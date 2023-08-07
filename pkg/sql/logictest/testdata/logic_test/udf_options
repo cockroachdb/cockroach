@@ -109,13 +109,13 @@ l1  l2  i1  i2  s1  s2  v1  v2
 statement ok
 CREATE SEQUENCE sq2;
 
-# TODO(107369): This does not error in postgres.
+# Note: postgres allows non-volatile functions to call other volatile functions.
 statement error pgcode 22023 volatile statement not allowed in immutable function: SELECT nextval\('sq2'\)
 CREATE FUNCTION rand_i() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
 
-# TODO(107369): This does not error in postgres.
+# Note: postgres allows non-volatile functions to call other volatile functions.
 statement error pgcode 22023 volatile statement not allowed in stable function: SELECT nextval\('sq2'\)
-CREATE FUNCTION rand_s() RETURNS INT STABLE    LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+CREATE FUNCTION rand_s() RETURNS INT STABLE LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
 
 statement ok
 CREATE FUNCTION rand_v() RETURNS INT VOLATILE  LANGUAGE SQL AS $$SELECT nextval('sq2')$$;

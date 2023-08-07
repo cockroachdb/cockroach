@@ -535,20 +535,21 @@ SELECT imp_cast(), (1,2,'3') = imp_cast(), pg_typeof(imp_cast())
 ----
 (1,2,3)  true  imp
 
-# TODO(107369): This is code 42846 in postgres.
+# Note: postgres returns error code 42846 (cannot cast type) here instead due to
+# implementation differences.
 statement error pgcode 42P13 return type mismatch in function declared to return imp
 CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
   SELECT (1, 2)
 $$
 
-# TODO(mgartner): The error message should say "imp" instead of "record".
-statement error pgcode 42P13 return type mismatch in function declared to return record
+statement error pgcode 42P13 return type mismatch in function declared to return imp
 CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
   SELECT k, a FROM imp
 $$
 
-# TODO(mgartner): The error message should say "imp" instead of "record".
-statement error pgcode 42P13 return type mismatch in function declared to return record
+# Note: This function can be successfully created in postgres, but will fail
+# when called.
+statement error pgcode 42P13 return type mismatch in function declared to return imp
 CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
   SELECT k, a, b::INT FROM imp
 $$

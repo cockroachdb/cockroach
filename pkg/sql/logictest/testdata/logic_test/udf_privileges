@@ -533,7 +533,7 @@ CREATE FUNCTION f_test_show_grants(INT, string, OID) RETURNS INT LANGUAGE SQL AS
 CREATE USER u_test_show_grants;
 GRANT EXECUTE ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID) TO u_test_show_grants;
 
-statement error pgcode XXUUU pq: function name "f_test_show_grants" is not unique
+statement error pgcode 42725 pq: function name "f_test_show_grants" is not unique
 SHOW GRANTS ON FUNCTION f_test_show_grants;
 
 query TTTTTTB colnames

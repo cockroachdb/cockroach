@@ -18,9 +18,8 @@ SELECT f_void();
 ----
 NULL
 
-# TODO(107369): This doesn't error in postgres, and this is the error code for
-# invalid foreign key, which may not make sense.
-statement error pgcode 42830 missing "a" primary key column
+# Note: This does not error in postgres until the function is executed.
+statement error pgcode 23502 missing "a" primary key column
 CREATE FUNCTION f_err(b INT) RETURNS RECORD AS
 $$
   INSERT INTO t (b) VALUES (b);

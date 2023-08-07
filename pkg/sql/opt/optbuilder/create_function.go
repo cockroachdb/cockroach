@@ -358,7 +358,7 @@ func validateReturnType(expected *types.T, cols []scopeColumn) error {
 			if !typ.Equivalent(cols[i].typ) {
 				return pgerror.WithCandidateCode(
 					errors.WithDetailf(
-						errors.Newf("return type mismatch in function declared to return record"),
+						errors.Newf("return type mismatch in function declared to return %s", expected.Name()),
 						"Final statement returns %s instead of %s at column %d",
 						cols[i].typ.Name(), typ.Name(), i+1,
 					),
@@ -372,7 +372,7 @@ func validateReturnType(expected *types.T, cols []scopeColumn) error {
 		// Ran out of columns from last statement.
 		return pgerror.WithCandidateCode(
 			errors.WithDetailf(
-				errors.New("return type mismatch in function declared to return record"),
+				errors.Newf("return type mismatch in function declared to return %s", expected.Name()),
 				"Final statement returns too few columns",
 			),
 			pgcode.InvalidFunctionDefinition,

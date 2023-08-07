@@ -298,7 +298,7 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 		)
 	}
 	if len(ret) > 1 {
-		return QualifiedOverload{}, errors.Errorf("function name %q is not unique", fd.Name)
+		return QualifiedOverload{}, pgerror.Newf(pgcode.AmbiguousFunction, "function name %q is not unique", fd.Name)
 	}
 	return ret[0], nil
 }
