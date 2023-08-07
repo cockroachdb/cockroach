@@ -121,7 +121,7 @@ ORDER BY name ASC`)
 		assert.NoError(t, rows.Scan(&table))
 		tables = append(tables, table)
 	}
-	tables = append(tables, "crdb_internal.probe_ranges_1s_write_limit_100")
+	tables = append(tables, "crdb_internal.probe_ranges_1s_read_limit_100")
 	sort.Strings(tables)
 
 	var exp []string
