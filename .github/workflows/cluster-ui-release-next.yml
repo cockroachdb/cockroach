@@ -42,6 +42,16 @@ jobs:
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      # Always install node dependencies. It seems silly to do if we're not
+      # going to actually use them, but setup-node's post-run action attempts
+      # to save dependencies to a cache shared between GitHub actions. If the
+      # pnpm store directory doesn't exist (e.g. during a cache miss), that
+      # cache-saving step will fail and the entire job will be marked "failed"
+      # as a result. Installing dependencies is the canonical way to seed the
+      # pnpm store from-scratch.
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
     - name: Check if version is published
       id: version-check
       shell: bash
@@ -62,7 +72,6 @@ jobs:
     - name: Build Cluster UI
       if: steps.version-check.outputs.published == 'no'
       run: |
-        pnpm install --frozen-lockfile
         bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client
         cp ../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* ../db-console/src/js/
         pnpm build
