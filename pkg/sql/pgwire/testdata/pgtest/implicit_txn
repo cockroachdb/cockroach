@@ -59,7 +59,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"BindComplete"}
-{"Type":"ErrorResponse","Code":"XXUUU"}
+{"Type":"ErrorResponse","Code":"25001"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send
