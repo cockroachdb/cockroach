@@ -732,8 +732,8 @@ func backupShowerHeaders(showSchemas bool, opts tree.ShowBackupOptions) colinfo.
 		{Name: "object_name", Typ: types.String},
 		{Name: "object_type", Typ: types.String},
 		{Name: "backup_type", Typ: types.String},
-		{Name: "start_time", Typ: types.Timestamp},
-		{Name: "end_time", Typ: types.Timestamp},
+		{Name: "start_time", Typ: types.TimestampTZ},
+		{Name: "end_time", Typ: types.TimestampTZ},
 		{Name: "size_bytes", Typ: types.Int},
 		{Name: "rows", Typ: types.Int},
 		{Name: "is_full_cluster", Typ: types.Bool},
@@ -844,12 +844,12 @@ func backupShowerDefault(
 					backupType = tree.NewDString("incremental")
 				}
 				start := tree.DNull
-				end, err := tree.MakeDTimestamp(timeutil.Unix(0, manifest.EndTime.WallTime), time.Nanosecond)
+				end, err := tree.MakeDTimestampTZ(timeutil.Unix(0, manifest.EndTime.WallTime), time.Nanosecond)
 				if err != nil {
 					return nil, err
 				}
 				if manifest.StartTime.WallTime != 0 {
-					start, err = tree.MakeDTimestamp(timeutil.Unix(0, manifest.StartTime.WallTime), time.Nanosecond)
+					start, err = tree.MakeDTimestampTZ(timeutil.Unix(0, manifest.StartTime.WallTime), time.Nanosecond)
 					if err != nil {
 						return nil, err
 					}
