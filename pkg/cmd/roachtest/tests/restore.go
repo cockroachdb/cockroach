@@ -323,7 +323,12 @@ func registerRestore(r registry.Registry) {
 		},
 		{
 			// The nightly 8TB Restore test.
-			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 2000}),
+			// TODO(pavelkalinnikov): using high memory machines due to the risk of
+			// hitting raft OOM issues. Reduce machine size when OOM issues are fixed:
+			// - https://github.com/cockroachdb/cockroach/issues/73376
+			// - https://github.com/cockroachdb/cockroach/issues/102840
+			// - https://github.com/cockroachdb/cockroach/issues/105338
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, mem: spec.High, volumeSize: 2000}),
 			backup: makeRestoringBackupSpecs(backupSpecs{
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 500000}}),
