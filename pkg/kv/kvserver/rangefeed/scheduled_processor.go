@@ -27,27 +27,27 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type schedulerEvent int
+type processorEvent int
 
 const (
 	// queueData is scheduled when event is put into rangefeed queue for
 	// processing.
-	queueData schedulerEvent = 1 << 2
+	queueData processorEvent = 1 << 2
 	// reqEvent is scheduled when request function id put into rangefeed request
 	// queue.
-	reqEvent schedulerEvent = 1 << 3
+	reqEvent processorEvent = 1 << 3
 )
 
-var eventNames = map[schedulerEvent]string{
-	schedulerEvent(sched.Queued):  "Queued",
-	schedulerEvent(sched.Stopped): "Stopped",
+var eventNames = map[processorEvent]string{
+	processorEvent(sched.Queued):  "Queued",
+	processorEvent(sched.Stopped): "Stopped",
 	queueData:                     "Data",
 	reqEvent:                      "Request",
 }
 
-func (e schedulerEvent) String() string {
+func (e processorEvent) String() string {
 	var evts []string
-	for m := schedulerEvent(sched.Queued); m <= reqEvent; m = m << 1 {
+	for m := processorEvent(sched.Queued); m <= reqEvent; m = m << 1 {
 		if m&e != 0 {
 			evts = append(evts, eventNames[m])
 		}
@@ -69,7 +69,6 @@ type ScheduledProcessor struct {
 	rts resolvedTimestamp
 
 	requestQueue chan request
-	eventC       chan *event
 	// If true, processor is not processing data anymore and waiting for registrations
 	// to be complete.
 	stopping bool
@@ -91,7 +90,6 @@ func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
 		rts:    makeResolvedTimestamp(),
 
 		requestQueue: make(chan request, 20),
-		eventC:       make(chan *event, cfg.EventChanCap),
 		// Closed when scheduler removed callback.
 		stoppedC: make(chan struct{}),
 	}
@@ -148,10 +146,12 @@ func (p *ScheduledProcessor) pusher() TxnPusher {
 
 // process is a scheduler callback that is processing scheduled events and
 // requests.
-func (p *ScheduledProcessor) process(e int) int {
+func (p *ScheduledProcessor) process(se processorEvent, events chunkSnapshot) (processorEvent, int) {
 	ctx := p.Config.AmbientContext.AnnotateCtx(context.Background())
-	se := schedulerEvent(e)
-	var nextEvent int
+	var (
+		nextEvent processorEvent
+		consumed  int
+	)
 	log.VEventf(ctx, 3, "rangefeed r%d processing event %s", p.RangeID, se)
 	if se&reqEvent != 0 {
 		func() {
@@ -159,7 +159,7 @@ func (p *ScheduledProcessor) process(e int) int {
 				select {
 				case e := <-p.requestQueue:
 					if e(ctx) {
-						nextEvent |= sched.Stopped
+						nextEvent |= Stopped
 					}
 				default:
 					return
@@ -171,27 +171,22 @@ func (p *ScheduledProcessor) process(e int) int {
 		// Transform and route all events.
 		// TODO(oleg): maybe limit max count and allow returning some data for
 		// further processing on next iteration.
-		func() {
-			for {
-				select {
-				case e := <-p.eventC:
-					if !p.stopping {
-						// If we are stopping, there's no need to forward any remaining
-						// data since registrations already have errors set.
-						p.consumeEvent(ctx, e)
-					}
-					e.alloc.Release(ctx)
-					putPooledEvent(e)
-				default:
-					return
-				}
+		for e, ok := events.Next(); ok; e, ok = events.Next() {
+			consumed++
+			if !p.stopping {
+				// If we are stopping, there's no need to forward any remaining
+				// data since registrations already have errors set.
+				p.consumeEvent(ctx, e)
 			}
-		}()
+			e.alloc.Release(ctx)
+			putPooledEvent(e)
+		}
 	}
-	if e&sched.Stopped != 0 {
+	if se&Stopped != 0 {
+		// TODO(oleg): need to cleanup leftovers in the scheduler, otherwise budget will leak.
 		p.cleanup()
 	}
-	return nextEvent
+	return nextEvent, consumed
 }
 
 func (p *ScheduledProcessor) cleanup() {
@@ -396,20 +391,6 @@ func (p *ScheduledProcessor) ForwardClosedTS(ctx context.Context, closedTS hlc.T
 // the method will wait for no longer than that duration before giving up,
 // shutting down the Processor, and returning false. 0 for no timeout.
 func (p *ScheduledProcessor) sendEvent(ctx context.Context, e event, timeout time.Duration) bool {
-	if p.enqueueEventInternal(ctx, e, timeout) {
-		// We can ignore the event because we don't guarantee that we will drain
-		// all the events after processor was stopped. Memory budget will also be
-		// closed, releasing info about pending events that would be discarded with
-		// processor.
-		_ = p.scheduleEvent(queueData)
-		return true
-	}
-	return false
-}
-
-func (p *ScheduledProcessor) enqueueEventInternal(
-	ctx context.Context, e event, timeout time.Duration,
-) bool {
 	// The code is a bit unwieldy because we try to avoid any allocations on fast
 	// path where we have enough budget and outgoing channel is free. If not, we
 	// try to set up timeout for acquiring budget and then reuse this timeout when
@@ -453,52 +434,12 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 	}
 	ev := getPooledEvent(e)
 	ev.alloc = alloc
-	if timeout == 0 {
-		// Timeout is zero if no timeout was requested or timeout is already set on
-		// the context by budget allocation. Just try to write using context as a
-		// timeout.
-		select {
-		case p.eventC <- ev:
-			// Reset allocation after successful posting to prevent deferred cleanup
-			// from freeing it (see comment on defer for explanation).
-			alloc = nil
-		case <-p.stoppedC:
-			// Already stopped. Do nothing.
-		case <-ctx.Done():
-			p.sendStop(newErrBufferCapacityExceeded())
-			return false
-		}
-	} else {
-		// First try fast path operation without blocking and without creating any
-		// contexts in case channel has capacity.
-		select {
-		case p.eventC <- ev:
-			// Reset allocation after successful posting to prevent deferred cleanup
-			// from freeing it (see comment on defer for explanation).
-			alloc = nil
-		case <-p.stoppedC:
-			// Already stopped. Do nothing.
-		default:
-			// Fast path failed since we don't have capacity in channel. Wait for
-			// slots to clear up using context timeout.
-			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, timeout) // nolint:context
-			defer cancel()
-			select {
-			case p.eventC <- ev:
-				// Reset allocation after successful posting to prevent deferred cleanup
-				// from freeing it  (see comment on defer for explanation).
-				alloc = nil
-			case <-p.stoppedC:
-				// Already stopped. Do nothing.
-			case <-ctx.Done():
-				// Sending on the eventC channel would have blocked.
-				// Instead, tear down the processor and return immediately.
-				p.sendStop(newErrBufferCapacityExceeded())
-				return false
-			}
-		}
+	if err := p.Scheduler.ScheduleEvent(ctx, ev, timeout); err != nil {
+		// TODO(oleg) check if we need to check if we are not stopped <-p.stoppedC
+		p.sendStop(kvpb.NewError(err))
+		return false
 	}
+	alloc = nil
 	return true
 }
 
@@ -518,22 +459,13 @@ func (p *ScheduledProcessor) syncEventC() {
 // syncSendAndWait allows sync event to be sent and waited on its channel.
 // Exposed to allow special test syneEvents that contain span to be sent.
 func (p *ScheduledProcessor) syncSendAndWait(se *syncEvent) {
-	ev := getPooledEvent(event{sync: se})
-	select {
-	case p.eventC <- ev:
-		// This shouldn't happen as there should be no sync events after disconnect,
-		// but if there's a bug don't wait it can hang waiting for sync chan.
-		if p.scheduleEvent(queueData) == nil {
-			select {
-			case <-se.c:
-			// Synchronized.
-			case <-p.stoppedC:
-				// Already stopped. Do nothing.
-			}
+	if p.sendEvent(context.Background(), event{sync: se}, 0) {
+		select {
+		case <-se.c:
+		// Synchronized.
+		case <-p.stoppedC:
+			// Already stopped. Do nothing.
 		}
-	case <-p.stoppedC:
-		// Already stopped. Do nothing.
-		putPooledEvent(ev)
 	}
 }
 
@@ -763,7 +695,7 @@ func (p *ScheduledProcessor) newCheckpointEvent() *kvpb.RangeFeedEvent {
 	return &event
 }
 
-func (p *ScheduledProcessor) scheduleEvent(e schedulerEvent) error {
+func (p *ScheduledProcessor) scheduleEvent(e processorEvent) error {
 	log.VEventf(context.Background(), 3, "scheduling event %s", e)
-	return p.Scheduler.Schedule(int(e))
+	return p.Scheduler.Schedule(e)
 }

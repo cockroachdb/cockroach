@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/sched"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -281,9 +280,9 @@ func newTestProcessor(t tHelper, opts ...option) (Processor, *processorTestHelpe
 		o(&cfg)
 	}
 	if cfg.useScheduler {
-		sch := sched.NewScheduler(sched.Config{Name: "test-scheduler", Workers: 1})
+		sch := NewScheduler(SConfig{Name: "test-scheduler", Workers: 1})
 		_ = sch.Start(stopper)
-		cfg.Scheduler = sched.NewClientScheduler(2, sch)
+		cfg.Scheduler = NewClientScheduler(2, sch)
 	}
 	s := NewProcessor(cfg.Config)
 	h := processorTestHelper{}

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/sched"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -77,7 +76,7 @@ type Config struct {
 
 	// Scheduler for processing events. If set (allocated id > 0), then use
 	// scheduler based processor, otherwise legacy one.
-	Scheduler sched.ClientScheduler
+	Scheduler ClientScheduler
 }
 
 // SetDefaults initializes unset fields in Config to values

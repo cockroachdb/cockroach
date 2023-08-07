@@ -84,7 +84,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/sched"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1018,7 +1017,7 @@ type Store struct {
 		syncutil.Mutex
 		m map[roachpb.RangeID]struct{}
 	}
-	rangefeedScheduler *sched.PooledScheduler
+	rangefeedScheduler *rangefeed.Scheduler
 	schedulerIDSeq     int64
 
 	// raftRecvQueues is a map of per-Replica incoming request queues. These
@@ -1961,7 +1960,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return err
 	}
 
-	rfs := sched.NewScheduler(sched.Config{
+	rfs := rangefeed.NewScheduler(rangefeed.SConfig{
 		Name: fmt.Sprintf("s%d-rangefeed-scheduler", s.StoreID()), Workers: 16,
 	})
 	if err = rfs.Start(s.stopper); err != nil {
@@ -3718,9 +3717,9 @@ func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 	return s.cfg.KVMemoryMonitor
 }
 
-func (s *Store) allocRangefeedScheduler() sched.ClientScheduler {
+func (s *Store) allocRangefeedScheduler() rangefeed.ClientScheduler {
 	id := atomic.AddInt64(&s.schedulerIDSeq, 1)
-	return sched.NewClientScheduler(id, s.rangefeedScheduler)
+	return rangefeed.NewClientScheduler(id, s.rangefeedScheduler)
 }
 
 // Implementation of the storeForTruncator interface.
