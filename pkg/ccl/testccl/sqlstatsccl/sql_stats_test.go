@@ -39,6 +39,7 @@ func TestSQLStatsRegions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 107582, "flaky test")
 	skip.UnderRace(t, "test is to slow for race")
 	skip.UnderStress(t, "test is too heavy to run under stress")
 
