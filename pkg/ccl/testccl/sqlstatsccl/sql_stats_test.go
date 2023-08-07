@@ -36,6 +36,7 @@ import (
 )
 
 func TestSQLStatsRegions(t *testing.T) {
+	skip.WithIssue(t, 107582, "flaky test")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
