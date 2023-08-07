@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -201,16 +200,13 @@ func NewReplicationHelper(
 	// Start server
 	s, db, _ := serverutils.StartServer(t, serverArgs)
 
-	// Make changefeeds run faster.
-	resetFreq := changefeedbase.TestingSetDefaultMinCheckpointFrequency(50 * time.Millisecond)
-
 	// Set required cluster settings.
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.ExecMultiple(t, strings.Split(`
 SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
-SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 SET CLUSTER SETTING cross_cluster_replication.enabled = true;
+SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '10ms'
 `, `;`)...)
 
 	// Sink to read data from.
@@ -228,7 +224,6 @@ SET CLUSTER SETTING cross_cluster_replication.enabled = true;
 
 	return h, func() {
 		cleanupSink()
-		resetFreq()
 		s.Stopper().Stop(ctx)
 	}
 }
