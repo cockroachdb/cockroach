@@ -247,6 +247,9 @@ CREATE TABLE customers (
 ) LOCALITY REGIONAL BY ROW;
 
 statement ok
+INSERT INTO customers VALUES ('69a1c2c2-5b18-459e-94d2-079dc53a4dd0', 'ACME Sprockets')
+
+statement ok
 ALTER TABLE customers INJECT STATISTICS '[
   {
     "columns": ["id"],
@@ -276,6 +279,9 @@ CREATE TABLE orders (
     INDEX (cust_id),
     FOREIGN KEY (cust_id, crdb_region) REFERENCES customers (id, crdb_region) ON UPDATE CASCADE
 ) LOCALITY REGIONAL BY ROW;
+
+statement ok
+INSERT INTO orders VALUES ('69a1c2c2-5b18-459e-94d2-079dc53a4dd0', '69a1c2c2-5b18-459e-94d2-079dc53a4dd0', 'Super Deluxe Sprocket')
 
 statement ok
 ALTER TABLE orders INJECT STATISTICS '[
@@ -636,11 +642,33 @@ locality-optimized-search
       ├── constraint: /11/10: [/'ca-central-1' - /'us-east-1']
       └── limit: 1
 
-# Locality optimized search with lookup join will be supported in phase 2 or 3
-# when we can dynamically determine if the lookup will access a remote region.
-retry
-statement error pq: Query has no home region\. Try adding a filter on o\.crdb_region and/or on key column \(o\.id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
-SELECT * FROM customers c JOIN orders o ON c.id = o.cust_id AND
+# Static checking should not error this query out, because we now generate a
+# plan with a home region for it.
+query T retry
+EXPLAIN (OPT) SELECT * FROM customers c JOIN orders o ON c.id = o.cust_id AND
+  (c.crdb_region = o.crdb_region) WHERE c.id = '69a1c2c2-5b18-459e-94d2-079dc53a4dd0'
+----
+project
+ └── inner-join (lookup orders [as=o])
+      ├── lookup columns are key
+      ├── inner-join (lookup orders@orders_cust_id_idx [as=o])
+      │    ├── locality-optimized-search
+      │    │    ├── scan customers [as=c]
+      │    │    │    └── constraint: /15/13: [/'ap-southeast-2'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0' - /'ap-southeast-2'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0']
+      │    │    └── scan customers [as=c]
+      │    │         └── constraint: /20/18
+      │    │              ├── [/'ca-central-1'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0' - /'ca-central-1'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0']
+      │    │              └── [/'us-east-1'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0' - /'us-east-1'/'69a1c2c2-5b18-459e-94d2-079dc53a4dd0']
+      │    └── filters
+      │         └── cust_id = '69a1c2c2-5b18-459e-94d2-079dc53a4dd0'
+      └── filters (true)
+
+# This query should error out dynamically during execution, but
+# `GetLookupJoinLookupTableDistribution` doesn't currently work in
+# the execbuilder phase because `Optimizer.stateMap` is empty.
+# TODO(msirek): Fix this test case to not error out statically.
+statement error pq: Query has no home region\. Try adding a filter on o\.crdb_region and/or on key column \(o\.cust_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+SELECT 'a' FROM customers c JOIN orders o ON c.id = o.cust_id AND
   (c.crdb_region = o.crdb_region) WHERE c.id = '69a1c2c2-5b18-459e-94d2-079dc53a4dd0'
 
 # Locality optimized lookup join is allowed.
@@ -1052,6 +1080,7 @@ project
       │    ├── fd: ()-->(11), (7)-->(9)
       │    ├── limit hint: 1.00
       │    ├── distribution: ap-southeast-2
+      │    ├── lookup table distribution: ap-southeast-2
       │    ├── prune: (7)
       │    ├── inner-join (inverted json_arr1_rbr@j_idx [as=t1])
       │    │    ├── columns: t2.j:3 t1.k:18 crdb_region:22

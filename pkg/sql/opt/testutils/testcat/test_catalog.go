@@ -316,6 +316,11 @@ func (tc *Catalog) RoleExists(ctx context.Context, role username.SQLUsername) (b
 	return true, nil
 }
 
+// Optimizer is part of the cat.Catalog interface.
+func (tc *Catalog) Optimizer() interface{} {
+	return nil
+}
+
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
 	if string(toResolve.CatalogName) != testDB {
 		return nil, cat.SchemaName{}, pgerror.Newf(pgcode.InvalidSchemaName,

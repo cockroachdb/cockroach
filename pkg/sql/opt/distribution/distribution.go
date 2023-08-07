@@ -149,31 +149,128 @@ func GetDEnumAsStringFromConstantExpr(expr opt.Expr) (enumAsString string, ok bo
 	return "", false
 }
 
-// BuildLookupJoinLookupTableDistribution builds the Distribution that results
-// from performing lookups of a LookupJoin, if that distribution can be
-// statically determined. If crdbRegionColID is non-zero, it is the column ID
-// of the input REGIONAL BY ROW table holding the crdb_region column, and
-// inputDistribution is the distribution of the operation on that table
-// (Scan or LocalityOptimizedSearch).
+// getCRBDRegionColSetFromInput finds the set of column ids in the input to a
+// lookup join which are known to all be `crdb_region` columns, either in a Scan
+// or by being a `crdb_region` lookup table key column in a lookup join or chain
+// of lookup joins, all connected by `crdb_region` key column lookups. This
+// column set plus the distribution of the lookup join's input relation is
+// returned.
+func getCRBDRegionColSetFromInput(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	join *memo.LookupJoinExpr,
+	required *physical.Required,
+	maybeGetBestCostRelation func(grp memo.RelExpr, required *physical.Required) (best memo.RelExpr, ok bool),
+) (crdbRegionColSet opt.ColSet, inputDistribution physical.Distribution) {
+	var needRemap bool
+	var setOpCols opt.ColSet
+
+	if bestCostInputRel, ok := maybeGetBestCostRelation(join.Input, required); ok {
+		maybeScan := bestCostInputRel
+		var projectExpr *memo.ProjectExpr
+		if projectExpr, ok = maybeScan.(*memo.ProjectExpr); ok {
+			maybeScan, ok = maybeGetBestCostRelation(projectExpr.Input, required)
+			if !ok {
+				return crdbRegionColSet, physical.Distribution{}
+			}
+		}
+		if selectExpr, ok := maybeScan.(*memo.SelectExpr); ok {
+			maybeScan, ok = maybeGetBestCostRelation(selectExpr.Input, required)
+			if !ok {
+				return crdbRegionColSet, physical.Distribution{}
+			}
+		}
+		if indexJoinExpr, ok := maybeScan.(*memo.IndexJoinExpr); ok {
+			maybeScan, ok = maybeGetBestCostRelation(indexJoinExpr.Input, required)
+			if !ok {
+				return crdbRegionColSet, physical.Distribution{}
+			}
+		}
+		if lookupJoinExpr, ok := maybeScan.(*memo.LookupJoinExpr); ok {
+			crdbRegionColSet, inputDistribution =
+				BuildLookupJoinLookupTableDistribution(
+					ctx, evalCtx, lookupJoinExpr, required, maybeGetBestCostRelation)
+			return crdbRegionColSet, inputDistribution
+		}
+		if localityOptimizedScan, ok := maybeScan.(*memo.LocalityOptimizedSearchExpr); ok {
+			maybeScan = localityOptimizedScan.Local
+			needRemap = true
+			setOpCols = localityOptimizedScan.Relational().OutputCols
+		}
+		scanExpr, ok := maybeScan.(*memo.ScanExpr)
+		if !ok {
+			return crdbRegionColSet, physical.Distribution{}
+		}
+		tab := maybeScan.Memo().Metadata().Table(scanExpr.Table)
+		if !tab.IsRegionalByRow() {
+			return crdbRegionColSet, physical.Distribution{}
+		}
+		inputDistribution =
+			BuildProvided(ctx, evalCtx, scanExpr, &required.Distribution)
+		index := tab.Index(scanExpr.Index)
+		crdbRegionColID := scanExpr.Table.IndexColumnID(index, 0)
+		if needRemap {
+			scanCols := scanExpr.Relational().OutputCols
+			if scanCols.Len() == setOpCols.Len() {
+				destCol, _ := setOpCols.Next(0)
+				for srcCol, ok := scanCols.Next(0); ok; srcCol, ok = scanCols.Next(srcCol + 1) {
+					if srcCol == crdbRegionColID {
+						crdbRegionColID = destCol
+						break
+					}
+					destCol, _ = setOpCols.Next(destCol + 1)
+				}
+			}
+		}
+		if projectExpr != nil {
+			if !projectExpr.Passthrough.Contains(crdbRegionColID) {
+				return crdbRegionColSet, physical.Distribution{}
+			}
+		}
+		crdbRegionColSet.Add(crdbRegionColID)
+	}
+	return crdbRegionColSet, inputDistribution
+}
+
+// BuildLookupJoinLookupTableDistribution builds and returns the Distribution of
+// a lookup table in a lookup join if that distribution can be statically
+// determined. It also finds the set of column ids in the input to the lookup
+// join which are known to all be `crdb_region` columns, either in a Scan or by
+// being a `crdb_region` lookup table key column in a lookup join or chain of
+// lookup joins, all connected by `crdb_region` key column lookups. This column
+// set plus the distribution of the lookup join's lookup table is returned.
+// Parameter `maybeGetBestCostRelation` is expected to be a function that looks
+// up the best cost relation in the `grp` relation's memo group. Typically this
+// is `xform.Coster.MaybeGetBestCostRelation`. It's passed as a function since
+// `BuildLookupJoinLookupTableDistribution` may be called from packages not
+// allowed to import the `xform` package due to import cycles.
 func BuildLookupJoinLookupTableDistribution(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	lookupJoin *memo.LookupJoinExpr,
-	crdbRegionColID opt.ColumnID,
-	inputDistribution physical.Distribution,
-) (provided physical.Distribution) {
+	required *physical.Required,
+	maybeGetBestCostRelation func(grp memo.RelExpr, required *physical.Required) (best memo.RelExpr, ok bool),
+) (crdbRegionColSet opt.ColSet, provided physical.Distribution) {
+	localCrdbRegionColSet, inputDistribution :=
+		getCRBDRegionColSetFromInput(ctx, evalCtx, lookupJoin, required, maybeGetBestCostRelation)
+
 	lookupTableMeta := lookupJoin.Memo().Metadata().TableMeta(lookupJoin.Table)
 	lookupTable := lookupTableMeta.Table
 
+	idx := lookupTable.Index(lookupJoin.Index)
+	col := idx.Column(0)
+	ord := col.Ordinal()
+	colIDOfFirstLookupIndexColumn := lookupTableMeta.MetaID.ColumnID(ord)
+
 	if lookupJoin.LocalityOptimized || lookupJoin.ChildOfLocalityOptimizedSearch {
 		provided.FromLocality(evalCtx.Locality)
-		return provided
+		return crdbRegionColSet, provided
 	} else if lookupTable.IsGlobalTable() {
 		provided.FromLocality(evalCtx.Locality)
-		return provided
+		return crdbRegionColSet, provided
 	} else if homeRegion, ok := lookupTable.HomeRegion(); ok {
 		provided.Regions = []string{homeRegion}
-		return provided
+		return crdbRegionColSet, provided
 	} else if lookupTable.IsRegionalByRow() {
 		if len(lookupJoin.KeyCols) > 0 {
 			inputExpr := lookupJoin.Input
@@ -182,23 +279,29 @@ func BuildLookupJoinLookupTableDistribution(
 				if filterExpr, ok := invertedJoinExpr.GetConstExprFromFilter(firstKeyColID); ok {
 					if homeRegion, ok = GetDEnumAsStringFromConstantExpr(filterExpr); ok {
 						provided.Regions = []string{homeRegion}
-						return provided
+						crdbRegionColSet.UnionWith(localCrdbRegionColSet)
+						crdbRegionColSet.Add(colIDOfFirstLookupIndexColumn)
+						return crdbRegionColSet, provided
 					}
 				}
 			} else if projectExpr, ok := inputExpr.(*memo.ProjectExpr); ok {
 				regionName := projectExpr.GetProjectedEnumConstant(firstKeyColID)
 				if regionName != "" {
 					provided.Regions = []string{regionName}
-					return provided
+					crdbRegionColSet.UnionWith(localCrdbRegionColSet)
+					crdbRegionColSet.Add(colIDOfFirstLookupIndexColumn)
+					return crdbRegionColSet, provided
 				}
 			}
-			if crdbRegionColID == firstKeyColID {
+			if localCrdbRegionColSet.Contains(firstKeyColID) {
 				provided.FromIndexScan(ctx, evalCtx, lookupTableMeta, lookupJoin.Index, nil)
 				if !inputDistribution.Any() &&
 					(provided.Any() || len(provided.Regions) > len(inputDistribution.Regions)) {
-					return inputDistribution
+					crdbRegionColSet.UnionWith(localCrdbRegionColSet)
+					crdbRegionColSet.Add(colIDOfFirstLookupIndexColumn)
+					return crdbRegionColSet, inputDistribution
 				}
-				return provided
+				return crdbRegionColSet, provided
 			}
 		} else if len(lookupJoin.LookupJoinPrivate.LookupExpr) > 0 {
 			if filterIdx, ok := lookupJoin.GetConstPrefixFilter(lookupJoin.Memo().Metadata()); ok {
@@ -206,22 +309,26 @@ func BuildLookupJoinLookupTableDistribution(
 				if firstIndexColEqExpr.Op() == opt.EqOp {
 					if regionName, ok := GetDEnumAsStringFromConstantExpr(firstIndexColEqExpr.Child(1)); ok {
 						provided.Regions = []string{regionName}
-						return provided
+						crdbRegionColSet.UnionWith(localCrdbRegionColSet)
+						crdbRegionColSet.Add(colIDOfFirstLookupIndexColumn)
+						return crdbRegionColSet, provided
 					}
 				}
-			} else if lookupJoin.ColIsEquivalentWithLookupIndexPrefix(lookupJoin.Memo().Metadata(), crdbRegionColID) {
+			} else if lookupJoin.LookupIndexPrefixIsEquatedWithColInColSet(lookupJoin.Memo().Metadata(), localCrdbRegionColSet) {
 				// We have a `crdb_region = crdb_region` term in `LookupJoinPrivate.LookupExpr`.
 				provided.FromIndexScan(ctx, evalCtx, lookupTableMeta, lookupJoin.Index, nil)
 				if !inputDistribution.Any() &&
 					(provided.Any() || len(provided.Regions) > len(inputDistribution.Regions)) {
-					return inputDistribution
+					crdbRegionColSet.UnionWith(localCrdbRegionColSet)
+					crdbRegionColSet.Add(colIDOfFirstLookupIndexColumn)
+					return crdbRegionColSet, inputDistribution
 				}
-				return provided
+				return crdbRegionColSet, provided
 			}
 		}
 	}
 	provided.FromIndexScan(ctx, evalCtx, lookupTableMeta, lookupJoin.Index, nil)
-	return provided
+	return crdbRegionColSet, provided
 }
 
 // BuildInvertedJoinLookupTableDistribution builds the Distribution that results
