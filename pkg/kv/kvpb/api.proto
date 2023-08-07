@@ -2986,6 +2986,13 @@ message RangeFeedRequest {
 
   // StreamID is set by the client issuing MuxRangeFeed requests.
   int64 stream_id = 5 [(gogoproto.customname) = "StreamID"];
+  // CloseStream is set by the mux RangeFeed client to indicate that
+  // the server should close the stream with the specified stream_id.
+  // When this bit is set, the server should attempt, as best effort, to
+  // quickly terminate rangefeed for this stream.
+  // When CloseStream is set, only the StreamID must be set, and
+  // other fields (such as Span) are ignored.
+  bool close_stream = 6;
 }
 
 // RangeFeedValue is a variant of RangeFeedEvent that represents an update to

@@ -97,9 +97,13 @@ type rangeFeedConfig struct {
 		// onRangefeedEvent invoked on each rangefeed event.
 		// Returns boolean indicating if event should be skipped or an error
 		// indicating if rangefeed should terminate.
-		onRangefeedEvent func(ctx context.Context, s roachpb.Span, event *kvpb.RangeFeedEvent) (skip bool, _ error)
+		// streamID set only for mux rangefeed.
+		onRangefeedEvent func(ctx context.Context, s roachpb.Span, muxStreamID int64, event *kvpb.RangeFeedEvent) (skip bool, _ error)
 		// metrics overrides rangefeed metrics to use.
 		metrics *DistSenderRangeFeedMetrics
+		// captureMuxRangeFeedRequestSender is a callback invoked when mux
+		// rangefeed establishes connection to the node.
+		captureMuxRangeFeedRequestSender func(nodeID roachpb.NodeID, sender func(req *kvpb.RangeFeedRequest) error)
 	}
 }
 
@@ -795,7 +799,7 @@ func (ds *DistSender) singleRangeFeed(
 			}
 
 			if cfg.knobs.onRangefeedEvent != nil {
-				skip, err := cfg.knobs.onRangefeedEvent(ctx, span, event)
+				skip, err := cfg.knobs.onRangefeedEvent(ctx, span, 0 /*streamID */, event)
 				if err != nil {
 					return args.Timestamp, err
 				}
@@ -871,7 +875,7 @@ var errRestartStuckRange = errors.New("rangefeed restarting due to inactivity")
 
 // TestingWithOnRangefeedEvent returns a test only option to modify rangefeed event.
 func TestingWithOnRangefeedEvent(
-	fn func(ctx context.Context, s roachpb.Span, event *kvpb.RangeFeedEvent) (skip bool, _ error),
+	fn func(ctx context.Context, s roachpb.Span, streamID int64, event *kvpb.RangeFeedEvent) (skip bool, _ error),
 ) RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.knobs.onRangefeedEvent = fn
@@ -883,6 +887,16 @@ func TestingWithOnRangefeedEvent(
 func TestingWithRangeFeedMetrics(m *DistSenderRangeFeedMetrics) RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.knobs.metrics = m
+	})
+}
+
+// TestingWithMuxRangeFeedRequestSenderCapture returns a test only option to specify a callback
+// that will be invoked when mux establishes connection to a node.
+func TestingWithMuxRangeFeedRequestSenderCapture(
+	fn func(nodeID roachpb.NodeID, capture func(request *kvpb.RangeFeedRequest) error),
+) RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.knobs.captureMuxRangeFeedRequestSender = fn
 	})
 }
 
