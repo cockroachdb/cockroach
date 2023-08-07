@@ -13,9 +13,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/errors"
 	pgproto3 "github.com/jackc/pgproto3/v2"
+	"golang.org/x/exp/slices"
 )
+
+// These errors occur after successful auth but are sent back as a result of
+// the auth request. Receiving such error shouldn't trigger throttle.
+var pgPostAuthErrorCodes = []string{
+	pgcode.TooManyConnections.String(),
+}
 
 // authenticate handles the startup of the pgwire protocol to the point where
 // the connections is considered authenticated. If that doesn't happen, it
@@ -111,13 +119,21 @@ var authenticate = func(
 		// Server has rejected the authentication response from the client and
 		// has closed the connection.
 		case *pgproto3.ErrorResponse:
-			throttleError := throttleHook(throttler.AttemptInvalidCredentials)
+			// The error may be in response of auth message but may not indicate
+			// unsuccessful authentication. Clear throttle if this is the case.
+			var throttleError error
+			if slices.Contains(pgPostAuthErrorCodes, tp.Code) {
+				throttleError = throttleHook(throttler.AttemptOK)
+			} else {
+				throttleError = throttleHook(throttler.AttemptInvalidCredentials)
+			}
 			if throttleError != nil {
 				if err = feSend(toPgError(throttleError)); err != nil {
 					return nil, err
 				}
 				return nil, throttleError
 			}
+
 			if err = feSend(backendMsg); err != nil {
 				return nil, err
 			}
