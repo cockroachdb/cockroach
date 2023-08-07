@@ -35,22 +35,6 @@ func ParseDatumStringAs(
 	}
 }
 
-// ParseDatumStringAsWithRawBytes parses s as type t. However, if the requested type is Bytes
-// then the string is returned unchanged. This function is used when the input string might be
-// unescaped raw bytes, so we don't want to run a bytes parsing routine on the input. Other
-// than the bytes case, this function does the same as ParseDatumStringAs but is not
-// guaranteed to round-trip.
-func ParseDatumStringAsWithRawBytes(
-	ctx context.Context, t *types.T, s string, evalCtx *eval.Context,
-) (tree.Datum, error) {
-	switch t.Family() {
-	case types.BytesFamily:
-		return tree.NewDBytes(tree.DBytes(s)), nil
-	default:
-		return ParseDatumStringAs(ctx, t, s, evalCtx)
-	}
-}
-
 func parseAsTyp(
 	ctx context.Context, evalCtx *eval.Context, typ *types.T, s string,
 ) (tree.Datum, error) {
