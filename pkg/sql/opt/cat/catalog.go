@@ -200,4 +200,8 @@ type Catalog interface {
 
 	// RoleExists returns true if the role exists.
 	RoleExists(ctx context.Context, role username.SQLUsername) (bool, error)
+
+	// Optimizer returns the query Optimizer used to optimize SQL statements
+	// referencing objects in this catalog, if any.
+	Optimizer() interface{}
 }

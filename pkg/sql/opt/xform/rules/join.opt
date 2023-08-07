@@ -897,8 +897,7 @@
 (LookupJoin
     $input:* &
         (IsRegionalByRowTableScanOrSelect $input) &
-        (IsCardinalityAboveMaxForLocalityOptimizedScan $input) &
-        (LookupsAreLocal (Root))
+        (IsCardinalityAboveMaxForLocalityOptimizedScan $input)
     *
     $private:* &
         ^(IsAntiJoin $private) &

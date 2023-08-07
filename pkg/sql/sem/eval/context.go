@@ -437,6 +437,11 @@ func (p *fakePlannerWithMonitor) EnforceHomeRegion() bool {
 func (p *fakePlannerWithMonitor) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) {
 }
 
+// Optimizer is part of the cat.Catalog interface.
+func (p *fakePlannerWithMonitor) Optimizer() interface{} {
+	return nil
+}
+
 type fakeStreamManagerFactory struct {
 	StreamManagerFactory
 }
