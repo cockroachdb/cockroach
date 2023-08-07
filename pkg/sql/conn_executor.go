@@ -2789,7 +2789,6 @@ func (ex *connExecutor) execCopyOut(
 		ex.planner.maybeLogStatement(
 			ctx,
 			ex.executorType,
-			true, /* isCopy */
 			int(ex.state.mu.autoRetryCounter),
 			ex.extraTxnState.txnCounter,
 			numOutputRows,
@@ -3041,7 +3040,7 @@ func (ex *connExecutor) execCopyIn(
 			ex.planner.CurrentDatabase(),
 		)
 		var stats topLevelQueryStats
-		ex.planner.maybeLogStatement(ctx, ex.executorType, true,
+		ex.planner.maybeLogStatement(ctx, ex.executorType,
 			int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter,
 			numInsertedRows, ex.state.mu.stmtCount,
 			0, /* bulkJobId */
