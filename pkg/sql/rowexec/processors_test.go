@@ -54,6 +54,7 @@ import (
 
 func TestPostProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	v := [10]rowenc.EncDatum{}
 	for i := range v {
@@ -225,6 +226,7 @@ func TestPostProcess(t *testing.T) {
 
 func TestAggregatorSpecAggregationEquals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Used for FilterColIdx *uint32.
 	colIdx1 := uint32(0)
@@ -315,6 +317,7 @@ func TestAggregatorSpecAggregationEquals(t *testing.T) {
 
 func TestProcessorBaseContext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Use a custom context to distinguish it from the background one.
 	ctx := context.WithValue(context.Background(), struct{}{}, struct{}{})
@@ -428,6 +431,7 @@ func populateRangeCacheAndDisableBuffering(t *testing.T, db *gosql.DB, tableName
 // interesting to test is the integration between DistSQL and KV.
 func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We're going to test by running a query that selects rows 1..10 with limit
 	// 5. Out of these, rows 1..5 are on node 1, 6..10 on node 2. We're going to
@@ -816,6 +820,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 // instantiation of processors.
 func TestFlowConcurrentTxnUse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Run("TestSingleGoroutine", func(t *testing.T) {
 		flow := &flowinfra.FlowBase{}
