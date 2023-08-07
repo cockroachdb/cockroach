@@ -57,11 +57,12 @@ func BuildScalar(
 	}
 
 	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
-	if err := b.Build(expr); err != nil {
+	root, err := b.Build(expr)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	return f.Memo().RootExpr().(opt.ScalarExpr)
+	return root
 }
 
 // BuildFilters builds the given input string as a FiltersExpr and returns it.

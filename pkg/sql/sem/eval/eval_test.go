@@ -100,12 +100,13 @@ func optBuildScalar(evalCtx *eval.Context, e tree.Expr) (tree.TypedExpr, error) 
 	o.Init(ctx, evalCtx, nil /* catalog */)
 	semaCtx := tree.MakeSemaContext()
 	b := optbuilder.NewScalar(ctx, &semaCtx, evalCtx, o.Factory())
-	if err := b.Build(e); err != nil {
+	scalar, err := b.Build(e)
+	if err != nil {
 		return nil, err
 	}
 
 	bld := execbuilder.New(
-		ctx, nil /* factory */, &o, o.Memo(), nil /* catalog */, o.Memo().RootExpr(),
+		ctx, nil /* factory */, &o, o.Memo(), nil /* catalog */, scalar,
 		evalCtx, false, /* allowAutoCommit */
 		false, /* isANSIDML */
 	)

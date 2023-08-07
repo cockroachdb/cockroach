@@ -103,10 +103,10 @@ func TestLookupConstraints(t *testing.T) {
 							return 0, opt.ColSet{}, err
 						}
 						b := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
-						if err := b.Build(expr); err != nil {
+						compExpr, err := b.Build(expr)
+						if err != nil {
 							return 0, opt.ColSet{}, err
 						}
-						compExpr := f.Memo().RootExpr().(opt.ScalarExpr)
 						var sharedProps props.Shared
 						memo.BuildSharedProps(compExpr, &sharedProps, &evalCtx)
 						md.TableMeta(tableID).AddComputedCol(colID, compExpr, sharedProps.OuterCols)
@@ -312,11 +312,10 @@ func makeFiltersExpr(
 	}
 
 	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
-	if err := b.Build(expr); err != nil {
+	root, err := b.Build(expr)
+	if err != nil {
 		return nil, err
 	}
-
-	root := f.Memo().RootExpr().(opt.ScalarExpr)
 
 	return memo.FiltersExpr{f.ConstructFiltersItem(root)}, nil
 }

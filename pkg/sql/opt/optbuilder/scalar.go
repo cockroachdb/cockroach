@@ -1177,7 +1177,7 @@ func NewScalar(
 
 // Build a memo structure from a TypedExpr: the root group represents a scalar
 // expression equivalent to expr.
-func (sb *ScalarBuilder) Build(expr tree.Expr) (err error) {
+func (sb *ScalarBuilder) Build(expr tree.Expr) (_ opt.ScalarExpr, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate errors without adding lots of checks
@@ -1194,8 +1194,7 @@ func (sb *ScalarBuilder) Build(expr tree.Expr) (err error) {
 
 	typedExpr := sb.scope.resolveType(expr, types.Any)
 	scalar := sb.buildScalar(typedExpr, &sb.scope, nil, nil, nil)
-	sb.factory.Memo().SetScalarRoot(scalar)
-	return nil
+	return scalar, nil
 }
 
 // reType is similar to tree.ReType, except that it panics with an internal
