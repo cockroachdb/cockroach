@@ -39,7 +39,6 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/interval",
         "//pkg/util/log",
-        "//pkg/util/must",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
         "//pkg/util/timetz",
