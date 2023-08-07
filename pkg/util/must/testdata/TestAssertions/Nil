@@ -1,3 +1,0 @@
-echo
-----
-message with ‹argument›: expected nil, got &hlc.Timestamp{WallTime:0, Logical:0, Synthetic:false}
