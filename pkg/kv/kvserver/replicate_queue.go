@@ -58,6 +58,13 @@ const (
 	// in high latency clusters, and not allowing enough of a cushion can
 	// make rebalance thrashing more likely (#17879).
 	newReplicaGracePeriod = 5 * time.Minute
+
+	// replicateQueueLeasePreferencePriority is the priority replicas are
+	// enqueued into the replicate queue with when violating lease preferences.
+	// This priority is lower than any voter up-replication, yet higher than
+	// removal, non-voter addition and rebalancing.
+	// See allocatorimpl.AllocatorAction.Priority.
+	replicateQueueLeasePreferencePriority = 1001
 )
 
 // MinLeaseTransferInterval controls how frequently leases can be transferred
@@ -915,13 +922,18 @@ func (rq *replicateQueue) ShouldRequeue(ctx context.Context, change ReplicateQue
 		// time around.
 		requeue = false
 
-	} else if change.Action == allocatorimpl.AllocatorConsiderRebalance {
-		// Don't requeue after a successful rebalance operation.
-		requeue = false
-
 	} else if change.Op.lhBeingRemoved() {
 		// Don't requeue if the leaseholder was removed as a voter or the range
 		// lease was transferred away.
+		requeue = false
+
+	} else if change.Action == allocatorimpl.AllocatorConsiderRebalance &&
+		!change.replica.leaseViolatesPreferences(ctx) {
+		// Don't requeue after a successful rebalance operation, when the lease
+		// does not violate any preferences. If the lease does violate preferences,
+		// the next process attempt will either find a target to transfer the lease
+		// or place the replica into purgatory if unable. See
+		// CantTransferLeaseViolatingPreferencesError.
 		requeue = false
 
 	} else {
@@ -1769,7 +1781,8 @@ func (rq *replicateQueue) considerRebalance(
 		if !canTransferLeaseFrom(ctx, repl) {
 			return nil, nil
 		}
-		return rq.shedLeaseTarget(
+		var err error
+		op, err = rq.shedLeaseTarget(
 			ctx,
 			repl,
 			desc,
@@ -1779,8 +1792,19 @@ func (rq *replicateQueue) considerRebalance(
 				ExcludeLeaseRepl:       false,
 				CheckCandidateFullness: true,
 			},
-		), nil
-
+		)
+		if err != nil {
+			if scatter && errors.Is(err, CantTransferLeaseViolatingPreferencesError{}) {
+				// When scatter is specified, we ignore lease preference violation
+				// errors returned from shedLeaseTarget. These errors won't place the
+				// replica into purgatory because they are called outside the replicate
+				// queue loop, directly.
+				log.KvDistribution.VEventf(ctx, 3, "%v", err)
+				err = nil
+			}
+			return nil, err
+		}
+		return op, nil
 	}
 
 	// If we have a valid rebalance action (ok == true) and we haven't
@@ -1943,22 +1967,36 @@ func (rq *replicateQueue) shedLeaseTarget(
 	desc *roachpb.RangeDescriptor,
 	conf roachpb.SpanConfig,
 	opts allocator.TransferLeaseOptions,
-) (op AllocationOp) {
+) (op AllocationOp, _ error) {
 	usage := RangeUsageInfoForRepl(repl)
+	existingVoters := desc.Replicas().VoterDescriptors()
 	// Learner replicas aren't allowed to become the leaseholder or raft leader,
 	// so only consider the `VoterDescriptors` replicas.
 	target := rq.allocator.TransferLeaseTarget(
 		ctx,
 		rq.storePool,
 		conf,
-		desc.Replicas().VoterDescriptors(),
+		existingVoters,
 		repl,
 		usage,
 		false, /* forceDecisionWithoutStats */
 		opts,
 	)
 	if target == (roachpb.ReplicaDescriptor{}) {
-		return nil
+		// If we don't find a suitable target, but we own a lease violating the
+		// lease preferences, and there is a more suitable target, return an error
+		// to place the replica in purgatory and retry sooner. This typically
+		// happens when we've just acquired a violating lease and we eagerly
+		// enqueue the replica before we've received Raft leadership, which
+		// prevents us from finding appropriate lease targets since we can't
+		// determine if any are behind.
+		liveVoters, _ := rq.storePool.LiveAndDeadReplicas(
+			existingVoters, false /* includeSuspectAndDrainingStores */)
+		preferred := rq.allocator.PreferredLeaseholders(rq.storePool, conf, liveVoters)
+		if len(preferred) > 0 && repl.leaseViolatesPreferences(ctx) {
+			return nil, CantTransferLeaseViolatingPreferencesError{RangeID: desc.RangeID}
+		}
+		return nil, nil
 	}
 
 	op = AllocationTransferLeaseOp{
@@ -1967,7 +2005,7 @@ func (rq *replicateQueue) shedLeaseTarget(
 		usage:              usage,
 		bypassSafetyChecks: false,
 	}
-	return op
+	return op, nil
 }
 
 // shedLease takes in a leaseholder replica, looks for a target for transferring
@@ -2192,3 +2230,26 @@ func RangeUsageInfoForRepl(repl *Replica) allocator.RangeUsageInfo {
 		},
 	}
 }
+
+// CantTransferLeaseViolatingPreferencesError is an error returned when a lease
+// violates the lease preferences, but we couldn't find a valid target to
+// transfer the lease to. It indicates that the replica should be sent to
+// purgatory, to retry the transfer faster.
+type CantTransferLeaseViolatingPreferencesError struct {
+	RangeID roachpb.RangeID
+}
+
+var _ errors.SafeFormatter = CantTransferLeaseViolatingPreferencesError{}
+
+func (e CantTransferLeaseViolatingPreferencesError) Error() string { return fmt.Sprint(e) }
+
+func (e CantTransferLeaseViolatingPreferencesError) Format(s fmt.State, verb rune) {
+	errors.FormatError(e, s, verb)
+}
+
+func (e CantTransferLeaseViolatingPreferencesError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("can't transfer r%d lease violating preferences, no suitable target", e.RangeID)
+	return nil
+}
+
+func (CantTransferLeaseViolatingPreferencesError) PurgatoryErrorMarker() {}

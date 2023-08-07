@@ -95,6 +95,21 @@ var ExpirationLeasesOnly = settings.RegisterBoolSetting(
 var DisableExpirationLeasesOnly = envutil.EnvOrDefaultBool(
 	"COCKROACH_DISABLE_EXPIRATION_LEASES_ONLY", false)
 
+// LeaseCheckPreferencesOnAcquisitionEnabled controls whether lease preferences
+// are checked upon acquiring a new lease. If the new lease violates the
+// configured preferences, it is enqueued in the replicate queue for
+// processing.
+//
+// TODO(kvoli): Remove this cluster setting in 24.1, once we wish to enable
+// this by default or is subsumed by another mechanism.
+var LeaseCheckPreferencesOnAcquisitionEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lease.check_preferences_on_acquisition.enabled",
+	"controls whether lease preferences are checked on lease acquisition, "+
+		"if the new lease violates preferences, it is queued for processing",
+	true,
+)
+
 var leaseStatusLogLimiter = func() *log.EveryN {
 	e := log.Every(15 * time.Second)
 	e.ShouldLog() // waste the first shot
@@ -1510,16 +1525,14 @@ func (r *Replica) hasCorrectLeaseTypeRLocked(lease roachpb.Lease) bool {
 type leasePreferencesStatus int
 
 const (
-	// leasePreferencesUnknown indicates the preferences status cannot be
-	// determined.
-	leasePreferencesUnknown leasePreferencesStatus = iota
-	// leasePreferencesViolating indicates the leaseholder does not
-	// satisfy any lease preference applied.
+	_ leasePreferencesStatus = iota
+	// leasePreferencesViolating indicates the checked store does not satisfy any
+	// lease preference applied.
 	leasePreferencesViolating
-	// leasePreferencesLessPreferred indicates the leaseholder satisfies _some_
+	// leasePreferencesLessPreferred indicates the checked store satisfies _some_
 	// preference, however not the most preferred.
 	leasePreferencesLessPreferred
-	// leasePreferencesOK indicates the lease satisfies the first
+	// leasePreferencesOK indicates the checked store satisfies the first
 	// preference, or no lease preferences are applied.
 	leasePreferencesOK
 )
@@ -1531,32 +1544,34 @@ func (r *Replica) leaseViolatesPreferences(ctx context.Context) bool {
 	storeID := r.store.StoreID()
 	now := r.Clock().NowAsClockTimestamp()
 	r.mu.RLock()
-	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
 	preferences := r.mu.conf.LeasePreferences
+	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
 	r.mu.RUnlock()
+
+	if !leaseStatus.IsValid() || !leaseStatus.Lease.OwnedBy(storeID) {
+		// We can't determine if the lease preferences are being conformed to or
+		// not, as the store either doesn't own the lease, or doesn't own a valid
+		// lease.
+		return false
+	}
 
 	storeAttrs := r.store.Attrs()
 	nodeAttrs := r.store.nodeDesc.Attrs
 	nodeLocality := r.store.nodeDesc.Locality
-	preferenceStatus := makeLeasePreferenceStatus(
-		leaseStatus, storeID, storeAttrs, nodeAttrs, nodeLocality, preferences)
-
+	preferenceStatus := checkStoreAgainstLeasePreferences(
+		storeID, storeAttrs, nodeAttrs, nodeLocality, preferences)
 	return preferenceStatus == leasePreferencesViolating
 }
 
-func makeLeasePreferenceStatus(
-	leaseStatus kvserverpb.LeaseStatus,
+// checkStoreAgainstLeasePreferences returns whether the given store would
+// violate, be less preferred or ok, leaseholder, according the the lease
+// preferences.
+func checkStoreAgainstLeasePreferences(
 	storeID roachpb.StoreID,
 	storeAttrs, nodeAttrs roachpb.Attributes,
 	nodeLocality roachpb.Locality,
 	preferences []roachpb.LeasePreference,
 ) leasePreferencesStatus {
-	if !leaseStatus.IsValid() || !leaseStatus.Lease.OwnedBy(storeID) {
-		// We can't determine if the lease preferences are being conformed to or
-		// not, as the store either doesn't own the lease, or doesn't own a valid
-		// lease.
-		return leasePreferencesUnknown
-	}
 	if len(preferences) == 0 {
 		return leasePreferencesOK
 	}
