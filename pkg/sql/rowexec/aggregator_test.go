@@ -60,6 +60,7 @@ func aggregations(aggTestSpecs []aggTestSpec) []execinfrapb.AggregatorSpec_Aggre
 //	VARIANCE
 func TestAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var (
 		col0              = []uint32{0}

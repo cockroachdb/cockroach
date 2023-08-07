@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -199,6 +200,8 @@ func (jsonUnionExpr) PreFilter(_ inverted.EncVal, _ []interface{}, _ []bool) (bo
 
 func TestInvertedJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -742,6 +745,7 @@ func TestInvertedJoiner(t *testing.T) {
 
 func TestInvertedJoinerDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
