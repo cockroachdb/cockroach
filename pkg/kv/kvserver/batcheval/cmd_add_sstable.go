@@ -184,8 +184,6 @@ func EvalAddSSTable(
 		}, nil
 	}
 
-	log.Infof(ctx, "non-remote AddSSTable")
-
 	// Reject AddSSTable requests not writing at the request timestamp if requested.
 	if AddSSTableRequireAtRequestTimestamp.Get(&cArgs.EvalCtx.ClusterSettings().SV) &&
 		sstToReqTS.IsEmpty() {

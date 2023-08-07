@@ -405,3 +405,32 @@ Action
 Biography
 Crime
 NULL
+
+# Regression test for #107839. More fixes for NULLS FIRST/LAST with DISTINCT ON.
+statement ok
+CREATE TABLE t1 (id int, str text);
+CREATE TABLE t2 (id int, num int);
+INSERT INTO t1 VALUES (1, 'hello'), (2, NULL);
+INSERT INTO t2 VALUES (1, 1), (2, 2), (NULL, NULL)
+
+query II
+SELECT
+DISTINCT ON (t2.id)
+t2.*
+FROM t1, t2
+ORDER BY t2.id DESC NULLS FIRST
+----
+NULL  NULL
+2     2
+1     1
+
+query II
+SELECT
+DISTINCT ON (t2.id)
+t2.*
+FROM t1, t2
+ORDER BY t2.id ASC NULLS LAST
+----
+1     1
+2     2
+NULL  NULL
