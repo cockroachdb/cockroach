@@ -207,6 +207,9 @@ func (c *conn) processCommands(
 
 	var decrementConnectionCount func()
 	if decrementConnectionCount, retErr = sqlServer.IncrementConnectionCount(c.sessionArgs); retErr != nil {
+		// This will return pgcode.TooManyConnections which is used by the sql proxy
+		// to skip failed auth throttle (as in this case the auth was fine but the
+		// error occurred before sending back auth ok msg)
 		_ = c.sendError(ctx, retErr)
 		return
 	}
