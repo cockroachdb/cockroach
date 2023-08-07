@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -258,12 +257,8 @@ func (d *delimitedConsumer) FillDatums(
 		} else if (!d.opts.HasEscape && field == "NULL") || d.opts.NullEncoding != nil && field == *d.opts.NullEncoding {
 			datum = tree.DNull
 		} else {
-			// This uses ParseDatumStringAsWithRawBytes instead of ParseDatumStringAs since mysql emits
-			// raw byte strings that do not use the same escaping as our ParseBytes
-			// function expects, and the difference between ParseStringAs and
-			// ParseDatumStringAs is whether or not it attempts to parse bytes.
 			var err error
-			datum, err = rowenc.ParseDatumStringAsWithRawBytes(ctx, conv.VisibleColTypes[datumIdx], field, conv.EvalCtx)
+			datum, err = mysqlStrToDatum(conv.EvalCtx, field, conv.VisibleColTypes[datumIdx])
 			if err != nil {
 				col := conv.VisibleCols[datumIdx]
 				return newImportRowError(
