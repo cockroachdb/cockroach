@@ -922,7 +922,7 @@ func (r *Replica) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (r *Replica) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("[n%d,s%d,r%s]",
-		r.store.Ident.NodeID, r.store.Ident.StoreID, r.rangeStr.get())
+		r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
 }
 
 // ReplicaID returns the ID for the Replica. This value is fixed for the
