@@ -136,6 +136,7 @@ func TestIndexConstraints(t *testing.T) {
 					filters, optionalFilters, indexCols, sv.NotNullCols(), computedCols,
 					colsInComputedColsExpressions,
 					true /* consolidate */, &evalCtx, &f, partition.PrefixSorter{},
+					func() {}, /* checkCancellation */
 				)
 				result := ic.Constraint()
 				var buf bytes.Buffer
@@ -254,6 +255,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 					nil /* computedCols */, opt.ColSet{}, /* colsInComputedColsExpressions */
 					true, /* consolidate */
 					&evalCtx, &f, partition.PrefixSorter{},
+					func() {}, /* checkCancellation */
 				)
 				_ = ic.Constraint()
 				_ = ic.RemainingFilters()

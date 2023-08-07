@@ -821,7 +821,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		// Check whether the filter can constrain the index.
 		spanExpr, constraint, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(
-			c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols,
+			c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols, c.checkCancellation,
 		)
 		if !ok {
 			// A span expression to constrain the inverted index could not be
@@ -1415,6 +1415,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			scanPrivate.Table,
 			index,
 			nil, /* computedColumns */
+			c.checkCancellation,
 		)
 		if !ok {
 			return
@@ -1809,4 +1810,14 @@ func (c *CustomFuncs) AddPrimaryKeyColsToScanPrivate(sp *memo.ScanPrivate) *memo
 // TableIDFromScanPrivate returns the table ID of the scan private.
 func (c *CustomFuncs) TableIDFromScanPrivate(sp *memo.ScanPrivate) opt.TableID {
 	return sp.Table
+}
+
+func (c *CustomFuncs) checkCancellation() {
+	// Check whether the optimization has been canceled (most likely due to a
+	// statement timeout). Internally, only every 1024th Check() call will poll
+	// on the Done channel, so this should only have negligible performance
+	// overhead.
+	if err := c.e.o.cancelChecker.Check(); err != nil {
+		panic(err)
+	}
 }
