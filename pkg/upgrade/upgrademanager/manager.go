@@ -792,28 +792,28 @@ FROM (
      WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
 )
 WHERE ((pl->'migration')->'clusterVersion') = $1::JSONB`
+	// postJobInfoQuery avoids the crdb_internal.system_jobs table
+	// to avoid expensive full scans.
 	postJobInfoTableQuery = `
-WITH latestpayload AS (
-     SELECT job_id, value FROM system.job_info AS payload
-     WHERE info_key = 'legacy_payload'
-     ORDER BY written DESC
+WITH
+running_migration_jobs AS (
+    SELECT id, status
+    FROM system.jobs
+    WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
+    AND job_type = 'MIGRATION'
+),
+payloads AS (
+    SELECT job_id, value
+    FROM system.job_info AS payload
+    WHERE info_key = 'legacy_payload'
+    AND job_id IN (SELECT id FROM running_migration_jobs)
+    ORDER BY written DESC
 )
-SELECT id, status
-FROM (
-     SELECT
-     distinct(id),
-     status,
-     crdb_internal.pb_to_json(
-	'cockroach.sql.jobs.jobspb.Payload',
-	payload.value,
-	false -- emit_defaults
-     ) AS pl
-     FROM system.jobs AS j
-     INNER JOIN latestpayload AS payload ON j.id = payload.job_id
-     WHERE j.status IN ` + jobs.NonTerminalStatusTupleString + `
-     AND j.job_type = 'MIGRATION'
-)
-WHERE ((pl->'migration')->'clusterVersion') = $1::JSONB`
+SELECT id, status FROM (
+    SELECT id, status, crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payloads.value, false) AS pl
+    FROM running_migration_jobs AS j
+    INNER JOIN payloads ON j.id = payloads.job_id
+) WHERE ((pl->'migration')->'clusterVersion') = $1::JSONB`
 )
 
 func (m *Manager) getRunningMigrationJob(
