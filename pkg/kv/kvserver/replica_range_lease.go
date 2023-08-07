@@ -68,7 +68,7 @@ import (
 	"go.etcd.io/etcd/raft/v3"
 )
 
-var transferExpirationLeasesFirstEnabled = settings.RegisterBoolSetting(
+var TransferExpirationLeasesFirstEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.transfer_expiration_leases_first.enabled",
 	"controls whether we transfer expiration-based leases that are later upgraded to epoch-based ones",
@@ -259,7 +259,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 
 	if p.repl.requiresExpiringLeaseRLocked() ||
 		(transfer &&
-			transferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV) &&
+			TransferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV) &&
 			p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.EnableLeaseUpgrade)) {
 		// In addition to ranges that unconditionally require expiration-based
 		// leases (node liveness and earlier), we also use them during lease
