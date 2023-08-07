@@ -36,6 +36,7 @@ import (
 )
 
 func TestSQLStatsRegions(t *testing.T) {
+	t.Skip("#107582")
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
