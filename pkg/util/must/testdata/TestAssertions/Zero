@@ -1,8 +1,0 @@
-echo
-----
-message with ‹argument›: expected zero value, got true
-message with ‹argument›: expected zero value, got 1
-message with ‹argument›: expected zero value, got 0.1
-message with ‹argument›: expected zero value, got ‹"a"›
-message with ‹argument›: expected zero value, got hlc.Timestamp{WallTime:0, Logical:1, Synthetic:false}
-message with ‹argument›: expected zero value, got &hlc.Timestamp{WallTime:0, Logical:0, Synthetic:false}

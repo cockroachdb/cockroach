@@ -14,7 +14,6 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/log/severity",
-        "//pkg/util/must",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_getsentry_sentry_go//:sentry-go",
