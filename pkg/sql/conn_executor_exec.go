@@ -803,7 +803,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		p.maybeLogStatement(
 			ctx,
 			ex.executorType,
-			false, /* isCopy */
 			int(ex.state.mu.autoRetryCounter),
 			ex.extraTxnState.txnCounter,
 			0, /* rowsAffected */
@@ -1577,7 +1576,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 					planner.maybeLogStatement(
 						ctx,
 						ex.executorType,
-						false, /* isCopy */
 						int(ex.state.mu.autoRetryCounter),
 						ex.extraTxnState.txnCounter,
 						ppInfo.dispatchToExecutionEngine.rowsAffected,
@@ -1605,7 +1603,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			planner.maybeLogStatement(
 				ctx,
 				ex.executorType,
-				false, /* isCopy */
 				int(ex.state.mu.autoRetryCounter),
 				ex.extraTxnState.txnCounter,
 				nonBulkJobNumRows,
@@ -2279,7 +2276,6 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		p.maybeLogStatement(
 			ctx,
 			ex.executorType,
-			false, /* isCopy */
 			int(ex.state.mu.autoRetryCounter),
 			ex.extraTxnState.txnCounter,
 			0, /* rowsAffected */
