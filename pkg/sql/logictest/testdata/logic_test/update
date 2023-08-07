@@ -672,3 +672,15 @@ statement error pgcode 42803 sum\(\): aggregate functions are not allowed in ORD
 UPDATE t107634 SET a = 1 ORDER BY sum(a) LIMIT 1;
 
 subtest end
+
+# Regression test for #108166. Do not allow aggregate functions in ORDER BY when
+# the function is wrapped by a conditional expression.
+subtest regression_108166
+
+statement ok
+CREATE TABLE t108166 (a INT)
+
+statement error pgcode 42803 sum\(\): aggregate functions are not allowed in ORDER BY in UPDATE
+UPDATE t108166 SET a = 1 ORDER BY COALESCE(sum(a), 1) LIMIT 1;
+
+subtest end
