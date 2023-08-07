@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
@@ -93,11 +92,11 @@ func TestExprIsNeverNull(t *testing.T) {
 				}
 
 				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
-				err = b.Build(expr)
+				scalar, err := b.Build(expr)
 				if err != nil {
 					return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 				}
-				result := memo.ExprIsNeverNull(o.Memo().RootExpr().(opt.ScalarExpr), sv.NotNullCols())
+				result := memo.ExprIsNeverNull(scalar, sv.NotNullCols())
 				return fmt.Sprintf("%t\n", result)
 
 			default:
