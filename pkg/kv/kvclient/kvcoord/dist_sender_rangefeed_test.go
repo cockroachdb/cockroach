@@ -12,6 +12,8 @@ package kvcoord_test
 
 import (
 	"context"
+	"math/rand"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -629,7 +631,7 @@ func TestMuxRangeCatchupScanQuotaReleased(t *testing.T) {
 	enoughErrors := make(chan struct{})
 	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, noValuesExpected, true,
 		kvcoord.TestingWithOnRangefeedEvent(
-			func(_ context.Context, _ roachpb.Span, event *kvpb.RangeFeedEvent) (skip bool, _ error) {
+			func(_ context.Context, _ roachpb.Span, _ int64, event *kvpb.RangeFeedEvent) (skip bool, _ error) {
 				*event = transientErrEvent
 				if numErrors.Add(1) == numErrsToReturn {
 					close(enoughErrors)
@@ -727,7 +729,7 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 		closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, ignoreValues, useMux,
 			kvcoord.TestingWithRangeFeedMetrics(&metrics),
 			kvcoord.TestingWithOnRangefeedEvent(
-				func(ctx context.Context, s roachpb.Span, event *kvpb.RangeFeedEvent) (skip bool, _ error) {
+				func(ctx context.Context, s roachpb.Span, _ int64, event *kvpb.RangeFeedEvent) (skip bool, _ error) {
 					switch t := event.GetValue().(type) {
 					case *kvpb.RangeFeedValue:
 						// If we previously arranged for the range to be skipped (stuck catchup scan),
@@ -801,4 +803,137 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 		// We also know that we have blocked numCatchupToBlock ranges in their catchup scan.
 		require.EqualValues(t, numCatchupToBlock, metrics.RangefeedCatchupRanges.Value())
 	})
+}
+
+// TestMuxRangeFeedCanCloseStream verifies stream termination functionality in mux rangefeed.
+func TestMuxRangeFeedCanCloseStream(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	ts := tc.Server(0)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	// Insert 1000 rows, and split them into 10 ranges.
+	sqlDB.ExecMultiple(t,
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
+		`SET CLUSTER SETTING kv.closed_timestamp.target_duration='100ms'`,
+		`ALTER DATABASE defaultdb  CONFIGURE ZONE USING num_replicas = 1`,
+		`CREATE TABLE foo (key INT PRIMARY KEY)`,
+		`INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`,
+		`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(100, 900, 100))`,
+	)
+
+	fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+		ts.DB(), keys.SystemSQLCodec, "defaultdb", "foo")
+	fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+
+	frontier, err := span.MakeFrontier(fooSpan)
+	require.NoError(t, err)
+
+	expectFrontierAdvance := func() {
+		t.Helper()
+		// Closed timestamp for range advances every100ms.  We'll require frontier to
+		// advance a bit more thn that.
+		threshold := frontier.Frontier().AddDuration(250 * time.Millisecond)
+		testutils.SucceedsWithin(t, func() error {
+			if frontier.Frontier().Less(threshold) {
+				return errors.Newf("waiting for frontier advance to at least %s", threshold)
+			}
+			return nil
+		}, 10*time.Second)
+	}
+
+	var observedStreams sync.Map
+	var capturedSender atomic.Value
+
+	ignoreValues := func(event kvcoord.RangeFeedMessage) {}
+	var numRestartStreams atomic.Int32
+
+	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, ts.Clock().Now(), ignoreValues, true,
+		kvcoord.WithMuxRangeFeed(),
+		kvcoord.TestingWithMuxRangeFeedRequestSenderCapture(
+			// We expect a single mux sender since we have 1 node in this test.
+			func(nodeID roachpb.NodeID, capture func(request *kvpb.RangeFeedRequest) error) {
+				capturedSender.Store(capture)
+			},
+		),
+		kvcoord.TestingWithOnRangefeedEvent(
+			func(ctx context.Context, s roachpb.Span, streamID int64, event *kvpb.RangeFeedEvent) (skip bool, _ error) {
+				switch t := event.GetValue().(type) {
+				case *kvpb.RangeFeedCheckpoint:
+					observedStreams.Store(streamID, nil)
+					_, err := frontier.Forward(t.Span, t.ResolvedTS)
+					if err != nil {
+						return true, err
+					}
+				case *kvpb.RangeFeedError:
+					// Keep track of mux errors due to RangeFeedRetryError_REASON_RANGEFEED_CLOSED.
+					// Those results when we issue CloseStream request.
+					err := t.Error.GoError()
+					log.Infof(ctx, "Got err: %v", err)
+					var retryErr *kvpb.RangeFeedRetryError
+					if ok := errors.As(err, &retryErr); ok && retryErr.Reason == kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED {
+						numRestartStreams.Add(1)
+					}
+				}
+
+				return false, nil
+			}),
+	)
+	defer closeFeed()
+
+	// Wait until we capture mux rangefeed request sender.  There should only be 1.
+	var muxRangeFeedRequestSender func(req *kvpb.RangeFeedRequest) error
+	testutils.SucceedsWithin(t, func() error {
+		v, ok := capturedSender.Load().(func(request *kvpb.RangeFeedRequest) error)
+		if ok {
+			muxRangeFeedRequestSender = v
+			return nil
+		}
+		return errors.New("waiting to capture mux rangefeed request sender.")
+	}, 10*time.Second)
+
+	cancelledStreams := make(map[int64]struct{})
+	for i := 0; i < 5; i++ {
+		// Wait for the test frontier to advance.  Once it advances,
+		// we know the rangefeed is started, all ranges are running.
+		expectFrontierAdvance()
+
+		// Pick some number of streams to close. Since sync.Map iteration order is non-deterministic,
+		// we'll pick few random streams.
+		initialClosed := numRestartStreams.Load()
+		numToCancel := 1 + rand.Int31n(3)
+		var numCancelled int32 = 0
+		observedStreams.Range(func(key any, _ any) bool {
+			streamID := key.(int64)
+			if _, wasCancelled := cancelledStreams[streamID]; wasCancelled {
+				return true // try another stream.
+			}
+			numCancelled++
+			cancelledStreams[streamID] = struct{}{}
+			require.NoError(t, muxRangeFeedRequestSender(&kvpb.RangeFeedRequest{
+				StreamID:    streamID,
+				CloseStream: true,
+			}))
+			return numCancelled < numToCancel
+		})
+
+		// Observe numToCancel errors.
+		testutils.SucceedsWithin(t, func() error {
+			numRestarted := numRestartStreams.Load()
+			if numRestarted == initialClosed+numCancelled {
+				return nil
+			}
+			return errors.Newf("waiting for %d streams to be closed (%d so far)", numCancelled, numRestarted-initialClosed)
+		}, 10*time.Second)
+
+		// When we close the stream(s), the rangefeed server responds with a retryable error.
+		// Mux rangefeed should retry, and thus we expect frontier to keep advancing.
+	}
 }

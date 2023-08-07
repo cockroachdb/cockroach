@@ -308,6 +308,17 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 				}
 				continue
 			}
+
+			if m.cfg.knobs.captureMuxRangeFeedRequestSender != nil {
+				m.cfg.knobs.captureMuxRangeFeedRequestSender(
+					args.Replica.NodeID,
+					func(req *kvpb.RangeFeedRequest) error {
+						conn.mu.Lock()
+						defer conn.mu.Unlock()
+						return conn.mu.sender.Send(req)
+					})
+			}
+
 			return nil
 		}
 
@@ -441,7 +452,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 		}
 
 		if m.cfg.knobs.onRangefeedEvent != nil {
-			skip, err := m.cfg.knobs.onRangefeedEvent(ctx, active.Span, &event.RangeFeedEvent)
+			skip, err := m.cfg.knobs.onRangefeedEvent(ctx, active.Span, event.StreamID, &event.RangeFeedEvent)
 			if err != nil {
 				return err
 			}

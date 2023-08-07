@@ -76,6 +76,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	"go.uber.org/atomic"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -219,6 +220,12 @@ This metric is thus not an indicator of KV health.`,
 		Measurement: "Streams",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaClosedMuxRangeFeedStreams = metric.Metadata{
+		Name:        "rpc.streams.mux_rangefeed.closed_streams",
+		Help:        `Total number of MuxRangeFeed streams explicitly closed by the client`,
+		Measurement: "Streams",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Cluster settings.
@@ -271,6 +278,7 @@ type nodeMetrics struct {
 	ActiveRangeFeed               *metric.Gauge
 	NumMuxRangeFeed               *metric.Counter
 	ActiveMuxRangeFeed            *metric.Gauge
+	ClosedMuxRangeFeedStreams     *metric.Counter
 }
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
@@ -295,6 +303,7 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 		NumRangeFeed:                  metric.NewCounter(metaTotalRangeFeed),
 		ActiveMuxRangeFeed:            metric.NewGauge(metaActiveMuxRangeFeed),
 		NumMuxRangeFeed:               metric.NewCounter(metaTotalMuxRangeFeed),
+		ClosedMuxRangeFeedStreams:     metric.NewCounter(metaClosedMuxRangeFeedStreams),
 	}
 
 	for i := range nm.MethodCounts {
@@ -1684,10 +1693,12 @@ func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_Range
 // TODO: This code can be removed in 22.2 once MuxRangeFeed is the default, and
 // the old style RangeFeed deprecated.
 type setRangeIDEventSink struct {
-	ctx      context.Context
-	rangeID  roachpb.RangeID
-	streamID int64
-	wrapped  *lockedMuxStream
+	ctx            context.Context
+	cancel         context.CancelFunc
+	closedByClient atomic.Bool
+	rangeID        roachpb.RangeID
+	streamID       int64
+	wrapped        *lockedMuxStream
 }
 
 func (s *setRangeIDEventSink) Context() context.Context {
@@ -1712,10 +1723,6 @@ type lockedMuxStream struct {
 	sendMu  syncutil.Mutex
 }
 
-func (s *lockedMuxStream) Context() context.Context {
-	return s.wrapped.Context()
-}
-
 func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
@@ -1728,7 +1735,7 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 // to avoid blocking on IO (sender.Send) during potentially critical areas.
 // Thus, the forwarding should happen on a dedicated goroutine.
 func newMuxRangeFeedCompletionWatcher(
-	ctx context.Context, stopper *stop.Stopper, sender *lockedMuxStream,
+	ctx context.Context, stopper *stop.Stopper, send func(e *kvpb.MuxRangeFeedEvent) error,
 ) (doneFn func(event *kvpb.MuxRangeFeedEvent), cleanup func(), _ error) {
 	// structure to help coordination of event forwarding and shutdown.
 	var fin = struct {
@@ -1751,14 +1758,12 @@ func newMuxRangeFeedCompletionWatcher(
 				toSend, fin.completed = fin.completed, nil
 				fin.Unlock()
 				for _, e := range toSend {
-					if err := sender.Send(e); err != nil {
+					if err := send(e); err != nil {
 						// If we failed to send, there is nothing else we can do.
 						// The stream is broken anyway.
 						return
 					}
 				}
-			case <-sender.wrapped.Context().Done():
-				return
 			case <-ctx.Done():
 				return
 			case <-stopper.ShouldQuiesce():
@@ -1795,7 +1800,7 @@ func newMuxRangeFeedCompletionWatcher(
 func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	muxStream := &lockedMuxStream{wrapped: stream}
 
-	rangefeedCompleted, cleanup, err := newMuxRangeFeedCompletionWatcher(stream.Context(), n.stopper, muxStream)
+	rangefeedCompleted, cleanup, err := newMuxRangeFeedCompletionWatcher(stream.Context(), n.stopper, muxStream.Send)
 	if err != nil {
 		return err
 	}
@@ -1805,28 +1810,76 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	n.metrics.ActiveMuxRangeFeed.Inc(1)
 	defer n.metrics.ActiveMuxRangeFeed.Inc(-1)
 
+	var activeStreams sync.Map
+	defer func() {
+		// Technically, this shouldn't be needed since stream context is a real
+		// context (i.e. no leaked goroutines even if cancel not called), but it's
+		// nice to clean up anyway.
+		activeStreams.Range(func(key, value any) bool {
+			value.(*setRangeIDEventSink).cancel()
+			return true
+		})
+	}()
+
 	for {
 		req, err := stream.Recv()
 		if err != nil {
 			return err
 		}
 
-		streamCtx := n.AnnotateCtx(stream.Context())
+		if req.CloseStream {
+			if !n.storeCfg.Settings.Version.IsActive(stream.Context(), clusterversion.V23_2) {
+				return errors.AssertionFailedf("unexpected CloseStream(%d) request (min version %s)",
+					req.StreamID, clusterversion.V23_2)
+			}
+
+			// Client issued a request to close previously established stream.
+			n.metrics.ClosedMuxRangeFeedStreams.Inc(1)
+			if v, loaded := activeStreams.LoadAndDelete(req.StreamID); loaded {
+				s := v.(*setRangeIDEventSink)
+				s.closedByClient.Store(true)
+				s.cancel()
+			} else {
+				// This is a bit strange, but it could happen if this stream completes
+				// just before we receive close request. So, just print out a warning.
+				if log.V(1) {
+					log.Infof(stream.Context(), "ignoring likely benign CloseStream race for stream %d", req.StreamID)
+				}
+			}
+			continue
+		}
+
+		streamCtx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
 		streamCtx = logtags.AddTag(streamCtx, "r", req.RangeID)
 		streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
+		streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
 
-		sink := setRangeIDEventSink{
+		streamSink := &setRangeIDEventSink{
 			ctx:      streamCtx,
+			cancel:   cancel,
 			rangeID:  req.RangeID,
 			streamID: req.StreamID,
 			wrapped:  muxStream,
 		}
+		activeStreams.Store(req.StreamID, streamSink)
 
 		n.metrics.NumMuxRangeFeed.Inc(1)
 		n.metrics.ActiveMuxRangeFeed.Inc(1)
-		f := n.stores.RangeFeed(req, &sink)
+		f := n.stores.RangeFeed(req, streamSink)
 		f.WhenReady(func(err error) {
 			n.metrics.ActiveMuxRangeFeed.Inc(-1)
+
+			activeStreams.Delete(req.StreamID)
+			streamSink.cancel()
+
+			if streamSink.closedByClient.Load() && errors.Is(err, context.Canceled) {
+				// If the stream was explicitly closed by the client, we expect to see
+				// context.Canceled error.  In this case, clear out the error
+				// so that kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED gets returned
+				// to the client.
+				err = nil
+			}
+
 			if err == nil {
 				cause := kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED
 				if !n.storeCfg.Settings.Version.IsActive(stream.Context(), clusterversion.V23_2) {
