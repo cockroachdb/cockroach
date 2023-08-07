@@ -3175,3 +3175,82 @@ WHERE json_col->'loc' @> '{"state":"NY"}'
 ----
 {"loc": {"state": "NY"}}  Big Apple          us-east-1
 {"loc": {"state": "NY"}}  Statue of Liberty  us-east-1
+
+# Regression test for incorrectly setting bytes limit in the streamer on remote
+# lookups (#108206).
+statement ok
+CREATE TABLE t108206_p (
+  id INT PRIMARY KEY,
+  p_id INT,
+  INDEX (p_id),
+  FAMILY (id, p_id)
+) LOCALITY REGIONAL BY ROW;
+CREATE TABLE t108206_c (
+  c_id INT PRIMARY KEY,
+  c_p_id INT,
+  INDEX (c_p_id),
+  FAMILY (c_id, c_p_id)
+) LOCALITY REGIONAL BY ROW;
+INSERT INTO t108206_p (crdb_region, id, p_id) VALUES ('ap-southeast-2', 1, 10), ('ca-central-1', 2, 20), ('us-east-1', 3, 30);
+INSERT INTO t108206_c (crdb_region, c_id, c_p_id) VALUES ('ap-southeast-2', 10, 10), ('ca-central-1', 20, 20), ('us-east-1', 30, 30)
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t108206_c WHERE EXISTS (SELECT * FROM t108206_p WHERE p_id = c_p_id) AND c_id = 20; SET tracing = off
+
+# If the row is not found in the local region, the other regions are searched in
+# parallel.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/136/1/"@"/20/0
+Scan /Table/136/1/"\x80"/20/0, /Table/136/1/"\xc0"/20/0
+fetched: /t108206_c/t108206_c_pkey/?/20/c_p_id -> /20
+Scan /Table/135/2/"@"/2{0-1}
+Scan /Table/135/2/"\x80"/2{0-1}, /Table/135/2/"\xc0"/2{0-1}
+fetched: /t108206_p/t108206_p_p_id_idx/'ca-central-1'/20/2 -> <undecoded>
+output row: [20 20]
+
+# Left join with locality optimized search enabled.
+query T retry
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM t108206_c WHERE EXISTS (SELECT * FROM t108206_p WHERE p_id = c_p_id) AND c_id = 20] OFFSET 2
+----
+·
+• lookup join (semi)
+│ table: t108206_p@t108206_p_p_id_idx
+│ lookup condition: (crdb_region = 'ap-southeast-2') AND (c_p_id = p_id)
+│ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (c_p_id = p_id)
+│
+└── • union all
+    │ limit: 1
+    │
+    ├── • scan
+    │     missing stats
+    │     table: t108206_c@t108206_c_pkey
+    │     spans: [/'ap-southeast-2'/20 - /'ap-southeast-2'/20]
+    │
+    └── • scan
+          missing stats
+          table: t108206_c@t108206_c_pkey
+          spans: [/'ca-central-1'/20 - /'ca-central-1'/20] [/'us-east-1'/20 - /'us-east-1'/20]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fr2zAQx9_3KY57STI0IjtlK4KCS-swFzfpYsMKjTGudXReHUuTbXAp-e7Ddkjrril025t0uv_pd_-THrH8laPAwPXdsxA-wny1vIQb9_rKP_UWMD73gjD45k9gmFBZ_Njmn-MUvn91Vy64120ejF_P0rssHWcSTiCN28UEThfnME77mM0nESzn88ANwUaGhZK0SDZUorhBCyOG2qiUylKZNvTYJXiyQcEZZoWuqzYcMUyVIRSPWGVVTigwTG5zWlEiyUw5MpRUJVneld034exXsb6nB2R4pvJ6U5QCWjy2I0aGgU7a6HSN63VzzNc4tfmUQ1JIsEBVP8hgtGWo6uqJqKySO0JhbdnfUVv_kdrZER-ktA9SPsGVZLIkh7pQRpIhOeCLtq-0s1CflJ7aw0b8bJNVYB1E4e8x7EJlxc6v2fCa8EGTAN-dhxC4lx5cLL0Fsr2Nem-j7uyKM9kgQ1-p-1rDT5UVoAoBY-cITqAZHfGREMKxOLf4l90Tdmw4AWc2QYYr2qiKIH9F3f6mZnT8XM-gGaWDgn9W3M9U9zM18jY2dJep4qBxs_cYt6JSq6KkF0M8NJKIIck76h9EqWqT0pVRaXdNv112ui4gqaz6U7vfeEV31H2F52LrX8T2m-LZQMxfimdvio9eiKPth98BAAD__78lm1s=
+
+statement ok
+SET vectorize=on
+
+query T
+EXPLAIN (VEC) SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10
+----
+│
+└ Node 1
+  └ *rowexec.joinReader
+    └ *colexec.limitOp
+      └ *colexec.SerialUnorderedSynchronizer
+        ├ *colfetcher.ColBatchScan
+        └ *colfetcher.ColBatchScan
+
+statement ok
+RESET vectorize
