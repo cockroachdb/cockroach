@@ -41,13 +41,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
@@ -714,8 +714,6 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		// The default behavior is to enable uncertainty errors for a single random
 		// node.
 		overrideErrorOrigin []int
-		// if non-empty, this test will be skipped.
-		skip string
 	}{
 		{
 			query:           "SELECT * FROM t AS t1 JOIN t AS t2 ON t1.x = t2.x",
@@ -726,8 +724,8 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElHFr2kAUwP_fp3g8GN3GWXMXtRoYWNqMpc0Sp44NSiiZuUlWzWW5C1PE7z6SCNVWr3ED9-fLez_fz3vvboXy1wwtHNmufTWGOPkh4MPQ_wR39reBe-l48ObaGY1Hn923sKl5VxUouByBouB4nj0E1_dvvwzgxne8TYaB74Gi5wt4D4qdLwP4-tEe2lUL17m14ew6DqdZOLdenyHBRETcC-dconWHFAkyJGhiQDDNxIRLKbIitSoLnWiBlkEwTtJcFZ8DghORcbRWqGI142jhOPw-40MeRjxrGkgw4iqMZ-XPq766Tx_4EgleiVk-T6QFCwJFPErDImo0qYHBmqDI1WMLqcIpR4uuSX2NGxEnGwvzucXyPo4WSNAV4iFP4aeIExCJBX267bYkkInfcXTQiP2lUefguTwTau0cFhL0c1V4kj4j_TbpmwflzINyj055IrKIZzzaEQrWe_Q90RBps_ekcH_r1k5rWn9h6LEL06RGo8nq7swLJlsTap1oZ-obXZx-Z1j9wbGjB8eMRs2pvaCxdUbtE02tvlH3_970PXJDLlORSF7rIhvFS8CjKa-eDSnybMIHmZiUbarQL7nyQ8SlqrK0CpykShWC2zDVwkwPMy1s7sD0KWzqtQ1965aWbuvhthbu6OHOv_zpCy3c1XfuauGeHu4dpR2sX_0JAAD__8XU8Oo=",
 		},
 		{
-			// This test reproduces 51458 and should be enabled once that issue is
-			// fixed.
+			// Reproduction of not propagating errors to all outputs of the
+			// hash router (#51458).
 			query:               "SELECT * FROM t JOIN onerow ON t.x = onerow.x",
 			expectedPlanURL:     "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lPFr2kAUx3_fX3E8GG3H2eSirSNQyGgzms5pp8IGJYyredWwmMvuLswi_u8jiWDjbDSk8yd93n3efb_f590S1O8IbBi5Pfd6TML4SZDPw8FX8uD-uO998vrk9MYbjUffemdkvedDsUGTu4HXJyJGKf6QQZ_o8wW5WtfnC598v3WHbtGx531xyclNyKeSz-33J0AhFgH2-RwV2A_AgIIFFNrgU0ikmKBSQmZLy3yjFyzANimEcZLq7GefwkRIBHsJOtQRgg1j_hjhEHmA0jCBQoCah1HeXjv6Z_ILn4HCtYjSeaxssqAkq0cJz6qWwUzwVxREqtdHbDo_PpMZV7NyT4eBv_IpKM2nCDZb0VekbvqksZABSgxKnfyM3Ldlh99brmZ3IoxRGp2ytAif9KnDzq5kOJ3l34DCINU2cRh1LOq0t6xubLQb2NihsS9aIjG62353Ht0pHc0OHzarO2yDmS3Dest5s-PO--I_zds6PHSrduiW2XrDxGtIbZfbFg-UU3z8K_rFm9BIrvWq3CP8QS6P8CDsUDBElYhY4UH33cw8YDDFIhMlUjnBeykm-TFFOci5_H4FqHSxui68uFjKBB4Od5rA3WqYbcPmS9iqhq1K-GMJNrfhdpPAquE9gVXDewLrNAnsoonnaniP52p4j-fLGrKtenCnCdythru1RuWv3v0NAAD__2MQZAI=",
 			overrideErrorOrigin: []int{0},
@@ -754,14 +752,13 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		}
 		for _, testCase := range testCases {
 			t.Run(testCase.query, func(t *testing.T) {
-				if testCase.skip != "" {
-					skip.IgnoreLint(t, testCase.skip)
-				}
 				func() {
 					_, err := defaultConn.Exec(ctx, fmt.Sprintf("set vectorize=%s", vectorizeOpt))
 					require.NoError(t, err)
-					func() {
-						// Check distsql plan.
+					// We allow for the DistSQL plan to be different for some
+					// time in case the range cache wasn't populated as we
+					// expected (we've seen this under race in #108250).
+					testutils.SucceedsSoon(t, func() error {
 						rows, err := defaultConn.Query(
 							ctx,
 							fmt.Sprintf("SELECT info FROM [EXPLAIN (DISTSQL) %s] WHERE info LIKE 'Diagram:%%'", testCase.query),
@@ -771,8 +768,14 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 						rows.Next()
 						var actualPlanURL string
 						require.NoError(t, rows.Scan(&actualPlanURL))
-						require.Equal(t, testCase.expectedPlanURL, actualPlanURL)
-					}()
+						if testCase.expectedPlanURL != actualPlanURL {
+							return errors.Newf(
+								"DistSQL plans didn't match:\nexpected:%s\nactual: %s",
+								testCase.expectedPlanURL, actualPlanURL,
+							)
+						}
+						return nil
+					})
 
 					errorOrigin := []int{allNodeIdxs[rng.Intn(len(allNodeIdxs))]}
 					if testCase.overrideErrorOrigin != nil {
