@@ -119,7 +119,6 @@ func (s executorType) logLabel() string { return logLabels[s] }
 func (p *planner) maybeLogStatement(
 	ctx context.Context,
 	execType executorType,
-	isCopy bool,
 	numRetries, txnCounter, rows int,
 	bulkJobId uint64,
 	err error,
@@ -131,7 +130,7 @@ func (p *planner) maybeLogStatement(
 	statsCollector sqlstats.StatsCollector,
 ) {
 	p.maybeAuditRoleBasedAuditEvent(ctx, execType)
-	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter,
+	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter,
 		rows, bulkJobId, err, queryReceived, hasAdminRoleCache,
 		telemetryLoggingMetrics, stmtFingerprintID, queryStats, statsCollector,
 	)
@@ -140,7 +139,6 @@ func (p *planner) maybeLogStatement(
 func (p *planner) maybeLogStatementInternal(
 	ctx context.Context,
 	execType executorType,
-	isCopy bool,
 	numRetries, txnCounter, rows int,
 	bulkJobId uint64,
 	err error,
@@ -233,7 +231,7 @@ func (p *planner) maybeLogStatementInternal(
 			auditEvent := builder.BuildAuditEvent(ctx, p, eventpb.CommonSQLEventDetails{}, execDetails)
 			entries[idx] = auditEvent
 		}
-		p.logEventsOnlyExternally(ctx, isCopy, entries...)
+		p.logEventsOnlyExternally(ctx, entries...)
 	}
 
 	if slowQueryLogEnabled && (
@@ -245,12 +243,12 @@ func (p *planner) maybeLogStatementInternal(
 		switch {
 		case execType == executorTypeExec:
 			// Non-internal queries are always logged to the slow query log.
-			p.logEventsOnlyExternally(ctx, isCopy, &eventpb.SlowQuery{CommonSQLExecDetails: execDetails})
+			p.logEventsOnlyExternally(ctx, &eventpb.SlowQuery{CommonSQLExecDetails: execDetails})
 
 		case execType == executorTypeInternal && slowInternalQueryLogEnabled:
 			// Internal queries that surpass the slow query log threshold should only
 			// be logged to the slow-internal-only log if the cluster setting dictates.
-			p.logEventsOnlyExternally(ctx, isCopy, &eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails})
+			p.logEventsOnlyExternally(ctx, &eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails})
 		}
 	}
 
@@ -265,13 +263,12 @@ func (p *planner) maybeLogStatementInternal(
 				// see a copy of the execution on the DEV Channel.
 				dst:               LogExternally | LogToDevChannelIfVerbose,
 				verboseTraceLevel: execType.vLevel(),
-				isCopy:            isCopy,
 			},
 			&eventpb.QueryExecute{CommonSQLExecDetails: execDetails})
 	}
 
 	if shouldLogToAdminAuditLog {
-		p.logEventsOnlyExternally(ctx, isCopy, &eventpb.AdminQuery{CommonSQLExecDetails: execDetails})
+		p.logEventsOnlyExternally(ctx, &eventpb.AdminQuery{CommonSQLExecDetails: execDetails})
 	}
 
 	if telemetryLoggingEnabled && !p.SessionData().TroubleshootingMode {
@@ -397,21 +394,19 @@ func (p *planner) maybeLogStatementInternal(
 				SchemaChangerMode:                     p.curPlan.instrumentation.schemaChangerMode.String(),
 			}
 
-			p.logOperationalEventsOnlyExternally(ctx, isCopy, &sampledQuery)
+			p.logOperationalEventsOnlyExternally(ctx, &sampledQuery)
 		} else {
 			telemetryMetrics.incSkippedQueryCount()
 		}
 	}
 }
 
-func (p *planner) logEventsOnlyExternally(
-	ctx context.Context, isCopy bool, entries ...logpb.EventPayload,
-) {
+func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...logpb.EventPayload) {
 	// The API contract for logEventsWithOptions() is that it returns
 	// no error when system.eventlog is not written to.
 	_ = p.logEventsWithOptions(ctx,
 		2, /* depth: we want to use the caller location */
-		eventLogOptions{dst: LogExternally, isCopy: isCopy},
+		eventLogOptions{dst: LogExternally},
 		entries...)
 }
 
@@ -419,12 +414,12 @@ func (p *planner) logEventsOnlyExternally(
 // options to omit SQL Name redaction. This is used when logging to
 // the telemetry channel when we want additional metadata available.
 func (p *planner) logOperationalEventsOnlyExternally(
-	ctx context.Context, isCopy bool, entries ...logpb.EventPayload,
+	ctx context.Context, entries ...logpb.EventPayload,
 ) {
 	// The API contract for logEventsWithOptions() is that it returns
 	// no error when system.eventlog is not written to.
 	_ = p.logEventsWithOptions(ctx,
 		2, /* depth: we want to use the caller location */
-		eventLogOptions{dst: LogExternally, isCopy: isCopy, rOpts: redactionOptions{omitSQLNameRedaction: true}},
+		eventLogOptions{dst: LogExternally, rOpts: redactionOptions{omitSQLNameRedaction: true}},
 		entries...)
 }
