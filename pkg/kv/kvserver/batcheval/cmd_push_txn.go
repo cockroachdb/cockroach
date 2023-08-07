@@ -15,6 +15,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -286,7 +286,9 @@ func PushTxn(
 	// transaction recovery procedure always finalizes target transactions, even
 	// if initiated by a PUSH_TIMESTAMP.
 	if pusheeStaging && pusherWins && pushType == kvpb.PUSH_TIMESTAMP {
-		_ = must.True(ctx, pusheeStagingFailed, "parallel commit must be known to have failed for push to succeed")
+		if !pusheeStagingFailed && !build.IsRelease() {
+			log.Fatalf(ctx, "parallel commit must be known to have failed for push to succeed")
+		}
 		pushType = kvpb.PUSH_ABORT
 	}
 
