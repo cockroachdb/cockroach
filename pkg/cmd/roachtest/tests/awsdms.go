@@ -191,7 +191,7 @@ func registerAWSDMS(r registry.Registry) {
 		Name:    "awsdms",
 		Owner:   registry.OwnerMigrations,
 		Cluster: r.MakeClusterSpec(1),
-		Tags:    []string{`default`, `awsdms`},
+		Tags:    []string{`weekly`, `aws-weekly`},
 		Leases:  registry.MetamorphicLeases,
 		Run:     runAWSDMS,
 	})
