@@ -76,7 +76,7 @@ func (l InsertsDataLoader) InitialDataLoad(
 		}
 	}
 
-	var bytesAtomic int64
+	var bytesAtomic atomic.Int64
 	for _, table := range tables {
 		if table.InitialRows.NumBatches == 0 {
 			continue
@@ -85,7 +85,7 @@ func (l InsertsDataLoader) InitialDataLoad(
 				`initial data is not supported for workload %s`, gen.Meta().Name)
 		}
 		tableStart := timeutil.Now()
-		var tableRowsAtomic int64
+		var tableRowsAtomic atomic.Int64
 
 		batchesPerWorker := table.InitialRows.NumBatches / l.Concurrency
 		g, gCtx := errgroup.WithContext(ctx)
@@ -118,13 +118,13 @@ func (l InsertsDataLoader) InitialDataLoad(
 
 				for batchIdx := startIdx; batchIdx < endIdx; batchIdx++ {
 					for _, row := range table.InitialRows.BatchRows(batchIdx) {
-						atomic.AddInt64(&tableRowsAtomic, 1)
+						tableRowsAtomic.Add(1)
 						if len(params) != 0 {
 							insertStmtBuf.WriteString(`,`)
 						}
 						insertStmtBuf.WriteString(`(`)
 						for i, datum := range row {
-							atomic.AddInt64(&bytesAtomic, workload.ApproxDatumSize(datum))
+							bytesAtomic.Add(workload.ApproxDatumSize(datum))
 							if i != 0 {
 								insertStmtBuf.WriteString(`,`)
 							}
@@ -145,10 +145,10 @@ func (l InsertsDataLoader) InitialDataLoad(
 		if err := g.Wait(); err != nil {
 			return 0, err
 		}
-		tableRows := int(atomic.LoadInt64(&tableRowsAtomic))
+		tableRows := int(tableRowsAtomic.Load())
 		log.Infof(ctx, `imported %s (%s, %d rows)`,
 			table.Name, timeutil.Since(tableStart).Round(time.Second), tableRows,
 		)
 	}
-	return atomic.LoadInt64(&bytesAtomic), nil
+	return bytesAtomic.Load(), nil
 }

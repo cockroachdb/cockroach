@@ -13,7 +13,6 @@ package tpcc
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
@@ -150,7 +149,7 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 }
 
 func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
-	atomic.AddUint64(&p.config.auditor.paymentTransactions, 1)
+	p.config.auditor.paymentTransactions.Add(1)
 
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
@@ -185,7 +184,7 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 	// and 40% by number.
 	if rng.Intn(100) < 60 {
 		d.cLast = string(p.config.randCLast(rng, &p.a))
-		atomic.AddUint64(&p.config.auditor.paymentsByLastName, 1)
+		p.config.auditor.paymentsByLastName.Add(1)
 	} else {
 		d.cID = p.config.randCustomerID(rng)
 	}

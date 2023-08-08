@@ -434,8 +434,8 @@ func (g *ycsb) Ops(
 		}
 	}
 
-	rowIndexVal := uint64(g.recordCount)
-	rowIndex := &rowIndexVal
+	var rowIndex atomic.Uint64
+	rowIndex.Store(uint64(g.recordCount))
 	rowCounter := NewAcknowledgedCounter((uint64)(g.recordCount))
 
 	var requestGen randGenerator
@@ -537,7 +537,7 @@ func (g *ycsb) Ops(
 			scanStmt:                scanStmt,
 			insertStmt:              insertStmt,
 			updateStmts:             updateStmts,
-			rowIndex:                rowIndex,
+			rowIndex:                &rowIndex,
 			rowCounter:              rowCounter,
 			nextInsertIndex:         nil,
 			requestGen:              requestGen,
@@ -572,7 +572,7 @@ type ycsbWorker struct {
 	updateStmts []stmtKey
 
 	// The next row index to insert.
-	rowIndex *uint64
+	rowIndex *atomic.Uint64
 	// Counter to keep track of which rows have been inserted.
 	rowCounter *AcknowledgedCounter
 	// Next insert index to use if non-nil.
@@ -613,7 +613,7 @@ func (yw *ycsbWorker) run(ctx context.Context) error {
 	return nil
 }
 
-var readOnly int32
+var readOnly atomic.Int32
 
 type operation string
 
@@ -683,7 +683,7 @@ func (yw *ycsbWorker) nextInsertKeyIndex() uint64 {
 		yw.nextInsertIndex = nil
 		return result
 	}
-	return atomic.AddUint64(yw.rowIndex, 1) - 1
+	return yw.rowIndex.Add(1) - 1
 }
 
 var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -872,15 +872,15 @@ func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
 // Choose an operation in proportion to the frequencies.
 func (yw *ycsbWorker) chooseOp() operation {
 	p := yw.rng.Float32()
-	if atomic.LoadInt32(&readOnly) == 0 && p <= yw.config.updateFreq {
+	if readOnly.Load() == 0 && p <= yw.config.updateFreq {
 		return updateOp
 	}
 	p -= yw.config.updateFreq
-	if atomic.LoadInt32(&readOnly) == 0 && p <= yw.config.insertFreq {
+	if readOnly.Load() == 0 && p <= yw.config.insertFreq {
 		return insertOp
 	}
 	p -= yw.config.insertFreq
-	if atomic.LoadInt32(&readOnly) == 0 && p <= yw.config.readModifyWriteFreq {
+	if readOnly.Load() == 0 && p <= yw.config.readModifyWriteFreq {
 		return readModifyWriteOp
 	}
 	p -= yw.config.readModifyWriteFreq
