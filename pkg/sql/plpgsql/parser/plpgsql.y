@@ -297,15 +297,12 @@ func (u *plpgsqlSymUnion) raiseOptions() []plpgsqltree.RaiseOption {
 %type <plpgsqltree.Expr>	decl_defval decl_cursor_query
 %type <tree.ResolvableTypeReference>	decl_datatype
 %type <str>		decl_collate
-%type <plpgsqltree.PLpgSQLDatum>	decl_cursor_args
 
 %type <*plpgsqltree.Open> open_stmt_processor
 %type <str>	expr_until_semi expr_until_paren
 %type <str>	expr_until_then expr_until_loop opt_expr_until_when
 %type <plpgsqltree.Expr>	opt_exitcond
 
-%type <plpgsqltree.PLpgSQLScalarVar>		cursor_variable
-%type <plpgsqltree.PLpgSQLDatum>	decl_cursor_arg
 %type <forvariable>	for_variable
 %type <plpgsqltree.Expr>	return_variable
 %type <*tree.NumVal>	foreach_slice
