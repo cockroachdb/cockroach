@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +35,7 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 
 	setRunning(zero)
 
-	handle := newElasticCPUWorkHandle(allotment)
+	handle := newElasticCPUWorkHandle(roachpb.SystemTenantID, allotment)
 	handle.testingOverrideRunningTime = func() time.Duration {
 		overrideMu.Lock()
 		defer overrideMu.Unlock()
@@ -176,7 +177,7 @@ func TestElasticCPUWorkHandlePreWork(t *testing.T) {
 
 	setRunning(zero)
 
-	handle := newElasticCPUWorkHandle(allotment)
+	handle := newElasticCPUWorkHandle(roachpb.SystemTenantID, allotment)
 	handle.testingOverrideRunningTime = func() time.Duration {
 		overrideMu.Lock()
 		defer overrideMu.Unlock()

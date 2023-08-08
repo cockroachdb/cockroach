@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
@@ -64,7 +65,7 @@ func TestElasticCPUWorkQueue(t *testing.T) {
 					d.ScanArgs(t, "disabled", &elasticCPUInternalWorkQueue.disabled)
 				}
 
-				handle, err := elasticWorkQ.Admit(ctx, duration, WorkInfo{})
+				handle, err := elasticWorkQ.Admit(ctx, duration, WorkInfo{TenantID: roachpb.SystemTenantID})
 				require.NoError(t, err)
 
 				var buf strings.Builder
@@ -97,7 +98,7 @@ func TestElasticCPUWorkQueue(t *testing.T) {
 				allotted, err := time.ParseDuration(allottedStr)
 				require.NoError(t, err)
 
-				handle := &ElasticCPUWorkHandle{}
+				handle := &ElasticCPUWorkHandle{tenantID: roachpb.SystemTenantID}
 				handle.testingOverrideRunningTime = func() time.Duration {
 					return running
 				}
@@ -168,6 +169,15 @@ func (t *testElasticCPUInternalWorkQueue) Admit(
 
 func (t *testElasticCPUInternalWorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
 	panic("unimplemented")
+}
+
+func (t *testElasticCPUInternalWorkQueue) adjustTenantUsed(
+	tenantID roachpb.TenantID, additionalUsed int64,
+) {
+	if !t.disabled {
+		fmt.Fprintf(&t.buf, "adjust-tenant-used: tenant=%s additional-used=%s",
+			tenantID.String(), time.Duration(additionalUsed).String())
+	}
 }
 
 func (t *testElasticCPUInternalWorkQueue) hasWaitingRequests() bool {

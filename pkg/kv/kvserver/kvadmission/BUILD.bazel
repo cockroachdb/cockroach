@@ -18,6 +18,7 @@ go_library(
         "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
+        "//pkg/util/grunning",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/timeutil",

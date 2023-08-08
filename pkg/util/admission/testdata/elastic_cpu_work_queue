@@ -63,7 +63,7 @@ handle:      50ms
 admitted-work-done running=10ms allotted=50ms
 ----
 granter:    return-grant=40ms
-work-queue: 
+work-queue: adjust-tenant-used: tenant=system additional-used=-40ms
 metrics:    acquired=50ms returned=40ms max-available=8s
 
 # Repeat the same but this time simulate what happens if we've taken less than
@@ -83,7 +83,7 @@ handle:      50ms
 admitted-work-done running=70ms allotted=50ms
 ----
 granter:    took-without-permission=20ms
-work-queue: 
+work-queue: adjust-tenant-used: tenant=system additional-used=20ms
 metrics:    acquired=70ms returned=0s max-available=8s
 
 # vim:ft=sh

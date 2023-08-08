@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 )
 
@@ -21,6 +22,7 @@ import (
 // specifically how much on-CPU time a request is allowed to make use of (used
 // for cooperative scheduling with elastic CPU granters).
 type ElasticCPUWorkHandle struct {
+	tenantID roachpb.TenantID
 	// cpuStart captures the running time of the calling goroutine when this
 	// handle is constructed.
 	cpuStart time.Duration
@@ -51,8 +53,10 @@ type ElasticCPUWorkHandle struct {
 	testingOverrideOverLimit   func() (bool, time.Duration)
 }
 
-func newElasticCPUWorkHandle(allotted time.Duration) *ElasticCPUWorkHandle {
-	h := &ElasticCPUWorkHandle{allotted: allotted}
+func newElasticCPUWorkHandle(
+	tenantID roachpb.TenantID, allotted time.Duration,
+) *ElasticCPUWorkHandle {
+	h := &ElasticCPUWorkHandle{tenantID: tenantID, allotted: allotted}
 	h.cpuStart = grunning.Time()
 	return h
 }
@@ -180,7 +184,7 @@ func ElasticCPUWorkHandleFromContext(ctx context.Context) *ElasticCPUWorkHandle 
 // TestingNewElasticCPUHandle exports the ElasticCPUWorkHandle constructor for
 // testing purposes.
 func TestingNewElasticCPUHandle() *ElasticCPUWorkHandle {
-	return newElasticCPUWorkHandle(420 * time.Hour) // use a very high allotment
+	return newElasticCPUWorkHandle(roachpb.SystemTenantID, 420*time.Hour) // use a very high allotment
 }
 
 // TestingNewElasticCPUHandleWithCallback constructs an ElasticCPUWorkHandle
