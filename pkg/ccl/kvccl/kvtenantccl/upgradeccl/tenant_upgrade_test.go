@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -278,6 +277,8 @@ func TestTenantUpgradeFailure(t *testing.T) {
 									ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 								) error {
 									tenantStopperChannel <- struct{}{}
+									// Wait for a second here to give the tenant some time to be stopped.
+									time.Sleep(time.Second * 1)
 									return nil
 								}), true
 						default:
@@ -293,7 +294,6 @@ func TestTenantUpgradeFailure(t *testing.T) {
 	}
 
 	t.Run("upgrade tenant have it crash then resume", func(t *testing.T) {
-		skip.WithIssue(t, 106279)
 		// Create a tenant before upgrading anything and verify its version.
 		const initialTenantID = 10
 		tenantInfo := mkTenant(t, initialTenantID)
