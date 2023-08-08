@@ -400,6 +400,9 @@ type Planner interface {
 	// less than numAnnotations entries. If updated, the annotations in the eval
 	// context held in the planner is also updated.
 	MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx)
+
+	// Optimizer returns the optimizer associated with this Planner, if any.
+	Optimizer() interface{}
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
