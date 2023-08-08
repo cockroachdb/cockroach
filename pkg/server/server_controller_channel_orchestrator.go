@@ -106,7 +106,10 @@ var _ serverState = (*serverStateUsingChannels)(nil)
 
 // getServer is part of the serverState interface.
 func (s *serverStateUsingChannels) getServer() (orchestratedServer, bool) {
-	return s.server, s.started.Get()
+	if s.started.Get() {
+		return s.server, true
+	}
+	return nil, false
 }
 
 // nameContainer is part of the serverState interface.
