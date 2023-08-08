@@ -267,18 +267,6 @@ func (rh *ReplicationHelper) StartReplicationStream(
 	return replicationProducerSpec
 }
 
-func (rh *ReplicationHelper) SetupSpanConfigsReplicationStream(
-	t *testing.T, sourceTenantName roachpb.TenantName,
-) streampb.ReplicationStreamSpec {
-	var rawSpec []byte
-	row := rh.SysSQL.QueryRow(t, `SELECT crdb_internal.setup_span_configs_stream($1)`, sourceTenantName)
-	row.Scan(&rawSpec)
-	var spec streampb.ReplicationStreamSpec
-	err := protoutil.Unmarshal(rawSpec, &spec)
-	require.NoError(t, err)
-	return spec
-}
-
 func (rh *ReplicationHelper) MaybeGenerateInlineURL(t *testing.T) *url.URL {
 	if rh.rng.Float64() > 0.5 {
 		return &rh.PGUrl

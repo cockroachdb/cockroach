@@ -50,7 +50,7 @@ func (sc testStreamClient) Create(
 // SetupSpanConfigsStream implements the Client interface.
 func (sc testStreamClient) SetupSpanConfigsStream(
 	ctx context.Context, tenant roachpb.TenantName,
-) (streampb.StreamID, Topology, error) {
+) (Subscription, error) {
 	panic("not implemented")
 }
 

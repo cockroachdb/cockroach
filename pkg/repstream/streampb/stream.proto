@@ -22,6 +22,7 @@ import "util/hlc/timestamp.proto";
 import "util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
+import "roachpb/span_config.proto";
 
 // ReplicationProducerSpec is the specification returned by the replication
 // producer job when it is created.
@@ -67,6 +68,8 @@ message StreamPartitionSpec {
 
     // Controls batch size in bytes.
     int64 batch_byte_size = 3;
+
+    roachpb.TenantID span_config_for_tenant = 4 [(gogoproto.nullable) = false];
   }
 
   ExecutionConfig config = 3 [(gogoproto.nullable) = false];
@@ -98,12 +101,20 @@ message ReplicationStreamSpec {
 
 }
 
+// StreamedSpanConfigEntry holds a span config update and its source side commit timestamp
+message StreamedSpanConfigEntry {
+  roachpb.SpanConfigEntry span_config = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+}
+
 // StreamEvent describes a replication stream event
 message StreamEvent {
+
   message Batch {
     repeated roachpb.KeyValue key_values = 1 [(gogoproto.nullable) = false];
     repeated roachpb.RangeFeedSSTable ssts = 2 [(gogoproto.nullable) = false];
     repeated roachpb.RangeFeedDeleteRange del_ranges = 3 [(gogoproto.nullable) = false];
+    repeated StreamedSpanConfigEntry span_configs = 4 [(gogoproto.nullable) = false];
   }
 
   // Checkpoint represents stream checkpoint.

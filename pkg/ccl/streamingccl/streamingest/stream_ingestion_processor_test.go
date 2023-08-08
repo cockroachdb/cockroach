@@ -74,7 +74,7 @@ func (m *mockStreamClient) Create(
 // SetupSpanConfigsStream implements the Client interface.
 func (m *mockStreamClient) SetupSpanConfigsStream(
 	ctx context.Context, tenant roachpb.TenantName,
-) (streampb.StreamID, streamclient.Topology, error) {
+) (streamclient.Subscription, error) {
 	panic("unimplemented")
 }
 
@@ -628,7 +628,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	streamAddr := getTestRandomClientURI(tenantID, tenantName)
 
 	// The random client returns system and table data partitions.
-	streamClient, err := streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(streamAddr), nil)
+	streamClient, err := streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(streamAddr), nil, false)
 	require.NoError(t, err)
 
 	randomStreamClient, ok := streamClient.(*streamclient.RandomStreamClient)

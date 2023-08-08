@@ -212,7 +212,7 @@ func ingestionPlanHook(
 		}
 
 		// Create a new stream with stream client.
-		client, err := streamclient.NewStreamClient(ctx, streamAddress, p.ExecCfg().InternalDB)
+		client, err := streamclient.NewStreamClient(ctx, streamAddress, p.ExecCfg().InternalDB, false)
 		if err != nil {
 			return err
 		}
