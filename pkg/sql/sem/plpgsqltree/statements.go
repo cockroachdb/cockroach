@@ -347,6 +347,17 @@ type While struct {
 }
 
 func (s *While) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("WHILE ")
+	s.Condition.Format(ctx)
+	ctx.WriteString(" LOOP\n")
+	for _, stmt := range s.Body {
+		stmt.Format(ctx)
+	}
+	ctx.WriteString("END LOOP")
+	if s.Label != "" {
+		ctx.WriteString(fmt.Sprintf(" %s", s.Label))
+	}
+	ctx.WriteString(";\n")
 }
 
 func (s *While) PlpgSQLStatementTag() string {

@@ -23,7 +23,7 @@ import (
 
 // TODO: Define(if possible) a data driven test framework so that sql and
 // plpgsql share a parse test
-func TestParseDataDriver(t *testing.T) {
+func TestParseDataDriven(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
