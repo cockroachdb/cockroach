@@ -2801,6 +2801,7 @@ func (ex *connExecutor) execCopyOut(
 			stmtFingerprintID,
 			&stats,
 			ex.statsCollector,
+			ex.applicationName.Load().(string),
 		)
 	}()
 
@@ -3050,7 +3051,8 @@ func (ex *connExecutor) execCopyIn(
 			ex.server.TelemetryLoggingMetrics,
 			stmtFingerprintID,
 			&stats,
-			ex.statsCollector)
+			ex.statsCollector,
+			ex.applicationName.Load().(string))
 	}()
 
 	var copyErr error

@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -129,11 +130,13 @@ func (p *planner) maybeLogStatement(
 	stmtFingerprintID appstatspb.StmtFingerprintID,
 	queryStats *topLevelQueryStats,
 	statsCollector sqlstats.StatsCollector,
+	applicationName string,
 ) {
 	p.maybeAuditRoleBasedAuditEvent(ctx, execType)
 	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter,
 		rows, stmtCount, bulkJobId, err, queryReceived, hasAdminRoleCache,
 		telemetryLoggingMetrics, stmtFingerprintID, queryStats, statsCollector,
+		applicationName,
 	)
 }
 
@@ -149,6 +152,7 @@ func (p *planner) maybeLogStatementInternal(
 	stmtFingerprintID appstatspb.StmtFingerprintID,
 	topLevelQueryStats *topLevelQueryStats,
 	statsCollector sqlstats.StatsCollector,
+	applicationName string,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
@@ -162,11 +166,13 @@ func (p *planner) maybeLogStatementInternal(
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEventBuilders) != 0
 	maxEventFrequency := TelemetryMaxEventFrequency.Get(&p.execCfg.Settings.SV)
+	logConsoleQuery := telemetryInternalConsoleQueriesEnabled.Get(&p.execCfg.Settings.SV) &&
+		strings.HasPrefix(applicationName, "$ internal-console")
 
 	// We only consider non-internal SQL statements for telemetry logging unless
 	// the telemetryInternalQueriesEnabled is true.
 	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV) &&
-		(execType == executorTypeExec || telemetryInternalQueriesEnabled.Get(&p.execCfg.Settings.SV))
+		(execType == executorTypeExec || telemetryInternalQueriesEnabled.Get(&p.execCfg.Settings.SV) || logConsoleQuery)
 
 	// If hasAdminRoleCache IsSet is true iff AdminAuditLog is enabled.
 	shouldLogToAdminAuditLog := hasAdminRoleCache.IsSet && hasAdminRoleCache.HasAdminRole
@@ -278,9 +284,12 @@ func (p *planner) maybeLogStatementInternal(
 		// the last event emission.
 		requiredTimeElapsed := 1.0 / float64(maxEventFrequency)
 		tracingEnabled := telemetryMetrics.isTracing(p.curPlan.instrumentation.Tracing())
-		// Always sample if the current statement is not of type DML or tracing
-		// is enabled for this statement.
-		if p.stmt.AST.StatementType() != tree.TypeDML || tracingEnabled {
+		// Always sample if one of the scenarios is true:
+		// - the current statement is not of type DML
+		// - tracing is enabled for this statement
+		// - this is a query emitted by our console (application_name starts with `$ internal-console`) and
+		// the cluster setting to log console queries is enabled
+		if p.stmt.AST.StatementType() != tree.TypeDML || tracingEnabled || logConsoleQuery {
 			requiredTimeElapsed = 0
 		}
 		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {

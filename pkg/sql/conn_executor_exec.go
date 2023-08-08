@@ -1588,6 +1588,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 						ppInfo.dispatchToExecutionEngine.stmtFingerprintID,
 						ppInfo.dispatchToExecutionEngine.queryStats,
 						ex.statsCollector,
+						ex.applicationName.Load().(string),
 					)
 				},
 			})
@@ -1615,6 +1616,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				stmtFingerprintID,
 				&stats,
 				ex.statsCollector,
+				ex.applicationName.Load().(string),
 			)
 		}
 	}()

@@ -42,6 +42,14 @@ var telemetryInternalQueriesEnabled = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+var telemetryInternalConsoleQueriesEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.telemetry.query_sampling.internal_console.enabled",
+	"when set to true, all internal queries used to populated the UI Console"+
+		"will be logged into telemetry",
+	true,
+)
+
 // TelemetryLoggingMetrics keeps track of the last time at which an event
 // was logged to the telemetry channel, and the number of skipped queries
 // since the last logged event.
