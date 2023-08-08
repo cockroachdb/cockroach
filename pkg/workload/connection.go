@@ -28,6 +28,7 @@ type ConnFlags struct {
 	Method      string // Method for issuing queries; see SQLRunner.
 
 	ConnHealthCheckPeriod time.Duration
+	DNSRefreshInterval    time.Duration
 	MaxConnIdleTime       time.Duration
 	MaxConnLifetime       time.Duration
 	MaxConnLifetimeJitter time.Duration
@@ -44,6 +45,7 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 	c.IntVar(&c.Concurrency, `concurrency`, 2*runtime.GOMAXPROCS(0),
 		`Number of concurrent workers`)
 	c.StringVar(&c.Method, `method`, `cache_statement`, `SQL issue method (cache_statement, cache_describe, describe_exec, exec, simple_protocol)`)
+	c.DurationVar(&c.DNSRefreshInterval, `dns-refresh`, defaultDNSCacheRefresh, `Interval used to refresh cached DNS entries (<0 disables)`)
 	c.DurationVar(&c.ConnHealthCheckPeriod, `conn-healthcheck-period`, 30*time.Second, `Interval that health checks are run on connections`)
 	c.IntVar(&c.MinConns, `min-conns`, 0, `Minimum number of connections to attempt to keep in the pool`)
 	c.DurationVar(&c.MaxConnIdleTime, `max-conn-idle-time`, 150*time.Second, `Max time an idle connection will be kept around`)
@@ -58,6 +60,7 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 		`concurrency`,
 		`conn-healthcheck-period`,
 		`db`,
+		`dns-refresh`,
 		`max-conn-idle-time`,
 		`max-conn-lifetime-jitter`,
 		`max-conn-lifetime`,
