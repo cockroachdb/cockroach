@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -99,6 +100,8 @@ var (
 		"determines whether the file sst sink integrates with elastic CPU control",
 		true,
 	)
+
+	testingDiscardBackupData = envutil.EnvOrDefaultBool("COCKROACH_BACKUP_TESTING_DISCARD_DATA", false)
 )
 
 const (
@@ -344,6 +347,9 @@ func runBackupProcessor(
 			}
 			log.Infof(ctx, "backing up %d spans to default locality because backup localities %s have no match in node's localities %s", totalSpans, backupLocalities, nodeLocalities)
 		}
+	}
+	if testingDiscardBackupData {
+		destURI = "null:///discard"
 	}
 	dest, err := cloud.ExternalStorageConfFromURI(destURI, spec.User())
 	if err != nil {
