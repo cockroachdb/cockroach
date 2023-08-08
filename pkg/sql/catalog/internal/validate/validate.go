@@ -294,7 +294,7 @@ var _ catalog.ValidationDescGetter = (*validationDescGetterImpl)(nil)
 func (vdg *validationDescGetterImpl) GetDescriptor(id descpb.ID) (catalog.Descriptor, error) {
 	desc, found := vdg.descriptors[id]
 	if !found || desc == nil {
-		return nil, catalog.NewReferencedDescriptorNotFoundError("object", id)
+		return nil, catalog.NewReferencedDescriptorNotFoundError("descriptor", id)
 	}
 	return desc, nil
 }
