@@ -23,6 +23,7 @@ import (
 	"math/big"
 	"net"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -1377,11 +1378,9 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:  "cdc/bank",
-		Owner: `cdc`,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/bank",
+		Owner:           `cdc`,
+		Cluster:         r.MakeClusterSpec(4),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Timeout:         30 * time.Minute,
@@ -1806,6 +1805,101 @@ type kafkaManager struct {
 	c     cluster.Cluster
 	nodes option.NodeListOption
 	mon   cluster.Monitor
+	cmd   cmd
+}
+
+type cmd interface {
+	Run(context.Context, ...string)
+	RunE(context.Context, ...string) error
+	PutString(ctx context.Context, content, dest string, mode os.FileMode) error
+	RunWithDetails(ctx context.Context, testLogger *logger.Logger, args ...string) (install.RunResultDetails, error)
+
+	// MakeDir creates the specified directory in both the host node and the docker instance if using Docker,
+	// to simplify file upload.
+	MakeDir(ctx context.Context, path string)
+}
+
+var _ cmd = &dockerCmd{}
+
+type dockerCmd struct {
+	km               *kafkaManager
+	containerRunning bool
+}
+
+func (dc *dockerCmd) RunE(ctx context.Context, cmd ...string) error {
+	cmd = append([]string{`sudo docker exec kafkaContainer ` + cmd[0]}, cmd[1:]...)
+	return dc.km.c.RunE(ctx, dc.km.nodes, cmd...)
+	/* if err := dc.km.c.RunE(ctx, dc.km.nodes, cmd...); err != nil {
+		// TODO (zinger): Is this necessary?
+		if !dc.containerRunning {
+			dc.km.t.Status(`waiting for docker container to run`)
+			retryOpts := retry.Options{
+				InitialBackoff: 1 * time.Second,
+				MaxBackoff:     5 * time.Second,
+			}
+			err = retry.WithMaxAttempts(ctx, retryOpts, 3, func() error {
+				return dc.km.c.RunE(ctx, dc.km.nodes, cmd...)
+			})
+			if err == nil {
+				dc.containerRunning = true
+			}
+		}
+		return err
+	}
+	dc.containerRunning = true
+	return nil */
+}
+
+func (dc *dockerCmd) Run(ctx context.Context, cmd ...string) {
+	if err := dc.RunE(ctx, cmd...); err != nil {
+		dc.km.t.Error(err)
+	}
+}
+
+func (dc *dockerCmd) PutString(ctx context.Context, content, dest string, mode os.FileMode) error {
+	tempDest := dest + `.tempfordocker`
+	if err := dc.km.c.PutString(ctx, content, tempDest, mode, dc.km.nodes); err != nil {
+		return err
+	}
+	return dc.km.c.RunE(ctx, dc.km.nodes, `sudo docker cp `+tempDest+` kafkaContainer:`+dest)
+}
+
+func (dc *dockerCmd) RunWithDetails(ctx context.Context, testLogger *logger.Logger, args ...string) (install.RunResultDetails, error) {
+	args = append([]string{`sudo docker exec kafkaContainer ` + args[0]}, args[1:]...)
+	return dc.km.c.RunWithDetailsSingleNode(ctx, testLogger, dc.km.nodes, args...)
+}
+
+func (dc *dockerCmd) MakeDir(ctx context.Context, path string) {
+	dc.km.c.Run(ctx, dc.km.nodes, `mkdir -p `+path)
+	dc.Run(ctx, `mkdir -p `+path)
+}
+
+var _ cmd = clusterCmd{}
+
+type clusterCmd struct {
+	km *kafkaManager
+}
+
+func (cc clusterCmd) RunE(ctx context.Context, cmd ...string) error {
+	return cc.km.c.RunE(ctx, cc.km.nodes, cmd...)
+}
+
+func (cc clusterCmd) Run(ctx context.Context, cmd ...string) {
+	if err := cc.RunE(ctx, cmd...); err != nil {
+		cc.km.t.Error(err)
+	}
+}
+
+func (cc clusterCmd) PutString(ctx context.Context, content, dest string, mode os.FileMode) error {
+	return cc.km.c.PutString(ctx, content, dest, mode, cc.km.nodes)
+}
+
+func (cc clusterCmd) RunWithDetails(ctx context.Context, testLogger *logger.Logger, args ...string) (install.RunResultDetails, error) {
+	return cc.km.c.RunWithDetailsSingleNode(ctx, testLogger, cc.km.nodes, args...)
+}
+
+func (cc clusterCmd) MakeDir(ctx context.Context, path string) {
+	cc.Run(ctx, `mkdir -p `+path)
 }
 
 func (k kafkaManager) basePath() string {
@@ -1813,6 +1907,18 @@ func (k kafkaManager) basePath() string {
 		return `/tmp/confluent`
 	}
 	return `/mnt/data1/confluent`
+}
+
+func (k kafkaManager) usesDocker() bool {
+	switch k.c.Architecture() {
+	case vm.ArchARM64:
+		return true
+	case vm.ArchFIPS, vm.ArchAMD64:
+		return false
+	default:
+		k.t.Status("installing kafka on %s may not be supported, trying anyway", k.c.Architecture())
+		return false
+	}
 }
 
 func (k kafkaManager) confluentHome() string {
@@ -1835,20 +1941,35 @@ func (k kafkaManager) serverJAASConfig() string {
 	return filepath.Join(k.configDir(), "server_jaas.conf")
 }
 
-func (k kafkaManager) install(ctx context.Context) {
+func (k *kafkaManager) install(ctx context.Context) {
+
+	if k.usesDocker() {
+		k.t.Status("installing docker")
+		if err := k.c.Install(ctx, k.t.L(), k.nodes, "docker"); err != nil {
+			k.t.Fatal(err)
+		}
+		k.t.Status("configuring amd emulation")
+		k.c.Run(ctx, k.nodes, `sudo docker run --privileged --rm tonistiigi/binfmt --install all`)
+		k.t.Status("running linux/amd64 under docker")
+		k.c.Run(ctx, k.nodes, `sudo docker run --privileged -i -d -t --name kafkaContainer --entrypoint /bin/bash --platform linux/amd64 cockroachdb/cockroach`)
+		k.cmd = &dockerCmd{km: k}
+	} else {
+		k.cmd = clusterCmd{km: k}
+	}
+
 	k.t.Status("installing kafka")
 	folder := k.basePath()
 
-	k.c.Run(ctx, k.nodes, `mkdir -p `+folder)
+	k.cmd.MakeDir(ctx, folder)
 
 	downloadScriptPath := filepath.Join(folder, "install.sh")
-	err := k.c.PutString(ctx, confluentDownloadScript, downloadScriptPath, 0700, k.nodes)
+	err := k.cmd.PutString(ctx, confluentDownloadScript, downloadScriptPath, 0700)
 	if err != nil {
 		k.t.Fatal(err)
 	}
-	k.c.Run(ctx, k.nodes, downloadScriptPath, folder)
+	k.cmd.Run(ctx, downloadScriptPath, folder)
 	if !k.c.IsLocal() {
-		k.c.Run(ctx, k.nodes, `mkdir -p logs`)
+		k.cmd.MakeDir(ctx, `logs`)
 		if err := k.installJRE(ctx); err != nil {
 			k.t.Fatal(err)
 		}
@@ -1861,11 +1982,11 @@ func (k kafkaManager) installJRE(ctx context.Context) error {
 		MaxBackoff:     5 * time.Minute,
 	}
 	return retry.WithMaxAttempts(ctx, retryOpts, 3, func() error {
-		err := k.c.RunE(ctx, k.nodes, `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
+		err := k.cmd.RunE(ctx, `sudo apt-get -q update`)
 		if err != nil {
 			return err
 		}
-		return k.c.RunE(ctx, k.nodes, `sudo DEBIAN_FRONTEND=noninteractive apt-get -yq --no-install-recommends install openssl default-jre maven 2>&1 > logs/apt-get-install.log`)
+		return k.cmd.RunE(ctx, `sudo DEBIAN_FRONTEND=noninteractive apt-get -yq --no-install-recommends install openssl default-jre maven`)
 	})
 }
 
@@ -1875,7 +1996,7 @@ func (k kafkaManager) runWithRetry(ctx context.Context, cmd string) {
 		MaxBackoff:     5 * time.Minute,
 	}
 	err := retry.WithMaxAttempts(ctx, retryOpts, 3, func() error {
-		return k.c.RunE(ctx, k.nodes, cmd)
+		return k.cmd.RunE(ctx, cmd)
 	})
 	if err != nil {
 		k.t.Fatal(err)
@@ -1883,19 +2004,19 @@ func (k kafkaManager) runWithRetry(ctx context.Context, cmd string) {
 }
 
 func (k kafkaManager) configureHydraOauth(ctx context.Context) (string, string) {
-	k.c.Run(ctx, k.nodes, `rm -rf /home/ubuntu/hydra`)
+	k.cmd.Run(ctx, `rm -rf /home/ubuntu/hydra`)
 	k.runWithRetry(ctx, `bash <(curl https://raw.githubusercontent.com/ory/meta/master/install.sh) -d -b . hydra v2.0.3`)
 
-	err := k.c.PutString(ctx, hydraServerStartScript, "/home/ubuntu/hydra-serve.sh", 0700, k.nodes)
+	err := k.cmd.PutString(ctx, hydraServerStartScript, "/home/ubuntu/hydra-serve.sh", 0700)
 	if err != nil {
 		k.t.Fatal(err)
 	}
 	mon := k.c.NewMonitor(ctx, k.nodes)
 	mon.Go(func(ctx context.Context) error {
-		err := k.c.RunE(ctx, k.nodes, `/home/ubuntu/hydra-serve.sh`)
+		err := k.cmd.RunE(ctx, `/home/ubuntu/hydra-serve.sh`)
 		return errors.Wrap(err, "hydra failed")
 	})
-	result, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, "/home/ubuntu/hydra create oauth2-client",
+	result, err := k.cmd.RunWithDetails(ctx, k.t.L(), "/home/ubuntu/hydra create oauth2-client",
 		"-e", "http://localhost:4445",
 		"--grant-type", "client_credentials",
 		"--token-endpoint-auth-method", "client_secret_basic",
@@ -1933,9 +2054,9 @@ func (k kafkaManager) configureOauth(ctx context.Context) (clientcredentials.Con
 
 	// In order to run Kafka with OAuth a custom implementation of certain Java
 	// classes has to be provided.
-	k.c.Run(ctx, k.nodes, `rm -rf /home/ubuntu/kafka-oauth`)
+	k.cmd.Run(ctx, `rm -rf /home/ubuntu/kafka-oauth`)
 	k.runWithRetry(ctx, `git clone https://github.com/jairsjunior/kafka-oauth.git /home/ubuntu/kafka-oauth`)
-	k.c.Run(ctx, k.nodes, `(cd /home/ubuntu/kafka-oauth; git checkout c2b307548ef944d3fbe899b453d24e1fc8380add; mvn package)`)
+	k.cmd.Run(ctx, `(cd /home/ubuntu/kafka-oauth; git checkout c2b307548ef944d3fbe899b453d24e1fc8380add; mvn package)`)
 
 	// CLASSPATH allows Kafka to load in the custom implementation
 	kafkaEnv := "CLASSPATH='/home/ubuntu/kafka-oauth/target/*'"
@@ -2020,28 +2141,28 @@ func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
 
 	k.t.Status("constructing java keystores")
 	// Convert PEM cert and key into pkcs12 bundle so that it can be imported into a java keystore.
-	k.c.Run(ctx, k.nodes,
+	k.cmd.Run(ctx,
 		fmt.Sprintf("openssl pkcs12 -export -in %s -inkey %s -name kafka -out %s -password pass:%s",
 			kafkaCertPath,
 			kafkaKeyPath,
 			kafkaBundlePath,
 			keystorePassword))
 
-	k.c.Run(ctx, k.nodes, fmt.Sprintf("rm -f %s", keystorePath))
-	k.c.Run(ctx, k.nodes, fmt.Sprintf("rm -f %s", truststorePath))
+	k.cmd.Run(ctx, fmt.Sprintf("rm -f %s", keystorePath))
+	k.cmd.Run(ctx, fmt.Sprintf("rm -f %s", truststorePath))
 
-	k.c.Run(ctx, k.nodes,
+	k.cmd.Run(ctx,
 		fmt.Sprintf("keytool -importkeystore -deststorepass %s -destkeystore %s -srckeystore %s -srcstoretype PKCS12 -srcstorepass %s -alias kafka",
 			keystorePassword,
 			keystorePath,
 			kafkaBundlePath,
 			keystorePassword))
-	k.c.Run(ctx, k.nodes,
+	k.cmd.Run(ctx,
 		fmt.Sprintf("keytool -keystore %s -alias CAroot -importcert -file %s -no-prompt -storepass %s",
 			truststorePath,
 			caCertPath,
 			keystorePassword))
-	k.c.Run(ctx, k.nodes,
+	k.cmd.Run(ctx,
 		fmt.Sprintf("keytool -keystore %s -alias CAroot -importcert -file %s -no-prompt -storepass %s",
 			keystorePath,
 			caCertPath,
@@ -2051,7 +2172,7 @@ func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
 }
 
 func (k kafkaManager) PutConfigContent(ctx context.Context, data string, path string) {
-	err := k.c.PutString(ctx, data, path, 0600, k.nodes)
+	err := k.cmd.PutString(ctx, data, path, 0600)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -2059,14 +2180,14 @@ func (k kafkaManager) PutConfigContent(ctx context.Context, data string, path st
 
 func (k kafkaManager) addSCRAMUsers(ctx context.Context) {
 	k.t.Status("adding entries for SASL/SCRAM users")
-	k.c.Run(ctx, k.nodes, filepath.Join(k.binDir(), "kafka-configs"),
+	k.cmd.Run(ctx, filepath.Join(k.binDir(), "kafka-configs"),
 		"--zookeeper", "localhost:2181",
 		"--alter",
 		"--add-config", "SCRAM-SHA-512=[password=scram512-secret]",
 		"--entity-type", "users",
 		"--entity-name", "scram512")
 
-	k.c.Run(ctx, k.nodes, filepath.Join(k.binDir(), "kafka-configs"),
+	k.cmd.Run(ctx, filepath.Join(k.binDir(), "kafka-configs"),
 		"--zookeeper", "localhost:2181",
 		"--alter",
 		"--add-config", "SCRAM-SHA-256=[password=scram256-secret]",
@@ -2076,7 +2197,7 @@ func (k kafkaManager) addSCRAMUsers(ctx context.Context) {
 
 func (k kafkaManager) start(ctx context.Context, service string, envVars ...string) {
 	// This isn't necessary for the nightly tests, but it's nice for iteration.
-	k.c.Run(ctx, k.nodes, k.makeCommand("confluent", "local destroy || true"))
+	k.cmd.Run(ctx, k.makeCommand("confluent", "local destroy || true"))
 	k.restart(ctx, service, envVars...)
 }
 
@@ -2089,7 +2210,7 @@ var kafkaServices = map[string][]string{
 func (k kafkaManager) restart(ctx context.Context, targetService string, envVars ...string) {
 	services := kafkaServices[targetService]
 
-	k.c.Run(ctx, k.nodes, "touch", k.serverJAASConfig())
+	k.cmd.Run(ctx, "touch", k.serverJAASConfig())
 	for _, svcName := range services {
 		// The confluent tool applies the KAFKA_OPTS to all
 		// services. Also, the kafka.logs.dir is used by each
@@ -2107,7 +2228,7 @@ func (k kafkaManager) restart(ctx context.Context, targetService string, envVars
 		)
 		startCmd += fmt.Sprintf(" %s local services %s start", k.confluentBin(), svcName)
 
-		k.c.Run(ctx, k.nodes, startCmd)
+		k.cmd.Run(ctx, startCmd)
 	}
 }
 
@@ -2120,8 +2241,8 @@ func (k kafkaManager) makeCommand(exe string, args ...string) string {
 }
 
 func (k kafkaManager) stop(ctx context.Context) {
-	k.c.Run(ctx, k.nodes, fmt.Sprintf("rm -f %s", k.serverJAASConfig()))
-	k.c.Run(ctx, k.nodes, k.makeCommand("confluent", "local services stop"))
+	k.cmd.Run(ctx, fmt.Sprintf("rm -f %s", k.serverJAASConfig()))
+	k.cmd.Run(ctx, k.makeCommand("confluent", "local services stop"))
 }
 
 func (k kafkaManager) chaosLoop(

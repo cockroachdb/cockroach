@@ -360,11 +360,13 @@ func initBinariesAndLibraries() {
 	// We need to verify we have at least both the cockroach and the workload binaries.
 	var err error
 
-	cockroach[defaultArch], _ = resolveBinary("cockroach", cockroachPath, defaultArch, true, false)
-	workload[defaultArch], _ = resolveBinary("workload", workloadPath, defaultArch, true, false)
-	cockroachEA[defaultArch], err = resolveBinary("cockroach-ea", cockroachEAPath, defaultArch, false, true)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-ea", defaultArch, err)
+	if arm64Probability < 1 {
+		cockroach[defaultArch], _ = resolveBinary("cockroach", cockroachPath, defaultArch, true, false)
+		workload[defaultArch], _ = resolveBinary("workload", workloadPath, defaultArch, true, false)
+		cockroachEA[defaultArch], err = resolveBinary("cockroach-ea", cockroachEAPath, defaultArch, false, true)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-ea", defaultArch, err)
+		}
 	}
 
 	if arm64Probability > 0 && defaultArch != vm.ArchARM64 {
