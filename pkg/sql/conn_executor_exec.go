@@ -1473,7 +1473,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	var err error
 	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
 		if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
-			err = ex.makeExecPlan(ctx, planner)
+			err = ex.makeExecPlan(ctx, planner, res)
 			ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
 			ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(namedFunc{
 				fName: "close planTop",
@@ -1485,7 +1485,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	} else {
 		// Prepare the plan. Note, the error is processed below. Everything
 		// between here and there needs to happen even if there's an error.
-		err = ex.makeExecPlan(ctx, planner)
+		err = ex.makeExecPlan(ctx, planner, res)
 		defer planner.curPlan.close(ctx)
 	}
 
@@ -1978,7 +1978,7 @@ func (ex *connExecutor) handleTxnRowsWrittenReadLimits(ctx context.Context) erro
 
 // makeExecPlan creates an execution plan and populates planner.curPlan using
 // the cost-based optimizer.
-func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
+func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner, res RestrictedCommandResult) error {
 	if tree.CanModifySchema(planner.stmt.AST) {
 		if planner.Txn().IsoLevel().ToleratesWriteSkew() {
 			if planner.extendedEvalCtx.TxnIsSingleStmt && planner.extendedEvalCtx.TxnImplicit {
@@ -2000,6 +2000,21 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	}
 
 	flags := planner.curPlan.flags
+
+	if flags.IsSet(planFlagContainsMutation) && planner.pausablePortal != nil {
+		telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
+		// We don't allow mutations in a pausable portal. Set it back to an
+		// un-pausable (normal) portal.
+		// With pauseInfo is nil, no cleanup function will be added to the stack
+		// and all clean-up steps will be performed as for normal portals.
+		planner.pausablePortal.pauseInfo = nil
+		// We need this so that the result consumption for this portal cannot be
+		// paused either.
+		if err := res.RevokePortalPausability(); err != nil {
+			res.SetError(err)
+			return nil
+		}
+	}
 
 	if flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan) {
 		if ex.executorType == executorTypeExec && planner.EvalContext().SessionData().DisallowFullTableScans {
