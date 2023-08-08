@@ -361,25 +361,6 @@ func (d *directoryCache) deleteEntry(entry *tenantEntry) bool {
 	return false
 }
 
-// markAllEntriesInvalid marks all tenant entries in the cache as invalid.
-// This will force new callers of LookupTenant to fetch the updated state from
-// the server, if a watch event hasn't been received.
-func (d *directoryCache) markAllEntriesInvalid() {
-	// Perform a copy since MarkInvalid locks the individual tenant entries.
-	entries := func() []*tenantEntry {
-		d.mut.Lock()
-		defer d.mut.Unlock()
-		s := make([]*tenantEntry, 0, len(d.mut.tenants))
-		for _, entry := range d.mut.tenants {
-			s = append(s, entry)
-		}
-		return s
-	}()
-	for _, entry := range entries {
-		entry.MarkInvalid()
-	}
-}
-
 // watchPods establishes a watcher that looks for changes to tenant pods.
 // Whenever tenant pods start or terminate, the watcher will get a notification
 // and update the directory to reflect that change.
@@ -542,31 +523,22 @@ func (d *directoryCache) watchTenants(ctx context.Context, stopper *stop.Stopper
 				if recvErr.ShouldLog() {
 					log.Errorf(ctx, "err receiving stream events: %s", err)
 				}
-				// Whenever the watch errors, invalidate all existing entries
-				// since some events can be missed, causing entries to be stale
-				// (for a long time, or until the watcher catches up). Marking
-				// them as stale allows LookupTenant to fetch a new right away
-				// if needed.
-				//
-				// TODO(jaylim-crl): One optimization that could be done here is
-				// to build a new cache, while allowing the old one to work.
-				// Once the cache has been populated, we will swap the new and
-				// old caches. We can tell that the cache has been populated
-				// when events switch from ADDED to MODIFIED. Though, if we use
-				// this approach, it is possible that there aren't any MODIFIED
-				// events, and we're stuck waiting to switch the cache over.
-				// Perhaps a better idea would be to invoke GetTenant on the
-				// list of tenants which were previously valid individually.
-				// Note that it's unlikely for us to hit multiple cache misses
-				// during this short period unless we're getting thousands of
-				// connections with unique tenant IDs for the first time.
-				d.markAllEntriesInvalid()
 				// If stream ends, immediately try to establish a new one.
 				// Otherwise, wait for a second to avoid slamming server.
 				if err != io.EOF {
 					time.Sleep(time.Second)
 				}
 				client = nil
+				// Whenever the watcher errors, we will continue serving stale
+				// entries (until the watcher catches up). There will not be
+				// any rollback issues since entries are only replaced if the
+				// Version field holds a newer value. Note that deleted tenants
+				// will only be removed once the proxy receives a new connection
+				// request to that tenant.
+				//
+				// We have decided to serve stale entries because there's a
+				// possibility where the directory server is failing, but
+				// routing to existing SQL pods still works.
 				continue
 			}
 
