@@ -488,7 +488,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableDropColumn:
 			if params.SessionData().SafeUpdates {
 				err := pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will " +
-					"remove all data in that column")
+					"remove all data in that column and drop any indexes that reference that column")
 				if !params.extendedEvalCtx.TxnIsSingleStmt {
 					err = errors.WithIssueLink(err, errors.IssueLink{
 						IssueURL: "https://github.com/cockroachdb/cockroach/issues/46541",
@@ -1718,6 +1718,11 @@ func dropColumnImpl(
 	}
 
 	for _, idxName := range idxNamesToDelete {
+		params.EvalContext().ClientNoticeSender.BufferClientNotice(params.ctx, pgnotice.Newf(
+			"dropping index %q which depends on column %q",
+			idxName,
+			colToDrop.ColName(),
+		))
 		jobDesc := fmt.Sprintf(
 			"removing index %q dependent on column %q which is being dropped; full details: %s",
 			idxName,

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -53,7 +54,7 @@ func checkSafeUpdatesForDropColumn(b BuildCtx) {
 		return
 	}
 	err := pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will " +
-		"remove all data in that column")
+		"remove all data in that column and drop any indexes that reference that column")
 	if !b.EvalCtx().TxnIsSingleStmt {
 		err = errors.WithIssueLink(err, errors.IssueLink{
 			IssueURL: "https://github.com/cockroachdb/cockroach/issues/46541",
@@ -227,6 +228,11 @@ func dropColumn(
 				Table: *tn,
 				Index: tree.UnrestrictedName(indexName.Name),
 			}
+			b.EvalCtx().ClientNoticeSender.BufferClientNotice(b, pgnotice.Newf(
+				"dropping index %q which depends on column %q",
+				indexName.Name,
+				cn.Name,
+			))
 			dropSecondaryIndex(b, &name, behavior, e)
 		case *scpb.View:
 			if behavior != tree.DropCascade {
