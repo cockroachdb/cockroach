@@ -4,8 +4,10 @@ go_library(
     name = "streamclient",
     srcs = [
         "client.go",
+        "client_helpers.go",
         "partitioned_stream_client.go",
         "random_stream_client.go",
+        "span_config_stream_client.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient",
     visibility = ["//visibility:public"],
@@ -47,6 +49,7 @@ go_test(
         "client_test.go",
         "main_test.go",
         "partitioned_stream_client_test.go",
+        "span_config_stream_client_test.go",
     ],
     args = ["-test.timeout=55s"],
     embed = [":streamclient"],

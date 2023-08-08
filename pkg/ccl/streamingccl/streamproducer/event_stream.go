@@ -491,20 +491,25 @@ func setConfigDefaults(cfg *streampb.StreamPartitionSpec_ExecutionConfig) {
 	}
 }
 
+func validateSpecs(evalCtx *eval.Context, spec streampb.StreamPartitionSpec) error {
+	if !evalCtx.SessionData().AvoidBuffering {
+		return errors.New("partition streaming requires 'SET avoid_buffering = true' option")
+	}
+	if len(spec.Spans) == 0 {
+		return errors.AssertionFailedf("expected at least one span, got none")
+	}
+	return nil
+}
+
 func streamPartition(
 	evalCtx *eval.Context, streamID streampb.StreamID, opaqueSpec []byte,
 ) (eval.ValueGenerator, error) {
-	if !evalCtx.SessionData().AvoidBuffering {
-		return nil, errors.New("partition streaming requires 'SET avoid_buffering = true' option")
-	}
-
 	var spec streampb.StreamPartitionSpec
 	if err := protoutil.Unmarshal(opaqueSpec, &spec); err != nil {
 		return nil, errors.Wrapf(err, "invalid partition spec for stream %d", streamID)
 	}
-
-	if len(spec.Spans) == 0 {
-		return nil, errors.AssertionFailedf("expected at least one span, got none")
+	if err := validateSpecs(evalCtx, spec); err != nil {
+		return nil, err
 	}
 
 	setConfigDefaults(&spec.Config)

@@ -55,7 +55,7 @@ type Client interface {
 	// that apply to the passed in tenant, and returns the subscriptions the
 	// client can subscribe to. No protected timestamp or job is persisted to the
 	// source cluster.
-	SetupSpanConfigsStream(ctx context.Context, tenant roachpb.TenantName) (streampb.StreamID, Topology, error)
+	SetupSpanConfigsStream(ctx context.Context, tenant roachpb.TenantName) (Subscription, error)
 
 	// Dial checks if the source is able to be connected to for queries
 	Dial(ctx context.Context) error
