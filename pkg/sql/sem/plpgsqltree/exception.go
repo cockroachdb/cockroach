@@ -16,13 +16,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-type PLpgSQLException struct {
-	PLpgSQLStatementImpl
-	Conditions []PLpgSQLCondition
-	Action     []PLpgSQLStatement
+type Exception struct {
+	StatementImpl
+	Conditions []Condition
+	Action     []Statement
 }
 
-func (s *PLpgSQLException) Format(ctx *tree.FmtCtx) {
+func (s *Exception) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("WHEN ")
 	for i, cond := range s.Conditions {
 		if i > 0 {
@@ -40,18 +40,18 @@ func (s *PLpgSQLException) Format(ctx *tree.FmtCtx) {
 	}
 }
 
-func (s *PLpgSQLException) PlpgSQLStatementTag() string {
+func (s *Exception) PlpgSQLStatementTag() string {
 	return "proc_exception"
 }
 
-func (s *PLpgSQLException) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Exception) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 	for _, stmt := range s.Action {
 		stmt.WalkStmt(visitor)
 	}
 }
 
-type PLpgSQLCondition struct {
+type Condition struct {
 	SqlErrState string
 	SqlErrName  string
 }
