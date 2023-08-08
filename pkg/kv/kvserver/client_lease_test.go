@@ -936,6 +936,12 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		locality("us", "mi"),
 		locality("us", "mi"),
 	}
+	// Disable expiration based lease transfers. It is possible that a (pseudo)
+	// dead node acquires the lease and we are forced to wait out the expiration
+	// timer, if this were not set.
+	settings := cluster.MakeTestingClusterSettings()
+	sv := &settings.SV
+	kvserver.TransferExpirationLeasesFirstEnabled.Override(ctx, sv, false)
 	for i := 0; i < numNodes; i++ {
 		serverArgs[i] = base.TestServerArgs{
 			Locality: localities[i],
