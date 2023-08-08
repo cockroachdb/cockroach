@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
@@ -82,8 +81,11 @@ func runMultiTenantUpgrade(
 	currentBinaryMinSupportedVersion, ok := versionToMinSupportedVersion[curBinaryMajorAndMinorVersion]
 	require.True(t, ok, "current binary '%s' not found in 'versionToMinSupportedVersion' map", curBinaryMajorAndMinorVersion)
 
-	predecessor, err := release.LatestPredecessor(v)
-	require.NoError(t, err)
+	// predecessor, err := release.LatestPredecessor(v)
+	// require.NoError(t, err)
+	// Hard-code the pre-decessor release to 23.1.4 until a new patch release is out (23.1.9) because
+	// the test is in-compatible with 23.1.{5,6,7,8} due to an erroneous PR merged on the 23.1 branch.
+	predecessor := "23.1.4"
 
 	currentBinary := uploadVersion(ctx, t, c, c.All(), clusterupgrade.MainVersion)
 	predecessorBinary := uploadVersion(ctx, t, c, c.All(), predecessor)
