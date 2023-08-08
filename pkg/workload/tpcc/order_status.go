@@ -12,7 +12,6 @@ package tpcc
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
@@ -117,7 +116,7 @@ func createOrderStatus(
 }
 
 func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
-	atomic.AddUint64(&o.config.auditor.orderStatusTransactions, 1)
+	o.config.auditor.orderStatusTransactions.Add(1)
 
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
@@ -129,7 +128,7 @@ func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
 	// and 40% by number.
 	if rng.Intn(100) < 60 {
 		d.cLast = string(o.config.randCLast(rng, &o.a))
-		atomic.AddUint64(&o.config.auditor.orderStatusByLastName, 1)
+		o.config.auditor.orderStatusByLastName.Add(1)
 	} else {
 		d.cID = o.config.randCustomerID(rng)
 	}
