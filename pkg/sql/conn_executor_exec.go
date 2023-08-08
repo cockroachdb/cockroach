@@ -1629,21 +1629,31 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	var err error
+
 	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
 		if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
-			err = ex.makeExecPlan(ctx, planner)
-			ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
-			ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(namedFunc{
-				fName: "close planTop",
-				f:     func() { ppInfo.dispatchToExecutionEngine.planTop.close(ctx) },
-			})
+			err = ex.makeExecPlan(ctx, planner, res)
+			if flags := planner.curPlan.flags; err == nil && (flags.IsSet(planFlagContainsMutation) || flags.IsSet(planFlagIsDDL)) {
+				telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
+				// We don't allow mutations in a pausable portal. Set it back to
+				// an un-pausable (normal) portal.
+				planner.pausablePortal.pauseInfo = nil
+				err = res.RevokePortalPausability()
+				defer planner.curPlan.close(ctx)
+			} else {
+				ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
+				ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(namedFunc{
+					fName: "close planTop",
+					f:     func() { ppInfo.dispatchToExecutionEngine.planTop.close(ctx) },
+				})
+			}
 		} else {
 			planner.curPlan = ppInfo.dispatchToExecutionEngine.planTop
 		}
 	} else {
 		// Prepare the plan. Note, the error is processed below. Everything
 		// between here and there needs to happen even if there's an error.
-		err = ex.makeExecPlan(ctx, planner)
+		err = ex.makeExecPlan(ctx, planner, res)
 		defer planner.curPlan.close(ctx)
 	}
 
@@ -1759,6 +1769,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			// un-pausable (normal) portal.
 			// With pauseInfo is nil, no cleanup function will be added to the stack
 			// and all clean-up steps will be performed as for normal portals.
+			// TODO(harding): We may need to move resetting pauseInfo before we add
+			// the pausable portal cleanup step above.
 			planner.pausablePortal.pauseInfo = nil
 			// We need this so that the result consumption for this portal cannot be
 			// paused either.
@@ -2133,7 +2145,9 @@ func (ex *connExecutor) handleTxnRowsWrittenReadLimits(ctx context.Context) erro
 
 // makeExecPlan creates an execution plan and populates planner.curPlan using
 // the cost-based optimizer.
-func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
+func (ex *connExecutor) makeExecPlan(
+	ctx context.Context, planner *planner,
+) error {
 	if tree.CanModifySchema(planner.stmt.AST) {
 		if planner.Txn().IsoLevel().ToleratesWriteSkew() {
 			if planner.extendedEvalCtx.TxnIsSingleStmt && planner.extendedEvalCtx.TxnImplicit {
