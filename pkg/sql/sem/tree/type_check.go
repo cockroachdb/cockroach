@@ -423,19 +423,22 @@ func (expr *CaseExpr) TypeCheck(
 	}
 
 	tmpExprs = tmpExprs[:0]
-	for _, when := range expr.Whens {
-		tmpExprs = append(tmpExprs, when.Val)
-	}
+	// As described in the Postgres docs, CASE treats its ELSE clause (if any) as
+	// the "first" input.
+	// See https://www.postgresql.org/docs/current/typeconv-union-case.html#ftn.id-1.5.9.10.9.6.1.1.
 	if expr.Else != nil {
 		tmpExprs = append(tmpExprs, expr.Else)
+	}
+	for _, when := range expr.Whens {
+		tmpExprs = append(tmpExprs, when.Val)
 	}
 	typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, semaCtx, desired, tmpExprs...)
 	if err != nil {
 		return nil, decorateTypeCheckError(err, "incompatible value type")
 	}
 	if expr.Else != nil {
-		expr.Else = typedSubExprs[len(typedSubExprs)-1]
-		typedSubExprs = typedSubExprs[:len(typedSubExprs)-1]
+		expr.Else = typedSubExprs[0]
+		typedSubExprs = typedSubExprs[1:]
 	}
 	for i, whenVal := range typedSubExprs {
 		expr.Whens[i].Val = whenVal
@@ -2627,8 +2630,15 @@ func typeCheckSameTypedExprs(
 			if err != nil {
 				return nil, nil, err
 			}
-			// TODO(#75103): For UNION, CASE, and related expressions we should
-			// only allow types that can be implicitly cast to firstValidType.
+			// From the Postgres docs
+			// https://www.postgresql.org/docs/current/typeconv-union-case.html:
+			// If the candidate type can be implicitly converted to the other type,
+			// but not vice-versa, select the other type as the new candidate type.
+			if typ := typedExpr.ResolvedType(); cast.ValidCast(firstValidType, typ, cast.ContextImplicit) {
+				if !cast.ValidCast(typ, firstValidType, cast.ContextImplicit) {
+					firstValidType = typ
+				}
+			}
 			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ.Family() == types.UnknownFamily) {
 				return nil, nil, unexpectedTypeError(exprs[i], firstValidType, typ)
 			}
