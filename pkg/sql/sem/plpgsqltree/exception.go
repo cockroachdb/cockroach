@@ -13,17 +13,17 @@ package plpgsqltree
 type PLpgSQLExceptionBlock struct {
 	SqlStateVarNo int
 	SqlErrmNo     int
-	ExecList      []*PLpgSQLException
+	ExecList      []*Exception
 }
 
-type PLpgSQLException struct {
+type Exception struct {
 	LineNo    int
-	Condition *PLpgSQLCondition
-	Action    []PLpgSQLStatement
+	Condition *Condition
+	Action    []Statement
 }
 
-type PLpgSQLCondition struct {
+type Condition struct {
 	SqlErrState int
 	Name        string // TODO postgres says it's helpful for debugging.
-	Next        *PLpgSQLCondition
+	Next        *Condition
 }

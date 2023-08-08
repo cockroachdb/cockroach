@@ -12,4 +12,4 @@ package plpgsqltree
 
 import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-type PLpgSQLVariable = tree.Name
+type Variable = tree.Name

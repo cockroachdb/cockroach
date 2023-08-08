@@ -10,14 +10,14 @@
 
 package plpgsqltree
 
-// PLpgSQLStmtVisitor defines methods that are called plpgsql statements during
+// StatementVisitor defines methods that are called plpgsql statements during
 // a statement walk.
-type PLpgSQLStmtVisitor interface {
+type StatementVisitor interface {
 	// Visit is called during a statement walk.
-	Visit(stmt PLpgSQLStatement)
+	Visit(stmt Statement)
 }
 
 // Walk traverses the plpgsql statement.
-func Walk(v PLpgSQLStmtVisitor, stmt PLpgSQLStatement) {
+func Walk(v StatementVisitor, stmt Statement) {
 	stmt.WalkStmt(v)
 }

@@ -62,24 +62,24 @@ type plpgsqlSymUnion struct {
     val interface{}
 }
 
-func (u *plpgsqlSymUnion) plpgsqlStmtBlock() *plpgsqltree.PLpgSQLStmtBlock {
-    return u.val.(*plpgsqltree.PLpgSQLStmtBlock)
+func (u *plpgsqlSymUnion) block() *plpgsqltree.Block {
+    return u.val.(*plpgsqltree.Block)
 }
 
-func (u *plpgsqlSymUnion) plpgsqlStmtCaseWhenArm() *plpgsqltree.PLpgSQLStmtCaseWhenArm {
-    return u.val.(*plpgsqltree.PLpgSQLStmtCaseWhenArm)
+func (u *plpgsqlSymUnion) caseWhen() *plpgsqltree.CaseWhen {
+    return u.val.(*plpgsqltree.CaseWhen)
 }
 
-func (u *plpgsqlSymUnion) plpgsqlStmtCaseWhenArms() []*plpgsqltree.PLpgSQLStmtCaseWhenArm {
-    return u.val.([]*plpgsqltree.PLpgSQLStmtCaseWhenArm)
+func (u *plpgsqlSymUnion) caseWhens() []*plpgsqltree.CaseWhen {
+    return u.val.([]*plpgsqltree.CaseWhen)
 }
 
-func (u *plpgsqlSymUnion) plpgsqlStatement() plpgsqltree.PLpgSQLStatement {
-    return u.val.(plpgsqltree.PLpgSQLStatement)
+func (u *plpgsqlSymUnion) statement() plpgsqltree.Statement {
+    return u.val.(plpgsqltree.Statement)
 }
 
-func (u *plpgsqlSymUnion) plpgsqlStatements() []plpgsqltree.PLpgSQLStatement {
-    return u.val.([]plpgsqltree.PLpgSQLStatement)
+func (u *plpgsqlSymUnion) statements() []plpgsqltree.Statement {
+    return u.val.([]plpgsqltree.Statement)
 }
 
 func (u *plpgsqlSymUnion) int32() int32 {
@@ -102,51 +102,51 @@ func (u *plpgsqlSymUnion) typ() tree.ResolvableTypeReference {
     return u.val.(tree.ResolvableTypeReference)
 }
 
-func (u *plpgsqlSymUnion) pLpgSQLGetDiagKind() plpgsqltree.PLpgSQLGetDiagKind {
-    return u.val.(plpgsqltree.PLpgSQLGetDiagKind)
+func (u *plpgsqlSymUnion) getDiagnosticsKind() plpgsqltree.GetDiagnosticsKind {
+    return u.val.(plpgsqltree.GetDiagnosticsKind)
 }
 
-func (u *plpgsqlSymUnion) pLpgSQLStmtGetDiagItem() *plpgsqltree.PLpgSQLStmtGetDiagItem {
-    return u.val.(*plpgsqltree.PLpgSQLStmtGetDiagItem)
+func (u *plpgsqlSymUnion) getDiagnosticsItem() *plpgsqltree.GetDiagnosticsItem {
+    return u.val.(*plpgsqltree.GetDiagnosticsItem)
 }
 
-func (u *plpgsqlSymUnion) pLpgSQLStmtGetDiagItemList() plpgsqltree.PLpgSQLStmtGetDiagItemList {
-    return u.val.(plpgsqltree.PLpgSQLStmtGetDiagItemList)
+func (u *plpgsqlSymUnion) getDiagnosticsItemList() plpgsqltree.GetDiagnosticsItemList {
+    return u.val.(plpgsqltree.GetDiagnosticsItemList)
 }
 
-func (u *plpgsqlSymUnion) pLpgSQLStmtIfElseIfArmList() []*plpgsqltree.PLpgSQLStmtIfElseIfArm {
-    return u.val.([]*plpgsqltree.PLpgSQLStmtIfElseIfArm)
+func (u *plpgsqlSymUnion) elseIf() []*plpgsqltree.ElseIf {
+    return u.val.([]*plpgsqltree.ElseIf)
 }
 
-func (u *plpgsqlSymUnion) pLpgSQLStmtOpen() *plpgsqltree.PLpgSQLStmtOpen {
-    return u.val.(*plpgsqltree.PLpgSQLStmtOpen)
+func (u *plpgsqlSymUnion) open() *plpgsqltree.Open {
+    return u.val.(*plpgsqltree.Open)
 }
 
-func (u *plpgsqlSymUnion) plpgsqlExpr() plpgsqltree.PLpgSQLExpr {
+func (u *plpgsqlSymUnion) expr() plpgsqltree.Expr {
     if u.val == nil {
       return nil
     }
-    return u.val.(plpgsqltree.PLpgSQLExpr)
+    return u.val.(plpgsqltree.Expr)
 }
 
-func (u *plpgsqlSymUnion) plpgsqlExprs() []plpgsqltree.PLpgSQLExpr {
-    return u.val.([]plpgsqltree.PLpgSQLExpr)
+func (u *plpgsqlSymUnion) exprs() []plpgsqltree.Expr {
+    return u.val.([]plpgsqltree.Expr)
 }
 
-func (u *plpgsqlSymUnion) plpgsqlDecl() *plpgsqltree.PLpgSQLDecl {
-    return u.val.(*plpgsqltree.PLpgSQLDecl)
+func (u *plpgsqlSymUnion) declaration() *plpgsqltree.Declaration {
+    return u.val.(*plpgsqltree.Declaration)
 }
 
-func (u *plpgsqlSymUnion) plpgsqlDecls() []plpgsqltree.PLpgSQLDecl {
-    return u.val.([]plpgsqltree.PLpgSQLDecl)
+func (u *plpgsqlSymUnion) declarations() []plpgsqltree.Declaration {
+    return u.val.([]plpgsqltree.Declaration)
 }
 
-func (u *plpgsqlSymUnion) plpgsqlOptionExpr() *plpgsqltree.PLpgSQLStmtRaiseOption {
-    return u.val.(*plpgsqltree.PLpgSQLStmtRaiseOption)
+func (u *plpgsqlSymUnion) raiseOption() *plpgsqltree.RaiseOption {
+    return u.val.(*plpgsqltree.RaiseOption)
 }
 
-func (u *plpgsqlSymUnion) plpgsqlOptionExprs() []plpgsqltree.PLpgSQLStmtRaiseOption {
-    return u.val.([]plpgsqltree.PLpgSQLStmtRaiseOption)
+func (u *plpgsqlSymUnion) raiseOptions() []plpgsqltree.RaiseOption {
+    return u.val.([]plpgsqltree.RaiseOption)
 }
 
 %}
@@ -294,62 +294,62 @@ func (u *plpgsqlSymUnion) plpgsqlOptionExprs() []plpgsqltree.PLpgSQLStmtRaiseOpt
 
 %type <str> decl_varname decl_defkey
 %type <bool>	decl_const decl_notnull
-%type <plpgsqltree.PLpgSQLExpr>	decl_defval decl_cursor_query
+%type <plpgsqltree.Expr>	decl_defval decl_cursor_query
 %type <tree.ResolvableTypeReference>	decl_datatype
 %type <str>		decl_collate
 %type <plpgsqltree.PLpgSQLDatum>	decl_cursor_args
 
-%type <*plpgsqltree.PLpgSQLStmtOpen> open_stmt_processor
+%type <*plpgsqltree.Open> open_stmt_processor
 %type <str>	expr_until_semi expr_until_paren
 %type <str>	expr_until_then expr_until_loop opt_expr_until_when
-%type <plpgsqltree.PLpgSQLExpr>	opt_exitcond
+%type <plpgsqltree.Expr>	opt_exitcond
 
 %type <plpgsqltree.PLpgSQLScalarVar>		cursor_variable
 %type <plpgsqltree.PLpgSQLDatum>	decl_cursor_arg
 %type <forvariable>	for_variable
-%type <plpgsqltree.PLpgSQLExpr>	return_variable
+%type <plpgsqltree.Expr>	return_variable
 %type <*tree.NumVal>	foreach_slice
-%type <plpgsqltree.PLpgSQLStatement>	for_control
+%type <plpgsqltree.Statement>	for_control
 
 %type <str> any_identifier opt_block_label opt_loop_label opt_label query_options
 %type <str> opt_error_level option_type
 
-%type <[]plpgsqltree.PLpgSQLStatement> proc_sect
-%type <[]*plpgsqltree.PLpgSQLStmtIfElseIfArm> stmt_elsifs
-%type <[]plpgsqltree.PLpgSQLStatement> stmt_else loop_body // TODO is this a list of statement?
-%type <plpgsqltree.PLpgSQLStatement>  pl_block
-%type <plpgsqltree.PLpgSQLStatement>	proc_stmt
-%type <plpgsqltree.PLpgSQLStatement>	stmt_assign stmt_if stmt_loop stmt_while stmt_exit stmt_continue
-%type <plpgsqltree.PLpgSQLStatement>	stmt_return stmt_raise stmt_assert stmt_execsql
-%type <plpgsqltree.PLpgSQLStatement>	stmt_dynexecute stmt_for stmt_perform stmt_call stmt_getdiag
-%type <plpgsqltree.PLpgSQLStatement>	stmt_open stmt_fetch stmt_move stmt_close stmt_null
-%type <plpgsqltree.PLpgSQLStatement>	stmt_commit stmt_rollback
-%type <plpgsqltree.PLpgSQLStatement>	stmt_case stmt_foreach_a
+%type <[]plpgsqltree.Statement> proc_sect
+%type <[]*plpgsqltree.ElseIf> stmt_elsifs
+%type <[]plpgsqltree.Statement> stmt_else loop_body // TODO is this a list of statement?
+%type <plpgsqltree.Statement>  pl_block
+%type <plpgsqltree.Statement>	proc_stmt
+%type <plpgsqltree.Statement>	stmt_assign stmt_if stmt_loop stmt_while stmt_exit stmt_continue
+%type <plpgsqltree.Statement>	stmt_return stmt_raise stmt_assert stmt_execsql
+%type <plpgsqltree.Statement>	stmt_dynexecute stmt_for stmt_perform stmt_call stmt_getdiag
+%type <plpgsqltree.Statement>	stmt_open stmt_fetch stmt_move stmt_close stmt_null
+%type <plpgsqltree.Statement>	stmt_commit stmt_rollback
+%type <plpgsqltree.Statement>	stmt_case stmt_foreach_a
 
-%type <*plpgsqltree.PLpgSQLDecl> decl_stmt decl_statement
-%type <[]plpgsqltree.PLpgSQLDecl> decl_sect opt_decl_stmts decl_stmts
+%type <*plpgsqltree.Declaration> decl_stmt decl_statement
+%type <[]plpgsqltree.Declaration> decl_sect opt_decl_stmts decl_stmts
 
-%type <*plpgsqltree.PLpgSQLExceptionBlock> exception_sect
-%type <*plpgsqltree.PLpgSQLException>	proc_exception
-%type <*plpgsqltree.PLpgSQLCondition>	proc_conditions proc_condition
+%type <*plpgsqltree.ExceptionBlock> exception_sect
+%type <*plpgsqltree.Exception>	proc_exception
+%type <*plpgsqltree.Condition>	proc_conditions proc_condition
 
-%type <*plpgsqltree.PLpgSQLStmtCaseWhenArm>	case_when
-%type <[]*plpgsqltree.PLpgSQLStmtCaseWhenArm>	case_when_list
-%type <[]plpgsqltree.PLpgSQLStatement> opt_case_else
+%type <*plpgsqltree.CaseWhen>	case_when
+%type <[]*plpgsqltree.CaseWhen>	case_when_list
+%type <[]plpgsqltree.Statement> opt_case_else
 
 %type <bool>	getdiag_area_opt
-%type <plpgsqltree.PLpgSQLStmtGetDiagItemList>	getdiag_list // TODO don't know what this is
-%type <*plpgsqltree.PLpgSQLStmtGetDiagItem> getdiag_list_item // TODO don't know what this is
+%type <plpgsqltree.GetDiagnosticsItemList>	getdiag_list // TODO don't know what this is
+%type <*plpgsqltree.GetDiagnosticsItem> getdiag_list_item // TODO don't know what this is
 %type <int32> getdiag_item
 
-%type <*plpgsqltree.PLpgSQLStmtRaiseOption> option_expr
-%type <[]plpgsqltree.PLpgSQLStmtRaiseOption> option_exprs opt_option_exprs
-%type <plpgsqltree.PLpgSQLExpr> format_expr
-%type <[]plpgsqltree.PLpgSQLExpr> opt_format_exprs format_exprs
+%type <*plpgsqltree.RaiseOption> option_expr
+%type <[]plpgsqltree.RaiseOption> option_exprs opt_option_exprs
+%type <plpgsqltree.Expr> format_expr
+%type <[]plpgsqltree.Expr> opt_format_exprs format_exprs
 
 %type <uint32>	opt_scrollable
 
-%type <*plpgsqltree.PLpgSQLStmtFetch>	opt_fetch_direction
+%type <*plpgsqltree.Fetch>	opt_fetch_direction
 
 %type <*tree.NumVal>	opt_transaction_chain
 
@@ -359,7 +359,7 @@ func (u *plpgsqlSymUnion) plpgsqlOptionExprs() []plpgsqltree.PLpgSQLStmtRaiseOpt
 pl_function:
   pl_block opt_semi
   {
-    plpgsqllex.(*lexer).SetStmt($1.plpgsqlStatement())
+    plpgsqllex.(*lexer).SetStmt($1.statement())
   }
 
 opt_semi:
@@ -368,39 +368,39 @@ opt_semi:
 
 pl_block: opt_block_label decl_sect BEGIN proc_sect exception_sect END opt_label
   {
-    $$.val = &plpgsqltree.PLpgSQLStmtBlock{
+    $$.val = &plpgsqltree.Block{
       Label: $1,
-      Decls: $2.plpgsqlDecls(),
-      Body: $4.plpgsqlStatements(),
+      Decls: $2.declarations(),
+      Body: $4.statements(),
     }
   }
 ;
 
 decl_sect: DECLARE opt_decl_stmts
   {
-    $$.val = $2.plpgsqlDecls()
+    $$.val = $2.declarations()
   }
 | /* EMPTY */
   {
     // Use a nil slice to indicate DECLARE was not used.
-    $$.val = []plpgsqltree.PLpgSQLDecl(nil)
+    $$.val = []plpgsqltree.Declaration(nil)
   }
 ;
 
 opt_decl_stmts: decl_stmts
   {
-    $$.val = $1.plpgsqlDecls()
+    $$.val = $1.declarations()
   }
 | /* EMPTY */
   {
-    $$.val = []plpgsqltree.PLpgSQLDecl{}
+    $$.val = []plpgsqltree.Declaration{}
   }
 ;
 
 decl_stmts: decl_stmts decl_stmt
   {
-    decs := $1.plpgsqlDecls()
-    dec := $2.plpgsqlDecl()
+    decs := $1.declarations()
+    dec := $2.declaration()
     if dec == nil {
       $$.val = decs
     } else {
@@ -409,23 +409,23 @@ decl_stmts: decl_stmts decl_stmt
   }
 | decl_stmt
   {
-    dec := $1.plpgsqlDecl()
+    dec := $1.declaration()
     if dec == nil {
-      $$.val = []plpgsqltree.PLpgSQLDecl{}
+      $$.val = []plpgsqltree.Declaration{}
     } else {
-      $$.val = []plpgsqltree.PLpgSQLDecl{*dec}
+      $$.val = []plpgsqltree.Declaration{*dec}
     }
 	}
 ;
 
 decl_stmt	: decl_statement
   {
-    $$.val = $1.plpgsqlDecl()
+    $$.val = $1.declaration()
   }
 | DECLARE
   {
     // This is to allow useless extra "DECLARE" keywords in the declare section.
-    $$.val = (*plpgsqltree.PLpgSQLDecl)(nil)
+    $$.val = (*plpgsqltree.Declaration)(nil)
   }
 // TODO(chengxiong): turn this block on and throw useful error if user
 // tries to put the block label just before BEGIN instead of before
@@ -437,13 +437,13 @@ decl_stmt	: decl_statement
 
 decl_statement: decl_varname decl_const decl_datatype decl_collate decl_notnull decl_defval
   {
-    $$.val = &plpgsqltree.PLpgSQLDecl{
-      Var: plpgsqltree.PLpgSQLVariable($1),
+    $$.val = &plpgsqltree.Declaration{
+      Var: plpgsqltree.Variable($1),
       Constant: $2.bool(),
       Typ: $3.typ(),
       Collate: $4,
       NotNull: $5.bool(),
-      Expr: $6.plpgsqlExpr(),
+      Expr: $6.expr(),
     }
   }
 | decl_varname ALIAS FOR decl_aliasitem ';'
@@ -565,7 +565,7 @@ decl_notnull:
 
 decl_defval: ';'
   {
-    $$.val = (plpgsqltree.PLpgSQLExpr)(nil)
+    $$.val = (plpgsqltree.Expr)(nil)
   }
 | decl_defkey ';'
   {
@@ -598,31 +598,31 @@ assign_operator: '='
 
 proc_sect:
   {
-    $$.val = []plpgsqltree.PLpgSQLStatement{}
+    $$.val = []plpgsqltree.Statement{}
   }
 | proc_sect proc_stmt
   {
-    stmts := $1.plpgsqlStatements()
-    stmts = append(stmts, $2.plpgsqlStatement())
+    stmts := $1.statements()
+    stmts = append(stmts, $2.statement())
     $$.val = stmts
   }
 ;
 
 proc_stmt:pl_block ';'
   {
-    $$.val = $1.plpgsqlStmtBlock()
+    $$.val = $1.block()
   }
 | stmt_assign
   {
-    $$.val = $1.plpgsqlStatement()
+    $$.val = $1.statement()
   }
 | stmt_if
   {
-    $$.val = $1.plpgsqlStatement()
+    $$.val = $1.statement()
   }
 | stmt_case
   {
-    $$.val = $1.plpgsqlStatement()
+    $$.val = $1.statement()
   }
 | stmt_loop
   { }
@@ -634,37 +634,37 @@ proc_stmt:pl_block ';'
   { }
 | stmt_exit
   {
-    $$.val = $1.plpgsqlStatement()
+    $$.val = $1.statement()
   }
 | stmt_continue
   {
-    $$.val = $1.plpgsqlStatement()
+    $$.val = $1.statement()
   }
 | stmt_return
   {
-    $$.val = $1.plpgsqlStatement()
+    $$.val = $1.statement()
   }
 | stmt_raise
   {
-    $$.val = $1.plpgsqlStatement()
+    $$.val = $1.statement()
   }
 | stmt_assert
   {
-    $$.val = $1.plpgsqlStatement()
+    $$.val = $1.statement()
   }
 | stmt_execsql
   {
-    $$.val = $1.plpgsqlStatement()
+    $$.val = $1.statement()
   }
 | stmt_dynexecute
   {
-    $$.val = $1.plpgsqlStatement()
+    $$.val = $1.statement()
   }
 | stmt_perform
   { }
 | stmt_call
   {
-    $$.val = $1.plpgsqlStatement()
+    $$.val = $1.statement()
   }
 | stmt_getdiag
   { }
@@ -676,7 +676,7 @@ proc_stmt:pl_block ';'
   { }
 | stmt_close
   {
-    $$.val = $1.plpgsqlStatement()
+    $$.val = $1.statement()
   }
 | stmt_null
   { }
@@ -694,11 +694,11 @@ stmt_perform: PERFORM expr_until_semi ';'
 
 stmt_call: CALL call_cmd ';'
   {
-    $$.val = &plpgsqltree.PLpgSQLStmtCall{IsCall: true}
+    $$.val = &plpgsqltree.Call{IsCall: true}
   }
 | DO call_cmd ';'
   {
-    $$.val = &plpgsqltree.PLpgSQLStmtCall{IsCall: false}
+    $$.val = &plpgsqltree.Call{IsCall: false}
   }
 ;
 
@@ -714,8 +714,8 @@ stmt_assign: IDENT assign_operator expr_until_semi ';'
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-    $$.val = &plpgsqltree.PLpgSQLStmtAssign{
-      Var: plpgsqltree.PLpgSQLVariable($1),
+    $$.val = &plpgsqltree.Assignment{
+      Var: plpgsqltree.Variable($1),
       Value: expr,
     }
   }
@@ -723,9 +723,9 @@ stmt_assign: IDENT assign_operator expr_until_semi ';'
 
 stmt_getdiag: GET getdiag_area_opt DIAGNOSTICS getdiag_list ';'
   {
-  $$.val = &plpgsqltree.PLpgSQLStmtGetDiag{
+  $$.val = &plpgsqltree.GetDiagnostics{
     IsStacked: $2.bool(),
-    DiagItems: $4.pLpgSQLStmtGetDiagItemList(),
+    DiagItems: $4.getDiagnosticsItemList(),
   }
   // TODO(jane): Check information items are valid for area option.
   }
@@ -747,18 +747,18 @@ getdiag_area_opt:
 
 getdiag_list: getdiag_list ',' getdiag_list_item
   {
-    $$.val = append($1.pLpgSQLStmtGetDiagItemList(), $3.pLpgSQLStmtGetDiagItem())
+    $$.val = append($1.getDiagnosticsItemList(), $3.getDiagnosticsItem())
   }
 | getdiag_list_item
   {
-    $$.val = plpgsqltree.PLpgSQLStmtGetDiagItemList{$1.pLpgSQLStmtGetDiagItem()}
+    $$.val = plpgsqltree.GetDiagnosticsItemList{$1.getDiagnosticsItem()}
   }
 ;
 
 getdiag_list_item: IDENT assign_operator getdiag_item
   {
-    $$.val = &plpgsqltree.PLpgSQLStmtGetDiagItem{
-      Kind : $3.pLpgSQLGetDiagKind(),
+    $$.val = &plpgsqltree.GetDiagnosticsItem{
+      Kind : $3.getDiagnosticsKind(),
       TargetName: $1,
       // TODO(jane): set the target from $1.
     }
@@ -811,18 +811,18 @@ stmt_if: IF expr_until_then THEN proc_sect stmt_elsifs stmt_else END_IF IF ';'
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-    $$.val = &plpgsqltree.PLpgSQLStmtIf{
+    $$.val = &plpgsqltree.If{
       Condition: cond,
-      ThenBody: $4.plpgsqlStatements(),
-      ElseIfList: $5.pLpgSQLStmtIfElseIfArmList(),
-      ElseBody: $6.plpgsqlStatements(),
+      ThenBody: $4.statements(),
+      ElseIfList: $5.elseIf(),
+      ElseBody: $6.statements(),
     }
   }
 ;
 
 stmt_elsifs:
   {
-    $$.val = []*plpgsqltree.PLpgSQLStmtIfElseIfArm{};
+    $$.val = []*plpgsqltree.ElseIf{};
   }
 | stmt_elsifs ELSIF expr_until_then THEN proc_sect
   {
@@ -830,33 +830,33 @@ stmt_elsifs:
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-    newStmt := &plpgsqltree.PLpgSQLStmtIfElseIfArm{
+    newStmt := &plpgsqltree.ElseIf{
       Condition: cond,
-      Stmts: $5.plpgsqlStatements(),
+      Stmts: $5.statements(),
     }
-    $$.val = append($1.pLpgSQLStmtIfElseIfArmList() , newStmt)
+    $$.val = append($1.elseIf() , newStmt)
   }
 ;
 
 stmt_else:
   {
-    $$.val = []plpgsqltree.PLpgSQLStatement{};
+    $$.val = []plpgsqltree.Statement{};
   }
 | ELSE proc_sect
   {
-    $$.val = $2.plpgsqlStatements();
+    $$.val = $2.statements();
   }
 ;
 
 stmt_case: CASE opt_expr_until_when case_when_list opt_case_else END_CASE CASE ';'
   {
-    expr := &plpgsqltree.PLpgSQLStmtCase {
+    expr := &plpgsqltree.Case {
       TestExpr: $2,
-      CaseWhenList: $3.plpgsqlStmtCaseWhenArms(),
+      CaseWhenList: $3.caseWhens(),
     }
     if $4.val != nil {
        expr.HaveElse = true
-       expr.ElseStmts = $4.plpgsqlStatements()
+       expr.ElseStmts = $4.statements()
     }
     $$.val = expr
   }
@@ -875,23 +875,23 @@ opt_expr_until_when:
 
 case_when_list: case_when_list case_when
   {
-    stmts := $1.plpgsqlStmtCaseWhenArms()
-    stmts = append(stmts, $2.plpgsqlStmtCaseWhenArm())
+    stmts := $1.caseWhens()
+    stmts = append(stmts, $2.caseWhen())
     $$.val = stmts
   }
 | case_when
   {
-    stmts := []*plpgsqltree.PLpgSQLStmtCaseWhenArm{}
-    stmts = append(stmts, $1.plpgsqlStmtCaseWhenArm())
+    stmts := []*plpgsqltree.CaseWhen{}
+    stmts = append(stmts, $1.caseWhen())
     $$.val = stmts
   }
 ;
 
 case_when: WHEN expr_until_then THEN proc_sect
   {
-     expr := &plpgsqltree.PLpgSQLStmtCaseWhenArm{
+     expr := &plpgsqltree.CaseWhen{
        Expr: $2,
-       Stmts: $4.plpgsqlStatements(),
+       Stmts: $4.statements(),
      }
      $$.val = expr
   }
@@ -903,7 +903,7 @@ opt_case_else:
   }
 | ELSE proc_sect
   {
-    $$.val = $2.plpgsqlStatements()
+    $$.val = $2.statements()
   }
 ;
 
@@ -911,9 +911,9 @@ stmt_loop: opt_loop_label LOOP loop_body opt_label ';'
   {
     // TODO(drewk): does the second usage of the label actually
     // do anything?
-    $$.val = &plpgsqltree.PLpgSQLStmtSimpleLoop{
+    $$.val = &plpgsqltree.Loop{
       Label: $1,
-      Body: $3.plpgsqlStatements(),
+      Body: $3.statements(),
     }
   }
 ;
@@ -977,18 +977,18 @@ foreach_slice:
 
 stmt_exit: EXIT opt_label opt_exitcond
   {
-    $$.val = &plpgsqltree.PLpgSQLStmtExit{
+    $$.val = &plpgsqltree.Exit{
       Label: $2,
-      Condition: $3.plpgsqlExpr(),
+      Condition: $3.expr(),
     }
   }
 ;
 
 stmt_continue: CONTINUE opt_label opt_exitcond
   {
-    $$.val = &plpgsqltree.PLpgSQLStmtContinue{
+    $$.val = &plpgsqltree.Continue{
       Label: $2,
-      Condition: $3.plpgsqlExpr(),
+      Condition: $3.expr(),
     }
   }
 ;
@@ -1001,8 +1001,8 @@ stmt_continue: CONTINUE opt_label opt_exitcond
 
 stmt_return: RETURN return_variable ';'
   {
-    $$.val = &plpgsqltree.PLpgSQLStmtReturn{
-      Expr: $2.plpgsqlExpr(),
+    $$.val = &plpgsqltree.Return{
+      Expr: $2.expr(),
     }
   }
 | RETURN_NEXT NEXT return_variable ';'
@@ -1044,34 +1044,34 @@ stmt_raise:
   }
 | RAISE opt_error_level SCONST opt_format_exprs opt_option_exprs ';'
   {
-    $$.val = &plpgsqltree.PLpgSQLStmtRaise{
+    $$.val = &plpgsqltree.Raise{
       LogLevel: $2,
       Message: $3,
-      Params: $4.plpgsqlExprs(),
-      Options: $5.plpgsqlOptionExprs(),
+      Params: $4.exprs(),
+      Options: $5.raiseOptions(),
     }
   }
 | RAISE opt_error_level IDENT opt_option_exprs ';'
   {
-    $$.val = &plpgsqltree.PLpgSQLStmtRaise{
+    $$.val = &plpgsqltree.Raise{
       LogLevel: $2,
       CodeName: $3,
-      Options: $4.plpgsqlOptionExprs(),
+      Options: $4.raiseOptions(),
     }
   }
 | RAISE opt_error_level SQLSTATE SCONST opt_option_exprs ';'
   {
-    $$.val = &plpgsqltree.PLpgSQLStmtRaise{
+    $$.val = &plpgsqltree.Raise{
       LogLevel: $2,
       Code: $4,
-      Options: $5.plpgsqlOptionExprs(),
+      Options: $5.raiseOptions(),
     }
   }
 | RAISE opt_error_level USING option_exprs ';'
   {
-    $$.val = &plpgsqltree.PLpgSQLStmtRaise{
+    $$.val = &plpgsqltree.Raise{
       LogLevel: $2,
-      Options: $4.plpgsqlOptionExprs(),
+      Options: $4.raiseOptions(),
     }
   }
 ;
@@ -1092,24 +1092,24 @@ opt_error_level:
 opt_option_exprs:
   USING option_exprs
   {
-    $$.val = $2.plpgsqlOptionExprs()
+    $$.val = $2.raiseOptions()
   }
 | /* EMPTY */
   {
-    $$.val = []plpgsqltree.PLpgSQLStmtRaiseOption{}
+    $$.val = []plpgsqltree.RaiseOption{}
   }
 ;
 
 option_exprs:
   option_exprs ',' option_expr
   {
-    option := $3.plpgsqlOptionExpr()
-    $$.val = append($1.plpgsqlOptionExprs(), *option)
+    option := $3.raiseOption()
+    $$.val = append($1.raiseOptions(), *option)
   }
 | option_expr
   {
-    option := $1.plpgsqlOptionExpr()
-    $$.val = []plpgsqltree.PLpgSQLStmtRaiseOption{*option}
+    option := $1.raiseOption()
+    $$.val = []plpgsqltree.RaiseOption{*option}
   }
 ;
 
@@ -1122,7 +1122,7 @@ option_expr:
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-    $$.val = &plpgsqltree.PLpgSQLStmtRaiseOption{
+    $$.val = &plpgsqltree.RaiseOption{
       OptType: $1,
       Expr: optionExpr,
     }
@@ -1144,22 +1144,22 @@ option_type:
 opt_format_exprs:
   format_exprs
   {
-    $$.val = $1.plpgsqlExprs()
+    $$.val = $1.exprs()
   }
  | /* EMPTY */
   {
-    $$.val = []plpgsqltree.PLpgSQLExpr{}
+    $$.val = []plpgsqltree.Expr{}
   }
 ;
 
 format_exprs:
   format_expr
   {
-    $$.val = []plpgsqltree.PLpgSQLExpr{$1.plpgsqlExpr()}
+    $$.val = []plpgsqltree.Expr{$1.expr()}
   }
 | format_exprs format_expr
   {
-    $$.val = append($1.plpgsqlExprs(), $2.plpgsqlExpr())
+    $$.val = append($1.exprs(), $2.expr())
   }
 ;
 
@@ -1177,7 +1177,7 @@ format_expr: ','
 
 stmt_assert: ASSERT assert_cond ';'
   {
-    $$.val = &plpgsqltree.PLpgSQLStmtAssert{}
+    $$.val = &plpgsqltree.Assert{}
   }
 ;
 
@@ -1192,7 +1192,7 @@ assert_cond:
 
 loop_body: proc_sect END LOOP
   {
-    $$.val = $1.plpgsqlStatements()
+    $$.val = $1.statements()
   }
 ;
 
@@ -1224,7 +1224,7 @@ stmt_dynexecute: EXECUTE
 // TODO: change expr_until_semi to process_cursor_before_semi
 stmt_open: OPEN IDENT open_stmt_processor ';'
   {
-    openCursorStmt := $3.pLpgSQLStmtOpen()
+    openCursorStmt := $3.open()
     openCursorStmt.CursorName = $2
     $$.val = openCursorStmt
   }
@@ -1249,13 +1249,13 @@ opt_fetch_direction:
 
 stmt_close: CLOSE cursor_variable ';'
   {
-    $$.val = &plpgsqltree.PLpgSQLStmtClose{}
+    $$.val = &plpgsqltree.Close{}
   }
 ;
 
 stmt_null: NULL ';'
   {
-  $$.val = &plpgsqltree.PLpgSQLStmtNull{};
+  $$.val = &plpgsqltree.Null{};
   }
 ;
 

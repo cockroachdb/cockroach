@@ -17,21 +17,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-type PLpgSQLExpr = tree.Expr
+type Expr = tree.Expr
 
-type PLpgSQLStatement interface {
+type Statement interface {
 	tree.NodeFormatter
 	GetLineNo() int
 	GetStmtID() uint
 	plpgsqlStmt()
-	WalkStmt(PLpgSQLStmtVisitor)
+	WalkStmt(StatementVisitor)
 }
 
-type TaggedPLpgSQLStatement interface {
+type TaggedStatement interface {
 	PlpgSQLStatementTag() string
 }
 
-type PLpgSQLStatementImpl struct {
+type StatementImpl struct {
 	// TODO(Chengxiong): figure out how to get line number from scanner.
 	LineNo int
 	/*
@@ -43,27 +43,27 @@ type PLpgSQLStatementImpl struct {
 	StmtID uint
 }
 
-func (s *PLpgSQLStatementImpl) GetLineNo() int {
+func (s *StatementImpl) GetLineNo() int {
 	return s.LineNo
 }
 
-func (s *PLpgSQLStatementImpl) GetStmtID() uint {
+func (s *StatementImpl) GetStmtID() uint {
 	return s.StmtID
 }
 
-func (s *PLpgSQLStatementImpl) plpgsqlStmt() {}
+func (s *StatementImpl) plpgsqlStmt() {}
 
 // pl_block
-type PLpgSQLStmtBlock struct {
-	PLpgSQLStatementImpl
+type Block struct {
+	StatementImpl
 	Label      string
-	Decls      []PLpgSQLDecl
-	Body       []PLpgSQLStatement
+	Decls      []Declaration
+	Body       []Statement
 	Exceptions *PLpgSQLExceptionBlock
 }
 
 // TODO(drewk): format Label and Exceptions fields.
-func (s *PLpgSQLStmtBlock) Format(ctx *tree.FmtCtx) {
+func (s *Block) Format(ctx *tree.FmtCtx) {
 	if s.Decls != nil {
 		ctx.WriteString("DECLARE\n")
 		for _, dec := range s.Decls {
@@ -79,11 +79,11 @@ func (s *PLpgSQLStmtBlock) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("END\n")
 }
 
-func (s *PLpgSQLStmtBlock) PlpgSQLStatementTag() string {
+func (s *Block) PlpgSQLStatementTag() string {
 	return "stmt_block"
 }
 
-func (s *PLpgSQLStmtBlock) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Block) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 	for _, stmt := range s.Body {
 		stmt.WalkStmt(visitor)
@@ -91,17 +91,17 @@ func (s *PLpgSQLStmtBlock) WalkStmt(visitor PLpgSQLStmtVisitor) {
 }
 
 // decl_stmt
-type PLpgSQLDecl struct {
-	PLpgSQLStatementImpl
-	Var      PLpgSQLVariable
+type Declaration struct {
+	StatementImpl
+	Var      Variable
 	Constant bool
 	Typ      tree.ResolvableTypeReference
 	Collate  string
 	NotNull  bool
-	Expr     PLpgSQLExpr
+	Expr     Expr
 }
 
-func (s *PLpgSQLDecl) Format(ctx *tree.FmtCtx) {
+func (s *Declaration) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(string(s.Var))
 	if s.Constant {
 		ctx.WriteString(" CONSTANT")
@@ -120,43 +120,43 @@ func (s *PLpgSQLDecl) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(";\n")
 }
 
-func (s *PLpgSQLDecl) PlpgSQLStatementTag() string {
+func (s *Declaration) PlpgSQLStatementTag() string {
 	return "decl_stmt"
 }
 
-func (s *PLpgSQLDecl) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Declaration) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_assign
-type PLpgSQLStmtAssign struct {
-	PLpgSQLStatement
-	Var   PLpgSQLVariable
-	Value PLpgSQLExpr
+type Assignment struct {
+	Statement
+	Var   Variable
+	Value Expr
 }
 
-func (s *PLpgSQLStmtAssign) PlpgSQLStatementTag() string {
+func (s *Assignment) PlpgSQLStatementTag() string {
 	return "stmt_assign"
 }
 
-func (s *PLpgSQLStmtAssign) Format(ctx *tree.FmtCtx) {
+func (s *Assignment) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(fmt.Sprintf("%s := %s;\n", s.Var, s.Value))
 }
 
-func (s *PLpgSQLStmtAssign) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Assignment) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_if
-type PLpgSQLStmtIf struct {
-	PLpgSQLStatementImpl
-	Condition  PLpgSQLExpr
-	ThenBody   []PLpgSQLStatement
-	ElseIfList []*PLpgSQLStmtIfElseIfArm
-	ElseBody   []PLpgSQLStatement
+type If struct {
+	StatementImpl
+	Condition  Expr
+	ThenBody   []Statement
+	ElseIfList []*ElseIf
+	ElseBody   []Statement
 }
 
-func (s *PLpgSQLStmtIf) Format(ctx *tree.FmtCtx) {
+func (s *If) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("IF ")
 	s.Condition.Format(ctx)
 	ctx.WriteString(" THEN\n")
@@ -178,11 +178,11 @@ func (s *PLpgSQLStmtIf) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("END IF;\n")
 }
 
-func (s *PLpgSQLStmtIf) PlpgSQLStatementTag() string {
+func (s *If) PlpgSQLStatementTag() string {
 	return "stmt_if"
 }
 
-func (s *PLpgSQLStmtIf) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *If) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 
 	for _, thenStmt := range s.ThenBody {
@@ -199,14 +199,14 @@ func (s *PLpgSQLStmtIf) WalkStmt(visitor PLpgSQLStmtVisitor) {
 
 }
 
-type PLpgSQLStmtIfElseIfArm struct {
-	PLpgSQLStatementImpl
+type ElseIf struct {
+	StatementImpl
 	LineNo    int
-	Condition PLpgSQLExpr
-	Stmts     []PLpgSQLStatement
+	Condition Expr
+	Stmts     []Statement
 }
 
-func (s *PLpgSQLStmtIfElseIfArm) Format(ctx *tree.FmtCtx) {
+func (s *ElseIf) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("ELSIF ")
 	s.Condition.Format(ctx)
 	ctx.WriteString(" THEN\n")
@@ -216,11 +216,11 @@ func (s *PLpgSQLStmtIfElseIfArm) Format(ctx *tree.FmtCtx) {
 	}
 }
 
-func (s *PLpgSQLStmtIfElseIfArm) PlpgSQLStatementTag() string {
+func (s *ElseIf) PlpgSQLStatementTag() string {
 	return "stmt_if_else_if"
 }
 
-func (s *PLpgSQLStmtIfElseIfArm) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *ElseIf) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 
 	for _, stmt := range s.Stmts {
@@ -229,19 +229,19 @@ func (s *PLpgSQLStmtIfElseIfArm) WalkStmt(visitor PLpgSQLStmtVisitor) {
 }
 
 // stmt_case
-type PLpgSQLStmtCase struct {
-	PLpgSQLStatementImpl
-	// TODO(drewk): Change to PLpgSQLExpr
+type Case struct {
+	StatementImpl
+	// TODO(drewk): Change to Expr
 	TestExpr     string
-	Var          PLpgSQLVariable
-	CaseWhenList []*PLpgSQLStmtCaseWhenArm
+	Var          Variable
+	CaseWhenList []*CaseWhen
 	HaveElse     bool
-	ElseStmts    []PLpgSQLStatement
+	ElseStmts    []Statement
 }
 
 // TODO(drewk): fix the whitespace/newline formatting for CASE (see the
 // stmt_case test file).
-func (s *PLpgSQLStmtCase) Format(ctx *tree.FmtCtx) {
+func (s *Case) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("CASE")
 	if len(s.TestExpr) > 0 {
 		ctx.WriteString(fmt.Sprintf(" %s", s.TestExpr))
@@ -260,11 +260,11 @@ func (s *PLpgSQLStmtCase) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("END CASE\n")
 }
 
-func (s *PLpgSQLStmtCase) PlpgSQLStatementTag() string {
+func (s *Case) PlpgSQLStatementTag() string {
 	return "stmt_case"
 }
 
-func (s *PLpgSQLStmtCase) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Case) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 
 	for _, when := range s.CaseWhenList {
@@ -278,14 +278,14 @@ func (s *PLpgSQLStmtCase) WalkStmt(visitor PLpgSQLStmtVisitor) {
 	}
 }
 
-type PLpgSQLStmtCaseWhenArm struct {
-	PLpgSQLStatementImpl
-	// TODO(drewk): Change to PLpgSQLExpr
+type CaseWhen struct {
+	StatementImpl
+	// TODO(drewk): Change to Expr
 	Expr  string
-	Stmts []PLpgSQLStatement
+	Stmts []Statement
 }
 
-func (s *PLpgSQLStmtCaseWhenArm) Format(ctx *tree.FmtCtx) {
+func (s *CaseWhen) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(fmt.Sprintf("WHEN %s THEN\n", s.Expr))
 	for i, stmt := range s.Stmts {
 		ctx.WriteString("  ")
@@ -296,11 +296,11 @@ func (s *PLpgSQLStmtCaseWhenArm) Format(ctx *tree.FmtCtx) {
 	}
 }
 
-func (s *PLpgSQLStmtCaseWhenArm) PlpgSQLStatementTag() string {
+func (s *CaseWhen) PlpgSQLStatementTag() string {
 	return "stmt_when"
 }
 
-func (s *PLpgSQLStmtCaseWhenArm) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *CaseWhen) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 
 	for _, stmt := range s.Stmts {
@@ -309,17 +309,17 @@ func (s *PLpgSQLStmtCaseWhenArm) WalkStmt(visitor PLpgSQLStmtVisitor) {
 }
 
 // stmt_loop
-type PLpgSQLStmtSimpleLoop struct {
-	PLpgSQLStatementImpl
+type Loop struct {
+	StatementImpl
 	Label string
-	Body  []PLpgSQLStatement
+	Body  []Statement
 }
 
-func (s *PLpgSQLStmtSimpleLoop) PlpgSQLStatementTag() string {
+func (s *Loop) PlpgSQLStatementTag() string {
 	return "stmt_simple_loop"
 }
 
-func (s *PLpgSQLStmtSimpleLoop) Format(ctx *tree.FmtCtx) {
+func (s *Loop) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("LOOP\n")
 	for _, stmt := range s.Body {
 		stmt.Format(ctx)
@@ -331,7 +331,7 @@ func (s *PLpgSQLStmtSimpleLoop) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(";\n")
 }
 
-func (s *PLpgSQLStmtSimpleLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Loop) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 	for _, stmt := range s.Body {
 		stmt.WalkStmt(visitor)
@@ -339,21 +339,21 @@ func (s *PLpgSQLStmtSimpleLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
 }
 
 // stmt_while
-type PLpgSQLStmtWhileLoop struct {
-	PLpgSQLStatementImpl
+type While struct {
+	StatementImpl
 	Label     string
-	Condition PLpgSQLExpr
-	Body      []PLpgSQLStatement
+	Condition Expr
+	Body      []Statement
 }
 
-func (s *PLpgSQLStmtWhileLoop) Format(ctx *tree.FmtCtx) {
+func (s *While) Format(ctx *tree.FmtCtx) {
 }
 
-func (s *PLpgSQLStmtWhileLoop) PlpgSQLStatementTag() string {
+func (s *While) PlpgSQLStatementTag() string {
 	return "stmt_while"
 }
 
-func (s *PLpgSQLStmtWhileLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *While) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 	for _, stmt := range s.Body {
 		stmt.WalkStmt(visitor)
@@ -361,123 +361,123 @@ func (s *PLpgSQLStmtWhileLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
 }
 
 // stmt_for
-type PLpgSQLStmtForIntLoop struct {
-	PLpgSQLStatementImpl
+type ForInt struct {
+	StatementImpl
 	Label   string
-	Var     PLpgSQLVariable
-	Lower   PLpgSQLExpr
-	Upper   PLpgSQLExpr
-	Step    PLpgSQLExpr
+	Var     Variable
+	Lower   Expr
+	Upper   Expr
+	Step    Expr
 	Reverse int
-	Body    []PLpgSQLStatement
+	Body    []Statement
 }
 
-func (s *PLpgSQLStmtForIntLoop) Format(ctx *tree.FmtCtx) {
+func (s *ForInt) Format(ctx *tree.FmtCtx) {
 }
 
-func (s *PLpgSQLStmtForIntLoop) PlpgSQLStatementTag() string {
+func (s *ForInt) PlpgSQLStatementTag() string {
 	return "stmt_for_int_loop"
 }
 
-func (s *PLpgSQLStmtForIntLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *ForInt) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 	for _, stmt := range s.Body {
 		stmt.WalkStmt(visitor)
 	}
 }
 
-type PLpgSQLStmtForQueryLoop struct {
-	PLpgSQLStatementImpl
+type ForQuery struct {
+	StatementImpl
 	Label string
-	Var   PLpgSQLVariable
-	Body  []PLpgSQLStatement
+	Var   Variable
+	Body  []Statement
 }
 
-func (s *PLpgSQLStmtForQueryLoop) Format(ctx *tree.FmtCtx) {
+func (s *ForQuery) Format(ctx *tree.FmtCtx) {
 }
 
-func (s *PLpgSQLStmtForQueryLoop) PlpgSQLStatementTag() string {
+func (s *ForQuery) PlpgSQLStatementTag() string {
 	return "stmt_for_query_loop"
 }
 
-func (s *PLpgSQLStmtForQueryLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *ForQuery) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 	for _, stmt := range s.Body {
 		stmt.WalkStmt(visitor)
 	}
 }
 
-type PLpgSQLStmtForQuerySelectLoop struct {
-	PLpgSQLStmtForQueryLoop
-	Query PLpgSQLExpr
+type ForSelect struct {
+	ForQuery
+	Query Expr
 }
 
-func (s *PLpgSQLStmtForQuerySelectLoop) Format(ctx *tree.FmtCtx) {
+func (s *ForSelect) Format(ctx *tree.FmtCtx) {
 }
 
-func (s *PLpgSQLStmtForQuerySelectLoop) PlpgSQLStatementTag() string {
+func (s *ForSelect) PlpgSQLStatementTag() string {
 	return "stmt_query_select_loop"
 }
 
-func (s *PLpgSQLStmtForQuerySelectLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *ForSelect) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
-	s.PLpgSQLStmtForQueryLoop.WalkStmt(visitor)
+	s.ForQuery.WalkStmt(visitor)
 }
 
-type PLpgSQLStmtForQueryCursorLoop struct {
-	PLpgSQLStmtForQueryLoop
+type ForCursor struct {
+	ForQuery
 	CurVar   int // TODO(drewk): is this CursorVariable?
-	ArgQuery PLpgSQLExpr
+	ArgQuery Expr
 }
 
-func (s *PLpgSQLStmtForQueryCursorLoop) Format(ctx *tree.FmtCtx) {
+func (s *ForCursor) Format(ctx *tree.FmtCtx) {
 }
 
-func (s *PLpgSQLStmtForQueryCursorLoop) PlpgSQLStatementTag() string {
+func (s *ForCursor) PlpgSQLStatementTag() string {
 	return "stmt_for_query_cursor_loop"
 }
 
-func (s *PLpgSQLStmtForQueryCursorLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *ForCursor) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
-	s.PLpgSQLStmtForQueryLoop.WalkStmt(visitor)
+	s.ForQuery.WalkStmt(visitor)
 }
 
-type PLpgSQLStmtForDynamicLoop struct {
-	PLpgSQLStmtForQueryLoop
-	Query  PLpgSQLExpr
-	Params []PLpgSQLExpr
+type ForDynamic struct {
+	ForQuery
+	Query  Expr
+	Params []Expr
 }
 
-func (s *PLpgSQLStmtForDynamicLoop) Format(ctx *tree.FmtCtx) {
+func (s *ForDynamic) Format(ctx *tree.FmtCtx) {
 }
 
-func (s *PLpgSQLStmtForDynamicLoop) PlpgSQLStatementTag() string {
+func (s *ForDynamic) PlpgSQLStatementTag() string {
 	return "stmt_for_dyn_loop"
 }
 
-func (s *PLpgSQLStmtForDynamicLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *ForDynamic) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
-	s.PLpgSQLStmtForQueryLoop.WalkStmt(visitor)
+	s.ForQuery.WalkStmt(visitor)
 }
 
 // stmt_foreach_a
-type PLpgSQLStmtForEachALoop struct {
-	PLpgSQLStatementImpl
+type ForEachArray struct {
+	StatementImpl
 	Label string
-	Var   *PLpgSQLVariable
+	Var   *Variable
 	Slice int // TODO(drewk): not sure what this is
-	Expr  PLpgSQLExpr
-	Body  []PLpgSQLStatement
+	Expr  Expr
+	Body  []Statement
 }
 
-func (s *PLpgSQLStmtForEachALoop) Format(ctx *tree.FmtCtx) {
+func (s *ForEachArray) Format(ctx *tree.FmtCtx) {
 }
 
-func (s *PLpgSQLStmtForEachALoop) PlpgSQLStatementTag() string {
+func (s *ForEachArray) PlpgSQLStatementTag() string {
 	return "stmt_for_each_a"
 }
 
-func (s *PLpgSQLStmtForEachALoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *ForEachArray) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 
 	for _, stmt := range s.Body {
@@ -486,13 +486,13 @@ func (s *PLpgSQLStmtForEachALoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
 }
 
 // stmt_exit
-type PLpgSQLStmtExit struct {
-	PLpgSQLStatementImpl
+type Exit struct {
+	StatementImpl
 	Label     string
-	Condition PLpgSQLExpr
+	Condition Expr
 }
 
-func (s *PLpgSQLStmtExit) Format(ctx *tree.FmtCtx) {
+func (s *Exit) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("EXIT")
 	if s.Label != "" {
 		ctx.WriteString(fmt.Sprintf(" %s", s.Label))
@@ -505,22 +505,22 @@ func (s *PLpgSQLStmtExit) Format(ctx *tree.FmtCtx) {
 
 }
 
-func (s *PLpgSQLStmtExit) PlpgSQLStatementTag() string {
+func (s *Exit) PlpgSQLStatementTag() string {
 	return "stmt_exit"
 }
 
-func (s *PLpgSQLStmtExit) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Exit) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_continue
-type PLpgSQLStmtContinue struct {
-	PLpgSQLStatementImpl
+type Continue struct {
+	StatementImpl
 	Label     string
-	Condition PLpgSQLExpr
+	Condition Expr
 }
 
-func (s *PLpgSQLStmtContinue) Format(ctx *tree.FmtCtx) {
+func (s *Continue) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("CONTINUE")
 	if s.Label != "" {
 		ctx.WriteString(fmt.Sprintf(" %s", s.Label))
@@ -532,22 +532,22 @@ func (s *PLpgSQLStmtContinue) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(";\n")
 }
 
-func (s *PLpgSQLStmtContinue) PlpgSQLStatementTag() string {
+func (s *Continue) PlpgSQLStatementTag() string {
 	return "stmt_continue"
 }
 
-func (s *PLpgSQLStmtContinue) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Continue) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_return
-type PLpgSQLStmtReturn struct {
-	PLpgSQLStatementImpl
-	Expr   PLpgSQLExpr
-	RetVar PLpgSQLVariable
+type Return struct {
+	StatementImpl
+	Expr   Expr
+	RetVar Variable
 }
 
-func (s *PLpgSQLStmtReturn) Format(ctx *tree.FmtCtx) {
+func (s *Return) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("RETURN ")
 	if s.Expr == nil {
 		s.RetVar.Format(ctx)
@@ -557,61 +557,61 @@ func (s *PLpgSQLStmtReturn) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(";\n")
 }
 
-func (s *PLpgSQLStmtReturn) PlpgSQLStatementTag() string {
+func (s *Return) PlpgSQLStatementTag() string {
 	return "stmt_return"
 }
 
-func (s *PLpgSQLStmtReturn) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Return) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
-type PLpgSQLStmtReturnNext struct {
-	PLpgSQLStatementImpl
-	Expr   PLpgSQLExpr
-	RetVar PLpgSQLVariable
+type ReturnNext struct {
+	StatementImpl
+	Expr   Expr
+	RetVar Variable
 }
 
-func (s *PLpgSQLStmtReturnNext) Format(ctx *tree.FmtCtx) {
+func (s *ReturnNext) Format(ctx *tree.FmtCtx) {
 }
 
-func (s *PLpgSQLStmtReturnNext) PlpgSQLStatementTag() string {
+func (s *ReturnNext) PlpgSQLStatementTag() string {
 	return "stmt_return_next"
 }
 
-func (s *PLpgSQLStmtReturnNext) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *ReturnNext) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
-type PLpgSQLStmtReturnQuery struct {
-	PLpgSQLStatementImpl
-	Query        PLpgSQLExpr
-	DynamicQuery PLpgSQLExpr
-	Params       []PLpgSQLExpr
+type ReturnQuery struct {
+	StatementImpl
+	Query        Expr
+	DynamicQuery Expr
+	Params       []Expr
 }
 
-func (s *PLpgSQLStmtReturnQuery) Format(ctx *tree.FmtCtx) {
+func (s *ReturnQuery) Format(ctx *tree.FmtCtx) {
 }
 
-func (s *PLpgSQLStmtReturnQuery) PlpgSQLStatementTag() string {
+func (s *ReturnQuery) PlpgSQLStatementTag() string {
 	return "stmt_return_query"
 }
 
-func (s *PLpgSQLStmtReturnQuery) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *ReturnQuery) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_raise
-type PLpgSQLStmtRaise struct {
-	PLpgSQLStatementImpl
+type Raise struct {
+	StatementImpl
 	LogLevel string
 	Code     string
 	CodeName string
 	Message  string
-	Params   []PLpgSQLExpr
-	Options  []PLpgSQLStmtRaiseOption
+	Params   []Expr
+	Options  []RaiseOption
 }
 
-func (s *PLpgSQLStmtRaise) Format(ctx *tree.FmtCtx) {
+func (s *Raise) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("RAISE")
 	if s.LogLevel != "" {
 		ctx.WriteString(" ")
@@ -641,53 +641,53 @@ func (s *PLpgSQLStmtRaise) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(";\n")
 }
 
-type PLpgSQLStmtRaiseOption struct {
+type RaiseOption struct {
 	OptType string
-	Expr    PLpgSQLExpr
+	Expr    Expr
 }
 
-func (s *PLpgSQLStmtRaiseOption) Format(ctx *tree.FmtCtx) {
+func (s *RaiseOption) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(fmt.Sprintf("%s = ", strings.ToUpper(s.OptType)))
 	s.Expr.Format(ctx)
 }
 
-func (s *PLpgSQLStmtRaise) PlpgSQLStatementTag() string {
+func (s *Raise) PlpgSQLStatementTag() string {
 	return "stmt_raise"
 }
 
-func (s *PLpgSQLStmtRaise) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Raise) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_assert
-type PLpgSQLStmtAssert struct {
-	PLpgSQLStatementImpl
-	Condition PLpgSQLExpr
-	Message   PLpgSQLExpr
+type Assert struct {
+	StatementImpl
+	Condition Expr
+	Message   Expr
 }
 
-func (s *PLpgSQLStmtAssert) Format(ctx *tree.FmtCtx) {
+func (s *Assert) Format(ctx *tree.FmtCtx) {
 	// TODO(drewk): Pretty print the assert condition and message
 	ctx.WriteString("ASSERT\n")
 }
 
-func (s *PLpgSQLStmtAssert) PlpgSQLStatementTag() string {
+func (s *Assert) PlpgSQLStatementTag() string {
 	return "stmt_assert"
 }
 
-func (s *PLpgSQLStmtAssert) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Assert) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_execsql
-type PLpgSQLStmtExecSql struct {
-	PLpgSQLStatementImpl
+type Execute struct {
+	StatementImpl
 	SqlStmt string
 	Into    bool // INTO provided?
 	Strict  bool // INTO STRICT flag
 }
 
-func (s *PLpgSQLStmtExecSql) Format(ctx *tree.FmtCtx) {
+func (s *Execute) Format(ctx *tree.FmtCtx) {
 	// TODO(drewk): Pretty print the sql statement
 	ctx.WriteString("EXECUTE bare sql query")
 	if s.Into {
@@ -699,26 +699,26 @@ func (s *PLpgSQLStmtExecSql) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("\n")
 }
 
-func (s *PLpgSQLStmtExecSql) PlpgSQLStatementTag() string {
+func (s *Execute) PlpgSQLStatementTag() string {
 	return "stmt_exec_sql"
 }
 
-func (s *PLpgSQLStmtExecSql) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Execute) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_dynexecute
 // TODO(chengxiong): query should be a better expression type.
-type PLpgSQLStmtDynamicExecute struct {
-	PLpgSQLStatementImpl
+type DynamicExecute struct {
+	StatementImpl
 	Query  string
 	Into   bool
 	Strict bool
-	Target PLpgSQLVariable
-	Params []PLpgSQLExpr
+	Target Variable
+	Params []Expr
 }
 
-func (s *PLpgSQLStmtDynamicExecute) Format(ctx *tree.FmtCtx) {
+func (s *DynamicExecute) Format(ctx *tree.FmtCtx) {
 	// TODO(drewk): Pretty print the original command
 	ctx.WriteString("EXECUTE a dynamic command")
 	if s.Into {
@@ -733,40 +733,40 @@ func (s *PLpgSQLStmtDynamicExecute) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("\n")
 }
 
-func (s *PLpgSQLStmtDynamicExecute) PlpgSQLStatementTag() string {
+func (s *DynamicExecute) PlpgSQLStatementTag() string {
 	return "stmt_dyn_exec"
 }
 
-func (s *PLpgSQLStmtDynamicExecute) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *DynamicExecute) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_perform
-type PLpgSQLStmtPerform struct {
-	PLpgSQLStatementImpl
-	Expr PLpgSQLExpr
+type Perform struct {
+	StatementImpl
+	Expr Expr
 }
 
-func (s *PLpgSQLStmtPerform) Format(ctx *tree.FmtCtx) {
+func (s *Perform) Format(ctx *tree.FmtCtx) {
 }
 
-func (s *PLpgSQLStmtPerform) PlpgSQLStatementTag() string {
+func (s *Perform) PlpgSQLStatementTag() string {
 	return "stmt_perform"
 }
 
-func (s *PLpgSQLStmtPerform) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Perform) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_call
-type PLpgSQLStmtCall struct {
-	PLpgSQLStatementImpl
-	Expr   PLpgSQLExpr
+type Call struct {
+	StatementImpl
+	Expr   Expr
 	IsCall bool
-	Target PLpgSQLVariable
+	Target Variable
 }
 
-func (s *PLpgSQLStmtCall) Format(ctx *tree.FmtCtx) {
+func (s *Call) Format(ctx *tree.FmtCtx) {
 	// TODO(drewk): Correct the Call field and print the Expr and Target.
 	if s.IsCall {
 		ctx.WriteString("CALL a function/procedure\n")
@@ -775,22 +775,22 @@ func (s *PLpgSQLStmtCall) Format(ctx *tree.FmtCtx) {
 	}
 }
 
-func (s *PLpgSQLStmtCall) PlpgSQLStatementTag() string {
+func (s *Call) PlpgSQLStatementTag() string {
 	return "stmt_call"
 }
 
-func (s *PLpgSQLStmtCall) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Call) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_getdiag
-type PLpgSQLStmtGetDiag struct {
-	PLpgSQLStatementImpl
+type GetDiagnostics struct {
+	StatementImpl
 	IsStacked bool
-	DiagItems PLpgSQLStmtGetDiagItemList // TODO(drewk): what is this?
+	DiagItems GetDiagnosticsItemList // TODO(drewk): what is this?
 }
 
-func (s *PLpgSQLStmtGetDiag) Format(ctx *tree.FmtCtx) {
+func (s *GetDiagnostics) Format(ctx *tree.FmtCtx) {
 	if s.IsStacked {
 		ctx.WriteString("GET STACKED DIAGNOSTICS ")
 	} else {
@@ -805,46 +805,46 @@ func (s *PLpgSQLStmtGetDiag) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("\n")
 }
 
-type PLpgSQLStmtGetDiagItem struct {
-	Kind PLpgSQLGetDiagKind
+type GetDiagnosticsItem struct {
+	Kind GetDiagnosticsKind
 	// TODO(jane): TargetName is temporary -- should be removed and use Target.
 	TargetName string
 	Target     int // where to assign it?
 }
 
-func (s *PLpgSQLStmtGetDiagItem) Format(ctx *tree.FmtCtx) {
+func (s *GetDiagnosticsItem) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(fmt.Sprintf("%s := %s", s.TargetName, s.Kind.String()))
 }
 
-type PLpgSQLStmtGetDiagItemList []*PLpgSQLStmtGetDiagItem
+type GetDiagnosticsItemList []*GetDiagnosticsItem
 
-func (s *PLpgSQLStmtGetDiag) PlpgSQLStatementTag() string {
+func (s *GetDiagnostics) PlpgSQLStatementTag() string {
 	return "stmt_get_diag"
 }
 
-func (s *PLpgSQLStmtGetDiag) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *GetDiagnostics) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_open
-type PLpgSQLStmtOpen struct {
-	PLpgSQLStatementImpl
-	CurVar        int // TODO(drewk): this could just a PLpgSQLVariable
+type Open struct {
+	StatementImpl
+	CurVar        int // TODO(drewk): this could just a Variable
 	CursorOptions uint32
 	// TODO(jane): This is temporary and we should remove it and use CurVar.
 	CursorName       string
 	WithExplicitExpr bool
-	// TODO(jane): Should be PLpgSQLExpr
+	// TODO(jane): Should be Expr
 	ArgQuery string
-	// TODO(jane): Should be PLpgSQLExpr
+	// TODO(jane): Should be Expr
 	Query string
-	// TODO(jane): Should be PLpgSQLExpr
+	// TODO(jane): Should be Expr
 	DynamicQuery string
-	// TODO(jane): Should be []PLpgSQLExpr
+	// TODO(jane): Should be []Expr
 	Params []string
 }
 
-func (s *PLpgSQLStmtOpen) Format(ctx *tree.FmtCtx) {
+func (s *Open) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(
 		fmt.Sprintf(
 			"OPEN %s ",
@@ -875,108 +875,108 @@ func (s *PLpgSQLStmtOpen) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("\n")
 }
 
-func (s *PLpgSQLStmtOpen) PlpgSQLStatementTag() string {
+func (s *Open) PlpgSQLStatementTag() string {
 	return "stmt_open"
 }
 
-func (s *PLpgSQLStmtOpen) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Open) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_fetch
 // stmt_move (where IsMove = true)
-type PLpgSQLStmtFetch struct {
-	PLpgSQLStatementImpl
-	Target           PLpgSQLVariable
-	CurVar           int // TODO(drewk): this could just a PLpgSQLVariable
-	Direction        PLpgSQLFetchDirection
+type Fetch struct {
+	StatementImpl
+	Target           Variable
+	CurVar           int // TODO(drewk): this could just a Variable
+	Direction        FetchDirection
 	HowMany          int64
-	Expr             PLpgSQLExpr
+	Expr             Expr
 	IsMove           bool
 	ReturnsMultiRows bool
 }
 
-func (s *PLpgSQLStmtFetch) Format(ctx *tree.FmtCtx) {
+func (s *Fetch) Format(ctx *tree.FmtCtx) {
 }
 
-func (s *PLpgSQLStmtFetch) PlpgSQLStatementTag() string {
+func (s *Fetch) PlpgSQLStatementTag() string {
 	if s.IsMove {
 		return "stmt_move"
 	}
 	return "stmt_fetch"
 }
 
-func (s *PLpgSQLStmtFetch) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Fetch) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_close
-type PLpgSQLStmtClose struct {
-	PLpgSQLStatementImpl
-	CurVar int // TODO(drewk): this could just a PLpgSQLVariable
+type Close struct {
+	StatementImpl
+	CurVar int // TODO(drewk): this could just a Variable
 }
 
-func (s *PLpgSQLStmtClose) Format(ctx *tree.FmtCtx) {
+func (s *Close) Format(ctx *tree.FmtCtx) {
 	// TODO(drewk): Pretty- Print the cursor identifier
 	ctx.WriteString("CLOSE a cursor\n")
 
 }
 
-func (s *PLpgSQLStmtClose) PlpgSQLStatementTag() string {
+func (s *Close) PlpgSQLStatementTag() string {
 	return "stmt_close"
 }
 
-func (s *PLpgSQLStmtClose) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Close) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_commit
-type PLpgSQLStmtCommit struct {
-	PLpgSQLStatementImpl
+type Commit struct {
+	StatementImpl
 	Chain bool
 }
 
-func (s *PLpgSQLStmtCommit) Format(ctx *tree.FmtCtx) {
+func (s *Commit) Format(ctx *tree.FmtCtx) {
 }
 
-func (s *PLpgSQLStmtCommit) PlpgSQLStatementTag() string {
+func (s *Commit) PlpgSQLStatementTag() string {
 	return "stmt_commit"
 }
 
-func (s *PLpgSQLStmtCommit) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Commit) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_rollback
-type PLpgSQLStmtRollback struct {
-	PLpgSQLStatementImpl
+type Rollback struct {
+	StatementImpl
 	Chain bool
 }
 
-func (s *PLpgSQLStmtRollback) Format(ctx *tree.FmtCtx) {
+func (s *Rollback) Format(ctx *tree.FmtCtx) {
 }
 
-func (s *PLpgSQLStmtRollback) PlpgSQLStatementTag() string {
+func (s *Rollback) PlpgSQLStatementTag() string {
 	return "stmt_rollback"
 }
 
-func (s *PLpgSQLStmtRollback) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Rollback) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
 // stmt_null
-type PLpgSQLStmtNull struct {
-	PLpgSQLStatementImpl
+type Null struct {
+	StatementImpl
 }
 
-func (s *PLpgSQLStmtNull) Format(ctx *tree.FmtCtx) {
+func (s *Null) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("NULL\n")
 }
 
-func (s *PLpgSQLStmtNull) PlpgSQLStatementTag() string {
+func (s *Null) PlpgSQLStatementTag() string {
 	return "stmt_null"
 }
 
-func (s *PLpgSQLStmtNull) WalkStmt(visitor PLpgSQLStmtVisitor) {
+func (s *Null) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }

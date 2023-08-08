@@ -35,7 +35,7 @@ type lexer struct {
 	// token returned by Lex().
 	lastPos int
 
-	stmt *plpgsqltree.PLpgSQLStmtBlock
+	stmt *plpgsqltree.Block
 
 	// numPlaceholders is 1 + the highest placeholder index encountered.
 	numPlaceholders int
@@ -120,9 +120,9 @@ func (l *lexer) Lex(lval *plpgsqlSymType) int {
 	return int(lval.id)
 }
 
-// MakeExecSqlStmt makes a PLpgSQLStmtExecSql from current token position.
+// MakeExecSqlStmt makes a Execute from current token position.
 // TODO(chengxiong): we need to fill in variables as well.
-func (l *lexer) MakeExecSqlStmt(startTokenID int) *plpgsqltree.PLpgSQLStmtExecSql {
+func (l *lexer) MakeExecSqlStmt(startTokenID int) *plpgsqltree.Execute {
 	sqlToks := make([]string, 0)
 	if startTokenID == 0 || startTokenID == ';' {
 		l.setErr(errors.AssertionFailedf("plpgsql_execsql: invalid start token"))
@@ -167,16 +167,16 @@ func (l *lexer) MakeExecSqlStmt(startTokenID int) *plpgsqltree.PLpgSQLStmtExecSq
 			hasInto = true
 		}
 	}
-	return &plpgsqltree.PLpgSQLStmtExecSql{
+	return &plpgsqltree.Execute{
 		SqlStmt: strings.Join(sqlToks, " "),
 		Into:    hasInto,
 		Strict:  hasStrict,
 	}
 }
 
-func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.PLpgSQLStmtDynamicExecute {
+func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.DynamicExecute {
 	cmdStr, _ := l.ReadSqlConstruct(INTO, USING, ';')
-	ret := &plpgsqltree.PLpgSQLStmtDynamicExecute{
+	ret := &plpgsqltree.DynamicExecute{
 		Query: cmdStr,
 	}
 
@@ -201,7 +201,7 @@ func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.PLpgSQLStmtDynamicExecute 
 			if ret.Params != nil {
 				l.setErr(errors.AssertionFailedf("seen multiple USINGs"))
 			}
-			ret.Params = make([]plpgsqltree.PLpgSQLExpr, 0)
+			ret.Params = make([]plpgsqltree.Expr, 0)
 			for {
 				l.ReadSqlConstruct(',', ';', INTO)
 				ret.Params = append(ret.Params, nil)
@@ -220,19 +220,19 @@ func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.PLpgSQLStmtDynamicExecute 
 	return ret
 }
 
-func (l *lexer) ProcessForOpenCursor(nullCursorExplicitExpr bool) *plpgsqltree.PLpgSQLStmtOpen {
-	openStmt := &plpgsqltree.PLpgSQLStmtOpen{}
-	openStmt.CursorOptions = plpgsqltree.PLpgSQLCursorOptFastPlan.Mask()
+func (l *lexer) ProcessForOpenCursor(nullCursorExplicitExpr bool) *plpgsqltree.Open {
+	openStmt := &plpgsqltree.Open{}
+	openStmt.CursorOptions = plpgsqltree.CursorOptionFastPlan.Mask()
 
 	if nullCursorExplicitExpr {
 		if l.Peek().id == NO {
 			l.lastPos++
 			if l.Peek().id == SCROLL {
-				openStmt.CursorOptions |= plpgsqltree.PLpgSQLCursorOptNoScroll.Mask()
+				openStmt.CursorOptions |= plpgsqltree.CursorOptionNoScroll.Mask()
 				l.lastPos++
 			}
 		} else if l.Peek().id == SCROLL {
-			openStmt.CursorOptions |= plpgsqltree.PLpgSQLCursorOptScroll.Mask()
+			openStmt.CursorOptions |= plpgsqltree.CursorOptionScroll.Mask()
 			l.lastPos++
 		}
 
@@ -334,7 +334,7 @@ func (l *lexer) ReadSqlConstruct(
 	return l.in[start:end], terminatorMet
 }
 
-func (l *lexer) ProcessQueryForCursorWithoutExplicitExpr(openStmt *plpgsqltree.PLpgSQLStmtOpen) {
+func (l *lexer) ProcessQueryForCursorWithoutExplicitExpr(openStmt *plpgsqltree.Open) {
 	l.lastPos++
 	if int(l.Peek().id) == EXECUTE {
 		dynamicQuery, endToken := l.ReadSqlExpressionStr2(USING, ';')
@@ -394,8 +394,8 @@ func (l *lexer) lastToken() plpgsqlSymType {
 }
 
 // SetStmt is called from the parser when the statement is constructed.
-func (l *lexer) SetStmt(stmt plpgsqltree.PLpgSQLStatement) {
-	l.stmt = stmt.(*plpgsqltree.PLpgSQLStmtBlock)
+func (l *lexer) SetStmt(stmt plpgsqltree.Statement) {
+	l.stmt = stmt.(*plpgsqltree.Block)
 }
 
 // setErr is called from parsing action rules to register an error observed
@@ -430,6 +430,6 @@ func (l *lexer) GetTypeFromValidSQLSyntax(sqlStr string) (tree.ResolvableTypeRef
 	return parser.GetTypeFromValidSQLSyntax(sqlStr)
 }
 
-func (l *lexer) ParseExpr(sqlStr string) (plpgsqltree.PLpgSQLExpr, error) {
+func (l *lexer) ParseExpr(sqlStr string) (plpgsqltree.Expr, error) {
 	return parser.ParseExpr(sqlStr)
 }

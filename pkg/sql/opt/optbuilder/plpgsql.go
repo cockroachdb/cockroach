@@ -116,7 +116,7 @@ type plpgsqlBuilder struct {
 	params []tree.ParamType
 
 	// decls is the set of variable declarations for a PL/pgSQL function.
-	decls []plpgsqltree.PLpgSQLDecl
+	decls []plpgsqltree.Declaration
 
 	// varTypes maps from the name of each variable to its type.
 	varTypes map[tree.Name]*types.T
@@ -146,7 +146,7 @@ func (b *plpgsqlBuilder) init(
 	ob *Builder,
 	colRefs *opt.ColSet,
 	params []tree.ParamType,
-	block *plpgsqltree.PLpgSQLStmtBlock,
+	block *plpgsqltree.Block,
 	returnType *types.T,
 ) {
 	b.ob = ob
@@ -178,7 +178,7 @@ func (b *plpgsqlBuilder) init(
 
 // build constructs an expression that returns the result of executing a
 // PL/pgSQL function. See buildPLpgSQLStatements for more details.
-func (b *plpgsqlBuilder) build(block *plpgsqltree.PLpgSQLStmtBlock, s *scope) *scope {
+func (b *plpgsqlBuilder) build(block *plpgsqltree.Block, s *scope) *scope {
 	s = s.push()
 	b.ensureScopeHasExpr(s)
 
@@ -223,13 +223,11 @@ func (b *plpgsqlBuilder) build(block *plpgsqltree.PLpgSQLStmtBlock, s *scope) *s
 //
 // buildPLpgSQLStatements returns nil if one or more branches in the given
 // statements do not eventually terminate with a RETURN statement.
-func (b *plpgsqlBuilder) buildPLpgSQLStatements(
-	stmts []plpgsqltree.PLpgSQLStatement, s *scope,
-) *scope {
+func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []plpgsqltree.Statement, s *scope) *scope {
 	b.ensureScopeHasExpr(s)
 	for i, stmt := range stmts {
 		switch t := stmt.(type) {
-		case *plpgsqltree.PLpgSQLStmtReturn:
+		case *plpgsqltree.Return:
 			// RETURN is handled by projecting a single column with the expression
 			// that is being returned.
 			returnScalar := b.buildPLpgSQLExpr(t.Expr, b.returnType, s)
@@ -238,11 +236,11 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, returnScalar)
 			b.ob.constructProjectForScope(s, returnScope)
 			return returnScope
-		case *plpgsqltree.PLpgSQLStmtAssign:
+		case *plpgsqltree.Assignment:
 			// Assignment (:=) is handled by projecting a new column with the same
 			// name as the variable being assigned.
 			s = b.addPLpgSQLAssign(s, t.Var, t.Value)
-		case *plpgsqltree.PLpgSQLStmtIf:
+		case *plpgsqltree.If:
 			if len(t.ElseIfList) != 0 {
 				panic(unimplemented.New(
 					"ELSIF statements",
@@ -292,7 +290,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, scalar)
 			b.ob.constructProjectForScope(s, returnScope)
 			return returnScope
-		case *plpgsqltree.PLpgSQLStmtSimpleLoop:
+		case *plpgsqltree.Loop:
 			if t.Label != "" {
 				panic(unimplemented.New(
 					"LOOP label",
@@ -319,7 +317,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			b.popContinuation()
 			b.popExitContinuation()
 			return b.callContinuation(&loopContinuation, s)
-		case *plpgsqltree.PLpgSQLStmtExit:
+		case *plpgsqltree.Exit:
 			if t.Label != "" {
 				panic(unimplemented.New(
 					"EXIT label",
@@ -336,7 +334,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 					"EXIT cannot be used outside a loop, unless it has a label",
 				))
 			}
-		case *plpgsqltree.PLpgSQLStmtContinue:
+		case *plpgsqltree.Continue:
 			if t.Label != "" {
 				panic(unimplemented.New(
 					"CONTINUE label",
@@ -350,7 +348,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			} else {
 				panic(pgerror.New(pgcode.Syntax, "CONTINUE cannot be used outside a loop"))
 			}
-		case *plpgsqltree.PLpgSQLStmtRaise:
+		case *plpgsqltree.Raise:
 			// RAISE statements allow the PLpgSQL function to send an error or a
 			// notice to the client. We handle these side effects by building them
 			// into a separate body statement that is only executed for its side
@@ -400,7 +398,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 // If there is a column with the same name in the previous scope, it will be
 // replaced. This allows the plpgsqlBuilder to model variable mutations.
 func (b *plpgsqlBuilder) addPLpgSQLAssign(
-	inScope *scope, ident plpgsqltree.PLpgSQLVariable, val plpgsqltree.PLpgSQLExpr,
+	inScope *scope, ident plpgsqltree.Variable, val plpgsqltree.Expr,
 ) *scope {
 	if b.constants != nil {
 		if _, ok := b.constants[ident]; ok {
@@ -433,9 +431,7 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(
 // getRaiseArgs validates the options attached to the given PLpgSQL RAISE
 // statement and returns the arguments to be used for a call to the
 // crdb_internal.plpgsql_raise builtin function.
-func (b *plpgsqlBuilder) getRaiseArgs(
-	s *scope, raise *plpgsqltree.PLpgSQLStmtRaise,
-) memo.ScalarListExpr {
+func (b *plpgsqlBuilder) getRaiseArgs(s *scope, raise *plpgsqltree.Raise) memo.ScalarListExpr {
 	var severity, message, detail, hint, code opt.ScalarExpr
 	makeConstStr := func(str string) opt.ScalarExpr {
 		return b.ob.factory.ConstructConstVal(tree.NewDString(str), types.String)
@@ -468,7 +464,7 @@ func (b *plpgsqlBuilder) getRaiseArgs(
 		code = makeConstStr(raise.CodeName)
 	}
 	// Retrieve the RAISE options, if any.
-	buildOptionExpr := func(name string, expr plpgsqltree.PLpgSQLExpr, isDup bool) opt.ScalarExpr {
+	buildOptionExpr := func(name string, expr plpgsqltree.Expr, isDup bool) opt.ScalarExpr {
 		if isDup {
 			panic(pgerror.Newf(pgcode.Syntax, "RAISE option already specified: %s", name))
 		}
@@ -517,7 +513,7 @@ func (b *plpgsqlBuilder) getRaiseArgs(
 // is specified by doubling it: '%%'. The formatting arguments can be arbitrary
 // SQL expressions.
 func (b *plpgsqlBuilder) makeRaiseFormatMessage(
-	s *scope, format string, args []plpgsqltree.PLpgSQLExpr,
+	s *scope, format string, args []plpgsqltree.Expr,
 ) (result opt.ScalarExpr) {
 	makeConstStr := func(str string) opt.ScalarExpr {
 		return b.ob.factory.ConstructConstVal(tree.NewDString(str), types.String)
@@ -597,7 +593,7 @@ func (b *plpgsqlBuilder) makeContinuation(name string) continuation {
 // function definitions, which need to push the continuation before it is
 // finished.
 func (b *plpgsqlBuilder) finishContinuation(
-	stmts []plpgsqltree.PLpgSQLStatement, con *continuation, recursive bool,
+	stmts []plpgsqltree.Statement, con *continuation, recursive bool,
 ) {
 	// Make sure to push s before constructing the continuation scope to ensure
 	// that the parameter columns are not projected.
@@ -662,7 +658,7 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 // buildPLpgSQLExpr parses and builds the given SQL expression into a ScalarExpr
 // within the given scope.
 func (b *plpgsqlBuilder) buildPLpgSQLExpr(
-	expr plpgsqltree.PLpgSQLExpr, typ *types.T, s *scope,
+	expr plpgsqltree.Expr, typ *types.T, s *scope,
 ) opt.ScalarExpr {
 	expr, _ = tree.WalkExpr(s, expr)
 	typedExpr, err := expr.TypeCheck(b.ob.ctx, b.ob.semaCtx, typ)
