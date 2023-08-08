@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -226,6 +225,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 
 	// Channel for stopping a tenant.
 	tenantStopperChannel := make(chan struct{})
+	firstV2UpgradeAttempt := true
 	startAndConnectToTenant := func(t *testing.T, tenantInfo *tenantInfo) (_ *gosql.DB, stopTenant func()) {
 		tenant, err := tc.Server(0).StartTenant(ctx, *tenantInfo.tenantArgs)
 		require.NoError(t, err)
@@ -278,6 +278,11 @@ func TestTenantUpgradeFailure(t *testing.T) {
 									ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 								) error {
 									tenantStopperChannel <- struct{}{}
+									if firstV2UpgradeAttempt {
+										// Somehow waiting here helps and blocking the stopper for sometime helps
+										// us get the right error message below [investigating why].
+										time.Sleep(time.Second * 10)
+									}
 									return nil
 								}), true
 						default:
@@ -293,7 +298,6 @@ func TestTenantUpgradeFailure(t *testing.T) {
 	}
 
 	t.Run("upgrade tenant have it crash then resume", func(t *testing.T) {
-		skip.WithIssue(t, 106279)
 		// Create a tenant before upgrading anything and verify its version.
 		const initialTenantID = 10
 		tenantInfo := mkTenant(t, initialTenantID)
@@ -362,6 +366,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		initialTenantRunner.CheckQueryResultsRetry(t,
 			"SELECT count(*) FROM system.sql_instances WHERE session_id IS NOT NULL", [][]string{{"1"}})
 
+		firstV2UpgradeAttempt = false
 		// Upgrade the tenant cluster.
 		initialTenantRunner.Exec(t,
 			"SET CLUSTER SETTING version = $1",

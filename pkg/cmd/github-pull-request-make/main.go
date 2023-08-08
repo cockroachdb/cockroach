@@ -225,9 +225,9 @@ func main() {
 			// stress, we usually use 4 or 2, so run with 8 here to make sure the
 			// test becomes an obvious candidate for skipping under race before it
 			// has to deal with the nightlies.
-			parallelism := 16
+			parallelism := 4
 			if target == "stressrace" {
-				parallelism = 8
+				parallelism = 2
 			}
 
 			var args []string
