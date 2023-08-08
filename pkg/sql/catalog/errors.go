@@ -83,6 +83,10 @@ func HasInactiveDescriptorError(err error) bool {
 // found with the given id.
 var ErrDescriptorNotFound = errors.New("descriptor not found")
 
+func NewDescriptorNotFoundError(id descpb.ID) error {
+	return errors.Wrapf(ErrDescriptorNotFound, "looking up ID %d", errors.Safe(id))
+}
+
 // ErrReferencedDescriptorNotFound is like ErrDescriptorNotFound but for
 // descriptors referenced within another descriptor.
 var ErrReferencedDescriptorNotFound = errors.New("referenced descriptor not found")

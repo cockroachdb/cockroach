@@ -166,7 +166,7 @@ func HydrateCatalog(ctx context.Context, c nstree.MutableCatalog) error {
 	defer sp.Finish()
 
 	fakeLookupFunc := func(_ context.Context, id descpb.ID, skipHydration bool) (catalog.Descriptor, error) {
-		return nil, catalog.WrapDescRefErr(id, catalog.ErrDescriptorNotFound)
+		return nil, catalog.NewDescriptorNotFoundError(id)
 	}
 	typeLookupFunc := hydrateddesc.MakeTypeLookupFuncForHydration(c, fakeLookupFunc)
 	return c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {

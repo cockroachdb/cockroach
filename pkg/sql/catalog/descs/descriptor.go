@@ -300,7 +300,7 @@ func (q *byIDLookupContext) lookupLeased(
 	// If we have already read all of the descriptors, use it as a negative
 	// cache to short-circuit a lookup we know will be doomed to fail.
 	if q.tc.stored.IsIDKnownToNotExist(id, q.flags.ParentID) {
-		return nil, catalog.NoValidation, catalog.ErrDescriptorNotFound
+		return nil, catalog.NoValidation, catalog.NewDescriptorNotFoundError(id)
 	}
 	desc, shouldReadFromStore, err := q.tc.leased.getByID(q.ctx, q.tc.deadlineHolder(q.txn), id)
 	if err != nil || shouldReadFromStore {
