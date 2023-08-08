@@ -1147,8 +1147,8 @@ func (c *CustomFuncs) TryRemapOuterCols(
 }
 
 // tryRemapOuterCols handles the traversal and outer-column replacement for
-// TryRemapOuterCols. It returns the replacement expression and whether an
-// outer-column reference was successfully remapped.
+// TryRemapOuterCols. It returns the replacement expression, which may be
+// unchanged if remapping was not possible.
 func (c *CustomFuncs) tryRemapOuterCols(
 	expr opt.Expr, outerCol opt.ColumnID, substituteCols opt.ColSet,
 ) opt.Expr {
@@ -1160,9 +1160,15 @@ func (c *CustomFuncs) tryRemapOuterCols(
 	switch t := expr.(type) {
 	case *memo.VariableExpr:
 		if t.Col == outerCol {
-			if replaceCol, ok := substituteCols.Next(0); ok {
-				// This outer-column reference can be remapped.
-				return c.f.ConstructVariable(replaceCol)
+			md := c.mem.Metadata()
+			outerColTyp := md.ColumnMeta(outerCol).Type
+			replaceCol, ok := substituteCols.Next(0)
+			for ; ok; replaceCol, ok = substituteCols.Next(replaceCol + 1) {
+				if outerColTyp.Identical(md.ColumnMeta(replaceCol).Type) {
+					// Only perform the replacement if the types are identical.
+					// This outer-column reference can be remapped.
+					return c.f.ConstructVariable(replaceCol)
+				}
 			}
 		}
 	case memo.RelExpr:
