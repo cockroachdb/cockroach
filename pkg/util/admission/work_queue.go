@@ -327,6 +327,9 @@ type workQueueOptions struct {
 	timeSource timeutil.TimeSource
 	// The epoch closing goroutine can be disabled for tests.
 	disableEpochClosingGoroutine bool
+	// The background resetting of used and GC'ing of tenants can be disabled
+	// for tests.
+	disableGCTenantsAndResetUsed bool
 }
 
 func makeWorkQueueOptions(workKind WorkKind) workQueueOptions {
@@ -397,18 +400,20 @@ func initWorkQueue(
 		q.mu.tenants = make(map[uint64]*tenantInfo)
 		q.sampleEpochLIFOSettingsLocked()
 	}()
-	go func() {
-		ticker := time.NewTicker(time.Second)
-		for {
-			select {
-			case <-ticker.C:
-				q.gcTenantsAndResetTokens()
-			case <-stopCh:
-				// Channel closed.
-				return
+	if !opts.disableGCTenantsAndResetUsed {
+		go func() {
+			ticker := time.NewTicker(time.Second)
+			for {
+				select {
+				case <-ticker.C:
+					q.gcTenantsAndResetUsed()
+				case <-stopCh:
+					// Channel closed.
+					return
+				}
 			}
-		}
-	}()
+		}()
+	}
 	q.tryCloseEpoch(q.timeNow())
 	if !opts.disableEpochClosingGoroutine {
 		q.startClosingEpochs()
@@ -671,29 +676,19 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		// the state of the requesters to see if there is any queued work that
 		// can be granted admission.
 		q.mu.Lock()
-		prevTenant := tenant
-		// The tenant could have been removed when using tokens. See the comment
-		// where the tenantInfo struct is declared.
+		// The tenant could have been removed. See the comment where the
+		// tenantInfo struct is declared.
 		tenant, ok = q.mu.tenants[tenantID]
-		if !q.usesTokens {
-			if !ok || prevTenant != tenant {
-				panic("prev tenantInfo no longer in map")
-			}
-			if tenant.used < uint64(info.RequestedCount) {
-				panic(errors.AssertionFailedf("tenant.used %d < info.RequestedCount %d",
-					tenant.used, info.RequestedCount))
-			}
+		if !ok {
+			tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID))
+			q.mu.tenants[tenantID] = tenant
+		}
+		// Don't want to overflow tenant.used if it has decreased because of being
+		// reset to 0 by the GC goroutine.
+		if tenant.used >= uint64(info.RequestedCount) {
 			tenant.used -= uint64(info.RequestedCount)
 		} else {
-			if !ok {
-				tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID))
-				q.mu.tenants[tenantID] = tenant
-			}
-			// Don't want to overflow tenant.used if it is already 0 because of
-			// being reset to 0 by the GC goroutine.
-			if tenant.used >= uint64(info.RequestedCount) {
-				tenant.used -= uint64(info.RequestedCount)
-			}
+			tenant.used = 0
 		}
 	}
 
@@ -749,7 +744,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			)
 		}
 
-		return // return without waiting (admission is asynchronous)
+		return false, nil // return without waiting (admission is asynchronous)
 	}
 
 	// Start waiting for admission.
@@ -766,16 +761,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		// are too short, we could underestimate the actual wait time.
 		tenant.priorityStates.updateDelayLocked(work.priority, waitDur, true /* canceled */)
 		if work.heapIndex == -1 {
-			// No longer in heap. Raced with token/slot grant.
-			if !q.usesTokens {
-				if tenant.used < uint64(info.RequestedCount) {
-					panic(errors.AssertionFailedf("tenant.used %d < info.RequestedCount %d",
-						tenant.used, info.RequestedCount))
-				}
-				tenant.used -= uint64(info.RequestedCount)
-			}
-			// Else, we don't decrement tenant.used since we don't want to race with
-			// the gc goroutine that will set used=0.
+			// No longer in heap. Raced with token/slot grant. Don't bother
+			// decrementing tenant.used since we don't want to race with the gc
+			// goroutine that sets used=0 and could have GC'd tenant and returned it
+			// to the sync.Pool. We can fix this if needed by calling
+			// adjustTenantUsedLocked.
 			q.mu.Unlock()
 			q.granter.returnGrant(info.RequestedCount)
 			// The channel is sent to after releasing mu, so we don't need to hold
@@ -822,22 +812,18 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 // AdmittedWorkDone is used to inform the WorkQueue that some admitted work is
 // finished. It must be called iff the WorkKind of this WorkQueue uses slots
 // (not tokens), i.e., KVWork, SQLStatementLeafStartWork,
-// SQLStatementRootStartWork.
-func (q *WorkQueue) AdmittedWorkDone(tenantID roachpb.TenantID) {
+// SQLStatementRootStartWork. Note, there is no support for SQLStatementLeafStartWork,
+// SQLStatementRootStartWork in the code yet.
+func (q *WorkQueue) AdmittedWorkDone(tenantID roachpb.TenantID, cpuTime time.Duration) {
 	if q.usesTokens {
 		panic(errors.AssertionFailedf("tokens should not be returned"))
 	}
-	// Single slot is allocated for the work.
-	q.mu.Lock()
-	tenant, ok := q.mu.tenants[tenantID.ToUint64()]
-	if !ok {
-		panic(errors.AssertionFailedf("tenant not found"))
+	// Single slot is allocated for the work in the granter, and tenant.used was
+	// incremented by 1.
+	additionalUsed := cpuTime - 1
+	if additionalUsed != 0 {
+		q.adjustTenantUsed(tenantID, additionalUsed.Nanoseconds())
 	}
-	tenant.used--
-	if isInTenantHeap(tenant) {
-		q.mu.tenantHeap.fix(tenant)
-	}
-	q.mu.Unlock()
 	q.granter.returnGrant(1)
 }
 
@@ -916,7 +902,7 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	return requestedCount
 }
 
-func (q *WorkQueue) gcTenantsAndResetTokens() {
+func (q *WorkQueue) gcTenantsAndResetUsed() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	// With large numbers of active tenants, this iteration could hold the lock
@@ -926,7 +912,7 @@ func (q *WorkQueue) gcTenantsAndResetTokens() {
 		if info.used == 0 && !isInTenantHeap(info) {
 			delete(q.mu.tenants, id)
 			releaseTenantInfo(info)
-		} else if q.usesTokens {
+		} else {
 			info.used = 0
 			// All the heap members will reset used=0, so no need to change heap
 			// ordering.
@@ -934,26 +920,30 @@ func (q *WorkQueue) gcTenantsAndResetTokens() {
 	}
 }
 
-// adjustTenantTokens is used internally by StoreWorkQueue. The
-// additionalTokensNeeded count can be negative, in which case it is returning
-// tokens. This is only for WorkQueue's own accounting -- it should not call
-// into granter.
-func (q *WorkQueue) adjustTenantTokens(tenantID roachpb.TenantID, additionalTokensNeeded int64) {
+// adjustTenantUsed is used internally by StoreWorkQueue, and by the KV queue
+// in AdmittedWorkDone. The additionalUsed count can be negative, in which
+// case it is returning unused resources. This is only for WorkQueue's own
+// accounting -- it should not call into granter.
+func (q *WorkQueue) adjustTenantUsed(tenantID roachpb.TenantID, additionalUsed int64) {
 	tid := tenantID.ToUint64()
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	tenant, ok := q.mu.tenants[tid]
-	if ok {
-		if additionalTokensNeeded < 0 {
-			toReturn := uint64(-additionalTokensNeeded)
-			if tenant.used < toReturn {
-				tenant.used = 0
-			} else {
-				tenant.used -= toReturn
-			}
+	if !ok {
+		return
+	}
+	if additionalUsed < 0 {
+		toReturn := uint64(-additionalUsed)
+		if tenant.used < toReturn {
+			tenant.used = 0
 		} else {
-			tenant.used += uint64(additionalTokensNeeded)
+			tenant.used -= toReturn
 		}
+	} else {
+		tenant.used += uint64(additionalUsed)
+	}
+	if isInTenantHeap(tenant) {
+		q.mu.tenantHeap.fix(tenant)
 	}
 }
 
@@ -1258,31 +1248,37 @@ type tenantInfo struct {
 	id uint64
 	// The weight assigned to the tenant. Must be > 0.
 	weight uint32
-	// used can be the currently used slots, or the tokens granted within the last
-	// interval.
+	// used is computed over an interval and periodically reset. Ordering
+	// between tenants, for fair sharing, utilizes this value.
+	//
+	// - For slots, used represents cpu time duration consumed by the tenant. It
+	//   is incremented by 1 (for non-elastic work) or some prediction of cpu
+	//   time (for elastic work) when the work is admitted. A correction is
+	//   applied when the work is done based on the actual cpu time consumed.
+	// - For tokens, used represents the tokens consumed. A prediction of tokens
+	//   that will be consumed is deducted at admission time, and a correction
+	//   is applied later.
 	//
 	// tenantInfo will not be GC'd until both used==0 and
 	// len(waitingWorkHeap)==0.
 	//
-	// Note that used can be reset to 0 periodically, iff the WorkQueue is using
-	// tokens (not slots). This creates a risk since callers of Admit hold
-	// references to tenantInfo. We do not want a race condition where the
-	// tenantInfo held in Admit is returned to the sync.Pool. Note that this
-	// race is almost impossible to reproduce in practice since GC loop runs at
-	// 1s intervals and needs two iterations to GC a tenantInfo -- first to
-	// reset used=0 and then the next time to GC it. We fix this by being
-	// careful in the code of Admit by not reusing a reference to tenantInfo,
-	// and instead grab a new reference from the map.
+	// The used value is reset to 0 periodically. This creates a risk since
+	// callers of Admit hold references to tenantInfo. We do not want a race
+	// condition where the tenantInfo held in Admit is returned to the
+	// sync.Pool. Note that this race is almost impossible to reproduce in
+	// practice since GC loop runs at 1s intervals and needs two iterations to
+	// GC a tenantInfo -- first to reset used=0 and then the next time to GC it.
+	// We fix this by being careful in the code of Admit by not reusing a
+	// reference to tenantInfo, and instead grab a new reference from the map.
 	//
 	// The above fix for the GC race condition is insufficient to prevent
 	// overflow of the used field if the reset to used=0 happens between used++
 	// and used-- within Admit. Properly fixing that would need to track the
 	// count of used==0 resets and gate the used-- on the count not having
 	// changed. This was considered unnecessarily complicated and instead we
-	// simply (a) do not do used-- for the tokens case, if used is already zero,
-	// or (b) do not do used-- for the tokens case if the request was canceled.
-	// This does imply some inaccuracy in token counting -- it can be fixed if
-	// needed.
+	// simply (a) do not do used--, if used is already zero, or (b) do not do
+	// used-- if the request was canceled. This does imply some inaccuracy in
+	// accounting -- it can be fixed if needed.
 	used            uint64
 	waitingWorkHeap waitingWorkHeap
 	openEpochsHeap  openEpochsHeap
@@ -1991,7 +1987,7 @@ func (q *StoreWorkQueue) admittedReplicatedWork(
 	if !coordMuLocked {
 		q.coordMu.Unlock()
 	}
-	q.q[wc].adjustTenantTokens(tenantID, additionalTokensNeeded)
+	q.q[wc].adjustTenantUsed(tenantID, additionalTokensNeeded)
 
 	// Inform callers of the entry we just admitted.
 	//
@@ -2036,7 +2032,7 @@ func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, doneInfo StoreWorkD
 	}
 	q.updateStoreStatsAfterWorkDone(1, doneInfo, false)
 	additionalTokens := q.granters[h.workClass].storeWriteDone(h.writeTokens, doneInfo)
-	q.q[h.workClass].adjustTenantTokens(h.tenantID, additionalTokens)
+	q.q[h.workClass].adjustTenantUsed(h.tenantID, additionalTokens)
 	return nil
 }
 
