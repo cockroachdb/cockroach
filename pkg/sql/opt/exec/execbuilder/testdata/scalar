@@ -1285,8 +1285,13 @@ vectorized: true
 
 # Regression test for #57959. This should not cause an error due to
 # "comparison overload not found".
-query T
+query error pq: incompatible value type: cannot determine type of empty array. Consider casting to the desired type, for example ARRAY[]::int[]
 EXPLAIN (VERBOSE) SELECT * FROM t0 WHERE (CASE WHEN (t0.c0) IN (t0.c0) THEN ARRAY[NULL] ELSE ARRAY[] END) IS NULL
+
+# TODO(rytaft): On Postgres this case returns ERROR: cannot determine type of
+# empty array.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t0 WHERE (CASE WHEN (t0.c0) IN (t0.c0) THEN ARRAY[] ELSE ARRAY[NULL] END) IS NULL
 ----
 distribution: local
 vectorized: true
@@ -1294,7 +1299,7 @@ vectorized: true
 • filter
 │ columns: (c0)
 │ estimated row count: 333 (missing stats)
-│ filter: CASE WHEN (c0 IS DISTINCT FROM CAST(NULL AS DECIMAL)) OR CAST(NULL AS BOOL) THEN ARRAY[NULL] ELSE ARRAY[] END IS NULL
+│ filter: CASE WHEN (c0 IS DISTINCT FROM CAST(NULL AS DECIMAL)) OR CAST(NULL AS BOOL) THEN ARRAY[] ELSE ARRAY[NULL] END IS NULL
 │
 └── • scan
       columns: (c0)

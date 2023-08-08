@@ -310,7 +310,6 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	decimalIntMismatchErr := `expected .* to be of type (decimal|int), found type (decimal|int)`
-	tupleFloatIntMismatchErr := `tuples .* are not the same type: ` + decimalIntMismatchErr
 	tupleIntMismatchErr := `expected .* to be of type (tuple|int), found type (tuple|int)`
 	tupleLenErr := `expected tuple .* to have a length of .*`
 	placeholderErr := `could not determine data type of placeholder .*`
@@ -325,10 +324,8 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	}{
 		// Single type mismatches.
 		{nil, nil, exprs(dint(1), decConst("1.1")), decimalIntMismatchErr},
-		{nil, nil, exprs(dint(1), ddecimal(1)), decimalIntMismatchErr},
 		{ptypesInt, nil, exprs(decConst("1.1"), placeholder(0)), placeholderAlreadyAssignedErr},
 		// Tuple type mismatches.
-		{nil, nil, exprs(tuple(dint(1)), tuple(ddecimal(1))), tupleFloatIntMismatchErr},
 		{nil, nil, exprs(tuple(dint(1)), dint(1), dint(1)), tupleIntMismatchErr},
 		{nil, nil, exprs(tuple(dint(1)), tuple(dint(1), dint(1))), tupleLenErr},
 		// Placeholder ambiguity.
@@ -352,6 +349,55 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 					t.Errorf("%d: expected %s, but found %v", i, d.expectedErr, err)
 				}
 			})
+		})
+	}
+}
+
+func TestTypeCheckSameTypedExprsImplicitCastOneWay(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	decimalIntMismatchErr := `expected .* to be of type (decimal|int), found type (decimal|int)`
+	tupleDecimalIntMismatchErr := `tuples .* are not the same type: ` + decimalIntMismatchErr
+
+	testData := []struct {
+		ptypes  tree.PlaceholderTypes
+		desired *types.T
+		exprs   []copyableExpr
+
+		expectedErr string
+	}{
+		// For each of these test cases, it should be possible to implicitly cast
+		// from left to right but not vice-versa.
+		// Single type mismatches.
+		{nil, nil, exprs(dint(1), ddecimal(1)), decimalIntMismatchErr},
+		// Tuple type mismatches.
+		{nil, nil, exprs(tuple(dint(1)), tuple(ddecimal(1))), tupleDecimalIntMismatchErr},
+	}
+	ctx := context.Background()
+	for i, d := range testData {
+		t.Run(fmt.Sprintf("test_%d", i), func(t *testing.T) {
+			semaCtx := tree.MakeSemaContext()
+			if err := semaCtx.Placeholders.Init(len(d.ptypes), d.ptypes); err != nil {
+				t.Error(err)
+			}
+			desired := types.Any
+			if d.desired != nil {
+				desired = d.desired
+			}
+			// Left to right succeeds.
+			if _, _, err := tree.TypeCheckSameTypedExprs(
+				ctx, &semaCtx, desired, buildExprs(d.exprs)...,
+			); err != nil {
+				t.Errorf("%d: unexpected error returned from TypeCheckSameTypedExprs: %v", i, err)
+			}
+			// Right to left fails.
+			exprs := make([]copyableExpr, len(d.exprs))
+			exprs[0], exprs[1] = d.exprs[1], d.exprs[0]
+			if _, _, err := tree.TypeCheckSameTypedExprs(
+				ctx, &semaCtx, desired, buildExprs(exprs)...,
+			); !testutils.IsError(err, d.expectedErr) {
+				t.Errorf("%d: expected %s, but found %v", i, d.expectedErr, err)
+			}
 		})
 	}
 }
