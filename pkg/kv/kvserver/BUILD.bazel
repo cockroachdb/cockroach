@@ -355,7 +355,7 @@ go_test(
         "txn_wait_queue_test.go",
     ],
     args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
+        "//build/toolchains:use_ci_timeouts": ["-test.timeout=1495s"],
         "//conditions:default": ["-test.timeout=3595s"],
     }),
     data = glob(["testdata/**"]),

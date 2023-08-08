@@ -36,7 +36,7 @@ var (
 		"small":    60,
 		"medium":   300,
 		"large":    900,
-		"enormous": 900,
+		"enormous": 1500,
 	}
 )
 

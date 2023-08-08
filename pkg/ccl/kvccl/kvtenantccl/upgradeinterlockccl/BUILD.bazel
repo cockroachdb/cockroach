@@ -9,7 +9,7 @@ go_test(
         "main_test.go",
     ],
     args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
+        "//build/toolchains:use_ci_timeouts": ["-test.timeout=1495s"],
         "//conditions:default": ["-test.timeout=3595s"],
     }),
     shard_count = 14,

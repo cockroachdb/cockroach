@@ -257,7 +257,7 @@ go_test(
     srcs = ["generated_test.go"],{{ if .SqliteLogicTest }}
     args = ["-test.timeout=7195s"],{{ else }}
     args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
+        "//build/toolchains:use_ci_timeouts": ["-test.timeout=1495s"],
         "//conditions:default": ["-test.timeout=3595s"],
     }),{{ end }}
     data = [
