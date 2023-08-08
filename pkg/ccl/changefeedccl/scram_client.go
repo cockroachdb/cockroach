@@ -12,7 +12,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 
-	"github.com/Shopify/sarama"
+	"github.com/HonoreDB/sarama"
 	"github.com/xdg-go/scram"
 )
 

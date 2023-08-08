@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Shopify/sarama"
+	"github.com/HonoreDB/sarama"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	saramaMetrics "github.com/rcrowley/go-metrics"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,7 +48,9 @@ type asyncProducerMock struct {
 	mu          struct {
 		syncutil.Mutex
 		outstanding []*sarama.ProducerMessage
+		throttle    time.Duration
 	}
+	callback sarama.ProduceCallback
 }
 
 var _ sarama.AsyncProducer = (*asyncProducerMock)(nil)
@@ -84,6 +87,17 @@ func (p *asyncProducerMock) AddOffsetsToTxn(
 }
 func (p *asyncProducerMock) AddMessageToTxn(_ *sarama.ConsumerMessage, _ string, _ *string) error {
 	panic(`unimplemented`)
+}
+func (p *asyncProducerMock) AddCallback(cb sarama.ProduceCallback) {
+	prev := p.callback
+	if prev == nil {
+		p.callback = cb
+	} else {
+		p.callback = func(resp *sarama.ProduceResponse, err error) {
+			prev(resp, err)
+			cb(resp, err)
+		}
+	}
 }
 
 type syncProducerMock struct {
@@ -135,6 +149,16 @@ func (p *syncProducerMock) AddMessageToTxn(_ *sarama.ConsumerMessage, _ string, 
 }
 func (p *syncProducerMock) Close() error { panic(`unimplemented`) }
 
+func (p *asyncProducerMock) newSuccessResponse(m *sarama.ProducerMessage) *sarama.ProduceResponse {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	resp := sarama.ProduceResponse{
+		ThrottleTime: p.mu.throttle,
+	}
+	p.mu.throttle = 0
+	return &resp
+}
+
 // consumeAndSucceed consumes input messages and sends them to successes channel.
 // Returns function that must be called to stop this consumer
 // to clean up. The cleanup function must be called before closing asyncProducerMock.
@@ -149,6 +173,9 @@ func (p *asyncProducerMock) consumeAndSucceed() (cleanup func()) {
 			case <-done:
 				return
 			case m := <-p.inputCh:
+				if p.callback != nil {
+					p.callback(p.newSuccessResponse(m), nil)
+				}
 				p.successesCh <- m
 			}
 		}
@@ -209,6 +236,13 @@ func (p *asyncProducerMock) outstanding() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return len(p.mu.outstanding)
+}
+
+// throttle adds a ThrottleTime to the next simulated success response.
+func (p *asyncProducerMock) throttle(t time.Duration) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.throttle = t
 }
 
 func topic(name string) *tableDescriptorTopic {
@@ -279,7 +313,9 @@ func makeTestKafkaSink(
 				return nil, nil
 			},
 		},
+		isThrottlingBackpressureEnabled: func() bool { return true },
 	}
+	s.throttler.sampler = saramaMetrics.NewMeter()
 	err = s.Dial()
 	require.NoError(t, err)
 
@@ -360,6 +396,35 @@ func TestKafkaSink(t *testing.T) {
 	require.NoError(t, sink.Flush(ctx))
 	// At the end, all of the resources has been released
 	require.EqualValues(t, 0, pool.used())
+}
+
+func TestKafkaSinkThrottling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	p := newAsyncProducerMock(1)
+	sink, cleanup := makeTestKafkaSink(
+		t, noTopicPrefix, defaultTopicName, p, "t")
+	defer cleanup()
+
+	// Ack all messages, but ask for a 1 second pause after the first one.
+	p.throttle(time.Second)
+	stopConsumer := p.consumeAndSucceed()
+
+	require.NoError(t,
+		sink.EmitRow(ctx, topic(`t`), []byte(`1`), nil, zeroTS, zeroTS, zeroAlloc))
+	afterFirstEmit := time.Now()
+	require.NoError(t, sink.Flush(ctx))
+
+	// Because the sink has now seen a throttle-for-1-second response, the next call
+	// to EmitRow() should block for a second. We assert half a second here to avoid
+	// having to synchronize.
+	require.NoError(t,
+		sink.EmitRow(ctx, topic(`t`), []byte(`1`), nil, zeroTS, zeroTS, zeroAlloc))
+	require.Greater(t, time.Now(), afterFirstEmit.Add(time.Second/2))
+
+	stopConsumer()
 }
 
 func TestKafkaSinkEscaping(t *testing.T) {

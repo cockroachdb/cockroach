@@ -4506,6 +4506,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_honoredb_sarama",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/HonoreDB/sarama",
+        sha256 = "a542c811c9a8a554b6b329e5e4ba75025a1a524cf625f386d272d75564922f8c",
+        strip_prefix = "github.com/HonoreDB/sarama@v0.0.0-20230606201949-ac24661e0077",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/HonoreDB/sarama/com_github_honoredb_sarama-v0.0.0-20230606201949-ac24661e0077.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_howeyc_gopass",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/howeyc/gopass",
