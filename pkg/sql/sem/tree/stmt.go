@@ -143,30 +143,6 @@ type canModifySchema interface {
 	modifiesSchema() bool
 }
 
-// IsAllowedToPause returns true if the stmt cannot either modify the schema or
-// write data.
-// This function is to gate the queries allowed for pausable portals.
-// TODO(janexing): We should be more accurate about the stmt selection here.
-// Now we only allow SELECT, but is it too strict? And how to filter out
-// SELECT with data writes / schema changes?
-func IsAllowedToPause(stmt Statement) bool {
-	if stmt != nil && !CanModifySchema(stmt) && !CanWriteData(stmt) {
-		switch t := stmt.(type) {
-		case *Select:
-			if t.With != nil {
-				ctes := t.With.CTEList
-				for _, cte := range ctes {
-					if !IsAllowedToPause(cte.Stmt) {
-						return false
-					}
-				}
-			}
-			return true
-		}
-	}
-	return false
-}
-
 // CanModifySchema returns true if the statement can modify
 // the database schema.
 func CanModifySchema(stmt Statement) bool {
@@ -201,6 +177,28 @@ func CanWriteData(stmt Statement) bool {
 		return true
 	}
 	return false
+}
+
+// ReturnsAtMostOneRow returns true if the statement returns either no rows or
+// a single row.
+// TODO(harding): Expand this list.
+func ReturnsAtMostOneRow(stmt Statement) bool {
+	switch stmt.(type) {
+	// Import operations.
+	case *CopyFrom, *Import, *Restore:
+		return true
+	// Backup creates a job and allows you to write into userfiles.
+	case *Backup:
+		return true
+	// CockroachDB extensions.
+	case *Scatter:
+		return true
+	// Replication operations.
+	case *CreateTenantFromReplication, *AlterTenantReplication:
+		return true
+	}
+	return false
+
 }
 
 // HiddenFromShowQueries is a pseudo-interface to be implemented
