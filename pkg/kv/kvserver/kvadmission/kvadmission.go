@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -222,6 +223,7 @@ type Handle struct {
 	raftAdmissionMeta    *kvflowcontrolpb.RaftAdmissionMeta
 
 	callAdmittedWorkDoneOnKVAdmissionQ bool
+	cpuStart                           time.Duration
 }
 
 // AnnotateCtx annotates the given context with request-scoped admission
@@ -403,6 +405,11 @@ func (n *controllerImpl) AdmitKVWork(
 			if err != nil {
 				return Handle{}, err
 			}
+			if callAdmittedWorkDoneOnKVAdmissionQ {
+				// We include the time to do other activities like intent resolution,
+				// since it is acceptable to charge them to the tenant.
+				ah.cpuStart = grunning.Time()
+			}
 			ah.callAdmittedWorkDoneOnKVAdmissionQ = callAdmittedWorkDoneOnKVAdmissionQ
 		}
 	}
@@ -413,7 +420,15 @@ func (n *controllerImpl) AdmitKVWork(
 func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteBytes) {
 	n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.elasticCPUWorkHandle)
 	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
-		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
+		cpuTime := grunning.Time() - ah.cpuStart
+		if cpuTime < 0 {
+			// See https://github.com/cockroachdb/cockroach/issues/95529. Count 1
+			// nanosecond, arbitrarily.
+			//
+			// TODO(sumeer): remove this hack when that bug is fixed.
+			cpuTime = 1
+		}
+		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID, cpuTime)
 	}
 	if ah.storeAdmissionQ != nil {
 		var doneInfo admission.StoreWorkDoneInfo
