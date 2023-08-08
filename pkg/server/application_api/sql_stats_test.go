@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -485,6 +486,136 @@ func TestStatusAPIStatements(t *testing.T) {
 	testPath("statements", expectedStatements)
 	// Test combined=true forwards to CombinedStatements
 	testPath(fmt.Sprintf("statements?combined=true&start=%d", aggregatedTs+60), nil)
+}
+
+func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	endpoint := "combinedstmts"
+
+	// Aug 30 2021 19:50:00 GMT+0000
+	aggregatedTs := int64(1630353000)
+	statsKnobs := sqlstats.CreateTestingKnobs()
+	statsKnobs.StubTimeNow = func() time.Time { return timeutil.Unix(aggregatedTs, 0) }
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: statsKnobs,
+			},
+		},
+	})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServerProto := testCluster.Server(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	var resp serverpb.StatementsResponse
+	// Test that non-admin without VIEWACTIVITY privileges cannot access.
+	err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, endpoint, &resp, false)
+	if !testutils.IsError(err, "status: 403") {
+		t.Fatalf("expected privilege error, got %v", err)
+	}
+
+	thirdServerSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWACTIVITY TO %s", apiconstants.TestingUserNameNoAdmin().Normalized()))
+
+	type TestCases struct {
+		stmt      string
+		respQuery string
+		fullScan  bool
+		distSQL   bool
+		failed    bool
+		count     int
+	}
+
+	// These test statements are executed before any indexes are introduced.
+	statements1 := []TestCases{
+		{stmt: `CREATE DATABASE football`, respQuery: `CREATE DATABASE football`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `SET database = football`, respQuery: `SET database = football`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `CREATE TABLE players (id INT PRIMARY KEY, name TEXT, position TEXT, age INT,goals INT)`, respQuery: `CREATE TABLE players (id INT8 PRIMARY KEY, name STRING, "position" STRING, age INT8, goals INT8)`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `INSERT INTO players (id, name, position, age, goals) VALUES (1, 'Lionel Messi', 'Forward', 34, 672), (2, 'Cristiano Ronaldo', 'Forward', 36, 674)`, respQuery: `INSERT INTO players(id, name, "position", age, goals) VALUES (_, '_', __more1_10__), (__more1_10__)`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `SELECT avg(goals) FROM players`, respQuery: `SELECT avg(goals) FROM players`, fullScan: true, distSQL: true, failed: false, count: 1},
+		{stmt: `SELECT name FROM players WHERE age >= 32`, respQuery: `SELECT name FROM players WHERE age >= _`, fullScan: true, distSQL: true, failed: false, count: 1},
+	}
+
+	// These test statements are executed after an index is created on the players table.
+	statements2 := []TestCases{
+		{stmt: `DROP INDEX IF EXISTS idx_age`, respQuery: `DROP INDEX IF EXISTS idx_age`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `CREATE INDEX idx_age ON players (age) STORING (name)`, respQuery: `CREATE INDEX idx_age ON players (age) STORING (name)`, fullScan: false, distSQL: false, failed: false, count: 1},
+		// Since the index is created, the fullScan value should be false.
+		{stmt: `SELECT name FROM players WHERE age < 32`, respQuery: `SELECT name FROM players WHERE age < _`, fullScan: false, distSQL: false, failed: false, count: 1},
+		// Although the index is created, the fullScan value should be true because the previous query was not using the index. Its count should also be 2.
+		{stmt: `SELECT name FROM players WHERE age >= 32`, respQuery: `SELECT name FROM players WHERE age >= _`, fullScan: true, distSQL: true, failed: false, count: 2},
+	}
+
+	type StatementData struct {
+		count    int
+		fullScan bool
+		distSQL  bool
+		failed   bool
+	}
+
+	ts := firstServerProto.ApplicationLayer()
+
+	checkCombinedStmtStats := func(statements []TestCases) {
+		// For each statement in the test case, execute the statement and store the
+		// expected statement data in a map.
+		statementDataMap := make(map[string]StatementData)
+		for _, stmt := range statements {
+			thirdServerSQL.Exec(t, stmt.stmt)
+			statementDataMap[stmt.respQuery] = StatementData{
+				fullScan: stmt.fullScan,
+				distSQL:  stmt.distSQL,
+				failed:   stmt.failed,
+				count:    stmt.count,
+			}
+		}
+
+		httpClient, err := ts.GetAuthenticatedHTTPClient(false, 1 /* */)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if skip.Stress() {
+			httpClient.Timeout += 30 * time.Second
+		}
+		fullURL := ts.AdminURL().String() + apiconstants.StatusPrefix + endpoint
+		if err := httputil.GetJSONWithOptions(httpClient, fullURL, &resp); err != nil {
+			t.Fatal(err)
+		}
+
+		for _, respStatement := range resp.Statements {
+			respQuery := respStatement.Key.KeyData.Query
+			actualCount := respStatement.Stats.Count
+			actualFullScan := respStatement.Key.KeyData.FullScan
+			actualDistSQL := respStatement.Key.KeyData.DistSQL
+			actualFailed := respStatement.Key.KeyData.Failed
+			// If the response has a query that isn't in our map, it means that it's
+			// from the previous test case, so we ignore it.
+			expectedData, ok := statementDataMap[respStatement.Key.KeyData.Query]
+			if !ok {
+				continue
+			}
+
+			if actualFullScan != expectedData.fullScan {
+				t.Fatalf("expected fullScan to be %v, got %v for %s", expectedData.fullScan, actualFullScan, respQuery)
+			}
+
+			if actualDistSQL != expectedData.distSQL {
+				t.Fatalf("expected distSQL to be %v, got %v for %s", expectedData.distSQL, actualDistSQL, respQuery)
+			}
+
+			if actualFailed != expectedData.failed {
+				t.Fatalf("expected failed to be %v, got %v for %s", expectedData.failed, actualFailed, respQuery)
+			}
+
+			if actualCount != int64(expectedData.count) {
+				t.Fatalf("expected count to be %v, got %v for %s", expectedData.count, actualCount, respQuery)
+			}
+		}
+	}
+
+	checkCombinedStmtStats(statements1)
+	checkCombinedStmtStats(statements2)
 }
 
 func TestStatusAPICombinedStatements(t *testing.T) {

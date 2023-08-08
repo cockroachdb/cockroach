@@ -68,6 +68,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util",
         "//pkg/util/grunning",
         "//pkg/util/hlc",
         "//pkg/util/httputil",

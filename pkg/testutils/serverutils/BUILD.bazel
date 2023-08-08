@@ -24,6 +24,7 @@ go_library(
         "//pkg/rpc",
         "//pkg/security",
         "//pkg/security/username",
+        "//pkg/server/apiconstants",
         "//pkg/server/decommissioning",
         "//pkg/server/serverpb",
         "//pkg/server/status",
