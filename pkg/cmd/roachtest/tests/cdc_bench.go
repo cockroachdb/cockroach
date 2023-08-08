@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -293,7 +294,7 @@ func runCDCBenchScan(
 	// Wait for the changefeed to complete, and compute throughput.
 	m.Go(func(ctx context.Context) error {
 		t.L().Printf("waiting for changefeed to finish")
-		info, err := waitForChangefeed(ctx, conn, jobID, func(info changefeedInfo) (bool, error) {
+		info, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
 			switch jobs.Status(info.status) {
 			case jobs.StatusSucceeded:
 				return true, nil
@@ -444,7 +445,7 @@ func runCDCBenchWorkload(
 		// the changefeed wasn't lagging by more than 1-2 minutes, but with 100k
 		// ranges it was found to sometimes lag by over 8 minutes.
 		m.Go(func(ctx context.Context) error {
-			info, err := waitForChangefeed(ctx, conn, jobID, func(info changefeedInfo) (bool, error) {
+			info, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
 				switch jobs.Status(info.status) {
 				case jobs.StatusPending, jobs.StatusRunning:
 					doneValue := done.Load()
@@ -465,7 +466,7 @@ func runCDCBenchWorkload(
 		now := timeutil.Now()
 		t.L().Printf("waiting for changefeed watermark to reach current time (%s)",
 			now.Format(time.RFC3339))
-		info, err := waitForChangefeed(ctx, conn, jobID, func(info changefeedInfo) (bool, error) {
+		info, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
 			switch jobs.Status(info.status) {
 			case jobs.StatusPending, jobs.StatusRunning:
 				return info.highwaterTime.After(now), nil
@@ -539,11 +540,15 @@ func getAllZoneTargets(ctx context.Context, t test.Test, conn *gosql.DB) []strin
 
 // waitForChangefeed waits until the changefeed satisfies the given closure.
 func waitForChangefeed(
-	ctx context.Context, conn *gosql.DB, jobID int, f func(changefeedInfo) (bool, error),
+	ctx context.Context,
+	conn *gosql.DB,
+	jobID int,
+	logger *logger.Logger,
+	f func(changefeedInfo) (bool, error),
 ) (changefeedInfo, error) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	for {
+	for attempt := 0; ; attempt++ {
 		select {
 		case <-ticker.C:
 		case <-ctx.Done():
@@ -552,7 +557,8 @@ func waitForChangefeed(
 
 		info, err := getChangefeedInfo(conn, jobID)
 		if err != nil {
-			return changefeedInfo{}, err
+			logger.Errorf("error getting changefeed info: %v (attempt %d)", err, attempt+1)
+			continue
 		} else if info.errMsg != "" {
 			return changefeedInfo{}, errors.Errorf("changefeed error: %s", info.errMsg)
 		}
