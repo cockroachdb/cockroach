@@ -210,11 +210,6 @@ func TestWatchTenants(t *testing.T) {
 		if tds.WatchTenantsListenersCount() != 0 {
 			return errors.New("watchers have not been removed yet")
 		}
-
-		// Make sure watcher has attempted to restart, and invalidates entries.
-		if _, err := dir.LookupTenant(ctx, tenant10); err == nil {
-			return errors.New("entries have not been invalidated")
-		}
 		return nil
 	})
 
@@ -223,6 +218,11 @@ func TestWatchTenants(t *testing.T) {
 	tenant20Data.Version = "002"
 	tenant20Data.ClusterName = "dim-dog"
 	tds.UpdateTenant(tenant20, tenant20Data)
+
+	// Make sure that entries are still valid.
+	tenantObj, err = dir.LookupTenant(ctx, tenant10)
+	require.NoError(t, err)
+	require.Equal(t, tenant10Data, tenantObj)
 
 	// Start the directory server again.
 	require.NoError(t, tds.Start(ctx))
@@ -233,12 +233,29 @@ func TestWatchTenants(t *testing.T) {
 		return nil
 	})
 
-	// Cache should be updated.
-	_, err = dir.LookupTenant(ctx, tenant10)
-	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant does not exist")
-	tenantObj, err = dir.LookupTenant(ctx, tenant20)
+	// Trigger a tenant update.
+	tds.UpdateTenant(tenant20, tenant20Data)
+
+	// Eventually, cache should be updated.
+	testutils.SucceedsSoon(t, func() error {
+		obj, err := dir.LookupTenant(ctx, tenant20)
+		if err != nil {
+			return err
+		}
+		if obj.Version != "002" {
+			return errors.New("tenant isn't updated yet")
+		}
+		return nil
+	})
+
+	// Tenant 10 should still be valid since deleted tenants are not removed.
+	tenantObj, err = dir.LookupTenant(ctx, tenant10)
 	require.NoError(t, err)
-	require.Equal(t, tenant20Data, tenantObj)
+	require.Equal(t, tenant10Data, tenantObj)
+
+	// Check that tenant is deleted.
+	_, err = dir.LookupTenantPods(ctx, tenant10)
+	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant does not exist")
 }
 
 func TestWatchPods(t *testing.T) {
