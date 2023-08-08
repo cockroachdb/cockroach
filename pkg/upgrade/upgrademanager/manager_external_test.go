@@ -155,7 +155,10 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
                     created_by_type,
                     created_by_id,
                     claim_session_id,
-                    claim_instance_id
+                    claim_instance_id,
+                    0,
+                    NULL,
+                    job_type
               FROM crdb_internal.system_jobs
              WHERE id = $1
           )
