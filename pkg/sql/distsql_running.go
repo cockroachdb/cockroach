@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -1998,7 +1999,8 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 			// cancellation has already occurred.
 			return
 		}
-		if !pgerror.IsSQLRetryableError(distributedErr) &&
+		if !sqlerrors.IsDistSQLRetryableError(distributedErr) &&
+			!pgerror.IsSQLRetryableError(distributedErr) &&
 			!flowinfra.IsFlowRetryableError(distributedErr) &&
 			!isDialErr(distributedErr) {
 			// Only re-run the query if we think there is a high chance of a
