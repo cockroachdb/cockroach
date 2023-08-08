@@ -892,7 +892,7 @@ func tsOrNull(micros int64) (tree.Datum, error) {
 		return tree.DNull, nil
 	}
 	ts := timeutil.Unix(0, micros*time.Microsecond.Nanoseconds())
-	return tree.MakeDTimestamp(ts, time.Microsecond)
+	return tree.MakeDTimestampTZ(ts, time.Microsecond)
 }
 
 const (
@@ -1117,7 +1117,7 @@ func wrapPayloadUnMarshalError(err error, jobID tree.Datum) error {
 }
 
 const (
-	jobsQSelect = `SELECT id, status, created, payload, progress, claim_session_id, claim_instance_id`
+	jobsQSelect = `SELECT id, status, created::timestamptz, payload, progress, claim_session_id, claim_instance_id`
 	// Note that we are querying crdb_internal.system_jobs instead of system.jobs directly.
 	// The former has access control built in and will filter out jobs that the
 	// user is not allowed to see.
@@ -1126,7 +1126,7 @@ const (
 	jobsStatusFilter  = ` WHERE status = $3`
 	oldJobsTypeFilter = ` WHERE crdb_internal.job_payload_type(payload) = $3`
 	jobsTypeFilter    = ` WHERE job_type = $3`
-	jobsQuery         = jobsQSelect + `, last_run, COALESCE(num_runs, 0), ` + jobs.NextRunClause +
+	jobsQuery         = jobsQSelect + `, last_run::timestamptz, COALESCE(num_runs, 0), ` + jobs.NextRunClause +
 		` as next_run` + jobsQFrom + ", " + jobsBackoffArgs
 )
 
@@ -1149,17 +1149,17 @@ CREATE TABLE crdb_internal.jobs (
   descriptor_ids        INT[],
   status                STRING,
   running_status        STRING,
-  created               TIMESTAMP,
-  started               TIMESTAMP,
-  finished              TIMESTAMP,
-  modified              TIMESTAMP,
+  created               TIMESTAMPTZ,
+  started               TIMESTAMPTZ,
+  finished              TIMESTAMPTZ,
+  modified              TIMESTAMPTZ,
   fraction_completed    FLOAT,
   high_water_timestamp  DECIMAL,
   error                 STRING,
   coordinator_id        INT,
   trace_id              INT,
-  last_run              TIMESTAMP,
-  next_run              TIMESTAMP,
+  last_run              TIMESTAMPTZ,
+  next_run              TIMESTAMPTZ,
   num_runs              INT,
   execution_errors      STRING[],
   execution_events      JSONB,
@@ -1258,7 +1258,7 @@ func makeJobsTableRows(
 			// marshalled.
 			id = tree.NewDInt(tree.DInt(job.JobID))
 			status = tree.NewDString(string(jobs.StatusPending))
-			created = eval.TimestampToInexactDTimestamp(p.txn.ReadTimestamp())
+			created = tree.MustMakeDTimestampTZ(timeutil.Unix(0, p.txn.ReadTimestamp().WallTime), time.Microsecond)
 			progressBytes, payloadBytes, err = getPayloadAndProgressFromJobsRecord(p, job)
 			if err != nil {
 				return matched, err
