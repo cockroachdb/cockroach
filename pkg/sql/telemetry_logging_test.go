@@ -1505,15 +1505,17 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 
 	st.SetTime(timeutil.FromUnixMicros(int64(1e6)))
 	db.Exec(t, `BEGIN;`)
-	db.Exec(t, `SELECT 1`)
 	st.SetTime(timeutil.FromUnixMicros(int64(2 * 1e6)))
-	db.Exec(t, `SELECT 2`)
+	db.Exec(t, `SELECT 1`)
 	st.SetTime(timeutil.FromUnixMicros(int64(3 * 1e6)))
+	db.Exec(t, `SELECT 2`)
+	st.SetTime(timeutil.FromUnixMicros(int64(4 * 1e6)))
 	db.Exec(t, `SELECT 3`)
+	st.SetTime(timeutil.FromUnixMicros(int64(5 * 1e6)))
 	db.Exec(t, `COMMIT;`)
 
 	expectedQueries := []string{
-		`SELECT ‹1›`, `SELECT ‹2›`, `SELECT ‹3›`,
+		`BEGIN`, `SELECT ‹1›`, `SELECT ‹2›`, `SELECT ‹3›`, `COMMIT`,
 	}
 
 	log.Flush()
@@ -1539,7 +1541,7 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 			if strings.Contains(e.Message, expected) {
 				var sq eventpb.SampledQuery
 				require.NoError(t, json.Unmarshal([]byte(e.Message), &sq))
-				require.Equal(t, uint32(i+1), sq.StmtPosInTxn, "%s", entries)
+				require.Equalf(t, uint32(i), sq.StmtPosInTxn, "stmt=%s entries: %s", expected, entries)
 				found = true
 				break
 			}

@@ -344,14 +344,26 @@ func (ex *connExecutor) populatePrepared(
 func (ex *connExecutor) execBind(
 	ctx context.Context, bindCmd BindStmt,
 ) (fsm.Event, fsm.EventPayload) {
+	var ps *PreparedStatement
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
+		if bindCmd.PreparedStatementName != "" {
+			err = errors.WithDetailf(err, "statement name %q", bindCmd.PreparedStatementName)
+		}
+		if bindCmd.PortalName != "" {
+			err = errors.WithDetailf(err, "portal name %q", bindCmd.PortalName)
+		}
+		if ps != nil && ps.StatementSummary != "" {
+			err = errors.WithDetailf(err, "statement summary %q", ps.StatementSummary)
+		}
 		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{err: err}
 	}
 
-	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
+	var ok bool
+	ps, ok = ex.extraTxnState.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
 	if !ok {
 		return retErr(newPreparedStmtDNEError(ex.sessionData(), bindCmd.PreparedStatementName))
 	}
+
 	ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(bindCmd.PreparedStatementName)
 
 	// We need to make sure type resolution happens within a transaction.
@@ -437,7 +449,7 @@ func (ex *connExecutor) execBind(
 		if len(bindCmd.Args) != int(numQArgs) {
 			return retErr(
 				pgwirebase.NewProtocolViolationErrorf(
-					"bind message supplies %d parameters, but prepared statement \"%s\" requires %d", len(bindCmd.Args), bindCmd.PreparedStatementName, numQArgs))
+					"bind message supplies %d parameters, but requires %d", len(bindCmd.Args), numQArgs))
 		}
 
 		resolve := func(ctx context.Context, txn *kv.Txn) (err error) {
@@ -497,9 +509,14 @@ func (ex *connExecutor) execBind(
 
 	numCols := len(ps.Columns)
 	if (len(bindCmd.OutFormats) > 1) && (len(bindCmd.OutFormats) != numCols) {
-		return retErr(pgwirebase.NewProtocolViolationErrorf(
+		err := pgwirebase.NewProtocolViolationErrorf(
 			"expected 1 or %d for number of format codes, got %d",
-			numCols, len(bindCmd.OutFormats)))
+			numCols, len(bindCmd.OutFormats))
+		// A user is hitting this error unexpectedly and rarely, dump extra info,
+		// should be okay since this should be a very rare error.
+		log.Infof(ctx, "%s outformats: %v, AST: %T, prepared statements: %s", err.Error(),
+			bindCmd.OutFormats, ps.AST, ex.extraTxnState.prepStmtsNamespace.String())
+		return retErr(err)
 	}
 
 	columnFormatCodes := bindCmd.OutFormats

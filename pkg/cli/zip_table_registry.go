@@ -228,9 +228,16 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			origin
 		FROM crdb_internal.cluster_settings`,
 	},
-	"crdb_internal.probe_ranges_1s_write_limit_100": {
-		customQueryRedacted:   `SELECT * FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'write') WHERE error != '' ORDER BY end_to_end_latency_ms DESC LIMIT 100;`,
-		customQueryUnredacted: `SELECT * FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'write') WHERE error != '' ORDER BY end_to_end_latency_ms DESC LIMIT 100;`,
+	"crdb_internal.probe_ranges_1s_read_limit_100": {
+		// At time of writing, it's considered very dangerous to use
+		// `write` as the argument to crdb_internal.probe_ranges due to
+		// this corruption bug:
+		// https://github.com/cockroachdb/cockroach/issues/101549 Since
+		// this fix is unevenly distributed in deployments it's not safe to
+		// indiscriminately run it from the CLI client on an arbitrary
+		// cluster.
+		customQueryRedacted:   `SELECT * FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'read') WHERE error != '' ORDER BY end_to_end_latency_ms DESC LIMIT 100;`,
+		customQueryUnredacted: `SELECT * FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'read') WHERE error != '' ORDER BY end_to_end_latency_ms DESC LIMIT 100;`,
 	},
 	"crdb_internal.cluster_transactions": {
 		// `last_auto_retry_reason` contains error text that may contain
