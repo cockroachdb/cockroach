@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -82,9 +83,25 @@ func runMultiTenantUpgrade(
 	currentBinaryMinSupportedVersion, ok := versionToMinSupportedVersion[curBinaryMajorAndMinorVersion]
 	require.True(t, ok, "current binary '%s' not found in 'versionToMinSupportedVersion' map", curBinaryMajorAndMinorVersion)
 
-	predecessor, err := release.LatestPredecessor(v)
-	require.NoError(t, err)
+	getPredecessorVersion := func() string {
+		predecessor, err := release.LatestPredecessor(v)
+		require.NoError(t, err)
 
+		// Hard-code the pre-decessor release to 23.1.4 if 23.1.9 is not out yet because
+		// the test is in-compatible with 23.1.{5,6,7,8} due to an erroneous PR merged on the 23.1 branch.
+		// See https://github.com/cockroachdb/cockroach/pull/108202 for more context.
+		parsedPredecessor := strings.Split(predecessor, ".")
+		major := parsedPredecessor[0]
+		minor := parsedPredecessor[1]
+		patch, err := strconv.Atoi(parsedPredecessor[2])
+		require.NoError(t, err)
+		if major == "23" && minor == "1" && patch < 9 {
+			predecessor = "23.1.4"
+		}
+		return predecessor
+	}
+
+	predecessor := getPredecessorVersion()
 	currentBinary := uploadVersion(ctx, t, c, c.All(), clusterupgrade.MainVersion)
 	predecessorBinary := uploadVersion(ctx, t, c, c.All(), predecessor)
 
