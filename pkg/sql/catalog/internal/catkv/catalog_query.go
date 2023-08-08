@@ -214,5 +214,5 @@ func requiredError(expectedType catalog.DescriptorType, id descpb.ID) (err error
 	default:
 		err = errors.Errorf("failed to find descriptor [%d]", id)
 	}
-	return errors.CombineErrors(catalog.ErrDescriptorNotFound, err)
+	return errors.CombineErrors(catalog.NewDescriptorNotFoundError(id), err)
 }
