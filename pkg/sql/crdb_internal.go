@@ -215,6 +215,8 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalKVFlowControllerID:                 crdbInternalKVFlowController,
 		catconstants.CrdbInternalKVFlowTokenDeductions:              crdbInternalKVFlowTokenDeductions,
 		catconstants.CrdbInternalRepairableCatalogCorruptionsViewID: crdbInternalRepairableCatalogCorruptions,
+		catconstants.CrdbInternalTxnExecInsightsViewID:              crdbTxnExecutionInsights,
+		catconstants.CrdbInternalStmtExecInsightsViewID:             crdbStmtExecutionInsights,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -1585,17 +1587,17 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			}
 
 			err := addRow(
-				alloc.NewDInt(tree.DInt(nodeID)),                                         // node_id
-				alloc.NewDString(tree.DString(stats.Key.App)),                            // application_name
-				alloc.NewDString(tree.DString(flags)),                                    // flags
-				alloc.NewDString(tree.DString(strconv.FormatUint(uint64(stats.ID), 10))), // statement_id
-				alloc.NewDString(tree.DString(stats.Key.Query)),                          // key
-				legacyAnonymizedStmt,                                                     // anonymized
-				alloc.NewDInt(tree.DInt(stats.Stats.Count)),                              // count
-				alloc.NewDInt(tree.DInt(stats.Stats.FirstAttemptCount)),                  // first_attempt_count
-				alloc.NewDInt(tree.DInt(stats.Stats.MaxRetries)),                         // max_retries
-				errString, // last_error
-				errCode,   // last_error_code
+				alloc.NewDInt(tree.DInt(nodeID)),                                                                                         // node_id
+				alloc.NewDString(tree.DString(stats.Key.App)),                                                                            // application_name
+				alloc.NewDString(tree.DString(flags)),                                                                                    // flags
+				alloc.NewDString(tree.DString(strconv.FormatUint(uint64(stats.ID), 10))),                                                 // statement_id
+				alloc.NewDString(tree.DString(stats.Key.Query)),                                                                          // key
+				legacyAnonymizedStmt,                                                                                                     // anonymized
+				alloc.NewDInt(tree.DInt(stats.Stats.Count)),                                                                              // count
+				alloc.NewDInt(tree.DInt(stats.Stats.FirstAttemptCount)),                                                                  // first_attempt_count
+				alloc.NewDInt(tree.DInt(stats.Stats.MaxRetries)),                                                                         // max_retries
+				errString,                                                                                                                // last_error
+				errCode,                                                                                                                  // last_error_code
 				alloc.NewDFloat(tree.DFloat(stats.Stats.NumRows.Mean)),                                                                   // rows_avg
 				alloc.NewDFloat(tree.DFloat(stats.Stats.NumRows.GetVariance(stats.Stats.Count))),                                         // rows_var
 				alloc.NewDFloat(tree.DFloat(stats.Stats.IdleLat.Mean)),                                                                   // idle_lat_avg
@@ -1658,14 +1660,14 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				tree.MakeDBool(tree.DBool(stats.Key.FullScan)),                                                                           // full_scan
 				alloc.NewDJSON(tree.DJSON{JSON: samplePlan}),                                                                             // sample_plan
 				alloc.NewDString(tree.DString(stats.Key.Database)),                                                                       // database_name
-				execNodeIDs,          // exec_node_ids
-				txnFingerprintID,     // txn_fingerprint_id
-				indexRecommendations, // index_recommendations
-				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.Min)), // latency_seconds_min
-				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.Max)), // latency_seconds_max
-				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.P50)), // latency_seconds_p50
-				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.P90)), // latency_seconds_p90
-				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.P99)), // latency_seconds_p99
+				execNodeIDs,                                                                                                              // exec_node_ids
+				txnFingerprintID,                                                                                                         // txn_fingerprint_id
+				indexRecommendations,                                                                                                     // index_recommendations
+				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.Min)),                                                                // latency_seconds_min
+				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.Max)),                                                                // latency_seconds_max
+				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.P50)),                                                                // latency_seconds_p50
+				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.P90)),                                                                // latency_seconds_p90
+				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.P99)),                                                                // latency_seconds_p99
 			)
 			if err != nil {
 				return err
@@ -1769,9 +1771,9 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			}
 
 			err := addRow(
-				alloc.NewDInt(tree.DInt(nodeID)),          // node_id
-				alloc.NewDString(tree.DString(stats.App)), // application_name
-				alloc.NewDString(tree.DString(strconv.FormatUint(uint64(stats.TransactionFingerprintID), 10))), // key
+				alloc.NewDInt(tree.DInt(nodeID)),                                                                                         // node_id
+				alloc.NewDString(tree.DString(stats.App)),                                                                                // application_name
+				alloc.NewDString(tree.DString(strconv.FormatUint(uint64(stats.TransactionFingerprintID), 10))),                           // key
 				stmtFingerprintIDsDatum,                                                                                                  // statement_ids
 				alloc.NewDInt(tree.DInt(stats.Stats.Count)),                                                                              // count
 				alloc.NewDInt(tree.DInt(stats.Stats.MaxRetries)),                                                                         // max_retries
@@ -2910,13 +2912,13 @@ func populateContentionEventsTable(
 				key = tree.NewDBytes(tree.DBytes(nkc.Key))
 			}
 			if err := addRow(
-				tree.DNull, // table_id
-				tree.DNull, // index_id
+				tree.DNull,                                       // table_id
+				tree.DNull,                                       // index_id
 				tree.NewDInt(tree.DInt(nkc.NumContentionEvents)), // num_contention_events
 				cumulativeContentionTime,                         // cumulative_contention_time
 				key,                                              // key
-				tree.NewDUuid(tree.DUuid{UUID: stc.TxnID}), // txn_id
-				tree.NewDInt(tree.DInt(stc.Count)),         // count
+				tree.NewDUuid(tree.DUuid{UUID: stc.TxnID}),       // txn_id
+				tree.NewDInt(tree.DInt(stc.Count)),               // count
 			); err != nil {
 				return err
 			}
@@ -6331,12 +6333,12 @@ CREATE TABLE crdb_internal.default_privileges (
 										database, // database_name
 										// When the schema_name is NULL, that means the default
 										// privileges are defined at the database level.
-										schema,                         // schema_name
-										role,                           // role
-										forAllRoles,                    // for_all_roles
-										objectTypeDatum,                // object_type
-										grantee,                        // grantee
-										tree.NewDString(priv.String()), // privilege_type
+										schema,                                                              // schema_name
+										role,                                                                // role
+										forAllRoles,                                                         // for_all_roles
+										objectTypeDatum,                                                     // object_type
+										grantee,                                                             // grantee
+										tree.NewDString(priv.String()),                                      // privilege_type
 										tree.MakeDBool(tree.DBool(priv.IsSetIn(userPrivs.WithGrantOption))), // is_grantable
 									); err != nil {
 										return err
@@ -6364,28 +6366,28 @@ CREATE TABLE crdb_internal.default_privileges (
 							}
 							if catprivilege.GetPublicHasUsageOnTypes(defaultPrivilegesForRole) {
 								if err := addRow(
-									database,    // database_name
-									schema,      // schema_name
-									role,        // role
-									forAllRoles, // for_all_roles
+									database,                                                // database_name
+									schema,                                                  // schema_name
+									role,                                                    // role
+									forAllRoles,                                             // for_all_roles
 									tree.NewDString(privilege.Types.String()),               // object_type
 									tree.NewDString(username.PublicRoleName().Normalized()), // grantee
 									tree.NewDString(privilege.USAGE.String()),               // privilege_type
-									tree.DBoolFalse, // is_grantable
+									tree.DBoolFalse,                                         // is_grantable
 								); err != nil {
 									return err
 								}
 							}
 							if catprivilege.GetPublicHasExecuteOnFunctions(defaultPrivilegesForRole) {
 								if err := addRow(
-									database,    // database_name
-									schema,      // schema_name
-									role,        // role
-									forAllRoles, // for_all_roles
+									database,                                                // database_name
+									schema,                                                  // schema_name
+									role,                                                    // role
+									forAllRoles,                                             // for_all_roles
 									tree.NewDString(privilege.Functions.String()),           // object_type
 									tree.NewDString(username.PublicRoleName().Normalized()), // grantee
 									tree.NewDString(privilege.EXECUTE.String()),             // privilege_type
-									tree.DBoolFalse, // is_grantable
+									tree.DBoolFalse,                                         // is_grantable
 								); err != nil {
 									return err
 								}
@@ -6451,7 +6453,7 @@ CREATE TABLE crdb_internal.index_usage_statistics (
 							tree.NewDInt(tree.DInt(tableID)),              // tableID
 							tree.NewDInt(tree.DInt(indexID)),              // indexID
 							tree.NewDInt(tree.DInt(stats.TotalReadCount)), // total_reads
-							lastScanTs, // last_scan
+							lastScanTs,                                    // last_scan
 						)
 
 						return pusher.pushRow(row...)
@@ -7281,20 +7283,20 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 
 				row = row[:0]
 				row = append(row,
-					collectionTs, // collection_ts
+					collectionTs,                                                             // collection_ts
 					tree.NewDUuid(tree.DUuid{UUID: resp.Events[i].BlockingEvent.TxnMeta.ID}), // blocking_txn_id
-					blockingFingerprintID, // blocking_fingerprint_id
-					tree.NewDUuid(tree.DUuid{UUID: resp.Events[i].WaitingTxnID}), // waiting_txn_id
-					waitingFingerprintID,        // waiting_fingerprint_id
-					contentionDuration,          // contention_duration
-					contendingKey,               // contending_key,
-					contendingPrettyKey,         // contending_pretty_key
-					waitingStmtId,               // waiting_stmt_id
-					waitingStmtFingerprintID,    // waiting_stmt_fingerprint_id
-					tree.NewDString(dbName),     // database_name
-					tree.NewDString(schemaName), // schema_name
-					tree.NewDString(tableName),  // table_name
-					tree.NewDString(indexName),  // index_name
+					blockingFingerprintID,                                                    // blocking_fingerprint_id
+					tree.NewDUuid(tree.DUuid{UUID: resp.Events[i].WaitingTxnID}),             // waiting_txn_id
+					waitingFingerprintID,                                                     // waiting_fingerprint_id
+					contentionDuration,                                                       // contention_duration
+					contendingKey,                                                            // contending_key,
+					contendingPrettyKey,                                                      // contending_pretty_key
+					waitingStmtId,                                                            // waiting_stmt_id
+					waitingStmtFingerprintID,                                                 // waiting_stmt_fingerprint_id
+					tree.NewDString(dbName),                                                  // database_name
+					tree.NewDString(schemaName),                                              // schema_name
+					tree.NewDString(tableName),                                               // table_name
+					tree.NewDString(indexName),                                               // index_name
 				)
 
 				if err = pusher.pushRow(row...); err != nil {
@@ -7918,6 +7920,124 @@ func populateTxnExecutionInsights(
 		}
 	}
 	return
+}
+
+var crdbTxnExecutionInsights = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.txn_exec_insights AS
+      SELECT
+        txn_id,
+				txn_fingerprint_id,
+				implicit_txn,
+				session_id,
+				start_time,
+				end_time,
+				user_name,
+				app_name,
+				rows_read,
+				rows_written,
+				user_priority,
+				retries,
+				last_retry_reason,
+				contention,
+				problems,
+				causes,
+				stmt_execution_ids,
+				cpu_sql_nanos,
+				last_error_code,
+				status,
+				created
+			FROM
+        system.txn_exec_insights`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "txn_id", Typ: types.Uuid},
+		{Name: "txn_fingerprint_id", Typ: types.Bytes},
+		{Name: "implicit_txn", Typ: types.Bool},
+		{Name: "session_id", Typ: types.String},
+		{Name: "start_time", Typ: types.Timestamp},
+		{Name: "end_time", Typ: types.Timestamp},
+		{Name: "user_name", Typ: types.String},
+		{Name: "app_name", Typ: types.String},
+		{Name: "rows_read", Typ: types.Int},
+		{Name: "rows_written", Typ: types.Int},
+		{Name: "user_priority", Typ: types.String},
+		{Name: "retries", Typ: types.Int},
+		{Name: "last_retry_reason", Typ: types.String},
+		{Name: "contention", Typ: types.Interval},
+		{Name: "problems", Typ: types.StringArray},
+		{Name: "causes", Typ: types.StringArray},
+		{Name: "stmt_execution_ids", Typ: types.StringArray},
+		{Name: "cpu_sql_nanos", Typ: types.Int},
+		{Name: "last_error_code", Typ: types.String},
+		{Name: "status", Typ: types.Int},
+		{Name: "created", Typ: types.TimestampTZ},
+	},
+}
+
+var crdbStmtExecutionInsights = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.stmt_exec_insights AS
+      SELECT
+        session_id,
+				txn_id,
+				txn_fingerprint_id,
+				stmt_id,
+				stmt_fingerprint_id,
+				problem,
+				causes,
+				query,
+				status,
+				start_time,
+				end_time,
+				full_scan,
+				user_name,
+				app_name,
+				database_name,
+				plan_gist,
+				rows_read,
+				rows_written,
+				retries,
+				last_retry_reason,
+				exec_node_ids,
+				contention,
+				index_recommendations,
+				implicit_txn,
+				cpu_sql_nanos,
+				error_code,
+				latency_in_seconds,
+				created
+			FROM
+        system.stmt_exec_insights`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "session_id", Typ: types.String},
+		{Name: "txn_id", Typ: types.Uuid},
+		{Name: "txn_fingerprint_id", Typ: types.Bytes},
+		{Name: "stmt_id", Typ: types.String},
+		{Name: "stmt_fingerprint_id", Typ: types.Bytes},
+		{Name: "problem", Typ: types.String},
+		{Name: "causes", Typ: types.StringArray},
+		{Name: "query", Typ: types.String},
+		{Name: "status", Typ: types.Int},
+		{Name: "start_time", Typ: types.Timestamp},
+		{Name: "end_time", Typ: types.Timestamp},
+		{Name: "full_scan", Typ: types.Bool},
+		{Name: "user_name", Typ: types.String},
+		{Name: "app_name", Typ: types.String},
+		{Name: "database_name", Typ: types.String},
+		{Name: "plan_gist", Typ: types.String},
+		{Name: "rows_read", Typ: types.Int},
+		{Name: "rows_written", Typ: types.Int},
+		{Name: "retries", Typ: types.Int},
+		{Name: "last_retry_reason", Typ: types.String},
+		{Name: "exec_node_ids", Typ: types.IntArray},
+		{Name: "contention", Typ: types.Interval},
+		{Name: "index_recommendations", Typ: types.StringArray},
+		{Name: "implicit_txn", Typ: types.Bool},
+		{Name: "cpu_sql_nanos", Typ: types.Int},
+		{Name: "error_code", Typ: types.String},
+		{Name: "latency_in_seconds", Typ: types.Float},
+		{Name: "created", Typ: types.TimestampTZ},
+	},
 }
 
 // This is the table structure for both cluster_execution_insights and node_execution_insights.
