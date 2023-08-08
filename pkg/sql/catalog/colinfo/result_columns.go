@@ -344,3 +344,11 @@ const RangesExtraRenders = `
 	coalesce((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT, 0) +
 	coalesce((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT, 0) AS range_size
 `
+
+// IdentifySystemColumns is the schema for IDENTIFY_SYSTEM.
+var IdentifySystemColumns = ResultColumns{
+	{Name: "systemid", Typ: types.String},
+	{Name: "timeline", Typ: types.Int4},
+	{Name: "xlogpos", Typ: types.String},
+	{Name: "dbname", Typ: types.String},
+}

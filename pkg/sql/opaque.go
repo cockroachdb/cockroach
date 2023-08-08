@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/pgrepltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -281,6 +282,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.Truncate(ctx, n)
 	case *tree.Unlisten:
 		return p.Unlisten(ctx, n)
+	case *pgrepltree.IdentifySystem:
+		return p.IdentifySystem(ctx, n)
 	case tree.CCLOnlyStatement:
 		plan, err := p.maybePlanHook(ctx, stmt)
 		if plan == nil && err == nil {
@@ -396,6 +399,8 @@ func init() {
 		&tree.ShowTransactionStatus{},
 		&tree.Truncate{},
 		&tree.Unlisten{},
+
+		&pgrepltree.IdentifySystem{},
 
 		// CCL statements (without Export which has an optimizer operator).
 		&tree.AlterBackup{},

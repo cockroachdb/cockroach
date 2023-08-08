@@ -25,7 +25,6 @@ func WithCandidateCode(err error, code pgcode.Code) error {
 	if err == nil {
 		return nil
 	}
-
 	return &withCandidateCode{cause: err, code: code.String()}
 }
 

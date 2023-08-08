@@ -26,11 +26,11 @@ func (i *IdentifySystem) Format(ctx *tree.FmtCtx) {
 }
 
 func (i *IdentifySystem) StatementReturnType() tree.StatementReturnType {
-	return tree.Replication
+	return tree.Rows
 }
 
 func (i *IdentifySystem) StatementType() tree.StatementType {
-	return tree.TypeDDL
+	return tree.TypeDML
 }
 
 func (i *IdentifySystem) StatementTag() string {
