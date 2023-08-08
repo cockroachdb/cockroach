@@ -281,7 +281,7 @@ func makeLimiter(
 		}
 		lim.UpdateLimit(rate, burst)
 	}
-	s.rate.SetOnChange(sv, fn)
+	s.rate.SetOnChange(sv, fn) // XXX: Reacts to setting changes.
 	s.burst.SetOnChange(sv, fn)
 	fn(ctx)
 	return lim

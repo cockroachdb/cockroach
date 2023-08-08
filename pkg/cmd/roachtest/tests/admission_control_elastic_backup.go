@@ -36,14 +36,8 @@ import (
 // which {CPU-scheduler,foreground} latencies are protected and track this data
 // in roachperf.
 func registerElasticControlForBackups(r registry.Registry) {
-	r.Add(registry.TestSpec{
-		Name:      "admission-control/elastic-backup",
-		Owner:     registry.OwnerAdmissionControl,
-		Benchmark: true,
-		Tags:      registry.Tags(`weekly`),
-		Cluster:   r.MakeClusterSpec(4, spec.CPU(8)),
-		Leases:    registry.MetamorphicLeases,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+	run := func(cloud string) func(ctx context.Context, t test.Test, c cluster.Cluster) {
+		return func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount < 4 {
 				t.Fatalf("expected at least 4 nodes, found %d", c.Spec().NodeCount)
 			}
@@ -82,6 +76,7 @@ func registerElasticControlForBackups(r registry.Registry) {
 				EstimatedSetupTime:            estimatedSetupTime,
 				SkipPostRunCheck:              true,
 				ExtraSetupArgs:                "--checks=false",
+				ExtraRunArgs:                  "--tolerate-errors",
 				PrometheusConfig:              promCfg,
 				DisableDefaultScheduledBackup: true,
 				During: func(ctx context.Context) error {
@@ -94,10 +89,13 @@ func registerElasticControlForBackups(r registry.Registry) {
 					m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
 					m.Go(func(ctx context.Context) error {
 						t.Status(fmt.Sprintf("during: creating full backup schedule to run every 20m (<%s)", time.Minute))
-						gcsBackupTestingBucket := backupTestingBucket
+						bucketPrefix := "gs"
+						if cloud == "aws" {
+							bucketPrefix = "s3"
+						}
 						_, err := db.ExecContext(ctx,
 							`CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '*/20 * * * *' FULL BACKUP ALWAYS WITH SCHEDULE OPTIONS ignore_existing_backups;`,
-							"gs://"+gcsBackupTestingBucket+"/"+c.Name()+"?AUTH=implicit",
+							bucketPrefix+"://"+backupTestingBucket+"/"+c.Name()+"?AUTH=implicit",
 						)
 						return err
 					})
@@ -107,6 +105,26 @@ func registerElasticControlForBackups(r registry.Registry) {
 					return nil
 				},
 			})
-		},
+		}
+	}
+
+	r.Add(registry.TestSpec{
+		Name:      "admission-control/elastic-backup",
+		Owner:     registry.OwnerAdmissionControl,
+		Benchmark: true,
+		Tags:      registry.Tags(`weekly`),
+		Cluster:   r.MakeClusterSpec(4, spec.CPU(8)),
+		Leases:    registry.MetamorphicLeases,
+		Run:       run("gce"),
+	})
+
+	r.Add(registry.TestSpec{
+		Name:      "admission-control/elastic-backup-s3",
+		Owner:     registry.OwnerAdmissionControl,
+		Benchmark: true,
+		Tags:      registry.Tags(`weekly`),
+		Cluster:   r.MakeClusterSpec(4, spec.CPU(8), spec.Cloud(spec.AWS)),
+		Leases:    registry.MetamorphicLeases,
+		Run:       run("aws"),
 	})
 }
