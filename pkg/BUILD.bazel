@@ -1902,6 +1902,7 @@ GO_TARGETS = [
     "//pkg/sql/parser:parser",
     "//pkg/sql/parser:parser_test",
     "//pkg/sql/pgrepl/lsn:lsn",
+    "//pkg/sql/pgrepl/lsnutil:lsnutil",
     "//pkg/sql/pgrepl/pgreplparser:pgreplparser",
     "//pkg/sql/pgrepl/pgreplparser:pgreplparser_test",
     "//pkg/sql/pgrepl/pgrepltree:pgrepltree",

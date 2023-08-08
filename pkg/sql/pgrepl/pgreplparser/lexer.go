@@ -33,6 +33,18 @@ const (
 	doubleQuote = '"'
 )
 
+func IsReplicationProtocolCommand(q string) bool {
+	l := newLexer(q)
+	var lval pgreplSymType
+	switch l.Lex(&lval) {
+	case K_CREATE_REPLICATION_SLOT, K_DROP_REPLICATION_SLOT, K_READ_REPLICATION_SLOT, K_START_REPLICATION,
+		K_IDENTIFY_SYSTEM,
+		K_TIMELINE_HISTORY, K_BASE_BACKUP:
+		return true
+	}
+	return false
+}
+
 // lexer implements the Lexer goyacc interface.
 // It differs from the sql/scanner package as replication has unique, case
 // sensitive behavior with unique keywords.
