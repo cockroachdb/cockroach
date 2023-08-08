@@ -41,19 +41,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPostProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	v := [10]rowenc.EncDatum{}
 	for i := range v {
@@ -225,6 +226,7 @@ func TestPostProcess(t *testing.T) {
 
 func TestAggregatorSpecAggregationEquals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Used for FilterColIdx *uint32.
 	colIdx1 := uint32(0)
@@ -315,6 +317,7 @@ func TestAggregatorSpecAggregationEquals(t *testing.T) {
 
 func TestProcessorBaseContext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Use a custom context to distinguish it from the background one.
 	ctx := context.WithValue(context.Background(), struct{}{}, struct{}{})
@@ -428,6 +431,7 @@ func populateRangeCacheAndDisableBuffering(t *testing.T, db *gosql.DB, tableName
 // interesting to test is the integration between DistSQL and KV.
 func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We're going to test by running a query that selects rows 1..10 with limit
 	// 5. Out of these, rows 1..5 are on node 1, 6..10 on node 2. We're going to
@@ -710,8 +714,6 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		// The default behavior is to enable uncertainty errors for a single random
 		// node.
 		overrideErrorOrigin []int
-		// if non-empty, this test will be skipped.
-		skip string
 	}{
 		{
 			query:           "SELECT * FROM t AS t1 JOIN t AS t2 ON t1.x = t2.x",
@@ -722,8 +724,8 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV1v2jwUgO_fX2Ed6VW3yZTY4TPSJKqSqWlpwgjTJlWoyojLvIY4sx0VVPHfpwBdIW0iwkWbCyTHh8ePfY5PHkH9icAC3x7Y52PE4zuBvoy8a3Rj_xgOzhwXfeg7_tj_OsDIvzgb2h_RNvTTJk6jMx9pghzXtUdo4HlX34bo0nPc7QxFnos0OV2gz0jT0-UEfb-wR_ZmpYFzZaOTPg9mMphb_58AhliEzA3mTIF1AwQwUMBgwgRDIsWUKSVkNvW4DnTCBVgGBh4nqc5eTzBMhWRgPYLmOmJgwTj4GbERC0Im6wZgCJkOeLTG656-Te7ZEjCciyidx8pCC4yysZ8E2ahWJwZMVhhEqp-XUDqYMbDIjpPTB8tY4cO1LgWPt1bmS6vlLQ8XgGEgxH2aoN-Cx0jEFuqRXdclRlI88LDQkOYMzSMNW4Xn9kKwsXeYgMFLdeaNexT3mrhnFsqaOdlWoeyzYxoLGTLJwj3ByeqV7biiJpJ6Nxf4ukojp9LdUyGHFxypWnB1YtTq9PCaI1XMdjLaeLOaaxxp2H6PmmvvydLDE00rJ5oatYOzTKto7Zxh882y3DzSsPMeWe5UaYMjphIRK3ZQ4zByK9VI1opYOGObvqVEKqdsKMV0HbsZemvQ-kXIlN7Mks3AiZ-mlJYsmP_7zuySSCmJFpPMPImWksw9EtkltfIks3x3RoXtNUpRzWISyZOapaRWMamRJ7WOPah2ntQuJXWKnWie1CkldYtJzType-zuOlm530Xi4ZaHYIGxfWqv_Dw9kP0hmKnszvm_xMMaO14m2Y25CyLFMFwH96zPNJNzHnOl-RQsLVO2Wv33NwAA___OinSA",
 		},
 		{
-			// This test reproduces 51458 and should be enabled once that issue is
-			// fixed.
+			// Reproduction of not propagating errors to all outputs of the
+			// hash router (#51458).
 			query:               "SELECT * FROM t JOIN onerow ON t.x = onerow.x",
 			expectedPlanURL:     "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lW9P4koUxt_fTzE5yY16M0inFPA2McEIN-JFcIFkNzHEjPQAjaXDzkwjxvDdN21xpYV2Kf7pC2WY098855knhxdQPz2wYdDqtC6HxPUngvzX792Qu9aP285Fu0uOm-3BcPCtQ8ng6uK2dULWpf_EdZpc99pdInyU4on0ukSfLsn5en26HJHvV61-KwZ32v-3yFHT5VPJ5_bfR0DBFw52-RwV2HfAgIIJFCoworCQYoxKCRluvUSFbWcJtkHB9ReBDr8eURgLiWC_gHa1h2DDkD942EfuoCwbQMFBzV0vwuuGvl884jNQuBReMPeVTZaUhOvBgoerUpkZMFpREIFeH_FGfngmM65mSWaDwWg1oqA0nyLYbEN3uwm2saIZ0t-4gS-kgxKdBHkUvvmnkh39X3E1uxauj7JsJaV6ONHHDXZyLt3pLPoEFHqBtkmD0YZJG5VU629tVVJtWe9oa4fmriiJRbme7n-nFCslpZ6QwvYPBysajjIzSmXzY_PBMtV_QT6qn5aPaqItc_9LMQtfimmUPvRGzEOlV5LHxAOwEf_bbmJj5rxLvpmSX8mU_wWBqn1aoGqZA2eHoj6qhfAV7jVPjNRJJRY2ic4UY9OUCOQYb6UYR7XxsheBovA4qHS8u160_dctpSXy-e-fgf1JVjbJKkaqZ5PO0iSWJhmbJDObxMw0ysxFnSVQRq5RlUMtZ8VIOZZXi5FyLP83TbIOtrySRlUPNWrr8vJJOUbVipFyjGJbOagVaM_cRG0ZlU-yskn1YqR6NolthbN-cBCscFxNPPF07zpgg7F-Sjv-vD4QvsCnKpyZg5l4irjD50U48SbcU0jhhj9iEzXKueu7SrtjsLUMcLX661cAAAD__3vS9aQ=",
 			overrideErrorOrigin: []int{0},
@@ -750,14 +752,13 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		}
 		for _, testCase := range testCases {
 			t.Run(testCase.query, func(t *testing.T) {
-				if testCase.skip != "" {
-					skip.IgnoreLint(t, testCase.skip)
-				}
 				func() {
 					_, err := defaultConn.Exec(ctx, fmt.Sprintf("set vectorize=%s", vectorizeOpt))
 					require.NoError(t, err)
-					func() {
-						// Check distsql plan.
+					// We allow for the DistSQL plan to be different for some
+					// time in case the range cache wasn't populated as we
+					// expected (we've seen this under race in #108250).
+					testutils.SucceedsSoon(t, func() error {
 						rows, err := defaultConn.Query(
 							ctx,
 							fmt.Sprintf("SELECT info FROM [EXPLAIN (DISTSQL, SHAPE) %s] WHERE info LIKE 'Diagram:%%'", testCase.query),
@@ -767,8 +768,14 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 						rows.Next()
 						var actualPlanURL string
 						require.NoError(t, rows.Scan(&actualPlanURL))
-						require.Equal(t, testCase.expectedPlanURL, actualPlanURL)
-					}()
+						if testCase.expectedPlanURL != actualPlanURL {
+							return errors.Newf(
+								"DistSQL plans didn't match:\nexpected:%s\nactual: %s",
+								testCase.expectedPlanURL, actualPlanURL,
+							)
+						}
+						return nil
+					})
 
 					errorOrigin := []int{allNodeIdxs[rng.Intn(len(allNodeIdxs))]}
 					if testCase.overrideErrorOrigin != nil {
@@ -816,6 +823,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 // instantiation of processors.
 func TestFlowConcurrentTxnUse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Run("TestSingleGoroutine", func(t *testing.T) {
 		flow := &flowinfra.FlowBase{}

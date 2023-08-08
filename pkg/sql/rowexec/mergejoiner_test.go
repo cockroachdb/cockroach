@@ -45,6 +45,7 @@ type mergeJoinerTestCase struct {
 
 func TestMergeJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	v := [10]rowenc.EncDatum{}
 	for i := range v {
@@ -761,6 +762,7 @@ func TestMergeJoiner(t *testing.T) {
 // Test that the joiner shuts down fine if the consumer is closed prematurely.
 func TestConsumerClosed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	v := [10]rowenc.EncDatum{}
 	for i := range v {

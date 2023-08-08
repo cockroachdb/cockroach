@@ -31,6 +31,8 @@ import (
 
 func TestValuesProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	rng, _ := randutil.NewTestRand()
 	for _, numRows := range []int{0, 1, 10, 13, 15} {
 		for _, numCols := range []int{0, 1, 3} {

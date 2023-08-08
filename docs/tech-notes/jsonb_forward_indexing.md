@@ -44,10 +44,18 @@ The following rules were kept in mind while designing this form of encoding, as 
 5. Objects with an equal number of key value pairs are compared in the order:
 `key1`, `value1`, `key2`, `value2`, ….
 
+**NOTE:** There is one exception to these rules, which is neither documented by
+Postgres, nor mentioned in the source code: empty arrays are the minimum JSON
+value. As far as we can tell, this is a Postgres bug that has existed for some
+time. We've decided to replicate this behavior to remain consistent with
+Postgres. We've filed a [Postgres bug report](https://www.postgresql.org/message-id/17873-826fdc8bbcace4f1%40postgresql.org)
+to track the issue.
+
 In order to satisfy property 1 at all times, tags are defined in an increasing order of bytes. 
 These tags will also have to be defined in a way where the tag representing an object is a large byte representation 
 for a hexadecimal value (such as 0xff) and the subsequent objects have a value 1 less than the previous one,
-where the ordering is described in point 1 above. 
+where the ordering is described in point 1 above. There is a special tag for empty JSON arrays
+in order to handle the special case of empty arrays being ordered before all other JSON values.
 
 Additionally, tags representing terminators will also be defined. There will be two terminators, one for the ascending designation and the other for the descending one, and will be required to denote the end of a key encoding of the following JSON values: Objects, Arrays, Number and Strings. JSON Boolean and JSON Null are not required to have the terminator since they do not have variable length encoding due to the presence of a single tag (as explained later in this document).
 

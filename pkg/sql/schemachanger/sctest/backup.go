@@ -35,23 +35,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TODO (xiang): Fix and unskip those flaky backup tests.
-func skipFlakyBackupTests(t *testing.T, path string) {
-	if strings.Contains(path, "alter_table_multiple_commands") ||
-		strings.Contains(path, "alter_table_alter_primary_key_drop_rowid") ||
-		strings.Contains(path, "drop_column_basic") {
-		skip.WithIssue(t, 108221, "skipping flaky tests")
-	}
-}
-
 // BackupSuccess tests that the schema changer can handle being backed up
 // any time during a successful schema change.
 func BackupSuccess(t *testing.T, path string, factory TestServerFactory) {
 	// These tests are expensive.
 	skip.UnderStress(t)
 	skip.UnderRace(t)
-
-	skipFlakyBackupTests(t, path)
 
 	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		backupSuccess(t, factory, cs)
@@ -68,8 +57,6 @@ func BackupRollbacks(t *testing.T, path string, factory TestServerFactory) {
 	// and at least as expensive to run.
 	skip.UnderShort(t)
 
-	skipFlakyBackupTests(t, path)
-
 	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		backupRollbacks(t, factory, cs)
 	})
@@ -84,8 +71,6 @@ func BackupSuccessMixedVersion(t *testing.T, path string, factory TestServerFact
 	// These tests are only marginally more useful than BackupSuccess
 	// and at least as expensive to run.
 	skip.UnderShort(t)
-
-	skipFlakyBackupTests(t, path)
 
 	factory = factory.WithMixedVersion()
 	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {
@@ -103,8 +88,6 @@ func BackupRollbacksMixedVersion(t *testing.T, path string, factory TestServerFa
 	// and at least as expensive to run.
 	skip.UnderShort(t)
 
-	skipFlakyBackupTests(t, path)
-
 	factory = factory.WithMixedVersion()
 	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		backupRollbacks(t, factory, cs)
@@ -117,21 +100,17 @@ var runAllBackups = flag.Bool(
 	"if true, run all backups instead of a random subset",
 )
 
-// If the number of stages in the same phase exceeds skipThreshold, we enable
-// skipping such that the backup test for each stage is skipped with probability
-// skipRate.
-// Set runAllBackups to true to disable skipping altogether.
-const skipThreshold = 10
 const skipRate = .5
 
-func maybeRandomlySkip(t *testing.T, stageCountInPhase int) {
-	if !*runAllBackups && stageCountInPhase > skipThreshold && rand.Float64() < skipRate {
+func maybeRandomlySkip(t *testing.T) {
+	if !*runAllBackups && rand.Float64() < skipRate {
 		skip.IgnoreLint(t, "skipping due to randomness")
 	}
 }
 
 func backupSuccess(t *testing.T, factory TestServerFactory, cs CumulativeTestCaseSpec) {
-	maybeRandomlySkip(t, cs.StagesCount)
+	maybeRandomlySkip(t)
+	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
 	ctx := context.Background()
 	url := fmt.Sprintf("userfile://backups.public.userfiles_$user/data_%s_%d",
 		cs.Phase, cs.StageOrdinal)
@@ -240,7 +219,8 @@ func backupRollbacks(t *testing.T, factory TestServerFactory, cs CumulativeTestC
 	if cs.Phase != scop.PostCommitPhase {
 		return
 	}
-	maybeRandomlySkip(t, cs.StagesCount)
+	maybeRandomlySkip(t)
+	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
 	ctx := context.Background()
 	var urls atomic.Value
 	var dbForBackup atomic.Pointer[gosql.DB]
