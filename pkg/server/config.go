@@ -204,6 +204,9 @@ type BaseConfig struct {
 	// Environment Variable: COCKROACH_DISABLE_SPAN_CONFIGS
 	SpanConfigsDisabled bool
 
+	// DisableKVProber disables the use of the kvprober infrastructure.
+	DisableKVProber bool
+
 	// Disables the default test tenant.
 	DisableDefaultTestTenant bool
 

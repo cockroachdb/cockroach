@@ -257,6 +257,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.DisableSpanConfigs {
 		cfg.SpanConfigsDisabled = true
 	}
+	if params.DisableKVProber {
+		cfg.DisableKVProber = true
+	}
 	if params.SnapshotApplyLimit != 0 {
 		cfg.SnapshotApplyLimit = params.SnapshotApplyLimit
 	}

@@ -716,6 +716,9 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 				3: {
 					DefaultTestTenant: base.TODOTestTenantDisabled,
 					UseDatabase:       "t",
+					// Disable kvprober to prevent it from interfering with the test.
+					// kvprober can cause unexpected updates to the range cache.
+					DisableKVProber: true,
 					Knobs: base.TestingKnobs{
 						KVClient: &kvcoord.ClientTestingKnobs{
 							// Inhibit the checking of connection health done by the

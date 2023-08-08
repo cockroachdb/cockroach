@@ -2148,8 +2148,11 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// global tenant capabilities state.
 	s.rpcContext.TenantRPCAuthorizer.BindReader(s.tenantCapabilitiesWatcher)
 
-	if err := s.kvProber.Start(workersCtx, s.stopper); err != nil {
-		return errors.Wrapf(err, "failed to start KV prober")
+	// If enabled, start kvprober.
+	if !s.cfg.DisableKVProber {
+		if err := s.kvProber.Start(workersCtx, s.stopper); err != nil {
+			return errors.Wrapf(err, "failed to start KV prober")
+		}
 	}
 
 	// Perform loss of quorum recovery cleanup if any actions were scheduled.

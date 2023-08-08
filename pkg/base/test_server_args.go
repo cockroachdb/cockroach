@@ -153,6 +153,9 @@ type TestServerArgs struct {
 	// config span.
 	DisableSpanConfigs bool
 
+	// DisableKVProber disables the use of the kvprober infrastructure.
+	DisableKVProber bool
+
 	// TestServer will probabilistically start a single test tenant on each node
 	// for multi-tenant testing, and default all connections through that tenant.
 	// Use this flag to change this behavior. You might want/need to alter this
