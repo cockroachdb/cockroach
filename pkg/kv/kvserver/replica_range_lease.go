@@ -71,7 +71,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-var transferExpirationLeasesFirstEnabled = settings.RegisterBoolSetting(
+var TransferExpirationLeasesFirstEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.transfer_expiration_leases_first.enabled",
 	"controls whether we transfer expiration-based leases that are later upgraded to epoch-based ones",
@@ -281,7 +281,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 
 	if p.repl.shouldUseExpirationLeaseRLocked() ||
 		(transfer &&
-			transferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV) &&
+			TransferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV) &&
 			p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODODelete_V22_2EnableLeaseUpgrade)) {
 		// In addition to ranges that should be using expiration-based leases
 		// (typically the meta and liveness ranges), we also use them during lease
