@@ -237,7 +237,10 @@ func (i InfoStorage) Write(ctx context.Context, infoKey string, value []byte) er
 	if value == nil {
 		return errors.AssertionFailedf("missing value (infoKey %q)", infoKey)
 	}
-	return i.write(ctx, infoKey, value)
+	if err := i.write(ctx, infoKey, value); err != nil {
+		return MaybeGenerateForcedRetryableError(ctx, i.txn.KV(), err)
+	}
+	return nil
 }
 
 // Delete removes the info record for the provided infoKey.
