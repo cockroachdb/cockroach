@@ -1,7 +1,5 @@
 #! /usr/bin/env expect -f
 
-# disabled until #107122 is resolved.
-
 source [file join [file dirname $argv0] common.tcl]
 
 spawn /bin/bash
@@ -71,6 +69,7 @@ end_test
 
 # Stop it.
 interrupt
+interrupt
 eexpect ":/# "
 
 start_test "Check that --logtostderr can override the threshold but no error is printed on startup"
@@ -79,6 +78,7 @@ eexpect "marker\r\nCockroachDB node starting"
 end_test
 
 # Stop it.
+interrupt
 interrupt
 eexpect ":/# "
 
