@@ -1944,6 +1944,20 @@ func TestShowJobs(t *testing.T) {
 			// confirmed via the job_type field, which is dependent on the details
 			// field.
 			out.details = in.details
+			// All the timestamps won't compare with simple == due locality, so we
+			// check that they are the same instant with time.Equal ourselves.
+			if out.created.Equal(in.created) {
+				out.created = in.created
+			}
+			if out.started.Equal(in.started) {
+				out.started = in.started
+			}
+			if out.finished.Equal(in.finished) {
+				out.finished = in.finished
+			}
+			if out.modified.Equal(in.modified) {
+				out.modified = in.modified
+			}
 
 			if !reflect.DeepEqual(in, out) {
 				diff := strings.Join(pretty.Diff(in, out), "\n")
