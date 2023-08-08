@@ -209,9 +209,10 @@ const (
 func mysqlStrToDatum(evalCtx *eval.Context, s string, desired *types.T) (tree.Datum, error) {
 	switch desired.Family() {
 	case types.BytesFamily:
-		//  mysql emits raw byte strings that do not use the same escaping as our ParseBytes
-		//	function expects, and the difference between ParseStringAs and
-		//	ParseDatumStringAs is whether or not it attempts to parse bytes.
+		// mysql emits raw byte strings that do not use the same escaping as our
+		// tree.ParseDBytes function expects, and the difference between
+		// tree.ParseAndRequireString and mysqlStrToDatum is whether or not it
+		// attempts to parse bytes.
 		return tree.NewDBytes(tree.DBytes(s)), nil
 	default:
 		res, _, err := tree.ParseAndRequireString(desired, s, evalCtx)

@@ -713,7 +713,6 @@ func cumulativeTestForEachPostCommitStage(
 			var hasFailed bool
 			for _, tc := range testCases {
 				fn := func(t *testing.T) {
-					t.Parallel() // SAFE FOR TESTING
 					tf(t, tc)
 				}
 				if hasFailed {
