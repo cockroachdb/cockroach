@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -711,8 +712,14 @@ FROM (SELECT fingerprint_id,
 			TxnFingerprintIDs: txnFingerprintIDs,
 		}
 
-		statements = append(statements, stmt)
+		fmt.Println("before fillInCountsToBools()")
+		err := fillInCountsToBools(metadataJSON, &stmt.Key.KeyData)
+		if err != nil {
+			return nil, srverrors.ServerError(ctx, err)
+		}
+		fmt.Println("after fillInCountsToBools()")
 
+		statements = append(statements, stmt)
 	}
 
 	if err != nil {
@@ -720,6 +727,45 @@ FROM (SELECT fingerprint_id,
 	}
 
 	return statements, nil
+}
+
+// fillInCountsToBools fills in the boolean fields in the statement statistics key based on the
+// count fields in the metadata JSON.
+func fillInCountsToBools(
+	metadataJSON json.JSON, stmtStatsKey *appstatspb.StatementStatisticsKey,
+) error {
+	fullScanCount, err := getCountFromMetadataJSON(metadataJSON, "fullScanCount")
+	if err != nil {
+		return err
+	}
+	failedCount, err := getCountFromMetadataJSON(metadataJSON, "failedCount")
+	if err != nil {
+		return err
+	}
+	distSQLCount, err := getCountFromMetadataJSON(metadataJSON, "distSQLCount")
+	if err != nil {
+		return err
+	}
+
+	stmtStatsKey.Failed = failedCount > 0
+	stmtStatsKey.DistSQL = distSQLCount > 0
+	stmtStatsKey.FullScan = fullScanCount > 0
+
+	return nil
+}
+
+// getCountFromMetadataJSON returns the count value from the metadata JSON.
+func getCountFromMetadataJSON(metadataJSON json.JSON, key string) (int64, error) {
+	countJSON, err := metadataJSON.FetchValKey(key)
+	if err != nil {
+		return 0, err
+	}
+	countDec, _ := countJSON.AsDecimal()
+	countInt, err := countDec.Int64()
+	if err != nil {
+		return 0, err
+	}
+	return countInt, nil
 }
 
 func getIterator(

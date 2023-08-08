@@ -487,6 +487,95 @@ func TestStatusAPIStatements(t *testing.T) {
 	testPath(fmt.Sprintf("statements?combined=true&start=%d", aggregatedTs+60), nil)
 }
 
+func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	endpoint := "combinedstmts"
+
+	// Aug 30 2021 19:50:00 GMT+0000
+	aggregatedTs := int64(1630353000)
+	statsKnobs := sqlstats.CreateTestingKnobs()
+	statsKnobs.StubTimeNow = func() time.Time { return timeutil.Unix(aggregatedTs, 0) }
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: statsKnobs,
+			},
+		},
+	})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServerProto := testCluster.Server(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	var resp serverpb.StatementsResponse
+	// Test that non-admin without VIEWACTIVITY privileges cannot access.
+	err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, endpoint, &resp, false)
+	if !testutils.IsError(err, "status: 403") {
+		t.Fatalf("expected privilege error, got %v", err)
+	}
+
+	thirdServerSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWACTIVITY TO %s", apiconstants.TestingUserNameNoAdmin().Normalized()))
+
+	statements := []struct {
+		stmt      string
+		respQuery string
+		fullScan  bool
+		distSQL   bool
+		failed    bool
+	}{
+		{stmt: `CREATE DATABASE football`, respQuery: `CREATE DATABASE football`, fullScan: false, distSQL: false, failed: false},
+		{stmt: `SET database = football`, respQuery: `SET database = football`, fullScan: false, distSQL: false, failed: false},
+		{stmt: `CREATE TABLE players (id INT PRIMARY KEY, name TEXT, position TEXT, age INT,goals INT)`, respQuery: `CREATE TABLE players (id INT8 PRIMARY KEY, name STRING, "position" STRING, age INT8, goals INT8)`, fullScan: false, distSQL: false, failed: false},
+		{stmt: `INSERT INTO players (id, name, position, age, goals) VALUES (1, 'Lionel Messi', 'Forward', 34, 672), (2, 'Cristiano Ronaldo', 'Forward', 36, 674)`, respQuery: `INSERT INTO players(id, name, "position", age, goals) VALUES (_, '_', __more1_10__), (__more1_10__)`, fullScan: false, distSQL: false, failed: false},
+		{stmt: `SELECT avg(goals) FROM players`, respQuery: `SELECT avg(goals) FROM players`, fullScan: true, distSQL: true, failed: false},
+		{stmt: `SELECT name FROM players WHERE age > 30`, respQuery: `SELECT name FROM players WHERE age > _`, fullScan: true, distSQL: true, failed: false},
+		{stmt: `DROP INDEX IF EXISTS idx_age`, respQuery: `DROP INDEX IF EXISTS idx_age`, fullScan: false, distSQL: false, failed: false},
+		{stmt: `CREATE INDEX idx_age ON players (age) STORING (name)`, respQuery: `CREATE INDEX idx_age ON players (age) STORING (name)`, fullScan: false, distSQL: false, failed: false},
+		{stmt: `SELECT name FROM players WHERE age < 32`, respQuery: `SELECT name FROM players WHERE age < _`, fullScan: false, distSQL: false, failed: false},
+	}
+
+	fullScanMap := make(map[string]bool)
+	distSQLMap := make(map[string]bool)
+	failedMap := make(map[string]bool)
+	for _, stmt := range statements {
+		thirdServerSQL.Exec(t, stmt.stmt)
+		fullScanMap[stmt.respQuery] = stmt.fullScan
+		distSQLMap[stmt.respQuery] = stmt.distSQL
+		failedMap[stmt.respQuery] = stmt.failed
+	}
+
+	if err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, endpoint, &resp, false); err != nil {
+		t.Fatal(err)
+	}
+
+	var statementsKeyInResponse []appstatspb.StatementStatisticsKey
+	for _, respStatement := range resp.Statements {
+		statementsKeyInResponse = append(statementsKeyInResponse, respStatement.Key.KeyData)
+	}
+
+	for _, respStatement := range statementsKeyInResponse {
+		expectedFullScan := fullScanMap[respStatement.Query]
+		actualFullScan := respStatement.FullScan
+		if actualFullScan != expectedFullScan {
+			t.Fatalf("expected fullScan to be %v, got %v for %s", expectedFullScan, actualFullScan, respStatement.Query)
+		}
+
+		expectedDistSQL := distSQLMap[respStatement.Query]
+		actualDistSQL := respStatement.DistSQL
+		if actualDistSQL != expectedDistSQL {
+			t.Fatalf("expected distSQL to be %v, got %v for %s", expectedDistSQL, actualDistSQL, respStatement.Query)
+		}
+
+		expectedFailed := failedMap[respStatement.Query]
+		actualFailed := respStatement.Failed
+		if actualFailed != expectedFailed {
+			t.Fatalf("expected failed to be %v, got %v for %s", expectedFailed, actualFailed, respStatement.Query)
+		}
+	}
+}
+
 func TestStatusAPICombinedStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
