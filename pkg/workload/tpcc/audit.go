@@ -30,17 +30,17 @@ type auditor struct {
 	warehouses int
 
 	// transaction counts
-	newOrderTransactions    uint64
-	newOrderRollbacks       uint64
-	paymentTransactions     uint64
-	orderStatusTransactions uint64
-	deliveryTransactions    uint64
+	newOrderTransactions    atomic.Uint64
+	newOrderRollbacks       atomic.Uint64
+	paymentTransactions     atomic.Uint64
+	orderStatusTransactions atomic.Uint64
+	deliveryTransactions    atomic.Uint64
 
 	// map from order-lines count to the number of orders with that count
 	orderLinesFreq map[int]uint64
 
 	// sum of order lines across all orders
-	totalOrderLines uint64
+	totalOrderLines atomic.Uint64
 
 	// map from warehouse to number of remote order lines for that warehouse
 	orderLineRemoteWarehouseFreq map[int]uint64
@@ -48,10 +48,10 @@ type auditor struct {
 	paymentRemoteWarehouseFreq map[int]uint64
 
 	// counts of how many transactions select the customer by last name
-	paymentsByLastName    uint64
-	orderStatusByLastName uint64
+	paymentsByLastName    atomic.Uint64
+	orderStatusByLastName atomic.Uint64
 
-	skippedDelivieries uint64
+	skippedDelivieries atomic.Uint64
 }
 
 func newAuditor(warehouses int) *auditor {
@@ -120,19 +120,19 @@ func check9217(a *auditor) auditResult {
 	a.Lock()
 	defer a.Unlock()
 
-	if a.deliveryTransactions < minSignificantTransactions {
+	if a.deliveryTransactions.Load() < minSignificantTransactions {
 		return newSkipResult("not enough delivery transactions to be statistically significant")
 	}
 
-	var threshold uint64
-	if a.deliveryTransactions > 100 {
-		threshold = a.deliveryTransactions / 100
+	var threshold atomic.Uint64
+	if a.deliveryTransactions.Load() > 100 {
+		threshold.Store(a.deliveryTransactions.Load() / 100)
 	} else {
-		threshold = 1
+		threshold.Store(1)
 	}
-	if a.skippedDelivieries > threshold {
+	if a.skippedDelivieries.Load() > threshold.Load() {
 		return newFailResult(
-			"expected no more than %d skipped deliveries, got %d", threshold, a.skippedDelivieries)
+			"expected no more than %d skipped deliveries, got %d", threshold.Load(), a.skippedDelivieries.Load())
 	}
 	return passResult
 }
@@ -140,11 +140,11 @@ func check9217(a *auditor) auditResult {
 func check92251(a *auditor) auditResult {
 	// At least 0.9% and at most 1.1% of the New-Order transactions roll back as a
 	// result of an unused item number.
-	orders := atomic.LoadUint64(&a.newOrderTransactions)
+	orders := a.newOrderTransactions.Load()
 	if orders < minSignificantTransactions {
 		return newSkipResult("not enough orders to be statistically significant")
 	}
-	rollbacks := atomic.LoadUint64(&a.newOrderRollbacks)
+	rollbacks := a.newOrderRollbacks.Load()
 	rollbackPct := 100 * float64(rollbacks) / float64(orders)
 	if rollbackPct < 0.9 || rollbackPct > 1.1 {
 		return newFailResult(
@@ -161,11 +161,11 @@ func check92252(a *auditor) auditResult {
 	a.Lock()
 	defer a.Unlock()
 
-	if a.newOrderTransactions < minSignificantTransactions {
+	if a.newOrderTransactions.Load() < minSignificantTransactions {
 		return newSkipResult("not enough orders to be statistically significant")
 	}
 
-	avg := float64(a.totalOrderLines) / float64(a.newOrderTransactions)
+	avg := float64(a.totalOrderLines.Load()) / float64(a.newOrderTransactions.Load())
 	if avg < 9.5 || avg > 10.5 {
 		return newFailResult(
 			"average order-lines count %.1f is not between allowed bounds [9.5, 10.5]", avg)
@@ -175,7 +175,7 @@ func check92252(a *auditor) auditResult {
 	tolerance := 1.0          // allow 1 percent deviation from expected
 	for i := 5; i <= 15; i++ {
 		freq := a.orderLinesFreq[i]
-		pct := 100 * float64(freq) / float64(a.newOrderTransactions)
+		pct := 100 * float64(freq) / float64(a.newOrderTransactions.Load())
 		if math.Abs(expectedPct-pct) > tolerance {
 			return newFailResult(
 				"order-lines count should be uniformly distributed from 5 to 15, but it was %d for %.1f "+
@@ -198,7 +198,7 @@ func check92253(a *auditor) auditResult {
 		// Not applicable when there are no remote warehouses.
 		return passResult
 	}
-	if a.newOrderTransactions < minSignificantTransactions {
+	if a.newOrderTransactions.Load() < minSignificantTransactions {
 		return newSkipResult("not enough orders to be statistically significant")
 	}
 
@@ -206,7 +206,7 @@ func check92253(a *auditor) auditResult {
 	for _, freq := range a.orderLineRemoteWarehouseFreq {
 		remoteOrderLines += freq
 	}
-	remotePct := 100 * float64(remoteOrderLines) / float64(a.totalOrderLines)
+	remotePct := 100 * float64(remoteOrderLines) / float64(a.totalOrderLines.Load())
 	if remotePct < 0.95 || remotePct > 1.05 {
 		return newFailResult(
 			"remote order-line percent %.1f is not between allowed bounds [0.95, 1.05]", remotePct)
@@ -241,7 +241,7 @@ func check92254(a *auditor) auditResult {
 		// Not applicable when there are no remote warehouses.
 		return passResult
 	}
-	if a.paymentTransactions < minSignificantTransactions {
+	if a.paymentTransactions.Load() < minSignificantTransactions {
 		return newSkipResult("not enough payments to be statistically significant")
 	}
 
@@ -249,7 +249,7 @@ func check92254(a *auditor) auditResult {
 	for _, freq := range a.paymentRemoteWarehouseFreq {
 		remotePayments += freq
 	}
-	remotePct := 100 * float64(remotePayments) / float64(a.paymentTransactions)
+	remotePct := 100 * float64(remotePayments) / float64(a.paymentTransactions.Load())
 	if remotePct < 14 || remotePct > 16 {
 		return newFailResult(
 			"remote payment percent %.1f is not between allowed bounds [14, 16]", remotePct)
@@ -274,10 +274,10 @@ func check92255(a *auditor) auditResult {
 	a.Lock()
 	defer a.Unlock()
 
-	if a.paymentTransactions < minSignificantTransactions {
+	if a.paymentTransactions.Load() < minSignificantTransactions {
 		return newSkipResult("not enough payments to be statistically significant")
 	}
-	lastNamePct := 100 * float64(a.paymentsByLastName) / float64(a.paymentTransactions)
+	lastNamePct := 100 * float64(a.paymentsByLastName.Load()) / float64(a.paymentTransactions.Load())
 	if lastNamePct < 57 || lastNamePct > 63 {
 		return newFailResult(
 			"percent of customer selections by last name in payment transactions %.1f is not between "+
@@ -294,10 +294,10 @@ func check92256(a *auditor) auditResult {
 	a.Lock()
 	defer a.Unlock()
 
-	if a.orderStatusTransactions < minSignificantTransactions {
+	if a.orderStatusTransactions.Load() < minSignificantTransactions {
 		return newSkipResult("not enough order status transactions to be statistically significant")
 	}
-	lastNamePct := 100 * float64(a.orderStatusByLastName) / float64(a.orderStatusTransactions)
+	lastNamePct := 100 * float64(a.orderStatusByLastName.Load()) / float64(a.orderStatusTransactions.Load())
 	if lastNamePct < 57 || lastNamePct > 63 {
 		return newFailResult(
 			"percent of customer selections by last name in order status transactions %.1f is not "+

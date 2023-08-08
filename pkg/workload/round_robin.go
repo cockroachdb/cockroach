@@ -19,13 +19,13 @@ import (
 // queries among the different databases that it was created with.
 type RoundRobinDB struct {
 	handles []*gosql.DB
-	current uint32
+	current atomic.Uint32
 }
 
 // NewRoundRobinDB creates a RoundRobinDB from the input list of
 // database connection URLs.
 func NewRoundRobinDB(urls []string) (*RoundRobinDB, error) {
-	r := &RoundRobinDB{current: 0, handles: make([]*gosql.DB, 0, len(urls))}
+	r := &RoundRobinDB{handles: make([]*gosql.DB, 0, len(urls))}
 	for _, url := range urls {
 		db, err := gosql.Open(`cockroach`, url)
 		if err != nil {
@@ -37,7 +37,7 @@ func NewRoundRobinDB(urls []string) (*RoundRobinDB, error) {
 }
 
 func (db *RoundRobinDB) next() *gosql.DB {
-	return db.handles[(atomic.AddUint32(&db.current, 1)-1)%uint32(len(db.handles))]
+	return db.handles[(db.current.Add(1)-1)%uint32(len(db.handles))]
 }
 
 // QueryRow executes (*gosql.DB).QueryRow on the next available DB.

@@ -52,6 +52,8 @@ type jsonLoad struct {
 	complexity  int
 	inverted    bool
 	computed    bool
+
+	writeSeqAtomic *atomic.Int64
 }
 
 func init() {
@@ -118,7 +120,7 @@ func (w *jsonLoad) Tables() []workload.Table {
 			w.splits,
 			func(splitIdx int) []interface{} {
 				rng := rand.New(rand.NewSource(RandomSeed.Seed() + int64(splitIdx)))
-				g := newHashGenerator(&sequence{config: w, val: w.writeSeq})
+				g := newHashGenerator(&sequence{config: w, val: w.writeSeqAtomic})
 				return []interface{}{
 					int(g.hash(rng.Int63())),
 				}
@@ -143,6 +145,10 @@ func (w *jsonLoad) Ops(
 	// Allow a maximum of concurrency+1 connections to the database.
 	db.SetMaxOpenConns(w.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(w.connFlags.Concurrency + 1)
+
+	var writeSeqAtomic atomic.Int64
+	writeSeqAtomic.Store(w.writeSeq)
+	w.writeSeqAtomic = &writeSeqAtomic
 
 	var buf bytes.Buffer
 	buf.WriteString(`SELECT k, v FROM j WHERE k IN (`)
@@ -191,7 +197,7 @@ func (w *jsonLoad) Ops(
 			readStmt:  readStmt,
 			writeStmt: writeStmt,
 		}
-		seq := &sequence{config: w, val: w.writeSeq}
+		seq := &sequence{config: w, val: w.writeSeqAtomic}
 		if w.sequential {
 			op.g = newSequentialGenerator(seq)
 		} else {
@@ -260,18 +266,18 @@ func (o *jsonOp) run(ctx context.Context) error {
 
 type sequence struct {
 	config *jsonLoad
-	val    int64
+	val    *atomic.Int64
 }
 
 func (s *sequence) write() int64 {
-	return (atomic.AddInt64(&s.val, 1) - 1) % s.config.cycleLength
+	return (s.val.Add(1) - 1) % s.config.cycleLength
 }
 
 // read returns the last key index that has been written. Note that the returned
 // index might not actually have been written yet, so a read operation cannot
 // require that the key is present.
 func (s *sequence) read() int64 {
-	return atomic.LoadInt64(&s.val) % s.config.cycleLength
+	return s.val.Load() % s.config.cycleLength
 }
 
 // keyGenerator generates read and write keys. Read keys may not yet exist and

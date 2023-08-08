@@ -246,7 +246,7 @@ func SetCmdDefaults(cmd *cobra.Command) *cobra.Command {
 
 // numOps keeps a global count of successful operations (if countErrors is
 // false) or of all operations (if countErrors is true).
-var numOps uint64
+var numOps atomic.Uint64
 
 // workerRun is an infinite loop in which the worker continuously attempts to
 // read / write blocks of random data into a table in cockroach DB. The function
@@ -289,7 +289,7 @@ func workerRun(
 			}
 		}
 
-		v := atomic.AddUint64(&numOps, 1)
+		v := numOps.Add(1)
 		if *maxOps > 0 && v >= *maxOps {
 			return
 		}
