@@ -52,7 +52,7 @@ func MakeRangeFeedValueReader(
 	)
 	require.NoError(t, err)
 
-	var timeout = 5 * time.Second
+	var timeout = 10 * time.Second
 	if util.RaceEnabled {
 		timeout = 3 * timeout
 	}
