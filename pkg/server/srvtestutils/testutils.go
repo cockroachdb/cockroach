@@ -13,6 +13,7 @@ package srvtestutils
 import (
 	"encoding/json"
 	"io"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -83,6 +84,19 @@ func GetStatusJSONProtoWithAdminOption(
 	ts serverutils.ApplicationLayerInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	return serverutils.GetJSONProtoWithAdminOption(ts, apiconstants.StatusPrefix+path, response, isAdmin)
+}
+
+// GetStatusJSONProtoWithAdminOptionAndTimeout is like
+// GetStatusJSONProtoWithAdminOption but allows the caller to customize the
+// timeout.
+func GetStatusJSONProtoWithAdminOptionAndTimeout(
+	ts serverutils.ApplicationLayerInterface,
+	path string,
+	response protoutil.Message,
+	isAdmin bool,
+	timeout time.Duration,
+) error {
+	return serverutils.GetJSONProtoWithAdminOptionAndTimeout(ts, apiconstants.StatusPrefix+path, response, isAdmin, timeout)
 }
 
 // PostStatusJSONProtoWithAdminOption performs a RPC-over-HTTP request to
