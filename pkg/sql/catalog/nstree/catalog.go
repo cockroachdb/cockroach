@@ -283,7 +283,7 @@ func (c Catalog) ValidateNamespaceEntry(key catalog.NameKey) error {
 	// Compare the namespace entry with the referenced descriptor.
 	desc := c.LookupDescriptor(ne.GetID())
 	if desc == nil {
-		return catalog.ErrReferencedDescriptorNotFound
+		return catalog.NewReferencedDescriptorNotFoundError("schema", ne.GetID())
 	}
 	if desc.Dropped() {
 		return catalog.ErrDescriptorDropped
