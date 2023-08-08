@@ -12,124 +12,122 @@ package plpgsqltree
 
 import "github.com/cockroachdb/errors"
 
-// PLpgSQLGetDiagKind represents the type of error diagnostic
+// GetDiagnosticsKind represents the type of error diagnostic
 // item in stmt_getdiag.
-type PLpgSQLGetDiagKind int
+type GetDiagnosticsKind int
 
-// PlpgsqlGetdiagRowCount is an option for diagnostic items that can be
-// present in stmt_getdiag.
 const (
-	// PlpgsqlGetdiagRowCount returns the number of rows processed by the recent
+	// GetDiagnosticsRowCount returns the number of rows processed by the recent
 	// SQL command.
-	PlpgsqlGetdiagRowCount PLpgSQLGetDiagKind = iota
-	// PlpgsqlGetdiagContext returns text describing the current call stack.
-	PlpgsqlGetdiagContext
-	// PlpgsqlGetdiagErrorContext returns text describing the exception's callstack.
-	PlpgsqlGetdiagErrorContext
-	// PlpgsqlGetdiagErrorDetail returns the exceptions detail message.
-	PlpgsqlGetdiagErrorDetail
-	// PlpgsqlGetdiagErrorHint returns the exceptions hint message.
-	PlpgsqlGetdiagErrorHint
-	// PlpgsqlGetdiagReturnedSqlstate returns the SQLSTATE error code related to
+	GetDiagnosticsRowCount GetDiagnosticsKind = iota
+	// GetDiagnosticsContext returns text describing the current call stack.
+	GetDiagnosticsContext
+	// GetDiagnosticsErrorContext returns text describing the exception's
+	// callstack.
+	GetDiagnosticsErrorContext
+	// GetDiagnosticsErrorDetail returns the exceptions detail message.
+	GetDiagnosticsErrorDetail
+	// GetDiagnosticsErrorHint returns the exceptions hint message.
+	GetDiagnosticsErrorHint
+	// GetDiagnosticsReturnedSQLState returns the SQLSTATE error code related to
 	// the exception.
-	PlpgsqlGetdiagReturnedSqlstate
-	// PlpgsqlGetdiagColumnName returns the column name related to the exception.
-	PlpgsqlGetdiagColumnName
-	// PlpgsqlGetdiagConstraintName returns the constraint name related to
+	GetDiagnosticsReturnedSQLState
+	// GetDiagnosticsColumnName returns the column name related to the exception.
+	GetDiagnosticsColumnName
+	// GetDiagnosticsConstraintName returns the constraint name related to
 	// the exception.
-	PlpgsqlGetdiagConstraintName
-	// PlpgsqlGetdiagDatatypeName returns the data type name related to
-	// the exception.
-	PlpgsqlGetdiagDatatypeName
-	// PlpgsqlGetdiagMessageText returns the exceptions primary message.
-	PlpgsqlGetdiagMessageText
-	// PlpgsqlGetdiagTableName returns the name of the table related to
-	// the exception.
-	PlpgsqlGetdiagTableName
-	// PlpgsqlGetdiagSchemaName returns the name of the schema related to
-	//	// the exception.
-	PlpgsqlGetdiagSchemaName
+	GetDiagnosticsConstraintName
+	// GetDiagnosticsDatatypeName returns the data type name related to the
+	// exception.
+	GetDiagnosticsDatatypeName
+	// GetDiagnosticsMessageText returns the exceptions primary message.
+	GetDiagnosticsMessageText
+	// GetDiagnosticsTableName returns the name of the table related to the
+	// exception.
+	GetDiagnosticsTableName
+	// GetDiagnosticsSchemaName returns the name of the schema related to the
+	// exception.
+	GetDiagnosticsSchemaName
 )
 
 // String implements the fmt.Stringer interface.
-func (k PLpgSQLGetDiagKind) String() string {
+func (k GetDiagnosticsKind) String() string {
 	switch k {
-	case PlpgsqlGetdiagRowCount:
+	case GetDiagnosticsRowCount:
 		return "ROW_COUNT"
-	case PlpgsqlGetdiagContext:
+	case GetDiagnosticsContext:
 		return "PG_CONTEXT"
-	case PlpgsqlGetdiagErrorContext:
+	case GetDiagnosticsErrorContext:
 		return "PG_EXCEPTION_CONTEXT"
-	case PlpgsqlGetdiagErrorDetail:
+	case GetDiagnosticsErrorDetail:
 		return "PG_EXCEPTION_DETAIL"
-	case PlpgsqlGetdiagErrorHint:
+	case GetDiagnosticsErrorHint:
 		return "PG_EXCEPTION_HINT"
-	case PlpgsqlGetdiagReturnedSqlstate:
+	case GetDiagnosticsReturnedSQLState:
 		return "RETURNED_SQLSTATE"
-	case PlpgsqlGetdiagColumnName:
+	case GetDiagnosticsColumnName:
 		return "COLUMN_NAME"
-	case PlpgsqlGetdiagConstraintName:
+	case GetDiagnosticsConstraintName:
 		return "CONSTRAINT_NAME"
-	case PlpgsqlGetdiagDatatypeName:
+	case GetDiagnosticsDatatypeName:
 		return "PG_DATATYPE_NAME"
-	case PlpgsqlGetdiagMessageText:
+	case GetDiagnosticsMessageText:
 		return "MESSAGE_TEXT"
-	case PlpgsqlGetdiagTableName:
+	case GetDiagnosticsTableName:
 		return "TABLE_NAME"
-	case PlpgsqlGetdiagSchemaName:
+	case GetDiagnosticsSchemaName:
 		return "SCHEMA_NAME"
 	}
-	panic(errors.AssertionFailedf("no Annotations unknown getDiagnistics kind"))
+	panic(errors.AssertionFailedf("unknown diagnostics kind"))
 
 }
 
-// PLpgSQLFetchDirection represents the direction clause passed into a
-// fetch statement.
-type PLpgSQLFetchDirection int
+// FetchDirection represents the direction clause passed into a fetch statement.
+type FetchDirection int
 
-// PLpgSQLCursorOpt represents a cursor option, which describes
-// how a cursor will behave.
-type PLpgSQLCursorOpt uint32
+// CursorOption represents a cursor option, which describes how a cursor will
+// behave.
+type CursorOption uint32
 
 const (
-	// PLpgSQLCursorOptNone
-	PLpgSQLCursorOptNone PLpgSQLCursorOpt = iota
-	// PLpgSQLCursorOptBinary describes cursors that return data in binary form.
-	PLpgSQLCursorOptBinary
-	// PLpgSQLCursorOptScroll describes cursors that can retrieve rows in
+	// CursorOptionNone
+	CursorOptionNone CursorOption = iota
+	// CursorOptionBinary describes cursors that return data in binary form.
+	CursorOptionBinary
+	// CursorOptionScroll describes cursors that can retrieve rows in
 	// non-sequential fashion.
-	PLpgSQLCursorOptScroll
-	// PLpgSQLCursorOptNoScroll describes cursors that can not retrieve rows in
+	CursorOptionScroll
+	// CursorOptionNoScroll describes cursors that can not retrieve rows in
 	// non-sequential fashion.
-	PLpgSQLCursorOptNoScroll
-	// PLpgSQLCursorOptInsensitive describes cursors that can't see changes to
+	CursorOptionNoScroll
+	// CursorOptionInsensitive describes cursors that can't see changes to
 	// done to data in same txn.
-	PLpgSQLCursorOptInsensitive
-	// PLpgSQLCursorOptAsensitive describes cursors that may be able to see
+	CursorOptionInsensitive
+	// CursorOPtionAsensitive describes cursors that may be able to see
 	// changes to done to data in same txn.
-	PLpgSQLCursorOptAsensitive
-	// PLpgSQLCursorOptHold describes cursors that can be used after a txn that it
+	CursorOPtionAsensitive
+	// CursorOptionHold describes cursors that can be used after a txn that it
 	// was created in commits.
-	PLpgSQLCursorOptHold
-	// PLpgSQLCursorOptFastPlan describes cursors that can not be used after a txn
+	CursorOptionHold
+	// CursorOptionFastPlan describes cursors that can not be used after a txn
 	// that it was created in commits.
-	PLpgSQLCursorOptFastPlan
-	// PLpgSQLCursorOptGenericPlan describes cursors that uses a generic plan.
-	PLpgSQLCursorOptGenericPlan
-	// PLpgSQLCursorOptCustomPlan describes cursors that uses a custom plan.
-	PLpgSQLCursorOptCustomPlan
-	// PLpgSQLCursorOptParallelOK describes cursors that allows parallel queries.
-	PLpgSQLCursorOptParallelOK
+	CursorOptionFastPlan
+	// CursorOptionGenericPlan describes cursors that uses a generic plan.
+	CursorOptionGenericPlan
+	// CursorOptionCustomPlan describes cursors that uses a custom plan.
+	CursorOptionCustomPlan
+	// CursorOptionParallelOK describes cursors that allows parallel queries.
+	CursorOptionParallelOK
 )
 
 // String implements the fmt.Stringer interface.
-func (o PLpgSQLCursorOpt) String() string {
+func (o CursorOption) String() string {
 	switch o {
-	case PLpgSQLCursorOptNoScroll:
+	case CursorOptionNoScroll:
 		return "NO SCROLL"
-	case PLpgSQLCursorOptScroll:
+	case CursorOptionScroll:
 		return "SCROLL"
-	case PLpgSQLCursorOptFastPlan:
+	case CursorOptionFastPlan:
 		return ""
 	// TODO(jane): implement string representation for other opts.
 	default:
@@ -138,19 +136,19 @@ func (o PLpgSQLCursorOpt) String() string {
 }
 
 // Mask returns the bitmask for a given cursor option.
-func (o PLpgSQLCursorOpt) Mask() uint32 {
+func (o CursorOption) Mask() uint32 {
 	return 1 << o
 }
 
 // IsSetIn returns true if this cursor option is set in the supplied bitfield.
-func (o PLpgSQLCursorOpt) IsSetIn(bits uint32) bool {
+func (o CursorOption) IsSetIn(bits uint32) bool {
 	return bits&o.Mask() != 0
 }
 
-type plpgSQLCursorOptList []PLpgSQLCursorOpt
+type cursorOptionList []CursorOption
 
 // ToBitField returns the bitfield representation of a list of cursor options.
-func (ol plpgSQLCursorOptList) ToBitField() uint32 {
+func (ol cursorOptionList) ToBitField() uint32 {
 	var ret uint32
 	for _, o := range ol {
 		ret |= o.Mask()
@@ -159,19 +157,19 @@ func (ol plpgSQLCursorOptList) ToBitField() uint32 {
 }
 
 // OptListFromBitField returns a list of cursor option to be printed.
-func OptListFromBitField(m uint32) plpgSQLCursorOptList {
-	ret := plpgSQLCursorOptList{}
-	opts := []PLpgSQLCursorOpt{
-		PLpgSQLCursorOptBinary,
-		PLpgSQLCursorOptScroll,
-		PLpgSQLCursorOptNoScroll,
-		PLpgSQLCursorOptInsensitive,
-		PLpgSQLCursorOptAsensitive,
-		PLpgSQLCursorOptHold,
-		PLpgSQLCursorOptFastPlan,
-		PLpgSQLCursorOptGenericPlan,
-		PLpgSQLCursorOptCustomPlan,
-		PLpgSQLCursorOptParallelOK,
+func OptListFromBitField(m uint32) cursorOptionList {
+	ret := cursorOptionList{}
+	opts := []CursorOption{
+		CursorOptionBinary,
+		CursorOptionScroll,
+		CursorOptionNoScroll,
+		CursorOptionInsensitive,
+		CursorOPtionAsensitive,
+		CursorOptionHold,
+		CursorOptionFastPlan,
+		CursorOptionGenericPlan,
+		CursorOptionCustomPlan,
+		CursorOptionParallelOK,
 	}
 	for _, opt := range opts {
 		if opt.IsSetIn(m) {
