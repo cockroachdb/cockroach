@@ -935,9 +935,19 @@ stmt_loop: opt_loop_label LOOP loop_body opt_label ';'
   }
 ;
 
-stmt_while: opt_loop_label WHILE expr_until_loop loop_body
+stmt_while: opt_loop_label WHILE expr_until_loop LOOP loop_body opt_label ';'
   {
-    return unimplemented(plpgsqllex, "while loop")
+    // TODO(drewk): does the second usage of the label actually
+    // do anything?
+    cond, err := plpgsqllex.(*lexer).ParseExpr($3)
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$.val = &plpgsqltree.While{
+      Label: $1,
+      Condition: cond,
+      Body: $5.statements(),
+    }
   }
 ;
 
@@ -1372,7 +1382,7 @@ expr_until_then:
 
 expr_until_loop:
   {
-    return unimplemented(plpgsqllex, "loop expr")
+    $$ = plpgsqllex.(*lexer).ReadSqlExpressionStr(LOOP)
   }
 ;
 
