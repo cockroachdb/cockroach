@@ -67,7 +67,7 @@ func (r *replicationStreamManagerImpl) CompleteReplicationStream(
 
 func (r *replicationStreamManagerImpl) SetupSpanConfigsStream(
 	ctx context.Context, tenantName roachpb.TenantName,
-) (*streampb.ReplicationStreamSpec, error) {
+) (eval.ValueGenerator, error) {
 	return setupSpanConfigsStream(ctx, r.evalCtx, r.txn, tenantName)
 }
 

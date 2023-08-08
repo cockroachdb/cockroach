@@ -52,6 +52,12 @@ func KeyMatches(key roachpb.Key) FeedEventPredicate {
 	}
 }
 
+func AnySpanConfigMatches() FeedEventPredicate {
+	return func(msg streamingccl.Event) bool {
+		return msg.Type() == streamingccl.SpanConfigEvent
+	}
+}
+
 func minResolvedTimestamp(resolvedSpans []jobspb.ResolvedSpan) hlc.Timestamp {
 	minTimestamp := hlc.MaxTimestamp
 	for _, rs := range resolvedSpans {
@@ -110,6 +116,18 @@ func (rf *ReplicationFeed) ObserveKey(ctx context.Context, key roachpb.Key) roac
 		return false
 	})
 	return *rf.msg.GetKV()
+}
+
+// ObserveAnySpanConfigRecord consumes the feed until any span config record is observed.
+// Note: we don't do any buffering here.  Therefore, it is required that the key
+// we want to observe will arrive at some point in the future.
+func (rf *ReplicationFeed) ObserveAnySpanConfigRecord(
+	ctx context.Context,
+) streampb.StreamedSpanConfigEntry {
+	rf.consumeUntil(ctx, AnySpanConfigMatches(), func(err error) bool {
+		return false
+	})
+	return *rf.msg.GetSpanConfigEvent()
 }
 
 // ObserveResolved consumes the feed until we received resolved timestamp that's at least
@@ -265,18 +283,6 @@ func (rh *ReplicationHelper) StartReplicationStream(
 	err := protoutil.Unmarshal(rawReplicationProducerSpec, &replicationProducerSpec)
 	require.NoError(t, err)
 	return replicationProducerSpec
-}
-
-func (rh *ReplicationHelper) SetupSpanConfigsReplicationStream(
-	t *testing.T, sourceTenantName roachpb.TenantName,
-) streampb.ReplicationStreamSpec {
-	var rawSpec []byte
-	row := rh.SysSQL.QueryRow(t, `SELECT crdb_internal.setup_span_configs_stream($1)`, sourceTenantName)
-	row.Scan(&rawSpec)
-	var spec streampb.ReplicationStreamSpec
-	err := protoutil.Unmarshal(rawSpec, &spec)
-	require.NoError(t, err)
-	return spec
 }
 
 func (rh *ReplicationHelper) MaybeGenerateInlineURL(t *testing.T) *url.URL {

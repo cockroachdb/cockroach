@@ -11,6 +11,7 @@ package streamingccl
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -30,6 +31,9 @@ const (
 	// CheckpointEvent indicates that GetResolvedSpans will be meaningful. The resolved
 	// timestamp indicates that all KVs have been emitted up to this timestamp.
 	CheckpointEvent
+	// SpanConfigEvent indicates that the SpanConfig field of an event holds an updated
+	// SpanConfigRecord.
+	SpanConfigEvent
 )
 
 // Event describes an event emitted by a cluster to cluster stream.  Its Type
@@ -52,6 +56,9 @@ type Event interface {
 	// GetResolvedSpans returns a list of span-time pairs indicating the time for
 	// which all KV events within that span has been emitted.
 	GetResolvedSpans() []jobspb.ResolvedSpan
+
+	// GetSpanConfigEvent returns a SpanConfig event if the EventType is SpanConfigEvent
+	GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry
 }
 
 // kvEvent is a key value pair that needs to be ingested.
@@ -86,6 +93,11 @@ func (kve kvEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
 	return nil
 }
 
+// GetSpanConfigEvent implements the Event interface.
+func (kve kvEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
+	return nil
+}
+
 // sstableEvent is a sstable that needs to be ingested.
 type sstableEvent struct {
 	sst kvpb.RangeFeedSSTable
@@ -113,6 +125,11 @@ func (sste sstableEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
 
 // GetResolvedSpans implements the Event interface.
 func (sste sstableEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
+	return nil
+}
+
+// GetSpanConfigEvent implements the Event interface.
+func (sste sstableEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
 	return nil
 }
 
@@ -145,6 +162,11 @@ func (dre delRangeEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
 
 // GetResolvedSpans implements the Event interface.
 func (dre delRangeEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
+	return nil
+}
+
+// GetSpanConfigEvent implements the Event interface.
+func (dre delRangeEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
 	return nil
 }
 
@@ -183,6 +205,47 @@ func (ce checkpointEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
 	return ce.resolvedSpans
 }
 
+// GetSpanConfigEvent implements the Event interface.
+func (ce checkpointEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
+	return nil
+}
+
+type spanConfigEvent struct {
+	spanConfig streampb.StreamedSpanConfigEntry
+}
+
+var _ Event = spanConfigEvent{}
+
+// Type implements the Event interface.
+func (spe spanConfigEvent) Type() EventType {
+	return SpanConfigEvent
+}
+
+// GetKV implements the Event interface.
+func (spe spanConfigEvent) GetKV() *roachpb.KeyValue {
+	return nil
+}
+
+// GetSSTable implements the Event interface.
+func (spe spanConfigEvent) GetSSTable() *kvpb.RangeFeedSSTable {
+	return nil
+}
+
+// GetDeleteRange implements the Event interface.
+func (spe spanConfigEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
+	return nil
+}
+
+// GetResolvedSpans implements the Event interface.
+func (spe spanConfigEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
+	return nil
+}
+
+// GetSpanConfigEvent implements the Event interface.
+func (spe spanConfigEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
+	return &spe.spanConfig
+}
+
 // MakeKVEvent creates an Event from a KV.
 func MakeKVEvent(kv roachpb.KeyValue) Event {
 	return kvEvent{kv: kv}
@@ -201,4 +264,8 @@ func MakeDeleteRangeEvent(delRange kvpb.RangeFeedDeleteRange) Event {
 // MakeCheckpointEvent creates an Event from a resolved timestamp.
 func MakeCheckpointEvent(resolvedSpans []jobspb.ResolvedSpan) Event {
 	return checkpointEvent{resolvedSpans: resolvedSpans}
+}
+
+func MakeSpanConfigEvent(streamedSpanConfig streampb.StreamedSpanConfigEntry) Event {
+	return spanConfigEvent{spanConfig: streamedSpanConfig}
 }
