@@ -779,6 +779,105 @@ func TestTelemetryLoggingInternalEnabled(t *testing.T) {
 	}
 }
 
+// TestTelemetryLoggingInternalConsoleEnabled verifies that setting the cluster setting to send
+// internal console queries to telemetry works as intended.
+func TestTelemetryLoggingInternalConsoleEnabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	defer cleanup()
+
+	st := logtestutils.StubTime{}
+	sts := logtestutils.StubTracingStatus{}
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			EventLog: &EventLogTestingKnobs{
+				// The sampling checks below need to have a deterministic
+				// number of statements run by internal executor.
+				SyncWrites: true,
+			},
+			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
+				getTimeNow:       st.TimeNow,
+				getTracingStatus: sts.TracingStatus,
+			},
+		},
+	})
+	stubTime := timeutil.FromUnixMicros(int64(1e6))
+	st.SetTime(stubTime)
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	// Set query internal to `false` to guarantee that if an entry qith `internal-console` is showing
+	// is because of the setting `sql.telemetry.query_sampling.internal_console.enabled` and not
+	// being sampled as a regular internal.
+	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.internal.enabled = false;`)
+
+	testData := []struct {
+		appName            string
+		logInternalConsole bool
+		errorMessage       string
+	}{
+		{
+			"$ internal-console",
+			false,
+			"query from internal-console found on logs with internal_console cluster setting disabled",
+		},
+		{
+			"$ internal-console-extra-name",
+			false,
+			"query from internal-console-extra-name found on logs with internal_console cluster setting disabled",
+		},
+		{
+			"$ internal-console",
+			true,
+			"query from internal-console not found on logs with internal_console cluster setting enabled",
+		},
+		{
+			"$ internal-console-extra-name",
+			true,
+			"query from internal-console-extra-name not found on logs with internal_console cluster setting enabled",
+		},
+	}
+
+	query := `SELECT count(*) FROM crdb_internal.statement_statistics`
+	for _, tc := range testData {
+		db.Exec(t, `SET application_name = $1`, tc.appName)
+		db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.internal_console.enabled = $1;`, tc.logInternalConsole)
+		db.Exec(t, query)
+		log.Flush()
+
+		entries, err := log.FetchEntriesFromFiles(
+			0,
+			math.MaxInt64,
+			10000,
+			regexp.MustCompile(`"EventType":"sampled_query"`),
+			log.WithMarkedSensitiveData,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) == 0 {
+			t.Fatal(errors.Newf("no entries found"))
+		}
+
+		found := false
+		for _, e := range entries {
+			if strings.Contains(e.Message, tc.appName) && strings.Contains(e.Message, query) {
+				found = true
+				break
+			}
+		}
+
+		if found != tc.logInternalConsole {
+			t.Errorf(tc.errorMessage)
+		}
+	}
+}
+
 func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := log.ScopeWithoutShowLogs(t)
