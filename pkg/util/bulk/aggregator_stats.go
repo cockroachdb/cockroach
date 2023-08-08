@@ -28,7 +28,7 @@ import (
 
 var flushTracingAggregatorFrequency = settings.RegisterDurationSetting(
 	settings.TenantWritable,
-	"bulkio.backup.aggregator_stats_flush_frequency",
+	"jobs.aggregator_stats_flush_frequency",
 	"frequency at which the coordinator node processes and persists tracing aggregator stats to storage",
 	10*time.Minute,
 )

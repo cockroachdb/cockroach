@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -76,7 +78,10 @@ type restoreDataProcessor struct {
 	// concurrent workers and sent down the flow by the processor.
 	progCh chan backuppb.RestoreProgress
 
-	agg *bulkutil.TracingAggregator
+	// Aggregator that aggregates StructuredEvents emitted in the
+	// restoreDataProcessors' trace recording.
+	agg      *bulkutil.TracingAggregator
+	aggTimer *timeutil.Timer
 
 	// qp is a MemoryBackedQuotaPool that restricts the amount of memory that
 	// can be used by this processor to open iterators on SSTs.
@@ -206,7 +211,7 @@ func newRestoreDataProcessor(
 			InputsToDrain: []execinfra.RowSource{input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				rd.ConsumerClosed()
-				return nil
+				return []execinfrapb.ProducerMetadata{*rd.constructTracingAggregatorProducerMeta(ctx)}
 			},
 		}); err != nil {
 		return nil, err
@@ -222,6 +227,8 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	ctx, rd.agg = bulkutil.MakeTracingAggregatorWithSpan(ctx, fmt.Sprintf("%s-aggregator", restoreDataProcName), rd.EvalCtx.Tracer)
+	rd.aggTimer = timeutil.NewTimer()
+	rd.aggTimer.Reset(15 * time.Second)
 
 	rd.cancelWorkersAndWait = func() {
 		cancel()
@@ -479,10 +486,6 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 			return err
 		}
 
-		ctx, agg := bulkutil.MakeTracingAggregatorWithSpan(ctx,
-			fmt.Sprintf("%s-worker-%d-aggregator", restoreDataProcName, worker), rd.EvalCtx.Tracer)
-		defer agg.Close()
-
 		var sstIter mergedSST
 		for {
 			done, err := func() (done bool, _ error) {
@@ -680,6 +683,33 @@ func makeProgressUpdate(
 	return progDetails
 }
 
+func (rd *restoreDataProcessor) constructTracingAggregatorProducerMeta(
+	ctx context.Context,
+) *execinfrapb.ProducerMetadata {
+	aggEvents := &execinfrapb.TracingAggregatorEvents{
+		SQLInstanceID: rd.flowCtx.NodeID.SQLInstanceID(),
+		FlowID:        rd.flowCtx.ID,
+		Events:        make(map[string][]byte),
+	}
+	rd.agg.ForEachAggregatedEvent(func(name string, event bulkutil.TracingAggregatorEvent) {
+		msg, ok := event.(protoutil.Message)
+		if !ok {
+			// This should never happen but if it does skip the aggregated event.
+			log.Warningf(ctx, "event is not a protoutil.Message: %T", event)
+			return
+		}
+		data := make([]byte, msg.Size())
+		if _, err := msg.MarshalTo(data); err != nil {
+			// This should never happen but if it does skip the aggregated event.
+			log.Warningf(ctx, "failed to unmarshal aggregated event: %v", err.Error())
+			return
+		}
+		aggEvents.Events[name] = data
+	})
+
+	return &execinfrapb.ProducerMetadata{AggregatorEvents: aggEvents}
+}
+
 // Next is part of the RowSource interface.
 func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if rd.State != execinfra.StateRunning {
@@ -702,14 +732,17 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 			return nil, rd.DrainHelper()
 		}
 		prog.ProgressDetails = *details
+		return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog}
+	case <-rd.aggTimer.C:
+		rd.aggTimer.Read = true
+		rd.aggTimer.Reset(15 * time.Second)
+		return nil, rd.constructTracingAggregatorProducerMeta(rd.Ctx())
 	case meta := <-rd.metaCh:
 		return nil, meta
 	case <-rd.Ctx().Done():
 		rd.MoveToDraining(rd.Ctx().Err())
 		return nil, rd.DrainHelper()
 	}
-
-	return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog}
 }
 
 // ConsumerClosed is part of the RowSource interface.
