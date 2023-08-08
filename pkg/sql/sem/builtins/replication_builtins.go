@@ -296,34 +296,28 @@ var replicationBuiltins = map[string]builtinDefinition{
 	),
 	"crdb_internal.setup_span_configs_stream": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryStreamIngestion,
-			Undocumented:     true,
-			DistsqlBlocklist: true,
+			Category:           builtinconstants.CategoryStreamIngestion,
+			Undocumented:       true,
+			DistsqlBlocklist:   true,
+			VectorizeStreaming: true,
 		},
-		tree.Overload{
-			Types: tree.ParamTypes{
+		makeGeneratorOverload(
+			tree.ParamTypes{
 				{Name: "tenant_name", Typ: types.String},
 			},
-			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			types.MakeLabeledTuple(
+				[]*types.T{types.Bytes},
+				[]string{"stream_event"},
+			),
+			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
 				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
 				}
-				tenantName := string(tree.MustBeDString(args[0]))
-				spec, err := mgr.SetupSpanConfigsStream(ctx, roachpb.TenantName(tenantName))
-				if err != nil {
-					return nil, err
-				}
-				rawSpec, err := protoutil.Marshal(spec)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDBytes(tree.DBytes(rawSpec)), err
+				return mgr.SetupSpanConfigsStream(ctx, roachpb.TenantName(tree.MustBeDString(args[0])))
 			},
-			Info: "This function can be used on the consumer side to setup a replication stream for " +
-				"the span configs of the tenant. The client can then run 'stream_partition' on a partition with the returned spec",
-			Volatility: volatility.Volatile,
-		},
+			"Stream span config updates for specified tenant",
+			volatility.Volatile,
+		),
 	),
 }

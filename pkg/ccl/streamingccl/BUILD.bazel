@@ -16,5 +16,6 @@ go_library(
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/util/hlc",
     ],
 )

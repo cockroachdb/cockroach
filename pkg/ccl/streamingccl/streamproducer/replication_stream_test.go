@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -31,10 +32,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -230,38 +235,6 @@ func testStreamReplicationStatus(
 	checkStreamStatus(t, hlc.MaxTimestamp, expectedStreamStatus)
 }
 
-func TestSpanConfigReplicationStreamSetup(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	serverArgs := base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		},
-	}
-
-	h, cleanup := replicationtestutils.NewReplicationHelper(t, serverArgs)
-	defer cleanup()
-	testTenantName := roachpb.TenantName("test-tenant")
-	h.SysSQL.Exec(t, "CREATE TENANT $1", testTenantName)
-	specs := h.SetupSpanConfigsReplicationStream(t, testTenantName)
-
-	var spanConfigTableID uint32
-	h.SysSQL.QueryRow(t, `SELECT id FROM system.namespace WHERE name = $1`,
-		systemschema.SpanConfigurationsTableName.Table()).Scan(&spanConfigTableID)
-	codec := keys.MakeSQLCodec(roachpb.SystemTenantID)
-	spanConfigKey := codec.TablePrefix(spanConfigTableID)
-	expectedSpan := roachpb.Span{Key: spanConfigKey, EndKey: spanConfigKey.PrefixEnd()}
-
-	require.Equal(t, 1, len(specs.Partitions))
-	require.Equal(t, 1, len(specs.Partitions[0].PartitionSpec.Spans))
-
-	require.NotEqual(t, 0, specs.SpanConfigStreamID)
-
-	require.Equal(t, expectedSpan, specs.Partitions[0].PartitionSpec.Spans[0])
-
-}
 func TestReplicationStreamInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -834,4 +807,219 @@ USE d;
 	require.Equal(t, t2Span.Key, receivedKVs[0].Key)
 	require.Equal(t, batchHLCTime, receivedKVs[0].Value.Timestamp)
 	require.Equal(t, expectedDelRanges, receivedDelRanges)
+}
+
+func TestStreamSpanConfigs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Use a dummy span config table to avoid dealing with the default span configs set on the tenant.
+	const dummySpanConfigurationsName = "dummy_span_configurations"
+	dummyFQN := tree.NewTableNameWithSchema("d", catconstants.PublicSchemaName, dummySpanConfigurationsName)
+
+	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			Streaming: &sql.StreamingTestingKnobs{
+				MockSpanConfigTableName: dummyFQN,
+			},
+		},
+	})
+	defer cleanup()
+
+	h.SysSQL.Exec(t, `
+CREATE DATABASE d;
+USE d;`)
+	h.SysSQL.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummyFQN))
+
+	tenantID := roachpb.MustMakeTenantID(uint64(10))
+	tenantName := roachpb.TenantName("app")
+
+	_, tenantCleanup := h.CreateTenant(t, tenantID, tenantName)
+	defer tenantCleanup()
+
+	tenantCodec := keys.MakeSQLCodec(tenantID)
+	accessor := spanconfigkvaccessor.New(
+		h.SysServer.DB(),
+		h.SysServer.InternalExecutor().(isql.Executor),
+		h.SysServer.ClusterSettings(),
+		h.SysServer.Clock(),
+		dummyFQN.String(),
+		nil, /* knobs */
+	)
+
+	const streamSpanConfigsQuery = `SELECT * FROM crdb_internal.setup_span_configs_stream($1)`
+	source, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
+		streamSpanConfigsQuery, tenantName)
+	defer feed.Close(ctx)
+
+	// Add a few more use cases:
+	// -  update a subset of the tenant key space
+
+	// makes a dummy span config record with the given ttl. If the ttl is 0,  no span config is added,
+	// and the record is treated as a delete record.
+	makeRecord := func(targetSpan roachpb.Span, ttl int) spanconfig.Record {
+		target := spanconfig.MakeTargetFromSpan(targetSpan)
+		var spanConfig roachpb.SpanConfig
+		if ttl > 0 {
+			spanConfig = roachpb.SpanConfig{
+				GCPolicy: roachpb.GCPolicy{
+					TTLSeconds: int32(ttl),
+				},
+			}
+		}
+		// check that all orderedUpdates are observed.
+		record, err := spanconfig.MakeRecord(target, spanConfig)
+		require.NoError(t, err)
+		return record
+	}
+
+	recordToEntry := func(record spanconfig.Record) roachpb.SpanConfigEntry {
+		t := record.GetTarget().ToProto()
+		c := record.GetConfig()
+		return roachpb.SpanConfigEntry{
+			Target: t,
+			Config: c,
+		}
+	}
+
+	makeTableSpan := func(highTableID uint32) roachpb.Span {
+		syntheticTableSpanPrefix := tenantCodec.TablePrefix(highTableID)
+		return roachpb.Span{Key: syntheticTableSpanPrefix, EndKey: syntheticTableSpanPrefix.PrefixEnd()}
+	}
+
+	irrelevantTenant := keys.MakeSQLCodec(roachpb.MustMakeTenantID(231))
+	relevantSpan := tenantCodec.TenantSpan()
+	t1Span, t2Span, t3Span := makeTableSpan(1001), makeTableSpan(1002), makeTableSpan(1003)
+	t123Span := roachpb.Span{Key: t1Span.Key, EndKey: t3Span.EndKey}
+	expectedSpanConfigs := makeSpanConfigUpdateRecorder()
+
+	expectedUpdateCount := 0
+	for ts, toApply := range []struct {
+		updates []spanconfig.Record
+		deletes []spanconfig.Target
+	}{
+		{
+			// This irrelevant span should not surface.
+			updates: []spanconfig.Record{makeRecord(irrelevantTenant.TenantSpan(), 3)},
+		},
+		{
+			updates: []spanconfig.Record{makeRecord(t1Span, 2)},
+		},
+		{
+			// Update the Span.
+			updates: []spanconfig.Record{makeRecord(t1Span, 3)},
+		},
+		{
+			// Add Two new records at the same time
+			updates: []spanconfig.Record{makeRecord(t2Span, 2), makeRecord(t3Span, 5)},
+		},
+		{
+			// Merge these Records
+			//
+			// TODO(msbutler): confirm this is the conventional merge request pattern: upsert the first
+			// record, delete the latter records. Adding a delete request for t2Span seems to noop and doesn't replicate.
+			deletes: []spanconfig.Target{spanconfig.MakeTargetFromSpan(t2Span), spanconfig.MakeTargetFromSpan(t3Span)},
+			updates: []spanconfig.Record{makeRecord(t123Span, 10)},
+		},
+		{
+			// Split the records
+			//
+			// TODO (msbutler): confirm this is the conventional split request pattern: no need to delete the big span, as the delete noops and doesn't replicate.
+			updates: []spanconfig.Record{makeRecord(t1Span, 1), makeRecord(t2Span, 2), makeRecord(t3Span, 3)},
+		},
+	} {
+		toApply := toApply
+		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toApply.deletes, toApply.updates,
+			hlc.MinTimestamp,
+			hlc.MaxTimestamp), "failed on update %d (index starts at 0)", ts)
+		for _, toDelete := range toApply.deletes {
+			deleteSpan := toDelete.GetSpan()
+			if relevantSpan.Contains(deleteSpan) {
+				deletedRecord := makeRecord(deleteSpan, 0)
+				require.True(t, expectedSpanConfigs.maybeAddNewRecord(recordToEntry(deletedRecord), int64(ts)))
+			}
+		}
+		for _, record := range toApply.updates {
+			if relevantSpan.Contains(record.GetTarget().GetSpan()) {
+				require.True(t, expectedSpanConfigs.maybeAddNewRecord(recordToEntry(record), int64(ts)))
+				expectedUpdateCount++
+			}
+		}
+
+	}
+	receivedSpanConfigs := makeSpanConfigUpdateRecorder()
+	codec := source.mu.codec.(*partitionStreamDecoder)
+	updateCount := 0
+	for {
+		source.mu.Lock()
+		require.True(t, source.mu.rows.Next())
+		source.mu.codec.decode()
+		if codec.e.Batch != nil {
+			for _, cfg := range codec.e.Batch.SpanConfigs {
+				if receivedSpanConfigs.maybeAddNewRecord(cfg.SpanConfig, cfg.Timestamp.WallTime) {
+					updateCount++
+				}
+			}
+		}
+		source.mu.Unlock()
+		if updateCount >= expectedUpdateCount {
+			break
+		}
+	}
+	require.Equal(t, expectedSpanConfigs.String(), receivedSpanConfigs.String())
+}
+
+type spanConfigUpdateRecorder struct {
+	allUpdates     map[string]struct{}
+	orderedUpdates []sortedSpanConfigUpdates
+	latestTime     int64
+}
+
+func (s *spanConfigUpdateRecorder) maybeAddNewRecord(
+	record roachpb.SpanConfigEntry, ts int64,
+) bool {
+	stringedUpdate := record.String() + fmt.Sprintf(" ts:%d", ts)
+	// TODO (msbutler): given that a batch can have repeat records, understand how to properly write those on the ingestion side.
+	if _, ok := s.allUpdates[stringedUpdate]; !ok {
+		s.allUpdates[stringedUpdate] = struct{}{}
+	} else {
+		return false
+	}
+	if ts > s.latestTime {
+		s.latestTime = ts
+		s.orderedUpdates = append(s.orderedUpdates, make(sortedSpanConfigUpdates, 0))
+	}
+	idx := len(s.orderedUpdates) - 1
+	s.orderedUpdates[idx] = append(s.orderedUpdates[idx], record)
+	sort.Sort(s.orderedUpdates[idx])
+	return true
+}
+
+func (s *spanConfigUpdateRecorder) String() string {
+	var b strings.Builder
+	for i, updates := range s.orderedUpdates {
+		b.WriteString(fmt.Sprintf("\n Ts %d:", i))
+		for _, update := range updates {
+			b.WriteString(fmt.Sprintf(" %s: ttl %d,", update.Target.GetSpan(), update.Config.GCPolicy.TTLSeconds))
+		}
+	}
+	return b.String()
+}
+
+func makeSpanConfigUpdateRecorder() spanConfigUpdateRecorder {
+	return spanConfigUpdateRecorder{
+		orderedUpdates: make([]sortedSpanConfigUpdates, 0),
+		allUpdates:     make(map[string]struct{}),
+	}
+}
+
+type sortedSpanConfigUpdates []roachpb.SpanConfigEntry
+
+func (a sortedSpanConfigUpdates) Len() int      { return len(a) }
+func (a sortedSpanConfigUpdates) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a sortedSpanConfigUpdates) Less(i, j int) bool {
+	return a[i].Target.GetSpan().Key.Compare(a[j].Target.GetSpan().Key) < 0
 }

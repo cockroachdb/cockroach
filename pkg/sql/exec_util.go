@@ -1789,6 +1789,8 @@ type StreamingTestingKnobs struct {
 	DistSQLRetryPolicy *retry.Options
 
 	AfterRetryIteration func(err error)
+
+	MockSpanConfigTableName *tree.TableName
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}

@@ -328,7 +328,7 @@ func completeReplicationStream(
 
 func setupSpanConfigsStream(
 	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, tenantName roachpb.TenantName,
-) (*streampb.ReplicationStreamSpec, error) {
+) (eval.ValueGenerator, error) {
 
 	tenantRecord, err := sql.GetTenantRecordByName(ctx, evalCtx.Settings, txn, tenantName)
 	if err != nil {
@@ -338,9 +338,14 @@ func setupSpanConfigsStream(
 	var spanConfigID descpb.ID
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 
+	spanConfigName := systemschema.SpanConfigurationsTableName
+	if knobs := execConfig.StreamingTestingKnobs; knobs != nil && knobs.MockSpanConfigTableName != nil {
+		spanConfigName = knobs.MockSpanConfigTableName
+	}
+
 	if err := sql.DescsTxn(ctx, execConfig, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		g := col.ByName(txn.KV()).Get()
-		_, imm, err := descs.PrefixAndTable(ctx, g, systemschema.SpanConfigurationsTableName)
+		_, imm, err := descs.PrefixAndTable(ctx, g, spanConfigName)
 		if err != nil {
 			return err
 		}
@@ -349,11 +354,19 @@ func setupSpanConfigsStream(
 	}); err != nil {
 		return nil, err
 	}
+
 	spanConfigKey := evalCtx.Codec.TablePrefix(uint32(spanConfigID))
 
 	// TODO(msbutler): crop this span to the keyspan within the span config
 	// table relevant to this specific tenant once I teach the client.Subscribe()
 	// to stream span configs, which will make testing easier.
 	span := roachpb.Span{Key: spanConfigKey, EndKey: spanConfigKey.PrefixEnd()}
-	return buildReplicationStreamSpec(ctx, evalCtx, tenantID, true, roachpb.Spans{span})
+
+	spec := streampb.StreamPartitionSpec{
+		Spans: roachpb.Spans{span},
+		Config: streampb.StreamPartitionSpec_ExecutionConfig{
+			MinCheckpointFrequency: streamingccl.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV),
+			SpanConfigForTenant:    tenantID,
+		}}
+	return streamSpanConfigPartition(evalCtx, spec)
 }

@@ -55,7 +55,7 @@ type Client interface {
 	// that apply to the passed in tenant, and returns the subscriptions the
 	// client can subscribe to. No protected timestamp or job is persisted to the
 	// source cluster.
-	SetupSpanConfigsStream(ctx context.Context, tenant roachpb.TenantName) (streampb.StreamID, Topology, error)
+	SetupSpanConfigsStream(ctx context.Context, tenant roachpb.TenantName) (Subscription, error)
 
 	// Dial checks if the source is able to be connected to for queries
 	Dial(ctx context.Context) error
@@ -148,7 +148,7 @@ type Subscription interface {
 
 // NewStreamClient creates a new stream client based on the stream address.
 func NewStreamClient(
-	ctx context.Context, streamAddress streamingccl.StreamAddress, db isql.DB,
+	ctx context.Context, streamAddress streamingccl.StreamAddress, db isql.DB, forSpanConfigs bool,
 ) (Client, error) {
 	var streamClient Client
 	streamURL, err := streamAddress.URL()
@@ -160,6 +160,9 @@ func NewStreamClient(
 	case "postgres", "postgresql":
 		// The canonical PostgreSQL URL scheme is "postgresql", however our
 		// own client commands also accept "postgres".
+		if forSpanConfigs {
+			return NewSpanConfigStreamClient(streamURL)
+		}
 		return NewPartitionedStreamClient(ctx, streamURL)
 	case "external":
 		if db == nil {
@@ -169,7 +172,7 @@ func NewStreamClient(
 		if err != nil {
 			return nil, err
 		}
-		return NewStreamClient(ctx, addr, db)
+		return NewStreamClient(ctx, addr, db, forSpanConfigs)
 	case RandomGenScheme:
 		streamClient, err = newRandomStreamClient(streamURL)
 		if err != nil {
@@ -206,7 +209,7 @@ func GetFirstActiveClient(ctx context.Context, streamAddresses []string) (Client
 	var combinedError error = nil
 	for _, address := range streamAddresses {
 		streamAddress := streamingccl.StreamAddress(address)
-		client, err := NewStreamClient(ctx, streamAddress, nil)
+		client, err := NewStreamClient(ctx, streamAddress, nil, false)
 		if err == nil {
 			err = client.Dial(ctx)
 			if err == nil {
