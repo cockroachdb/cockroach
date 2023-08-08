@@ -391,7 +391,9 @@ ALTER TABLE t DROP COLUMN IF EXISTS q
 statement error cannot drop column "e" because view "v" depends on it
 ALTER TABLE t DROP COLUMN IF EXISTS e
 
-statement ok
+# Negative test to assert that NOTICEs are NOT emitted if there are no indexes
+# being dropped.
+statement notice ^$
 ALTER TABLE t DROP COLUMN IF EXISTS e CASCADE
 
 statement ok
@@ -403,12 +405,16 @@ CREATE TABLE o (gf INT REFERENCES t (g), h INT, i INT, INDEX oi (i), INDEX oh (h
 statement error "t_g_key" is referenced by foreign key from table "o"
 ALTER TABLE t DROP COLUMN g
 
-statement ok
+statement notice NOTICE: dropping index "t_g_key" which depends on column "g"
 ALTER TABLE t DROP COLUMN g CASCADE
 
 # Dropping columns that are indexed or stored in indexes drops those indexes
-# too.
-statement ok
+# too. Excuse the nasty regex, the legacy schema changer emits additional
+# NOTICEs about GCing. We're not testing for that, so we just "eat" them.
+# Example: "NOTICE: the data for dropped indexes is reclaimed
+# asynchronously\nHINT: The reclamation delay can be customized in the zone
+# configuration for the table."
+statement notice (NOTICE: dropping index "(oh|oih)" which depends on column "h"(\nNOTICE: .+\nHINT: .+\n)?\n?){2}
 ALTER TABLE o DROP COLUMN h
 
 query TTBITTTBBBF colnames,rowsort
