@@ -424,6 +424,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&groupNode{}):                               "group",
 	reflect.TypeOf(&hookFnNode{}):                              "plugin",
 	reflect.TypeOf(&indexJoinNode{}):                           "index join",
+	reflect.TypeOf(&kvScanNode{}):                              "index scan",
 	reflect.TypeOf(&insertNode{}):                              "insert",
 	reflect.TypeOf(&insertFastPathNode{}):                      "insert fast path",
 	reflect.TypeOf(&invertedFilterNode{}):                      "inverted filter",

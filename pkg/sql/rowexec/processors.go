@@ -404,6 +404,9 @@ func NewProcessor(
 		}
 		return NewGenerativeSplitAndScatterProcessor(ctx, flowCtx, processorID, *core.GenerativeSplitAndScatter, post)
 	}
+	if core.KvScanReader != nil {
+		return newKvScan(ctx, flowCtx, processorID, *core.KvScanReader, post)
+	}
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 

@@ -1704,34 +1704,18 @@ func ValidateInvertedIndexes(
 
 		grp.GoCtx(func(ctx context.Context) error {
 			// KV scan can be used to get the index length.
-			// TODO (lucy): Switch to using DistSQL to get the count, so that we get
-			// distributed execution and avoid bypassing the SQL decoding
 			start := timeutil.Now()
-			var idxLen int64
-			span := tableDesc.IndexSpan(codec, idx.GetID())
-			key := span.Key
-			endKey := span.EndKey
-			if err := runHistoricalTxn.Exec(ctx, func(
-				ctx context.Context, txn descs.Txn,
-			) error {
-				for {
-					kvs, err := txn.KV().Scan(ctx, key, endKey, 1000000)
-					if err != nil {
-						return err
-					}
-					if len(kvs) == 0 {
-						break
-					}
-					idxLen += int64(len(kvs))
-					key = kvs[len(kvs)-1].Key.PrefixEnd()
-				}
-				return nil
-			}); err != nil {
+			idxLen, err := countIndexRowsAndMaybeCheckUniqueness(ctx,
+				tableDesc,
+				idx,
+				true, /*withFirstMutationPublic*/
+				runHistoricalTxn,
+				execOverride)
+			if err != nil {
 				return err
 			}
 			log.Infof(ctx, "inverted index %s/%s count = %d, took %s",
 				tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
-
 			select {
 			case <-countReady[i]:
 				if idxLen != expectedCount[i] {
@@ -2057,13 +2041,14 @@ func countIndexRowsAndMaybeCheckUniqueness(
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (int64, error) {
+	idxIsInverted := idx.GetType() == descpb.IndexDescriptor_INVERTED
 	// If we are doing a REGIONAL BY ROW locality change, we can
 	// bypass the uniqueness check below as we are only adding or
 	// removing an implicit partitioning column.  Scan the
 	// mutations if we're assuming the first mutation to be public
 	// to see if we have a locality config swap.
-	skipUniquenessChecks := false
-	if withFirstMutationPublic {
+	skipUniquenessChecks := idxIsInverted
+	if withFirstMutationPublic && !idxIsInverted {
 		mutations := tableDesc.AllMutations()
 		if len(mutations) > 0 {
 			mutationID := mutations[0].MutationID()
@@ -2127,6 +2112,10 @@ func countIndexRowsAndMaybeCheckUniqueness(
 		// as a filter to the query to force scanning the index.
 		if idx.IsPartial() {
 			query = fmt.Sprintf(`%s WHERE %s`, query, idx.GetPredicate())
+		}
+		// Inverted indexes can use a more trivial query.
+		if idxIsInverted {
+			query = fmt.Sprintf(`SELECT count(1) FROM crdb_internal.scan(crdb_internal.index_span(%d, %d))`, desc.GetID(), idx.GetID())
 		}
 		return txn.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
 			row, err := txn.QueryRowEx(ctx, "verify-idx-count", txn.KV(), execOverride, query)
