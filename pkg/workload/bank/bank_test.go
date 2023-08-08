@@ -37,7 +37,9 @@ func TestBank(t *testing.T) {
 		{10, 100, 10}, // don't make more ranges than rows
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
 	defer s.Stopper().Stop(ctx)
 	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE test`)

@@ -44,7 +44,9 @@ func TestSetup(t *testing.T) {
 		{10, 100, 4},
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
 	defer s.Stopper().Stop(ctx)
 	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE test`)

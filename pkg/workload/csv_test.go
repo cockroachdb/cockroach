@@ -76,7 +76,8 @@ func TestHandleCSV(t *testing.T) {
 }
 
 func BenchmarkWriteCSVRows(b *testing.B) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	var batches []coldata.Batch
 	for _, table := range tpcc.FromWarehouses(1).Tables() {

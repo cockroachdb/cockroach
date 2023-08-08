@@ -901,6 +901,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rogpeppe/fastuuid/com_github_rogpeppe_fastuuid-v1.2.0.zip": "f9b8293f5e20270e26fb4214ca7afec864de92c73d03ff62b5ee29d1db4e72a1",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rogpeppe/go-internal/com_github_rogpeppe_go_internal-v1.9.0.zip": "7d777908b9c91a1685f2d709550e6b7478e14e9c4699dffd7f0a150e36dbc7e9",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rs/cors/com_github_rs_cors-v1.8.0.zip": "9aeb6b48d7ba5d34187b40adaed8280f0690e6d9b4fd6132eccbd62aa2c0efd9",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rs/dnscache/com_github_rs_dnscache-v0.0.0-20230804202142-fc85eb664529.zip": "11e1fa18f7a18eac97b54b3726363598577ac0df7a6ce806f4775088593c0047",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rs/xid/com_github_rs_xid-v1.3.0.zip": "809ed1d8845fe5d73f6973e9b7a33eefd786cc97b1aebe493243e420b7c89958",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rs/zerolog/com_github_rs_zerolog-v1.15.0.zip": "8e98c48e7fd132aafbf129664e8fd65229d067d772bff4bd712a497b7a2f00c4",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/russross/blackfriday/com_github_russross_blackfriday-v1.6.0.zip": "8dbd018a896577afef870d49adc9a7cbdcef54f6edd97dcbbe1b53e7cd6d66d4",

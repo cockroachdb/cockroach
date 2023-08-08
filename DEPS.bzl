@@ -7667,6 +7667,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_rs_dnscache",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/rs/dnscache",
+        sha256 = "11e1fa18f7a18eac97b54b3726363598577ac0df7a6ce806f4775088593c0047",
+        strip_prefix = "github.com/rs/dnscache@v0.0.0-20230804202142-fc85eb664529",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rs/dnscache/com_github_rs_dnscache-v0.0.0-20230804202142-fc85eb664529.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_rs_xid",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/rs/xid",

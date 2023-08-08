@@ -205,6 +205,7 @@ require (
 	github.com/pseudomuto/protoc-gen-doc v1.3.2
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/rs/dnscache v0.0.0-20230804202142-fc85eb664529
 	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/shirou/gopsutil/v3 v3.21.12
 	github.com/slack-go/slack v0.9.5
