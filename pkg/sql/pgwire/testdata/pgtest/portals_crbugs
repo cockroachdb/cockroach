@@ -302,3 +302,71 @@ ReadyForQuery
 
 
 subtest end
+
+subtest functions_not_supported
+
+# We don't support UDFs in pausable portals since we don't allow mutations, and
+# UDFs may contain mutations. The following test results in a duplicate key
+# violation in postgres.
+
+send
+Query {"String": "SET multiple_active_portals_enabled = true"}
+----
+
+send
+Query {"String": "DROP TABLE IF EXISTS xy;"}
+Query {"String": "DROP FUNCTION IF EXISTS f;"}
+Query {"String": "DROP FUNCTION IF EXISTS g;"}
+Query {"String": "DEALLOCATE ALL;"}
+Query {"String": "CREATE TABLE xy (x INT PRIMARY KEY, y INT);"}
+Query {"String": "CREATE FUNCTION f() RETURNS SETOF RECORD LANGUAGE SQL AS $$ INSERT INTO xy VALUES (1, 1), (2, 2) RETURNING *; $$"}
+Query {"String": "CREATE FUNCTION g() RETURNS SETOF RECORD LANGUAGE SQL AS $$ INSERT INTO xy VALUES (2, 1), (3, 3) RETURNING *; $$"}
+Parse {"Name": "q1", "Query": "SELECT f();"}
+Parse {"Name": "q2", "Query": "SELECT g();"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q2"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Sync
+----
+
+until keepErrMessage
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ErrorResponse
+----
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"DROP FUNCTION"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"DROP FUNCTION"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE FUNCTION"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE FUNCTION"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ParseComplete"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"(1,1)"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v23.2"}
+
+subtest end

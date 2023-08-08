@@ -1629,14 +1629,24 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	var err error
+
 	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
 		if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 			err = ex.makeExecPlan(ctx, planner)
-			ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
-			ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(namedFunc{
-				fName: "close planTop",
-				f:     func() { ppInfo.dispatchToExecutionEngine.planTop.close(ctx) },
-			})
+			if flags := planner.curPlan.flags; err == nil && (flags.IsSet(planFlagContainsMutation) || flags.IsSet(planFlagIsDDL)) {
+				telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
+				// We don't allow mutations in a pausable portal. Set it back to
+				// an un-pausable (normal) portal.
+				planner.pausablePortal.pauseInfo = nil
+				err = res.RevokePortalPausability()
+				defer planner.curPlan.close(ctx)
+			} else {
+				ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
+				ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(namedFunc{
+					fName: "close planTop",
+					f:     func() { ppInfo.dispatchToExecutionEngine.planTop.close(ctx) },
+				})
+			}
 		} else {
 			planner.curPlan = ppInfo.dispatchToExecutionEngine.planTop
 		}
@@ -1759,6 +1769,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			// un-pausable (normal) portal.
 			// With pauseInfo is nil, no cleanup function will be added to the stack
 			// and all clean-up steps will be performed as for normal portals.
+			// TODO(harding): We may need to move resetting pauseInfo before we add
+			// the pausable portal cleanup step above.
 			planner.pausablePortal.pauseInfo = nil
 			// We need this so that the result consumption for this portal cannot be
 			// paused either.
