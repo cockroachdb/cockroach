@@ -55,11 +55,11 @@ type telemetryVisitor struct {
 	Err     error
 }
 
-var _ plpgsqltree.PLpgSQLStmtVisitor = &telemetryVisitor{}
+var _ plpgsqltree.StatementVisitor = &telemetryVisitor{}
 
-// Visit implements the PLpgSQLStmtVisitor interface
-func (v *telemetryVisitor) Visit(stmt plpgsqltree.PLpgSQLStatement) {
-	taggedStmt, ok := stmt.(plpgsqltree.TaggedPLpgSQLStatement)
+// Visit implements the StatementVisitor interface
+func (v *telemetryVisitor) Visit(stmt plpgsqltree.Statement) {
+	taggedStmt, ok := stmt.(plpgsqltree.TaggedStatement)
 	if !ok {
 		v.Err = errors.AssertionFailedf("no tag found for stmt %q", stmt)
 	}
