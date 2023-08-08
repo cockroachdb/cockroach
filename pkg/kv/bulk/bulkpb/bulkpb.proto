@@ -19,6 +19,8 @@ import "util/hlc/timestamp.proto";
 // IngestionPerformanceStats is a message containing information about the
 // creation of SSTables by an SSTBatcher or BufferingAdder.
 message IngestionPerformanceStats {
+  option (gogoproto.goproto_stringer) = false;
+
   // LogicalDataSize is the total byte size of all the KVs ingested.
   int64 logical_data_size = 1;
 

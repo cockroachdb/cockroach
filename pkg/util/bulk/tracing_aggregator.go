@@ -13,8 +13,10 @@ package bulk
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 // TracingAggregatorEvent describes an event that can be aggregated and stored by the
@@ -88,6 +90,24 @@ func (b *TracingAggregator) Notify(event tracing.Structured) tracing.EventConsum
 // NOTE: it must be called exactly once.
 func (b *TracingAggregator) Close() {
 	b.sp.Finish()
+}
+
+// TracingAggregatorEventToBytes marshals an event into a byte slice.
+func TracingAggregatorEventToBytes(
+	ctx context.Context, event TracingAggregatorEvent,
+) ([]byte, error) {
+	msg, ok := event.(protoutil.Message)
+	if !ok {
+		// This should never happen but if it does skip the aggregated event.
+		return nil, errors.Newf("event is not a protoutil.Message: %T", event)
+	}
+	data := make([]byte, msg.Size())
+	if _, err := msg.MarshalTo(data); err != nil {
+		// This should never happen but if it does skip the aggregated event.
+		return nil, errors.Newf("event is not a protoutil.Message: %T", event)
+	}
+
+	return data, nil
 }
 
 var _ tracing.EventListener = &TracingAggregator{}
