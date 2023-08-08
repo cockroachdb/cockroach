@@ -17,10 +17,12 @@ import (
 	"sync/atomic"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -308,6 +310,17 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 				}
 				continue
 			}
+
+			if m.cfg.knobs.captureMuxRangeFeedRequestSender != nil {
+				m.cfg.knobs.captureMuxRangeFeedRequestSender(
+					args.Replica.NodeID,
+					func(req *kvpb.RangeFeedRequest) error {
+						conn.mu.Lock()
+						defer conn.mu.Unlock()
+						return conn.mu.sender.Send(req)
+					})
+			}
+
 			return nil
 		}
 
@@ -441,7 +454,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 		}
 
 		if m.cfg.knobs.onRangefeedEvent != nil {
-			skip, err := m.cfg.knobs.onRangefeedEvent(ctx, active.Span, &event.RangeFeedEvent)
+			skip, err := m.cfg.knobs.onRangefeedEvent(ctx, active.Span, event.StreamID, &event.RangeFeedEvent)
 			if err != nil {
 				return err
 			}
@@ -603,4 +616,17 @@ func (c *muxStream) close() []*activeMuxRangeFeed {
 	c.mu.Unlock()
 
 	return toRestart
+}
+
+// NewCloseStreamRequest returns a mux rangefeed request to close specified stream.
+func NewCloseStreamRequest(
+	ctx context.Context, st *cluster.Settings, streamID int64,
+) (*kvpb.RangeFeedRequest, error) {
+	if !st.Version.IsActive(ctx, clusterversion.V23_2) {
+		return nil, errors.Newf("CloseStream request requires cluster version 23.2 or above, found %s", st.Version)
+	}
+	return &kvpb.RangeFeedRequest{
+		StreamID:    streamID,
+		CloseStream: true,
+	}, nil
 }

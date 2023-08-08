@@ -156,6 +156,22 @@ func TestSingleRoleAuditLogging(t *testing.T) {
 		`GRANT SELECT ON TABLE u TO root`,
 		// DML statement
 		`SELECT * FROM u`,
+		// The following statements are all executed specially by the conn_executor.
+		`SET application_name = 'test'`,
+		`SET CLUSTER SETTING sql.defaults.vectorize = 'on'`,
+		`BEGIN`,
+		`SHOW application_name`,
+		`SAVEPOINT s`,
+		`RELEASE SAVEPOINT s`,
+		`SAVEPOINT t`,
+		`ROLLBACK TO SAVEPOINT t`,
+		`COMMIT`,
+		`SHOW COMMIT TIMESTAMP`,
+		`BEGIN TRANSACTION PRIORITY LOW`,
+		`ROLLBACK`,
+		`PREPARE q AS SELECT 1`,
+		`EXECUTE q`,
+		`DEALLOCATE q`,
 	}
 	testData := []struct {
 		name            string
@@ -167,7 +183,7 @@ func TestSingleRoleAuditLogging(t *testing.T) {
 			name:            "test-all-stmt-types",
 			role:            allStmtTypesRole,
 			queries:         testQueries,
-			expectedNumLogs: 3,
+			expectedNumLogs: len(testQueries),
 		},
 		{
 			name:            "test-no-stmt-types",
@@ -181,7 +197,7 @@ func TestSingleRoleAuditLogging(t *testing.T) {
 			role:    "testuser",
 			queries: testQueries,
 			// One for each test query.
-			expectedNumLogs: 3,
+			expectedNumLogs: len(testQueries),
 		},
 	}
 

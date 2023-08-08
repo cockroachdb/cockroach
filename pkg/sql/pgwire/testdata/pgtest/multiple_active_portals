@@ -127,7 +127,7 @@ until keepErrMessage
 ErrorResponse
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42P03","Message":"portal \"p2\" already exists"}
+{"Type":"ErrorResponse","Code":"42P03","Message":"portal \"p2\" already exists","Detail":"statement name \"q3\"\n--\nportal name \"p2\"\n--\nstatement summary \"SELECT * FROM mytable\""}
 
 send
 Query {"String": "COMMIT"}

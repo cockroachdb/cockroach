@@ -84,3 +84,18 @@ ReadyForQuery
 ----
 {"Type":"ErrorResponse","Code":"23503","ConstraintName":"foo bar"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "s0", "Query": "select $1,$2,$3", "ParameterOIDs":[1043, 1043, 1043]}
+Bind {"DestinationPortal": "p0", "PreparedStatement": "s0", "ParameterFormatCodes": [0], "ResultFormatCodes": [0,1,2,3,4,5], "Parameters": [{"text":"whitebear"}, {"text":"blackbear"}, {"text":"brownbear"}]}
+Execute {"Portal": "p0"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

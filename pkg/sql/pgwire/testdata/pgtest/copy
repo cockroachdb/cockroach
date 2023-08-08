@@ -1078,7 +1078,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"08P01","Message":"bind message supplies 1 parameters, but prepared statement \"\" requires 0"}
+{"Type":"ErrorResponse","Code":"08P01","Message":"bind message supplies 1 parameters, but requires 0","Detail":"statement summary \"COPY (SELECT) TO STDOUT\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # And it's also an error to _not_ bind a placeholder.
