@@ -107,11 +107,13 @@ func (s *stmtStatsMetadata) jsonFields() jsonFields {
 type aggregatedMetadata appstatspb.AggregatedStatementMetadata
 
 func (s *aggregatedMetadata) jsonFields() jsonFields {
+	fullScan := s.FullScanCount > 0
 	return jsonFields{
 		{"db", (*stringArray)(&s.Databases)},
 		{"appNames", (*stringArray)(&s.AppNames)},
 		{"distSQLCount", (*jsonInt)(&s.DistSQLCount)},
 		{"failedCount", (*jsonInt)(&s.FailedCount)},
+		{"fullScan", (*jsonBool)(&fullScan)},
 		{"fullScanCount", (*jsonInt)(&s.FullScanCount)},
 		{"implicitTxn", (*jsonBool)(&s.ImplicitTxn)},
 		{"query", (*jsonString)(&s.Query)},

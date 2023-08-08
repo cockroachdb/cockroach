@@ -487,6 +487,77 @@ func TestStatusAPIStatements(t *testing.T) {
 	testPath(fmt.Sprintf("statements?combined=true&start=%d", aggregatedTs+60), nil)
 }
 
+func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	endpoint := "combinedstmts"
+
+	// Aug 30 2021 19:50:00 GMT+0000
+	aggregatedTs := int64(1630353000)
+	statsKnobs := sqlstats.CreateTestingKnobs()
+	statsKnobs.StubTimeNow = func() time.Time { return timeutil.Unix(aggregatedTs, 0) }
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: statsKnobs,
+			},
+		},
+	})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServerProto := testCluster.Server(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	var resp serverpb.StatementsResponse
+	// Test that non-admin without VIEWACTIVITY privileges cannot access.
+	err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, "combinedstmts", &resp, false)
+	if !testutils.IsError(err, "status: 403") {
+		t.Fatalf("expected privilege error, got %v", err)
+	}
+
+	thirdServerSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWACTIVITY TO %s", apiconstants.TestingUserNameNoAdmin().Normalized()))
+
+	statements := []struct {
+		stmt      string
+		respQuery string
+		fullScan  bool
+	}{
+		{stmt: `CREATE DATABASE football`, respQuery: `CREATE DATABASE football`, fullScan: false},
+		{stmt: `SET database = football`, respQuery: `SET database = football`, fullScan: false},
+		{stmt: `CREATE TABLE players (id INT PRIMARY KEY, name TEXT, position TEXT, age INT,goals INT)`, respQuery: `CREATE TABLE players (id INT8 PRIMARY KEY, name STRING, "position" STRING, age INT8, goals INT8)`, fullScan: false},
+		{stmt: `INSERT INTO players (id, name, position, age, goals) VALUES (1, 'Lionel Messi', 'Forward', 34, 672), (2, 'Cristiano Ronaldo', 'Forward', 36, 674)`, respQuery: `INSERT INTO players(id, name, "position", age, goals) VALUES (_, '_', __more1_10__), (__more1_10__)`, fullScan: false},
+		{stmt: `SELECT avg(goals) FROM players`, respQuery: `SELECT avg(goals) FROM players`, fullScan: true},
+		{stmt: `SELECT name FROM players WHERE age > 30`, respQuery: `SELECT name FROM players WHERE age > _`, fullScan: true},
+		{stmt: `DROP INDEX IF EXISTS idx_age`, respQuery: `DROP INDEX IF EXISTS idx_age`, fullScan: false},
+		{stmt: `CREATE INDEX idx_age ON players (age) STORING (name)`, respQuery: `CREATE INDEX idx_age ON players (age) STORING (name)`, fullScan: false},
+		{stmt: `SELECT name FROM players WHERE age < 32`, respQuery: `SELECT name FROM players WHERE age < _`, fullScan: false},
+	}
+
+	fullScanMap := make(map[string]bool)
+	for _, stmt := range statements {
+		thirdServerSQL.Exec(t, stmt.stmt)
+		fullScanMap[stmt.respQuery] = stmt.fullScan
+	}
+
+	if err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, endpoint, &resp, false); err != nil {
+		t.Fatal(err)
+	}
+
+	var statementsInResponse []appstatspb.StatementStatisticsKey
+	for _, respStatement := range resp.Statements {
+		statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData)
+	}
+
+	for _, respStatement := range statementsInResponse {
+		expected := fullScanMap[respStatement.Query]
+		actual := respStatement.FullScan
+		if actual != expected {
+			t.Fatalf("expected fullScan to be %v, got %v for %s", expected, actual, respStatement.Query)
+		}
+	}
+}
+
 func TestStatusAPICombinedStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -513,15 +584,17 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	statements := []struct {
 		stmt          string
 		fingerprinted string
+		fullScan      bool
 	}{
-		{stmt: `CREATE DATABASE roachblog`},
-		{stmt: `SET database = roachblog`},
-		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
+		{stmt: `CREATE DATABASE roachblog`, fullScan: false},
+		{stmt: `SET database = roachblog`, fullScan: false},
+		{stmt: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`, fullScan: false},
 		{
 			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
 			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
+			fullScan:      false,
 		},
-		{stmt: `SELECT * FROM posts`},
+		{stmt: `SELECT * FROM posts`, fullScan: true},
 	}
 
 	for _, stmt := range statements {
