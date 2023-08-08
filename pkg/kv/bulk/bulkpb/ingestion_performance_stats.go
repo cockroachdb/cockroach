@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/proto"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -87,9 +87,76 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 	}
 }
 
-// Tag implements the TracingAggregatorEvent interface.
+// ProtoName implements the TracingAggregatorEvent interface.
 func (s *IngestionPerformanceStats) ProtoName() string {
-	return reflect.TypeOf(s).Elem().String()
+	return proto.MessageName(s)
+}
+
+func (s *IngestionPerformanceStats) ToText() []byte {
+	return []byte(s.String())
+}
+
+// String implements the stringer interface.
+func (s *IngestionPerformanceStats) String() string {
+	const mb = 1 << 20
+	var b strings.Builder
+	if s.Batches > 0 {
+		b.WriteString(fmt.Sprintf("num_batches: %d\n", s.Batches))
+		b.WriteString(fmt.Sprintf("num_batches_due_to_size: %d\n", s.BatchesDueToSize))
+		b.WriteString(fmt.Sprintf("num_batches_due_to_range: %d\n", s.BatchesDueToRange))
+		b.WriteString(fmt.Sprintf("split_retries: %d\n", s.SplitRetries))
+	}
+
+	if s.BufferFlushes > 0 {
+		b.WriteString(fmt.Sprintf("num_flushes: %d\n", s.BufferFlushes))
+		b.WriteString(fmt.Sprintf("num_flushes_due_to_size: %d\n", s.FlushesDueToSize))
+	}
+
+	if s.LogicalDataSize > 0 {
+		logicalDataSizeMB := float64(s.LogicalDataSize) / mb
+		b.WriteString(fmt.Sprintf("logical_data_size: %.2f MB\n", logicalDataSizeMB))
+
+		if !s.CurrentFlushTime.IsEmpty() && !s.LastFlushTime.IsEmpty() {
+			duration := s.CurrentFlushTime.GoTime().Sub(s.LastFlushTime.GoTime())
+			throughput := logicalDataSizeMB / duration.Seconds()
+			b.WriteString(fmt.Sprintf("logical_throughput: %.2f MB/s\n", throughput))
+		}
+	}
+
+	if s.SSTDataSize > 0 {
+		sstDataSizeMB := float64(s.SSTDataSize) / mb
+		b.WriteString(fmt.Sprintf("sst_data_size: %.2f MB\n", sstDataSizeMB))
+
+		if !s.CurrentFlushTime.IsEmpty() && !s.LastFlushTime.IsEmpty() {
+			duration := s.CurrentFlushTime.GoTime().Sub(s.LastFlushTime.GoTime())
+			throughput := sstDataSizeMB / duration.Seconds()
+			b.WriteString(fmt.Sprintf("sst_throughput: %.2f MB/s\n", throughput))
+		}
+	}
+
+	timeString(&b, "fill_wait", s.FillWait)
+	timeString(&b, "sort_wait", s.SortWait)
+	timeString(&b, "flush_wait", s.FlushWait)
+	timeString(&b, "batch_wait", s.BatchWait)
+	timeString(&b, "send_wait", s.SendWait)
+	timeString(&b, "split_wait", s.SplitWait)
+	b.WriteString(fmt.Sprintf("splits: %d\n", s.Splits))
+	timeString(&b, "scatter_wait", s.ScatterWait)
+	b.WriteString(fmt.Sprintf("scatters: %d\n", s.Scatters))
+	b.WriteString(fmt.Sprintf("scatter_moved: %d\n", s.ScatterMoved))
+	timeString(&b, "commit_wait", s.CommitWait)
+
+	// Sort store send wait by IDs before adding them as tags.
+	ids := make(roachpb.StoreIDSlice, 0, len(s.SendWaitByStore))
+	for i := range s.SendWaitByStore {
+		ids = append(ids, i)
+	}
+	sort.Sort(ids)
+	for _, id := range ids {
+		timeString(&b, fmt.Sprintf("store-%d_send_wait", id), s.SendWaitByStore[id])
+	}
+
+	return b.String()
 }
 
 // Render implements the TracingAggregatorEvent interface.
@@ -196,6 +263,10 @@ func timeKeyValue(key attribute.Key, time time.Duration) attribute.KeyValue {
 		Key:   key,
 		Value: attribute.StringValue(string(humanizeutil.Duration(time))),
 	}
+}
+
+func timeString(b *strings.Builder, key string, time time.Duration) {
+	b.WriteString(fmt.Sprintf("%s: %s\n", key, string(humanizeutil.Duration(time))))
 }
 
 // LogTimings logs the timing ingestion stats.

@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -402,6 +403,20 @@ func restore(
 	}
 	tasks = append(tasks, generativeCheckpointLoop)
 
+	tracingAggCh := make(chan *execinfrapb.TracingAggregatorEvents)
+	tracingAggLoop := func(ctx context.Context) error {
+		if err := bulk.AggregateTracingStats(ctx, job.ID(),
+			execCtx.ExecCfg().Settings, execCtx.ExecCfg().InternalDB, tracingAggCh); err != nil {
+			log.Warningf(ctx, "failed to aggregate tracing stats: %v", err)
+			// Drain the channel if the loop to aggregate tracing stats has returned
+			// an error.
+			for range tracingAggCh {
+			}
+		}
+		return nil
+	}
+	tasks = append(tasks, tracingAggLoop)
+
 	runRestore := func(ctx context.Context) error {
 		if details.ExperimentalOnline {
 			log.Warningf(ctx, "EXPERIMENTAL ONLINE RESTORE being used")
@@ -422,21 +437,25 @@ func restore(
 				genSpan,
 			)
 		}
+		md := restoreJobMetadata{
+			jobID:                job.ID(),
+			dataToRestore:        dataToRestore,
+			restoreTime:          endTime,
+			encryption:           encryption,
+			kmsEnv:               kmsEnv,
+			uris:                 details.URIs,
+			backupLocalityInfo:   backupLocalityInfo,
+			spanFilter:           filter,
+			numImportSpans:       numImportSpans,
+			useSimpleImportSpans: simpleImportSpans,
+			execLocality:         details.ExecutionLocality,
+		}
 		return distRestore(
 			ctx,
 			execCtx,
-			job.ID(),
-			dataToRestore,
-			endTime,
-			encryption,
-			kmsEnv,
-			details.URIs,
-			backupLocalityInfo,
-			filter,
-			numImportSpans,
-			simpleImportSpans,
-			details.ExecutionLocality,
+			md,
 			progCh,
+			tracingAggCh,
 		)
 	}
 	tasks = append(tasks, runRestore)
