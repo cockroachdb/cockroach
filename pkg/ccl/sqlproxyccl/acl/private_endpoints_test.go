@@ -41,7 +41,7 @@ func TestPrivateEndpoints(t *testing.T) {
 				return nil, errors.New("foo")
 			},
 		}
-		err := p.CheckConnection(ctx, makeConn(""))
+		err := p.CheckConnection(ctx, makeConn("foo"))
 		require.EqualError(t, err, "foo")
 	})
 
