@@ -16,9 +16,11 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -88,6 +90,22 @@ func MakeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 		tlsConf = &tls.Config{RootCAs: roots}
 	}
 	t := http.DefaultTransport.(*http.Transport).Clone()
+	dialer := &net.Dialer{ // XXX:
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		Control: func(network, address string, c syscall.RawConn) error {
+			var operr error
+			if err := c.Control(func(fd uintptr) {
+				operr = syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_TOS, 0x08 /* IPTOS_THROUGHPUT */)
+				// https://github.com/tredeske/u/blob/master/unet/tos.go#L64
+
+			}); err != nil {
+				return err
+			}
+			return operr
+		},
+	}
+	t.DialContext = dialer.DialContext
 	// Add our custom CA.
 	t.TLSClientConfig = tlsConf
 	return &http.Client{Transport: t}, nil

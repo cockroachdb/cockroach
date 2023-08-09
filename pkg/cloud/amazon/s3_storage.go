@@ -538,7 +538,7 @@ func newClient(
 			conf.region = "default-region"
 		}
 
-		client, err := cloud.MakeHTTPClient(settings)
+		client, err := cloud.MakeHTTPClient(settings) // XXX: Creating conn
 		if err != nil {
 			return s3Client{}, "", err
 		}
@@ -756,7 +756,7 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 		defer sp.Finish()
 		// Upload the file to S3.
 		// TODO(dt): test and tune the uploader parameters.
-		_, err := uploader.UploadWithContext(ctx, &s3manager.UploadInput{
+		_, err := uploader.UploadWithContext(ctx, &s3manager.UploadInput{ // XXX: Where's the connection
 			Bucket:               s.bucket,
 			Key:                  aws.String(path.Join(s.prefix, basename)),
 			Body:                 r,
