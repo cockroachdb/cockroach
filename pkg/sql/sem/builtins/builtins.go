@@ -5520,7 +5520,7 @@ SELECT
 				minDuration := args[0].(*tree.DInterval).Duration
 				elapsed := duration.MakeDuration(int64(evalCtx.StmtTimestamp.Sub(evalCtx.TxnTimestamp)), 0, 0)
 				if elapsed.Compare(minDuration) < 0 {
-					return nil, evalCtx.Txn.GenerateForcedRetryableError(
+					return nil, evalCtx.Txn.GenerateForcedRetryableErr(
 						ctx, "forced by crdb_internal.force_retry()")
 				}
 				return tree.DZero, nil

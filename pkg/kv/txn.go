@@ -1398,20 +1398,18 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) error {
 	return txn.mu.sender.SetFixedTimestamp(ctx, ts)
 }
 
-// GenerateForcedRetryableError returns a TransactionRetryWithProtoRefreshError
+// GenerateForcedRetryableErr returns a TransactionRetryWithProtoRefreshError
 // that will cause the txn to be retried.
 //
 // The transaction's epoch is bumped, simulating to an extent what the
 // TxnCoordSender does on retriable errors. The transaction's timestamp is only
-// bumped to the extent that txn.ReadTimestamp is racheted up to txn.WriteTimestamp.
+// bumped to the extent that txn.ReadTimestamp is ratcheted up to txn.WriteTimestamp.
 // TODO(andrei): This method should take in an up-to-date timestamp, but
 // unfortunately its callers don't currently have that handy.
 //
 // As with other transaction retry errors, the caller must call PrepareForRetry
 // before continuing to use the transaction.
-func (txn *Txn) GenerateForcedRetryableError(
-	ctx context.Context, msg redact.RedactableString,
-) error {
+func (txn *Txn) GenerateForcedRetryableErr(ctx context.Context, msg redact.RedactableString) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	now := txn.db.clock.NowAsClockTimestamp()

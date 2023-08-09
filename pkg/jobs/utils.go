@@ -188,11 +188,11 @@ func isJobInfoTableDoesNotExistError(err error) bool {
 // https://github.com/cockroachdb/cockroach/issues/106764.
 func MaybeGenerateForcedRetryableError(ctx context.Context, txn *kv.Txn, err error) error {
 	if err != nil && isJobTypeColumnDoesNotExistError(err) {
-		return txn.GenerateForcedRetryableError(ctx, "synthetic error "+
+		return txn.GenerateForcedRetryableErr(ctx, "synthetic error "+
 			"to push timestamp to after the `job_type` upgrade has run")
 	}
 	if err != nil && isJobInfoTableDoesNotExistError(err) {
-		return txn.GenerateForcedRetryableError(ctx, "synthetic error "+
+		return txn.GenerateForcedRetryableErr(ctx, "synthetic error "+
 			"to push timestamp to after the `job_info` upgrade has run")
 	}
 	return err
