@@ -13,6 +13,7 @@ sql admin
   "database": "system",
   "execute": false,
   "max_result_size": 10000,
+  "separate_txns": false,
   "statements": [
    {
     "arguments": [
