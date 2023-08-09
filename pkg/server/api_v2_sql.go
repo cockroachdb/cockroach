@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -196,35 +197,41 @@ var SQLAPIClock timeutil.TimeSource = timeutil.DefaultTimeSource{}
 //	                  type: array
 //	                  description: The result rows.
 //	                  items: {}
+
+// Type for the request.
+type requestType struct {
+	Timeout         string      `json:"timeout"`
+	MaxResultSize   int         `json:"max_result_size"`
+	Database        string      `json:"database"`
+	ApplicationName string      `json:"application_name"`
+	Execute         bool        `json:"execute"`
+	SeparateTxns    bool        `json:"separate_txns"`
+	Statements      []statement `json:"statements"`
+}
+
+type statement struct {
+	SQL       string                               `json:"sql"`
+	stmt      statements.Statement[tree.Statement] `json:"-"`
+	Arguments []interface{}                        `json:"arguments,omitempty"`
+}
+
+// Type for the result.
+type txnResult struct {
+	Statement    int               `json:"statement"` // index of statement in request.
+	Tag          string            `json:"tag"`       // SQL statement tag.
+	Start        jsonTime          `json:"start"`     // start timestamp.
+	End          jsonTime          `json:"end"`       // end timestamp.
+	RowsAffected int               `json:"rows_affected"`
+	Columns      columnsDefinition `json:"columns,omitempty"`
+	Rows         []resultRow       `json:"rows,omitempty"`
+	Error        *jsonError        `json:"error,omitempty"`
+}
+type execResult struct {
+	Retries    int         `json:"retries,omitempty"`
+	TxnResults []txnResult `json:"txn_results"`
+}
+
 func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
-	// Type for the request.
-	type requestType struct {
-		Timeout         string `json:"timeout"`
-		MaxResultSize   int    `json:"max_result_size"`
-		Database        string `json:"database"`
-		ApplicationName string `json:"application_name"`
-		Execute         bool   `json:"execute"`
-		Statements      []struct {
-			SQL       string                               `json:"sql"`
-			stmt      statements.Statement[tree.Statement] `json:"-"`
-			Arguments []interface{}                        `json:"arguments,omitempty"`
-		} `json:"statements"`
-	}
-	// Type for the result.
-	type txnResult struct {
-		Statement    int               `json:"statement"` // index of statement in request.
-		Tag          string            `json:"tag"`       // SQL statement tag.
-		Start        jsonTime          `json:"start"`     // start timestamp.
-		End          jsonTime          `json:"end"`       // end timestamp.
-		RowsAffected int               `json:"rows_affected"`
-		Columns      columnsDefinition `json:"columns,omitempty"`
-		Rows         []resultRow       `json:"rows,omitempty"`
-		Error        *jsonError        `json:"error,omitempty"`
-	}
-	type execResult struct {
-		Retries    int         `json:"retries,omitempty"`
-		TxnResults []txnResult `json:"txn_results"`
-	}
 	var result struct {
 		Error         *jsonError   `json:"error,omitempty"`
 		NumStatements int          `json:"num_statements,omitempty"`
@@ -364,95 +371,143 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 	options := []isql.TxnOption{
 		isql.WithPriority(admissionpb.NormalPri),
 	}
-	result.Execution = &execResult{}
-	result.Execution.TxnResults = make([]txnResult, 0, len(requestPayload.Statements))
 
 	err = timeutil.RunWithTimeout(ctx, "run-sql-via-api", timeout, func(ctx context.Context) error {
-		retryNum := 0
-
-		return a.sqlServer.internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			result.Execution.TxnResults = result.Execution.TxnResults[:0]
-			result.Execution.Retries = retryNum
-			retryNum++
-			curSize := uintptr(0)
-			addSize := func(row tree.Datums) error {
-				for _, c := range row {
-					curSize += c.Size()
-				}
-				if curSize > uintptr(requestPayload.MaxResultSize) {
-					return errors.New("max result size exceeded")
-				}
-				return nil
+		if !requestPayload.SeparateTxns {
+			execRes, _, err := a.runSingleTxn(ctx, 0, 0, username, requestPayload, requestPayload.Statements, options)
+			result.Execution = execRes
+			return err
+		}
+		// Run a separate transaction for each statement.
+		result.Execution = &execResult{}
+		numTotalStmts := 0
+		totalSize := uintptr(0)
+		var responseErr error
+		for _, stmt := range requestPayload.Statements {
+			execRes, newTotalSize, txnErr := a.runSingleTxn(ctx, numTotalStmts, totalSize, username, requestPayload, []statement{stmt}, options)
+			result.Execution.Retries += execRes.Retries
+			result.Execution.TxnResults = append(result.Execution.TxnResults, execRes.TxnResults...)
+			if txnErr != nil {
+				responseErr = txnErr
 			}
-
-			for stmtIdx, stmt := range requestPayload.Statements {
-				// Is server shutting down? Or query timing out?
-				if err := a.shouldStop(ctx); err != nil {
-					return err
-				}
-
-				result.Execution.TxnResults = append(result.Execution.TxnResults, txnResult{})
-				txnRes := &result.Execution.TxnResults[stmtIdx]
-
-				returnType := stmt.stmt.AST.StatementReturnType()
-				stmtErr := func() (retErr error) {
-					txnRes.Start = jsonTime(SQLAPIClock.Now())
-					txnRes.Statement = stmtIdx + 1
-					txnRes.Tag = stmt.stmt.AST.StatementTag()
-					defer func() {
-						txnRes.End = jsonTime(SQLAPIClock.Now())
-						if retErr != nil {
-							retErr = errors.Wrapf(retErr, "executing stmt %d", stmtIdx+1)
-							txnRes.Error = &jsonError{retErr}
-						}
-					}()
-
-					it, err := txn.QueryIteratorEx(ctx, "run-query-via-api", txn.KV(),
-						sessiondata.InternalExecutorOverride{
-							User:            username,
-							Database:        requestPayload.Database,
-							ApplicationName: requestPayload.ApplicationName,
-						},
-						stmt.SQL, stmt.Arguments...)
-					if err != nil {
-						return err
-					}
-					// We have to make sure to close the iterator since we might return from the
-					// for loop early (before Next() returns false).
-					defer func(it isql.Rows) {
-						if returnType == tree.RowsAffected || (returnType != tree.Rows && it.RowsAffected() > 0) {
-							txnRes.RowsAffected = it.RowsAffected()
-						}
-						retErr = errors.CombineErrors(retErr, it.Close())
-					}(it)
-					ok, err := it.Next(ctx)
-					if err != nil {
-						return err
-					}
-
-					txnRes.Columns = columnsDefinition(it.Types())
-					for ; ok; ok, err = it.Next(ctx) {
-						if err := a.shouldStop(ctx); err != nil {
-							return err
-						}
-						txnRes.Rows = append(txnRes.Rows,
-							resultRow{cols: it.Types(), row: it.Cur()})
-						if err := addSize(it.Cur()); err != nil {
-							return err
-						}
-					}
-					return err
-				}()
-				if stmtErr != nil {
-					return stmtErr
-				}
-			}
-			return nil
-		}, options...)
+			numTotalStmts++
+			totalSize = newTotalSize
+		}
+		// If we encounter an error with any transaction, return a generic error.
+		// Transaction-specific errors are captured at the statement level.
+		if responseErr != nil {
+			responseErr = errors.New("separate transaction payload encountered transaction error(s)")
+		}
+		return responseErr
 	})
 	if err != nil {
 		result.Error = &jsonError{err}
 	}
+}
+
+func (a *apiV2Server) runSingleTxn(
+	ctx context.Context,
+	numTotalStmts int,
+	totalSize uintptr,
+	username username.SQLUsername,
+	requestPayload requestType,
+	stmts []statement,
+	options []isql.TxnOption,
+) (execRes *execResult, newTotalSize uintptr, txnErr error) {
+	retryNum := 0
+	newTotalSize = totalSize
+	execRes = &execResult{TxnResults: make([]txnResult, 0, len(stmts))}
+	txnErr = a.sqlServer.internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		execRes.TxnResults = execRes.TxnResults[:0]
+		execRes.Retries = retryNum
+		retryNum++
+		curSize := uintptr(0)
+		checkSize := func(size uintptr) error {
+			if size > uintptr(requestPayload.MaxResultSize) {
+				return errors.New("max result size exceeded")
+			}
+			return nil
+		}
+		addSize := func(row tree.Datums) error {
+			for _, c := range row {
+				curSize += c.Size()
+			}
+			return checkSize(totalSize + curSize)
+		}
+
+		for stmtIdx, stmt := range stmts {
+			// Is server shutting down? Or query timing out?
+			if err := a.shouldStop(ctx); err != nil {
+				return err
+			}
+
+			execRes.TxnResults = append(execRes.TxnResults, txnResult{})
+			txnRes := &execRes.TxnResults[stmtIdx]
+
+			returnType := stmt.stmt.AST.StatementReturnType()
+			stmtErr := func() (retErr error) {
+				txnRes.Start = jsonTime(SQLAPIClock.Now())
+				txnRes.Statement = numTotalStmts + stmtIdx + 1
+				txnRes.Tag = stmt.stmt.AST.StatementTag()
+				defer func() {
+					newTotalSize += curSize
+					txnRes.End = jsonTime(SQLAPIClock.Now())
+					if retErr != nil {
+						retErr = errors.Wrapf(retErr, "executing stmt %d", numTotalStmts+stmtIdx+1)
+						txnRes.Error = &jsonError{retErr}
+					}
+				}()
+
+				// If the max size has been exceeded by previous statements/transactions
+				// avoid executing, return immediately.
+				err := checkSize(totalSize + curSize)
+				if err != nil {
+					return err
+				}
+
+				it, err := txn.QueryIteratorEx(ctx, "run-query-via-api", txn.KV(),
+					sessiondata.InternalExecutorOverride{
+						User:            username,
+						Database:        requestPayload.Database,
+						ApplicationName: requestPayload.ApplicationName,
+					},
+					stmt.SQL, stmt.Arguments...)
+				if err != nil {
+					return err
+				}
+				// We have to make sure to close the iterator since we might return from the
+				// for loop early (before Next() returns false).
+				defer func(it isql.Rows) {
+					if returnType == tree.RowsAffected || (returnType != tree.Rows && it.RowsAffected() > 0) {
+						txnRes.RowsAffected = it.RowsAffected()
+					}
+					retErr = errors.CombineErrors(retErr, it.Close())
+				}(it)
+				ok, err := it.Next(ctx)
+				if err != nil {
+					return err
+				}
+
+				txnRes.Columns = columnsDefinition(it.Types())
+				for ; ok; ok, err = it.Next(ctx) {
+					if err := a.shouldStop(ctx); err != nil {
+						return err
+					}
+					txnRes.Rows = append(txnRes.Rows,
+						resultRow{cols: it.Types(), row: it.Cur()})
+					if err := addSize(it.Cur()); err != nil {
+						return err
+					}
+				}
+				return err
+			}()
+			if stmtErr != nil {
+				return stmtErr
+			}
+		}
+		return nil
+	}, options...)
+	return execRes, newTotalSize, txnErr
 }
 
 type columnsDefinition colinfo.ResultColumns
