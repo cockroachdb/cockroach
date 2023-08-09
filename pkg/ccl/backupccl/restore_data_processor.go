@@ -211,7 +211,11 @@ func newRestoreDataProcessor(
 			InputsToDrain: []execinfra.RowSource{input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				rd.ConsumerClosed()
-				return []execinfrapb.ProducerMetadata{*rd.constructTracingAggregatorProducerMeta(ctx)}
+				meta := rd.constructTracingAggregatorProducerMeta(ctx)
+				if meta == nil {
+					return nil
+				}
+				return []execinfrapb.ProducerMetadata{*meta}
 			},
 		}); err != nil {
 		return nil, err
@@ -686,6 +690,9 @@ func makeProgressUpdate(
 func (rd *restoreDataProcessor) constructTracingAggregatorProducerMeta(
 	ctx context.Context,
 ) *execinfrapb.ProducerMetadata {
+	if rd.agg == nil {
+		return nil
+	}
 	aggEvents := &execinfrapb.TracingAggregatorEvents{
 		SQLInstanceID: rd.flowCtx.NodeID.SQLInstanceID(),
 		FlowID:        rd.flowCtx.ID,
@@ -748,7 +755,10 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 	rd.cancelWorkersAndWait()
 
 	rd.qp.Close(rd.Ctx())
-	rd.agg.Close()
+	if rd.agg != nil {
+		rd.agg.Close()
+	}
+	rd.aggTimer.Stop()
 	rd.InternalClose()
 }
 
