@@ -33,7 +33,7 @@ declare global {
 }
 
 export function fetchDataFromServer(): Promise<DataFromServer> {
-  return fetch("/uiconfig", {
+  return fetch("uiconfig", {
     method: "GET",
     headers: {
       Accept: "application/json",

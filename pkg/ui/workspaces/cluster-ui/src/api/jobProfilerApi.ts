@@ -13,7 +13,7 @@ import { fetchData } from "./fetchData";
 import { SqlExecutionRequest, executeInternalSql } from "./sqlApi";
 import { propsToQueryString } from "../util";
 
-const JOB_PROFILER_PATH = "/_status/job_profiler_execution_details";
+const JOB_PROFILER_PATH = "_status/job_profiler_execution_details";
 
 export type ListJobProfilerExecutionDetailsRequest =
   cockroach.server.serverpb.ListJobProfilerExecutionDetailsRequest;
@@ -30,7 +30,7 @@ export const listExecutionDetailFiles = (
 ): Promise<cockroach.server.serverpb.ListJobProfilerExecutionDetailsResponse> => {
   return fetchData(
     cockroach.server.serverpb.ListJobProfilerExecutionDetailsResponse,
-    `/_status/list_job_profiler_execution_details/${req.job_id}`,
+    `_status/list_job_profiler_execution_details/${req.job_id}`,
     null,
     null,
     "30M",
