@@ -40,12 +40,13 @@ func runDecommissionMixedVersions(
 
 	h := newDecommTestHelper(t, c)
 
-	// The v20.2 CLI can only be run against servers running v20.2. For this
-	// reason, we grab a handle on a specific server slated for an upgrade.
 	pinnedUpgrade := h.getRandNode()
 	t.L().Printf("pinned n%d for upgrade", pinnedUpgrade)
 
-	const suspectDuration = 5 * time.Second
+	// NB: The suspect duration must be at least 10s, as versions 23.2 and
+	// beyond will reset to the default of 30s if it fails validation, even if
+	// set by a previous version.
+	const suspectDuration = 10 * time.Second
 
 	allNodes := c.All()
 	u := newVersionUpgradeTest(c,
@@ -61,7 +62,7 @@ func runDecommissionMixedVersions(
 
 		preloadDataStep(pinnedUpgrade),
 
-		// We upgrade a pinnedUpgrade and one other random node of the cluster to v20.2.
+		// We upgrade a pinned node and one other random node of the cluster to the current version.
 		binaryUpgradeStep(c.Node(pinnedUpgrade), clusterupgrade.MainVersion),
 		binaryUpgradeStep(c.Node(h.getRandNodeOtherThan(pinnedUpgrade)), clusterupgrade.MainVersion),
 		checkAllMembership(pinnedUpgrade, "active"),
@@ -101,7 +102,7 @@ func runDecommissionMixedVersions(
 		// Note also that this has to remain the last step unless we want this test to
 		// handle the fact that the decommissioned node will no longer be able
 		// to communicate with the cluster (i.e. most commands against it will fail).
-		// This is also why we're making sure to avoid decommissioning pinnedUpgrade
+		// This is also why we're making sure to avoid decommissioning the pinned node
 		// itself, as we use it to check the membership after.
 		fullyDecommissionStep(h.getRandNodeOtherThan(pinnedUpgrade), h.getRandNode(), ""),
 		checkOneMembership(pinnedUpgrade, "decommissioned"),
@@ -181,7 +182,7 @@ func fullyDecommissionStep(target, from int, binaryVersion string) versionStep {
 
 // checkOneDecommissioning checks against the `decommissioning` column in
 // crdb_internal.gossip_liveness, asserting that only one node is marked as
-// decommissioning. This check can be run against both v20.1 and v20.2 servers.
+// decommissioning.
 func checkOneDecommissioning(from int) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		// We use a retry block here (and elsewhere) because we're consulting
@@ -214,7 +215,7 @@ func checkOneDecommissioning(from int) versionStep {
 
 // checkNoDecommissioning checks against the `decommissioning` column in
 // crdb_internal.gossip_liveness, asserting that only no nodes are marked as
-// decommissioning. This check can be run against both v20.1 and v20.2 servers.
+// decommissioning.
 func checkNoDecommissioning(from int) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
@@ -237,8 +238,7 @@ func checkNoDecommissioning(from int) versionStep {
 
 // checkOneMembership checks against the `membership` column in
 // crdb_internal.gossip_liveness, asserting that only one node is marked with
-// the specified membership status. This check can be only be run against
-// servers running v20.2 and beyond.
+// the specified membership status.
 func checkOneMembership(from int, membership string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
@@ -268,8 +268,7 @@ func checkOneMembership(from int, membership string) versionStep {
 
 // checkAllMembership checks against the `membership` column in
 // crdb_internal.gossip_liveness, asserting that all nodes are marked with
-// the specified membership status. This check can be only be run against
-// servers running v20.2 and beyond.
+// the specified membership status.
 func checkAllMembership(from int, membership string) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
