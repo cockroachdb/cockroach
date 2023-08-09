@@ -1152,8 +1152,8 @@ func (tc *TxnCoordSender) RequiredFrontier() hlc.Timestamp {
 	return tc.mu.txn.RequiredFrontier()
 }
 
-// ManualRestart is part of the kv.TxnSender interface.
-func (tc *TxnCoordSender) ManualRestart(
+// GenerateForcedRetryableErr is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) GenerateForcedRetryableErr(
 	ctx context.Context, ts hlc.Timestamp, msg redact.RedactableString,
 ) error {
 	tc.mu.Lock()
