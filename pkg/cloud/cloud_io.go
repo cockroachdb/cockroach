@@ -96,9 +96,8 @@ func MakeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 		Control: func(network, address string, c syscall.RawConn) error {
 			var operr error
 			if err := c.Control(func(fd uintptr) {
-				operr = syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_TOS, 0x08 /* IPTOS_THROUGHPUT */)
+				operr = syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_TOS, 0x04 /* LE */)
 				// https://github.com/tredeske/u/blob/master/unet/tos.go#L64
-
 			}); err != nil {
 				return err
 			}
