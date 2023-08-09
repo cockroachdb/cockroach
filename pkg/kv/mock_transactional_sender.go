@@ -154,6 +154,24 @@ func (m *MockTransactionalSender) GenerateForcedRetryableErr(
 	return kvpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, m.txn)
 }
 
+// UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
+func (m *MockTransactionalSender) UpdateStateOnRemoteRetryableErr(
+	ctx context.Context, pErr *kvpb.Error,
+) *kvpb.Error {
+	panic("unimplemented")
+}
+
+// GetRetryableErr is part of the TxnSender interface.
+func (m *MockTransactionalSender) GetRetryableErr(
+	ctx context.Context,
+) *kvpb.TransactionRetryWithProtoRefreshError {
+	return nil
+}
+
+// ClearRetryableErr is part of the TxnSender interface.
+func (m *MockTransactionalSender) ClearRetryableErr(ctx context.Context) {
+}
+
 // IsSerializablePushAndRefreshNotPossible is part of the TxnSender interface.
 func (m *MockTransactionalSender) IsSerializablePushAndRefreshNotPossible() bool {
 	return false
@@ -190,13 +208,6 @@ func (m *MockTransactionalSender) Active() bool {
 	panic("unimplemented")
 }
 
-// UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
-func (m *MockTransactionalSender) UpdateStateOnRemoteRetryableErr(
-	ctx context.Context, pErr *kvpb.Error,
-) *kvpb.Error {
-	panic("unimplemented")
-}
-
 // DisablePipelining is part of the kv.TxnSender interface.
 func (m *MockTransactionalSender) DisablePipelining() error { return nil }
 
@@ -228,17 +239,6 @@ func (m *MockTransactionalSender) GetSteppingMode(context.Context) SteppingMode 
 // DeferCommitWait is part of the TxnSender interface.
 func (m *MockTransactionalSender) DeferCommitWait(ctx context.Context) func(context.Context) error {
 	panic("unimplemented")
-}
-
-// GetTxnRetryableErr is part of the TxnSender interface.
-func (m *MockTransactionalSender) GetTxnRetryableErr(
-	ctx context.Context,
-) *kvpb.TransactionRetryWithProtoRefreshError {
-	return nil
-}
-
-// ClearTxnRetryableErr is part of the TxnSender interface.
-func (m *MockTransactionalSender) ClearTxnRetryableErr(ctx context.Context) {
 }
 
 // HasPerformedReads is part of TxnSenderFactory.

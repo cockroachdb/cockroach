@@ -267,7 +267,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 // can be idle and aborted by a heartbeat failure. This test verifies that in
 // those cases the state of the handle ends up as txnRetryableError.
 // This is important to verify because if the handle stays in txnPending then
-// GetTxnRetryableErr() returns nil, and PrepareForRetry() will not reset the
+// GetRetryableErr() returns nil, and PrepareForRetry() will not reset the
 // handle.
 func TestDB_PrepareForRetryAfterHeartbeatFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -336,7 +336,7 @@ func TestDB_PrepareForRetryAfterHeartbeatFailure(t *testing.T) {
 
 	// At this point the handle should be in state txnRetryableError - verify we
 	// can read the error.
-	pErr := tc.GetTxnRetryableErr(ctx)
+	pErr := tc.GetRetryableErr(ctx)
 	require.NotNil(t, pErr)
 	require.Equal(t, txn.ID(), pErr.TxnID)
 	// The transaction was aborted, therefore we should have a new transaction ID.
@@ -662,7 +662,7 @@ func TestTxnCoordSenderCleanupOnCommitAfterRestart(t *testing.T) {
 
 	// Restart the transaction with a new epoch.
 	require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, s.Clock.Now(), "force retry"))
-	txn.Sender().ClearTxnRetryableErr(ctx)
+	txn.Sender().ClearRetryableErr(ctx)
 
 	// Now immediately commit.
 	require.NoError(t, txn.Commit(ctx))
@@ -2772,7 +2772,7 @@ func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
 				_, err := txn.Get(ctx, "k")
 				require.NoError(t, err)
 				require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, txn.ReadTimestamp().Next(), "force retry"))
-				txn.Sender().ClearTxnRetryableErr(ctx)
+				txn.Sender().ClearRetryableErr(ctx)
 			},
 		},
 		{
@@ -2780,7 +2780,7 @@ func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
 			before: func(t *testing.T, txn *kv.Txn) {
 				require.NoError(t, txn.Put(ctx, "k", "v"))
 				require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, txn.ReadTimestamp().Next(), "force retry"))
-				txn.Sender().ClearTxnRetryableErr(ctx)
+				txn.Sender().ClearRetryableErr(ctx)
 			},
 		},
 		{
@@ -2790,7 +2790,7 @@ func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, txn.Put(ctx, "k", "v"))
 				require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, txn.ReadTimestamp().Next(), "force retry"))
-				txn.Sender().ClearTxnRetryableErr(ctx)
+				txn.Sender().ClearRetryableErr(ctx)
 			},
 		},
 	} {

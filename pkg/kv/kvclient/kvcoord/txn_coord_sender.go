@@ -47,7 +47,7 @@ const (
 	// txnRetryableError means that the transaction encountered a
 	// TransactionRetryWithProtoRefreshError, and calls to Send() fail in this
 	// state. It is possible to move back to txnPending by calling
-	// ClearTxnRetryableErr().
+	// ClearRetryableErr().
 	txnRetryableError
 
 	// txnError means that a batch encountered a non-retriable error. Further
@@ -788,15 +788,6 @@ func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context) {
 	}
 }
 
-// UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
-func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
-	ctx context.Context, pErr *kvpb.Error,
-) *kvpb.Error {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	return kvpb.NewError(tc.handleRetryableErrLocked(ctx, pErr))
-}
-
 // handleRetryableErrLocked takes a retriable error and creates a
 // TransactionRetryWithProtoRefreshError containing the transaction that needs
 // to be used by the next attempt. It also handles various aspects of updating
@@ -1182,6 +1173,37 @@ func (tc *TxnCoordSender) GenerateForcedRetryableErr(
 	return pErr
 }
 
+// UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
+	ctx context.Context, pErr *kvpb.Error,
+) *kvpb.Error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return kvpb.NewError(tc.handleRetryableErrLocked(ctx, pErr))
+}
+
+// GetRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) GetRetryableErr(
+	ctx context.Context,
+) *kvpb.TransactionRetryWithProtoRefreshError {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnRetryableError {
+		return tc.mu.storedRetryableErr
+	}
+	return nil
+}
+
+// ClearRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) ClearRetryableErr(ctx context.Context) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnRetryableError {
+		tc.mu.storedRetryableErr = nil
+		tc.mu.txnState = txnPending
+	}
+}
+
 // IsSerializablePushAndRefreshNotPossible is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 	tc.mu.Lock()
@@ -1478,28 +1500,6 @@ func (tc *TxnCoordSender) DeferCommitWait(ctx context.Context) func(context.Cont
 			return nil
 		}
 		return tc.maybeCommitWait(ctx, true /* deferred */)
-	}
-}
-
-// GetTxnRetryableErr is part of the TxnSender interface.
-func (tc *TxnCoordSender) GetTxnRetryableErr(
-	ctx context.Context,
-) *kvpb.TransactionRetryWithProtoRefreshError {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	if tc.mu.txnState == txnRetryableError {
-		return tc.mu.storedRetryableErr
-	}
-	return nil
-}
-
-// ClearTxnRetryableErr is part of the TxnSender interface.
-func (tc *TxnCoordSender) ClearTxnRetryableErr(ctx context.Context) {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	if tc.mu.txnState == txnRetryableError {
-		tc.mu.storedRetryableErr = nil
-		tc.mu.txnState = txnPending
 	}
 }
 
