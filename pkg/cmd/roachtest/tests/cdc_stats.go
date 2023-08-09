@@ -28,7 +28,7 @@ var (
 	changefeedThroughputAgg = clusterstats.AggQuery{
 		Stat:  changefeedThroughput,
 		Query: "sum(rate(changefeed_emitted_bytes[1m]) / (1000 * 1000))",
-		Tag:   "Throughput (MBps)",
+		Tag:   "AWSVolumeThroughput (MBps)",
 	}
 
 	// cpuUsage is the sys_cpu_combined_percent_normalized prometheus metric per mode.

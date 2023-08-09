@@ -100,7 +100,7 @@ type ebsDisk struct {
 	VolumeType          string `json:"VolumeType"`
 	VolumeSize          int    `json:"VolumeSize"`
 	IOPs                int    `json:"Iops,omitempty"`
-	Throughput          int    `json:"Throughput,omitempty"`
+	Throughput          int    `json:"AWSVolumeThroughput,omitempty"`
 	DeleteOnTermination bool   `json:"DeleteOnTermination"`
 }
 
@@ -785,7 +785,7 @@ func (p *Provider) getVolumesForInstance(
 			Iops               int       `json:"Iops"`
 			VolumeType         string    `json:"VolumeType"`
 			MultiAttachEnabled bool      `json:"MultiAttachEnabled"`
-			Throughput         int       `json:"Throughput,omitempty"`
+			Throughput         int       `json:"AWSVolumeThroughput,omitempty"`
 			Tags               Tags      `json:"Tags,omitempty"`
 		} `json:"Volumes"`
 	}
