@@ -27,6 +27,7 @@ type MockTransactionalSender struct {
 		context.Context, *roachpb.Transaction, *kvpb.BatchRequest,
 	) (*kvpb.BatchResponse, *kvpb.Error)
 	txn roachpb.Transaction
+	pri roachpb.UserPriority
 }
 
 // NewMockTransactionalSender creates a MockTransactionalSender.
@@ -36,8 +37,9 @@ func NewMockTransactionalSender(
 		context.Context, *roachpb.Transaction, *kvpb.BatchRequest,
 	) (*kvpb.BatchResponse, *kvpb.Error),
 	txn *roachpb.Transaction,
+	pri roachpb.UserPriority,
 ) *MockTransactionalSender {
-	return &MockTransactionalSender{senderFunc: f, txn: *txn}
+	return &MockTransactionalSender{senderFunc: f, txn: *txn, pri: pri}
 }
 
 // Send is part of the TxnSender interface.
@@ -92,6 +94,7 @@ func (m *MockTransactionalSender) IsoLevel() isolation.Level {
 // SetUserPriority is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetUserPriority(pri roachpb.UserPriority) error {
 	m.txn.Priority = roachpb.MakePriority(pri)
+	m.pri = pri
 	return nil
 }
 
@@ -145,9 +148,9 @@ func (m *MockTransactionalSender) RequiredFrontier() hlc.Timestamp {
 
 // ManualRestart is part of the TxnSender interface.
 func (m *MockTransactionalSender) ManualRestart(
-	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp, msg redact.RedactableString,
+	ctx context.Context, ts hlc.Timestamp, msg redact.RedactableString,
 ) error {
-	m.txn.Restart(pri, 0 /* upgradePriority */, ts)
+	m.txn.Restart(m.pri, 0 /* upgradePriority */, ts)
 	return kvpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, m.txn)
 }
 
@@ -287,14 +290,14 @@ func MakeMockTxnSenderFactoryWithNonTxnSender(
 
 // RootTransactionalSender is part of TxnSenderFactory.
 func (f MockTxnSenderFactory) RootTransactionalSender(
-	txn *roachpb.Transaction, _ roachpb.UserPriority,
+	txn *roachpb.Transaction, pri roachpb.UserPriority,
 ) TxnSender {
-	return NewMockTransactionalSender(f.senderFunc, txn)
+	return NewMockTransactionalSender(f.senderFunc, txn, pri)
 }
 
 // LeafTransactionalSender is part of TxnSenderFactory.
 func (f MockTxnSenderFactory) LeafTransactionalSender(tis *roachpb.LeafTxnInputState) TxnSender {
-	return NewMockTransactionalSender(f.senderFunc, &tis.Txn)
+	return NewMockTransactionalSender(f.senderFunc, &tis.Txn, 0 /* pri */)
 }
 
 // NonTransactionalSender is part of TxnSenderFactory.

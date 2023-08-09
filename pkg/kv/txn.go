@@ -1415,7 +1415,7 @@ func (txn *Txn) GenerateForcedRetryableError(
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	now := txn.db.clock.NowAsClockTimestamp()
-	return txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now.ToTimestamp(), msg)
+	return txn.mu.sender.ManualRestart(ctx, now.ToTimestamp(), msg)
 }
 
 // IsSerializablePushAndRefreshNotPossible returns true if the transaction is
