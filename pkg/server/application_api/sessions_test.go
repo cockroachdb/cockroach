@@ -232,7 +232,7 @@ func TestStatusCancelSessionGatewayMetadataPropagation(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(ctx)
 
 	// Start a SQL session as admin on node 1.
@@ -256,7 +256,7 @@ func TestStatusAPIListSessions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(ctx)
 
 	serverProto := testCluster.Server(0)
@@ -319,7 +319,7 @@ func TestListClosedSessions(t *testing.T) {
 	skip.UnderStressRace(t, "active sessions")
 
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(ctx)
 
 	server := testCluster.Server(0)

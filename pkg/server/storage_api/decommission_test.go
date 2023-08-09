@@ -46,7 +46,7 @@ func TestDecommissionPreCheckInvalid(t *testing.T) {
 
 	// Set up test cluster.
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 4, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: decommissionTsArgs("a", "n1"),
@@ -89,7 +89,7 @@ func TestDecommissionPreCheckEvaluation(t *testing.T) {
 
 	// Set up test cluster.
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 7, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 7, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: tsArgs("ns1", "origin"),
@@ -209,7 +209,7 @@ func TestDecommissionPreCheckOddToEven(t *testing.T) {
 
 	// Set up test cluster.
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 5, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 5, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -334,7 +334,7 @@ func TestDecommissionPreCheckBasicReadiness(t *testing.T) {
 	skip.UnderRace(t) // can't handle 7-node clusters
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 7, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 7, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -358,7 +358,7 @@ func TestDecommissionPreCheckUnready(t *testing.T) {
 	skip.UnderRace(t) // can't handle 7-node clusters
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 7, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 7, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -506,7 +506,7 @@ func TestDecommissionPreCheckMultiple(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 5, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 5, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -572,7 +572,7 @@ func TestDecommissionPreCheckInvalidNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 5, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 5, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -638,7 +638,7 @@ func TestDecommissionSelf(t *testing.T) {
 
 	// Set up test cluster.
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 7, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 7, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -709,7 +709,7 @@ func TestDecommissionEnqueueReplicas(t *testing.T) {
 
 	ctx := context.Background()
 	enqueuedRangeIDs := make(chan roachpb.RangeID)
-	tc := serverutils.StartNewTestCluster(t, 7, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 7, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Insecure: true, // allows admin client without setting up certs
@@ -774,7 +774,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 	skip.UnderRace(t, "test uses timeouts, and race builds cause the timeouts to be exceeded")
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
 		ServerArgs: base.TestServerArgs{
 			// Disable the default test tenant for now as this tests fails

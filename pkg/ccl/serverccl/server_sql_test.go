@@ -72,7 +72,7 @@ func TestTenantCannotSetClusterSetting(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	}})
 	defer tc.Stopper().Stop(ctx)

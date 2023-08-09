@@ -92,7 +92,7 @@ func TestTenantTempTableCleanup(t *testing.T) {
 			},
 		},
 	}
-	tc := serverutils.StartNewTestCluster(
+	tc := serverutils.StartCluster(
 		t, 3 /* numNodes */, base.TestClusterArgs{ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				// Disable the default test tenant so that we can start it.

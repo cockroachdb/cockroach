@@ -35,7 +35,7 @@ func TestSpanStatsMetaScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 	s := testCluster.Server(0)
 
@@ -197,7 +197,7 @@ func BenchmarkSpanStats(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	createCluster := func(numNodes int) serverutils.TestClusterInterface {
-		return serverutils.StartNewTestCluster(b, numNodes,
+		return serverutils.StartCluster(b, numNodes,
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationAuto,
 			})

@@ -66,10 +66,10 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 
 	const n = 100
 
-	// NB: this test uses StartNewTestCluster because it depends on some
+	// NB: this test uses StartCluster because it depends on some
 	// cluster setting initializations that only testcluster does.
 	const numNodes = 1
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{UseDatabase: "test"},
 	})
 	defer tc.Stopper().Stop(context.Background())
@@ -271,7 +271,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	// We're going to setup a cluster with 4 nodes. The last one will not be a
 	// target of any replication so that its caches stay virgin.
 
-	tc := serverutils.StartNewTestCluster(t, 4, /* numNodes */
+	tc := serverutils.StartCluster(t, 4, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -392,7 +392,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 	const n = 100
 	const numNodes = 5
 
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs:      base.TestServerArgs{UseDatabase: "test"},
 	})
@@ -486,7 +486,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numNodes = 2
-	tc := serverutils.StartNewTestCluster(
+	tc := serverutils.StartCluster(
 		t,
 		numNodes,
 		base.TestClusterArgs{

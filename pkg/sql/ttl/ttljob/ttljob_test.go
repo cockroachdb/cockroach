@@ -108,7 +108,7 @@ func newRowLevelTTLTestJobTestHelper(
 		defaultTestTenant = base.TODOTestTenantDisabled
 	}
 
-	testCluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: replicationMode,
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: defaultTestTenant,

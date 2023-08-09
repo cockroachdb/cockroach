@@ -276,23 +276,23 @@ func InitTestClusterFactory(impl TestClusterFactory) {
 	clusterFactoryImpl = impl
 }
 
-// StartNewTestCluster creates and starts up a TestCluster made up of numNodes
-// in-memory testing servers. The cluster should be stopped using
+// StartCluster is a convenience function that calls
+// NewCluster() followed by Start() on the resulting cluster
+// instance. The caller remains responsible for calling
 // Stopper().Stop().
-func StartNewTestCluster(
-	t TestFataler, numNodes int, args base.TestClusterArgs,
-) TestClusterInterface {
-	cluster := NewTestCluster(t, numNodes, args)
+func StartCluster(t TestFataler, numNodes int, args base.TestClusterArgs) TestClusterInterface {
+	cluster := NewCluster(t, numNodes, args)
 	cluster.Start(t)
 	// Note: do not add logic here. To customize cluster configuration,
-	// add testing knobs and check them in testcluster.NewTestCluster.
-	// Not all tests use StartNewTestCluster.
+	// add testing knobs and check them in testcluster.NewTestCluster() or
+	// the (*TestCluster).Start() method.
+	// Not all tests use StartTestCluster().
 	return cluster
 }
 
-// NewTestCluster creates TestCluster made up of numNodes in-memory testing
+// NewCluster creates TestCluster made up of numNodes in-memory testing
 // servers. It can be started using the return type.
-func NewTestCluster(t TestFataler, numNodes int, args base.TestClusterArgs) TestClusterInterface {
+func NewCluster(t TestFataler, numNodes int, args base.TestClusterArgs) TestClusterInterface {
 	if clusterFactoryImpl == nil {
 		panic("TestClusterFactory not initialized. One needs to be injected " +
 			"from the package's TestMain()")

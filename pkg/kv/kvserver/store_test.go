@@ -2323,7 +2323,7 @@ func TestStoreScanIntentsRespectsLimit(t *testing.T) {
 	commitCh := make(chan struct{})
 	// intentsLaidDownCh is signalled when the writer is done laying down intents.
 	intentsLaidDownCh := make(chan struct{})
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &StoreTestingKnobs{

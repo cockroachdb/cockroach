@@ -247,7 +247,7 @@ func (tc testCase) runTest(
 		numNodes = 1
 	}
 	cfg.ServerArgs.DefaultTestTenant = base.TestControlsTenantsExplicitly
-	testCluster := serverutils.StartNewTestCluster(t, numNodes, cfg.TestClusterArgs)
+	testCluster := serverutils.StartCluster(t, numNodes, cfg.TestClusterArgs)
 	defer testCluster.Stopper().Stop(ctx)
 
 	testServer := testCluster.Server(0)

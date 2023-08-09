@@ -57,7 +57,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 4, base.TestClusterArgs{})
 
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)

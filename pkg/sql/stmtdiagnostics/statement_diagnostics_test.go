@@ -538,7 +538,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 2, base.TestClusterArgs{})
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 	db0 := tc.ServerConn(0)

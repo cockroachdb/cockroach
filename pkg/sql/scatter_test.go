@@ -39,7 +39,7 @@ func TestScatterRandomizeLeases(t *testing.T) {
 
 	const numHosts = 3
 
-	tc := serverutils.StartNewTestCluster(t, numHosts, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, numHosts, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	sqlutils.CreateTable(
