@@ -785,6 +785,9 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
+	// Configure drain to immediately cancel SQL queries and jobs to speed up the
+	// test and avoid timeouts.
+	serverutils.SetClusterSetting(t, tc, "server.shutdown.query_wait", 0)
 	serverutils.SetClusterSetting(t, tc, "server.shutdown.jobs_wait", 0)
 
 	scratchKey := tc.ScratchRange(t)
@@ -801,8 +804,8 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 		require.NoError(t, srv.Decommission(ctx, status, []roachpb.NodeID{decomSrv.NodeID()}))
 	}
 
-	testutils.SucceedsWithin(t, func() error {
-		timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	testutils.SucceedsSoon(t, func() error {
+		timeoutCtx, cancel := context.WithTimeout(ctx, testutils.DefaultSucceedsSoonDuration)
 		defer cancel()
 		_, err := decomSrv.DB().Scan(timeoutCtx, keys.LocalMax, keys.MaxKey, 0)
 		if err == nil {
@@ -813,7 +816,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			return nil
 		}
 		return err
-	}, 10*time.Second)
+	})
 
 	// Set up an admin client.
 	adminClient := decomSrv.GetAdminClient(t)
@@ -925,8 +928,8 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 	for _, tc := range testcases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			testutils.SucceedsWithin(t, func() error {
-				timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			testutils.SucceedsSoon(t, func() error {
+				timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 				defer cancel()
 				err := tc.op(timeoutCtx, adminClient)
 				if tc.expectCode == codes.OK {
@@ -945,7 +948,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 				}
 				require.Equal(t, tc.expectCode, s.Code(), "%+v", err)
 				return nil
-			}, 10*time.Second)
+			})
 		})
 	}
 }
