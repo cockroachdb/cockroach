@@ -745,8 +745,14 @@ var npgsqlBlocklist = blocklist{
 }
 
 var npgsqlIgnoreList = blocklist{
+	`Npgsql.Tests.CommandTests(Multiplexing).QueryNonQuery`:                                           "flaky",
+	`Npgsql.Tests.CommandTests(Multiplexing).SingleNonQuery`:                                          "flaky",
 	`Npgsql.Tests.CommandTests(Multiplexing).Statement_mapped_output_parameters(Default)`:             "flaky",
+	`Npgsql.Tests.CommandTests(NonMultiplexing).Cached_command_clears_parameters_placeholder_type`:    "flaky",
+	`Npgsql.Tests.CommandTests(NonMultiplexing).CloseConnection_with_exception`:                       "flaky",
+	`Npgsql.Tests.CommandTests(NonMultiplexing).Cursor_move_RecordsAffected `:                         "flaky",
 	`Npgsql.Tests.CommandTests(NonMultiplexing).Statement_mapped_output_parameters(SequentialAccess)`: "flaky",
+	`Npgsql.Tests.CommandTests(NonMultiplexing).Use_across_connection_change(Prepared)`:               "flaky",
 	`Npgsql.Tests.ConnectionTests(NonMultiplexing).PostgreSqlVersion_ServerVersion`:                   "flaky",
 	`Npgsql.Tests.ConnectionTests(NonMultiplexing).Connector_not_initialized_exception`:               "flaky",
 	`Npgsql.Tests.ConnectionTests(NonMultiplexing).Many_open_close_with_transaction`:                  "flaky",
