@@ -353,6 +353,56 @@ func maxSupportedTPCCWarehouses(
 	return warehouses
 }
 
+type backgroundFn func(ctx context.Context, u *versionUpgradeTest) error
+
+// A backgroundStepper is a tool to run long-lived commands while a cluster is
+// going through a sequence of version upgrade operations.
+// It exposes a `launch` step that launches the method carrying out long-running
+// work (in the background) and a `stop` step collecting any errors.
+type backgroundStepper struct {
+	// This is the operation that will be launched in the background. When the
+	// context gets canceled, it should shut down and return without an error.
+	// The way to typically get this is:
+	//
+	//  err := doSomething(ctx)
+	//  ctx.Err() != nil {
+	//    return nil
+	//  }
+	//  return err
+	run backgroundFn
+	// When not nil, called with the error within `.stop()`. The interceptor
+	// gets a chance to ignore the error or produce a different one (via t.Fatal).
+	onStop func(context.Context, test.Test, *versionUpgradeTest, error)
+	nodes  option.NodeListOption // nodes to monitor, defaults to c.All()
+
+	// Internal.
+	m cluster.Monitor
+}
+
+// launch spawns the function the background step was initialized with.
+func (s *backgroundStepper) launch(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+	nodes := s.nodes
+	if nodes == nil {
+		nodes = u.c.All()
+	}
+	s.m = u.c.NewMonitor(ctx, nodes)
+	s.m.Go(func(ctx context.Context) error {
+		return s.run(ctx, u)
+	})
+}
+
+func (s *backgroundStepper) wait(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+	// We don't care about the workload failing since we only use it to produce a
+	// few `RESTORE` jobs. And indeed workload will fail because it does not
+	// tolerate pausing of its jobs.
+	err := s.m.WaitE()
+	if s.onStop != nil {
+		s.onStop(ctx, t, u, err)
+	} else if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // runTPCCMixedHeadroom runs a mixed-version test that imports a large
 // `bank` dataset, and runs one or multiple database upgrades while a
 // TPCC workload is running. The number of database upgrades is
