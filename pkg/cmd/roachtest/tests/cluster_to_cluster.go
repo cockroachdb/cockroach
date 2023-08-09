@@ -749,6 +749,8 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.checkParticipatingNodes(ingestionJobID)
 
 	retainedTime := rd.getReplicationRetainedTime()
+	require.GreaterOrEqual(rd.t, cutoverTime, retainedTime,
+		"cannot cutover to a time below the retained time (did the test already fail?)")
 
 	rd.metrics.cutoverTo = newMetricSnapshot(metricSnapper, cutoverTime)
 	rd.metrics.cutoverStart = newMetricSnapshot(metricSnapper, timeutil.Now())
