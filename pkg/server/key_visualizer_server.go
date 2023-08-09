@@ -110,8 +110,13 @@ func (s *KeyVisualizerServer) getSamplesFromFanOut(
 	}
 
 	err := s.status.iterateNodes(ctx,
-		"iterating nodes for key visualizer samples", dialFn, nodeFn,
-		responseFn, errorFn)
+		"iterating nodes for key visualizer samples",
+		noTimeout,
+		dialFn,
+		nodeFn,
+		responseFn,
+		errorFn,
+	)
 	if err != nil {
 		return nil, err
 	}

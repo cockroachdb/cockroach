@@ -85,6 +85,7 @@ func (s *statusServer) Statements(
 	}
 
 	if err := s.iterateNodes(ctx, "statement statistics",
+		noTimeout,
 		dialFn,
 		nodeStatement,
 		func(nodeID roachpb.NodeID, resp interface{}) {

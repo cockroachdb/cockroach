@@ -79,6 +79,7 @@ func (s *statusServer) ResetSQLStats(
 	var fanoutError error
 
 	if err := s.iterateNodes(ctx, "reset SQL statistics",
+		noTimeout,
 		dialFn,
 		resetSQLStats,
 		func(nodeID roachpb.NodeID, resp interface{}) {

@@ -500,6 +500,7 @@ type systemStatusServer struct {
 	spanConfigReporter spanconfig.Reporter
 	rangeStatsFetcher  *rangestats.Fetcher
 	node               *Node
+	knobs              *TestingKnobs
 }
 
 // StmtDiagnosticsRequester is the interface into *stmtdiagnostics.Registry
@@ -618,6 +619,7 @@ func newSystemStatusServer(
 	clock *hlc.Clock,
 	rangeStatsFetcher *rangestats.Fetcher,
 	node *Node,
+	knobs *TestingKnobs,
 ) *systemStatusServer {
 	server := newStatusServer(
 		ambient,
@@ -645,6 +647,7 @@ func newSystemStatusServer(
 		spanConfigReporter: spanConfigReporter,
 		rangeStatsFetcher:  rangeStatsFetcher,
 		node:               node,
+		knobs:              knobs,
 	}
 }
 
@@ -1635,7 +1638,9 @@ func (s *statusServer) fetchProfileFromAllNodes(
 	errorFn := func(nodeID roachpb.NodeID, err error) {
 		response.profDataByNodeID[nodeID] = &profData{err: err}
 	}
-	if err := s.iterateNodes(ctx, opName, dialFn, nodeFn, responseFn, errorFn); err != nil {
+	if err := s.iterateNodes(
+		ctx, opName, noTimeout, dialFn, nodeFn, responseFn, errorFn,
+	); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
 	var data []byte
@@ -2053,7 +2058,13 @@ func (s *systemStatusServer) NetworkConnectivity(
 		response.ErrorsByNodeID[nodeID] = err.Error()
 	}
 
-	if err := s.iterateNodes(ctx, "network connectivity", dialFn, nodeFn, responseFn, errorFn); err != nil {
+	if err := s.iterateNodes(ctx, "network connectivity",
+		noTimeout,
+		dialFn,
+		nodeFn,
+		responseFn,
+		errorFn,
+	); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
 
@@ -2637,7 +2648,13 @@ func (s *systemStatusServer) HotRanges(
 		}
 	}
 
-	if err := s.iterateNodes(ctx, "hot ranges", dialFn, nodeFn, responseFn, errorFn); err != nil {
+	if err := s.iterateNodes(ctx, "hot ranges",
+		noTimeout,
+		dialFn,
+		nodeFn,
+		responseFn,
+		errorFn,
+	); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
 
@@ -2990,7 +3007,9 @@ func (s *statusServer) Range(
 	}
 
 	if err := s.iterateNodes(
-		ctx, fmt.Sprintf("details about range %d", req.RangeId), dialFn, nodeFn, responseFn, errorFn,
+		ctx, fmt.Sprintf("details about range %d", req.RangeId), noTimeout,
+		dialFn,
+		nodeFn, responseFn, errorFn,
 	); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -3019,6 +3038,7 @@ func (s *statusServer) ListLocalSessions(
 func (s *statusServer) iterateNodes(
 	ctx context.Context,
 	errorCtx string,
+	nodeFnTimeout time.Duration,
 	dialFn func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error),
 	nodeFn func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error),
 	responseFn func(nodeID roachpb.NodeID, resp interface{}),
@@ -3053,7 +3073,18 @@ func (s *statusServer) iterateNodes(
 			return
 		}
 
-		res, err := nodeFn(ctx, client, nodeID)
+		var res interface{}
+		if nodeFnTimeout == noTimeout {
+			res, err = nodeFn(ctx, client, nodeID)
+		} else {
+			err = timeutil.RunWithTimeout(ctx, "iterate-nodes-fn",
+				nodeFnTimeout, func(ctx context.Context) error {
+					var _err error
+					res, _err = nodeFn(ctx, client, nodeID)
+					return _err
+				})
+		}
+
 		if err != nil {
 			err = errors.Wrapf(err, "error requesting %s from node %d (%s)",
 				errorCtx, nodeID, nodeStatuses[serverID(nodeID)])
@@ -3116,7 +3147,9 @@ func (s *statusServer) paginatedIterateNodes(
 	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
 ) (next paginationState, err error) {
 	if limit == 0 {
-		return paginationState{}, s.iterateNodes(ctx, errorCtx, dialFn, nodeFn, responseFn, errorFn)
+		return paginationState{}, s.iterateNodes(ctx, errorCtx, noTimeout,
+			dialFn,
+			nodeFn, responseFn, errorFn)
 	}
 	nodeStatuses, err := s.serverIterator.getAllNodes(ctx)
 	if err != nil {
@@ -3462,7 +3495,9 @@ func (s *statusServer) ListContentionEvents(
 		response.Errors = append(response.Errors, errResponse)
 	}
 
-	if err := s.iterateNodes(ctx, "contention events list", dialFn, nodeFn, responseFn, errorFn); err != nil {
+	if err := s.iterateNodes(ctx, "contention events list", noTimeout,
+		dialFn, nodeFn,
+		responseFn, errorFn); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
 	return &response, nil
@@ -3509,7 +3544,9 @@ func (s *statusServer) ListDistSQLFlows(
 		response.Errors = append(response.Errors, errResponse)
 	}
 
-	if err := s.iterateNodes(ctx, "distsql flows list", dialFn, nodeFn, responseFn, errorFn); err != nil {
+	if err := s.iterateNodes(ctx, "distsql flows list", noTimeout, dialFn,
+		nodeFn,
+		responseFn, errorFn); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
 	return &response, nil
@@ -3569,7 +3606,9 @@ func (s *statusServer) ListExecutionInsights(
 		response.Errors = append(response.Errors, errors.EncodeError(ctx, err))
 	}
 
-	if err := s.iterateNodes(ctx, "execution insights list", dialFn, nodeFn, responseFn, errorFn); err != nil {
+	if err := s.iterateNodes(ctx, "execution insights list", noTimeout,
+		dialFn, nodeFn,
+		responseFn, errorFn); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
 	return &response, nil
@@ -3929,6 +3968,7 @@ func (s *statusServer) TransactionContentionEvents(
 	}
 
 	if err := s.iterateNodes(ctx, "txn contention events for node",
+		noTimeout,
 		dialFn,
 		rpcCallFn,
 		func(nodeID roachpb.NodeID, nodeResp interface{}) {
