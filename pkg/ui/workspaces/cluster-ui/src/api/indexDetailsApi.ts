@@ -31,7 +31,7 @@ export const getIndexStats = (
 ): Promise<TableIndexStatsResponse> => {
   return fetchData(
     cockroach.server.serverpb.TableIndexStatsResponse,
-    `/_status/databases/${req.database}/tables/${req.table}/indexstats`,
+    `_status/databases/${req.database}/tables/${req.table}/indexstats`,
     null,
     null,
     "30M",
@@ -44,7 +44,7 @@ export const resetIndexStats = (
 ): Promise<ResetIndexUsageStatsResponse> => {
   return fetchData(
     cockroach.server.serverpb.ResetIndexUsageStatsResponse,
-    "/_status/resetindexusagestats",
+    "_status/resetindexusagestats",
     cockroach.server.serverpb.ResetIndexUsageStatsRequest,
     req,
     "30M",
