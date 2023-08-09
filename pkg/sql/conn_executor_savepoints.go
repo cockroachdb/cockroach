@@ -152,6 +152,12 @@ func (ex *connExecutor) execRelease(
 		// Committing the transaction failed. We'll go to state RestartWait if
 		// it's a retriable error, or to state RollbackWait otherwise.
 		if errIsRetriable(err) {
+			// For certain retryable errors, we should turn them into client visible
+			// errors, since the client needs to retry now.
+			var conversionError error
+			if err, conversionError = ex.convertRetriableErrorIntoUserVisibleError(ctx, err); conversionError != nil {
+				return ex.makeErrEvent(conversionError, s)
+			}
 			// Add the savepoint back. We want to allow a ROLLBACK TO SAVEPOINT
 			// cockroach_restart (that's the whole point of commitOnRelease).
 			env.push(*entry)
