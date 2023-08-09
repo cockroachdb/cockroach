@@ -87,6 +87,7 @@ var (
 	}
 
 	v231 = version.MustParse("v23.1.0")
+	v222 = version.MustParse("v22.2.0")
 
 	// minSupportedRestoreVersion is the version before which we do not
 	// attempt to restore backups taken in mixed-version as they might
@@ -106,6 +107,21 @@ var (
 		"users", "settings", "locations", "role_members", "role_options", "ui",
 		"comments", "scheduled_jobs", "database_role_settings", "tenant_settings",
 		"privileges", "external_connections",
+	}
+
+	// systemTableVersionRestrictions maps a subset of
+	// `systemTablesInFullClusterBackups` to the minimum version that
+	// should be active in the cluster for the system tables to exist.
+	systemTableVersionRestrictions = map[string]*version.Version{
+		"external_connections": v222,
+		"privileges":           v222,
+		// Even though the `tenant_settings` table exists in 22.1, there
+		// is a bug when using `SHOW COLUMNS` to access information about
+		// this table after a cluster restore in 22.1 (error: `relation
+		// "system.tenant_settings" does not exist`). For that reason, we
+		// do not make any assertions about this table for cluster versions
+		// older than 22.2.
+		"tenant_settings": v222,
 	}
 
 	// showSystemQueries maps system table names to `SHOW` statements
@@ -177,27 +193,12 @@ func sanitizeVersionForBackup(v string) string {
 	return invalidVersionRE.ReplaceAllString(clusterupgrade.VersionMsg(v), "")
 }
 
-// lowestMixedVersion returns the lowest binary version running in a
-// mixedversion cluster. It takes into account upgrade and downgrade
-// scenarios.
-func lowestMixedVersion(tc *mixedversion.Context) *version.Version {
-	lowestVersion := tc.FromVersion // upgrades
-	if tc.FromVersion == clusterupgrade.MainVersion {
-		lowestVersion = tc.ToVersion // downgrades
-	}
-
-	// Add 'v' prefix expected by `version` package.
-	lowestVersion = "v" + lowestVersion
-	return version.MustParse(lowestVersion)
-}
-
 // hasInternalSystemJobs returns true if the cluster is expected to
 // have the `crdb_internal.system_jobs` vtable in the mixed-version
 // context passed. If so, it should be used instead of `system.jobs`
 // when querying job status.
-func hasInternalSystemJobs(tc *mixedversion.Context) bool {
-	lowestV := lowestMixedVersion(tc)
-	return lowestV.AtLeast(v231)
+func hasInternalSystemJobs(h *mixedversion.Helper) bool {
+	return h.LowestBinaryVersion().AtLeast(v231)
 }
 
 func aostFor(timestamp string) string {
@@ -538,14 +539,28 @@ func (dbb *databaseBackup) TargetTables() []string {
 	return tableNamesWithDB(dbb.db, dbb.tables)
 }
 
-func newClusterBackup(rng *rand.Rand, dbs []string, tables [][]string) *clusterBackup {
+func newClusterBackup(
+	rng *rand.Rand, dbs []string, tables [][]string, lowest *version.Version,
+) *clusterBackup {
 	dbBackups := make([]*databaseBackup, 0, len(dbs))
 	for j, db := range dbs {
 		dbBackups = append(dbBackups, newDatabaseBackup(rng, []string{db}, [][]string{tables[j]}))
 	}
+
+	// Only include system tables that exist in the current version.
+	var systemTables []string
+	for _, t := range systemTablesInFullClusterBackup {
+		minVersion, ok := systemTableVersionRestrictions[t]
+		if ok && !lowest.AtLeast(minVersion) {
+			continue
+		}
+
+		systemTables = append(systemTables, t)
+	}
+
 	return &clusterBackup{
 		dbBackups:    dbBackups,
-		systemTables: systemTablesInFullClusterBackup,
+		systemTables: systemTables,
 	}
 }
 
@@ -1030,11 +1045,11 @@ func newMixedVersionBackup(
 
 // newBackupType chooses a random backup type (table, database,
 // cluster) with equal probability.
-func (mvb *mixedVersionBackup) newBackupType(rng *rand.Rand) backupType {
+func (mvb *mixedVersionBackup) newBackupType(rng *rand.Rand, h *mixedversion.Helper) backupType {
 	possibleTypes := []backupType{
 		newTableBackup(rng, mvb.dbs, mvb.tables),
 		newDatabaseBackup(rng, mvb.dbs, mvb.tables),
-		newClusterBackup(rng, mvb.dbs, mvb.tables),
+		newClusterBackup(rng, mvb.dbs, mvb.tables, h.LowestBinaryVersion()),
 	}
 
 	return possibleTypes[rng.Intn(len(possibleTypes))]
@@ -1351,7 +1366,7 @@ func (mvb *mixedVersionBackup) waitForJobSuccess(
 	l.Printf("querying job status through node %d", node)
 
 	jobsQuery := "system.jobs WHERE id = $1"
-	if hasInternalSystemJobs(h.Context()) {
+	if hasInternalSystemJobs(h) {
 		jobsQuery = fmt.Sprintf("(%s)", jobutils.InternalSystemJobsBaseQuery)
 	}
 	for r := retry.StartWithCtx(ctx, backupCompletionRetryOptions); r.Next(); {
@@ -1515,7 +1530,7 @@ func (mvb *mixedVersionBackup) runBackup(
 	var collection backupCollection
 	switch b := bType.(type) {
 	case fullBackup:
-		btype := mvb.newBackupType(rng)
+		btype := mvb.newBackupType(rng, h)
 		name := mvb.backupName(mvb.nextBackupID(), h, b.label, btype)
 		createOptions := newBackupOptions(rng)
 		collection = newBackupCollection(name, btype, createOptions)
@@ -1834,10 +1849,16 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 }
 
 // checkFiles uses the `check_files` option of `SHOW BACKUP` to verify
-// that the latest backup in the collection passed is valid.
+// that the latest backup in the collection passed is valid. This step
+// is skipped if the feature is not available.
 func (mvb *mixedVersionBackup) checkFiles(
-	rng *rand.Rand, collection *backupCollection, h *mixedversion.Helper,
+	rng *rand.Rand, l *logger.Logger, collection *backupCollection, h *mixedversion.Helper,
 ) error {
+	if !h.LowestBinaryVersion().AtLeast(v231) {
+		l.Printf("skipping check_files as it is not supported")
+		return nil
+	}
+
 	options := []string{"check_files"}
 	if opt := collection.encryptionOption(); opt != nil {
 		options = append(options, opt.String())
@@ -1898,7 +1919,7 @@ func (mvb *mixedVersionBackup) verifyBackupCollection(
 	// Note that `version` will only be `clusterupgrade.MainVersion` at
 	// the end of the upgrade, when we are verifying all backups on a
 	// cluster comprised only of nodes running the current version.
-	lowestV := lowestMixedVersion(h.Context())
+	lowestV := h.LowestBinaryVersion()
 	if version != clusterupgrade.MainVersion && !lowestV.AtLeast(minSupportedRestoreVersion) {
 		l.Printf("skipping restore because %s < %s", lowestV, minSupportedRestoreVersion)
 		return nil
@@ -1931,7 +1952,7 @@ func (mvb *mixedVersionBackup) verifyBackupCollection(
 
 	// As a sanity check, make sure that a `check_files` check passes
 	// before attempting a restore.
-	if err := mvb.checkFiles(rng, collection, h); err != nil {
+	if err := mvb.checkFiles(rng, l, collection, h); err != nil {
 		return fmt.Errorf("%s: backup %s: check_files failed: %w", v, collection.name, err)
 	}
 
@@ -2065,7 +2086,7 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 	}
 
 	verify(h.Context().FromVersion)
-	verify(clusterupgrade.MainVersion)
+	verify(h.Context().ToVersion)
 
 	// If the context was canceled (most likely due to a test timeout),
 	// return early. In these cases, it's likely that `restoreErrors`
@@ -2091,6 +2112,13 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 		return fmt.Errorf("%d errors during restore:\n%s", len(restoreErrors), strings.Join(msgs, "\n"))
 	}
 
+	// Reset collections -- if this test run is performing multiple
+	// upgrades, we just want to test restores from the previous version
+	// to the current one.
+	//
+	// TODO(renato): it would be nice if this automatically followed
+	// `binaryMinSupportedVersion` instead.
+	mvb.collections = nil
 	return nil
 }
 
