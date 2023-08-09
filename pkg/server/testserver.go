@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/deprecatedshowranges"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -659,24 +660,19 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	return nil
 }
 
-// Start starts the testServer by bootstrapping an in-memory store
-// (defaults to maximum of 100M). The server is started, launching the
-// node RPC server and all HTTP endpoints. Use the value of
-// testServer.AdvRPCAddr() after Start() for client connections.
-// Use testServer.Stopper().Stop() to shutdown the server after the test
-// completes.
-func (ts *testServer) Start(ctx context.Context) (retErr error) {
-	defer func() {
-		if retErr != nil {
-			// Use a separate context to avoid using an already-cancelled
-			// context in closers.
-			ts.Stopper().Stop(context.Background())
-		}
-	}()
+// PreStart calls the PreStart() method on the underlying server.
+// Call this before calling Start().
+// The caller is responsible for calling .Stopper().Stop() even
+// when PreStart() returns an error.
+func (ts *testServer) PreStart(ctx context.Context) error {
+	return ts.topLevelServer.PreStart(ctx)
+}
 
-	if err := ts.topLevelServer.PreStart(ctx); err != nil {
-		return err
-	}
+// Activate runs post-init server initialization and enables
+// clients to connect.
+// The caller is responsible for calling .Stopper().Stop() even
+// when PreStart() returns an error.
+func (ts *testServer) Activate(ctx context.Context) error {
 	if err := ts.topLevelServer.AcceptInternalClients(ctx); err != nil {
 		return err
 	}
@@ -687,6 +683,20 @@ func (ts *testServer) Start(ctx context.Context) (retErr error) {
 		return err
 	}
 
+	maybeRunVersionUpgrade := func(layer serverutils.ApplicationLayerInterface) error {
+		if v := ts.BinaryVersionOverride(); v != (roachpb.Version{}) {
+			ie := layer.InternalExecutor().(isql.Executor)
+			if _, err := ie.Exec(context.Background(), "set-cluster-version", nil, /* txn */
+				`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := maybeRunVersionUpgrade(ts.SystemLayer()); err != nil {
+		return err
+	}
+
 	// Let clients connect.
 	if err := ts.topLevelServer.AcceptClients(ctx); err != nil {
 		return err
@@ -694,6 +704,12 @@ func (ts *testServer) Start(ctx context.Context) (retErr error) {
 
 	if err := ts.maybeStartDefaultTestTenant(ctx); err != nil {
 		return err
+	}
+
+	if ts.StartedDefaultTestTenant() {
+		if err := maybeRunVersionUpgrade(ts.ApplicationLayer()); err != nil {
+			return err
+		}
 	}
 
 	go func() {
@@ -711,6 +727,24 @@ func (ts *testServer) Start(ctx context.Context) (retErr error) {
 		}
 	}()
 	return nil
+}
+
+// Start calls PreStart() and Activate().
+// For convenience, it also ensures .Stopper().Stop() has been
+// called if an error is returned.
+func (ts *testServer) Start(ctx context.Context) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			// Use a separate context to avoid using an already-cancelled
+			// context in closers.
+			ts.Stopper().Stop(context.Background())
+		}
+	}()
+
+	if err := ts.PreStart(ctx); err != nil {
+		return err
+	}
+	return ts.Activate(ctx)
 }
 
 // Stop is part of the serverutils.TestServerInterface.
