@@ -145,10 +145,9 @@ func (m *MockTransactionalSender) RequiredFrontier() hlc.Timestamp {
 
 // ManualRestart is part of the TxnSender interface.
 func (m *MockTransactionalSender) ManualRestart(
-	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp, msg redact.RedactableString,
+	context.Context, roachpb.UserPriority, hlc.Timestamp, redact.RedactableString,
 ) error {
-	m.txn.Restart(pri, 0 /* upgradePriority */, ts)
-	return kvpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, m.txn)
+	panic("unimplemented")
 }
 
 // IsSerializablePushAndRefreshNotPossible is part of the TxnSender interface.
