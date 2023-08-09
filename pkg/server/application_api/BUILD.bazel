@@ -85,6 +85,7 @@ go_test(
         "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//slices",
         "@org_golang_x_sync//errgroup",
     ],
 )
