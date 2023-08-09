@@ -268,6 +268,9 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	ctx := context.Background()
 
 	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TODOTestTenantDisabled,
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{},
 	}
 	const numNodes = 3
@@ -275,7 +278,6 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		i := i
 		clusterArgs.ServerArgsPerNode[i] = base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
