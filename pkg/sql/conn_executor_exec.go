@@ -903,6 +903,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		// PREPARE statement itself.
 		oldPlaceholders := p.extendedEvalCtx.Placeholders
 		p.extendedEvalCtx.Placeholders = nil
+		defer func() {
+			p.extendedEvalCtx.Placeholders = oldPlaceholders
+		}()
 		if _, err := ex.addPreparedStmt(
 			ctx, name, prepStmt, typeHints, rawTypeHints, PreparedStatementOriginSQL,
 		); err != nil {
@@ -912,7 +915,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		// being prepared. Set it back to the PREPARE statement, so that it's
 		// logged correctly.
 		p.stmt = stmt
-		p.extendedEvalCtx.Placeholders = oldPlaceholders
 		return nil, nil, nil
 	}
 
