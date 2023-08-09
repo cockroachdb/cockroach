@@ -79,8 +79,7 @@ func TestColdStartLatency(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		i := i
 		args := base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			Locality:          localities[i],
+			Locality: localities[i],
 		}
 		signalAfter[i] = make(chan struct{})
 		serverKnobs := &server.TestingKnobs{
@@ -120,6 +119,9 @@ func TestColdStartLatency(t *testing.T) {
 	tc := testcluster.NewTestCluster(t, numNodes, base.TestClusterArgs{
 		ParallelStart:     true,
 		ServerArgsPerNode: perServerArgs,
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TODOTestTenantDisabled,
+		},
 	})
 	go func() {
 		for _, c := range signalAfter {

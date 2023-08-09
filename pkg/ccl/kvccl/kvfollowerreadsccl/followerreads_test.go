@@ -714,8 +714,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 			// Also, we're going to collect a trace of the test's final query.
 			ServerArgsPerNode: map[int]base.TestServerArgs{
 				3: {
-					DefaultTestTenant: base.TODOTestTenantDisabled,
-					UseDatabase:       "t",
+					UseDatabase: "t",
 					Knobs: base.TestingKnobs{
 						KVClient: &kvcoord.ClientTestingKnobs{
 							// Inhibit the checking of connection health done by the
@@ -901,13 +900,15 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			}
 			localities[i] = locality
 			serverArgs[i] = base.TestServerArgs{
-				Locality:          localities[i],
-				DefaultTestTenant: base.TODOTestTenantDisabled, // we'll create one ourselves below.
+				Locality: localities[i],
 			}
 		}
 		tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 			ReplicationMode:   base.ReplicationManual,
 			ServerArgsPerNode: serverArgs,
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TODOTestTenantDisabled, // we'll create one ourselves below.
+			},
 		})
 		ctx := context.Background()
 		defer tc.Stopper().Stop(ctx)
