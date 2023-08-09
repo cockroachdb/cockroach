@@ -146,8 +146,8 @@ func (m *MockTransactionalSender) RequiredFrontier() hlc.Timestamp {
 	return m.txn.RequiredFrontier()
 }
 
-// ManualRestart is part of the TxnSender interface.
-func (m *MockTransactionalSender) ManualRestart(
+// GenerateForcedRetryableErr is part of the TxnSender interface.
+func (m *MockTransactionalSender) GenerateForcedRetryableErr(
 	ctx context.Context, ts hlc.Timestamp, msg redact.RedactableString,
 ) error {
 	m.txn.Restart(m.pri, 0 /* upgradePriority */, ts)
