@@ -650,21 +650,15 @@ of nodes, outputting a line whenever a change is detected:
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		messages, err := roachprod.Monitor(context.Background(), config.Logger, args[0], monitorOpts)
+		eventChan, err := roachprod.Monitor(context.Background(), config.Logger, args[0], monitorOpts)
 		if err != nil {
 			return err
 		}
-		for msg := range messages {
-			if msg.Err != nil {
-				msg.Msg += "error: " + msg.Err.Error()
-			}
-			thisError := errors.Newf("%d: %s", msg.Node, msg.Msg)
-			if msg.Err != nil || strings.Contains(msg.Msg, "dead") {
-				err = errors.CombineErrors(err, thisError)
-			}
-			fmt.Println(thisError.Error())
+		for info := range eventChan {
+			fmt.Println(info.String())
 		}
-		return err
+
+		return nil
 	}),
 }
 
