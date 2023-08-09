@@ -10,6 +10,7 @@ package streamingest
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -256,6 +258,11 @@ type streamIngestionProcessor struct {
 	metrics *Metrics
 
 	logBufferEvery log.EveryN
+
+	// Aggregator that aggregates StructuredEvents emitted in the
+	// backupDataProcessors' trace recording.
+	agg      *bulkutil.TracingAggregator
+	aggTimer *timeutil.Timer
 }
 
 // partitionEvent augments a normal event with the partition it came from.
@@ -323,7 +330,7 @@ func newStreamIngestionDataProcessor(
 			InputsToDrain: []execinfra.RowSource{},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				sip.close()
-				return nil
+				return []execinfrapb.ProducerMetadata{*sip.constructTracingAggregatorProducerMeta(ctx)}
 			},
 		},
 	); err != nil {
@@ -331,6 +338,34 @@ func newStreamIngestionDataProcessor(
 	}
 
 	return sip, nil
+}
+
+func (sip *streamIngestionProcessor) constructTracingAggregatorProducerMeta(
+	ctx context.Context,
+) *execinfrapb.ProducerMetadata {
+	aggEvents := &execinfrapb.TracingAggregatorEvents{
+		SQLInstanceID: sip.flowCtx.NodeID.SQLInstanceID(),
+		FlowID:        sip.flowCtx.ID,
+		Events:        make(map[string][]byte),
+	}
+	sip.agg.ForEachAggregatedEvent(func(name string, event bulkutil.TracingAggregatorEvent) {
+		msg, ok := event.(protoutil.Message)
+		if !ok {
+			// This should never happen but if it does skip the aggregated event.
+			log.Warningf(ctx, "event is not a protoutil.Message: %T", event)
+			return
+		}
+		data := make([]byte, msg.Size())
+		if _, err := msg.MarshalTo(data); err != nil {
+			// This should never happen but if it does skip the aggregated event.
+			log.Warningf(ctx, "failed to unmarshal aggregated event: %v", err.Error())
+			return
+		}
+		aggEvents.Events[name] = data
+	})
+	log.Infof(ctx, "constructing tracing aggregator %+v", aggEvents)
+
+	return &execinfrapb.ProducerMetadata{AggregatorEvents: aggEvents}
 }
 
 // Start launches a set of goroutines that read from the spans
@@ -357,6 +392,13 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", sip.spec.JobID)
 	log.Infof(ctx, "starting ingest proc")
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName)
+
+	// Construct an Aggregator to aggregate and render AggregatorEvents emitted in
+	// sips' trace recording.
+	ctx, sip.agg = bulkutil.MakeTracingAggregatorWithSpan(ctx,
+		fmt.Sprintf("%s-aggregator", streamIngestionProcessorName), sip.EvalCtx.Tracer)
+	sip.aggTimer = timeutil.NewTimer()
+	sip.aggTimer.Reset(15 * time.Second)
 
 	sip.metrics = sip.flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics)
 
@@ -469,6 +511,10 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 			}
 			return row, nil
 		}
+	case <-sip.aggTimer.C:
+		sip.aggTimer.Read = true
+		sip.aggTimer.Reset(15 * time.Second)
+		return nil, sip.constructTracingAggregatorProducerMeta(sip.Ctx())
 	case err := <-sip.errCh:
 		sip.MoveToDraining(err)
 		return nil, sip.DrainHelper()

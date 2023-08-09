@@ -265,6 +265,7 @@ var (
 	errNonInnerMergeJoinWithOnExpr    = errors.New("can't plan vectorized non-inner merge joins with ON expressions")
 	errWindowFunctionFilterClause     = errors.New("window functions with FILTER clause are not supported")
 	errDefaultAggregateWindowFunction = errors.New("default aggregate window functions not supported")
+	errStreamIngestionWrap            = errors.New("core.StreamIngestion{Data,Frontier} is not supported because of #55758")
 )
 
 func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCoreUnion) error {
@@ -313,7 +314,9 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 	case core.RestoreData != nil:
 	case core.Filterer != nil:
 	case core.StreamIngestionData != nil:
+		return errStreamIngestionWrap
 	case core.StreamIngestionFrontier != nil:
+		return errStreamIngestionWrap
 	case core.HashGroupJoiner != nil:
 	default:
 		return errors.AssertionFailedf("unexpected processor core %q", core)

@@ -247,7 +247,16 @@ func MakeStreamSSTBatcher(
 	sendLimiter limit.ConcurrentRequestLimiter,
 	onFlush func(summary kvpb.BulkOpSummary),
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, rc: rc, settings: settings, ingestAll: true, mem: mem, limiter: sendLimiter}
+	b := &SSTBatcher{
+		db:        db,
+		rc:        rc,
+		settings:  settings,
+		ingestAll: true,
+		mem:       mem,
+		limiter:   sendLimiter,
+	}
+	b.mu.lastFlush = timeutil.Now()
+	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
 	b.SetOnFlush(onFlush)
 	err := b.Reset(ctx)
 	return b, err

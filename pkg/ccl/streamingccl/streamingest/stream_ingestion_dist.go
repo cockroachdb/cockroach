@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -153,18 +154,39 @@ func startDistIngestion(
 		func() time.Duration { return replanFrequency.Get(execCtx.ExecCfg().SV()) },
 	)
 
+	tracingAggCh := make(chan *execinfrapb.TracingAggregatorEvents)
+	tracingAggLoop := func(ctx context.Context) error {
+		if err := bulk.AggregateTracingStats(ctx, ingestionJob.ID(),
+			execCtx.ExecCfg().Settings, execCtx.ExecCfg().InternalDB, tracingAggCh); err != nil {
+			log.Warningf(ctx, "failed to aggregate tracing stats: %v", err)
+			// Drain the channel if the loop to aggregate tracing stats has returned
+			// an error.
+			for range tracingAggCh {
+			}
+		}
+		return nil
+	}
+
 	execInitialPlan := func(ctx context.Context) error {
 		log.Infof(ctx, "starting to run DistSQL flow for stream ingestion job %d",
 			ingestionJob.ID())
 		defer stopReplanner()
+		defer close(tracingAggCh)
 		ctx = logtags.AddTag(ctx, "stream-ingest-distsql", nil)
+
+		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
+			if meta.AggregatorEvents != nil {
+				tracingAggCh <- meta.AggregatorEvents
+			}
+			return nil
+		}
 
 		rw := sql.NewRowResultWriter(nil /* rowContainer */)
 
 		var noTxn *kv.Txn
 		recv := sql.MakeDistSQLReceiver(
 			ctx,
-			rw,
+			sql.NewMetadataCallbackWriter(rw, metaFn),
 			tree.Rows,
 			nil, /* rangeCache */
 			noTxn,
@@ -181,7 +203,7 @@ func startDistIngestion(
 
 	updateRunningStatus(ctx, ingestionJob, jobspb.Replicating,
 		"running the SQL flow for the stream ingestion job")
-	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner)
+	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner, tracingAggLoop)
 	if errors.Is(err, sql.ErrPlanChanged) {
 		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
 	}
