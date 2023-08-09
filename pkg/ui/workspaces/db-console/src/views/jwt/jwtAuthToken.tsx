@@ -159,7 +159,7 @@ export const JwtAuthTokenPage = () => {
   useEffect(() => {
     const { State, Code } = JSON.parse(atob(oidc));
 
-    fetch(`/oidc/v1/jwt?state=${State}&code=${Code}`).then(
+    fetch(`oidc/v1/jwt?state=${State}&code=${Code}`).then(
       (response: Response) => {
         setLoading(false);
         if (response.ok) {
