@@ -232,10 +232,12 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, returnScalar)
 			b.ob.constructProjectForScope(s, returnScope)
 			return returnScope
+
 		case *ast.Assignment:
 			// Assignment (:=) is handled by projecting a new column with the same
 			// name as the variable being assigned.
 			s = b.addPLpgSQLAssign(s, t.Var, t.Value)
+
 		case *ast.If:
 			if len(t.ElseIfList) != 0 {
 				panic(unimplemented.New(
@@ -286,6 +288,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, scalar)
 			b.ob.constructProjectForScope(s, returnScope)
 			return returnScope
+
 		case *ast.Loop:
 			if t.Label != "" {
 				panic(unimplemented.New(
@@ -313,6 +316,36 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			b.popContinuation()
 			b.popExitContinuation()
 			return b.callContinuation(&loopContinuation, s)
+
+		case *ast.While:
+			// A WHILE LOOP is syntactic sugar for a LOOP with a conditional
+			// EXIT, so it is handled by a simple rewrite:
+			//
+			//   WHILE [cond] LOOP
+			//     [body];
+			//   END LOOP;
+			//   =>
+			//   LOOP
+			//     IF [cond] THEN
+			//       [body];
+			//     ELSE
+			//       EXIT;
+			//     END IF;
+			//   END LOOP;
+			//
+			loop := &ast.Loop{
+				Label: t.Label,
+				Body: []ast.Statement{&ast.If{
+					Condition: t.Condition,
+					ThenBody:  t.Body,
+					ElseBody:  []ast.Statement{&ast.Exit{}},
+				}},
+			}
+			newStmts := make([]ast.Statement, 0, len(stmts))
+			newStmts = append(newStmts, loop)
+			newStmts = append(newStmts, stmts[i+1:]...)
+			return b.buildPLpgSQLStatements(newStmts, s)
+
 		case *ast.Exit:
 			if t.Label != "" {
 				panic(unimplemented.New(
@@ -330,6 +363,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 					"EXIT cannot be used outside a loop, unless it has a label",
 				))
 			}
+
 		case *ast.Continue:
 			if t.Label != "" {
 				panic(unimplemented.New(
@@ -344,6 +378,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			} else {
 				panic(pgerror.New(pgcode.Syntax, "CONTINUE cannot be used outside a loop"))
 			}
+
 		case *ast.Raise:
 			// RAISE statements allow the PLpgSQL function to send an error or a
 			// notice to the client. We handle these side effects by building them
@@ -378,6 +413,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			con.def.BodyProps = []*physical.Required{raiseScope.makePhysicalProps()}
 			b.finishContinuation(stmts[i+1:], &con, false /* recursive */)
 			return b.callContinuation(&con, s)
+
 		default:
 			panic(unimplemented.New(
 				"unimplemented PL/pgSQL statement",

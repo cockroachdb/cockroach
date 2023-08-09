@@ -1162,7 +1162,7 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   BEGIN
     LOOP
       IF i >= b THEN EXIT; END IF;
-      IF i = 2 THEN 
+      IF i = 2 THEN
         i := i + 1;
         CONTINUE;
       END IF;
@@ -1541,6 +1541,124 @@ project
                      │                                                                                                                                      │    ├── variable: a:38
                      │                                                                                                                                      │    └── variable: b:39
                      │                                                                                                                                      └── recursive-call
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    sum INT := 0;
+    i INT := 0;
+  BEGIN
+    WHILE i < n LOOP
+      sum := sum + i;
+      i := i + 1;
+    END LOOP;
+    RETURN sum;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f(5)
+----
+project
+ ├── columns: f:21
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:21]
+           ├── args
+           │    └── const: 5
+           ├── params: n:1
+           └── body
+                └── limit
+                     ├── columns: stmt_loop_3:20
+                     ├── project
+                     │    ├── columns: stmt_loop_3:20
+                     │    ├── project
+                     │    │    ├── columns: i:3!null sum:2!null
+                     │    │    ├── project
+                     │    │    │    ├── columns: sum:2!null
+                     │    │    │    ├── values
+                     │    │    │    │    └── tuple
+                     │    │    │    └── projections
+                     │    │    │         └── const: 0 [as=sum:2]
+                     │    │    └── projections
+                     │    │         └── const: 0 [as=i:3]
+                     │    └── projections
+                     │         └── udf: stmt_loop_3 [as=stmt_loop_3:20]
+                     │              ├── args
+                     │              │    ├── variable: sum:2
+                     │              │    ├── variable: i:3
+                     │              │    └── variable: n:1
+                     │              ├── params: sum:8 i:9 n:10
+                     │              └── body
+                     │                   └── project
+                     │                        ├── columns: stmt_if_5:19
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── case [as=stmt_if_5:19]
+                     │                                  ├── true
+                     │                                  ├── when
+                     │                                  │    ├── lt
+                     │                                  │    │    ├── variable: i:9
+                     │                                  │    │    └── variable: n:10
+                     │                                  │    └── subquery
+                     │                                  │         └── project
+                     │                                  │              ├── columns: stmt_if_4:17
+                     │                                  │              ├── project
+                     │                                  │              │    ├── columns: i:16 sum:15
+                     │                                  │              │    ├── project
+                     │                                  │              │    │    ├── columns: sum:15
+                     │                                  │              │    │    ├── values
+                     │                                  │              │    │    │    └── tuple
+                     │                                  │              │    │    └── projections
+                     │                                  │              │    │         └── plus [as=sum:15]
+                     │                                  │              │    │              ├── variable: sum:8
+                     │                                  │              │    │              └── variable: i:9
+                     │                                  │              │    └── projections
+                     │                                  │              │         └── plus [as=i:16]
+                     │                                  │              │              ├── variable: i:9
+                     │                                  │              │              └── const: 1
+                     │                                  │              └── projections
+                     │                                  │                   └── udf: stmt_if_4 [as=stmt_if_4:17]
+                     │                                  │                        ├── args
+                     │                                  │                        │    ├── variable: sum:15
+                     │                                  │                        │    ├── variable: i:16
+                     │                                  │                        │    └── variable: n:10
+                     │                                  │                        ├── params: sum:11 i:12 n:13
+                     │                                  │                        └── body
+                     │                                  │                             └── project
+                     │                                  │                                  ├── columns: stmt_loop_3:14
+                     │                                  │                                  ├── values
+                     │                                  │                                  │    └── tuple
+                     │                                  │                                  └── projections
+                     │                                  │                                       └── udf: stmt_loop_3 [as=stmt_loop_3:14]
+                     │                                  │                                            ├── args
+                     │                                  │                                            │    ├── variable: sum:11
+                     │                                  │                                            │    ├── variable: i:12
+                     │                                  │                                            │    └── variable: n:13
+                     │                                  │                                            └── recursive-call
+                     │                                  └── subquery
+                     │                                       └── project
+                     │                                            ├── columns: loop_exit_1:18
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── udf: loop_exit_1 [as=loop_exit_1:18]
+                     │                                                      ├── args
+                     │                                                      │    ├── variable: sum:8
+                     │                                                      │    ├── variable: i:9
+                     │                                                      │    └── variable: n:10
+                     │                                                      ├── params: sum:4 i:5 n:6
+                     │                                                      └── body
+                     │                                                           └── project
+                     │                                                                ├── columns: stmt_return_2:7
+                     │                                                                ├── values
+                     │                                                                │    └── tuple
+                     │                                                                └── projections
+                     │                                                                     └── variable: sum:4 [as=stmt_return_2:7]
                      └── const: 1
 
 # TODO(drewk): consider adding a norm rules to fold nested UDFs.

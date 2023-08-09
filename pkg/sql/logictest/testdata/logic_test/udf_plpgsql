@@ -278,7 +278,7 @@ CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   BEGIN
     LOOP
       IF i >= b THEN EXIT; END IF;
-      IF i = 2 THEN 
+      IF i = 2 THEN
         i := i + 1;
         CONTINUE;
       END IF;
@@ -327,6 +327,78 @@ SELECT f(1, 5), f(-5, 5), f(0, 1)
 
 # TODO(drewk): add back the dijkstra test once UDFs calling other UDFs is
 # allowed.
+
+# --------------------------------------------------
+# Tests for WHILE LOOP
+# --------------------------------------------------
+
+subtest while
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+    sum INT := 0;
+  BEGIN
+    WHILE i <= n LOOP
+      sum := sum + i;
+      i := i + 1;
+    END LOOP;
+    RETURN sum;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIII
+SELECT f(0), f(1), f(2), f(10);
+----
+0  1  3  55
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+    sum INT := 0;
+  BEGIN
+    WHILE i <= n LOOP
+      IF i > 10 THEN
+        EXIT;
+      END IF;
+      sum := sum + i;
+      i := i + 1;
+    END LOOP;
+    RETURN sum;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II
+SELECT f(5), f(20)
+----
+15  55
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+    sum INT := 0;
+  BEGIN
+    WHILE i <= n LOOP
+      IF i % 2 = 0 THEN
+        i := i + 1;
+        CONTINUE;
+      END IF;
+      sum := sum + i;
+      i := i + 1;
+    END LOOP;
+    RETURN sum;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIII
+SELECT f(0), f(1), f(2), f(5)
+----
+0  1  1  9
+
+subtest end
 
 statement error pgcode 2F005 control reached end of function without RETURN
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
