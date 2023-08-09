@@ -11,7 +11,7 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "src/api";
 
-const STATUS_PREFIX = "/_status";
+const STATUS_PREFIX = "_status";
 
 export type CancelSessionRequestMessage =
   cockroach.server.serverpb.CancelSessionRequest;
