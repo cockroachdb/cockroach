@@ -43,9 +43,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// DefaultTestTenantMessage is a message that is printed when a test is run
+// defaultTestTenantMessage is a message that is printed when a test is run
 // with the default test tenant. This is useful for debugging test failures.
-const DefaultTestTenantMessage = `
+const defaultTestTenantMessage = `
 Test server was configured to route SQL queries to a secondary tenant (virtual cluster).
 If you are only seeing a test failure when this message appears, there may be a problem
 specific to cluster virtualization or multi-tenancy.
@@ -59,26 +59,40 @@ var PreventStartTenantError = errors.New("attempting to manually start a server 
 
 // ShouldStartDefaultTestTenant determines whether a default test tenant
 // should be started for test servers or clusters, to serve SQL traffic by
-// default.
-// This can be overridden either via the build tag `metamorphic_disable`
+// default. It returns a new base.DefaultTestTenantOptions that reflects
+// the decision that was taken.
+//
+// The decision can be overridden either via the build tag `metamorphic_disable`
 // or just for test tenants via COCKROACH_TEST_TENANT.
-func ShouldStartDefaultTestTenant(t TestLogger, serverArgs base.TestServerArgs) bool {
+//
+// This function is included in package 'serverutils' instead of 'server.testServer'
+// directly so that it only gets linked into test code (and to avoid a linter
+// error that 'skip' must only be used in test code).
+func ShouldStartDefaultTestTenant(
+	t TestLogger, baseArg base.DefaultTestTenantOptions,
+) (retval base.DefaultTestTenantOptions) {
+	defer func() {
+		if !(retval.TestTenantAlwaysEnabled() || retval.TestTenantAlwaysDisabled()) {
+			panic(errors.AssertionFailedf("programming error: no decision was actually taken"))
+		}
+	}()
+
 	// Explicit cases for enabling or disabling the default test tenant.
-	if serverArgs.DefaultTestTenant.TestTenantAlwaysEnabled() {
-		return true
+	if baseArg.TestTenantAlwaysEnabled() {
+		return baseArg
 	}
-	if serverArgs.DefaultTestTenant.TestTenantAlwaysDisabled() {
-		if issueNum, label := serverArgs.DefaultTestTenant.IssueRef(); issueNum != 0 {
+	if baseArg.TestTenantAlwaysDisabled() {
+		if issueNum, label := baseArg.IssueRef(); issueNum != 0 {
 			t.Logf("cluster virtualization disabled due to issue: #%d (expected label: %s)", issueNum, label)
 		}
-		return false
+		return baseArg
 	}
 
 	if skip.UnderBench() {
 		// Until #83461 is resolved, we want to make sure that we don't use the
 		// multi-tenant setup so that the comparison against old single-tenant
 		// SHAs in the benchmarks is fair.
-		return false
+		return base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(83461)
 	}
 
 	// Obey the env override if present.
@@ -87,7 +101,10 @@ func ShouldStartDefaultTestTenant(t TestLogger, serverArgs base.TestServerArgs) 
 		if err != nil {
 			panic(err)
 		}
-		return v
+		if v {
+			return base.TestTenantAlwaysEnabled
+		}
+		return base.InternalNonDefaultDecision
 	}
 
 	// Note: we ask the metamorphic framework for a "disable" value, instead
@@ -95,9 +112,12 @@ func ShouldStartDefaultTestTenant(t TestLogger, serverArgs base.TestServerArgs) 
 	// more often than not and that is what we want.
 	enabled := !util.ConstantWithMetamorphicTestBoolWithoutLogging("disable-test-tenant", false)
 	if enabled && t != nil {
-		t.Log(DefaultTestTenantMessage)
+		t.Log(defaultTestTenantMessage)
 	}
-	return enabled
+	if enabled {
+		return base.TestTenantAlwaysEnabled
+	}
+	return base.InternalNonDefaultDecision
 }
 
 var srvFactoryImpl TestServerFactory
@@ -134,17 +154,9 @@ type TestFataler interface {
 // server configuration messages.
 func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInterface, error) {
 	allowAdditionalTenants := params.DefaultTestTenant.AllowAdditionalTenants()
-	// Determine if we should probabilistically start a test tenant
-	// for this server.
-	startDefaultSQLServer := ShouldStartDefaultTestTenant(t, params)
-	if !startDefaultSQLServer {
-		// If we're told not to start a test tenant, set the
-		// disable flag explicitly.
-		//
-		// TODO(#76378): review the definition of params.DefaultTestTenant
-		// so we do not need this weird sentinel value.
-		params.DefaultTestTenant = base.InternalNonDefaultDecision
-	}
+	// Update the flags with the actual decision as to whether we should
+	// start the service for a default test tenant.
+	params.DefaultTestTenant = ShouldStartDefaultTestTenant(t, params.DefaultTestTenant)
 
 	s, err := NewServer(params)
 	if err != nil {
@@ -154,12 +166,7 @@ func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInter
 	ctx := context.Background()
 
 	if err := s.Start(ctx); err != nil {
-		s.Stopper().Stop(ctx)
 		return nil, err
-	}
-
-	if s.StartedDefaultTestTenant() && t != nil {
-		t.Log(DefaultTestTenantMessage)
 	}
 
 	if !allowAdditionalTenants {

@@ -337,9 +337,11 @@ func TestBackupRestorePartitioned(t *testing.T) {
 
 	// Disabled to run within tenant as certain MR features are not available to tenants.
 	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TODOTestTenantDisabled,
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
-				DefaultTestTenant: base.TODOTestTenantDisabled,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "west"},
 					// NB: This has the same value as an az in the east region
@@ -349,7 +351,6 @@ func TestBackupRestorePartitioned(t *testing.T) {
 				}},
 			},
 			1: {
-				DefaultTestTenant: base.TODOTestTenantDisabled,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "east"},
 					// NB: This has the same value as an az in the west region
@@ -359,7 +360,6 @@ func TestBackupRestorePartitioned(t *testing.T) {
 				}},
 			},
 			2: {
-				DefaultTestTenant: base.TODOTestTenantDisabled,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "east"},
 					{Key: "az", Value: "az2"},
@@ -490,34 +490,33 @@ func TestBackupRestoreExecLocality(t *testing.T) {
 
 	// Disabled to run within tenant as certain MR features are not available to tenants.
 	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TODOTestTenantDisabled,
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
-				ExternalIODir:     "/west0",
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				ExternalIODir: "/west0",
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "tier", Value: "0"},
 					{Key: "region", Value: "west"},
 				}},
 			},
 			1: {
-				ExternalIODir:     "/west1",
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				ExternalIODir: "/west1",
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "tier", Value: "1"},
 					{Key: "region", Value: "west"},
 				}},
 			},
 			2: {
-				ExternalIODir:     "/east0",
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				ExternalIODir: "/east0",
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "tier", Value: "0"},
 					{Key: "region", Value: "east"},
 				}},
 			},
 			3: {
-				ExternalIODir:     "/east1",
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				ExternalIODir: "/east1",
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "tier", Value: "1"},
 					{Key: "region", Value: "east"},
