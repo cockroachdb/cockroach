@@ -251,8 +251,8 @@ func (m *MockTransactionalSender) HasPerformedWrites() bool {
 	panic("unimplemented")
 }
 
-// TestingRandomRetryableErrorsEnabled is part of TxnSenderFactory.
-func (m *MockTransactionalSender) TestingRandomRetryableErrorsEnabled() bool {
+// TestingShouldRetry is part of TxnSenderFactory.
+func (m *MockTransactionalSender) TestingShouldRetry(*Txn) bool {
 	return false
 }
 

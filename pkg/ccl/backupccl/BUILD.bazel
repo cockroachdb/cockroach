@@ -291,6 +291,7 @@ go_test(
         "//pkg/testutils/distsqlutils",
         "//pkg/testutils/fingerprintutils",
         "//pkg/testutils/jobutils",
+        "//pkg/testutils/kvclientutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
