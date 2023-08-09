@@ -201,7 +201,7 @@ func getDescriptorsByID(
 		if flags.layerFilters.withoutStorage {
 			// Some descriptors are still missing and there's nowhere left to get
 			// them from.
-			return catalog.ErrDescriptorNotFound
+			return errors.Wrapf(catalog.ErrDescriptorNotFound, "looking up descriptor(s) %v", readIDs)
 		}
 		const isDescriptorRequired = true
 		read, err := tc.cr.GetByIDs(ctx, txn, readIDs.Ordered(), isDescriptorRequired, catalog.Any)
@@ -235,7 +235,7 @@ func getDescriptorsByID(
 func filterDescriptor(desc catalog.Descriptor, flags getterFlags) error {
 	if expected := flags.descFilters.maybeParentID; expected != descpb.InvalidID {
 		if actual := desc.GetParentID(); actual != descpb.InvalidID && actual != expected {
-			return catalog.ErrDescriptorNotFound
+			return errors.Wrapf(catalog.ErrDescriptorNotFound, "expected %d, got %d", expected, actual)
 		}
 	}
 	if flags.descFilters.withoutDropped {
@@ -371,7 +371,7 @@ func (q *byIDLookupContext) lookupLeased(
 	// If we have already read all of the descriptors, use it as a negative
 	// cache to short-circuit a lookup we know will be doomed to fail.
 	if q.tc.cr.IsDescIDKnownToNotExist(id, q.flags.descFilters.maybeParentID) {
-		return nil, catalog.NoValidation, catalog.ErrDescriptorNotFound
+		return nil, catalog.NoValidation, catalog.NewDescriptorNotFoundError(id)
 	}
 	desc, shouldReadFromStore, err := q.tc.leased.getByID(q.ctx, q.tc.deadlineHolder(q.txn), id)
 	if err != nil || shouldReadFromStore {

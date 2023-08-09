@@ -294,7 +294,7 @@ var _ catalog.ValidationDescGetter = (*validationDescGetterImpl)(nil)
 func (vdg *validationDescGetterImpl) GetDescriptor(id descpb.ID) (catalog.Descriptor, error) {
 	desc, found := vdg.descriptors[id]
 	if !found || desc == nil {
-		return nil, catalog.WrapDescRefErr(id, catalog.ErrReferencedDescriptorNotFound)
+		return nil, catalog.NewReferencedDescriptorNotFoundError("descriptor", id)
 	}
 	return desc, nil
 }
@@ -305,7 +305,7 @@ func (vdg *validationDescGetterImpl) GetDatabaseDescriptor(
 ) (catalog.DatabaseDescriptor, error) {
 	desc, found := vdg.descriptors[id]
 	if !found || desc == nil {
-		return nil, catalog.WrapDatabaseDescRefErr(id, catalog.ErrReferencedDescriptorNotFound)
+		return nil, catalog.NewReferencedDescriptorNotFoundError("database", id)
 	}
 	return catalog.AsDatabaseDescriptor(desc)
 }
@@ -316,7 +316,7 @@ func (vdg *validationDescGetterImpl) GetSchemaDescriptor(
 ) (catalog.SchemaDescriptor, error) {
 	desc, found := vdg.descriptors[id]
 	if !found || desc == nil {
-		return nil, catalog.WrapSchemaDescRefErr(id, catalog.ErrReferencedDescriptorNotFound)
+		return nil, catalog.NewReferencedDescriptorNotFoundError("schema", id)
 	}
 	return catalog.AsSchemaDescriptor(desc)
 }
@@ -327,7 +327,7 @@ func (vdg *validationDescGetterImpl) GetTableDescriptor(
 ) (catalog.TableDescriptor, error) {
 	desc, found := vdg.descriptors[id]
 	if !found || desc == nil {
-		return nil, catalog.WrapTableDescRefErr(id, catalog.ErrReferencedDescriptorNotFound)
+		return nil, catalog.NewReferencedDescriptorNotFoundError("table", id)
 	}
 	return catalog.AsTableDescriptor(desc)
 }
@@ -338,7 +338,7 @@ func (vdg *validationDescGetterImpl) GetTypeDescriptor(
 ) (catalog.TypeDescriptor, error) {
 	desc, found := vdg.descriptors[id]
 	if !found || desc == nil {
-		return nil, catalog.WrapTypeDescRefErr(id, catalog.ErrReferencedDescriptorNotFound)
+		return nil, catalog.NewReferencedDescriptorNotFoundError("type", id)
 	}
 	descriptor, err := catalog.AsTypeDescriptor(desc)
 	if err != nil {
@@ -352,7 +352,7 @@ func (vdg *validationDescGetterImpl) GetFunctionDescriptor(
 ) (catalog.FunctionDescriptor, error) {
 	desc, found := vdg.descriptors[id]
 	if !found || desc == nil {
-		return nil, catalog.WrapFunctionDescRefErr(id, catalog.ErrReferencedDescriptorNotFound)
+		return nil, catalog.NewReferencedDescriptorNotFoundError("function", id)
 	}
 	return catalog.AsFunctionDescriptor(desc)
 }
