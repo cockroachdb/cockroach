@@ -165,7 +165,6 @@ export default function (props: GraphDashboardProps) {
         <Metric
           name="cr.node.changefeed.backfill_pending_ranges"
           title="Backfill Pending Ranges"
-          nonNegativeRate
         />
       </Axis>
     </LineGraph>,
