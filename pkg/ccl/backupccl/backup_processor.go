@@ -173,7 +173,11 @@ func newBackupDataProcessor(
 			InputsToDrain: nil,
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				bp.close()
-				return []execinfrapb.ProducerMetadata{*bp.constructTracingAggregatorProducerMeta(ctx)}
+				meta := bp.constructTracingAggregatorProducerMeta(ctx)
+				if meta == nil {
+					return nil
+				}
+				return []execinfrapb.ProducerMetadata{*meta}
 			},
 		}); err != nil {
 		return nil, err
@@ -245,6 +249,9 @@ func (bp *backupDataProcessor) constructProgressProducerMeta(
 func (bp *backupDataProcessor) constructTracingAggregatorProducerMeta(
 	ctx context.Context,
 ) *execinfrapb.ProducerMetadata {
+	if bp.agg == nil {
+		return nil
+	}
 	aggEvents := &execinfrapb.TracingAggregatorEvents{
 		SQLInstanceID: bp.flowCtx.NodeID.SQLInstanceID(),
 		FlowID:        bp.flowCtx.ID,
@@ -292,7 +299,9 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 func (bp *backupDataProcessor) close() {
 	bp.cancelAndWaitForWorker()
 	if bp.InternalClose() {
-		bp.agg.Close()
+		if bp.agg != nil {
+			bp.agg.Close()
+		}
 		bp.aggTimer.Stop()
 		bp.memAcc.Close(bp.Ctx())
 	}
