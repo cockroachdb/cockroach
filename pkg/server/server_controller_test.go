@@ -15,10 +15,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -81,6 +85,7 @@ func TestSQLErrorUponInvalidTenant(t *testing.T) {
 	require.NoError(t, err)
 
 	err = db.Ping()
+	require.NotNil(t, err)
 	require.Regexp(t, `service unavailable for target tenant \(nonexistent\)`, err.Error())
 }
 
@@ -108,4 +113,58 @@ func TestSharedProcessServerInheritsTempStorageLimit(t *testing.T) {
 
 	tss := ts.(*testTenant)
 	require.Equal(t, int64(specialSize), tss.SQLCfg.TempStorageConfig.Mon.Limit())
+}
+
+// TestServerSQLConn checks that the SQLConn() method on the
+// SystemLayer() of TestServerInterface works even when non-specific
+// SQL connection requests are redirected to a secondary tenant.
+func TestServerSQLConn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer s.Stopper().Stop(ctx)
+	systemTenant := s.SystemLayer()
+
+	// Start some secondary tenant servers.
+	secondaryTenantExtNoName, err := s.StartTenant(ctx, base.TestTenantArgs{
+		TenantID: roachpb.MustMakeTenantID(2),
+	})
+	require.NoError(t, err)
+
+	secondaryTenantExtNamed, err := s.StartTenant(ctx, base.TestTenantArgs{
+		TenantName: "hello",
+		TenantID:   roachpb.MustMakeTenantID(10),
+	})
+	require.NoError(t, err)
+
+	secondaryTenantSh, _, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+		TenantName: "world",
+	})
+	require.NoError(t, err)
+	multitenant.DefaultTenantSelect.Override(ctx, &systemTenant.ClusterSettings().SV, "world")
+
+	for _, tc := range []struct {
+		testName     string
+		tbName       string
+		sqlInterface serverutils.ApplicationLayerInterface
+	}{
+		{"system", "foo", systemTenant},
+		{"secondary-external-noname", "bar", secondaryTenantExtNoName},
+		{"secondary-external-named", "baz", secondaryTenantExtNamed},
+		{"secondary-shared", "qux", secondaryTenantSh},
+	} {
+		t.Run(tc.testName, func(t *testing.T) {
+			_, err = tc.sqlInterface.InternalExecutor().(isql.Executor).
+				Exec(ctx, "create-table", nil, "CREATE TABLE defaultdb."+tc.tbName+" (i INT)")
+			require.NoError(t, err)
+
+			conn := tc.sqlInterface.SQLConn(t, "defaultdb")
+			var unused int
+			assert.NoError(t, conn.QueryRowContext(ctx, "SELECT count(*) FROM "+tc.tbName).Scan(&unused))
+		})
+	}
 }
