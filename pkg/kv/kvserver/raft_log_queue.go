@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -264,8 +263,13 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	// efficient to catch up via a snapshot than via applying a long tail of log
 	// entries.
 	targetSize := r.store.cfg.RaftLogTruncationThreshold
-	if targetSize > r.mu.conf.RangeMaxBytes {
-		targetSize = r.mu.conf.RangeMaxBytes
+	conf, err := r.SpanConfig()
+	if err != nil {
+		// If we can't load the span config, we defer truncating this range.
+		return truncateDecision{}, err
+	}
+	if targetSize > conf.RangeMaxBytes {
+		targetSize = conf.RangeMaxBytes
 	}
 	raftStatus := r.raftStatusRLocked()
 
@@ -636,7 +640,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 // is true only if the replica is the raft leader and if the total number of
 // the range's raft log's stale entries exceeds RaftLogQueueStaleThreshold.
 func (rlq *raftLogQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, r *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, now hlc.ClockTimestamp, r *Replica,
 ) (shouldQueue bool, priority float64) {
 	decision, err := newTruncateDecision(ctx, r)
 	if err != nil {
@@ -678,9 +682,7 @@ func (rlq *raftLogQueue) shouldQueueImpl(
 // process truncates the raft log of the range if the replica is the raft
 // leader and if the total number of the range's raft log's stale entries
 // exceeds RaftLogQueueStaleThreshold.
-func (rlq *raftLogQueue) process(
-	ctx context.Context, r *Replica, _ spanconfig.StoreReader,
-) (processed bool, err error) {
+func (rlq *raftLogQueue) process(ctx context.Context, r *Replica) (processed bool, err error) {
 	decision, err := newTruncateDecision(ctx, r)
 	if err != nil {
 		return false, err

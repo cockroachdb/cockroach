@@ -263,13 +263,13 @@ type queueImpl interface {
 	// shouldQueue accepts current time, a replica, and the system config
 	// and returns whether it should be queued and if so, at what priority.
 	// The Replica is guaranteed to be initialized.
-	shouldQueue(context.Context, hlc.ClockTimestamp, *Replica, spanconfig.StoreReader) (shouldQueue bool, priority float64)
+	shouldQueue(context.Context, hlc.ClockTimestamp, *Replica) (shouldQueue bool, priority float64)
 
 	// process accepts a replica, and the system config and executes
 	// queue-specific work on it. The Replica is guaranteed to be initialized.
 	// We return a boolean to indicate if the Replica was processed successfully
 	// (vs. it being a no-op or an error).
-	process(context.Context, *Replica, spanconfig.StoreReader) (processed bool, err error)
+	process(context.Context, *Replica) (processed bool, err error)
 
 	// processScheduled is called after async task was created to run process.
 	// This function is called by the process loop synchronously. This method is
@@ -466,11 +466,6 @@ func newBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *b
 	ambient := store.cfg.AmbientCtx
 	ambient.AddLogTag(name, nil)
 
-	if !cfg.acceptsUnsplitRanges && !cfg.needsSpanConfigs {
-		log.Fatalf(ambient.AnnotateCtx(context.Background()),
-			"misconfigured queue: acceptsUnsplitRanges=false requires needsSpanConfigs=true; got %+v", cfg)
-	}
-
 	bq := baseQueue{
 		AmbientContext:   ambient,
 		name:             name,
@@ -644,19 +639,6 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		fn(ctx, bq)
 	}
 
-	// Load the system config if it's needed.
-	var confReader spanconfig.StoreReader
-	if bq.needsSpanConfigs {
-		var err error
-		confReader, err = bq.store.GetConfReader(ctx)
-		if err != nil {
-			if errors.Is(err, errSpanConfigsUnavailable) && log.V(1) {
-				log.Warningf(ctx, "unable to retrieve span configs, skipping: %v", err)
-			}
-			return
-		}
-	}
-
 	bq.mu.Lock()
 	stopped := bq.mu.stopped || bq.mu.disabled
 	bq.mu.Unlock()
@@ -669,19 +651,32 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		return
 	}
 
-	if !bq.acceptsUnsplitRanges {
-		// Queue does not accept unsplit ranges. Check to see if the range needs to
-		// be split because of spanconfigs.
-		needsSplit, err := confReader.NeedsSplit(ctx, repl.Desc().StartKey, repl.Desc().EndKey)
+	// Load the system config if it's needed.
+	var confReader spanconfig.StoreReader
+	if bq.needsSpanConfigs {
+		var err error
+		confReader, err = bq.store.GetConfReader(ctx)
 		if err != nil {
-			log.Warningf(ctx, "unable to compute whether split is needed; not adding")
-			return
-		}
-		if needsSplit {
-			if log.V(1) {
-				log.Infof(ctx, "split needed; not adding")
+			if errors.Is(err, errSpanConfigsUnavailable) && log.V(1) {
+				log.Warningf(ctx, "unable to retrieve span configs, skipping: %v", err)
 			}
 			return
+		}
+		// We can only check this if we need span configs.
+		if !bq.acceptsUnsplitRanges {
+			// Queue does not accept unsplit ranges. Check to see if the range needs to
+			// be split because of spanconfigs.
+			needsSplit, err := confReader.NeedsSplit(ctx, repl.Desc().StartKey, repl.Desc().EndKey)
+			if err != nil {
+				log.Warningf(ctx, "unable to compute whether split is needed; not adding")
+				return
+			}
+			if needsSplit {
+				if log.V(1) {
+					log.Infof(ctx, "split needed; not adding")
+				}
+				return
+			}
 		}
 	}
 
@@ -700,7 +695,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	// it may not be and shouldQueue will be passed a nil realRepl. These tests
 	// know what they're getting into so that's fine.
 	realRepl, _ := repl.(*Replica)
-	should, priority := bq.impl.shouldQueue(ctx, now, realRepl, confReader)
+	should, priority := bq.impl.shouldQueue(ctx, now, realRepl)
 	if !should {
 		return
 	}
@@ -956,19 +951,18 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 		if err != nil {
 			return err
 		}
-	}
-
-	if !bq.acceptsUnsplitRanges {
-		// Queue does not accept unsplit ranges. Check to see if the range needs to
-		// be spilt because of a span config.
-		needsSplit, err := confReader.NeedsSplit(ctx, repl.Desc().StartKey, repl.Desc().EndKey)
-		if err != nil {
-			log.Warningf(ctx, "unable to compute NeedsSplit, skipping: %v", err)
-			return nil
-		}
-		if needsSplit {
-			log.VEventf(ctx, 3, "split needed; skipping")
-			return nil
+		if !bq.acceptsUnsplitRanges {
+			// Queue does not accept unsplit ranges. Check to see if the range needs to
+			// be spilt because of a span config.
+			needsSplit, err := confReader.NeedsSplit(ctx, repl.Desc().StartKey, repl.Desc().EndKey)
+			if err != nil {
+				log.Warningf(ctx, "unable to compute NeedsSplit, skipping: %v", err)
+				return nil
+			}
+			if needsSplit {
+				log.VEventf(ctx, 3, "split needed; skipping")
+				return nil
+			}
 		}
 	}
 
@@ -1015,7 +1009,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 			// it may not be and shouldQueue will be passed a nil realRepl. These tests
 			// know what they're getting into so that's fine.
 			realRepl, _ := repl.(*Replica)
-			processed, err := bq.impl.process(ctx, realRepl, confReader)
+			processed, err := bq.impl.process(ctx, realRepl)
 			if err != nil {
 				return err
 			}

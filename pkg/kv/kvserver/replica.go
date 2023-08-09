@@ -1039,10 +1039,8 @@ func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanCon
 }
 
 // SpanConfig returns the authoritative span config for the replica.
-func (r *Replica) SpanConfig() roachpb.SpanConfig {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.mu.conf
+func (r *Replica) SpanConfig() (roachpb.SpanConfig, error) {
+	return r.store.GetSpanConfigForKey(context.TODO(), r.startKey)
 }
 
 // Desc returns the authoritative range descriptor, acquiring a replica lock in

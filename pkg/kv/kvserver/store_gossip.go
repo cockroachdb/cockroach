@@ -157,6 +157,8 @@ func (s *Store) startGossip() {
 
 var errSpanConfigsUnavailable = errors.New("span configs not available")
 
+var errSpanConfigsNotConfigured = errors.New("span configs not configured")
+
 // systemGossipUpdate is a callback for gossip updates to
 // the system config which affect range split boundaries.
 //

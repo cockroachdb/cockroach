@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -238,11 +237,15 @@ func (r mvccGCQueueScore) String() string {
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
 func (mgcq *mvccGCQueue) shouldQueue(
-	ctx context.Context, _ hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, _ hlc.ClockTimestamp, repl *Replica,
 ) (bool, float64) {
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score.
-	conf := repl.SpanConfig()
+	conf, err := repl.SpanConfig()
+	if err != nil {
+		log.VErrEventf(ctx, 2, "skipping gc, can't read SpanConfig: %v", err)
+		return false, 0
+	}
 	canGC, _, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
 	if err != nil {
 		log.VErrEventf(ctx, 2, "failed to check protected timestamp for gc: %v", err)
@@ -670,15 +673,17 @@ func (r *replicaGCer) GC(
 //  6. scan the AbortSpan table for old entries
 //  7. push these transactions (again, recreating txn entries).
 //  8. send a GCRequest.
-func (mgcq *mvccGCQueue) process(
-	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
-) (processed bool, err error) {
+func (mgcq *mvccGCQueue) process(ctx context.Context, repl *Replica) (processed bool, err error) {
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
 	defer repl.MeasureReqCPUNanos(grunning.Time())
 
 	// Lookup the descriptor and GC policy for the zone containing this key range.
-	desc, conf := repl.DescAndSpanConfig()
+	desc := repl.Desc()
+	conf, err := repl.SpanConfig()
+	if err != nil {
+		return false, err
+	}
 
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score and updated GC
@@ -869,7 +874,12 @@ func (mgcq *mvccGCQueue) scanReplicasForHiPriGCHints(
 		}
 		gCHint := replica.GetGCHint()
 		if !gCHint.LatestRangeDeleteTimestamp.IsEmpty() {
-			desc, spanConfig := replica.DescAndSpanConfig()
+			desc := replica.Desc()
+			spanConfig, err := replica.SpanConfig()
+			if err != nil {
+				log.Infof(ctx, "skip replica since no span config found ")
+				return true
+			}
 			gcThreshold := now.Add(-int64(spanConfig.GCPolicy.TTLSeconds)*1e9,
 				0)
 			if gCHint.LatestRangeDeleteTimestamp.Less(gcThreshold) {

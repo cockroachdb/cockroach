@@ -182,8 +182,12 @@ func shouldSplitRange(
 // prefix or if the range's size in bytes exceeds the limit for the zone,
 // or if the range has too much load on it.
 func (sq *splitQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica,
 ) (shouldQ bool, priority float64) {
+	confReader, err := repl.store.GetConfReader(ctx)
+	if err != nil {
+		return false, 0
+	}
 	shouldQ, priority = shouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
 		repl.GetMaxBytes(), repl.shouldBackpressureWrites(), confReader)
 
@@ -206,10 +210,8 @@ func (unsplittableRangeError) PurgatoryErrorMarker() {}
 var _ PurgatoryError = unsplittableRangeError{}
 
 // process synchronously invokes admin split for each proposed split key.
-func (sq *splitQueue) process(
-	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
-) (processed bool, err error) {
-	processed, err = sq.processAttempt(ctx, r, confReader)
+func (sq *splitQueue) process(ctx context.Context, r *Replica) (processed bool, err error) {
+	processed, err = sq.processAttempt(ctx, r)
 	if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
 		// ConditionFailedErrors are an expected outcome for range split
 		// attempts because splits can race with other descriptor modifications.
@@ -223,10 +225,12 @@ func (sq *splitQueue) process(
 	return processed, err
 }
 
-func (sq *splitQueue) processAttempt(
-	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
-) (processed bool, err error) {
+func (sq *splitQueue) processAttempt(ctx context.Context, r *Replica) (processed bool, err error) {
 	desc := r.Desc()
+	confReader, err := r.store.GetConfReader(ctx)
+	if err != nil {
+		return false, errors.Wrapf(err, "unable to load conf reader")
+	}
 	// First handle the case of splitting due to span config maps.
 	splitKey, err := confReader.ComputeSplitKey(ctx, desc.StartKey, desc.EndKey)
 	if err != nil {

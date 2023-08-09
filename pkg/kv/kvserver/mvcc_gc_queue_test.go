@@ -908,7 +908,7 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 
 	// Process through a scan queue.
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, cfg)
+	processed, err := mgcq.process(ctx, tc.repl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1143,12 +1143,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 
 	// Run GC.
 	mgcq := newMVCCGCQueue(tc.store)
-	cfg, err := tc.store.GetConfReader(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	processed, err := mgcq.process(ctx, tc.repl, cfg)
+	processed, err := mgcq.process(ctx, tc.repl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1277,12 +1272,8 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 	}
 
 	// Process through GC queue.
-	confReader, err := tc.store.GetConfReader(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
+	processed, err := mgcq.process(ctx, tc.repl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1340,14 +1331,9 @@ func TestMVCCGCQueueLastProcessedTimestamps(t *testing.T) {
 		}
 	}
 
-	confReader, err := tc.store.GetConfReader(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// Process through a scan queue.
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
+	processed, err := mgcq.process(ctx, tc.repl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1445,17 +1431,13 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	}
 
 	// Forward the clock past the default GC time.
-	confReader, err := tc.store.GetConfReader(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	conf, err := confReader.GetSpanConfigForKey(ctx, roachpb.RKey("key"))
+	conf, err := tc.store.GetSpanConfigForKey(ctx, roachpb.RKey("key"))
 	if err != nil {
 		t.Fatalf("could not find span config for range %s", err)
 	}
 	tc.manualClock.Advance(conf.TTL() + 1)
 	mgcq := newMVCCGCQueue(tc.store)
-	processed, err := mgcq.process(ctx, tc.repl, confReader)
+	processed, err := mgcq.process(ctx, tc.repl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1503,7 +1485,8 @@ func TestMVCCGCQueueGroupsRangeDeletions(t *testing.T) {
 	require.NoError(t, store.AddReplica(r2))
 	r2.RaftStatus()
 	r2.handleGCHintResult(ctx, &roachpb.GCHint{LatestRangeDeleteTimestamp: hlc.Timestamp{WallTime: 1}})
-	r2.SetSpanConfig(roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{TTLSeconds: 100}})
+	// FIXME
+	//	r2.SetSpanConfig(roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{TTLSeconds: 100}})
 
 	gcQueue := newMVCCGCQueue(store)
 

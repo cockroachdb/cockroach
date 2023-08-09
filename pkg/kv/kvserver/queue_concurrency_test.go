@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -84,7 +83,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 
 	// Set up a queue impl that will return random results from processing.
 	impl := fakeQueueImpl{
-		pr: func(context.Context, *Replica, spanconfig.StoreReader) (bool, error) {
+		pr: func(context.Context, *Replica) (bool, error) {
 			n := rand.Intn(4)
 			if n == 0 {
 				return true, nil
@@ -134,21 +133,19 @@ func TestBaseQueueConcurrent(t *testing.T) {
 }
 
 type fakeQueueImpl struct {
-	pr func(context.Context, *Replica, spanconfig.StoreReader) (processed bool, err error)
+	pr func(context.Context, *Replica) (processed bool, err error)
 }
 
 var _ queueImpl = &fakeQueueImpl{}
 
 func (fakeQueueImpl) shouldQueue(
-	context.Context, hlc.ClockTimestamp, *Replica, spanconfig.StoreReader,
+	context.Context, hlc.ClockTimestamp, *Replica,
 ) (shouldQueue bool, priority float64) {
 	return rand.Intn(5) != 0, 1.0
 }
 
-func (fq fakeQueueImpl) process(
-	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
-) (bool, error) {
-	return fq.pr(ctx, repl, confReader)
+func (fq fakeQueueImpl) process(ctx context.Context, repl *Replica) (bool, error) {
+	return fq.pr(ctx, repl)
 }
 
 func (fakeQueueImpl) postProcessScheduled(

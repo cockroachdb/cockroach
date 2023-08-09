@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -130,12 +129,16 @@ func newMergeQueue(store *Store, db *kv.DB) *mergeQueue {
 }
 
 func (mq *mergeQueue) shouldQueue(
-	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica,
 ) (shouldQueue bool, priority float64) {
 	desc := repl.Desc()
 
 	if desc.EndKey.Equal(roachpb.RKeyMax) {
 		// The last range has no right-hand neighbor to merge with.
+		return false, 0
+	}
+	confReader, err := repl.store.GetConfReader(ctx)
+	if err != nil {
 		return false, 0
 	}
 
@@ -232,9 +235,12 @@ func (mq *mergeQueue) requestRangeStats(
 	return desc, stats, lbSnap, nil
 }
 
-func (mq *mergeQueue) process(
-	ctx context.Context, lhsRepl *Replica, confReader spanconfig.StoreReader,
-) (processed bool, err error) {
+func (mq *mergeQueue) process(ctx context.Context, lhsRepl *Replica) (processed bool, err error) {
+
+	confReader, err := lhsRepl.store.GetConfReader(ctx)
+	if err != nil {
+		return false, errors.Wrapf(err, "unable to load conf reader")
+	}
 
 	lhsDesc := lhsRepl.Desc()
 	lhsStats := lhsRepl.GetMVCCStats()
@@ -414,7 +420,7 @@ func (mq *mergeQueue) process(
 		return false, rangeMergePurgatoryError{err}
 	}
 	if testingAggressiveConsistencyChecks {
-		if _, err := mq.store.consistencyQueue.process(ctx, lhsRepl, confReader); err != nil {
+		if _, err := mq.store.consistencyQueue.process(ctx, lhsRepl); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
 	}

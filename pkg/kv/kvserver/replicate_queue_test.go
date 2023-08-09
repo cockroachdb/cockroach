@@ -777,7 +777,10 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, conf := repl.DescAndSpanConfig()
+			conf, err := repl.SpanConfig()
+			if err != nil {
+				return false
+			}
 			return conf.GetNumNonVoters() == 0
 		}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond)
 
@@ -1205,7 +1208,10 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, conf := repl.DescAndSpanConfig()
+			conf, err := repl.SpanConfig()
+			if err != nil {
+				return false
+			}
 			return conf.GetNumNonVoters() == 0
 		}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond)
 
@@ -2024,23 +2030,26 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 		time.Sleep(13 * time.Millisecond)
 	}
 
-	// Set the zone preference for the replica to show that it has to be moved
-	// to the remote node.
-	desc, conf := leaseHolderRepl.DescAndSpanConfig()
-	newConf := conf
-	newConf.LeasePreferences = []roachpb.LeasePreference{
-		{
-			Constraints: []roachpb.Constraint{
-				{
-					Type:  roachpb.Constraint_REQUIRED,
-					Value: fmt.Sprintf("n%d", remoteNodeID),
-				},
-			},
-		},
-	}
-
 	// By now the lease holder may have changed.
 	testutils.SucceedsSoon(t, func() error {
+		conf, err := leaseHolderRepl.SpanConfig()
+		if err != nil {
+			return err
+		}
+		newConf := conf
+
+		// Set the zone preference for the replica to show that it has to be moved
+		// to the remote node.
+		newConf.LeasePreferences = []roachpb.LeasePreference{
+			{
+				Constraints: []roachpb.Constraint{
+					{
+						Type:  roachpb.Constraint_REQUIRED,
+						Value: fmt.Sprintf("n%d", remoteNodeID),
+					},
+				},
+			},
+		}
 		leaseBefore, _ := leaseHolderRepl.GetLease()
 		log.Infof(ctx, "Lease before transfer %+v\n", leaseBefore)
 
@@ -2062,7 +2071,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 			return err
 		}
 		transferred, err := leaseStore.FindTargetAndTransferLease(
-			ctx, leaseRepl, desc, newConf)
+			ctx, leaseRepl, leaseHolderRepl.Desc(), newConf)
 		if err != nil {
 			return err
 		}

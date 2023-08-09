@@ -56,14 +56,12 @@ type testQueueImpl struct {
 var _ queueImpl = &testQueueImpl{}
 
 func (tq *testQueueImpl) shouldQueue(
-	_ context.Context, now hlc.ClockTimestamp, r *Replica, _ spanconfig.StoreReader,
+	_ context.Context, now hlc.ClockTimestamp, r *Replica,
 ) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
 }
 
-func (tq *testQueueImpl) process(
-	_ context.Context, _ *Replica, _ spanconfig.StoreReader,
-) (bool, error) {
+func (tq *testQueueImpl) process(_ context.Context, _ *Replica) (bool, error) {
 	atomic.AddInt32(&tq.processed, 1)
 	if tq.err != nil {
 		return false, tq.err
@@ -99,10 +97,6 @@ func (tq *testQueueImpl) updateChan() <-chan time.Time {
 }
 
 func makeTestBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *baseQueue {
-	if !cfg.acceptsUnsplitRanges {
-		// Needed in order to pass the validation in newBaseQueue.
-		cfg.needsSpanConfigs = true
-	}
 	cfg.successes = metric.NewCounter(metric.Metadata{Name: "processed"})
 	cfg.failures = metric.NewCounter(metric.Metadata{Name: "failures"})
 	cfg.pending = metric.NewGauge(metric.Metadata{Name: "pending"})
@@ -968,7 +962,7 @@ type processTimeoutQueueImpl struct {
 var _ queueImpl = &processTimeoutQueueImpl{}
 
 func (pq *processTimeoutQueueImpl) process(
-	ctx context.Context, r *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, r *Replica,
 ) (processed bool, err error) {
 	<-ctx.Done()
 	atomic.AddInt32(&pq.processed, 1)
@@ -1097,9 +1091,7 @@ type processTimeQueueImpl struct {
 
 var _ queueImpl = &processTimeQueueImpl{}
 
-func (pq *processTimeQueueImpl) process(
-	_ context.Context, _ *Replica, _ spanconfig.StoreReader,
-) (processed bool, err error) {
+func (pq *processTimeQueueImpl) process(_ context.Context, _ *Replica) (processed bool, err error) {
 	time.Sleep(5 * time.Millisecond)
 	return true, nil
 }
@@ -1322,13 +1314,13 @@ type parallelQueueImpl struct {
 var _ queueImpl = &parallelQueueImpl{}
 
 func (pq *parallelQueueImpl) process(
-	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, repl *Replica,
 ) (processed bool, err error) {
 	atomic.AddInt32(&pq.processing, 1)
 	if pq.processBlocker != nil {
 		<-pq.processBlocker
 	}
-	processed, err = pq.testQueueImpl.process(ctx, repl, confReader)
+	processed, err = pq.testQueueImpl.process(ctx, repl)
 	atomic.AddInt32(&pq.processing, -1)
 	return processed, err
 }

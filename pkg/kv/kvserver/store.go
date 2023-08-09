@@ -1807,7 +1807,11 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					// without leases we probably should try to move the leadership
 					// manually to a non-draining replica.
 
-					desc, conf := r.DescAndSpanConfig()
+					desc := r.Desc()
+					conf, err := r.SpanConfig()
+					if err != nil {
+						log.Infof(ctx, "skipping range %s without a valid span config", desc)
+					}
 
 					if verbose || log.V(1) {
 						// This logging is useful to troubleshoot incomplete drains.
@@ -2147,9 +2151,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 	}
 
-	s.cfg.SpanConfigSubscriber.Subscribe(func(ctx context.Context, update roachpb.Span) {
-		s.onSpanConfigUpdate(ctx, update)
-	})
+	if s.cfg.SpanConfigSubscriber != nil {
+		s.cfg.SpanConfigSubscriber.Subscribe(func(ctx context.Context, update roachpb.Span) {
+			s.onSpanConfigUpdate(ctx, update)
+		})
+	}
 
 	// We also want to do it when the fallback config setting is changed.
 	spanconfigstore.FallbackConfigOverride.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
@@ -2188,12 +2194,8 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 		return s.cfg.TestingKnobs.ConfReaderInterceptor(), nil
 	}
 
-	if s.TestingKnobs().UseSystemConfigSpanForQueues {
-		sysCfg := s.cfg.SystemConfigProvider.GetSystemConfig()
-		if sysCfg == nil {
-			return nil, errSpanConfigsUnavailable
-		}
-		return sysCfg, nil
+	if s.cfg.SpanConfigSubscriber == nil {
+		return nil, errSpanConfigsNotConfigured
 	}
 
 	if s.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty() {
@@ -2345,6 +2347,20 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 	s.rangefeedReplicas.Unlock()
 }
 
+func (s *Store) GetSpanConfigForKey(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, error) {
+	confReader, err := s.GetConfReader(ctx)
+	if err != nil {
+		// Tests don't always set the SpanConfigSubscriber, just use the default.
+		if errors.Is(err, errSpanConfigsNotConfigured) {
+			return s.cfg.DefaultSpanConfig, nil
+		}
+		return roachpb.SpanConfig{}, err
+	}
+	return confReader.GetSpanConfigForKey(ctx, key)
+}
+
 // onSpanConfigUpdate is the callback invoked whenever this store learns of a
 // span config update.
 func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
@@ -2366,58 +2382,13 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 				return nil // placeholder; ignore
 			}
 
-			replCtx := repl.AnnotateCtx(ctx)
-			startKey := repl.Desc().StartKey
-			if sp.ContainsKey(startKey) {
-				// It's possible that the update we're receiving here implies a split.
-				// If the update corresponds to what would be the config for the
-				// right-hand side after the split, we avoid clobbering the pre-split
-				// range's embedded span config by checking if the start key is part of
-				// the update.
-				//
-				// Even if we're dealing with what would be the right-hand side after
-				// the split is processed, we still want to nudge the split queue
-				// below -- we can't instead rely on there being an update for the
-				// left-hand side of the split. Concretely, consider the case when a
-				// new table is added with a different configuration to its (left)
-				// adjacent table. This results in a single update, corresponding to the
-				// new table's span, which forms the right-hand side post split.
-
-				// TODO(irfansharif): It's possible for a config to be applied over an
-				// entire range when it only pertains to the first half of the range.
-				// This will be corrected shortly -- we enqueue the range for a split
-				// below where we then apply the right config on each half. But still,
-				// it's surprising behavior and gets in the way of a desirable
-				// consistency guarantee: a key's config at any point in time is one
-				// that was explicitly declared over it, or the default config.
-				//
-				// We can do better, we can skip applying the config entirely and
-				// enqueue the split, then relying on the split trigger to install
-				// the right configs on each half. The current structure is as it is
-				// to maintain parity with the system config span variant.
-
-				conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, startKey)
-				if err != nil {
-					log.Errorf(ctx, "skipped applying update, unexpected error reading from subscriber: %v", err)
-					return err
-				}
-				repl.SetSpanConfig(conf)
-			}
-
 			// TODO(irfansharif): For symmetry with the system config span variant,
 			// we queue blindly; we could instead only queue it if we knew the
 			// range's keyspans has a split in there somewhere, or was now part of a
 			// larger range and eligible for a merge, or the span config implied a
 			// need for {up,down}replication.
-			s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
-			s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
-			s.replicateQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
+			s.queueChanges(repl, ctx, now)
+
 			return nil // more
 		},
 	); err != nil {
@@ -2431,22 +2402,22 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 func (s *Store) applyAllFromSpanConfigStore(ctx context.Context) {
 	now := s.cfg.Clock.NowAsClockTimestamp()
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		replCtx := repl.AnnotateCtx(ctx)
-		key := repl.Desc().StartKey
-		conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, key)
-		if err != nil {
-			log.Errorf(ctx, "skipped applying config update, unexpected error reading from subscriber: %v", err)
-			return true // more
-		}
-
-		repl.SetSpanConfig(conf)
-		s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-			h.MaybeAdd(ctx, repl, now)
-		})
-		s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-			h.MaybeAdd(ctx, repl, now)
-		})
+		s.queueChanges(repl, ctx, now)
 		return true // more
+	})
+}
+
+func (s *Store) queueChanges(repl *Replica, ctx context.Context, now hlc.ClockTimestamp) {
+	replCtx := repl.AnnotateCtx(ctx)
+
+	s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		h.MaybeAdd(ctx, repl, now)
+	})
+	s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		h.MaybeAdd(ctx, repl, now)
+	})
+	s.replicateQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		h.MaybeAdd(ctx, repl, now)
 	})
 }
 
@@ -3385,8 +3356,11 @@ func (s *Store) ReplicateQueueDryRun(
 		return true
 	}
 	desc := repl.Desc()
-	conf := repl.SpanConfig()
-	_, err := s.replicateQueue.processOneChange(
+	conf, err := repl.SpanConfig()
+	if err != nil {
+		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
+	}
+	_, err = s.replicateQueue.processOneChange(
 		ctx, repl, desc, conf, canTransferLease, false /* scatter */, true, /* dryRun */
 	)
 	if err != nil {
@@ -3424,13 +3398,7 @@ func (s *Store) AllocatorCheckRange(
 	}
 	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator check range", spanOptions...)
 
-	confReader, err := s.GetConfReader(ctx)
-	if err != nil {
-		log.Eventf(ctx, "span configs unavailable: %s", err)
-		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
-	}
-
-	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
+	conf, err := s.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
 		log.Eventf(ctx, "error retrieving span config for range %s: %s", desc, err)
 		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
@@ -3523,13 +3491,6 @@ func (s *Store) Enqueue(
 		return nil, nil, errors.Errorf("unknown queue type %q", queueName)
 	}
 
-	confReader, err := s.GetConfReader(ctx)
-	if err != nil {
-		return nil, nil, errors.Wrap(err,
-			"unable to retrieve conf reader, cannot run queue; make sure "+
-				"the cluster has been initialized and all nodes connected to it")
-	}
-
 	// Many queues are only meant to be run on leaseholder replicas, so attempt to
 	// take the lease here or bail out early if a different replica has it.
 	if needsLease {
@@ -3562,7 +3523,7 @@ func (s *Store) Enqueue(
 
 	if !skipShouldQueue {
 		log.Eventf(ctx, "running %s.shouldQueue", queueName)
-		shouldQueue, priority := qImpl.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, confReader)
+		shouldQueue, priority := qImpl.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl)
 		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
 		if !shouldQueue {
 			return collectAndFinish(), nil, nil
@@ -3570,7 +3531,7 @@ func (s *Store) Enqueue(
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
-	processed, processErr := qImpl.process(ctx, repl, confReader)
+	processed, processErr := qImpl.process(ctx, repl)
 	log.Eventf(ctx, "processed: %t (err: %v)", processed, processErr)
 	return collectAndFinish(), processErr, nil
 }
@@ -3607,7 +3568,7 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 		g.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			processed, err := s.replicaGCQueue.process(ctx, repl, nil)
+			processed, err := s.replicaGCQueue.process(ctx, repl)
 			if err != nil {
 				return errors.Wrapf(err, "on %s", repl.Desc())
 			}
