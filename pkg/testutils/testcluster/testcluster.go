@@ -73,6 +73,8 @@ type TestCluster struct {
 	serverArgs  []base.TestServerArgs
 	clusterArgs base.TestClusterArgs
 
+	defaultTestTenantOptions base.DefaultTestTenantOptions
+
 	t serverutils.TestFataler
 }
 
@@ -232,6 +234,15 @@ func StartTestCluster(
 	t serverutils.TestFataler, nodes int, args base.TestClusterArgs,
 ) *TestCluster {
 	cluster := NewTestCluster(t, nodes, args)
+
+	defer func() {
+		if r := recover(); r != nil {
+			// Avoid a stopper leak.
+			cluster.Stopper().Stop(context.Background())
+			panic(r)
+		}
+	}()
+
 	cluster.Start(t)
 	return cluster
 }
@@ -275,6 +286,22 @@ func NewTestCluster(
 	if len(tc.clusterArgs.ServerArgs.Locality.Tiers) > 0 {
 		noLocalities = false
 	}
+
+	// Find out how to do the default test tenant.
+	// The choice should be made by the top-level ServerArgs.
+	defaultTestTenantOptions := tc.clusterArgs.ServerArgs.DefaultTestTenant
+	// API check: verify that no non-default choice was made via per-server args,
+	// and inform the user otherwise.
+	for i := 0; i < nodes; i++ {
+		if args, ok := tc.clusterArgs.ServerArgsPerNode[i]; ok &&
+			args.DefaultTestTenant != (base.DefaultTestTenantOptions{}) &&
+			args.DefaultTestTenant != defaultTestTenantOptions {
+			t.Fatalf("improper use of DefaultTestTenantOptions in per-server args: %v vs %v\n"+
+				"Tip: use the top-level ServerArgs to set the default test tenant options.",
+				args.DefaultTestTenant, defaultTestTenantOptions)
+		}
+	}
+	tc.defaultTestTenantOptions = serverutils.ShouldStartDefaultTestTenant(t, defaultTestTenantOptions)
 
 	var firstListener net.Listener
 	for i := 0; i < nodes; i++ {
@@ -365,36 +392,11 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 		errCh = make(chan error, nodes)
 	}
 
-	// Determine if we should probabilistically start a test tenant for the
-	// cluster. We key off of the DisableDefaultTestTenant flag of the first
-	// server in the cluster since they should all be set to the same value
-	// (validated below).
-	probabilisticallyStartTestTenant := false
-	if !tc.Servers[0].DefaultTestTenantDisabled() {
-		probabilisticallyStartTestTenant = serverutils.ShouldStartDefaultTestTenant(t, tc.serverArgs[0])
-	}
-
-	startedTestTenant := true
 	disableLBS := false
 	for i := 0; i < nodes; i++ {
 		// Disable LBS if any server has a very low scan interval.
 		if tc.serverArgs[i].ScanInterval > 0 && tc.serverArgs[i].ScanInterval <= 100*time.Millisecond {
 			disableLBS = true
-		}
-
-		// If we're not probabilistically starting the test tenant, disable
-		// its start and set the "started" flag accordingly. We need to do this
-		// with two separate if checks because the DisableDefaultTestTenant flag
-		// could have been set coming into this function by the caller.
-		if !probabilisticallyStartTestTenant {
-			tc.Servers[i].DisableDefaultTestTenant()
-		}
-		if tc.Servers[i].DefaultTestTenantDisabled() {
-			if startedTestTenant && i > 0 {
-				t.Fatal(errors.Newf("starting only some nodes with a test tenant is not"+
-					"currently supported - attempted to disable SQL sever on node %d", i))
-			}
-			startedTestTenant = false
 		}
 
 		if tc.clusterArgs.ParallelStart {
@@ -410,10 +412,6 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 			// unexpected order (#22342).
 			tc.WaitForNStores(t, i+1, tc.Servers[0].GossipI().(*gossip.Gossip))
 		}
-	}
-
-	if tc.StartedDefaultTestTenant() {
-		t.Log(serverutils.DefaultTestTenantMessage)
 	}
 
 	if tc.clusterArgs.ParallelStart {
@@ -439,10 +437,7 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 		}
 	}
 
-	// No need to disable the merge queue for SQL servers, as they don't have
-	// access to that cluster setting (and ALTER TABLE ... SPLIT AT is not
-	// supported in SQL servers either).
-	if !startedTestTenant && tc.clusterArgs.ReplicationMode == base.ReplicationManual {
+	if tc.clusterArgs.ReplicationMode == base.ReplicationManual {
 		// We've already disabled the merge queue via testing knobs above, but ALTER
 		// TABLE ... SPLIT AT will throw an error unless we also disable merges via
 		// the cluster setting.
@@ -602,15 +597,13 @@ func (tc *TestCluster) AddServer(
 		serverArgs.Addr = serverArgs.Listener.Addr().String()
 	}
 
+	// Inject the decision that was made about whether or not to start a
+	// test tenant server, into this new server's configuration.
+	serverArgs.DefaultTestTenant = tc.defaultTestTenantOptions
+
 	s, err := serverutils.NewServer(serverArgs)
 	if err != nil {
 		return nil, err
-	}
-
-	// If we only allowed probabilistic starting of the test tenant, we disable
-	// starting additional tenants, even if we didn't start the test tenant.
-	if serverArgs.DefaultTestTenant == base.TestTenantProbabilisticOnly {
-		s.DisableStartTenant(serverutils.PreventStartTenantError)
 	}
 
 	tc.Servers = append(tc.Servers, s)
