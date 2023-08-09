@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -171,19 +170,6 @@ func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInter
 
 	if !allowAdditionalTenants {
 		s.DisableStartTenant(PreventStartTenantError)
-	}
-
-	// Now that we have started the server on the bootstrap version, let us run
-	// the migrations up to the overridden BinaryVersion.
-	if v := s.BinaryVersionOverride(); v != (roachpb.Version{}) {
-		for _, layer := range []ApplicationLayerInterface{s.SystemLayer(), s.ApplicationLayer()} {
-			ie := layer.InternalExecutor().(isql.Executor)
-			if _, err := ie.Exec(ctx, "set-version", nil, /* kv.Txn */
-				`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
-				s.Stopper().Stop(ctx)
-				return nil, err
-			}
-		}
 	}
 
 	return s, nil
