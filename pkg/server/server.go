@@ -881,6 +881,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	// Instantiate the status API server.
+	var serverTestingKnobs *TestingKnobs
+	if cfg.TestingKnobs.Server != nil {
+		serverTestingKnobs = cfg.TestingKnobs.Server.(*TestingKnobs)
+	}
+
 	sStatus := newSystemStatusServer(
 		cfg.AmbientCtx,
 		st,
@@ -903,6 +908,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock,
 		rangestats.NewFetcher(db),
 		node,
+		serverTestingKnobs,
 	)
 
 	keyVisualizerServer := &KeyVisualizerServer{
