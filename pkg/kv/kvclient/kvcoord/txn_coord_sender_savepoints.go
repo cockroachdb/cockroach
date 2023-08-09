@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // savepoint captures the state in the TxnCoordSender necessary to restore that
@@ -121,15 +122,8 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.Savepoin
 	}
 
 	sp := s.(*savepoint)
-	err := tc.checkSavepointLocked(sp)
+	err := tc.checkSavepointLocked(sp, "rollback to")
 	if err != nil {
-		if errors.Is(err, errSavepointInvalidAfterTxnRestart) {
-			err = kvpb.NewTransactionRetryWithProtoRefreshError(
-				"cannot rollback to savepoint after a transaction restart",
-				tc.mu.txn.ID,
-				tc.mu.txn,
-			)
-		}
 		return err
 	}
 
@@ -165,15 +159,7 @@ func (tc *TxnCoordSender) ReleaseSavepoint(ctx context.Context, s kv.SavepointTo
 	}
 
 	sp := s.(*savepoint)
-	err := tc.checkSavepointLocked(sp)
-	if errors.Is(err, errSavepointInvalidAfterTxnRestart) {
-		err = kvpb.NewTransactionRetryWithProtoRefreshError(
-			"cannot release savepoint after a transaction restart",
-			tc.mu.txn.ID,
-			tc.mu.txn,
-		)
-	}
-	return err
+	return tc.checkSavepointLocked(sp, "release")
 }
 
 type errSavepointOperationInErrorTxn struct{}
@@ -193,23 +179,22 @@ func (tc *TxnCoordSender) assertNotFinalized() error {
 	return nil
 }
 
-var errSavepointInvalidAfterTxnRestart = errors.New("savepoint invalid after transaction restart")
-
 // checkSavepointLocked checks whether the provided savepoint is still valid.
-// Returns errSavepointInvalidAfterTxnRestart if the savepoint is not an
+// Returns a TransactionRetryWithProtoRefreshError if the savepoint is not an
 // "initial" one and the transaction has restarted since the savepoint was
 // created.
-func (tc *TxnCoordSender) checkSavepointLocked(s *savepoint) error {
+func (tc *TxnCoordSender) checkSavepointLocked(s *savepoint, op redact.SafeString) error {
 	// Only savepoints taken before any activity are allowed to be used after a
 	// transaction restart.
 	if s.Initial() {
 		return nil
 	}
-	if s.txnID != tc.mu.txn.ID {
-		return errSavepointInvalidAfterTxnRestart
-	}
-	if s.epoch != tc.mu.txn.Epoch {
-		return errSavepointInvalidAfterTxnRestart
+	if s.txnID != tc.mu.txn.ID || s.epoch != tc.mu.txn.Epoch {
+		return kvpb.NewTransactionRetryWithProtoRefreshError(
+			redact.Sprintf("cannot %s savepoint after a transaction restart", op),
+			s.txnID,
+			tc.mu.txn,
+		)
 	}
 
 	if s.seqNum < 0 || s.seqNum > tc.interceptorAlloc.txnSeqNumAllocator.writeSeq {
