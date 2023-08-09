@@ -661,7 +661,7 @@ func TestTxnCoordSenderCleanupOnCommitAfterRestart(t *testing.T) {
 	}
 
 	// Restart the transaction with a new epoch.
-	require.Error(t, txn.Sender().ManualRestart(ctx, txn.UserPriority(), s.Clock.Now(), "force retry"))
+	require.Error(t, txn.Sender().ManualRestart(ctx, s.Clock.Now(), "force retry"))
 	txn.Sender().ClearTxnRetryableErr(ctx)
 
 	// Now immediately commit.
@@ -2773,7 +2773,7 @@ func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
 			before: func(t *testing.T, txn *kv.Txn) {
 				_, err := txn.Get(ctx, "k")
 				require.NoError(t, err)
-				require.Error(t, txn.Sender().ManualRestart(ctx, txn.UserPriority(), txn.ReadTimestamp().Next(), "force retry"))
+				require.Error(t, txn.Sender().ManualRestart(ctx, txn.ReadTimestamp().Next(), "force retry"))
 				txn.Sender().ClearTxnRetryableErr(ctx)
 			},
 		},
@@ -2781,7 +2781,7 @@ func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
 			name: "write before, in prior epoch",
 			before: func(t *testing.T, txn *kv.Txn) {
 				require.NoError(t, txn.Put(ctx, "k", "v"))
-				require.Error(t, txn.Sender().ManualRestart(ctx, txn.UserPriority(), txn.ReadTimestamp().Next(), "force retry"))
+				require.Error(t, txn.Sender().ManualRestart(ctx, txn.ReadTimestamp().Next(), "force retry"))
 				txn.Sender().ClearTxnRetryableErr(ctx)
 			},
 		},
@@ -2791,7 +2791,7 @@ func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
 				_, err := txn.Get(ctx, "k")
 				require.NoError(t, err)
 				require.NoError(t, txn.Put(ctx, "k", "v"))
-				require.Error(t, txn.Sender().ManualRestart(ctx, txn.UserPriority(), txn.ReadTimestamp().Next(), "force retry"))
+				require.Error(t, txn.Sender().ManualRestart(ctx, txn.ReadTimestamp().Next(), "force retry"))
 				txn.Sender().ClearTxnRetryableErr(ctx)
 			},
 		},

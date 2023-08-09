@@ -1155,7 +1155,7 @@ func (tc *TxnCoordSender) RequiredFrontier() hlc.Timestamp {
 
 // ManualRestart is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) ManualRestart(
-	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp, msg redact.RedactableString,
+	ctx context.Context, ts hlc.Timestamp, msg redact.RedactableString,
 ) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -1166,7 +1166,7 @@ func (tc *TxnCoordSender) ManualRestart(
 	// Invalidate any writes performed by any workers after the retry updated
 	// the txn's proto but before we synchronized (some of these writes might
 	// have been performed at the wrong epoch).
-	tc.mu.txn.Restart(pri, 0 /* upgradePriority */, ts)
+	tc.mu.txn.Restart(tc.mu.userPriority, 0 /* upgradePriority */, ts)
 
 	pErr := kvpb.NewTransactionRetryWithProtoRefreshError(
 		msg, tc.mu.txn.ID, tc.mu.txn)
