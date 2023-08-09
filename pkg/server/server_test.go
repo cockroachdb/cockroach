@@ -937,7 +937,7 @@ func TestDecommissionNodeStatus(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -969,7 +969,7 @@ func TestSQLDecommissioned(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
 		ServerArgs: base.TestServerArgs{
 			Insecure: true, // to set up a simple SQL client

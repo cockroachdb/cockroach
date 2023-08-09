@@ -477,7 +477,7 @@ func TestImportInMultiServerTenant(t *testing.T) {
 		DefaultTestTenant: base.TODOTestTenantDisabled,
 		ExternalIODir:     baseDir,
 	}
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 
 	// Setup a SQL server on a tenant.

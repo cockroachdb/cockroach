@@ -1987,7 +1987,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 // of a TABLE CREATE are pushed to allow them to observe the created table.
 func TestTableCreationPushesTxnsInRecentPast(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(context.Background())
