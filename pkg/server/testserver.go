@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/deprecatedshowranges"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -495,7 +496,9 @@ func (ts *testServer) SQLConnE(dbName string) (*gosql.DB, error) {
 
 // SQLConnForUserE is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) SQLConnForUserE(userName string, dbName string) (*gosql.DB, error) {
-	return openTestSQLConn(userName, dbName, ts.Stopper(),
+	return openTestSQLConn(
+		userName, dbName, catconstants.SystemTenantName,
+		ts.Stopper(),
 		ts.topLevelServer.loopbackPgL,
 		ts.cfg.SQLAdvertiseAddr,
 		ts.cfg.Insecure,
@@ -787,7 +790,15 @@ func (t *testTenant) SQLConnE(dbName string) (*gosql.DB, error) {
 
 // SQLConnForUserE is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) SQLConnForUserE(userName string, dbName string) (*gosql.DB, error) {
-	return openTestSQLConn(userName, dbName, t.Stopper(),
+	tenantName := t.t.tenantName
+	if !t.Cfg.DisableSQLListener {
+		// This tenant server has its own SQL listener. It will not accept
+		// a "cluster" connection parameter.
+		tenantName = ""
+	}
+	return openTestSQLConn(
+		userName, dbName, tenantName,
+		t.Stopper(),
 		t.pgL,
 		t.Cfg.SQLAdvertiseAddr,
 		t.Cfg.Insecure,
