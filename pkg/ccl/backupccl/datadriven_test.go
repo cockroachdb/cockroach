@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -152,6 +153,10 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODirConfig = cfg.ioConf
 	params.ServerArgs.DisableDefaultTestTenant = cfg.disableTenant
+	var transactionRetryFilter func(*kv.Txn) bool
+	if cfg.randomTxnRetries {
+		transactionRetryFilter = kvclientutils.RandomTransactionRetryFilter()
+	}
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		TenantTestingKnobs: &sql.TenantTestingKnobs{
@@ -160,7 +165,7 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 			EnableTenantIDReuse: true,
 		},
 		KVClient: &kvcoord.ClientTestingKnobs{
-			EnableRandomTransactionRetryErrors: cfg.randomTxnRetries,
+			TransactionRetryFilter: transactionRetryFilter,
 		},
 	}
 
