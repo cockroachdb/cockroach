@@ -903,16 +903,18 @@ func (ex *connExecutor) execStmtInOpenState(
 		// PREPARE statement itself.
 		oldPlaceholders := p.extendedEvalCtx.Placeholders
 		p.extendedEvalCtx.Placeholders = nil
+		defer func() {
+			// The call to addPreparedStmt changed the planner stmt to the
+			// statement being prepared. Set it back to the PREPARE statement,
+			// so that it's logged correctly.
+			p.stmt = stmt
+			p.extendedEvalCtx.Placeholders = oldPlaceholders
+		}()
 		if _, err := ex.addPreparedStmt(
 			ctx, name, prepStmt, typeHints, rawTypeHints, PreparedStatementOriginSQL,
 		); err != nil {
 			return makeErrEvent(err)
 		}
-		// The call to addPreparedStmt changed the planner stmt to the statement
-		// being prepared. Set it back to the PREPARE statement, so that it's
-		// logged correctly.
-		p.stmt = stmt
-		p.extendedEvalCtx.Placeholders = oldPlaceholders
 		return nil, nil, nil
 	}
 
@@ -1307,14 +1309,12 @@ func (ex *connExecutor) commitSQLTransaction(
 	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionCommit, timeutil.Now())
 	if err := commitFn(ctx); err != nil {
-		if descs.IsTwoVersionInvariantViolationError(err) {
-			if resetErr := ex.resetTransactionOnSchemaChangeRetry(ctx); resetErr != nil {
-				return ex.makeErrEvent(err, ast)
-			}
-			// Generating a forced retry error here, right after resetting the
-			// transaction is not exactly necessary, but it's a sound way to
-			// generate the only type of ClientVisibleRetryError we have.
-			err = ex.state.mu.txn.GenerateForcedRetryableError(ctx, redact.Sprint(err))
+		// For certain retryable errors, we should turn them into client visible
+		// errors, since the client needs to retry now.
+		var conversionError error
+		err, conversionError = ex.convertRetriableErrorIntoUserVisibleError(ctx, err)
+		if conversionError != nil {
+			return ex.makeErrEvent(conversionError, ast)
 		}
 		return ex.makeErrEvent(err, ast)
 	}
