@@ -110,7 +110,7 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 			MaxVal:       time.Hour.Nanoseconds(),
 			SigFigs:      sigFigs,
 			Duration:     histogramWindowInterval,
-			BucketConfig: metric.StaticBucketConfigs[metric.LongRunning60mLatencyBuckets],
+			BucketConfig: metric.LongRunning60mLatencyBuckets,
 		}),
 		SelectDuration: b.Histogram(metric.HistogramOptions{
 			Metadata: metric.Metadata{
@@ -123,7 +123,7 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 			MaxVal:       time.Minute.Nanoseconds(),
 			SigFigs:      sigFigs,
 			Duration:     histogramWindowInterval,
-			BucketConfig: metric.StaticBucketConfigs[metric.BatchProcessLatencyBuckets],
+			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
 		DeleteDuration: b.Histogram(metric.HistogramOptions{
 			Metadata: metric.Metadata{
@@ -136,7 +136,7 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 			MaxVal:       time.Minute.Nanoseconds(),
 			SigFigs:      sigFigs,
 			Duration:     histogramWindowInterval,
-			BucketConfig: metric.StaticBucketConfigs[metric.BatchProcessLatencyBuckets],
+			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
 		RowSelections: b.Counter(
 			metric.Metadata{

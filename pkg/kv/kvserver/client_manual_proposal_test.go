@@ -235,7 +235,7 @@ LIMIT
 					Mode:         metric.HistogramModePrometheus,
 					Metadata:     fakeMeta,
 					Duration:     time.Millisecond,
-					BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+					BucketConfig: metric.IOLatencyBuckets,
 				}),
 			},
 		}

@@ -76,7 +76,7 @@ func NewMetrics(histogramWindowInterval time.Duration) *Metrics {
 			MaxVal:       time.Hour.Nanoseconds(),
 			SigFigs:      1,
 			Duration:     histogramWindowInterval,
-			BucketConfig: metric.StaticBucketConfigs[metric.LongRunning60mLatencyBuckets],
+			BucketConfig: metric.LongRunning60mLatencyBuckets,
 		}),
 
 		QueryWaitTime: metric.NewHistogram(metric.HistogramOptions{
@@ -89,7 +89,7 @@ func NewMetrics(histogramWindowInterval time.Duration) *Metrics {
 			MaxVal:       time.Hour.Nanoseconds(),
 			SigFigs:      1,
 			Duration:     histogramWindowInterval,
-			BucketConfig: metric.StaticBucketConfigs[metric.LongRunning60mLatencyBuckets],
+			BucketConfig: metric.LongRunning60mLatencyBuckets,
 		}),
 
 		DeadlocksTotal: metric.NewCounter(

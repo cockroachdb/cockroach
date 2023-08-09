@@ -188,7 +188,7 @@ func newMetrics(c *Controller) *metrics {
 			metric.HistogramOptions{
 				Metadata:     annotateMetricTemplateWithWorkClass(wc, waitDuration),
 				Duration:     base.DefaultHistogramWindowInterval(),
-				BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+				BucketConfig: metric.IOLatencyBuckets,
 				Mode:         metric.HistogramModePrometheus,
 			},
 		)

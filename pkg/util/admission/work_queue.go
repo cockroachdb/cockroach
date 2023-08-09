@@ -1787,7 +1787,7 @@ func makeWorkQueueMetricsSingle(name string) workQueueMetricsSingle {
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     addName(name, waitDurationsMeta),
 			Duration:     base.DefaultHistogramWindowInterval(),
-			BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		WaitQueueLength: metric.NewGauge(addName(name, waitQueueLengthMeta)),
 	}

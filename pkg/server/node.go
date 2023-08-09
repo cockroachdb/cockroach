@@ -279,7 +279,7 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaExecLatency,
 			Duration:     histogramWindow,
-			BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		Success:                       metric.NewCounter(metaExecSuccess),
 		Err:                           metric.NewCounter(metaExecError),

@@ -71,7 +71,7 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 				Mode:         metric.HistogramModePrometheus,
 				Metadata:     metric.Metadata{},
 				Duration:     10 * time.Second,
-				BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 		},
 	}

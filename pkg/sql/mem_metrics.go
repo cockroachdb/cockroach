@@ -78,7 +78,7 @@ func makeMemMetricHistogram(
 		Duration:     histogramWindow,
 		MaxVal:       log10int64times1000,
 		SigFigs:      3,
-		BucketConfig: metric.StaticBucketConfigs[metric.MemoryUsage64MBBuckets],
+		BucketConfig: metric.MemoryUsage64MBBuckets,
 	})
 }
 

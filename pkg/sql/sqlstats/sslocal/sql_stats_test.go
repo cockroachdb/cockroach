@@ -533,7 +533,7 @@ func BenchmarkRecordStatement(b *testing.B) {
 			Duration:     10 * time.Second,
 			MaxVal:       19 * 1000,
 			SigFigs:      3,
-			BucketConfig: metric.StaticBucketConfigs[metric.MemoryUsage64MBBuckets],
+			BucketConfig: metric.MemoryUsage64MBBuckets,
 		}), /* maxMemoryBytesHist */
 		insightsProvider.Writer,
 		monitor,

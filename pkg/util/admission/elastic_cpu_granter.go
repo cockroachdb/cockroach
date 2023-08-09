@@ -372,7 +372,7 @@ func makeElasticCPUGranterMetrics() *elasticCPUGranterMetrics {
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     elasticCPUOverLimitDurations,
 			Duration:     base.DefaultHistogramWindowInterval(),
-			BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		Utilization:      metric.NewGaugeFloat64(elasticCPUGranterUtilization),
 		UtilizationLimit: metric.NewGaugeFloat64(elasticCPUGranterUtilizationLimit),

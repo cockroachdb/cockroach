@@ -2841,7 +2841,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaLeaseRequestLatency,
 			Duration:     histogramWindow,
-			BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		LeaseTransferSuccessCount:      metric.NewCounter(metaLeaseTransferSuccessCount),
 		LeaseTransferErrorCount:        metric.NewCounter(metaLeaseTransferErrorCount),
@@ -2871,13 +2871,13 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		AverageCPUNanosPerSecond:   metric.NewGaugeFloat64(metaAverageCPUNanosPerSecond),
 		RecentReplicaCPUNanosPerSecond: metric.NewManualWindowHistogram(
 			metaRecentReplicaCPUNanosPerSecond,
-			metric.StaticBucketConfigs[metric.ReplicaCPUTimeBuckets].
+			metric.ReplicaCPUTimeBuckets.
 				GetBucketsFromBucketConfig(),
 			true, /* withRotate */
 		),
 		RecentReplicaQueriesPerSecond: metric.NewManualWindowHistogram(
 			metaRecentReplicaQueriesPerSecond,
-			metric.StaticBucketConfigs[metric.ReplicaBatchRequestCountBuckets].
+			metric.ReplicaBatchRequestCountBuckets.
 				GetBucketsFromBucketConfig(),
 			true, /* withRotate */
 		),
@@ -3014,7 +3014,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			Duration:     histogramWindow,
 			MaxVal:       100,
 			SigFigs:      1,
-			BucketConfig: metric.StaticBucketConfigs[metric.Percent100Buckets],
+			BucketConfig: metric.Percent100Buckets,
 		}),
 		RaftWorkingDurationNanos: metric.NewCounter(metaRaftWorkingDurationNanos),
 		RaftTickingDurationNanos: metric.NewCounter(metaRaftTickingDurationNanos),
@@ -3023,37 +3023,37 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaRaftLogCommitLatency,
 			Duration:     histogramWindow,
-			BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		RaftCommandCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaRaftCommandCommitLatency,
 			Duration:     histogramWindow,
-			BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		RaftHandleReadyLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaRaftHandleReadyLatency,
 			Duration:     histogramWindow,
-			BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		RaftApplyCommittedLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaRaftApplyCommittedLatency,
 			Duration:     histogramWindow,
-			BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		RaftReplicationLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaRaftReplicationLatency,
 			Duration:     histogramWindow,
-			BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		RaftSchedulerLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaRaftSchedulerLatency,
 			Duration:     histogramWindow,
-			BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		RaftTimeoutCampaign:  metric.NewCounter(metaRaftTimeoutCampaign),
 		RaftStorageReadBytes: metric.NewCounter(metaRaftStorageReadBytes),
@@ -3206,13 +3206,13 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaReplicaReadBatchEvaluationLatency,
 			Duration:     histogramWindow,
-			BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		ReplicaWriteBatchEvaluationLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaReplicaWriteBatchEvaluationLatency,
 			Duration:     histogramWindow,
-			BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		FlushUtilization: metric.NewGaugeFloat64(metaStorageFlushUtilization),
 		FsyncLatency: metric.NewManualWindowHistogram(

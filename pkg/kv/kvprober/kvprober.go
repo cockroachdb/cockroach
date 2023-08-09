@@ -279,7 +279,7 @@ func NewProber(opts Opts) *Prober {
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     metaReadProbeLatency,
 				Duration:     opts.HistogramWindowInterval,
-				BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			WriteProbeAttempts: metric.NewCounter(metaWriteProbeAttempts),
 			WriteProbeFailures: metric.NewCounter(metaWriteProbeFailures),
@@ -287,7 +287,7 @@ func NewProber(opts Opts) *Prober {
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     metaWriteProbeLatency,
 				Duration:     opts.HistogramWindowInterval,
-				BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			WriteProbeQuarantineOldestDuration: metric.NewFunctionalGauge(
 				metaWriteProbeQuarantineOldestDuration,

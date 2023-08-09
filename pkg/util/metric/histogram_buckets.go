@@ -43,96 +43,90 @@ const (
 	COUNT
 )
 
-// histType describes the category of the metric for which we record
-// histogram data
-type histType int
-
-const (
-	IOLatencyBuckets histType = iota
-	BatchProcessLatencyBuckets
-	LongRunning60mLatencyBuckets
-	DataSize16MBBuckets
-	MemoryUsage64MBBuckets
-	ReplicaCPUTimeBuckets
-	ReplicaBatchRequestCountBuckets
-	Count1KBuckets
-	Percent100Buckets
-)
-
-var StaticBucketConfigs = map[histType]staticBucketConfig{
-	IOLatencyBuckets: {
-		category:     "IOLatencyBuckets",
-		min:          10e3, // 10µs
-		max:          10e9, // 10s
-		count:        60,
-		units:        LATENCY,
-		distribution: Exponential,
-	},
-	BatchProcessLatencyBuckets: {
-		category:     "BatchProcessLatencyBuckets",
-		min:          500e6, // 500ms
-		max:          300e9, // 5m
-		count:        60,
-		units:        LATENCY,
-		distribution: Exponential,
-	},
-	LongRunning60mLatencyBuckets: {
-		category:     "LongRunning60mLatencyBuckets",
-		min:          500e6,  // 500ms
-		max:          3600e9, // 1h
-		count:        60,
-		units:        LATENCY,
-		distribution: Exponential,
-	},
-	DataSize16MBBuckets: {
-		category:     "DataSize16MBBuckets",
-		min:          1e3,     // 1kB
-		max:          16384e3, // 16MB
-		count:        15,
-		units:        SIZE,
-		distribution: Exponential,
-	},
-	MemoryUsage64MBBuckets: {
-		category:     "MemoryUsage64MBBuckets",
-		min:          1,    // 1B
-		max:          64e6, // 64MB
-		count:        15,
-		units:        SIZE,
-		distribution: Exponential,
-	},
-	ReplicaCPUTimeBuckets: {
-		category:     "ReplicaCPUTimeBuckets",
-		min:          50e4, // 500µs
-		max:          5e9,  // 5s
-		count:        20,
-		units:        LATENCY,
-		distribution: Exponential,
-	},
-	ReplicaBatchRequestCountBuckets: {
-		category:     "ReplicaBatchRequestCountBuckets",
-		min:          1,
-		max:          16e3,
-		count:        20,
-		units:        COUNT,
-		distribution: Exponential,
-	},
-	Count1KBuckets: {
-		category:     "Count1KBuckets",
-		min:          1,
-		max:          1024,
-		count:        11,
-		units:        COUNT,
-		distribution: Exponential,
-	},
-	Percent100Buckets: {
-		category:     "Percent100Buckets",
-		min:          0,
-		max:          100,
-		count:        10,
-		units:        COUNT,
-		distribution: Uniform,
-	},
+var IOLatencyBuckets = staticBucketConfig{
+	category:     "IOLatencyBuckets",
+	min:          10e3, // 10µs
+	max:          10e9, // 10s
+	count:        60,
+	units:        LATENCY,
+	distribution: Exponential,
 }
+
+var BatchProcessLatencyBuckets = staticBucketConfig{
+	category:     "BatchProcessLatencyBuckets",
+	min:          500e6, // 500ms
+	max:          300e9, // 5m
+	count:        60,
+	units:        LATENCY,
+	distribution: Exponential,
+}
+
+var LongRunning60mLatencyBuckets = staticBucketConfig{
+	category:     "LongRunning60mLatencyBuckets",
+	min:          500e6,  // 500ms
+	max:          3600e9, // 1h
+	count:        60,
+	units:        LATENCY,
+	distribution: Exponential,
+}
+
+var DataSize16MBBuckets = staticBucketConfig{
+	category:     "DataSize16MBBuckets",
+	min:          1e3,     // 1kB
+	max:          16384e3, // 16MB
+	count:        15,
+	units:        SIZE,
+	distribution: Exponential,
+}
+
+var MemoryUsage64MBBuckets = staticBucketConfig{
+	category:     "MemoryUsage64MBBuckets",
+	min:          1,    // 1B
+	max:          64e6, // 64MB
+	count:        15,
+	units:        SIZE,
+	distribution: Exponential,
+}
+
+var ReplicaCPUTimeBuckets = staticBucketConfig{
+	category:     "ReplicaCPUTimeBuckets",
+	min:          50e4, // 500µs
+	max:          5e9,  // 5s
+	count:        20,
+	units:        LATENCY,
+	distribution: Exponential,
+}
+
+var ReplicaBatchRequestCountBuckets = staticBucketConfig{
+	category:     "ReplicaBatchRequestCountBuckets",
+	min:          1,
+	max:          16e3,
+	count:        20,
+	units:        COUNT,
+	distribution: Exponential,
+}
+
+var Count1KBuckets = staticBucketConfig{
+	category:     "Count1KBuckets",
+	min:          1,
+	max:          1024,
+	count:        11,
+	units:        COUNT,
+	distribution: Exponential,
+}
+var Percent100Buckets = staticBucketConfig{
+	category:     "Percent100Buckets",
+	min:          0,
+	max:          100,
+	count:        10,
+	units:        COUNT,
+	distribution: Uniform,
+}
+
+var StaticBucketConfigs = []staticBucketConfig{IOLatencyBuckets,
+	BatchProcessLatencyBuckets, LongRunning60mLatencyBuckets,
+	DataSize16MBBuckets, MemoryUsage64MBBuckets, ReplicaCPUTimeBuckets,
+	ReplicaBatchRequestCountBuckets, Count1KBuckets, Percent100Buckets}
 
 func (config staticBucketConfig) GetBucketsFromBucketConfig() []float64 {
 	var buckets []float64

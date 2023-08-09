@@ -384,7 +384,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 				Mode:         metric.HistogramModePrometheus,
 				Metadata:     metaDialTenantLatency,
 				Duration:     time.Millisecond,
-				BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
 		}
@@ -469,7 +469,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     metaDialTenantLatency,
 				Duration:     time.Millisecond,
-				BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
 		}
@@ -503,7 +503,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     metaDialTenantLatency,
 				Duration:     time.Millisecond,
-				BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
 		}

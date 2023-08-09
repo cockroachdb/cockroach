@@ -75,7 +75,7 @@ func TestAggMetric(t *testing.T) {
 		Duration:     base.DefaultHistogramWindowInterval(),
 		MaxVal:       100,
 		SigFigs:      1,
-		BucketConfig: metric.StaticBucketConfigs[metric.Count1KBuckets],
+		BucketConfig: metric.Count1KBuckets,
 	}, "tenant_id")
 	r.AddMetric(h)
 
@@ -179,7 +179,7 @@ func TestAggMetricBuilder(t *testing.T) {
 		Duration:     base.DefaultHistogramWindowInterval(),
 		MaxVal:       100,
 		SigFigs:      1,
-		BucketConfig: metric.StaticBucketConfigs[metric.Count1KBuckets],
+		BucketConfig: metric.Count1KBuckets,
 	})
 
 	for i := 5; i < 10; i++ {

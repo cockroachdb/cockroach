@@ -282,7 +282,7 @@ func newTenantSpecificMetrics(
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     MetaConnLatency,
 			Duration:     histogramWindow,
-			BucketConfig: metric.StaticBucketConfigs[metric.IOLatencyBuckets],
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		ConnFailures:                metric.NewCounter(MetaConnFailures),
 		PGWireCancelTotalCount:      metric.NewCounter(MetaPGWireCancelTotal),
