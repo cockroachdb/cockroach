@@ -426,19 +426,6 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 		tc.WaitForNStores(t, tc.NumServers(), tc.Servers[0].GossipI().(*gossip.Gossip))
 	}
 
-	// Now that we have started all the servers on the bootstrap version, let us
-	// run the migrations up to the overridden BinaryVersion.
-	s := tc.Servers[0]
-	if v := s.BinaryVersionOverride(); v != (roachpb.Version{}) {
-		for _, layer := range []serverutils.ApplicationLayerInterface{s.SystemLayer(), s.ApplicationLayer()} {
-			ie := layer.InternalExecutor().(isql.Executor)
-			if _, err := ie.Exec(context.Background(), "set-cluster-version", nil, /* txn */
-				`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-
 	// No need to disable the merge queue for SQL servers, as they don't have
 	// access to that cluster setting (and ALTER TABLE ... SPLIT AT is not
 	// supported in SQL servers either).
@@ -449,7 +436,7 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 		//
 		// TODO(benesch): this won't be necessary once we have sticky bits for
 		// splits.
-		if _, err := s.SystemLayer().
+		if _, err := tc.Servers[0].SystemLayer().
 			InternalExecutor().(isql.Executor).
 			Exec(context.Background(), "enable-merge-queue", nil, /* txn */
 				`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
@@ -458,7 +445,7 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 	}
 
 	if disableLBS {
-		if _, err := s.SystemLayer().
+		if _, err := tc.Servers[0].SystemLayer().
 			InternalExecutor().(isql.Executor).
 			Exec(context.Background(), "enable-split-by-load", nil, /*txn */
 				`SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {

@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/deprecatedshowranges"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -678,6 +679,21 @@ func (ts *testServer) Start(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
+
+	maybeRunVersionUpgrade := func(layer serverutils.ApplicationLayerInterface) error {
+		if v := ts.BinaryVersionOverride(); v != (roachpb.Version{}) {
+			ie := layer.InternalExecutor().(isql.Executor)
+			if _, err := ie.Exec(context.Background(), "set-cluster-version", nil, /* txn */
+				`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := maybeRunVersionUpgrade(ts.SystemLayer()); err != nil {
+		return err
+	}
+
 	if err := ts.topLevelServer.AcceptClients(ctx); err != nil {
 		return err
 	}
@@ -688,6 +704,13 @@ func (ts *testServer) Start(ctx context.Context) error {
 		ts.Stopper().Stop(context.Background())
 		return err
 	}
+
+	if ts.StartedDefaultTestTenant() {
+		if err := maybeRunVersionUpgrade(ts.ApplicationLayer()); err != nil {
+			return err
+		}
+	}
+
 	go func() {
 		// If the server requests a shutdown, do that simply by stopping the
 		// stopper.
