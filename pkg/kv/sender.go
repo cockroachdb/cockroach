@@ -177,17 +177,20 @@ type TxnSender interface {
 	// transaction has been used in the current epoch to read or write.
 	SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) error
 
-	// ManualRestart bumps the transactions epoch and can upgrade the
-	// timestamp.
-	// An uninitialized timestamp can be passed to leave the timestamp
-	// alone.
-	// Returns a TransactionRetryWithProtoRefreshError with a payload
-	// initialized from this txn, which must be cleared by a call to
-	// ClearTxnRetryableErr before continuing to use the TxnSender.
+	// GenerateForcedRetryableErr constructs, handles, and returns a retryable
+	// error that will cause the transaction to be retried.
 	//
-	// Used by the SQL layer which sometimes knows that a transaction
-	// will not be able to commit and prefers to restart early.
-	ManualRestart(
+	// The transaction's epoch is bumped and its timestamp is upgraded to the
+	// specified timestamp. An uninitialized timestamp can be passed to leave
+	// the timestamp alone.
+	//
+	// The method returns a TransactionRetryWithProtoRefreshError with a
+	// payload initialized from this transaction, which must be cleared by a
+	// call to ClearTxnRetryableErr before continuing to use the TxnSender.
+	//
+	// Used by the SQL layer which sometimes knows that a transaction will not
+	// be able to commit and prefers to restart early.
+	GenerateForcedRetryableErr(
 		ctx context.Context, ts hlc.Timestamp, msg redact.RedactableString,
 	) error
 
