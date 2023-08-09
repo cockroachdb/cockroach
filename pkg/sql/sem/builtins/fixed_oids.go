@@ -2440,6 +2440,7 @@ var builtinOidsArray = []string{
 	2467: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, samplingProbability: float, minExecutionLatency: interval, expiresAfter: interval) -> bool`,
 	2468: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, antiPlanGist: bool, samplingProbability: float, minExecutionLatency: interval, expiresAfter: interval) -> bool`,
 	2469: `crdb_internal.is_system_table_key(raw_key: bytes) -> bool`,
+	2470: `oidvectortypes(vector: oidvector) -> string`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

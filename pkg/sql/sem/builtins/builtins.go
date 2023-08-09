@@ -3993,6 +3993,41 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"oidvectortypes": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategoryCompatibility,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "vector", Typ: types.OidVector},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				var err error
+				oidVector := args[0].(*tree.DArray)
+				result := strings.Builder{}
+				for idx, datum := range oidVector.Array {
+					oidDatum := datum.(*tree.DOid)
+					var typ *types.T
+					if resolvedTyp, ok := types.OidToType[oidDatum.Oid]; ok {
+						typ = resolvedTyp
+					} else {
+						typ, err = evalCtx.Planner.ResolveTypeByOID(ctx, oidDatum.Oid)
+						if err != nil {
+							return nil, err
+						}
+					}
+					result.WriteString(typ.SQLString())
+					if idx != len(oidVector.Array)-1 {
+						result.WriteString(", ")
+					}
+				}
+				return tree.NewDString(result.String()), nil
+			},
+			Info:       "Generates a comma seperated string of type names from an oidvector",
+			Volatility: volatility.Stable,
+		}),
+
 	"crdb_internal.pb_to_json": makeBuiltin(
 		jsonProps(),
 		func() []tree.Overload {
