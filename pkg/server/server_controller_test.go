@@ -15,10 +15,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -81,6 +84,7 @@ func TestSQLErrorUponInvalidTenant(t *testing.T) {
 	require.NoError(t, err)
 
 	err = db.Ping()
+	require.NotNil(t, err)
 	require.Regexp(t, `service unavailable for target tenant \(nonexistent\)`, err.Error())
 }
 
@@ -108,4 +112,48 @@ func TestSharedProcessServerInheritsTempStorageLimit(t *testing.T) {
 
 	tss := ts.(*testTenant)
 	require.Equal(t, int64(specialSize), tss.SQLCfg.TempStorageConfig.Mon.Limit())
+}
+
+// TestServerSQLConn checks that the SQLConn() method on the
+// SystemLayer() of TestServerInterface works even when non-specific
+// SQL connection requests are redirected to a secondary tenant.
+func TestServerSQLConn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const specialSize = 123123123
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer s.Stopper().Stop(ctx)
+	systemTenant := s.SystemLayer()
+
+	// Start a shared process tenant server.
+	secondaryTenant, _, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+		TenantName: "hello",
+	})
+	require.NoError(t, err)
+	multitenant.DefaultTenantSelect.Override(ctx, &systemTenant.ClusterSettings().SV, "hello")
+
+	t.Run("system", func(t *testing.T) {
+		_, err = systemTenant.InternalExecutor().(isql.Executor).
+			Exec(ctx, "create-table", nil, "CREATE TABLE defaultdb.foo (i INT)")
+		require.NoError(t, err)
+
+		conn := systemTenant.SQLConn(t, "defaultdb")
+		var unused int
+		assert.NoError(t, conn.QueryRowContext(ctx, "SELECT count(*) FROM foo").Scan(&unused))
+	})
+
+	t.Run("secondary", func(t *testing.T) {
+		_, err = secondaryTenant.InternalExecutor().(isql.Executor).
+			Exec(ctx, "create-table", nil, "CREATE TABLE defaultdb.bar (i INT)")
+		require.NoError(t, err)
+
+		conn := secondaryTenant.SQLConn(t, "defaultdb")
+		var unused int
+		assert.NoError(t, conn.QueryRowContext(ctx, "SELECT count(*) FROM bar").Scan(&unused))
+	})
 }
