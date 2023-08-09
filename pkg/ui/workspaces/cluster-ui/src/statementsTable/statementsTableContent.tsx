@@ -32,7 +32,7 @@ import {
 import styles from "./statementsTableContent.module.scss";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { EllipsisVertical } from "@cockroachlabs/icons";
-import { getBasePath } from "src/api/basePath";
+import { withBasePath } from "src/api/basePath";
 
 export type NodeNames = { [nodeId: string]: string };
 const cx = classNames.bind(styles);
@@ -137,9 +137,9 @@ export const StatementTableCell = {
                       name: (
                         <a
                           className={cx("diagnostic-report-dropdown-option")}
-                          href={`${getBasePath()}/_admin/v1/stmtbundle/${
+                          href={withBasePath(`_admin/v1/stmtbundle/${
                             dr.statement_diagnostics_id
-                          }`}
+                          }`)}
                         >
                           {`Download ${TimestampToMoment(
                             dr.requested_at,
