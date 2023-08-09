@@ -63,7 +63,7 @@ eexpect ":/# "
 stop_server $argv
 
 start_test "Check that a server started with --logtostderr logs even info messages to stderr."
-send "$argv start-single-node -s=path=logs/db --insecure --logtostderr\r"
+send "$argv start-single-node --max-sql-memory=128MB -s=path=logs/db --insecure --logtostderr\r"
 eexpect "CockroachDB node starting"
 end_test
 
@@ -71,9 +71,10 @@ end_test
 interrupt
 interrupt
 eexpect ":/# "
+system "rm -rf logs/db"
 
 start_test "Check that --logtostderr can override the threshold but no error is printed on startup"
-send "echo marker; $argv start-single-node -s=path=logs/db --insecure --logtostderr=ERROR 2>&1 | grep -v '^\\*'\r"
+send "echo marker; $argv start-single-node --max-sql-memory=128MB -s=path=logs/db --insecure --logtostderr=ERROR 2>&1 | grep -v '^\\*'\r"
 eexpect "marker\r\nCockroachDB node starting"
 end_test
 
@@ -81,9 +82,11 @@ end_test
 interrupt
 interrupt
 eexpect ":/# "
+system "rm -rf logs/db"
+
 
 start_test "Check that panic reports are printed to the log even when --logtostderr is specified"
-send "$argv start-single-node -s=path=logs/db --insecure --logtostderr\r"
+send "$argv start-single-node --max-sql-memory=128MB -s=path=logs/db --insecure --logtostderr\r"
 eexpect "CockroachDB node starting"
 
 system "($argv sql --insecure -e \"select crdb_internal.force_panic('helloworld')\" || true)&"
