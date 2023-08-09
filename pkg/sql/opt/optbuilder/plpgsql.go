@@ -353,6 +353,12 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 					"EXIT statement labels are not yet supported",
 				))
 			}
+			if t.Condition != nil {
+				panic(unimplemented.New(
+					"EXIT WHEN",
+					"conditional EXIT statements are not yet supported",
+				))
+			}
 			// EXIT statements are handled by calling the function that executes the
 			// statements after a loop. Errors if used outside a loop.
 			if con := b.getExitContinuation(); con != nil {
@@ -369,6 +375,12 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				panic(unimplemented.New(
 					"CONTINUE label",
 					"CONTINUE statement labels are not yet supported",
+				))
+			}
+			if t.Condition != nil {
+				panic(unimplemented.New(
+					"CONTINUE WHEN",
+					"conditional CONTINUE statements are not yet supported",
 				))
 			}
 			// CONTINUE statements are handled by calling the function that executes
