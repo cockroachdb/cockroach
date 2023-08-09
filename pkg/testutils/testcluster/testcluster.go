@@ -567,7 +567,7 @@ func (tc *TestCluster) AddServer(
 	if serverArgs.JoinAddr != "" {
 		serverArgs.NoAutoInitializeCluster = true
 	}
-	// Check args even though they might have been checked in StartNewTestCluster;
+	// Check args even though they might have been checked in New/Start;
 	// this method might be called for servers being added after the cluster was
 	// started, in which case the check has not been performed.
 	if err := checkServerArgsForCluster(

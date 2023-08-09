@@ -40,7 +40,7 @@ func TestManifestHandlingIteratorOperations(t *testing.T) {
 	const changesPerDescriptor = 3
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	store, err := cloud.ExternalStorageFromURI(ctx, "userfile:///foo",
@@ -108,7 +108,7 @@ func TestManifestHandlingEmptyIterators(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	store, err := cloud.ExternalStorageFromURI(ctx, "userfile:///foo",

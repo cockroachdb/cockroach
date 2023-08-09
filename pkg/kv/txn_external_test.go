@@ -192,7 +192,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 					},
 				},
 			}
-			tci := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{ServerArgs: args})
+			tci := serverutils.StartCluster(t, 2, base.TestClusterArgs{ServerArgs: args})
 			tc := tci.(*testcluster.TestCluster)
 			defer tc.Stopper().Stop(ctx)
 
@@ -527,7 +527,7 @@ func TestRevScanAndGet(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tci := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	tci := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	tc := tci.(*testcluster.TestCluster)
 	defer tc.Stopper().Stop(ctx)
 	db := tc.Servers[0].DB()

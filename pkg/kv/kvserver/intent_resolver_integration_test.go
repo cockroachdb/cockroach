@@ -311,7 +311,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 				},
 			},
 		}
-		tc := serverutils.StartNewTestCluster(t, 3, clusterArgs)
+		tc := serverutils.StartCluster(t, 3, clusterArgs)
 		defer tc.Stopper().Stop(ctx)
 
 		srv := tc.Server(0)

@@ -62,7 +62,7 @@ func TestSharedProcessTenantNodeLocalAccess(t *testing.T) {
 		}
 	}()
 
-	tc := serverutils.StartNewTestCluster(t, nodeCount, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, nodeCount, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		},
@@ -391,7 +391,7 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 
 	t.Logf("starting test cluster")
 	numNodes := 3
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),

@@ -449,7 +449,7 @@ func TestSingleArgumentDistAggregateFunctions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	const numRows = 100
 
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	// Create a table with a few columns:
@@ -550,7 +550,7 @@ func TestTwoArgumentRegressionAggregateFunctions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	const numRows = 100
 
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	// Create a table with a few columns:

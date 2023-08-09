@@ -5601,7 +5601,7 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	sinkDir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
-	tc := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 4, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// Test uses SPLIT AT, which isn't currently supported for
 			// secondary tenants. Tracked with #76378.
@@ -5758,7 +5758,7 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 		}
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgsPerNode: func() map[int]base.TestServerArgs {
 			perNode := make(map[int]base.TestServerArgs)
@@ -5896,7 +5896,7 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 		}
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ServerArgsPerNode: perServerKnobs,
 			ReplicationMode:   base.ReplicationManual,

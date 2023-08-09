@@ -31,7 +31,7 @@ func TestRouteToNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 2, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	routesToTest := []struct {

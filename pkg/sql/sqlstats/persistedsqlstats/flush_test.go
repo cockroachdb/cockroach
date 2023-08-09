@@ -69,7 +69,7 @@ func TestSQLStatsFlush(t *testing.T) {
 	}
 	fakeTime.setTime(timeutil.Now())
 
-	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &sqlstats.TestingKnobs{

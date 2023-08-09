@@ -375,7 +375,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{

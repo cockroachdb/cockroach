@@ -249,7 +249,7 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 
-	tc = serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+	tc = serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs:      params,
 	})
@@ -346,7 +346,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,

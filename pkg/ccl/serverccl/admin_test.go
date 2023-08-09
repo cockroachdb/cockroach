@@ -48,8 +48,8 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 
 	// TODO(clust-obs): This test should work with just a single node,
 	// i.e. using serverutils.StartServer` instead of
-	// `StartNewTestCluster`.
-	testCluster := serverutils.StartNewTestCluster(t, 3,
+	// `StartCluster`.
+	testCluster := serverutils.StartCluster(t, 3,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				// The code below ought to work when this is omitted. This
@@ -114,7 +114,7 @@ func TestAdminAPIChartCatalog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServer := testCluster.Server(0)
