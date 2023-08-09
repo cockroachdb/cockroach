@@ -1009,6 +1009,9 @@ func (p *Provider) Create(
 			fmt.Sprintf("size=%dGB", providerOpts.PDVolumeSize),
 			"auto-delete=yes",
 		}
+		// TODO(pavelkalinnikov): support disk types with "provisioned-throughput"
+		// option, such as Hyperdisk Throughput:
+		// https://cloud.google.com/compute/docs/disks/add-hyperdisk#hyperdisk-throughput.
 		args = append(args, "--create-disk", strings.Join(pdProps, ","))
 		// Enable DISCARD commands for persistent disks, as is advised in:
 		// https://cloud.google.com/compute/docs/disks/optimizing-pd-performance#formatting_parameters.
