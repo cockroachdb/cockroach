@@ -939,6 +939,7 @@ show_full_scans_stmt ::=
 
 show_default_privileges_stmt ::=
 	'SHOW' 'DEFAULT' 'PRIVILEGES' opt_for_roles opt_in_schema
+	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'GRANTEE' role_spec_list opt_in_schema
 	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' opt_in_schema
 
 opt_table ::=
@@ -1111,6 +1112,7 @@ unreserved_keyword ::=
 	| 'GEOMETRYCOLLECTIONZM'
 	| 'GLOBAL'
 	| 'GOAL'
+	| 'GRANTEE'
 	| 'GRANTS'
 	| 'GROUPS'
 	| 'HASH'
@@ -3479,6 +3481,7 @@ bare_label_keywords ::=
 	| 'DEFINER'
 	| 'DEPENDS'
 	| 'EXTERNAL'
+	| 'GRANTEE'
 	| 'IMMUTABLE'
 	| 'INCLUDE_ALL_SECONDARY_TENANTS'
 	| 'INPUT'
