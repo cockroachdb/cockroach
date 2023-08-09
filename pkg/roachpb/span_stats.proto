@@ -67,5 +67,7 @@ message SpanStatsResponse {
 
   map<string, SpanStats> span_to_stats = 4;
 
-  // NEXT ID: 5.
+  string errors = 5;
+
+  // NEXT ID: 6.
 }

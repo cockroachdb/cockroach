@@ -12,7 +12,9 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -37,8 +39,15 @@ func (s *systemStatusServer) spanStatsFanOut(
 	res := &roachpb.SpanStatsResponse{
 		SpanToStats: make(map[string]*roachpb.SpanStats),
 	}
-	// Response level error
-	var respErr error
+
+	errorMessages := make([]string, 0)
+
+	// Populate SpanToStats with empty values for each span,
+	// so that clients may still access stats for a specific span
+	// in the extreme case of an error encountered on every node.
+	for _, sp := range req.Spans {
+		res.SpanToStats[sp.String()] = &roachpb.SpanStats{}
+	}
 
 	spansPerNode, err := s.getSpansPerNode(ctx, req)
 	if err != nil {
@@ -51,6 +60,14 @@ func (s *systemStatusServer) spanStatsFanOut(
 		ctx context.Context,
 		nodeID roachpb.NodeID,
 	) (interface{}, error) {
+		if s.knobs != nil {
+			if s.knobs.IterateNodesDialCallback != nil {
+				if err := s.knobs.IterateNodesDialCallback(nodeID); err != nil {
+					return nil, err
+				}
+			}
+		}
+
 		if _, ok := spansPerNode[nodeID]; ok {
 			return s.dialNode(ctx, nodeID)
 		}
@@ -58,6 +75,14 @@ func (s *systemStatusServer) spanStatsFanOut(
 	}
 
 	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		if s.knobs != nil {
+			if s.knobs.IterateNodesNodeCallback != nil {
+				if err := s.knobs.IterateNodesNodeCallback(ctx, nodeID); err != nil {
+					return nil, err
+				}
+			}
+		}
+
 		// `smartDial` may skip this node, so check to see if the client is nil.
 		// If it is, return nil response.
 		if client == nil {
@@ -81,23 +106,26 @@ func (s *systemStatusServer) spanStatsFanOut(
 		nodeResponse := resp.(*roachpb.SpanStatsResponse)
 
 		for spanStr, spanStats := range nodeResponse.SpanToStats {
-			_, exists := res.SpanToStats[spanStr]
-			if !exists {
-				res.SpanToStats[spanStr] = spanStats
-			} else {
-				res.SpanToStats[spanStr].Add(spanStats)
+			// We are not counting replicas, so only consider range count
+			// if it has not been set.
+			if res.SpanToStats[spanStr].RangeCount == 0 {
+				res.SpanToStats[spanStr].RangeCount = spanStats.RangeCount
 			}
+			res.SpanToStats[spanStr].Add(spanStats)
 		}
 	}
 
 	errorFn := func(nodeID roachpb.NodeID, err error) {
 		log.Errorf(ctx, nodeErrorMsgPlaceholder, nodeID, err)
-		respErr = err
+		errorMessage := fmt.Sprintf("%v", err)
+		errorMessages = append(errorMessages, errorMessage)
 	}
 
+	timeout := roachpb.SpanStatsNodeTimeout.Get(&s.st.SV)
 	if err := s.statusServer.iterateNodes(
 		ctx,
 		"iterating nodes for span stats",
+		timeout,
 		smartDial,
 		nodeFn,
 		responseFn,
@@ -106,7 +134,8 @@ func (s *systemStatusServer) spanStatsFanOut(
 		return nil, err
 	}
 
-	return res, respErr
+	res.Errors = strings.Join(errorMessages, ",")
+	return res, nil
 }
 
 func (s *systemStatusServer) getLocalStats(
