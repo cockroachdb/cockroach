@@ -177,8 +177,8 @@ type TxnSender interface {
 	// transaction has been used in the current epoch to read or write.
 	SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) error
 
-	// ManualRestart bumps the transactions epoch, and can upgrade the
-	// timestamp and priority.
+	// ManualRestart bumps the transactions epoch and can upgrade the
+	// timestamp.
 	// An uninitialized timestamp can be passed to leave the timestamp
 	// alone.
 	// Returns a TransactionRetryWithProtoRefreshError with a payload
@@ -188,7 +188,7 @@ type TxnSender interface {
 	// Used by the SQL layer which sometimes knows that a transaction
 	// will not be able to commit and prefers to restart early.
 	ManualRestart(
-		ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp, msg redact.RedactableString,
+		ctx context.Context, ts hlc.Timestamp, msg redact.RedactableString,
 	) error
 
 	// UpdateStateOnRemoteRetryableErr updates the txn in response to an
