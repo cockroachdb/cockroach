@@ -307,9 +307,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TempStorageConfig.Settings = st
 	}
 
-	// TODO(#76378): Review this assignment to ensure it does not interfere with randomization.
-	cfg.DisableDefaultTestTenant = params.DefaultTestTenant.TestTenantAlwaysDisabled()
-
 	if cfg.TestingKnobs.Store == nil {
 		cfg.TestingKnobs.Store = &kvserver.StoreTestingKnobs{}
 	}
@@ -568,12 +565,7 @@ func (ts *testServer) TestTenants() []serverutils.ApplicationLayerInterface {
 
 // DefaultTestTenantDisabled is part of the serverutils.TenantControlInterface.
 func (ts *testServer) DefaultTestTenantDisabled() bool {
-	return ts.cfg.DisableDefaultTestTenant
-}
-
-// DisableDefaultTestTenant is part of the serverutils.TenantControlInterface.
-func (ts *testServer) DisableDefaultTestTenant() {
-	ts.cfg.DisableDefaultTestTenant = true
+	return ts.params.DefaultTestTenant.TestTenantAlwaysDisabled()
 }
 
 // maybeStartDefaultTestTenant might start a test tenant. This can then be used
@@ -583,9 +575,16 @@ func (ts *testServer) DisableDefaultTestTenant() {
 // enterprise enabled build. This is due to licensing restrictions on the MT
 // capabilities.
 func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
+	if !(ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() ||
+		ts.params.DefaultTestTenant.TestTenantAlwaysEnabled()) {
+		return errors.WithHint(
+			errors.AssertionFailedf("programming error: no decision taken about the default test tenant"),
+			"Maybe add the missing call to serverutils.ShouldStartDefaultTestTenant()?")
+	}
+
 	// If the flag has been set to disable the default test tenant, don't start
 	// it here.
-	if ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() || ts.cfg.DisableDefaultTestTenant {
+	if ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() {
 		return nil
 	}
 
@@ -594,7 +593,10 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		log.Shoutf(ctx, severity.WARNING, "test tenant requested by configuration, but code organization prevents start!\n%v", err)
 		// If not enterprise enabled, we won't be able to use SQL Servers so eat
 		// the error and return without creating/starting a SQL server.
-		ts.cfg.DisableDefaultTestTenant = true
+		//
+		// TODO(knz/yahor): Remove this - as we discussed this ought to work
+		// now even when not enterprise enabled.
+		ts.params.DefaultTestTenant = base.TODOTestTenantDisabled
 		return nil // nolint:returnerrcheck
 	}
 
@@ -665,7 +667,15 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 // testServer.AdvRPCAddr() after Start() for client connections.
 // Use testServer.Stopper().Stop() to shutdown the server after the test
 // completes.
-func (ts *testServer) Start(ctx context.Context) error {
+func (ts *testServer) Start(ctx context.Context) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			// Use a separate context to avoid using an already-cancelled
+			// context in closers.
+			ts.Stopper().Stop(context.Background())
+		}
+	}()
+
 	if err := ts.topLevelServer.PreStart(ctx); err != nil {
 		return err
 	}
@@ -678,16 +688,16 @@ func (ts *testServer) Start(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
+
+	// Let clients connect.
 	if err := ts.topLevelServer.AcceptClients(ctx); err != nil {
 		return err
 	}
 
 	if err := ts.maybeStartDefaultTestTenant(ctx); err != nil {
-		// We're failing the call to this function but we've already started
-		// the testServer above. Stop it here to avoid leaking the server.
-		ts.Stopper().Stop(context.Background())
 		return err
 	}
+
 	go func() {
 		// If the server requests a shutdown, do that simply by stopping the
 		// stopper.

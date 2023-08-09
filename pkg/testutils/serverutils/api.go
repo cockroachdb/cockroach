@@ -53,6 +53,9 @@ type TestServerInterface interface {
 	// Start runs the server. This is pre-called by StartServer().
 	// It is provided for tests that use the TestServerFactory directly
 	// (mostly 'cockroach demo').
+	//
+	// For convenience, the caller can assume that Stop() has been called
+	// already if Start() fails with an error.
 	Start(context.Context) error
 
 	// Stop stops the server. This must be called at the end of a test
@@ -444,12 +447,6 @@ type TenantControlInterface interface {
 	// TODO(knz): Verify whether this accessor is needed. This should
 	// be simplified.
 	DefaultTestTenantDisabled() bool
-
-	// DisableDefaultTestTenant prevents the server from starting the
-	// service for the default test tenant.
-	// TODO(knz): Verify whether this accessor is needed. This should
-	// be simplified.
-	DisableDefaultTestTenant()
 }
 
 // StorageLayerInterface defines accessors to the storage layer of a
