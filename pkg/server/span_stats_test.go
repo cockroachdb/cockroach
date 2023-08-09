@@ -14,12 +14,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -188,6 +190,74 @@ func TestSpanStatsFanOut(t *testing.T) {
 
 		return nil
 	})
+
+}
+
+func TestSpanStatsFanOutFaultTolerance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	const numNodes = 5
+
+	serverArgs := base.TestServerArgs{}
+	serverArgs.Knobs.Server = &server.TestingKnobs{
+		IterateNodesDialCallback: func(nodeID roachpb.NodeID) error {
+			// On the 1st and 2nd node, simulate a connection error.
+			if nodeID == 1 || nodeID == 2 {
+				return errors.Newf("error dialing node %d", nodeID)
+			}
+			return nil
+		},
+		IterateNodesNodeCallback: func(ctx context.Context, nodeID roachpb.NodeID) error {
+			// On the 3rd node, simulate some sort of KV error.
+			if nodeID == 3 {
+				return errors.Newf("kv error on node %d", nodeID)
+			}
+
+			// On the 4th and 5th node, simulate a request that takes a very long time.
+			// In this case, nodeFn will block until the context is cancelled
+			// i.e. if iterateNodes respects the timeout cluster setting.
+			if nodeID == 4 || nodeID == 5 {
+				<-ctx.Done()
+				// Return an error that mimics the error returned
+				// when a rpc's context is cancelled:
+				return errors.Newf("node %d timed out", nodeID)
+			}
+			return nil
+		},
+	}
+
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{ServerArgs: serverArgs})
+	defer tc.Stopper().Stop(ctx)
+
+	sqlDB := tc.Server(0).SQLConn(t, "defaultdb")
+	_, err := sqlDB.Exec("SET CLUSTER SETTING server.span_stats.node.timeout = '3s'")
+	require.NoError(t, err)
+
+	res, err := tc.GetStatusClient(t, 0).SpanStats(ctx, &roachpb.SpanStatsRequest{
+		NodeID: "0",
+		Spans:  []roachpb.Span{keys.EverythingSpan},
+	})
+	require.NoError(t, err)
+	// Expect to still be able to access SpanToStats for keys.EverythingSpan
+	// without panicking, even though there was a failure on every node.
+	require.Equal(t, int64(0), res.SpanToStats[keys.EverythingSpan.String()].TotalStats.LiveCount)
+	require.Equal(t, 5, len(res.Errors))
+
+	containsError := func(testString string) bool {
+		for _, e := range res.Errors {
+			if strings.Contains(e, testString) {
+				return true
+			}
+		}
+		return false
+	}
+
+	require.Equal(t, true, containsError("error dialing node 1"))
+	require.Equal(t, true, containsError("error dialing node 2"))
+	require.Equal(t, true, containsError("kv error on node 3"))
+	require.Equal(t, true, containsError("node 4 timed out"))
+	require.Equal(t, true, containsError("node 5 timed out"))
 
 }
 
