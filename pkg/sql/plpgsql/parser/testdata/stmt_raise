@@ -116,18 +116,20 @@ RAISE SQLSTATE '222222'
 USING HINT = hm;
 END
 
-parse
+error
 DECLARE
 BEGIN
   RAISE internal_screaming;
 END
 ----
+at or near "internal_screaming": syntax error
+DETAIL: source SQL:
 DECLARE
 BEGIN
-RAISE internal_screaming;
-END
+  RAISE internal_screaming;
+        ^
 
-parse
+error
 DECLARE
 BEGIN
   RAISE internal_screaming
@@ -135,9 +137,9 @@ BEGIN
         COLUMN = 'foo';
 END
 ----
+at or near "internal_screaming": syntax error
+DETAIL: source SQL:
 DECLARE
 BEGIN
-RAISE internal_screaming
-USING MESSAGE = 'blah blah blah',
-COLUMN = 'foo';
-END
+  RAISE internal_screaming
+        ^

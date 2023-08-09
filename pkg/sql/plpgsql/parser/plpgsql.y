@@ -1051,14 +1051,6 @@ stmt_raise:
       Options: $5.plpgsqlOptionExprs(),
     }
   }
-| RAISE opt_error_level IDENT opt_option_exprs ';'
-  {
-    $$.val = &plpgsqltree.PLpgSQLStmtRaise{
-      LogLevel: $2,
-      CodeName: $3,
-      Options: $4.plpgsqlOptionExprs(),
-    }
-  }
 | RAISE opt_error_level SQLSTATE SCONST opt_option_exprs ';'
   {
     $$.val = &plpgsqltree.PLpgSQLStmtRaise{
