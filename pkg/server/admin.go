@@ -77,6 +77,7 @@ import (
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	gwutil "github.com/grpc-ecosystem/grpc-gateway/utilities"
+	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -1986,17 +1987,15 @@ func (s *adminServer) Settings(
 ) (*serverpb.SettingsResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	keys := req.Keys
-	if len(keys) == 0 {
-		keys = settings.Keys(settings.ForSystemTenant)
-	}
-
 	_, isAdmin, err := s.privilegeChecker.GetUserAndRole(ctx)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	redactValues := true
+	// Only returns non-sensitive settings that are required
+	// for features on DB Console.
+	consoleSettingsOnly := false
 	if isAdmin {
 		// Root accesses can customize the purpose.
 		// This is used by the UI to see all values (local access)
@@ -2007,7 +2006,32 @@ func (s *adminServer) Settings(
 	} else {
 		// Non-root access cannot see the values in any case.
 		if err := s.privilegeChecker.RequireViewClusterSettingOrModifyClusterSettingPermission(ctx); err != nil {
-			return nil, err
+			if err2 := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err2 != nil {
+				return nil, err
+			}
+			consoleSettingsOnly = true
+			log.Warningf(ctx, "only cluster settings used by DB Console are returned with "+
+				"VIEWACTIVITY or VIEWACTIVITYREDACTED")
+		}
+	}
+
+	var settingsKeys []string
+	if !consoleSettingsOnly {
+		settingsKeys = req.Keys
+		if len(settingsKeys) == 0 {
+			settingsKeys = settings.Keys(settings.ForSystemTenant)
+		}
+	} else {
+
+		if len(req.Keys) == 0 {
+			settingsKeys = settings.ConsoleKeys()
+		} else {
+			settingsKeys = []string{}
+			for _, k := range req.Keys {
+				if slices.Contains(settings.ConsoleKeys(), k) {
+					settingsKeys = append(settingsKeys, k)
+				}
+			}
 		}
 	}
 
@@ -2037,7 +2061,7 @@ func (s *adminServer) Settings(
 	}
 
 	resp := serverpb.SettingsResponse{KeyValues: make(map[string]serverpb.SettingsResponse_Value)}
-	for _, k := range keys {
+	for _, k := range settingsKeys {
 		var v settings.Setting
 		var ok bool
 		if redactValues {
