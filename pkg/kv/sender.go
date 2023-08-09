@@ -186,7 +186,7 @@ type TxnSender interface {
 	//
 	// The method returns a TransactionRetryWithProtoRefreshError with a
 	// payload initialized from this transaction, which must be cleared by a
-	// call to ClearTxnRetryableErr before continuing to use the TxnSender.
+	// call to ClearRetryableErr before continuing to use the TxnSender.
 	//
 	// Used by the SQL layer which sometimes knows that a transaction will not
 	// be able to commit and prefers to restart early.
@@ -197,6 +197,15 @@ type TxnSender interface {
 	// UpdateStateOnRemoteRetryableErr updates the txn in response to an
 	// error encountered when running a request through the txn.
 	UpdateStateOnRemoteRetryableErr(context.Context, *kvpb.Error) *kvpb.Error
+
+	// GetRetryableErr returns an error if the TxnSender had a retryable error,
+	// otherwise nil. In this state Send() always fails with the same retryable
+	// error. ClearRetryableErr can be called to clear this error and make
+	// TxnSender usable again.
+	GetRetryableErr(ctx context.Context) *kvpb.TransactionRetryWithProtoRefreshError
+
+	// ClearRetryableErr clears the retryable error, if any.
+	ClearRetryableErr(ctx context.Context)
 
 	// DisablePipelining instructs the TxnSender not to pipeline
 	// requests. It should rarely be necessary to call this method. It
@@ -322,15 +331,6 @@ type TxnSender interface {
 	// violations where a future, causally dependent transaction may fail to
 	// observe the writes performed by this transaction.
 	DeferCommitWait(ctx context.Context) func(context.Context) error
-
-	// GetTxnRetryableErr returns an error if the TxnSender had a retryable error,
-	// otherwise nil. In this state Send() always fails with the same retryable
-	// error. ClearTxnRetryableErr can be called to clear this error and make
-	// TxnSender usable again.
-	GetTxnRetryableErr(ctx context.Context) *kvpb.TransactionRetryWithProtoRefreshError
-
-	// ClearTxnRetryableErr clears the retryable error, if any.
-	ClearTxnRetryableErr(ctx context.Context)
 
 	// HasPerformedReads returns true if a read has been performed.
 	HasPerformedReads() bool

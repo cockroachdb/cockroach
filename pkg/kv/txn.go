@@ -1012,7 +1012,7 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 
-	retryErr := txn.mu.sender.GetTxnRetryableErr(ctx)
+	retryErr := txn.mu.sender.GetRetryableErr(ctx)
 	if retryErr == nil {
 		return nil
 	}
@@ -1044,7 +1044,7 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) error {
 		// If the retryable error doesn't correspond to an aborted transaction,
 		// there's no need to switch out the transaction. We simply clear the
 		// retryable error and proceed.
-		txn.mu.sender.ClearTxnRetryableErr(ctx)
+		txn.mu.sender.ClearRetryableErr(ctx)
 		return nil
 	}
 

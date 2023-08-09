@@ -753,7 +753,7 @@ func TestUpdateStateOnRemoteRetryableErr(t *testing.T) {
 		// Ensure what we got back is a TransactionRetryWithProtoRefreshError.
 		require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
 		// Ensure the same thing is stored on the TxnCoordSender as well.
-		retErr := txn.Sender().GetTxnRetryableErr(ctx)
+		retErr := txn.Sender().GetRetryableErr(ctx)
 		require.Equal(t, retErr, err)
 		if tc.epochBumped {
 			require.Greater(t, txn.Epoch(), epochBefore)
