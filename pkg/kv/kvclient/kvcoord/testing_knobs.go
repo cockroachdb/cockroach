@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 )
 
@@ -58,9 +59,9 @@ type ClientTestingKnobs struct {
 	// continues.
 	OnRangeSpanningNonTxnalBatch func(ba *kvpb.BatchRequest) *kvpb.Error
 
-	// EnableRandomTransactionRetryErrors allows transaction retry
-	// loops to randomly inject retriable errors.
-	EnableRandomTransactionRetryErrors bool
+	// TransactionRetryFilter allows transaction retry loops to inject retriable
+	// errors.
+	TransactionRetryFilter func(*kv.Txn) bool
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}

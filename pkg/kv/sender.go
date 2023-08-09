@@ -335,12 +335,12 @@ type TxnSender interface {
 	// HasPerformedWrites returns true if a write has been performed.
 	HasPerformedWrites() bool
 
-	// TestingRandomRetriableErrorsEnabled returns true if
+	// TestingShouldRetry returns true if
 	// transaction retry errors should be randomly returned to
 	// callers. Note, it is the responsibility of (*kv.DB).Txn()
 	// to return the retries. This lives here since the TxnSender
 	// is what has access to the server's testing knobs.
-	TestingRandomRetryableErrorsEnabled() bool
+	TestingShouldRetry(*Txn) bool
 }
 
 // SteppingMode is the argument type to ConfigureStepping.

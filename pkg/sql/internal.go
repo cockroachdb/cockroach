@@ -1764,14 +1764,11 @@ func (ief *InternalDB) txn(
 			if err != nil {
 				return err
 			}
-			// We check this testing condition here since
-			// a random retry cannot be generated after a
-			// successful commit. Since we commit below,
-			// this is our last chance to generate a
-			// random retry for users of
-			// (*InternalDB).Txn.
-			if kvTxn.TestingShouldReturnRandomRetry() {
-				return kvTxn.GenerateForcedRetryableError(ctx, "randomized retriable error")
+			// We check this testing condition here since a retry cannot be generated
+			// after a successful commit. Since we commit below, this is our last
+			// chance to generate a retry for users of (*InternalDB).Txn.
+			if kvTxn.TestingShouldRetry() {
+				return kvTxn.GenerateForcedRetryableError(ctx, "injected retriable error")
 			}
 
 			return commitTxnFn(ctx)
