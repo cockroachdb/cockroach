@@ -12,6 +12,7 @@ package roachpb
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 )
@@ -29,6 +30,15 @@ var SpanStatsBatchLimit = settings.RegisterIntSetting(
 	DefaultSpanStatsSpanLimit,
 	settings.PositiveInt,
 )
+
+var SpanStatsNodeTimeout = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"server.span_stats.node.timeout",
+	"the duration allowed for a single node to return span stats data before"+
+		" the request is cancelled; if set to 0, there is no timeout",
+	time.Minute,
+	settings.NonNegativeDuration,
+).WithPublic()
 
 const defaultRangeStatsBatchLimit = 100
 

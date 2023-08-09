@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -189,6 +191,63 @@ func TestSpanStatsFanOut(t *testing.T) {
 		return nil
 	})
 
+}
+
+func TestSpanStatsFanOutFaultTolerance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	const numNodes = 5
+
+	mu := syncutil.Mutex{}
+	nodeErrors := make(map[roachpb.NodeID]error)
+
+	serverArgs := base.TestServerArgs{}
+	serverArgs.Knobs.Server = &server.TestingKnobs{
+		IterateNodesDialFn: func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+			if nodeID == 2 {
+				return nil, errors.Newf("error dialing node %d", nodeID)
+			}
+			return nil, nil
+		},
+		IterateNodesNodeFn: func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+			// On the 3rd node, simulate some sort of KV error.
+			if nodeID == 3 {
+				return nil, errors.Newf("error getting span stats from node %d", nodeID)
+			}
+
+			// On the 4th node, simulate a request that takes a very long time.
+			// In this case, nodeFn will block until the timeout is reached.
+			if nodeID == 4 {
+				<-ctx.Done()
+				// Return an error that mimics the error returned
+				// when a rpc's context is cancelled:
+				return nil, errors.New("node 4 timed out")
+			}
+			return &roachpb.SpanStatsResponse{}, nil
+		},
+		IterateNodesErrorFn: func(nodeID roachpb.NodeID, err error) {
+			mu.Lock()
+			defer mu.Unlock()
+			nodeErrors[nodeID] = err
+		},
+	}
+
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{ServerArgs: serverArgs})
+	defer tc.Stopper().Stop(ctx)
+
+	sqlDB := tc.Server(0).SQLConn(t, "defaultdb")
+	_, err := sqlDB.Exec("SET CLUSTER SETTING server.span_stats.node.timeout = '3s'")
+	require.NoError(t, err)
+
+	_, err = tc.GetStatusClient(t, 0).SpanStats(ctx, &roachpb.SpanStatsRequest{
+		NodeID: "0",
+		Spans:  []roachpb.Span{},
+	})
+	require.NoError(t, err)
+	require.ErrorContains(t, nodeErrors[2], "error dialing node 2")
+	require.ErrorContains(t, nodeErrors[3], "error getting span stats from node 3")
+	require.ErrorContains(t, nodeErrors[4], "node 4 timed out")
 }
 
 // BenchmarkSpanStats measures the cost of collecting span statistics.

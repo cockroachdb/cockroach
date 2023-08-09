@@ -37,8 +37,6 @@ func (s *systemStatusServer) spanStatsFanOut(
 	res := &roachpb.SpanStatsResponse{
 		SpanToStats: make(map[string]*roachpb.SpanStats),
 	}
-	// Response level error
-	var respErr error
 
 	spansPerNode, err := s.getSpansPerNode(ctx, req)
 	if err != nil {
@@ -92,12 +90,25 @@ func (s *systemStatusServer) spanStatsFanOut(
 
 	errorFn := func(nodeID roachpb.NodeID, err error) {
 		log.Errorf(ctx, nodeErrorMsgPlaceholder, nodeID, err)
-		respErr = err
 	}
 
+	if s.knobs != nil {
+		if s.knobs.IterateNodesDialFn != nil {
+			smartDial = s.knobs.IterateNodesDialFn
+		}
+		if s.knobs.IterateNodesNodeFn != nil {
+			nodeFn = s.knobs.IterateNodesNodeFn
+		}
+		if s.knobs.IterateNodesErrorFn != nil {
+			errorFn = s.knobs.IterateNodesErrorFn
+		}
+	}
+
+	timeout := roachpb.SpanStatsNodeTimeout.Get(&s.st.SV)
 	if err := s.statusServer.iterateNodes(
 		ctx,
 		"iterating nodes for span stats",
+		timeout,
 		smartDial,
 		nodeFn,
 		responseFn,
@@ -106,7 +117,8 @@ func (s *systemStatusServer) spanStatsFanOut(
 		return nil, err
 	}
 
-	return res, respErr
+	// Return a map of errors from all nodes
+	return res, nil
 }
 
 func (s *systemStatusServer) getLocalStats(
