@@ -81,15 +81,15 @@ EXPORT INTO CSV 'a' FROM SELECT * FROM _ -- identifiers removed
 parse
 EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM TABLE a
 ----
-EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM TABLE a
-EXPORT INTO CSV ('s3://my/path/%part%.csv') WITH delimiter = ('|') FROM TABLE a -- fully parenthesized
-EXPORT INTO CSV '_' WITH delimiter = '_' FROM TABLE a -- literals removed
-EXPORT INTO CSV 's3://my/path/%part%.csv' WITH _ = '|' FROM TABLE _ -- identifiers removed
+EXPORT INTO CSV 's3://my/path/%part%.csv' WITH OPTIONS(delimiter = '|') FROM TABLE a -- normalized!
+EXPORT INTO CSV ('s3://my/path/%part%.csv') WITH OPTIONS(delimiter = ('|')) FROM TABLE a -- fully parenthesized
+EXPORT INTO CSV '_' WITH OPTIONS(delimiter = '_') FROM TABLE a -- literals removed
+EXPORT INTO CSV 's3://my/path/%part%.csv' WITH OPTIONS(_ = '|') FROM TABLE _ -- identifiers removed
 
 parse
 EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10
 ----
-EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10
-EXPORT INTO CSV ('s3://my/path/%part%.csv') WITH delimiter = ('|') FROM SELECT (a), (sum((b))) FROM c WHERE ((d) = (1)) ORDER BY (sum((b))) DESC LIMIT (10) -- fully parenthesized
-EXPORT INTO CSV '_' WITH delimiter = '_' FROM SELECT a, sum(b) FROM c WHERE d = _ ORDER BY sum(b) DESC LIMIT _ -- literals removed
-EXPORT INTO CSV 's3://my/path/%part%.csv' WITH _ = '|' FROM SELECT _, sum(_) FROM _ WHERE _ = 1 ORDER BY sum(_) DESC LIMIT 10 -- identifiers removed
+EXPORT INTO CSV 's3://my/path/%part%.csv' WITH OPTIONS(delimiter = '|') FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10 -- normalized!
+EXPORT INTO CSV ('s3://my/path/%part%.csv') WITH OPTIONS(delimiter = ('|')) FROM SELECT (a), (sum((b))) FROM c WHERE ((d) = (1)) ORDER BY (sum((b))) DESC LIMIT (10) -- fully parenthesized
+EXPORT INTO CSV '_' WITH OPTIONS(delimiter = '_') FROM SELECT a, sum(b) FROM c WHERE d = _ ORDER BY sum(b) DESC LIMIT _ -- literals removed
+EXPORT INTO CSV 's3://my/path/%part%.csv' WITH OPTIONS(_ = '|') FROM SELECT _, sum(_) FROM _ WHERE _ = 1 ORDER BY sum(_) DESC LIMIT 10 -- identifiers removed
