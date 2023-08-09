@@ -383,7 +383,7 @@ func TestExamineDescriptors(t *testing.T) {
 				{NameInfo: descpb.NameInfo{Name: "causes_error"}, ID: 2},
 			},
 			expected: `Examining 0 descriptors and 4 namespace entries...
-  ParentID   0, ParentSchemaID  0: namespace entry "causes_error" (2): referenced descriptor not found
+  ParentID   0, ParentSchemaID  0: namespace entry "causes_error" (2): referenced schema ID 2: referenced descriptor not found
 `,
 		},
 		{ // 14
