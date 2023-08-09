@@ -67,12 +67,16 @@ type ClusterSpec struct {
 	InstanceType string     // auto-chosen if left empty
 	NodeCount    int
 	// CPUs is the number of CPUs per node.
-	CPUs                 int
-	Mem                  MemPerCPU
-	SSDs                 int
-	RAID0                bool
-	VolumeSize           int
-	PreferLocalSSD       bool
+	CPUs           int
+	Mem            MemPerCPU
+	SSDs           int
+	RAID0          bool
+	VolumeSize     int
+	PreferLocalSSD bool
+	// Throughput is the min provisioned disk throughput.
+	// TODO(pavelkalinnikov): used only in a limited way, revisit it.
+	Throughput int
+
 	Zones                string
 	Geo                  bool
 	Lifetime             time.Duration
@@ -140,10 +144,15 @@ func awsMachineSupportsSSD(machineType string) bool {
 	return false
 }
 
-func getAWSOpts(machineType string, zones []string, volumeSize int, localSSD bool) vm.ProviderOpts {
+func getAWSOpts(
+	machineType string, zones []string, volumeSize, throughput int, localSSD bool,
+) vm.ProviderOpts {
 	opts := aws.DefaultProviderOpts()
 	if volumeSize != 0 {
 		opts.DefaultEBSVolume.Disk.VolumeSize = volumeSize
+	}
+	if throughput != 0 {
+		opts.DefaultEBSVolume.Disk.Throughput = throughput
 	}
 	if localSSD {
 		opts.SSDMachineType = machineType
@@ -310,7 +319,8 @@ func (s *ClusterSpec) RoachprodOpts(
 	var providerOpts vm.ProviderOpts
 	switch s.Cloud {
 	case AWS:
-		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, createVMOpts.SSDOpts.UseLocalSSD)
+		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, s.Throughput,
+			createVMOpts.SSDOpts.UseLocalSSD)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,

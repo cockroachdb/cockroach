@@ -76,6 +76,17 @@ func VolumeSize(n int) Option {
 	return volumeSizeOption(n)
 }
 
+type throughputOption int
+
+func (o throughputOption) apply(spec *ClusterSpec) {
+	spec.Throughput = int(o)
+}
+
+// Throughput is the throughput in MB/s of the disk volume.
+func Throughput(n int) Option {
+	return throughputOption(n)
+}
+
 type nodeSSDOption int
 
 func (o nodeSSDOption) apply(spec *ClusterSpec) {

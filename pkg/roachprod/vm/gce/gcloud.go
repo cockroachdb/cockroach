@@ -1009,6 +1009,7 @@ func (p *Provider) Create(
 			fmt.Sprintf("size=%dGB", providerOpts.PDVolumeSize),
 			"auto-delete=yes",
 		}
+		// TODO(pavelkalinnikov): set the "provisioned-throughput" in MB/s too.
 		args = append(args, "--create-disk", strings.Join(pdProps, ","))
 		// Enable DISCARD commands for persistent disks, as is advised in:
 		// https://cloud.google.com/compute/docs/disks/optimizing-pd-performance#formatting_parameters.

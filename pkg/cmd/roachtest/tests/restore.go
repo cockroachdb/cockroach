@@ -323,7 +323,10 @@ func registerRestore(r registry.Registry) {
 		},
 		{
 			// The nightly 8TB Restore test.
-			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 2000}),
+			// NB: bump disk throughput because this load saturates the default 125
+			// MB/s. See https://github.com/cockroachdb/cockroach/issues/107609.
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 2000,
+				throughput: 250 /* MB/s */}),
 			backup: makeRestoringBackupSpecs(backupSpecs{
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 500000}}),
@@ -466,6 +469,9 @@ type hardwareSpecs struct {
 	// volumeSize indicates the size of per node block storage (pd-ssd for gcs,
 	// ebs for aws). If zero, local ssd's are used.
 	volumeSize int
+	// throughput is the min provisioned throughput of the storage, in MB/s.
+	// TODO(pavelkalinnikov): currently works only for EBS.
+	throughput int
 
 	// mem is the memory per cpu.
 	mem spec.MemPerCPU
@@ -480,6 +486,9 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string
 	clusterOpts = append(clusterOpts, spec.CPU(hw.cpus))
 	if hw.volumeSize != 0 {
 		clusterOpts = append(clusterOpts, spec.VolumeSize(hw.volumeSize))
+	}
+	if hw.throughput != 0 {
+		clusterOpts = append(clusterOpts, spec.Throughput(hw.throughput))
 	}
 	if hw.mem != spec.Auto {
 		clusterOpts = append(clusterOpts, spec.Mem(hw.mem))
@@ -553,6 +562,9 @@ func makeHardwareSpecs(override hardwareSpecs) hardwareSpecs {
 	}
 	if override.volumeSize != 0 {
 		specs.volumeSize = override.volumeSize
+	}
+	if override.throughput != 0 {
+		specs.throughput = override.throughput
 	}
 	specs.zones = override.zones
 	specs.workloadNode = override.workloadNode
