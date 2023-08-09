@@ -2998,7 +2998,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	// We want to avoid having to read this multiple times during the replica
 	// visiting, so load it once up front for all nodes.
 	livenessMap := s.cfg.NodeLiveness.ScanNodeVitalityFromCache()
+	allowEagerEnqueueToRepair := EagerlyMaybeAddRangesNeedingRepair.Get(&s.ClusterSettings().SV)
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
+		var shouldEagerlyEnqueueReplicate bool
 		metrics := rep.Metrics(ctx, now, livenessMap, clusterNodes)
 		if metrics.Leader {
 			raftLeaderCount++
@@ -3026,7 +3028,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			// satisfying no preferences.
 			if metrics.ViolatingLeasePreferences {
 				leaseViolatingPreferencesCount++
+				shouldEagerlyEnqueueReplicate = true
 			} else if metrics.LessPreferredLease {
+				shouldEagerlyEnqueueReplicate = true
 				leaseLessPreferredCount++
 			}
 		}
@@ -3039,9 +3043,11 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 				unavailableRangeCount++
 			}
 			if metrics.Underreplicated {
+				shouldEagerlyEnqueueReplicate = true
 				underreplicatedRangeCount++
 			}
 			if metrics.Overreplicated {
+				shouldEagerlyEnqueueReplicate = true
 				overreplicatedRangeCount++
 			}
 		}
@@ -3077,6 +3083,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		mc := rep.GetCurrentClosedTimestamp(ctx)
 		if minMaxClosedTS.IsEmpty() || mc.Less(minMaxClosedTS) {
 			minMaxClosedTS = mc
+		}
+		if allowEagerEnqueueToRepair && shouldEagerlyEnqueueReplicate {
+			s.replicateQueue.MaybeAddAsync(ctx, rep, now)
 		}
 		return true // more
 	})

@@ -102,6 +102,15 @@ var MinLeaseTransferInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+var EagerlyMaybeAddRangesNeedingRepair = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.eagerly_enqueue_ranges_needing_repair",
+	"controls whether ranges are eagerly enqueued into the replicate queue "+
+		"for repair, when under-replicated, over-replicated, or violating lease "+
+		" preferences.",
+	true,
+)
+
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.addreplica",
