@@ -997,8 +997,8 @@ func runTxn(ctx context.Context, txn *Txn, retryable func(context.Context, *Txn)
 		if err := retryable(ctx, txn); err != nil {
 			return err
 		}
-		if txn.TestingShouldReturnRandomRetry() {
-			return txn.GenerateForcedRetryableErr(ctx, "randomized retriable error")
+		if txn.TestingShouldRetry() {
+			return txn.GenerateForcedRetryableErr(ctx, "injected retriable error")
 		}
 		return nil
 	})

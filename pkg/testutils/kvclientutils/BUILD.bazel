@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "api.go",
         "txn_recovery.go",
+        "txn_restart.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils",
     visibility = ["//visibility:public"],
@@ -14,6 +15,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/util/hlc",
+        "//pkg/util/randutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
     ],

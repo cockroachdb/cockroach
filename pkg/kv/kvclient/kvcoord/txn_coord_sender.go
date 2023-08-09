@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -1382,9 +1383,9 @@ func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
 func (tc *TxnCoordSender) Step(ctx context.Context) error {
 	// TODO(nvanbenschoten): it should be possible to make this assertion, but
 	// the API is currently misused by the connExecutor. See #86162.
-	//if tc.typ != kv.RootTxn {
+	// if tc.typ != kv.RootTxn {
 	//	return errors.AssertionFailedf("cannot step in non-root txn")
-	//}
+	// }
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	if tc.shouldStepReadTimestampLocked() {
@@ -1543,12 +1544,14 @@ func (tc *TxnCoordSender) HasPerformedWrites() bool {
 	return tc.hasPerformedWritesLocked()
 }
 
-func (tc *TxnCoordSender) TestingRandomRetryableErrorsEnabled() bool {
-	if tc.testingKnobs.EnableRandomTransactionRetryErrors {
+var randRetryRngSource, _ = randutil.NewLockedPseudoRand()
+
+func (tc *TxnCoordSender) TestingShouldRetry(txn *kv.Txn) bool {
+	if filter := tc.testingKnobs.TransactionRetryFilter; filter != nil && filter(txn) {
 		return true
 	}
 	if forceTxnRetries && buildutil.CrdbTestBuild {
-		return true
+		return randRetryRngSource.Float64() < kv.RandomTxnRetryProbability
 	}
 	return false
 }
