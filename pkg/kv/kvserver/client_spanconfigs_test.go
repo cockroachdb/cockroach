@@ -94,7 +94,10 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	mockSubscriber.callback(ctx, span) // invoke the callback
 	testutils.SucceedsSoon(t, func() error {
 		repl := store.LookupReplica(keys.MustAddr(key))
-		gotConfig := repl.SpanConfig()
+		gotConfig, err := repl.SpanConfig()
+		if err != nil {
+			return err
+		}
 		if !gotConfig.Equal(conf) {
 			return errors.Newf("expected config=%s, got config=%s", conf.String(), gotConfig.String())
 		}
@@ -152,7 +155,10 @@ func TestFallbackSpanConfigOverride(t *testing.T) {
 	mockSubscriber.callback(ctx, span) // invoke the callback
 	testutils.SucceedsSoon(t, func() error {
 		repl := store.LookupReplica(keys.MustAddr(key))
-		gotConfig := repl.SpanConfig()
+		gotConfig, err := repl.SpanConfig()
+		if err != nil {
+			return err
+		}
 		if !gotConfig.Equal(conf) {
 			return errors.Newf("expected config=%s, got config=%s", conf.String(), gotConfig.String())
 		}

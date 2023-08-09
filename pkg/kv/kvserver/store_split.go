@@ -329,13 +329,6 @@ func (s *Store) SplitRange(
 	// distribution across all tracked load stats is identical.
 	leftRepl.loadStats.Split(rightRepl.loadStats)
 
-	// Update the replica's cached byte thresholds. This is a no-op if the system
-	// config is not available, in which case we rely on the next gossip update to
-	// perform the update.
-	if err := rightRepl.updateRangeInfo(ctx, rightDesc); err != nil {
-		return err
-	}
-
 	rightRepl.mu.Lock()
 	defer rightRepl.mu.Unlock()
 	return s.markReplicaInitializedLockedReplLocked(ctx, rightRepl)

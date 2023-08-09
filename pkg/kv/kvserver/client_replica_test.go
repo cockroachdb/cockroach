@@ -4142,7 +4142,11 @@ func TestStrictGCEnforcement(t *testing.T) {
 				for i := 0; i < tc.NumServers(); i++ {
 					s := tc.Server(i)
 					_, r := getFirstStoreReplica(t, s, tableKey)
-					if c := r.SpanConfig(); c.TTL().Seconds() != (time.Duration(exp) * time.Second).Seconds() {
+					c, err := r.SpanConfig()
+					if err != nil {
+						return err
+					}
+					if c.TTL().Seconds() != (time.Duration(exp) * time.Second).Seconds() {
 						return errors.Errorf("expected %d, got %f", exp, c.TTL().Seconds())
 					}
 				}
@@ -4476,7 +4480,11 @@ func TestProposalOverhead(t *testing.T) {
 			if repl == nil {
 				return errors.New("scratch range replica not found")
 			}
-			if repl.SpanConfig().RangefeedEnabled {
+			conf, err := repl.SpanConfig()
+			if err != nil {
+				return err
+			}
+			if conf.RangefeedEnabled {
 				return errors.New("waiting for span configs to apply")
 			}
 			return nil

@@ -136,9 +136,15 @@ func (r *Replica) shouldBackpressureWrites() bool {
 		return false
 	}
 
+	// TODO: Optimize somehow...
+	conf, err := r.SpanConfig()
+	if err != nil {
+		return false
+	}
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	exceeded, bytesOver := r.exceedsMultipleOfSplitSizeRLocked(mult)
+	exceeded, bytesOver := r.exceedsMultipleOfSplitSizeRLocked(conf, mult)
 	if !exceeded {
 		return false
 	}

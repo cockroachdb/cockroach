@@ -9641,7 +9641,9 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 		if !r.ExcludeDataFromBackup() {
 			return false, errors.New("waiting for exclude_data_from_backup to be applied")
 		}
-		conf := r.SpanConfig()
+		conf, err := r.SpanConfig()
+		require.NoError(t, err)
+
 		if conf.TTL() != 1*time.Second {
 			return false, errors.New("waiting for gc.ttlseconds to be applied")
 		}
@@ -9666,7 +9668,12 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 
 	// Ensure that the replica sees the ProtectionPolicies.
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "test", func(r *kvserver.Replica) (bool, error) {
-		if len(r.SpanConfig().GCPolicy.ProtectionPolicies) == 0 {
+		conf, err := r.SpanConfig()
+		if err != nil {
+			return false, err
+		}
+
+		if len(conf.GCPolicy.ProtectionPolicies) == 0 {
 			return false, errors.New("no protection policy applied to replica")
 		}
 		return true, nil

@@ -391,6 +391,7 @@ type StoreTestingKnobs struct {
 	SpanConfigUpdateInterceptor func(spanconfig.Update)
 	// SetSpanConfigInterceptor is called before updating a replica's embedded
 	// SpanConfig. The returned SpanConfig is used instead.
+	// FIXME
 	SetSpanConfigInterceptor func(*roachpb.RangeDescriptor, roachpb.SpanConfig) roachpb.SpanConfig
 	// If set, use the given version as the initial replica version when
 	// bootstrapping ranges. This is used for testing the migration
@@ -414,13 +415,6 @@ type StoreTestingKnobs struct {
 	// MakeSystemConfigSpanUnavailableToQueues makes the system config span
 	// unavailable to queues that ask for it.
 	MakeSystemConfigSpanUnavailableToQueues bool
-	// UseSystemConfigSpanForQueues uses the system config span infrastructure
-	// for internal queues (as opposed to the span configs infrastructure). This
-	// is used only for (old) tests written with the system config span in mind.
-	//
-	// TODO(irfansharif): Get rid of this knob, maybe by first moving
-	// DisableSpanConfigs into a testing knob instead of a server arg.
-	UseSystemConfigSpanForQueues bool
 	// ConfReaderInterceptor intercepts calls to get a span config reader.
 	ConfReaderInterceptor func() spanconfig.StoreReader
 	// IgnoreStrictGCEnforcement is used by tests to op out of strict GC

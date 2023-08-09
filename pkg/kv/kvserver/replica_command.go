@@ -3570,15 +3570,7 @@ func (roo *replicaRelocateOneOptions) StorePool() storepool.AllocatorStorePool {
 func (roo *replicaRelocateOneOptions) SpanConfig(
 	ctx context.Context, startKey roachpb.RKey,
 ) (roachpb.SpanConfig, error) {
-	confReader, err := roo.store.GetConfReader(ctx)
-	if err != nil {
-		return roachpb.SpanConfig{}, errors.Wrap(err, "can't relocate range")
-	}
-	conf, err := confReader.GetSpanConfigForKey(ctx, startKey)
-	if err != nil {
-		return roachpb.SpanConfig{}, err
-	}
-	return conf, nil
+	return roo.store.GetSpanConfigForKey(ctx, startKey)
 }
 
 // Leaseholder returns the descriptor of the replica which holds the lease on
@@ -3979,7 +3971,12 @@ func (r *Replica) adminScatter(
 	// Note that we disable lease transfers until the final step as transferring
 	// the lease prevents any further action on this node.
 	var allowLeaseTransfer bool
-	var err error
+	desc := r.Desc()
+	conf, err := r.SpanConfig()
+	if err != nil {
+		// We don't have the span config for this range.
+		return kvpb.AdminScatterResponse{}, err
+	}
 	requeue := true
 	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica, conf roachpb.SpanConfig) bool {
 		return allowLeaseTransfer
@@ -3991,7 +3988,6 @@ func (r *Replica) adminScatter(
 		if currentAttempt == maxAttempts-1 || !requeue {
 			allowLeaseTransfer = true
 		}
-		desc, conf := r.DescAndSpanConfig()
 		requeue, err = rq.processOneChange(
 			ctx, r, desc, conf, canTransferLease, true /* scatter */, false, /* dryRun */
 		)
@@ -4011,7 +4007,6 @@ func (r *Replica) adminScatter(
 	// done by transferring the lease to any of the given N replicas with
 	// probability 1/N of choosing each.
 	if args.RandomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
-		desc, conf := r.DescAndSpanConfig()
 		potentialLeaseTargets := r.store.allocator.ValidLeaseTargets(
 			ctx, r.store.cfg.StorePool, desc, conf, desc.Replicas().VoterDescriptors(), r, allocator.TransferLeaseOptions{})
 		if len(potentialLeaseTargets) > 0 {

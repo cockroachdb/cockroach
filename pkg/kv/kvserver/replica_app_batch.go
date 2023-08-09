@@ -591,15 +591,24 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	prevStats := *r.mu.state.Stats
 	*r.mu.state.Stats = *b.state.Stats
 
-	// If the range is now less than its RangeMaxBytes, clear the history of its
-	// largest previous max bytes.
-	if r.mu.largestPreviousMaxRangeSizeBytes > 0 && b.state.Stats.Total() < r.mu.conf.RangeMaxBytes {
-		r.mu.largestPreviousMaxRangeSizeBytes = 0
-	}
-
+	now := timeutil.Now()
+	needsSplitBySize := false
 	// Check the queuing conditions while holding the lock.
-	needsSplitBySize := r.needsSplitBySizeRLocked()
-	needsMergeBySize := r.needsMergeBySizeRLocked()
+	if r.splitQueueThrottle.ShouldProcess(now) {
+		// If the range is now less than its RangeMaxBytes, clear the history of its
+		// largest previous max bytes.
+		conf, err := r.SpanConfig()
+		if r.mu.largestPreviousMaxRangeSizeBytes > 0 {
+			// If we can't load the span config for this range, then clear the max bytes.
+			if err != nil || b.state.Stats.Total() < conf.RangeMaxBytes {
+				r.mu.largestPreviousMaxRangeSizeBytes = 0
+			}
+			if conf.RangeMaxBytes > r.mu.largestPreviousMaxRangeSizeBytes {
+				r.mu.largestPreviousMaxRangeSizeBytes = conf.RangeMaxBytes
+			}
+		}
+		needsSplitBySize = r.needsSplitBySizeRLocked(conf)
+	}
 	needsTruncationByLogSize := r.needsRaftLogTruncationLocked()
 	r.mu.Unlock()
 	if closedTimestampUpdated {
@@ -614,12 +623,8 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// Record the number of keys written to the replica.
 	b.r.loadStats.RecordWriteKeys(float64(b.ab.numMutations))
 
-	now := timeutil.Now()
-	if needsSplitBySize && r.splitQueueThrottle.ShouldProcess(now) {
+	if needsSplitBySize {
 		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
-	}
-	if needsMergeBySize && r.mergeQueueThrottle.ShouldProcess(now) {
-		r.store.mergeQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 	if needsTruncationByLogSize {
 		r.store.raftLogQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())

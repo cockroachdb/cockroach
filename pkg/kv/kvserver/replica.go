@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"math"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -530,13 +531,6 @@ type Replica struct {
 		// For more, see pkg/kv/kvserver/uncertainty/doc.go.
 		minValidObservedTimestamp hlc.ClockTimestamp
 
-		// The span config for this replica.
-		conf roachpb.SpanConfig
-		// spanConfigExplicitlySet tracks whether a span config was explicitly set
-		// on this replica (as opposed to it having initialized with the default
-		// span config).
-		spanConfigExplicitlySet bool
-
 		// proposalBuf buffers Raft commands as they are passed to the Raft
 		// replication subsystem. The buffer is populated by requests after
 		// evaluation and is consumed by the Raft processing thread. Once
@@ -882,7 +876,7 @@ type Replica struct {
 	// information and without explicit throttling some replicas will offer once
 	// per applied Raft command, which is silly and also clogs up the queues'
 	// semaphores.
-	splitQueueThrottle, mergeQueueThrottle util.EveryN
+	splitQueueThrottle util.EveryN
 
 	// loadBasedSplitter keeps information about load-based splitting.
 	loadBasedSplitter split.Decider
@@ -947,48 +941,22 @@ func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
 
 // GetMinBytes gets the replica's minimum byte threshold.
 func (r *Replica) GetMinBytes() int64 {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.mu.conf.RangeMinBytes
+	conf, err := r.store.GetSpanConfigForKey(context.TODO(), r.startKey)
+	if err != nil {
+		// We don't want to split ranges if we don't have a span config.
+		return 0
+	}
+	return conf.RangeMinBytes
 }
 
 // GetMaxBytes gets the replica's maximum byte threshold.
 func (r *Replica) GetMaxBytes() int64 {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.mu.conf.RangeMaxBytes
-}
-
-// SetSpanConfig sets the replica's span config.
-func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if r.IsInitialized() && !r.mu.conf.IsEmpty() && !conf.IsEmpty() {
-		total := r.mu.state.Stats.Total()
-
-		// Set largestPreviousMaxRangeSizeBytes if the current range size is
-		// greater than the new limit, if the limit has decreased from what we
-		// last remember, and we don't already have a larger value.
-		if total > conf.RangeMaxBytes && conf.RangeMaxBytes < r.mu.conf.RangeMaxBytes &&
-			r.mu.largestPreviousMaxRangeSizeBytes < r.mu.conf.RangeMaxBytes &&
-			// We also want to make sure that we're replacing a real span config.
-			// If we didn't have this check, the default value would prevent
-			// backpressure until the range got larger than it.
-			r.mu.spanConfigExplicitlySet {
-			r.mu.largestPreviousMaxRangeSizeBytes = r.mu.conf.RangeMaxBytes
-		} else if r.mu.largestPreviousMaxRangeSizeBytes > 0 &&
-			r.mu.largestPreviousMaxRangeSizeBytes < conf.RangeMaxBytes {
-			// Reset it if the new limit is larger than the largest we were
-			// aware of.
-			r.mu.largestPreviousMaxRangeSizeBytes = 0
-		}
+	conf, err := r.store.GetSpanConfigForKey(context.TODO(), r.startKey)
+	if err != nil {
+		// We don't want to merge ranges if we don't have a span config.
+		return math.MaxInt64
 	}
-
-	if knobs := r.store.TestingKnobs(); knobs != nil && knobs.SetSpanConfigInterceptor != nil {
-		conf = knobs.SetSpanConfigInterceptor(r.descRLocked(), conf)
-	}
-	r.mu.conf, r.mu.spanConfigExplicitlySet = conf, true
+	return conf.RangeMinBytes
 }
 
 // IsScratchRange returns true if this is range is a scratch range (i.e.
@@ -1030,14 +998,6 @@ func (r *Replica) IsQuiescent() bool {
 	return r.mu.quiescent
 }
 
-// DescAndSpanConfig returns the authoritative range descriptor as well
-// as the span config for the replica.
-func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.mu.state.Desc, r.mu.conf
-}
-
 // SpanConfig returns the authoritative span config for the replica.
 func (r *Replica) SpanConfig() (roachpb.SpanConfig, error) {
 	return r.store.GetSpanConfigForKey(context.TODO(), r.startKey)
@@ -1063,7 +1023,10 @@ func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 // NOTE: an exported version of this method which does not require the replica
 // lock exists in helpers_test.go. Move here if needed.
 func (r *Replica) closedTimestampPolicyRLocked() roachpb.RangeClosedTimestampPolicy {
-	if r.mu.conf.GlobalReads {
+	// TODO: Determine if this impacts performance with a large number of
+	// replicas. If so we need a scheme to not call this as frequently.
+	conf, err := r.SpanConfig()
+	if err != nil && conf.GlobalReads {
 		if !r.mu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
 			return roachpb.LEAD_FOR_GLOBAL_READS
 		}
@@ -1143,11 +1106,16 @@ func (r *Replica) GetGCHint() roachpb.GCHint {
 func (r *Replica) ExcludeDataFromBackup() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.conf.ExcludeDataFromBackup
+	return r.excludeReplicaFromBackupRLocked()
 }
 
 func (r *Replica) excludeReplicaFromBackupRLocked() bool {
-	return r.mu.conf.ExcludeDataFromBackup
+	conf, err := r.SpanConfig()
+	if err != nil {
+		// TODO(baptist): Is this safe, should we return true instead?
+		return false
+	}
+	return conf.ExcludeDataFromBackup
 }
 
 // Version returns the replica version.
@@ -1234,7 +1202,13 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 		return *r.mu.state.GCThreshold
 	}
 
-	gcTTL := r.mu.conf.TTL()
+	conf, err := r.SpanConfig()
+	if err != nil {
+		// We don't have a valid span config for this replica, fall back to the
+		// cached GCThreshold.
+		return *r.mu.state.GCThreshold
+	}
+	gcTTL := conf.TTL()
 	gcThreshold := gc.CalculateThreshold(c.readAt, gcTTL)
 	if !c.earliestProtectionTimestamp.IsEmpty() {
 		// We want to allow GC up to the timestamp preceding the earliest valid
@@ -1259,14 +1233,16 @@ func (r *Replica) isRangefeedEnabled() (ret bool) {
 }
 
 func (r *Replica) isRangefeedEnabledRLocked() (ret bool) {
-	if !r.mu.spanConfigExplicitlySet {
+	conf, err := r.SpanConfig()
+	if err != nil {
 		return true
 	}
-	return r.mu.conf.RangefeedEnabled
+	return conf.RangefeedEnabled
 }
 
 func (r *Replica) shouldIgnoreStrictGCEnforcementRLocked() (ret bool) {
-	if !r.mu.spanConfigExplicitlySet {
+	conf, err := r.SpanConfig()
+	if err != nil {
 		return true
 	}
 
@@ -1274,7 +1250,7 @@ func (r *Replica) shouldIgnoreStrictGCEnforcementRLocked() (ret bool) {
 		return true
 	}
 
-	return r.mu.conf.GCPolicy.IgnoreStrictEnforcement
+	return conf.GCPolicy.IgnoreStrictEnforcement
 }
 
 // maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including
@@ -1544,7 +1520,8 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 			}
 		}
 	}
-	ri.RangeMaxBytes = r.mu.conf.RangeMaxBytes
+	// FIXME
+	//	ri.RangeMaxBytes = r.mu.largestPreviousMaxRangeSizeBytes
 	if r.mu.tenantID != (roachpb.TenantID{}) {
 		ri.TenantID = r.mu.tenantID.ToUint64()
 	}

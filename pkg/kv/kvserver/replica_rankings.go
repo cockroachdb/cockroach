@@ -45,9 +45,9 @@ type CandidateReplica interface {
 	// GetFirstIndex returns the index of the first entry in the replica's Raft
 	// log.
 	GetFirstIndex() kvpb.RaftIndex
-	// DescAndSpanConfig returns the authoritative range descriptor as well
-	// as the span config for the replica.
-	DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)
+	// SpanConfig returns the span config for the replica or an error if it can't
+	// be determined.
+	SpanConfig() (roachpb.SpanConfig, error)
 	// Desc returns the authoritative range descriptor.
 	Desc() *roachpb.RangeDescriptor
 	// RangeUsageInfo returns usage information (sizes and traffic) needed by

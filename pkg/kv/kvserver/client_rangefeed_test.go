@@ -129,7 +129,11 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 				if repl == nil {
 					return fmt.Errorf("replica not found on n%d", i)
 				}
-				if repl.SpanConfig().RangefeedEnabled {
+				conf, err := repl.SpanConfig()
+				if err != nil {
+					return err
+				}
+				if conf.RangefeedEnabled {
 					return errors.New("waiting for span configs")
 				}
 			}

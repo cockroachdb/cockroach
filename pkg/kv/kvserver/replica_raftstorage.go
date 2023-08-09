@@ -372,38 +372,6 @@ func snapshot(
 	}, nil
 }
 
-// updateRangeInfo is called whenever a range is updated by ApplySnapshot
-// or is created by range splitting to setup the fields which are
-// uninitialized or need updating.
-func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescriptor) error {
-	// RangeMaxBytes should be updated by looking up Zone Config in two cases:
-	// 1. After applying a snapshot, if the zone config was not updated for
-	// this key range, then maxBytes of this range will not be updated either.
-	// 2. After a new range is created by a split, only copying maxBytes from
-	// the original range wont work as the original and new ranges might belong
-	// to different zones.
-	// Load the system config.
-	confReader, err := r.store.GetConfReader(ctx)
-	if errors.Is(err, errSpanConfigsUnavailable) {
-		// This could be before the span config subscription was ever
-		// established.
-		log.Warningf(ctx, "unable to retrieve conf reader, cannot determine range MaxBytes")
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
-	// Find span config for this range.
-	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
-	if err != nil {
-		return errors.Wrapf(err, "%s: failed to lookup span config", r)
-	}
-
-	r.SetSpanConfig(conf)
-	return nil
-}
-
 // applySnapshot updates the replica and its store based on the given
 // (non-empty) snapshot and associated HardState. All snapshots must pass
 // through Raft for correctness, i.e. the parameters to this method must be
@@ -718,13 +686,6 @@ func (r *Replica) applySnapshot(
 	r.disconnectRangefeedWithReason(
 		kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
 	)
-
-	// Update the replica's cached byte thresholds. This is a no-op if the system
-	// config is not available, in which case we rely on the next gossip update
-	// to perform the update.
-	if err := r.updateRangeInfo(ctx, desc); err != nil {
-		log.Fatalf(ctx, "unable to update range info while applying snapshot: %+v", err)
-	}
 
 	return nil
 }

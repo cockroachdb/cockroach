@@ -524,20 +524,26 @@ func (r *Replica) leasePostApplyLocked(
 	// lease is valid and owned by the replica before processing.
 	if iAmTheLeaseHolder && leaseChangingHands &&
 		LeaseCheckPreferencesOnAcquisitionEnabled.Get(&r.store.cfg.Settings.SV) {
-		preferenceStatus := checkStoreAgainstLeasePreferences(r.store.StoreID(), r.store.Attrs(),
-			r.store.nodeDesc.Attrs, r.store.nodeDesc.Locality, r.mu.conf.LeasePreferences)
-		switch preferenceStatus {
-		case leasePreferencesOK, leasePreferencesLessPreferred:
-			// We could also enqueue the lease when we are a less preferred
-			// leaseholder, however the replicate queue will eventually get to it and
-			// we already satisfy _some_ preference.
-		case leasePreferencesViolating:
-			log.VEventf(ctx, 2,
-				"acquired lease violates lease preferences, enqueuing for transfer [lease=%v preferences=%v]",
-				newLease, r.mu.conf.LeasePreferences)
-			r.store.replicateQueue.AddAsync(ctx, r, replicateQueueLeasePreferencePriority)
-		default:
-			log.Fatalf(ctx, "unknown lease preferences status: %v", preferenceStatus)
+		conf, err := r.SpanConfig()
+		// If there is an error we can't check this now. This can happen during
+		// startup, but normally it would be rare for us to acquire a non-preference
+		// lease until later.
+		if err != nil {
+			preferenceStatus := checkStoreAgainstLeasePreferences(r.store.StoreID(), r.store.Attrs(),
+				r.store.nodeDesc.Attrs, r.store.nodeDesc.Locality, conf.LeasePreferences)
+			switch preferenceStatus {
+			case leasePreferencesOK, leasePreferencesLessPreferred:
+				// We could also enqueue the lease when we are a less preferred
+				// leaseholder, however the replicate queue will eventually get to it and
+				// we already satisfy _some_ preference.
+			case leasePreferencesViolating:
+				log.VEventf(ctx, 2,
+					"acquired lease violates lease preferences, enqueuing for transfer [lease=%v preferences=%v]",
+					newLease, conf.LeasePreferences)
+				r.store.replicateQueue.AddAsync(ctx, r, replicateQueueLeasePreferencePriority)
+			default:
+				log.Fatalf(ctx, "unknown lease preferences status: %v", preferenceStatus)
+			}
 		}
 	}
 

@@ -654,7 +654,7 @@ func (sr *StoreRebalancer) applyRangeRebalance(
 	candidateReplica CandidateReplica,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 ) bool {
-	descBeforeRebalance, _ := candidateReplica.DescAndSpanConfig()
+	descBeforeRebalance := candidateReplica.Desc()
 	log.KvDistribution.Infof(
 		ctx,
 		"rebalancing r%d (%s load) to better balance load: voters from %v to %v; non-voters from %v to %v",
@@ -740,7 +740,12 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			continue
 		}
 
-		desc, conf := candidateReplica.DescAndSpanConfig()
+		desc := candidateReplica.Desc()
+		conf, err := candidateReplica.SpanConfig()
+		if err != nil {
+			log.KvDistribution.VEventf(ctx, 2, "unable to load span config: %v", err)
+			continue
+		}
 		log.KvDistribution.VEventf(ctx, 3, "considering lease transfer for r%d with %s load",
 			desc.RangeID, candidateReplica.RangeUsageInfo().TransferImpact())
 
@@ -867,7 +872,12 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 			continue
 		}
 
-		rangeDesc, conf := candidateReplica.DescAndSpanConfig()
+		rangeDesc := candidateReplica.Desc()
+		conf, err := candidateReplica.SpanConfig()
+		if err != nil {
+			log.KvDistribution.VEventf(ctx, 2, "unable to load span config: %v", err)
+			continue
+		}
 		clusterNodes := sr.storePool.ClusterNodeCount()
 		numDesiredVoters := allocatorimpl.GetNeededVoters(conf.GetNumVoters(), clusterNodes)
 		numDesiredNonVoters := allocatorimpl.GetNeededNonVoters(numDesiredVoters, int(conf.GetNumNonVoters()), clusterNodes)

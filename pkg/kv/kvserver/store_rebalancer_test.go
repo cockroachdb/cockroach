@@ -509,7 +509,6 @@ func loadRanges(rr *ReplicaRankings, s *Store, ranges []testRange) {
 		rangeID := roachpb.RangeID(i + 1)
 		repl := &Replica{store: s, RangeID: rangeID}
 		repl.mu.state.Desc = &roachpb.RangeDescriptor{RangeID: rangeID}
-		repl.mu.conf = s.cfg.DefaultSpanConfig
 		for _, storeID := range r.voters {
 			repl.mu.state.Desc.InternalReplicas = append(repl.mu.state.Desc.InternalReplicas, roachpb.ReplicaDescriptor{
 				NodeID:    roachpb.NodeID(storeID),

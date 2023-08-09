@@ -77,10 +77,10 @@ func (sr *simulatorReplica) GetFirstIndex() kvpb.RaftIndex {
 	return 2
 }
 
-// DescAndSpanConfig returns the authoritative range descriptor as well
+// SpanConfig returns the authoritative range descriptor as well
 // as the span config for the replica.
-func (sr *simulatorReplica) DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig) {
-	return sr.rng.Descriptor(), sr.rng.SpanConfig()
+func (sr *simulatorReplica) SpanConfig() (roachpb.SpanConfig, error) {
+	return sr.rng.SpanConfig(), nil
 }
 
 // Desc returns the authoritative range descriptor, acquiring a replica lock in

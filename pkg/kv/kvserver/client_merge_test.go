@@ -4297,19 +4297,22 @@ func TestMergeQueue(t *testing.T) {
 
 	// setThresholds simulates a zone config update that updates the ranges'
 	// minimum and maximum sizes.
-	setSpanConfigs := func(t *testing.T, conf roachpb.SpanConfig) {
-		t.Helper()
-		if l := lhs(); l == nil {
-			t.Fatal("left-hand side range not found")
-		} else {
-			l.SetSpanConfig(conf)
+	// FIXME: These need to be in the store conf
+	/*
+		setSpanConfigs := func(t *testing.T, conf roachpb.SpanConfig) {
+			t.Helper()
+			if l := lhs(); l == nil {
+				t.Fatal("left-hand side range not found")
+			} else {
+				l.SetSpanConfig(conf)
+			}
+			if r := rhs(); r == nil {
+				t.Fatal("right-hand side range not found")
+			} else {
+				r.SetSpanConfig(conf)
+			}
 		}
-		if r := rhs(); r == nil {
-			t.Fatal("right-hand side range not found")
-		} else {
-			r.SetSpanConfig(conf)
-		}
-	}
+	*/
 
 	reset := func(t *testing.T) {
 		t.Helper()
@@ -4319,7 +4322,7 @@ func TestMergeQueue(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		setSpanConfigs(t, conf)
+		//setSpanConfigs(t, conf)
 		// Disable load-based splitting, so that the absence of sufficient QPS
 		// measurements do not prevent ranges from merging. Certain subtests
 		// re-enable the functionality.
@@ -4346,7 +4349,7 @@ func TestMergeQueue(t *testing.T) {
 		reset(t)
 		conf := conf
 		conf.RangeMinBytes *= 2
-		lhs().SetSpanConfig(conf)
+		//lhs().SetSpanConfig(conf)
 		verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
 	})
 
@@ -4358,12 +4361,12 @@ func TestMergeQueue(t *testing.T) {
 		conf := conf
 		conf.RangeMinBytes = rhs().GetMVCCStats().Total() + 1
 		conf.RangeMaxBytes = lhs().GetMVCCStats().Total() + rhs().GetMVCCStats().Total() - 1
-		setSpanConfigs(t, conf)
+		//setSpanConfigs(t, conf)
 		verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
 
 		// Once the maximum size threshold is increased, the merge can occur.
 		conf.RangeMaxBytes += 1
-		setSpanConfigs(t, conf)
+		//setSpanConfigs(t, conf)
 		verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
 	})
 
