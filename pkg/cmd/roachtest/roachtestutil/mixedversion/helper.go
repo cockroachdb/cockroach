@@ -20,7 +20,9 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
 func (h *Helper) RandomNode(prng *rand.Rand, nodes option.NodeListOption) int {
@@ -117,6 +119,34 @@ func (h *Helper) ExpectDeath() {
 // ExpectDeaths is the general version of `ExpectDeath()`.
 func (h *Helper) ExpectDeaths(n int) {
 	h.runner.monitor.ExpectDeaths(n)
+}
+
+// LowestBinaryVersion returns a parsed `version.Version` object
+// corresponding to the lowest binary version used in the current
+// upgrade. The {Major, Minor} information in the version returned
+// provides a lower bound on the cluster version active when this
+// function is called. Test authors can use this information to
+// determine whether a certain feature is available.
+func (h *Helper) LowestBinaryVersion() *version.Version {
+	tc := h.Context()
+
+	var lowestVersion string
+	if tc.FromVersion == clusterupgrade.MainVersion {
+		lowestVersion = tc.ToVersion
+	} else if tc.ToVersion == clusterupgrade.MainVersion {
+		lowestVersion = tc.FromVersion
+	} else {
+		fromVersion := version.MustParse("v" + tc.FromVersion)
+		toVersion := version.MustParse("v" + tc.ToVersion)
+
+		if fromVersion.Compare(toVersion) < 0 {
+			lowestVersion = tc.FromVersion
+		} else {
+			lowestVersion = tc.ToVersion
+		}
+	}
+
+	return version.MustParse("v" + lowestVersion)
 }
 
 // loggerFor creates a logger instance to be used by background
