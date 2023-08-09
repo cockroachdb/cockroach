@@ -13,10 +13,13 @@ package server
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"net"
 	"net/url"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -43,6 +46,7 @@ const useLoopbackListener = false
 // of serverutils.ApplicationLayerInterface.
 func openTestSQLConn(
 	userName, dbName string,
+	tenantName roachpb.TenantName,
 	stopper *stop.Stopper,
 	// When useLoopbackListener is set, only this is used:
 	pgL *netutil.LoopbackListener,
@@ -53,13 +57,21 @@ func openTestSQLConn(
 	cleanupFn := func() {}
 	var goDB *gosql.DB
 
+	opts := url.Values{}
+	if tenantName != "" && !strings.HasPrefix(dbName, "cluster:") {
+		opts.Add("options", fmt.Sprintf("-ccluster=%s", tenantName))
+	}
+	if insecure || useLoopbackListener {
+		opts.Add("sslmode", "disable")
+	}
+
 	if useLoopbackListener {
 		pgurl := url.URL{
 			Scheme:   "postgres",
 			User:     url.User(userName),
 			Host:     "unused",
 			Path:     dbName,
-			RawQuery: "sslmode=disable",
+			RawQuery: opts.Encode(),
 		}
 		// TODO(sql): consider using pgx for tests instead of lib/pq.
 		connector, err := pq.NewConnector(pgurl.String())
@@ -76,9 +88,16 @@ func openTestSQLConn(
 			return nil, err
 		}
 		pgURL.Path = dbName
-		if insecure {
-			pgURL.RawQuery = "sslmode=disable"
+
+		// Add the common query options decided above to those prepared by
+		// PGUrlE().
+		qv := pgURL.Query()
+		for k, v := range opts {
+			qv[k] = v
 		}
+		pgURL.RawQuery = qv.Encode()
+
+		// Open the connection.
 		goDB, err = gosql.Open("postgres", pgURL.String())
 		if err != nil {
 			cleanupFn()
