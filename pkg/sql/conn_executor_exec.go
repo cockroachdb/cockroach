@@ -903,16 +903,18 @@ func (ex *connExecutor) execStmtInOpenState(
 		// PREPARE statement itself.
 		oldPlaceholders := p.extendedEvalCtx.Placeholders
 		p.extendedEvalCtx.Placeholders = nil
+		defer func() {
+			// The call to addPreparedStmt changed the planner stmt to the
+			// statement being prepared. Set it back to the PREPARE statement,
+			// so that it's logged correctly.
+			p.stmt = stmt
+			p.extendedEvalCtx.Placeholders = oldPlaceholders
+		}()
 		if _, err := ex.addPreparedStmt(
 			ctx, name, prepStmt, typeHints, rawTypeHints, PreparedStatementOriginSQL,
 		); err != nil {
 			return makeErrEvent(err)
 		}
-		// The call to addPreparedStmt changed the planner stmt to the statement
-		// being prepared. Set it back to the PREPARE statement, so that it's
-		// logged correctly.
-		p.stmt = stmt
-		p.extendedEvalCtx.Placeholders = oldPlaceholders
 		return nil, nil, nil
 	}
 
