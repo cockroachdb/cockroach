@@ -17,7 +17,6 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
-        "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
 )
