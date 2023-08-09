@@ -64,6 +64,7 @@ go_test(
     data = glob(["testdata/**"]),
     deps = [
         ":plpgparser",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/plpgsqltree/utils",
         "//pkg/testutils/datapathutils",
         "@com_github_cockroachdb_datadriven//:datadriven",

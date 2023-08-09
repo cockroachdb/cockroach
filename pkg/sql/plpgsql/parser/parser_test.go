@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -46,6 +47,20 @@ func TestParseDataDriver(t *testing.T) {
 				}
 
 				return fn.String()
+			case "error":
+				_, err := parser.Parse(d.Input)
+				if err == nil {
+					return ""
+				}
+				pgerr := pgerror.Flatten(err)
+				msg := pgerr.Message
+				if pgerr.Detail != "" {
+					msg += "\nDETAIL: " + pgerr.Detail
+				}
+				if pgerr.Hint != "" {
+					msg += "\nHINT: " + pgerr.Hint
+				}
+				return msg
 			}
 			d.Fatalf(t, "unsupported command: %s", d.Cmd)
 			return ""
