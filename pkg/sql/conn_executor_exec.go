@@ -1552,6 +1552,9 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 			// retry the statement.
 			break
 		}
+		if knob := ex.server.cfg.TestingKnobs.OnReadCommittedStmtRetry; knob != nil {
+			knob(txnRetryErr)
+		}
 		res.SetError(nil)
 		if err := ex.state.mu.txn.RollbackToSavepoint(ctx, readCommittedSavePointToken); err != nil {
 			return true, err
