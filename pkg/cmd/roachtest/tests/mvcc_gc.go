@@ -95,9 +95,6 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 		execSQLOrFail(fmt.Sprintf(`SET CLUSTER SETTING %s = $1`, name), value)
 	}
 
-	// Explicitly enable range tombstones. Can be removed once ranges tombstones
-	// are enabled by default.
-	setClusterSetting("storage.mvcc.range_tombstones.enabled", true)
 	// Protected timestamps prevent GC from collecting data, even with low ttl
 	// we need to wait for protected ts to be moved. By reducing this interval
 	// we ensure that data will always be collectable after ttl + 5s.
