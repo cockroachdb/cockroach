@@ -43,6 +43,12 @@ func TestShowTransferState(t *testing.T) {
 	require.NoError(t, err)
 	_, err = tenantDB.Exec("CREATE TYPE typ AS ENUM ('foo', 'bar')")
 	require.NoError(t, err)
+	_, err = tenantDB.Exec("CREATE TABLE tab (a INT4, b typ)")
+	require.NoError(t, err)
+	_, err = tenantDB.Exec("INSERT INTO tab VALUES (1, 'foo')")
+	require.NoError(t, err)
+	_, err = tenantDB.Exec("GRANT SELECT ON tab TO testuser")
+	require.NoError(t, err)
 
 	testUserConn := tenant.SQLConnForUser(t, username.TestUser, "")
 
@@ -90,12 +96,18 @@ func TestShowTransferState(t *testing.T) {
 		defer func() { _ = conn.Close(ctx) }()
 
 		// Add a prepared statement to make sure SHOW TRANSFER STATE handles it.
-		_, err = conn.Prepare(ctx, "prepared_stmt", "SELECT $1::INT4, 'foo'::typ WHERE 1 = 1")
+		_, err = conn.Prepare(ctx, "prepared_stmt_const", "SELECT $1::INT4, 'foo'::typ WHERE 1 = 1")
+		require.NoError(t, err)
+		_, err = conn.Prepare(ctx, "prepared_stmt_aost", "SELECT a, b FROM tab AS OF SYSTEM TIME '-1us'")
 		require.NoError(t, err)
 
 		var intResult int
 		var enumResult string
-		err = conn.QueryRow(ctx, "prepared_stmt", 1).Scan(&intResult, &enumResult)
+		err = conn.QueryRow(ctx, "prepared_stmt_const", 1).Scan(&intResult, &enumResult)
+		require.NoError(t, err)
+		require.Equal(t, 1, intResult)
+		require.Equal(t, "foo", enumResult)
+		err = conn.QueryRow(ctx, "prepared_stmt_aost").Scan(&intResult, &enumResult)
 		require.NoError(t, err)
 		require.Equal(t, 1, intResult)
 		require.Equal(t, "foo", enumResult)
@@ -171,13 +183,25 @@ func TestShowTransferState(t *testing.T) {
 		// session.
 		result := conn.PgConn().ExecPrepared(
 			ctx,
-			"prepared_stmt",
+			"prepared_stmt_const",
 			[][]byte{{0, 0, 0, 2}}, // binary representation of 2
 			[]int16{1},             // paramFormats - 1 means binary
-			[]int16{1},             // resultFormats - 1 means binary
+			[]int16{1, 1},          // resultFormats - 1 means binary
 		).Read()
+		require.NoError(t, result.Err)
 		require.Equal(t, [][][]byte{{
 			{0, 0, 0, 2}, {0x66, 0x6f, 0x6f}, // binary representation of 2, 'foo'
+		}}, result.Rows)
+		result = conn.PgConn().ExecPrepared(
+			ctx,
+			"prepared_stmt_aost",
+			[][]byte{},    // paramValues
+			[]int16{},     // paramFormats
+			[]int16{1, 1}, // resultFormats - 1 means binary
+		).Read()
+		require.NoError(t, result.Err)
+		require.Equal(t, [][][]byte{{
+			{0, 0, 0, 1}, {0x66, 0x6f, 0x6f}, // binary representation of 1, 'foo'
 		}}, result.Rows)
 	})
 

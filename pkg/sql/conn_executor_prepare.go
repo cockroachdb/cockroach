@@ -320,8 +320,15 @@ func (ex *connExecutor) populatePrepared(
 		return 0, err
 	}
 	p.extendedEvalCtx.PrepareOnly = true
-	if err := ex.handleAOST(ctx, p.stmt.AST); err != nil {
-		return 0, err
+	// If the statement is being prepared by a session migration, then we should
+	// not evaluate the AS OF SYSTEM TIME timestamp. During session migration,
+	// there is no way for the statement being prepared to be executed in this
+	// transaction, so there's no need to fix the timestamp, unlike how we must
+	// for pgwire- or SQL-level prepared statements.
+	if origin != PreparedStatementOriginSessionMigration {
+		if err := ex.handleAOST(ctx, p.stmt.AST); err != nil {
+			return 0, err
+		}
 	}
 
 	// PREPARE has a limited subset of statements it can be run with. Postgres
