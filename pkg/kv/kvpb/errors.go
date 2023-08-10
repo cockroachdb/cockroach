@@ -715,7 +715,32 @@ func (e *TransactionAbortedError) SafeFormatError(p errors.Printer) (next error)
 	return nil
 }
 
-// NewTransactionRetryWithProtoRefreshError initializes a new TransactionRetryWithProtoRefreshError.
+type retryErrOptions struct {
+	conflictingTxn *enginepb.TxnMeta
+}
+
+// RetryErrOption is used to annotate optional fields in retry related errors.
+type RetryErrOption interface {
+	apply(*retryErrOptions)
+}
+
+type retryErrOptionFunc func(*retryErrOptions)
+
+func (f retryErrOptionFunc) apply(o *retryErrOptions) {
+	f(o)
+}
+
+// WithConflictingTxn is used to annotate a retry error with the conflicting
+// transaction metadata (optional). This is only used for cases where a refresh
+// fails with `REASON_INTENT`.
+func WithConflictingTxn(txn *enginepb.TxnMeta) RetryErrOption {
+	return retryErrOptionFunc(func(o *retryErrOptions) {
+		o.conflictingTxn = txn
+	})
+}
+
+// NewTransactionRetryWithProtoRefreshError initializes a new
+// TransactionRetryWithProtoRefreshError.
 //
 // prevTxnID is the ID of the transaction being retried.
 // prevTxnEpoch is the epoch of the transaction being retried.
@@ -730,13 +755,19 @@ func NewTransactionRetryWithProtoRefreshError(
 	prevTxnID uuid.UUID,
 	prevTxnEpoch enginepb.TxnEpoch,
 	nextTxn roachpb.Transaction,
+	opts ...RetryErrOption,
 ) *TransactionRetryWithProtoRefreshError {
+	options := retryErrOptions{}
+	for _, o := range opts {
+		o.apply(&options)
+	}
 	return &TransactionRetryWithProtoRefreshError{
 		Msg:             msg.StripMarkers(),
 		MsgRedactable:   msg,
 		PrevTxnID:       prevTxnID,
 		PrevTxnEpoch:    prevTxnEpoch,
 		NextTransaction: nextTxn,
+		ConflictingTxn:  options.conflictingTxn,
 	}
 }
 
@@ -808,12 +839,17 @@ var _ transactionRestartError = &TransactionPushError{}
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
 func NewTransactionRetryError(
-	reason TransactionRetryReason, extraMsg redact.RedactableString,
+	reason TransactionRetryReason, extraMsg redact.RedactableString, opts ...RetryErrOption,
 ) *TransactionRetryError {
+	options := retryErrOptions{}
+	for _, o := range opts {
+		o.apply(&options)
+	}
 	return &TransactionRetryError{
 		Reason:             reason,
 		ExtraMsg:           extraMsg.StripMarkers(),
 		ExtraMsgRedactable: extraMsg,
+		ConflictingTxn:     options.conflictingTxn,
 	}
 }
 
@@ -1467,12 +1503,27 @@ var _ ErrorDetailInterface = &MinTimestampBoundUnsatisfiableError{}
 // or 'intent' which caused the failed refresh, key is the key that we failed
 // refreshing, and ts is the timestamp of the committed value or intent that was written.
 func NewRefreshFailedError(
-	reason RefreshFailedError_Reason, key roachpb.Key, ts hlc.Timestamp,
+	ctx context.Context,
+	reason RefreshFailedError_Reason,
+	key roachpb.Key,
+	ts hlc.Timestamp,
+	opts ...RetryErrOption,
 ) *RefreshFailedError {
+	options := retryErrOptions{}
+	for _, o := range opts {
+		o.apply(&options)
+	}
+	if reason == RefreshFailedError_REASON_INTENT && options.conflictingTxn == nil {
+		log.Fatal(ctx, "conflictingTxn should be set if refresh failed with REASON_INTENT")
+	}
+	if reason != RefreshFailedError_REASON_INTENT && options.conflictingTxn != nil {
+		log.Fatal(ctx, "conflictingTxn should not be set if refresh failed without REASON_INTENT")
+	}
 	return &RefreshFailedError{
-		Reason:    reason,
-		Key:       key,
-		Timestamp: ts,
+		Reason:         reason,
+		Key:            key,
+		Timestamp:      ts,
+		ConflictingTxn: options.conflictingTxn,
 	}
 }
 

@@ -625,8 +625,7 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 		require.Equal(t, scanArgs.Span(), refReq.Span())
 		require.Equal(t, origReadTs, refReq.RefreshFrom)
 
-		return nil, kvpb.NewError(kvpb.NewRefreshFailedError(
-			kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}))
+		return nil, kvpb.NewError(kvpb.NewRefreshFailedError(ctx, kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}))
 	}
 	unexpected := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Fail(t, "unexpected")
