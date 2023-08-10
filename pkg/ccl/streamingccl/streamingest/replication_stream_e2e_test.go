@@ -996,3 +996,53 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	cutoverOutput := replicationtestutils.DecimalTimeToHLC(c.T, showCutover)
 	require.Equal(c.T, futureTime, cutoverOutput)
 }
+
+// TestTenantStreamingPauseProducer verifies that pausing the producer job pauses the ingestion job.
+func TestTenantStreamingPauseProducer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	// Pause the producer job.
+	c.SrcSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", producerJobID))
+	jobutils.WaitForJobToPause(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+
+	// Verify the ingestion job is paused.
+	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+}
+
+// TestTenantStreamingCancelProducer verifies that canceling the producer job pauses the ingestion job.
+func TestTenantStreamingCancelProducer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	// Cancel the producer job, which should fail the ingestion job.
+	c.SrcSysSQL.Exec(t, fmt.Sprintf("CANCEL JOB %d", producerJobID))
+	jobutils.WaitForJobToCancel(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+
+	// Verify the ingestion job is paused.
+	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+}
