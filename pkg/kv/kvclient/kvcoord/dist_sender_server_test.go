@@ -4287,3 +4287,62 @@ func BenchmarkReturnOnRangeBoundary(b *testing.B) {
 		require.NoError(b, txn.Commit(ctx))
 	}
 }
+
+func TestRefreshFailureIncludesConflictingTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "committed", func(t *testing.T, committed bool) {
+		testutils.RunTrueAndFalse(t, "range-refresh", func(t *testing.T, rangeRefresh bool) {
+			ctx := context.Background()
+			s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+
+			err := db.Put(ctx, "a", "put")
+			require.NoError(t, err)
+
+			txn1 := db.NewTxn(ctx, "original txn")
+			txn2 := db.NewTxn(ctx, "contending txn")
+
+			if rangeRefresh {
+				_, err = txn1.Scan(ctx, "a", "a2", 10)
+				require.NoError(t, err)
+			} else {
+				_, err = txn1.Get(ctx, "a")
+				require.NoError(t, err)
+			}
+
+			// This bumps the timestamp cache on "b" so that the next put from txn1
+			// causes its write timestamp to skew, thereby forcing a refresh.
+			_, err = txn2.Get(ctx, "b")
+			require.NoError(t, err)
+
+			err = txn2.Put(ctx, "a", "put")
+			require.NoError(t, err)
+
+			if committed {
+				require.NoError(t, txn2.Commit(ctx))
+				// Force intent clean up.
+				_, err = db.Get(ctx, "a")
+				require.NoError(t, err)
+			}
+
+			err = txn1.Put(ctx, "b", "put")
+			require.NoError(t, err)
+
+			err = txn1.Commit(ctx)
+			require.Error(t, err)
+
+			tErr := (*kvpb.TransactionRetryWithProtoRefreshError)(nil)
+			require.ErrorAs(t, err, &tErr)
+
+			if committed {
+				require.Nil(t, tErr.ConflictingTxn)
+			} else {
+				require.NotNil(t, tErr.ConflictingTxn)
+				require.Equal(t, txn2.ID(), tErr.ConflictingTxn.ID)
+				require.Equal(t, int32(1), tErr.ConflictingTxn.CoordinatorNodeID)
+			}
+		})
+	})
+}
