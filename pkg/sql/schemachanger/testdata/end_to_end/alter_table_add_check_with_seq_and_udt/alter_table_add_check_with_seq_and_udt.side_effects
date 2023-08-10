@@ -34,8 +34,8 @@ upsert descriptor #104
   +  dependedOnBy:
   +  - byId: true
   +    id: 107
-     formatVersion: 3
-     id: 104
+     families:
+     - columnIds:
   ...
        start: "1"
      unexposedParentSchemaId: 101
@@ -120,8 +120,8 @@ upsert descriptor #104
   +  dependedOnBy:
   +  - byId: true
   +    id: 107
-     formatVersion: 3
-     id: 104
+     families:
+     - columnIds:
   ...
        start: "1"
      unexposedParentSchemaId: 101

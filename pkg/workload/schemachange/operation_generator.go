@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -356,18 +355,6 @@ func init() {
 			panic(errors.AssertionFailedf("declarative op %v doesn't have an active version", op))
 		}
 	}
-}
-
-// adjustOpWeightsForActiveVersion adjusts the weights for the active cockroach
-// version, allowing us to disable certain operations in mixed version scenarios.
-func adjustOpWeightsForCockroachVersion(
-	ctx context.Context, pool *workload.MultiConnPool, opWeights []int,
-) error {
-	tx, err := pool.Get().Begin(ctx)
-	if err != nil {
-		return err
-	}
-	return tx.Rollback(ctx)
 }
 
 // getSupportedDeclarativeOp generates declarative operations until,

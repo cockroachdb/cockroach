@@ -154,8 +154,7 @@ sql.schema.schema_changer_mode.legacy
 feature-usage
 CREATE SCHEMA a
 ----
-sql.schema.create_schema
-sql.schema.schema_changer_mode.declarative
+sql.schema.schema_changer_mode.legacy
 
 feature-usage
 CREATE INDEX ON t(b)

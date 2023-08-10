@@ -1501,3 +1501,33 @@ public              admin
 
 statement ok
 COMMIT
+
+
+subtest statement-control
+
+# Disable ALTER table completely and validate it works
+statement ok
+SET use_declarative_schema_changer = 'on'
+
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!ALTER TABLE'
+
+statement ok
+CREATE TABLE stmt_ctrl(n int primary key)
+
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE stmt_ctrl ADD COLUMN j BOOL
+
+statement ok
+ALTER TABLE stmt_ctrl ADD COLUMN fallback_works BOOL
+
+# Validate that CREATE SEQUENCE is disabled and can be re-enabled with the same flag.
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) CREATE SEQUENCE sq2
+
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='+CREATE SEQUENCE'
+
+skipif config local-mixed-22.2-23.1
+statement ok
+EXPLAIN (DDL) CREATE SEQUENCE sq2
