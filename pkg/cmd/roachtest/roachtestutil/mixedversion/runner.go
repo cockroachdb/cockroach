@@ -358,6 +358,11 @@ func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
 	tr.logger.Printf("stopping background functions")
 	tr.background.Terminate()
 
+	tr.logger.Printf("stopping node monitor")
+	if err := tr.monitor.Stop(); err != nil {
+		tr.logger.Printf("monitor returned error: %v", err)
+	}
+
 	// If the test failed, we wait for any currently running steps to
 	// return before passing control back to the roachtest
 	// framework. This achieves a test.log that does not contain any
@@ -514,7 +519,7 @@ func newCRDBMonitor(
 func (cm *crdbMonitor) Init() {
 	cm.once.Do(func() {
 		go func() {
-			if err := cm.monitor.WaitE(); err != nil {
+			if err := cm.monitor.WaitForNodeDeath(); err != nil {
 				cm.errCh <- err
 			}
 		}()
@@ -529,6 +534,10 @@ func (cm *crdbMonitor) Err() chan error {
 
 func (cm *crdbMonitor) ExpectDeaths(n int) {
 	cm.monitor.ExpectDeaths(int32(n))
+}
+
+func (cm *crdbMonitor) Stop() error {
+	return cm.monitor.WaitE()
 }
 
 func newBackgroundRunner(ctx context.Context, l *logger.Logger) *backgroundRunner {
