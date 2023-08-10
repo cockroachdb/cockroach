@@ -848,7 +848,6 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			err = ds.getSQLDB(t, cluster, user).QueryRow(filePathQuery).Scan(&filePath)
 			require.NoError(t, err)
 			fullPath := filepath.Join(ds.getIODir(t, cluster), parsedURI.Path, filePath)
-			print(fullPath)
 			data, err := os.ReadFile(fullPath)
 			require.NoError(t, err)
 			data[20] ^= 1
