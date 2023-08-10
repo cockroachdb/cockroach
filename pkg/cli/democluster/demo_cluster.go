@@ -1003,6 +1003,20 @@ func (c *transientCluster) Close(ctx context.Context) {
 	}
 }
 
+// findServer looks for the index of the server with the given node
+// ID. We need to do this search because the mapping between server
+// index and node ID is not guaranteed.
+func (c *transientCluster) findServer(nodeID roachpb.NodeID) int {
+	serverIdx := -1
+	for i, s := range c.servers {
+		if s.nodeID == nodeID {
+			serverIdx = i
+			break
+		}
+	}
+	return serverIdx
+}
+
 // DrainAndShutdown will gracefully attempt to drain a node in the cluster, and
 // then shut it down.
 func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) error {
@@ -1010,15 +1024,8 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 		return errors.Errorf("shutting down nodes is not supported in --%s configurations", cliflags.Global.Name)
 	}
 
-	// Find which server has the requested node ID. We need to do this
-	// search because the mapping between server index and node ID is
-	// not guaranteed.
-	serverIdx := -1
-	for i, s := range c.servers {
-		if s.nodeID == roachpb.NodeID(nodeID) {
-			serverIdx = i
-		}
-	}
+	// Find which server has the requested node ID.
+	serverIdx := c.findServer(roachpb.NodeID(nodeID))
 
 	if serverIdx == -1 {
 		return errors.Errorf("node %d does not exist", nodeID)
@@ -1141,15 +1148,8 @@ func (c *transientCluster) Decommission(ctx context.Context, nodeID int32) error
 // The node must have been shut down beforehand.
 // The node will restart, connecting to the same in memory node.
 func (c *transientCluster) RestartNode(ctx context.Context, nodeID int32) error {
-	// Find which server has the requested node ID. We need to do this
-	// search because the mapping between server index and node ID is
-	// not guaranteed.
-	serverIdx := -1
-	for i, s := range c.servers {
-		if s.nodeID == roachpb.NodeID(nodeID) {
-			serverIdx = i
-		}
-	}
+	// Find which server has the requested node ID.
+	serverIdx := c.findServer(roachpb.NodeID(nodeID))
 
 	if serverIdx == -1 {
 		return errors.Errorf("node %d does not exist", nodeID)
