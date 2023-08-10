@@ -107,7 +107,7 @@ export const FALLBACK_DB = "system";
 export function executeInternalSql<RowType>(
   req: SqlExecutionRequest,
 ): Promise<SqlExecutionResponse<RowType>> {
-  if (!req.application_name) {
+  if (!req.application_name || req.application_name === INTERNAL_SQL_API_APP) {
     req.application_name = INTERNAL_SQL_API_APP;
   } else {
     req.application_name = `$ internal-${req.application_name}`;
