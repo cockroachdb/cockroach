@@ -44,7 +44,4 @@ type DemoCluster interface {
 
 	// Decommission decommissions the given node.
 	Decommission(ctx context.Context, nodeID int32) error
-
-	// Recommission recommissions the given node.
-	Recommission(ctx context.Context, nodeID int32) error
 }
