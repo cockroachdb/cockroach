@@ -243,12 +243,6 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			// name as the variable being assigned.
 			s = b.addPLpgSQLAssign(s, t.Var, t.Value)
 		case *plpgsqltree.PLpgSQLStmtIf:
-			if len(t.ElseIfList) != 0 {
-				panic(unimplemented.New(
-					"ELSIF statements",
-					"PL/pgSQL ELSIF branches are not yet supported",
-				))
-			}
 			// IF statement control flow is handled by calling a "continuation"
 			// function in each branch that executes all the statements that logically
 			// follow the IF statement block.
@@ -266,25 +260,40 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			// function at the end of construction in order to resume execution after
 			// the IF block.
 			thenScope := b.buildPLpgSQLStatements(t.ThenBody, s.push())
+			elsifScopes := make([]*scope, len(t.ElseIfList))
+			for j := range t.ElseIfList {
+				elsifScopes[j] = b.buildPLpgSQLStatements(t.ElseIfList[j].Stmts, s.push())
+			}
 			// Note that if the ELSE body is empty, elseExpr will be equivalent to
 			// executing the statements following the IF statement (it will be a call
 			// to the continuation that was built above).
 			elseScope := b.buildPLpgSQLStatements(t.ElseBody, s.push())
 			b.popContinuation()
 
+			// If one of the branches does not terminate, return nil to indicate a
+			// non-terminal branch.
 			if thenScope == nil || elseScope == nil {
-				// One or both branches didn't terminate with a RETURN statement.
 				return nil
 			}
-			thenExpr, elseExpr := thenScope.expr, elseScope.expr
+			for j := range elsifScopes {
+				if elsifScopes[j] == nil {
+					return nil
+				}
+			}
 
-			// Build a scalar CASE statement that conditionally executes either branch
+			// Build a scalar CASE statement that conditionally executes each branch
 			// of the IF statement as a subquery.
 			cond := b.buildPLpgSQLExpr(t.Condition, types.Bool, s)
-			thenScalar := b.ob.factory.ConstructSubquery(thenExpr, &memo.SubqueryPrivate{})
-			elseScalar := b.ob.factory.ConstructSubquery(elseExpr, &memo.SubqueryPrivate{})
-			whenExpr := memo.ScalarListExpr{b.ob.factory.ConstructWhen(cond, thenScalar)}
-			scalar := b.ob.factory.ConstructCase(memo.TrueSingleton, whenExpr, elseScalar)
+			thenScalar := b.ob.factory.ConstructSubquery(thenScope.expr, &memo.SubqueryPrivate{})
+			whens := make(memo.ScalarListExpr, 0, len(t.ElseIfList)+1)
+			whens = append(whens, b.ob.factory.ConstructWhen(cond, thenScalar))
+			for j := range t.ElseIfList {
+				elsifCond := b.buildPLpgSQLExpr(t.ElseIfList[j].Condition, types.Bool, s)
+				elsifScalar := b.ob.factory.ConstructSubquery(elsifScopes[j].expr, &memo.SubqueryPrivate{})
+				whens = append(whens, b.ob.factory.ConstructWhen(elsifCond, elsifScalar))
+			}
+			elseScalar := b.ob.factory.ConstructSubquery(elseScope.expr, &memo.SubqueryPrivate{})
+			scalar := b.ob.factory.ConstructCase(memo.TrueSingleton, whens, elseScalar)
 
 			// Return a single column that projects the result of the CASE statement.
 			returnColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_if"))
