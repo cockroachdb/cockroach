@@ -8093,6 +8093,11 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				argStrings := make([]string, len(args))
 				for i := range args {
+					if args[i] == tree.DNull {
+						return nil, pgerror.New(
+							pgcode.NullValueNotAllowed, "RAISE statement option cannot be null",
+						)
+					}
 					s, ok := tree.AsDString(args[i])
 					if !ok {
 						return nil, errors.Newf("expected string value, got %T", args[i])
@@ -8144,8 +8149,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				}
 				return tree.DNull, nil
 			},
-			Info:       "This function is used internally to implement the PLpgSQL RAISE statement.",
-			Volatility: volatility.Volatile,
+			Info:              "This function is used internally to implement the PLpgSQL RAISE statement.",
+			Volatility:        volatility.Volatile,
+			CalledOnNullInput: true,
 		},
 	),
 }

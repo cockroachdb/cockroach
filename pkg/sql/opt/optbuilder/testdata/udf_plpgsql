@@ -1710,7 +1710,9 @@ project
                      │                   │              ├── concat
                      │                   │              │    ├── concat
                      │                   │              │    │    ├── const: ''
-                     │                   │              │    │    └── const: 1
+                     │                   │              │    │    └── coalesce
+                     │                   │              │    │         ├── const: 1
+                     │                   │              │    │         └── const: '<NULL>'
                      │                   │              │    └── const: ''
                      │                   │              ├── const: ''
                      │                   │              ├── const: ''
@@ -1736,11 +1738,17 @@ project
                      │                                       │              │    │    │    │    ├── concat
                      │                                       │              │    │    │    │    │    ├── concat
                      │                                       │              │    │    │    │    │    │    ├── const: 'foo: '
-                     │                                       │              │    │    │    │    │    │    └── const: 1
+                     │                                       │              │    │    │    │    │    │    └── coalesce
+                     │                                       │              │    │    │    │    │    │         ├── const: 1
+                     │                                       │              │    │    │    │    │    │         └── const: '<NULL>'
                      │                                       │              │    │    │    │    │    └── const: ', '
-                     │                                       │              │    │    │    │    └── const: 2
+                     │                                       │              │    │    │    │    └── coalesce
+                     │                                       │              │    │    │    │         ├── const: 2
+                     │                                       │              │    │    │    │         └── const: '<NULL>'
                      │                                       │              │    │    │    └── const: ', '
-                     │                                       │              │    │    └── const: 3
+                     │                                       │              │    │    └── coalesce
+                     │                                       │              │    │         ├── const: 3
+                     │                                       │              │    │         └── const: '<NULL>'
                      │                                       │              │    └── const: ''
                      │                                       │              ├── const: ''
                      │                                       │              ├── const: ''
@@ -1788,7 +1796,9 @@ project
                      │                                                                               │              │    │    │    │    ├── const: ''
                      │                                                                               │              │    │    │    │    └── const: '%'
                      │                                                                               │              │    │    │    └── const: ''
-                     │                                                                               │              │    │    └── const: 1
+                     │                                                                               │              │    │    └── coalesce
+                     │                                                                               │              │    │         ├── const: 1
+                     │                                                                               │              │    │         └── const: '<NULL>'
                      │                                                                               │              │    └── const: ''
                      │                                                                               │              ├── const: ''
                      │                                                                               │              ├── const: ''
@@ -1830,7 +1840,9 @@ project
                      │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    ├── const: ''
                      │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── const: '%'
                      │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── const: ''
-                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── const: 1
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── coalesce
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │         ├── const: 1
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │         └── const: '<NULL>'
                      │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── const: 'foo'
                      │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── const: '%'
                      │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── const: ' bar'
@@ -1844,9 +1856,13 @@ project
                      │                                                                                                   │              │    │    │    │    │    │    │    └── const: ''
                      │                                                                                                   │              │    │    │    │    │    │    └── const: '%'
                      │                                                                                                   │              │    │    │    │    │    └── const: ' ba'
-                     │                                                                                                   │              │    │    │    │    └── const: 2
+                     │                                                                                                   │              │    │    │    │    └── coalesce
+                     │                                                                                                   │              │    │    │    │         ├── const: 2
+                     │                                                                                                   │              │    │    │    │         └── const: '<NULL>'
                      │                                                                                                   │              │    │    │    └── const: 'z'
-                     │                                                                                                   │              │    │    └── const: 3
+                     │                                                                                                   │              │    │    └── coalesce
+                     │                                                                                                   │              │    │         ├── const: 3
+                     │                                                                                                   │              │    │         └── const: '<NULL>'
                      │                                                                                                   │              │    └── const: ''
                      │                                                                                                   │              ├── const: ''
                      │                                                                                                   │              ├── const: ''
@@ -2237,7 +2253,9 @@ project
                      │                   │              ├── concat
                      │                   │              │    ├── concat
                      │                   │              │    │    ├── const: '1: i = '
-                     │                   │              │    │    └── variable: i:2
+                     │                   │              │    │    └── coalesce
+                     │                   │              │    │         ├── variable: i:2
+                     │                   │              │    │         └── const: '<NULL>'
                      │                   │              │    └── const: ''
                      │                   │              ├── const: ''
                      │                   │              ├── const: ''
@@ -2266,7 +2284,9 @@ project
                      │                                       │              ├── concat
                      │                                       │              │    ├── concat
                      │                                       │              │    │    ├── const: '2: i = '
-                     │                                       │              │    │    └── variable: i:5
+                     │                                       │              │    │    └── coalesce
+                     │                                       │              │    │         ├── variable: i:5
+                     │                                       │              │    │         └── const: '<NULL>'
                      │                                       │              │    └── const: ''
                      │                                       │              ├── const: ''
                      │                                       │              ├── const: ''
@@ -2304,7 +2324,9 @@ project
                      │                                                           │              ├── concat
                      │                                                           │              │    ├── concat
                      │                                                           │              │    │    ├── const: '3: i = '
-                     │                                                           │              │    │    └── variable: i:14
+                     │                                                           │              │    │    └── coalesce
+                     │                                                           │              │    │         ├── variable: i:14
+                     │                                                           │              │    │         └── const: '<NULL>'
                      │                                                           │              │    └── const: ''
                      │                                                           │              ├── const: ''
                      │                                                           │              ├── const: ''
@@ -2329,18 +2351,20 @@ project
                      │                                                                               │              ├── concat
                      │                                                                               │              │    ├── concat
                      │                                                                               │              │    │    ├── const: 'max_x: '
-                     │                                                                               │              │    │    └── subquery
-                     │                                                                               │              │    │         └── max1-row
-                     │                                                                               │              │    │              ├── columns: max:22
-                     │                                                                               │              │    │              └── scalar-group-by
-                     │                                                                               │              │    │                   ├── columns: max:22
-                     │                                                                               │              │    │                   ├── project
-                     │                                                                               │              │    │                   │    ├── columns: x:17
-                     │                                                                               │              │    │                   │    └── scan xy
-                     │                                                                               │              │    │                   │         └── columns: x:17 y:18 rowid:19!null crdb_internal_mvcc_timestamp:20 tableoid:21
-                     │                                                                               │              │    │                   └── aggregations
-                     │                                                                               │              │    │                        └── max [as=max:22]
-                     │                                                                               │              │    │                             └── variable: x:17
+                     │                                                                               │              │    │    └── coalesce
+                     │                                                                               │              │    │         ├── subquery
+                     │                                                                               │              │    │         │    └── max1-row
+                     │                                                                               │              │    │         │         ├── columns: max:22
+                     │                                                                               │              │    │         │         └── scalar-group-by
+                     │                                                                               │              │    │         │              ├── columns: max:22
+                     │                                                                               │              │    │         │              ├── project
+                     │                                                                               │              │    │         │              │    ├── columns: x:17
+                     │                                                                               │              │    │         │              │    └── scan xy
+                     │                                                                               │              │    │         │              │         └── columns: x:17 y:18 rowid:19!null crdb_internal_mvcc_timestamp:20 tableoid:21
+                     │                                                                               │              │    │         │              └── aggregations
+                     │                                                                               │              │    │         │                   └── max [as=max:22]
+                     │                                                                               │              │    │         │                        └── variable: x:17
+                     │                                                                               │              │    │         └── const: '<NULL>'
                      │                                                                               │              │    └── const: ''
                      │                                                                               │              ├── const: ''
                      │                                                                               │              ├── const: ''
@@ -2437,7 +2461,9 @@ project
                      │                                  │                                                 │              ├── concat
                      │                                  │                                                 │              │    ├── concat
                      │                                  │                                                 │              │    │    ├── const: 'finished with i = '
-                     │                                  │                                                 │              │    │    └── variable: i:3
+                     │                                  │                                                 │              │    │    └── coalesce
+                     │                                  │                                                 │              │    │         ├── variable: i:3
+                     │                                  │                                                 │              │    │         └── const: '<NULL>'
                      │                                  │                                                 │              │    └── const: ''
                      │                                  │                                                 │              ├── const: ''
                      │                                  │                                                 │              ├── const: ''
@@ -2479,7 +2505,9 @@ project
                      │                                                                               │              ├── concat
                      │                                                                               │              │    ├── concat
                      │                                                                               │              │    │    ├── const: 'i = '
-                     │                                                                               │              │    │    └── variable: i:9
+                     │                                                                               │              │    │    └── coalesce
+                     │                                                                               │              │    │         ├── variable: i:9
+                     │                                                                               │              │    │         └── const: '<NULL>'
                      │                                                                               │              │    └── const: ''
                      │                                                                               │              ├── const: ''
                      │                                                                               │              ├── const: ''
@@ -2730,7 +2758,9 @@ project
                      │                                  │                                                 │              ├── concat
                      │                                  │                                                 │              │    ├── concat
                      │                                  │                                                 │              │    │    ├── const: 'finished with i = '
-                     │                                  │                                                 │              │    │    └── variable: i:3
+                     │                                  │                                                 │              │    │    └── coalesce
+                     │                                  │                                                 │              │    │         ├── variable: i:3
+                     │                                  │                                                 │              │    │         └── const: '<NULL>'
                      │                                  │                                                 │              │    └── const: ''
                      │                                  │                                                 │              ├── const: ''
                      │                                  │                                                 │              ├── const: ''
@@ -2784,7 +2814,9 @@ project
                      │                                                                          │                             │              ├── concat
                      │                                                                          │                             │              │    ├── concat
                      │                                                                          │                             │              │    │    ├── const: 'i = '
-                     │                                                                          │                             │              │    │    └── variable: i:15
+                     │                                                                          │                             │              │    │    └── coalesce
+                     │                                                                          │                             │              │    │         ├── variable: i:15
+                     │                                                                          │                             │              │    │         └── const: '<NULL>'
                      │                                                                          │                             │              │    └── const: ''
                      │                                                                          │                             │              ├── const: ''
                      │                                                                          │                             │              ├── const: ''
@@ -2819,7 +2851,9 @@ project
                      │                                                                          │                                                                     │              ├── concat
                      │                                                                          │                                                                     │              │    ├── concat
                      │                                                                          │                                                                     │              │    │    ├── const: 'i = '
-                     │                                                                          │                                                                     │              │    │    └── variable: i:10
+                     │                                                                          │                                                                     │              │    │    └── coalesce
+                     │                                                                          │                                                                     │              │    │         ├── variable: i:10
+                     │                                                                          │                                                                     │              │    │         └── const: '<NULL>'
                      │                                                                          │                                                                     │              │    └── const: ''
                      │                                                                          │                                                                     │              ├── const: ''
                      │                                                                          │                                                                     │              ├── const: ''
@@ -2870,7 +2904,9 @@ project
                      │                                                                                                                       │              ├── concat
                      │                                                                                                                       │              │    ├── concat
                      │                                                                                                                       │              │    │    ├── const: 'i = '
-                     │                                                                                                                       │              │    │    └── variable: i:10
+                     │                                                                                                                       │              │    │    └── coalesce
+                     │                                                                                                                       │              │    │         ├── variable: i:10
+                     │                                                                                                                       │              │    │         └── const: '<NULL>'
                      │                                                                                                                       │              │    └── const: ''
                      │                                                                                                                       │              ├── const: ''
                      │                                                                                                                       │              ├── const: ''
