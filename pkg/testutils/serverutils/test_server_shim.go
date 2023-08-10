@@ -43,16 +43,20 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// defaultTestTenantMessage is a message that is printed when a test is run
-// with the default test tenant. This is useful for debugging test failures.
-const defaultTestTenantMessage = `
-Test server was configured to route SQL queries to a secondary tenant (virtual cluster).
-If you are only seeing a test failure when this message appears, there may be a problem
-specific to cluster virtualization or multi-tenancy.
+// defaultTestTenantMessage is a message that is printed when a test is run with
+// the default test tenant. This is useful for debugging test failures.
+//
+// If you see this message, the test server was configured to route SQL queries
+// to a secondary tenant (virtual cluster). If you are only seeing a test
+// failure when this message appears, there may be a problem specific to cluster
+// virtualization or multi-tenancy.
+//
+// To investigate, consider using "COCKROACH_TEST_TENANT=true" to force-enable
+// just the secondary tenant in all runs (or, alternatively, "false" to
+// force-disable), or use "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=false"
+// to disable all random test variables altogether.`
 
-To investigate, consider using "COCKROACH_TEST_TENANT=true" to force-enable just
-the secondary tenant in all runs (or, alternatively, "false" to force-disable), or use
-"COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=false" to disable all random test variables altogether.`
+const defaultTestTenantMessage = `test server using tenant; see comment at top of test_server_shim.go for details.`
 
 var PreventStartTenantError = errors.New("attempting to manually start a server for a secondary tenant while " +
 	"DefaultTestTenant is set to TestTenantProbabilisticOnly")
