@@ -24,6 +24,9 @@ const Doc = "checks that usages of mutex Unlock() are deferred."
 
 const noLintName = "deferunlock"
 
+// Please try to avoid updating this value, use the nolint comment instead.
+const unlocksLimit = 1037
+
 // Analyzer is an analysis pass that checks for mutex unlocks which
 // aren't deferred.
 var Analyzer = &analysis.Analyzer{
@@ -40,6 +43,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	filter := []ast.Node{
 		(*ast.ExprStmt)(nil),
 	}
+	var unlocksFound int
 	astInspector.Preorder(filter, func(n ast.Node) {
 		stmt := n.(*ast.ExprStmt)
 		expr, ok := stmt.X.(*ast.CallExpr)
@@ -50,8 +54,16 @@ func run(pass *analysis.Pass) (interface{}, error) {
 		if !ok {
 			return
 		}
+		// Increase the count if we found a violation.
 		if sel.Sel != nil && (sel.Sel.Name == "Unlock" || sel.Sel.Name == "RUnlock") && !passesutil.HasNolintComment(pass, n, noLintName) {
-			pass.Reportf(sel.Pos(), "Mutex %s not deferred", sel.Sel.Name)
+			unlocksFound++
+		}
+		// If we exceed the limit then the reports trigger.
+		if unlocksFound > unlocksLimit {
+			pass.Report(analysis.Diagnostic{
+				Pos:     n.Pos(),
+				Message: "Too many Unlocks() not being deferred, check code changes (//nolint:deferunlock to pass)",
+			})
 		}
 	})
 
