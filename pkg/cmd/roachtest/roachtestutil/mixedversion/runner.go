@@ -89,6 +89,7 @@ type (
 	// node death is expected if the test performs its own restarts or
 	// chaos events.
 	crdbMonitor struct {
+		ctx       context.Context
 		once      sync.Once
 		crdbNodes option.NodeListOption
 		monitor   cluster.Monitor
@@ -198,7 +199,7 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 			if err := tr.refreshClusterVersions(); err != nil {
 				return err
 			}
-			tr.monitor.Init()
+			tr.monitor.Init(tr.cluster)
 		}
 	}
 
@@ -358,6 +359,11 @@ func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
 	tr.logger.Printf("stopping background functions")
 	tr.background.Terminate()
 
+	tr.logger.Printf("stopping node monitor")
+	if err := tr.monitor.Stop(); err != nil {
+		tr.logger.Printf("monitor returned error: %v", err)
+	}
+
 	// If the test failed, we wait for any currently running steps to
 	// return before passing control back to the roachtest
 	// framework. This achieves a test.log that does not contain any
@@ -503,18 +509,19 @@ func newCRDBMonitor(
 	ctx context.Context, c cluster.Cluster, crdbNodes option.NodeListOption,
 ) *crdbMonitor {
 	return &crdbMonitor{
+		ctx:       ctx,
 		crdbNodes: crdbNodes,
-		monitor:   c.NewMonitor(ctx, crdbNodes),
 		errCh:     make(chan error),
 	}
 }
 
 // Init must be called once the cluster is initialized and the
 // cockroach process is running on the nodes. Init is idempotent.
-func (cm *crdbMonitor) Init() {
+func (cm *crdbMonitor) Init(c cluster.Cluster) {
 	cm.once.Do(func() {
+		cm.monitor = c.NewMonitor(cm.ctx, cm.crdbNodes)
 		go func() {
-			if err := cm.monitor.WaitE(); err != nil {
+			if err := cm.monitor.WaitForNodeDeath(); err != nil {
 				cm.errCh <- err
 			}
 		}()
@@ -529,6 +536,10 @@ func (cm *crdbMonitor) Err() chan error {
 
 func (cm *crdbMonitor) ExpectDeaths(n int) {
 	cm.monitor.ExpectDeaths(int32(n))
+}
+
+func (cm *crdbMonitor) Stop() error {
+	return cm.monitor.WaitE()
 }
 
 func newBackgroundRunner(ctx context.Context, l *logger.Logger) *backgroundRunner {

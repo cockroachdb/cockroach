@@ -31,11 +31,13 @@ type monitorImpl struct {
 		Failed() bool
 		WorkerStatus(...interface{})
 	}
-	l      *logger.Logger
-	nodes  string
-	ctx    context.Context
-	cancel func()
-	g      *errgroup.Group
+	l            *logger.Logger
+	nodes        string
+	ctx          context.Context
+	cancel       func()
+	userGroup    *errgroup.Group
+	monitorGroup *errgroup.Group
+	monitorOnce  sync.Once
 
 	numTasks  int32 // atomically
 	expDeaths int32 // atomically
@@ -58,7 +60,12 @@ func newMonitor(
 		nodes: c.MakeNodes(opts...),
 	}
 	m.ctx, m.cancel = context.WithCancel(ctx)
-	m.g, m.ctx = errgroup.WithContext(m.ctx)
+	m.userGroup, m.ctx = errgroup.WithContext(m.ctx)
+	m.monitorGroup, _ = errgroup.WithContext(m.ctx)
+	err := m.startNodeMonitor()
+	if err != nil {
+		t.Fatal(err)
+	}
 	return m
 }
 
@@ -83,7 +90,7 @@ var errTestFatal = errors.New("t.Fatal() was called")
 func (m *monitorImpl) Go(fn func(context.Context) error) {
 	atomic.AddInt32(&m.numTasks, 1)
 
-	m.g.Go(func() (err error) {
+	m.userGroup.Go(func() (err error) {
 		defer func() {
 			r := recover()
 			if r == nil {
@@ -141,86 +148,59 @@ func (m *monitorImpl) Wait() {
 	}
 }
 
-func (m *monitorImpl) wait() error {
-	// It is surprisingly difficult to get the cancellation semantics exactly
-	// right. We need to watch for the "workers" group (m.g) to finish, or for
-	// the monitor command to emit an unexpected node failure, or for the monitor
-	// command itself to exit. We want to capture whichever error happens first
-	// and then cancel the other goroutines. This ordering prevents the usage of
-	// an errgroup.Group for the goroutines below. Consider:
-	//
-	//   g, _ := errgroup.WithContext(m.ctx)
-	//   g.Go(func(context.Context) error {
-	//     defer m.cancel()
-	//     return m.g.Wait()
-	//   })
-	//
-	// Now consider what happens when an error is returned. Before the error
-	// reaches the errgroup, we invoke the cancellation closure which can cause
-	// the other goroutines to wake up and perhaps race and set the errgroup
-	// error first.
-	//
-	// The solution is to implement our own errgroup mechanism here which allows
-	// us to set the error before performing the cancellation.
+// startNodeMonitor will start a background function that monitors
+// unexpected node deaths. To read errors coming from these events,
+// callers are expected to call `Wait` or `WaitForNodeDeath`.
+func (m *monitorImpl) startNodeMonitor() error {
+	var retErr error
 
-	var errOnce sync.Once
-	var err error
-	setErr := func(e error) {
-		if e != nil {
-			errOnce.Do(func() {
-				err = e
-			})
-		}
-	}
-
-	// 1. The first goroutine waits for the worker errgroup to exit.
-	// Note that this only happens if the caller created at least one
-	// task for the monitor. This check enables the roachtest monitor to
-	// be used in cases where we just want to monitor events in the
-	// cluster without running any background tasks through the monitor.
-	var wg sync.WaitGroup
-	if atomic.LoadInt32(&m.numTasks) > 0 {
-		wg.Add(1)
-		go func() {
-			defer func() {
-				m.cancel()
-				wg.Done()
-			}()
-			setErr(errors.Wrap(m.g.Wait(), "function passed to monitor.Go failed"))
-		}()
-	}
-
-	// 2. The second goroutine reads from the monitoring channel, watching for any
-	// unexpected death events.
-	wg.Add(1)
-	go func() {
-		defer func() {
-			m.cancel()
-			wg.Done()
-		}()
-
+	m.monitorOnce.Do(func() {
 		eventsCh, err := roachprod.Monitor(m.ctx, m.l, m.nodes, install.MonitorOpts{})
 		if err != nil {
-			setErr(errors.Wrap(err, "monitor command failure"))
+			m.cancel()
+			retErr = errors.Wrap(err, "monitor command failure")
 			return
 		}
 
-		for info := range eventsCh {
-			_, isDeath := info.Event.(install.MonitorNodeDead)
-			isExpectedDeath := isDeath && atomic.AddInt32(&m.expDeaths, -1) >= 0
-			var expectedDeathStr string
-			if isExpectedDeath {
-				expectedDeathStr = ": expected"
-			}
-			m.l.Printf("Monitor event: %s%s", info, expectedDeathStr)
+		m.monitorGroup.Go(func() error {
+			defer m.cancel()
 
-			if isDeath && !isExpectedDeath {
-				setErr(fmt.Errorf("unexpected node event: %s", info))
-				return
-			}
-		}
-	}()
+			for info := range eventsCh {
+				_, isDeath := info.Event.(install.MonitorNodeDead)
+				isExpectedDeath := isDeath && atomic.AddInt32(&m.expDeaths, -1) >= 0
+				var expectedDeathStr string
+				if isExpectedDeath {
+					expectedDeathStr = ": expected"
+				}
+				m.l.Printf("Monitor event: %s%s", info, expectedDeathStr)
 
-	wg.Wait()
-	return err
+				if isDeath && !isExpectedDeath {
+					return fmt.Errorf("unexpected node event: %s", info)
+				}
+			}
+
+			return nil
+		})
+	})
+
+	return retErr
+}
+
+// WaitForNodeDeath blocks while the monitor is active. Any errors due
+// to unexpected node deaths are returned.
+func (m *monitorImpl) WaitForNodeDeath() error {
+	if err := m.startNodeMonitor(); err != nil {
+		return err
+	}
+	return m.monitorGroup.Wait()
+}
+
+func (m *monitorImpl) wait() error {
+	if err := m.startNodeMonitor(); err != nil {
+		return err
+	}
+
+	userErr := m.userGroup.Wait()
+	m.cancel()
+	return errors.CombineErrors(userErr, m.WaitForNodeDeath())
 }
