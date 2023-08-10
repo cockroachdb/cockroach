@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ctxutil",
+    srcs = [
+        "context.go",
+        "context_abi.go",
+        "context_abi_pre1_20.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/ctxutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/buildutil",
+        "//pkg/util/log",
+    ],
+)
+
+go_test(
+    name = "ctxutil_test",
+    srcs = [
+        "context_cause_test.go",
+        "context_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    embed = [":ctxutil"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
