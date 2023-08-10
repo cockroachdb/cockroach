@@ -53,6 +53,7 @@ go_library(
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//credentials/insecure",
         "@org_golang_google_grpc//status",
+        "@org_golang_x_exp//slices",
     ],
 )
 
@@ -93,9 +94,9 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/pgwire",
+        "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgwirebase",
-        "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",

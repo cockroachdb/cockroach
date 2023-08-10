@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -156,7 +155,10 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
                     created_by_type,
                     created_by_id,
                     claim_session_id,
-                    claim_instance_id
+                    claim_instance_id,
+                    0,
+                    NULL,
+                    job_type
               FROM crdb_internal.system_jobs
              WHERE id = $1
           )
@@ -610,8 +612,6 @@ func TestPrecondition(t *testing.T) {
 	ctx := context.Background()
 	args := func() base.TestServerArgs {
 		return base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107397),
-
 			Knobs: knobs,
 			Settings: cluster.MakeTestingClusterSettingsWithVersions(
 				v2,    // binaryVersion
@@ -621,6 +621,9 @@ func TestPrecondition(t *testing.T) {
 		}
 	}
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107397),
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: args(),
 			1: args(),
@@ -682,8 +685,6 @@ func TestPrecondition(t *testing.T) {
 func TestMigrationFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 106648)
 
 	ctx := context.Background()
 

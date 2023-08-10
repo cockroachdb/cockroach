@@ -315,12 +315,6 @@ func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 	}
 }
 
-// SetScalarRoot stores the root memo expression when it is a scalar expression.
-// Used only for testing.
-func (m *Memo) SetScalarRoot(scalar opt.ScalarExpr) {
-	m.rootExpr = scalar
-}
-
 // HasPlaceholders returns true if the memo contains at least one placeholder
 // operator.
 func (m *Memo) HasPlaceholders() bool {
@@ -580,3 +574,11 @@ func (l *LiteralValuesExpr) ColList() opt.ColList {
 func (l *LiteralValuesExpr) Len() int {
 	return l.Rows.Rows.NumRows()
 }
+
+// GetLookupJoinLookupTableDistribution returns the Distribution of a lookup
+// table in a lookup join if that distribution can be statically determined.
+var GetLookupJoinLookupTableDistribution func(
+	lookupJoin *LookupJoinExpr,
+	required *physical.Required,
+	optimizer interface{},
+) (physicalDistribution physical.Distribution)

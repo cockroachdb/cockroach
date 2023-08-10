@@ -111,9 +111,14 @@ func TestGenerateHelpCommand(t *testing.T) {
 	end := time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC)
 
 	r := &issues.Renderer{}
-	generateHelpCommand("foo-cluster", start, end)(r)
+	generateHelpCommand("foo-cluster", spec.GCE, start, end)(r)
 
 	echotest.Require(t, r.String(), filepath.Join("testdata", "help_command.txt"))
+
+	r = &issues.Renderer{}
+	generateHelpCommand("foo-cluster", spec.AWS, start, end)(r)
+
+	echotest.Require(t, r.String(), filepath.Join("testdata", "help_command_non_gce.txt"))
 }
 
 func TestCreatePostRequest(t *testing.T) {
@@ -184,11 +189,13 @@ func TestCreatePostRequest(t *testing.T) {
 			}
 
 			ti := &testImpl{
-				spec: testSpec,
-				l:    nilLogger(),
+				spec:  testSpec,
+				l:     nilLogger(),
+				start: time.Date(2023, time.July, 21, 16, 34, 3, 817, time.UTC),
+				end:   time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC),
 			}
 
-			testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64}
+			testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64, name: "foo"}
 			vo := vm.DefaultCreateOpts()
 			vmOpts := &vo
 
@@ -219,6 +226,11 @@ func TestCreatePostRequest(t *testing.T) {
 			} else {
 				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message")
 				assert.NoError(t, err, "Expected no error in createPostRequest")
+
+				r := &issues.Renderer{}
+				req.HelpCommand(r)
+				file := fmt.Sprintf("help_command_createpost_%d.txt", idx+1)
+				echotest.Require(t, r.String(), filepath.Join("testdata", file))
 
 				if c.expectedParams != nil {
 					require.Equal(t, c.expectedParams, req.ExtraParams)

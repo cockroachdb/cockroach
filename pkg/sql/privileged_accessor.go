@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
@@ -74,6 +75,15 @@ func (p *planner) LookupZoneConfigByNamespaceID(
 	}
 
 	return tree.DBytes(zc.GetRawBytesInStorage()), true, nil
+}
+
+// IsSystemTable implements tree.PrivilegedAccessor.
+func (p *planner) IsSystemTable(ctx context.Context, id int64) (bool, error) {
+	tbl, err := p.Descriptors().ByID(p.Txn()).Get().Table(ctx, catid.DescID(id))
+	if err != nil {
+		return false, err
+	}
+	return catalog.IsSystemDescriptor(tbl), nil
 }
 
 // checkDescriptorPermissions returns nil if the executing user has permissions

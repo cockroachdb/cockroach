@@ -991,6 +991,7 @@ func mirrorJoinTypeAndOnExpr(
 
 func TestHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := hashJoinerTestCases()
 
@@ -1101,6 +1102,7 @@ func TestHashJoiner(t *testing.T) {
 
 func TestHashJoinerError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	v := [10]rowenc.EncDatum{}
 	for i := range v {
@@ -1211,6 +1213,8 @@ func checkExpectedRows(
 // the consumer is draining.
 func TestHashJoinerDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	v := [10]rowenc.EncDatum{}
 	for i := range v {
 		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
@@ -1319,6 +1323,7 @@ func TestHashJoinerDrain(t *testing.T) {
 // joiner will drain both inputs.
 func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	v := [10]rowenc.EncDatum{}
 	for i := range v {

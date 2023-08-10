@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
@@ -728,6 +729,21 @@ func (b *Builder) buildUDF(
 		if err != nil {
 			panic(err)
 		}
+		// Add a VALUES (NULL) statement if the return type of the function is
+		// VOID. We cant simply project NULL from the last statement because all
+		// column would be pruned and the contents of last statement would not
+		// be executed.
+		// TODO(mgartner): This will add some planning overhead for every
+		// invocation of the function. Is there a more efficient way to do this?
+		if rtyp.Family() == types.VoidFamily {
+			stmts = append(stmts, statements.Statement[tree.Statement]{
+				AST: &tree.Select{
+					Select: &tree.ValuesClause{
+						Rows: []tree.Exprs{{tree.DNull}},
+					},
+				},
+			})
+		}
 		body = make([]memo.RelExpr, len(stmts))
 		bodyProps = make([]*physical.Required, len(stmts))
 
@@ -750,6 +766,8 @@ func (b *Builder) buildUDF(
 		if err != nil {
 			panic(err)
 		}
+		// TODO(#108298): Figure out how to handle PLpgSQL functions with VOID
+		// return types.
 		var plBuilder plpgsqlBuilder
 		plBuilder.init(b, colRefs, o.Types.(tree.ParamTypes), stmt.AST, rtyp)
 		stmtScope := plBuilder.build(stmt.AST, bodyScope)
@@ -1177,7 +1195,7 @@ func NewScalar(
 
 // Build a memo structure from a TypedExpr: the root group represents a scalar
 // expression equivalent to expr.
-func (sb *ScalarBuilder) Build(expr tree.Expr) (err error) {
+func (sb *ScalarBuilder) Build(expr tree.Expr) (_ opt.ScalarExpr, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate errors without adding lots of checks
@@ -1194,8 +1212,7 @@ func (sb *ScalarBuilder) Build(expr tree.Expr) (err error) {
 
 	typedExpr := sb.scope.resolveType(expr, types.Any)
 	scalar := sb.buildScalar(typedExpr, &sb.scope, nil, nil, nil)
-	sb.factory.Memo().SetScalarRoot(scalar)
-	return nil
+	return scalar, nil
 }
 
 // reType is similar to tree.ReType, except that it panics with an internal

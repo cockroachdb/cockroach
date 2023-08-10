@@ -107,10 +107,12 @@ func (r DebugZipTableRegistry) GetTables() []string {
 var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	"crdb_internal.cluster_contention_events": {
 		// `key` column contains the contended key, which may contain sensitive
-		// row-level data.
+		// row-level data. So, we will only fetch if the table is under the system
+		// schema.
 		nonSensitiveCols: NonSensitiveColumns{
 			"table_id",
 			"index_id",
+			"IF(crdb_internal.is_system_table_key(key), crdb_internal.pretty_key(key, 0) ,'redacted') as pretty_key",
 			"num_contention_events",
 			"cumulative_contention_time",
 			"txn_id",
@@ -158,6 +160,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"exec_node_ids",
 			"contention",
 			"index_recommendations",
+			"retries",
+			"last_retry_reason",
 		},
 	},
 	"crdb_internal.cluster_locks": {
@@ -228,9 +232,16 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			origin
 		FROM crdb_internal.cluster_settings`,
 	},
-	"crdb_internal.probe_ranges_1s_write_limit_100": {
-		customQueryRedacted:   `SELECT * FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'write') WHERE error != '' ORDER BY end_to_end_latency_ms DESC LIMIT 100;`,
-		customQueryUnredacted: `SELECT * FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'write') WHERE error != '' ORDER BY end_to_end_latency_ms DESC LIMIT 100;`,
+	"crdb_internal.probe_ranges_1s_read_limit_100": {
+		// At time of writing, it's considered very dangerous to use
+		// `write` as the argument to crdb_internal.probe_ranges due to
+		// this corruption bug:
+		// https://github.com/cockroachdb/cockroach/issues/101549 Since
+		// this fix is unevenly distributed in deployments it's not safe to
+		// indiscriminately run it from the CLI client on an arbitrary
+		// cluster.
+		customQueryRedacted:   `SELECT * FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'read') WHERE error != '' ORDER BY end_to_end_latency_ms DESC LIMIT 100;`,
+		customQueryUnredacted: `SELECT * FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'read') WHERE error != '' ORDER BY end_to_end_latency_ms DESC LIMIT 100;`,
 	},
 	"crdb_internal.cluster_transactions": {
 		// `last_auto_retry_reason` contains error text that may contain
@@ -524,7 +535,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	},
 	"crdb_internal.transaction_contention_events": {
 		// `contending_key` column contains the contended key, which may
-		// contain sensitive row-level data.
+		// contain sensitive row-level data. So, we will only fetch if the
+		// table is under the system schema.
 		nonSensitiveCols: NonSensitiveColumns{
 			"collection_ts",
 			"blocking_txn_id",
@@ -532,6 +544,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"waiting_txn_id",
 			"waiting_txn_fingerprint_id",
 			"contention_duration",
+			"IF(crdb_internal.is_system_table_key(contending_key), crdb_internal.pretty_key(contending_key, 0) ,'redacted') as contending_pretty_key",
 		},
 	},
 	"crdb_internal.zones": {
@@ -1232,6 +1245,8 @@ var zipSystemTables = DebugZipTableRegistry{
 			"min_execution_latency",
 			"expires_at",
 			"sampling_probability",
+			"plan_gist",
+			"anti_plan_gist",
 		},
 	},
 	"system.table_statistics": {

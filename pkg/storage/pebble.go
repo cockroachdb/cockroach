@@ -582,8 +582,7 @@ func DefaultPebbleOptions() *pebble.Options {
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
 		BlockPropertyCollectors:     PebbleBlockPropertyCollectors,
-		// Minimum supported format.
-		FormatMajorVersion: MinimumSupportedFormatVersion,
+		FormatMajorVersion:          MinimumSupportedFormatVersion,
 	}
 	// Automatically flush 10s after the first range tombstone is added to a
 	// memtable. This ensures that we can reclaim space even when there's no
@@ -1025,7 +1024,13 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 			ValueBlocksEnabled.Get(&cfg.Settings.SV)
 	}
 	opts.Experimental.DisableIngestAsFlushable = func() bool {
-		return !IngestAsFlushable.Get(&cfg.Settings.SV)
+		// Disable flushable ingests if shared storage is enabled. This is because
+		// flushable ingests currently do not support Excise operations.
+		//
+		// TODO(bilal): Remove the first part of this || statement when
+		// https://github.com/cockroachdb/pebble/issues/2676 is completed, or when
+		// Pebble has better guards against this.
+		return cfg.SharedStorage != nil || !IngestAsFlushable.Get(&cfg.Settings.SV)
 	}
 
 	auxDir := opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
@@ -1148,6 +1153,13 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	opts.EventListener = &el
 	p.wrappedIntentWriter = wrapIntentWriter(p)
 
+	// If both cfg.SharedStorage and cfg.RemoteStorageFactory are set, CRDB uses
+	// cfg.SharedStorage. Note that eventually we will enable using both at the
+	// same time, but we don't have the right abstractions in place to do that
+	// today.
+	//
+	// We prefer cfg.SharedStorage, since the Locator -> Storage mapping contained
+	// in it is needed for CRDB to function properly.
 	if cfg.SharedStorage != nil {
 		esWrapper := &externalStorageWrapper{p: p, es: cfg.SharedStorage, ctx: ctx}
 		opts.Experimental.RemoteStorage = remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
@@ -1155,10 +1167,10 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		})
 		opts.Experimental.CreateOnShared = true
 		opts.Experimental.CreateOnSharedLocator = ""
-	}
-
-	if cfg.RemoteStorageFactory != nil {
-		opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: ctx, factory: cfg.RemoteStorageFactory}
+	} else {
+		if cfg.RemoteStorageFactory != nil {
+			opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: ctx, factory: cfg.RemoteStorageFactory}
+		}
 	}
 
 	// Read the current store cluster version.
@@ -1466,6 +1478,20 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 // NewEngineIterator implements the Engine interface.
 func (p *Pebble) NewEngineIterator(opts IterOptions) EngineIterator {
 	return newPebbleIterator(p.db, opts, StandardDurability, p)
+}
+
+// ScanInternal implements the Engine interface.
+func (p *Pebble) ScanInternal(
+	ctx context.Context,
+	lower, upper roachpb.Key,
+	visitPointKey func(key *pebble.InternalKey, value pebble.LazyValue, info pebble.IteratorLevel) error,
+	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
+	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
+	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+) error {
+	rawLower := EngineKey{Key: lower}.Encode()
+	rawUpper := EngineKey{Key: upper}.Encode()
+	return p.db.ScanInternal(ctx, rawLower, rawUpper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile)
 }
 
 // ConsistentIterators implements the Engine interface.
@@ -2014,16 +2040,34 @@ func (p *Pebble) Type() enginepb.EngineType {
 	return enginepb.EngineTypePebble
 }
 
-// IngestExternalFiles implements the Engine interface.
-func (p *Pebble) IngestExternalFiles(ctx context.Context, paths []string) error {
+// IngestLocalFiles implements the Engine interface.
+func (p *Pebble) IngestLocalFiles(ctx context.Context, paths []string) error {
 	return p.db.Ingest(paths)
 }
 
-// IngestExternalFilesWithStats implements the Engine interface.
-func (p *Pebble) IngestExternalFilesWithStats(
+// IngestLocalFilesWithStats implements the Engine interface.
+func (p *Pebble) IngestLocalFilesWithStats(
 	ctx context.Context, paths []string,
 ) (pebble.IngestOperationStats, error) {
 	return p.db.IngestWithStats(paths)
+}
+
+// IngestAndExciseFiles implements the Engine interface.
+func (p *Pebble) IngestAndExciseFiles(
+	ctx context.Context, paths []string, shared []pebble.SharedSSTMeta, exciseSpan roachpb.Span,
+) (pebble.IngestOperationStats, error) {
+	rawSpan := pebble.KeyRange{
+		Start: EngineKey{Key: exciseSpan.Key}.Encode(),
+		End:   EngineKey{Key: exciseSpan.EndKey}.Encode(),
+	}
+	return p.db.IngestAndExcise(paths, shared, rawSpan)
+}
+
+// IngestExternalFiles implements the Engine interface.
+func (p *Pebble) IngestExternalFiles(
+	ctx context.Context, external []pebble.ExternalFile,
+) (pebble.IngestOperationStats, error) {
+	return p.db.IngestExternalFiles(external)
 }
 
 // PreIngestDelay implements the Engine interface.
@@ -2063,6 +2107,44 @@ func (p *Pebble) GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetr
 		}
 	}
 	return metricsInfo, nil
+}
+
+// ScanStorageInternalKeys implements the Engine interface.
+func (p *Pebble) ScanStorageInternalKeys(
+	start, end roachpb.Key, megabytesPerSecond int64,
+) ([]enginepb.StorageInternalKeysMetrics, error) {
+	stats, err := p.db.ScanStatistics(context.TODO(), start, end, pebble.ScanStatisticsOptions{LimitBytesPerSecond: 1000000 * megabytesPerSecond})
+	if err != nil {
+		return []enginepb.StorageInternalKeysMetrics{}, err
+	}
+
+	var metrics []enginepb.StorageInternalKeysMetrics
+
+	for level := 0; level < 7; level++ {
+		metrics = append(metrics, enginepb.StorageInternalKeysMetrics{
+			Level:                   int32(level),
+			SnapshotPinnedKeys:      uint64(stats.Levels[level].SnapshotPinnedKeys),
+			SnapshotPinnedKeysBytes: stats.Levels[level].SnapshotPinnedKeysBytes,
+			PointKeyDeleteCount:     uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindDelete]),
+			PointKeySetCount:        uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindSet]),
+			RangeDeleteCount:        uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindRangeDelete]),
+			RangeKeySetCount:        uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindRangeKeySet]),
+			RangeKeyDeleteCount:     uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindRangeKeyDelete]),
+		})
+	}
+
+	metrics = append(metrics, enginepb.StorageInternalKeysMetrics{
+		Level:                   -1,
+		SnapshotPinnedKeys:      uint64(stats.Accumulated.SnapshotPinnedKeys),
+		SnapshotPinnedKeysBytes: stats.Accumulated.SnapshotPinnedKeysBytes,
+		PointKeyDeleteCount:     uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindDelete]),
+		PointKeySetCount:        uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindSet]),
+		RangeDeleteCount:        uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindRangeDelete]),
+		RangeKeySetCount:        uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindRangeKeySet]),
+		RangeKeyDeleteCount:     uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindRangeKeyDelete]),
+	})
+
+	return metrics, nil
 }
 
 // ApproximateDiskBytes implements the Engine interface.
@@ -2437,10 +2519,23 @@ func (p *pebbleReadOnly) PinEngineStateForIterators() error {
 	return nil
 }
 
+// ScanInternal implements the Reader interface.
+func (p *pebbleReadOnly) ScanInternal(
+	ctx context.Context,
+	lower, upper roachpb.Key,
+	visitPointKey func(key *pebble.InternalKey, value pebble.LazyValue, info pebble.IteratorLevel) error,
+	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
+	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
+	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+) error {
+	return p.parent.ScanInternal(ctx, lower, upper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile)
+}
+
 // Writer methods are not implemented for pebbleReadOnly. Ideally, the code
 // could be refactored so that a Reader could be supplied to evaluateBatch
 
 // Writer is the write interface to an engine's data.
+
 func (p *pebbleReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
 	panic("not implemented")
 }
@@ -2612,6 +2707,20 @@ func (p pebbleSnapshot) ConsistentIterators() bool {
 func (p *pebbleSnapshot) PinEngineStateForIterators() error {
 	// Snapshot already pins state, so nothing to do.
 	return nil
+}
+
+// ScanInternal implements the Reader interface.
+func (p *pebbleSnapshot) ScanInternal(
+	ctx context.Context,
+	lower, upper roachpb.Key,
+	visitPointKey func(key *pebble.InternalKey, value pebble.LazyValue, info pebble.IteratorLevel) error,
+	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
+	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
+	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+) error {
+	rawLower := EngineKey{Key: lower}.Encode()
+	rawUpper := EngineKey{Key: upper}.Encode()
+	return p.snapshot.ScanInternal(ctx, rawLower, rawUpper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile)
 }
 
 // ExceedMaxSizeError is the error returned when an export request

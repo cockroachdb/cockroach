@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,18 +31,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type interceptingTransport struct {
-	kvcoord.Transport
-	intercept func(context.Context, *kvpb.BatchRequest, *kvpb.BatchResponse, error) (*kvpb.BatchResponse, error)
-}
-
-func (f *interceptingTransport) SendNext(
-	ctx context.Context, ba *kvpb.BatchRequest,
-) (*kvpb.BatchResponse, error) {
-	br, err := f.Transport.SendNext(ctx, ba)
-	return f.intercept(ctx, ba, br, err)
-}
 
 // TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit sets up a situation
 // in which DistSender retries an (unbeknownst to it) successful EndTxn(commit=true)
@@ -76,16 +63,17 @@ func TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit(t *testing.T
 			}
 			return &interceptingTransport{
 				Transport: tf,
-				intercept: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse, err error) (*kvpb.BatchResponse, error) {
-					if err != nil || ba.Txn == nil || br.Txn == nil ||
-						ba.Txn.Status != roachpb.PENDING || br.Txn.Status != roachpb.COMMITTED ||
-						!keys.ScratchRangeMin.Equal(br.Txn.Key) {
+				afterSend: func(ctx context.Context, req *interceptedReq, resp *interceptedResp) (overrideResp *interceptedResp) {
+					if resp.err != nil || req.ba.Txn == nil || resp.br.Txn == nil ||
+						req.ba.Txn.Status != roachpb.PENDING || resp.br.Txn.Status != roachpb.COMMITTED ||
+						!keys.ScratchRangeMin.Equal(resp.br.Txn.Key) {
 						// Only want to inject error on successful commit for "our" txn.
-						return br, err
+						return nil
 					}
-					err = circuit.ErrBreakerOpen
+
+					err := circuit.ErrBreakerOpen
 					assert.True(t, grpcutil.RequestDidNotStart(err)) // avoid Fatal on goroutine
-					return nil, err
+					return &interceptedResp{err: err}
 				},
 			}, nil
 		},

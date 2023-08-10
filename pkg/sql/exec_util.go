@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -739,8 +740,8 @@ var overrideAlterPrimaryRegionInSuperRegion = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-var errNoTransactionInProgress = errors.New("there is no transaction in progress")
-var errTransactionInProgress = errors.New("there is already a transaction in progress")
+var errNoTransactionInProgress = pgerror.New(pgcode.NoActiveSQLTransaction, "there is no transaction in progress")
+var errTransactionInProgress = pgerror.New(pgcode.ActiveSQLTransaction, "there is already a transaction in progress")
 
 const sqlTxnName string = "sql txn"
 const metricsSampleInterval = 10 * time.Second
@@ -1320,6 +1321,10 @@ type ExecutorConfig struct {
 	// and per-role default settings.
 	SessionInitCache *sessioninit.Cache
 
+	// AuditConfig is the cluster's audit configuration. See the
+	// 'sql.log.user_audit' cluster setting to see how this is configured.
+	AuditConfig *auditlogging.AuditConfigLock
+
 	// ProtectedTimestampProvider encapsulates the protected timestamp subsystem.
 	ProtectedTimestampProvider protectedts.Provider
 
@@ -1377,6 +1382,10 @@ type ExecutorConfig struct {
 	// GetTableMetricsFunc is used to gather information about sstables that
 	// overlap with a key range for a specified node and store.
 	GetTableMetricsFunc eval.GetTableMetricsFunc
+
+	// ScanStorageInternalKeys is used to gather information about the types of
+	// keys (including snapshot pinned keys) at each level of a node store.
+	ScanStorageInternalKeysFunc eval.ScanStorageInternalKeysFunc
 
 	// TraceCollector is used to contact all live nodes in the cluster, and
 	// collect trace spans from their inflight node registries.
@@ -2152,6 +2161,7 @@ type SessionArgs struct {
 	User                        username.SQLUsername
 	IsSuperuser                 bool
 	IsSSL                       bool
+	ReplicationMode             sessiondatapb.ReplicationMode
 	SystemIdentity              username.SQLUsername
 	SessionDefaults             SessionDefaults
 	CustomOptionSessionDefaults SessionDefaults

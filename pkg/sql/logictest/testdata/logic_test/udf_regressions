@@ -554,29 +554,70 @@ $$
 subtest end
 
 
-# Regression test for #105259. Do not type-check subqueries in UDFs outside
-# optbuilder. Doing so can cause internal errors.
+# Regression tests for #105259 and #107654. Do not type-check subqueries in UDFs
+# outside optbuilder. Doing so can cause internal errors.
 subtest regression_105259
 
 statement ok
 CREATE TYPE e105259 AS ENUM ('foo');
 
-statement ok
+statement error pgcode 0A000 subqueries are not allowed in casts to enums within UDFs
 CREATE FUNCTION f() RETURNS VOID LANGUAGE SQL AS $$
   SELECT (SELECT 'foo')::e105259;
   SELECT NULL;
 $$
 
+statement error pgcode 0A000 subqueries are not allowed in casts to enums within UDFs
+CREATE FUNCTION f() RETURNS VOID LANGUAGE SQL AS $$
+  SELECT (
+    CASE WHEN true THEN (SELECT 'foo') ELSE NULL END
+  )::e105259;
+  SELECT NULL;
+$$
+
+subtest end
+
+
+# Regression test for #108297. UDFs with VOID return types should succeed when
+# the last statement returns columns of any type.
+subtest regression_108297
+
+statement ok
+CREATE OR REPLACE FUNCTION f108297() RETURNS VOID LANGUAGE SQL AS 'SELECT 1'
+
 query T
-SELECT f()
+SELECT f108297()
 ----
 NULL
 
 statement ok
-ALTER TYPE e105259 RENAME VALUE 'foo' TO 'bar'
+CREATE OR REPLACE FUNCTION f108297() RETURNS VOID LANGUAGE SQL AS $$
+  SELECT 1, 'foo', NULL
+$$
 
-# Renaming the enum value corrupts the UDF. This is expected behavior.
-statement error pgcode 22P02 invalid input value for enum e105259: "foo"
-SELECT f()
+query T
+SELECT f108297()
+----
+NULL
+
+statement ok
+CREATE SEQUENCE s108297
+
+statement ok
+CREATE OR REPLACE FUNCTION f108297() RETURNS VOID LANGUAGE SQL AS $$
+  SELECT nextval('s108297')
+$$
+
+query T
+SELECT f108297()
+----
+NULL
+
+# Invoking the UDF above should have increment s108297 to 1, so calling nextval
+# again should yield 2.
+query I
+SELECT nextval('s108297')
+----
+2
 
 subtest end

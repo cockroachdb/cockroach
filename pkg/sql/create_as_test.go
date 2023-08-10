@@ -325,6 +325,7 @@ AND status != 'succeeded'`
 
 func TestFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		sql            string

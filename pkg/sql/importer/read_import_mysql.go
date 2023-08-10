@@ -206,6 +206,20 @@ const (
 	zeroTime = "0000-00-00 00:00:00"
 )
 
+func mysqlStrToDatum(evalCtx *eval.Context, s string, desired *types.T) (tree.Datum, error) {
+	switch desired.Family() {
+	case types.BytesFamily:
+		// mysql emits raw byte strings that do not use the same escaping as our
+		// tree.ParseDBytes function expects, and the difference between
+		// tree.ParseAndRequireString and mysqlStrToDatum is whether or not it
+		// attempts to parse bytes.
+		return tree.NewDBytes(tree.DBytes(s)), nil
+	default:
+		res, _, err := tree.ParseAndRequireString(desired, s, evalCtx)
+		return res, err
+	}
+}
+
 // mysqlValueToDatum attempts to convert a value, as parsed from a mysqldump
 // INSERT statement, in to a Cockroach Datum of type `desired`. The MySQL parser
 // does not parse the values themselves to Go primitivies, rather leaving the
@@ -239,11 +253,7 @@ func mysqlValueToDatum(
 					}
 				}
 			}
-			// This uses ParseDatumStringAsWithRawBytes instead of ParseDatumStringAs since mysql emits
-			// raw byte strings that do not use the same escaping as our ParseBytes
-			// function expects, and the difference between ParseStringAs and
-			// ParseDatumStringAs is whether or not it attempts to parse bytes.
-			return rowenc.ParseDatumStringAsWithRawBytes(ctx, desired, s, evalContext)
+			return mysqlStrToDatum(evalContext, s, desired)
 		case mysql.IntVal:
 			return rowenc.ParseDatumStringAs(ctx, desired, string(v.Val), evalContext)
 		case mysql.FloatVal:

@@ -27,11 +27,12 @@ go_test(
     args = ["-test.timeout=295s"],
     deps = [
         ":idxrecommendations",
+        "//pkg/base",
+        "//pkg/ccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/opt/indexrec",
-        "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

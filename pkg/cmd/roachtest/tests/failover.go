@@ -80,7 +80,7 @@ func registerFailover(r registry.Registry) {
 				Owner:               registry.OwnerKV,
 				Benchmark:           true,
 				Timeout:             60 * time.Minute,
-				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.PreferLocalSSD(false)), // uses disk stalls
+				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.PreferLocalSSD(false), spec.ReuseNone()), // uses disk stalls
 				Leases:              leases,
 				SkipPostValidations: registry.PostValidationNoDeadNodes, // cleanup kills nodes
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -122,12 +122,17 @@ func registerFailover(r registry.Registry) {
 		for _, failureMode := range allFailureModes {
 			failureMode := failureMode // pin loop variable
 
-			var usePD bool
+			clusterOpts := make([]spec.Option, 0)
+			clusterOpts = append(clusterOpts, spec.CPU(2))
+
 			var postValidation registry.PostValidation
 			if failureMode == failureModeDiskStall {
 				// Use PDs in an attempt to work around flakes encountered when using
 				// SSDs. See #97968.
-				usePD = true
+				clusterOpts = append(clusterOpts, spec.PreferLocalSSD(false))
+				// Don't reuse the cluster for tests that call dmsetup to avoid
+				// spurious flakes from previous runs. See #107865
+				clusterOpts = append(clusterOpts, spec.ReuseNone())
 				postValidation = registry.PostValidationNoDeadNodes
 			}
 			r.Add(registry.TestSpec{
@@ -136,7 +141,7 @@ func registerFailover(r registry.Registry) {
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
-				Cluster:             r.MakeClusterSpec(7, spec.CPU(2), spec.PreferLocalSSD(!usePD)),
+				Cluster:             r.MakeClusterSpec(7, clusterOpts...),
 				Leases:              leases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverNonSystem(ctx, t, c, failureMode)
@@ -149,7 +154,7 @@ func registerFailover(r registry.Registry) {
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
-				Cluster:             r.MakeClusterSpec(5, spec.CPU(2), spec.PreferLocalSSD(!usePD)),
+				Cluster:             r.MakeClusterSpec(5, clusterOpts...),
 				Leases:              leases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverLiveness(ctx, t, c, failureMode)
@@ -162,7 +167,7 @@ func registerFailover(r registry.Registry) {
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
-				Cluster:             r.MakeClusterSpec(7, spec.CPU(2), spec.PreferLocalSSD(!usePD)),
+				Cluster:             r.MakeClusterSpec(7, clusterOpts...),
 				Leases:              leases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverSystemNonLiveness(ctx, t, c, failureMode)

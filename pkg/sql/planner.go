@@ -127,6 +127,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.CompactEngineSpan = execCfg.CompactEngineSpanFunc
 	evalCtx.SetCompactionConcurrency = execCfg.CompactionConcurrencyFunc
 	evalCtx.GetTableMetrics = execCfg.GetTableMetricsFunc
+	evalCtx.ScanStorageInternalKeys = execCfg.ScanStorageInternalKeysFunc
 	evalCtx.TestingKnobs = execCfg.EvalContextTestingKnobs
 	evalCtx.ClusterID = execCfg.NodeInfo.LogicalClusterID()
 	evalCtx.ClusterName = execCfg.RPCContext.ClusterName()
@@ -624,7 +625,7 @@ func (p *planner) LeaseMgr() *lease.Manager {
 }
 
 func (p *planner) AuditConfig() *auditlogging.AuditConfigLock {
-	return p.execCfg.SessionInitCache.AuditConfig
+	return p.execCfg.AuditConfig
 }
 
 func (p *planner) Txn() *kv.Txn {
@@ -974,4 +975,9 @@ func (p *planner) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) 
 	}
 	p.SemaCtx().Annotations = tree.MakeAnnotations(numAnnotations)
 	p.ExtendedEvalContext().Annotations = &p.SemaCtx().Annotations
+}
+
+// Optimizer is part of the eval.Planner interface.
+func (p *planner) Optimizer() interface{} {
+	return p.optPlanningCtx.Optimizer()
 }

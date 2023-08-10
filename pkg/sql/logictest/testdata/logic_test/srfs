@@ -1322,16 +1322,16 @@ subtest generator-syntax
 
 # Regression test for #97119 and #94890 - return syntax error when CASE or
 # COALESCE is used with a set-generating function as argument.
-statement error pq: set-returning functions are not allowed in CASE
+statement error pq: set-returning functions are not allowed in conditional expressions
 SELECT CASE generate_series(1, 3) WHEN 3 THEN 0 ELSE 1 END;
 
-statement error pq: set-returning functions are not allowed in CASE
+statement error pq: set-returning functions are not allowed in conditional expressions
 SELECT CASE WHEN true THEN generate_series(1, 3) ELSE 1 END;
 
-statement error pq: set-returning functions are not allowed in CASE
+statement error pq: set-returning functions are not allowed in conditional expressions
 SELECT CASE WHEN false THEN 1 ELSE generate_series(1, 3) END;
 
-statement error pq: set-returning functions are not allowed in COALESCE
+statement error pq: set-returning functions are not allowed in conditional expressions
 SELECT COALESCE(generate_series(1, 10));
 
 # A subquery with a generator function is allowed within CASE and COALESCE.
@@ -1376,12 +1376,12 @@ SELECT COALESCE(sum(x) OVER ()) FROM xy;
 15
 
 # IF does not allow generator functions.
-statement error pq: set-returning functions are not allowed in IF
+statement error pq: set-returning functions are not allowed in conditional expressions
 SELECT IF(x > y, generate_series(1, 3), 0) FROM xy;
 
 # IFNULL does not allow generator functions. Note that the error mentions
 # COALESCE because IFNULL is parsed directly as a COALESCE expression.
-statement error pq: set-returning functions are not allowed in COALESCE
+statement error pq: set-returning functions are not allowed in conditional expressions
 SELECT IFNULL(1, generate_series(1, 2));
 
 # NULLIF allows generator functions.

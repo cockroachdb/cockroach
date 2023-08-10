@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -213,38 +214,9 @@ func PushTxn(
 	}
 	reply.PusheeTxn.UpgradePriority(args.PusheeTxn.Priority)
 
-	// If the pusher is aware that the pushee's currently recorded attempt at a
-	// parallel commit failed, either because it found intents at a higher
-	// timestamp than the parallel commit attempt or because it found intents at
-	// a higher epoch than the parallel commit attempt, it should not consider
-	// the pushee to be performing a parallel commit. Its commit status is not
-	// indeterminate.
-	if (knownHigherTimestamp || knownHigherEpoch) && reply.PusheeTxn.Status == roachpb.STAGING {
-		reply.PusheeTxn.Status = roachpb.PENDING
-		reply.PusheeTxn.InFlightWrites = nil
-		// If the pusher is aware that the pushee's currently recorded attempt
-		// at a parallel commit failed, upgrade PUSH_TIMESTAMPs to PUSH_ABORTs.
-		// We don't want to move the transaction back to PENDING, as this is not
-		// (currently) allowed by the recovery protocol. We also don't want to
-		// move the transaction to a new timestamp while retaining the STAGING
-		// status, as this could allow the transaction to enter an implicit
-		// commit state without its knowledge, leading to atomicity violations.
-		//
-		// This has no effect on pushes that fail with a TransactionPushError.
-		// Such pushes will still wait on the pushee to retry its commit and
-		// eventually commit or abort. It also has no effect on expired pushees,
-		// as they would have been aborted anyway. This only impacts pushes
-		// which would have succeeded due to priority mismatches. In these
-		// cases, the push acts the same as a short-circuited transaction
-		// recovery process, because the transaction recovery procedure always
-		// finalizes target transactions, even if initiated by a PUSH_TIMESTAMP.
-		if pushType == kvpb.PUSH_TIMESTAMP {
-			pushType = kvpb.PUSH_ABORT
-		}
-	}
-
 	pusherIso, pusheeIso := args.PusherTxn.IsoLevel, reply.PusheeTxn.IsoLevel
 	pusherPri, pusheePri := args.PusherTxn.Priority, reply.PusheeTxn.Priority
+	pusheeStatus := reply.PusheeTxn.Status
 	var pusherWins bool
 	var reason string
 	switch {
@@ -258,7 +230,7 @@ func PushTxn(
 		// If just attempting to cleanup old or already-committed txns,
 		// pusher always fails.
 		pusherWins = false
-	case txnwait.CanPushWithPriority(pushType, pusherIso, pusheeIso, pusherPri, pusheePri):
+	case txnwait.CanPushWithPriority(pushType, pusherIso, pusheeIso, pusherPri, pusheePri, pusheeStatus):
 		reason = "pusher has priority"
 		pusherWins = true
 	case args.Force:
@@ -282,11 +254,40 @@ func PushTxn(
 	// If the pushed transaction is in the staging state, we can't change its
 	// record without first going through the transaction recovery process and
 	// attempting to finalize it.
+	pusheeStaging := pusheeStatus == roachpb.STAGING
+	// However, if the pusher is aware that the pushee's currently recorded
+	// attempt at a parallel commit failed, either because it found intents at a
+	// higher timestamp than the parallel commit attempt or because it found
+	// intents at a higher epoch than the parallel commit attempt, it should not
+	// consider the pushee to be performing a parallel commit. Its commit status
+	// is not indeterminate.
+	pusheeStagingFailed := pusheeStaging && (knownHigherTimestamp || knownHigherEpoch)
 	recoverOnFailedPush := cArgs.EvalCtx.EvalKnobs().RecoverIndeterminateCommitsOnFailedPushes
-	if reply.PusheeTxn.Status == roachpb.STAGING && (pusherWins || recoverOnFailedPush) {
+	if pusheeStaging && !pusheeStagingFailed && (pusherWins || recoverOnFailedPush) {
 		err := kvpb.NewIndeterminateCommitError(reply.PusheeTxn)
 		log.VEventf(ctx, 1, "%v", err)
 		return result.Result{}, err
+	}
+
+	// If the pusher is aware that the pushee's currently recorded attempt at a
+	// parallel commit failed, upgrade PUSH_TIMESTAMPs to PUSH_ABORTs. We don't
+	// want to move the transaction back to PENDING, as this is not (currently)
+	// allowed by the recovery protocol. We also don't want to move the
+	// transaction to a new timestamp while retaining the STAGING status, as this
+	// could allow the transaction to enter an implicit commit state without its
+	// knowledge, leading to atomicity violations.
+	//
+	// This has no effect on pushes that fail with a TransactionPushError. Such
+	// pushes will still wait on the pushee to retry its commit and eventually
+	// commit or abort. It also has no effect on expired pushees, as they would
+	// have been aborted anyway. This only impacts pushes which would have
+	// succeeded due to priority mismatches. In these cases, the push acts the
+	// same as a short-circuited transaction recovery process, because the
+	// transaction recovery procedure always finalizes target transactions, even
+	// if initiated by a PUSH_TIMESTAMP.
+	if pusheeStaging && pusherWins && pushType == kvpb.PUSH_TIMESTAMP {
+		_ = must.True(ctx, pusheeStagingFailed, "parallel commit must be known to have failed for push to succeed")
+		pushType = kvpb.PUSH_ABORT
 	}
 
 	if !pusherWins {
@@ -306,6 +307,8 @@ func PushTxn(
 		// Forward the timestamp to accommodate AbortSpan GC. See method comment for
 		// details.
 		reply.PusheeTxn.WriteTimestamp.Forward(reply.PusheeTxn.LastActive())
+		// If the transaction was previously staging, clear its in-flight writes.
+		reply.PusheeTxn.InFlightWrites = nil
 		// If the transaction record was already present, persist the updates to it.
 		// If not, then we don't want to create it. This could allow for finalized
 		// transactions to be revived. Instead, we obey the invariant that only the

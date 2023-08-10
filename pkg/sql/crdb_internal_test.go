@@ -56,7 +56,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -85,7 +84,7 @@ func TestGetAllNamesInternal(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, _ /* sqlDB */, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -168,7 +167,8 @@ func TestRangeLocalityBasedOnNodeIDs(t *testing.T) {
 func TestGossipAlertsTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
+
+	params, _ := createTestServerParams()
 	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
@@ -213,7 +213,7 @@ func TestOldBitColumnMetadata(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
@@ -434,7 +434,7 @@ func TestInvalidObjects(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		Store: &kvserver.StoreTestingKnobs{
 			DisableMergeQueue: true,
@@ -522,9 +522,9 @@ UPDATE system.namespace SET id = %d WHERE id = %d;
 		{fmt.Sprintf("%d", schemaID), fmt.Sprintf("[%d]", databaseID), "public", "",
 			fmt.Sprintf(`schema "public" (%d): referenced database ID %d: referenced descriptor not found`, schemaID, databaseID),
 		},
-		{fmt.Sprintf("%d", databaseID), "t", "", "", `referenced descriptor not found`},
-		{fmt.Sprintf("%d", tableFkTblID), "defaultdb", "public", "fktbl", `referenced descriptor not found`},
-		{fmt.Sprintf("%d", fakeID), fmt.Sprintf("[%d]", databaseID), "public", "test", `referenced descriptor not found`},
+		{fmt.Sprintf("%d", databaseID), "t", "", "", `referenced schema ID 104: referenced descriptor not found`},
+		{fmt.Sprintf("%d", tableFkTblID), "defaultdb", "public", "fktbl", `referenced schema ID 107: referenced descriptor not found`},
+		{fmt.Sprintf("%d", fakeID), fmt.Sprintf("[%d]", databaseID), "public", "test", `referenced schema ID 12345: referenced descriptor not found`},
 	})
 }
 
@@ -636,15 +636,11 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 	const clusterScope = "cluster"
 	const nodeScope = "node"
 	getNum := func(db *sqlutils.SQLRunner, scope string) int {
-		querySuffix := fmt.Sprintf("FROM crdb_internal.%s_distsql_flows", scope)
-		// Check that all remote flows (if any) correspond to the expected
-		// statement.
-		stmts := db.QueryStr(t, "SELECT stmt "+querySuffix)
-		for _, stmt := range stmts {
-			require.Equal(t, query, stmt[0])
-		}
+		// Count the number of flows matching our target query. Note that there
+		// could be other flows in the table for the internal operations.
+		countQuery := fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s_distsql_flows WHERE stmt = '%s'", scope, query)
 		var num int
-		db.QueryRow(t, "SELECT count(*) "+querySuffix).Scan(&num)
+		db.QueryRow(t, countQuery).Scan(&num)
 		return num
 	}
 	for nodeID := 0; nodeID < numNodes; nodeID++ {

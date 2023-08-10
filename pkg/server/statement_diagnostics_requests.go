@@ -25,8 +25,13 @@ import (
 )
 
 type stmtDiagnosticsRequest struct {
-	ID                     int
-	StatementFingerprint   string
+	ID                   int
+	StatementFingerprint string
+	// Empty plan gist indicates that any plan will do.
+	PlanGist string
+	// If true and PlanGist is not empty, then any plan not matching the gist
+	// will do.
+	AntiPlanGist           bool
 	Completed              bool
 	StatementDiagnosticsID int
 	RequestedAt            time.Time
@@ -86,6 +91,8 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 	err := s.stmtDiagnosticsRequester.InsertRequest(
 		ctx,
 		req.StatementFingerprint,
+		req.PlanGist,
+		req.AntiPlanGist,
 		req.SamplingProbability,
 		req.MinExecutionLatency,
 		req.ExpiresAfter,
@@ -137,11 +144,11 @@ func (s *statusServer) StatementDiagnosticsRequests(
 
 	var err error
 
-	// TODO(irfansharif): Remove this version gating in 23.1.
 	var extraColumns string
-	if s.st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SampledStmtDiagReqs) {
+	if s.st.Version.IsActive(ctx, clusterversion.V23_2_StmtDiagForPlanGist) {
 		extraColumns = `,
-			sampling_probability`
+			plan_gist,
+			anti_plan_gist`
 	}
 	// TODO(davidh): Add pagination to this request.
 	it, err := s.internalExecutor.QueryIteratorEx(ctx, "stmt-diag-get-all", nil, /* txn */
@@ -153,7 +160,8 @@ func (s *statusServer) StatementDiagnosticsRequests(
 			statement_diagnostics_id,
 			requested_at,
 			min_execution_latency,
-			expires_at%s
+			expires_at,
+			sampling_probability%s
 		FROM
 			system.statement_diagnostics_requests`, extraColumns))
 	if err != nil {
@@ -179,12 +187,9 @@ func (s *statusServer) StatementDiagnosticsRequests(
 		if requestedAt, ok := row[4].(*tree.DTimestampTZ); ok {
 			req.RequestedAt = requestedAt.Time
 		}
-		if extraColumns != "" {
-			if samplingProbability, ok := row[7].(*tree.DFloat); ok {
-				req.SamplingProbability = float64(*samplingProbability)
-			}
+		if samplingProbability, ok := row[7].(*tree.DFloat); ok {
+			req.SamplingProbability = float64(*samplingProbability)
 		}
-
 		if minExecutionLatency, ok := row[5].(*tree.DInterval); ok {
 			req.MinExecutionLatency = time.Duration(minExecutionLatency.Duration.Nanos())
 		}
@@ -193,6 +198,14 @@ func (s *statusServer) StatementDiagnosticsRequests(
 			// Don't return already expired requests.
 			if !completed && req.ExpiresAt.Before(timeutil.Now()) {
 				continue
+			}
+		}
+		if extraColumns != "" {
+			if planGist, ok := row[8].(*tree.DString); ok {
+				req.PlanGist = string(*planGist)
+			}
+			if antiGist, ok := row[9].(*tree.DBool); ok {
+				req.AntiPlanGist = bool(*antiGist)
 			}
 		}
 

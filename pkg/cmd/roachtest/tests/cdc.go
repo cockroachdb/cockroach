@@ -946,18 +946,16 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 func skipLocalUnderArm64(cloud string) string {
 	if cloud == spec.Local && runtime.GOARCH == "arm64" {
 		// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-		return "Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888"
+		return "Skip under ARM64."
 	}
 	return ""
 }
 
 func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:      "cdc/initial-scan-only",
-		Owner:     registry.OwnerCDC,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
+		Name:            "cdc/initial-scan-only",
+		Owner:           registry.OwnerCDC,
+		Benchmark:       true,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -980,12 +978,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/tpcc-1000",
-		Owner:     registry.OwnerCDC,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/tpcc-1000",
+		Owner:           registry.OwnerCDC,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1007,12 +1003,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/tpcc-1000/sink=null",
-		Owner:     registry.OwnerCDC,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/tpcc-1000/sink=null",
+		Owner:           registry.OwnerCDC,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:          registry.MetamorphicLeases,
 		Tags:            registry.Tags("manual"),
 		RequiresLicense: true,
@@ -1035,12 +1029,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/initial-scan",
-		Owner:     registry.OwnerCDC,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/initial-scan",
+		Owner:           registry.OwnerCDC,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1058,12 +1050,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/sink-chaos",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/sink-chaos",
+		Owner:           `cdc`,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1086,12 +1076,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/crdb-chaos",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/crdb-chaos",
+		Owner:           `cdc`,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1121,10 +1109,8 @@ func registerCDC(r registry.Registry) {
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1154,12 +1140,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/cloud-sink-gcs/rangefeed=true",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/cloud-sink-gcs/rangefeed=true",
+		Owner:           `cdc`,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1184,12 +1168,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/pubsub-sink",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/pubsub-sink",
+		Owner:           `cdc`,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1223,12 +1205,10 @@ func registerCDC(r registry.Registry) {
 	// TODO(rui): Change to a shorter test as it just needs to validate
 	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
-		Name:      "cdc/pubsub-sink/assume-role",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/pubsub-sink/assume-role",
+		Owner:           `cdc`,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1259,12 +1239,10 @@ func registerCDC(r registry.Registry) {
 	// TODO(rui): Change to a shorter test as it just needs to validate
 	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
-		Name:      "cdc/cloud-sink-gcs/assume-role",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/cloud-sink-gcs/assume-role",
+		Owner:           `cdc`,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1286,12 +1264,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/webhook-sink",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/webhook-sink",
+		Owner:           `cdc`,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1342,7 +1318,7 @@ func registerCDC(r registry.Registry) {
 		Name:      "cdc/kafka-oauth",
 		Owner:     `cdc`,
 		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		// Only Kafka 3 supports Arm64, but the broker setup for Oauth used only works with Kafka 2
 		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
@@ -1351,14 +1327,18 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1})
+			// Run tpcc workload for tiny bit.  Roachtest monitor does not
+			// like when there are no tasks that were started with the monitor
+			// (This can be removed once #108530 resolved).
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30s"})
 
 			kafkaNode := ct.kafkaSinkNode()
 			kafka := kafkaManager{
-				t:     ct.t,
-				c:     ct.cluster,
-				nodes: kafkaNode,
-				mon:   ct.mon,
+				t:         ct.t,
+				c:         ct.cluster,
+				nodes:     kafkaNode,
+				mon:       ct.mon,
+				useKafka2: true, // The broker-side oauth configuration used only works with Kafka 2
 			}
 			kafka.install(ct.ctx)
 
@@ -1377,11 +1357,9 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:  "cdc/bank",
-		Owner: `cdc`,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/bank",
+		Owner:           `cdc`,
+		Cluster:         r.MakeClusterSpec(4),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Timeout:         30 * time.Minute,
@@ -1574,15 +1552,6 @@ func main() {
 `, port)
 }
 
-const (
-	confluentDownloadURL = "https://storage.googleapis.com/cockroach-fixtures/tools/confluent-community-6.1.0.tar.gz"
-	confluentSHA256      = "53b0e2f08c4cfc55087fa5c9120a614ef04d306db6ec3bcd7710f89f05355355"
-	confluentInstallBase = "confluent-6.1.0"
-
-	confluentCLIVersion         = "1.26.0"
-	confluentCLIDownloadURLBase = "https://s3-us-west-2.amazonaws.com/confluent.cloud/confluent-cli/archives"
-)
-
 var hydraServerStartScript = `
 export SECRETS_SYSTEM=arbitrarySystemSecret
 export OAUTH2_ISSUER_URL=http://localhost:4444
@@ -1596,100 +1565,6 @@ export DSN=memory
 
 ./hydra serve all --dev
 `
-
-// TODO(ssd): Perhaps something like this could be a roachprod command?
-var confluentDownloadScript = fmt.Sprintf(`#!/usr/bin/env bash
-set -euo pipefail
-
-CONFLUENT_URL="%s"
-CONFLUENT_SHA256="%s"
-CONFLUENT_INSTALL_BASE="%s"
-
-CONFLUENT_CLI_VERSION="%s"
-CONFLUENT_CLI_URL_BASE="%s"
-
-
-CONFLUENT_CLI_TAR_PATH="/tmp/confluent-cli-$CONFLUENT_CLI_VERSION.tar.gz"
-CONFLUENT_TAR_PATH=/tmp/confluent.tar.gz
-
-CONFLUENT_DIR="$1"
-
-os() {
-  uname -s | tr '[:upper:]' '[:lower:]'
-}
-
-arch() {
-  local arch
-  arch=$(uname -m)
-  case "$arch" in
-    x86_64)
-      echo "amd64"
-      ;;
-    *)
-      echo "$arch"
-      ;;
-  esac
-}
-
-checkFile() {
-  local file_name="${1}"
-  local expected_shasum="${2}"
-
-  local actual_shasum=""
-  if command -v sha256sum > /dev/null 2>&1; then
-    actual_shasum=$(sha256sum "$file_name" | cut -f1 -d' ')
-  elif command -v shasum > /dev/null 2>&1; then
-    actual_shasum=$(shasum -a 256 "$file_name" | cut -f1 -d' ')
-  else
-    echo "sha256sum or shasum not found" >&2
-    return 1
-  fi
-
-  if [[ "$actual_shasum" == "$expected_shasum" ]]; then
-     return 0
-  else
-    return 1
-  fi
-}
-
-download() {
-  URL="$1"
-  OUTPUT_FILE="$2"
-  for i in $(seq 1 5); do
-    if curl --retry 3 --retry-delay 1 --fail --show-error -o "$OUTPUT_FILE" "$URL"; then
-      break
-    fi
-    sleep 15;
-  done
-}
-
-PLATFORM="$(os)/$(arch)"
-case "$PLATFORM" in
-    linux/amd64)
-      CONFLUENT_CLI_URL="${CONFLUENT_CLI_URL_BASE}/${CONFLUENT_CLI_VERSION}/confluent_v${CONFLUENT_CLI_VERSION}_linux_amd64.tar.gz"
-      ;;
-    darwin/amd64)
-      CONFLUENT_CLI_URL="${CONFLUENT_CLI_URL_BASE}/${CONFLUENT_CLI_VERSION}/confluent_v${CONFLUENT_CLI_VERSION}_darwin_amd64.tar.gz"
-      ;;
-    *)
-      echo "We don't know how to install the confluent CLI for \"${PLATFORM}\""
-      exit 1
-      ;;
-esac
-
-if ! [[ -f "$CONFLUENT_TAR_PATH" ]] || ! checkFile "$CONFLUENT_TAR_PATH" "$CONFLUENT_SHA256"; then
-  download "$CONFLUENT_URL" "$CONFLUENT_TAR_PATH"
-fi
-
-tar xvf "$CONFLUENT_TAR_PATH" -C "$CONFLUENT_DIR"
-
-if ! [[ -f "$CONFLUENT_DIR/bin/confluent" ]]; then
-  if ! [[ -f "$CONFLUENT_CLI_TAR_PATH" ]]; then
-    download "$CONFLUENT_CLI_URL" "$CONFLUENT_CLI_TAR_PATH"
-  fi
-  tar xvf "$CONFLUENT_CLI_TAR_PATH" -C "$CONFLUENT_DIR/$CONFLUENT_INSTALL_BASE/bin/" --strip-components=1 confluent/confluent
-fi
-`, confluentDownloadURL, confluentSHA256, confluentInstallBase, confluentCLIVersion, confluentCLIDownloadURLBase)
 
 const (
 	// kafkaJAASConfig is a JAAS configuration file that creates a
@@ -1806,6 +1681,9 @@ type kafkaManager struct {
 	c     cluster.Cluster
 	nodes option.NodeListOption
 	mon   cluster.Monitor
+
+	// Our method of requiring OAuth on the broker only works with Kafka 2
+	useKafka2 bool
 }
 
 func (k kafkaManager) basePath() string {
@@ -1815,16 +1693,142 @@ func (k kafkaManager) basePath() string {
 	return `/mnt/data1/confluent`
 }
 
+func (k kafkaManager) confluentInstallBase() string {
+	if k.useKafka2 {
+		return "confluent-6.1.0"
+	} else {
+		return "confluent-7.4.0"
+	}
+}
+
+func (k kafkaManager) confluentDownloadScript() string {
+	var downloadURL string
+	var downloadSHA string
+	if k.useKafka2 {
+		downloadURL = "https://storage.googleapis.com/cockroach-fixtures/tools/confluent-community-6.1.0.tar.gz"
+		downloadSHA = "53b0e2f08c4cfc55087fa5c9120a614ef04d306db6ec3bcd7710f89f05355355"
+	} else {
+		downloadURL = "https://packages.confluent.io/archive/7.4/confluent-community-7.4.0.tar.gz"
+		downloadSHA = "cc3066e9b55c211664c6fb9314c553521a0cb0d5b78d163e74480bdc60256d75"
+	}
+
+	// Confluent CLI Versions 3 and above do not support a local schema registry,
+	// and while confluent-7.4.0 does include a cli with a schema-registry it
+	// requires logging in to Confluent Cloud, so instead the latest 2.x cli
+	// version is used.
+	confluentCLIVersion := "2.38.1"
+	confluentCLIDownloadURLBase := "https://s3-us-west-2.amazonaws.com/confluent.cloud/confluent-cli/archives"
+
+	return fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+
+CONFLUENT_URL="%s"
+CONFLUENT_SHA256="%s"
+CONFLUENT_INSTALL_BASE="%s"
+
+CONFLUENT_CLI_VERSION="%s"
+CONFLUENT_CLI_URL_BASE="%s"
+
+
+CONFLUENT_CLI_TAR_PATH="/tmp/confluent-cli-$CONFLUENT_CLI_VERSION.tar.gz"
+CONFLUENT_TAR_PATH=/tmp/confluent.tar.gz
+
+CONFLUENT_DIR="$1"
+
+os() {
+  uname -s | tr '[:upper:]' '[:lower:]'
+}
+
+arch() {
+  local arch
+  arch=$(uname -m)
+  case "$arch" in
+    x86_64)
+      echo "amd64"
+      ;;
+    aarch64)
+      echo "arm64"
+      ;;
+    *)
+      echo "$arch"
+      ;;
+  esac
+}
+
+checkFile() {
+  local file_name="${1}"
+  local expected_shasum="${2}"
+
+  local actual_shasum=""
+  if command -v sha256sum > /dev/null 2>&1; then
+    actual_shasum=$(sha256sum "$file_name" | cut -f1 -d' ')
+  elif command -v shasum > /dev/null 2>&1; then
+    actual_shasum=$(shasum -a 256 "$file_name" | cut -f1 -d' ')
+  else
+    echo "sha256sum or shasum not found" >&2
+    return 1
+  fi
+
+  if [[ "$actual_shasum" == "$expected_shasum" ]]; then
+     return 0
+  else
+    return 1
+  fi
+}
+
+download() {
+  URL="$1"
+  OUTPUT_FILE="$2"
+  for i in $(seq 1 5); do
+    if curl --retry 3 --retry-delay 1 --fail --show-error -o "$OUTPUT_FILE" "$URL"; then
+      break
+    fi
+    sleep 15;
+  done
+}
+
+PLATFORM="$(os)/$(arch)"
+case "$PLATFORM" in
+    linux/amd64)
+      CONFLUENT_CLI_URL="${CONFLUENT_CLI_URL_BASE}/${CONFLUENT_CLI_VERSION}/confluent_v${CONFLUENT_CLI_VERSION}_linux_amd64.tar.gz"
+      ;;
+    darwin/amd64)
+      CONFLUENT_CLI_URL="${CONFLUENT_CLI_URL_BASE}/${CONFLUENT_CLI_VERSION}/confluent_v${CONFLUENT_CLI_VERSION}_darwin_amd64.tar.gz"
+      ;;
+    linux/arm64)
+      CONFLUENT_CLI_URL="${CONFLUENT_CLI_URL_BASE}/${CONFLUENT_CLI_VERSION}/confluent_v${CONFLUENT_CLI_VERSION}_linux_arm64.tar.gz"
+      ;;
+    *)
+      echo "We don't know how to install the confluent CLI for \"${PLATFORM}\""
+      exit 1
+      ;;
+esac
+
+if ! [[ -f "$CONFLUENT_TAR_PATH" ]] || ! checkFile "$CONFLUENT_TAR_PATH" "$CONFLUENT_SHA256"; then
+  download "$CONFLUENT_URL" "$CONFLUENT_TAR_PATH"
+fi
+
+tar xvf "$CONFLUENT_TAR_PATH" -C "$CONFLUENT_DIR"
+
+if ! [[ -f "$CONFLUENT_DIR/bin/confluent" ]]; then
+  if ! [[ -f "$CONFLUENT_CLI_TAR_PATH" ]]; then
+    download "$CONFLUENT_CLI_URL" "$CONFLUENT_CLI_TAR_PATH"
+  fi
+  tar xvf "$CONFLUENT_CLI_TAR_PATH" -C "$CONFLUENT_DIR/$CONFLUENT_INSTALL_BASE/bin/" --strip-components=1 confluent/confluent
+fi
+`, downloadURL, downloadSHA, k.confluentInstallBase(), confluentCLIVersion, confluentCLIDownloadURLBase)
+}
+
 func (k kafkaManager) confluentHome() string {
-	return filepath.Join(k.basePath(), confluentInstallBase)
+	return filepath.Join(k.basePath(), k.confluentInstallBase())
 }
 
 func (k kafkaManager) configDir() string {
-	return filepath.Join(k.basePath(), confluentInstallBase, "etc/kafka")
+	return filepath.Join(k.basePath(), k.confluentInstallBase(), "etc/kafka")
 }
 
 func (k kafkaManager) binDir() string {
-	return filepath.Join(k.basePath(), confluentInstallBase, "bin")
+	return filepath.Join(k.basePath(), k.confluentInstallBase(), "bin")
 }
 
 func (k kafkaManager) confluentBin() string {
@@ -1842,7 +1846,8 @@ func (k kafkaManager) install(ctx context.Context) {
 	k.c.Run(ctx, k.nodes, `mkdir -p `+folder)
 
 	downloadScriptPath := filepath.Join(folder, "install.sh")
-	err := k.c.PutString(ctx, confluentDownloadScript, downloadScriptPath, 0700, k.nodes)
+	downloadScript := k.confluentDownloadScript()
+	err := k.c.PutString(ctx, downloadScript, downloadScriptPath, 0700, k.nodes)
 	if err != nil {
 		k.t.Fatal(err)
 	}
@@ -2374,6 +2379,7 @@ func (cfc *changefeedCreator) Create() (int, error) {
 type changefeedInfo struct {
 	status        string
 	errMsg        string
+	startedTime   time.Time
 	statementTime time.Time
 	highwaterTime time.Time
 	finishedTime  time.Time
@@ -2409,6 +2415,7 @@ func getChangefeedInfo(db *gosql.DB, jobID int) (*changefeedInfo, error) {
 	return &changefeedInfo{
 		status:        status,
 		errMsg:        payload.Error,
+		startedTime:   time.UnixMicro(payload.StartedMicros),
 		statementTime: payload.GetChangefeed().StatementTime.GoTime(),
 		highwaterTime: highwaterTime,
 		finishedTime:  time.UnixMicro(payload.FinishedMicros),

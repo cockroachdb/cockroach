@@ -209,3 +209,68 @@ project
                                │    └── projections
                                │         └── const: 1 [as="?column?":5, type=int]
                                └── const: 1 [type=int]
+
+# The "udf" property should propagate to the top-most filter.
+build
+SELECT i FROM (VALUES (1), (2)) v(i) WHERE i = (SELECT a FROM ab WHERE b = fn_leakproof())
+----
+select
+ ├── columns: i:1(int!null)
+ ├── cardinality: [0 - 2]
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (1)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ └── filters
+      └── eq [type=bool, outer=(1), subquery, udf, constraints=(/1: (/NULL - ])]
+           ├── variable: column1:1 [type=int]
+           └── subquery [type=int]
+                └── max1-row
+                     ├── columns: a:2(int!null)
+                     ├── error: "more than one row returned by a subquery used as an expression"
+                     ├── cardinality: [0 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(2)
+                     └── project
+                          ├── columns: a:2(int!null)
+                          ├── key: (2)
+                          ├── prune: (2)
+                          ├── interesting orderings: (+2)
+                          └── select
+                               ├── columns: a:2(int!null) b:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+                               ├── key: (2)
+                               ├── fd: ()-->(3), (2)-->(4,5)
+                               ├── prune: (2,4,5)
+                               ├── interesting orderings: (+2 opt(3))
+                               ├── scan ab
+                               │    ├── columns: a:2(int!null) b:3(int) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+                               │    ├── key: (2)
+                               │    ├── fd: (2)-->(3-5)
+                               │    ├── prune: (2-5)
+                               │    └── interesting orderings: (+2)
+                               └── filters
+                                    └── eq [type=bool, outer=(3), udf, constraints=(/3: (/NULL - ]), fd=()-->(3)]
+                                         ├── variable: b:3 [type=int]
+                                         └── udf: fn_leakproof [type=int]
+                                              └── body
+                                                   └── limit
+                                                        ├── columns: "?column?":6(int!null)
+                                                        ├── cardinality: [1 - 1]
+                                                        ├── key: ()
+                                                        ├── fd: ()-->(6)
+                                                        ├── project
+                                                        │    ├── columns: "?column?":6(int!null)
+                                                        │    ├── cardinality: [1 - 1]
+                                                        │    ├── key: ()
+                                                        │    ├── fd: ()-->(6)
+                                                        │    ├── values
+                                                        │    │    ├── cardinality: [1 - 1]
+                                                        │    │    ├── key: ()
+                                                        │    │    └── tuple [type=tuple]
+                                                        │    └── projections
+                                                        │         └── const: 1 [as="?column?":6, type=int]
+                                                        └── const: 1 [type=int]

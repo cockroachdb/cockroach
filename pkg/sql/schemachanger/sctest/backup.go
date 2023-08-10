@@ -13,7 +13,9 @@ package sctest
 import (
 	"context"
 	gosql "database/sql"
+	"flag"
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -70,10 +72,6 @@ func BackupSuccessMixedVersion(t *testing.T, path string, factory TestServerFact
 	// and at least as expensive to run.
 	skip.UnderShort(t)
 
-	if strings.Contains(path, "alter_table_add_primary_key_drop_rowid") {
-		skip.WithIssue(t, 107552, "flaky test")
-	}
-
 	factory = factory.WithMixedVersion()
 	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		backupSuccess(t, factory, cs)
@@ -96,7 +94,23 @@ func BackupRollbacksMixedVersion(t *testing.T, path string, factory TestServerFa
 	})
 }
 
+// runAllBackups runs all the backup tests, disabling the random skipping.
+var runAllBackups = flag.Bool(
+	"run-all-backups", false,
+	"if true, run all backups instead of a random subset",
+)
+
+const skipRate = .5
+
+func maybeRandomlySkip(t *testing.T) {
+	if !*runAllBackups && rand.Float64() < skipRate {
+		skip.IgnoreLint(t, "skipping due to randomness")
+	}
+}
+
 func backupSuccess(t *testing.T, factory TestServerFactory, cs CumulativeTestCaseSpec) {
+	maybeRandomlySkip(t)
+	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
 	ctx := context.Background()
 	url := fmt.Sprintf("userfile://backups.public.userfiles_$user/data_%s_%d",
 		cs.Phase, cs.StageOrdinal)
@@ -205,6 +219,8 @@ func backupRollbacks(t *testing.T, factory TestServerFactory, cs CumulativeTestC
 	if cs.Phase != scop.PostCommitPhase {
 		return
 	}
+	maybeRandomlySkip(t)
+	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
 	ctx := context.Background()
 	var urls atomic.Value
 	var dbForBackup atomic.Pointer[gosql.DB]

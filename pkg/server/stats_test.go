@@ -43,11 +43,7 @@ func TestTelemetrySQLStatsIndependence(t *testing.T) {
 
 	ctx := context.Background()
 	var params base.TestServerArgs
-	params.Knobs = base.TestingKnobs{
-		SQLStatsKnobs: &sqlstats.TestingKnobs{
-			AOSTClause: "AS OF SYSTEM TIME '-1us'",
-		},
-	}
+	params.Knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
 
 	r := diagutils.NewServer()
 	defer r.Close()

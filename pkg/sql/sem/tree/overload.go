@@ -810,6 +810,7 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 
 	// Filter out overloads on resolved types. This includes resolved placeholders
 	// and any other resolvable exprs.
+	ambiguousCollatedTypes := false
 	var typeableIdxs intsets.Fast
 	for i, ok := s.resolvableIdxs.Next(0); ok; i, ok = s.resolvableIdxs.Next(i + 1) {
 		typeableIdxs.Add(i)
@@ -836,6 +837,8 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 				break
 			}
 		}
+		// Don't allow ambiguous types to be desired, this prevents for instance
+		// AnyCollatedString from trumping the concrete collated type.
 		if sameType != nil {
 			paramDesired = sameType
 		}
@@ -844,12 +847,41 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 			return err
 		}
 		s.typedExprs[i] = typ
+		if typ.ResolvedType() == types.AnyCollatedString {
+			ambiguousCollatedTypes = true
+		}
 		rt := typ.ResolvedType()
 		s.overloadIdxs = filterParams(s.overloadIdxs, s.params, func(
 			params TypeList,
 		) bool {
 			return params.MatchAt(rt, i)
 		})
+	}
+
+	// If we typed any exprs as AnyCollatedString but have a concrete collated
+	// string type, redo the types using the contrete type. Note we're probably
+	// still lacking full compliance with PG on collation handling:
+	// https://www.postgresql.org/docs/current/collation.html#id-1.6.11.4.4
+	if ambiguousCollatedTypes {
+		var concreteType *types.T
+		for i, ok := typeableIdxs.Next(0); ok; i, ok = typeableIdxs.Next(i + 1) {
+			typ := s.typedExprs[i].ResolvedType()
+			if typ != types.AnyCollatedString {
+				concreteType = typ
+				break
+			}
+		}
+		if concreteType != nil {
+			for i, ok := typeableIdxs.Next(0); ok; i, ok = typeableIdxs.Next(i + 1) {
+				if s.typedExprs[i].ResolvedType() == types.AnyCollatedString {
+					typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, concreteType)
+					if err != nil {
+						return err
+					}
+					s.typedExprs[i] = typ
+				}
+			}
+		}
 	}
 
 	// At this point, all remaining overload candidates accept the argument list,

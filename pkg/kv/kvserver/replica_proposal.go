@@ -37,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"golang.org/x/time/rate"
@@ -517,25 +519,27 @@ func (r *Replica) leasePostApplyLocked(
 		})
 	}
 
-	// If we acquired a new lease, and it violates the lease preferences, enqueue
-	// it in the replicate queue.
-	if leaseChangingHands && iAmTheLeaseHolder {
-		if LeaseCheckPreferencesOnAcquisitionEnabled.Get(&r.store.cfg.Settings.SV) {
-			preferenceStatus := makeLeasePreferenceStatus(st, r.store.StoreID(), r.store.Attrs(),
-				r.store.nodeDesc.Attrs, r.store.nodeDesc.Locality, r.mu.conf.LeasePreferences)
-			switch preferenceStatus {
-			case leasePreferencesOK, leasePreferencesLessPreferred, leasePreferencesUnknown:
-				// We could also enqueue the lease when we are a less preferred
-				// leaseholder, however the replicate queue will eventually get to it and
-				// we already satisfy _some_ preference.
-			case leasePreferencesViolating:
-				log.VEventf(ctx, 2,
-					"acquired lease violates lease preferences, enqueueing for transfer [lease=%v preferences=%v]",
-					newLease, r.mu.conf.LeasePreferences)
-				r.store.replicateQueue.AddAsync(ctx, r, replicateQueueLeasePreferencePriority)
-			default:
-				log.Fatalf(ctx, "unknown lease preferences status: %v", preferenceStatus)
-			}
+	// If we acquired a lease, and it violates the lease preferences, enqueue it
+	// in the replicate queue. NOTE: We don't check whether the lease is valid,
+	// it is possible that the lease being applied is invalid due to replication
+	// lag, or previously needing a snapshot. The replicate queue will ensure the
+	// lease is valid and owned by the replica before processing.
+	if iAmTheLeaseHolder && leaseChangingHands &&
+		LeaseCheckPreferencesOnAcquisitionEnabled.Get(&r.store.cfg.Settings.SV) {
+		preferenceStatus := checkStoreAgainstLeasePreferences(r.store.StoreID(), r.store.Attrs(),
+			r.store.nodeDesc.Attrs, r.store.nodeDesc.Locality, r.mu.conf.LeasePreferences)
+		switch preferenceStatus {
+		case leasePreferencesOK, leasePreferencesLessPreferred:
+			// We could also enqueue the lease when we are a less preferred
+			// leaseholder, however the replicate queue will eventually get to it and
+			// we already satisfy _some_ preference.
+		case leasePreferencesViolating:
+			log.VEventf(ctx, 2,
+				"acquired lease violates lease preferences, enqueuing for transfer [lease=%v preferences=%v]",
+				newLease, r.mu.conf.LeasePreferences)
+			r.store.replicateQueue.AddAsync(ctx, r, replicateQueueLeasePreferencePriority)
+		default:
+			log.Fatalf(ctx, "unknown lease preferences status: %v", preferenceStatus)
 		}
 	}
 
@@ -626,19 +630,32 @@ func addSSTablePreApply(
 			sst.Span,
 			sst.RemoteFileLoc,
 		)
-		// TODO(bilal): replace this with the real ingest.
-		/*
-			start := storage.EngineKey{Key: sst.Span.Key}
-			end := storage.EngineKey{Key: sst.Span.EndKey}
+		start := storage.EngineKey{Key: sst.Span.Key}
+		end := storage.EngineKey{Key: sst.Span.EndKey}
+		externalFile := pebble.ExternalFile{
+			Locator:         remote.Locator(sst.RemoteFileLoc),
+			ObjName:         sst.RemoteFilePath,
+			Size:            sst.BackingFileSize,
+			SmallestUserKey: start.Encode(),
+			LargestUserKey:  end.Encode(),
+		}
+		tBegin := timeutil.Now()
+		defer func() {
+			if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
+				log.Infof(ctx,
+					"ingesting SST of size %s at index %d took %.2fs",
+					humanizeutil.IBytes(int64(len(sst.Data))), index, dur.Seconds(),
+				)
+			}
+		}()
 
-			externalFile := pebble.ExternalFile{
-				Locator:         shared.Locator(sst.RemoteFileLoc),
-				ObjName:         sst.RemoteFilePath,
-				Size:            sst.BackingFileSize,
-				SmallestUserKey: start.Encode(),
-				LargestUserKey:  end.Encode(),
-			}*/
-		log.Fatalf(ctx, "Unsupported IngestRemoteFile")
+		_, ingestErr := env.eng.IngestExternalFiles(ctx, []pebble.ExternalFile{externalFile})
+		if ingestErr != nil {
+			log.Fatalf(ctx, "while ingesting %s: %v", sst.RemoteFilePath, ingestErr)
+		}
+		// Adding without modification succeeded, no copy necessary.
+		log.Eventf(ctx, "ingested SSTable at index %d, term %d: external %s", index, term, sst.RemoteFilePath)
+		return false
 	}
 	checksum := util.CRC32(sst.Data)
 
@@ -683,7 +700,7 @@ func addSSTablePreApply(
 	}
 
 	// Regular path - we made a hard link, so we can ingest the hard link now.
-	ingestErr := env.eng.IngestExternalFiles(ctx, []string{ingestPath})
+	ingestErr := env.eng.IngestLocalFiles(ctx, []string{ingestPath})
 	if ingestErr != nil {
 		log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
 	}
@@ -724,7 +741,7 @@ func ingestViaCopy(
 	if err := kvserverbase.WriteFileSyncing(ctx, ingestPath, sst.Data, eng, 0600, st, limiter); err != nil {
 		return errors.Wrapf(err, "while ingesting %s", ingestPath)
 	}
-	if err := eng.IngestExternalFiles(ctx, []string{ingestPath}); err != nil {
+	if err := eng.IngestLocalFiles(ctx, []string{ingestPath}); err != nil {
 		return errors.Wrapf(err, "while ingesting %s", ingestPath)
 	}
 	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)

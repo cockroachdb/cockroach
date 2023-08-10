@@ -11,35 +11,15 @@
 package joberror
 
 import (
-	"strings"
-
 	circuitbreaker "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 )
-
-// IsDistSQLRetryableError returns true if the supplied error, or any of its parent
-// causes is an rpc error.
-// This is an unfortunate implementation that should be looking for a more
-// specific error.
-func IsDistSQLRetryableError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	// TODO(knz): this is a bad implementation. Make it go away
-	// by avoiding string comparisons.
-
-	errStr := err.Error()
-	// When a crdb node dies, any DistSQL flows with processors scheduled on
-	// it get an error with "rpc error" in the message from the call to
-	// `(*DistSQLPlanner).Run`.
-	return strings.Contains(errStr, `rpc error`)
-}
 
 // isBreakerOpenError returns true if err is a circuit.ErrBreakerOpen.
 //
@@ -57,7 +37,7 @@ func IsPermanentBulkJobError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return !IsDistSQLRetryableError(err) &&
+	return !sqlerrors.IsDistSQLRetryableError(err) &&
 		!grpcutil.IsClosedConnection(err) &&
 		!flowinfra.IsFlowRetryableError(err) &&
 		!flowinfra.IsNoInboundStreamConnectionError(err) &&

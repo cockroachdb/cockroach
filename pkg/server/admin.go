@@ -3524,24 +3524,30 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		}
 
 	case *time.Time:
-		s, ok := src.(*tree.DTimestamp)
-		if !ok {
+		switch s := src.(type) {
+		case *tree.DTimestamp:
+			*d = s.Time
+		case *tree.DTimestampTZ:
+			*d = s.Time
+		default:
 			return errors.Errorf("source type assertion failed")
 		}
-		*d = s.Time
 
 	// Passing a **time.Time instead of a *time.Time means the source is allowed
 	// to be NULL, in which case nil is stored into *src.
 	case **time.Time:
-		s, ok := src.(*tree.DTimestamp)
-		if !ok {
-			if src != tree.DNull {
+		switch s := src.(type) {
+		case *tree.DTimestamp:
+			*d = &s.Time
+		case *tree.DTimestampTZ:
+			*d = &s.Time
+		default:
+			if src == tree.DNull {
+				*d = nil
+			} else {
 				return errors.Errorf("source type assertion failed")
 			}
-			*d = nil
-			break
 		}
-		*d = &s.Time
 
 	case *[]byte:
 		s, ok := src.(*tree.DBytes)

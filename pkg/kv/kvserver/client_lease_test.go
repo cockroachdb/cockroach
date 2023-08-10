@@ -783,8 +783,7 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 func TestLeaseholderRelocate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	stickyRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyRegistry.CloseAllStickyInMemEngines()
+	stickyRegistry := server.NewStickyVFSRegistry()
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
 
@@ -809,14 +808,14 @@ func TestLeaseholderRelocate(t *testing.T) {
 			Locality: localities[i],
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					WallClock:            manualClock,
-					StickyEngineRegistry: stickyRegistry,
+					WallClock:         manualClock,
+					StickyVFSRegistry: stickyRegistry,
 				},
 			},
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 		}
@@ -919,8 +918,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	skip.WithIssue(t, 88769, "flaky test")
 	defer log.Scope(t).Close(t)
 
-	stickyRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyRegistry.CloseAllStickyInMemEngines()
+	stickyRegistry := server.NewStickyVFSRegistry()
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
 	// Place all the leases in the us.
@@ -949,6 +947,13 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		locality("us", "mi"),
 		locality("us", "mi"),
 	}
+	// Disable expiration based lease transfers. It is possible that a (pseudo)
+	// dead node acquires the lease and we are forced to wait out the expiration
+	// timer, if this were not set.
+	settings := cluster.MakeTestingClusterSettings()
+	sv := &settings.SV
+	kvserver.TransferExpirationLeasesFirstEnabled.Override(ctx, sv, false)
+	kvserver.ExpirationLeasesOnly.Override(ctx, sv, false)
 	for i := 0; i < numNodes; i++ {
 		serverArgs[i] = base.TestServerArgs{
 			Locality: localities[i],
@@ -956,7 +961,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 				Server: &server.TestingKnobs{
 					WallClock:                 manualClock,
 					DefaultZoneConfigOverride: &zcfg,
-					StickyEngineRegistry:      stickyRegistry,
+					StickyVFSRegistry:         stickyRegistry,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// The Raft leadership may not end up on the eu node, but it needs to
@@ -966,8 +971,8 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 			},
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 		}
@@ -1128,8 +1133,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 
 	// Speed up lease transfers.
-	stickyRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyRegistry.CloseAllStickyInMemEngines()
+	stickyRegistry := server.NewStickyVFSRegistry()
 	manualClock := hlc.NewHybridManualClock()
 	serverArgs := make(map[int]base.TestServerArgs)
 	numNodes := 4
@@ -1141,13 +1145,13 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 				Server: &server.TestingKnobs{
 					WallClock:                 manualClock,
 					DefaultZoneConfigOverride: &zcfg,
-					StickyEngineRegistry:      stickyRegistry,
+					StickyVFSRegistry:         stickyRegistry,
 				},
 			},
 			StoreSpecs: []base.StoreSpec{
 				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
 		}

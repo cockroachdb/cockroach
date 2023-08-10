@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // import External Connection providers.
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -77,6 +78,8 @@ func TestS3ExternalConnection(t *testing.T) {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
 
+	testID := cloudtestutils.NewTestID()
+
 	t.Run("auth-implicit", func(t *testing.T) {
 		// You can create an IAM that can access S3
 		// in the AWS console, then set it up locally.
@@ -93,14 +96,14 @@ func TestS3ExternalConnection(t *testing.T) {
 		params := make(url.Values)
 		params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
 
-		s3URI := fmt.Sprintf("s3://%s/backup-ec-test-default?%s", bucket, params.Encode())
+		s3URI := fmt.Sprintf("s3://%s/backup-ec-test-default-%d?%s", bucket, testID, params.Encode())
 		ecName := "auth-implicit-s3"
 		createExternalConnection(ecName, s3URI)
 		backupAndRestoreFromExternalConnection(ecName)
 	})
 
 	t.Run("auth-specified", func(t *testing.T) {
-		s3URI := amazon.S3URI(bucket, "backup-ec-test-default",
+		s3URI := amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-default-%d", testID),
 			&cloudpb.ExternalStorage_S3{
 				AccessKey: creds.AccessKeyID,
 				Secret:    creds.SecretAccessKey,
@@ -126,7 +129,7 @@ func TestS3ExternalConnection(t *testing.T) {
 				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
 		}
 
-		s3URI := amazon.S3URI(bucket, "backup-ec-test-sse-256", &cloudpb.ExternalStorage_S3{
+		s3URI := amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
 			Region:        "us-east-1",
 			Auth:          cloud.AuthParamImplicit,
 			ServerEncMode: "AES256",
@@ -139,7 +142,7 @@ func TestS3ExternalConnection(t *testing.T) {
 		if v == "" {
 			skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
 		}
-		s3KMSURI := amazon.S3URI(bucket, "backup-ec-test-sse-kms", &cloudpb.ExternalStorage_S3{
+		s3KMSURI := amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-kms-%d", testID), &cloudpb.ExternalStorage_S3{
 			Region:        "us-east-1",
 			Auth:          cloud.AuthParamImplicit,
 			ServerEncMode: "aws:kms",
@@ -163,7 +166,7 @@ func TestS3ExternalConnection(t *testing.T) {
 		}
 
 		// Unsupported server side encryption option.
-		invalidS3URI := amazon.S3URI(bucket, "backup-ec-test-sse-256", &cloudpb.ExternalStorage_S3{
+		invalidS3URI := amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
 			Region:        "us-east-1",
 			Auth:          cloud.AuthParamImplicit,
 			ServerEncMode: "unsupported-algorithm",
@@ -172,7 +175,7 @@ func TestS3ExternalConnection(t *testing.T) {
 			"unsupported server encryption mode unsupported-algorithm. Supported values are `aws:kms` and `AES256",
 			fmt.Sprintf(`BACKUP DATABASE foo INTO '%s'`, invalidS3URI))
 
-		invalidS3URI = amazon.S3URI(bucket, "backup-ec-test-sse-256", &cloudpb.ExternalStorage_S3{
+		invalidS3URI = amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
 			Region:        "us-east-1",
 			Auth:          cloud.AuthParamImplicit,
 			ServerEncMode: "aws:kms",
@@ -257,8 +260,9 @@ func TestAWSKMSExternalConnection(t *testing.T) {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
 
+	testID := cloudtestutils.NewTestID()
 	// Create an external connection where we will write the backup.
-	backupURI := fmt.Sprintf("s3://%s/backup?%s=%s", bucket,
+	backupURI := fmt.Sprintf("s3://%s/backup-%d?%s=%s", bucket, testID,
 		cloud.AuthParam, cloud.AuthParamImplicit)
 	backupExternalConnectionName := "backup"
 	createExternalConnection(backupExternalConnectionName, backupURI)
@@ -372,8 +376,9 @@ func TestAWSKMSExternalConnectionAssumeRole(t *testing.T) {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
 
+	testID := cloudtestutils.NewTestID()
 	// Create an external connection where we will write the backup.
-	backupURI := fmt.Sprintf("s3://%s/backup?%s=%s", bucket,
+	backupURI := fmt.Sprintf("s3://%s/backup-%d?%s=%s", bucket, testID,
 		cloud.AuthParam, cloud.AuthParamImplicit)
 	backupExternalConnectionName := "backup"
 	createExternalConnection(backupExternalConnectionName, backupURI)

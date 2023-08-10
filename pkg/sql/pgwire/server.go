@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -278,10 +279,10 @@ func newTenantSpecificMetrics(
 		NewConns:           metric.NewCounter(MetaNewConns),
 		ConnsWaitingToHash: metric.NewGauge(MetaConnsWaitingToHash),
 		ConnLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:     metric.HistogramModePreferHdrLatency,
-			Metadata: MetaConnLatency,
-			Duration: histogramWindow,
-			Buckets:  metric.IOLatencyBuckets,
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     MetaConnLatency,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		ConnFailures:                metric.NewCounter(MetaConnFailures),
 		PGWireCancelTotalCount:      metric.NewCounter(MetaPGWireCancelTotal),
@@ -1133,6 +1134,9 @@ func (s *Server) serveImpl(
 				})
 
 			case pgwirebase.ClientMsgExecute:
+				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
+					return false, isSimpleQuery, err
+				}
 				// To support the 1PC txn fast path, we peek at the next command to
 				// see if it is a Sync. This is because in the extended protocol, an
 				// implicit transaction cannot commit until the Sync is seen. If there's
@@ -1147,15 +1151,27 @@ func (s *Server) serveImpl(
 				return false, isSimpleQuery, c.handleExecute(ctx, timeReceived, followedBySync)
 
 			case pgwirebase.ClientMsgParse:
+				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
+					return false, isSimpleQuery, err
+				}
 				return false, isSimpleQuery, c.handleParse(ctx, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
 
 			case pgwirebase.ClientMsgDescribe:
+				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
+					return false, isSimpleQuery, err
+				}
 				return false, isSimpleQuery, c.handleDescribe(ctx)
 
 			case pgwirebase.ClientMsgBind:
+				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
+					return false, isSimpleQuery, err
+				}
 				return false, isSimpleQuery, c.handleBind(ctx)
 
 			case pgwirebase.ClientMsgClose:
+				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
+					return false, isSimpleQuery, err
+				}
 				return false, isSimpleQuery, c.handleClose(ctx)
 
 			case pgwirebase.ClientMsgTerminate:
@@ -1250,6 +1266,24 @@ func (s *Server) serveImpl(
 		_ /* err */ = c.writeErr(ctx, newAdminShutdownErr(ErrDrainingExistingConn), &c.writerState.buf)
 		_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
 	}
+}
+
+// From https://github.com/postgres/postgres/blob/28b5726561841556dc3e00ffe26b01a8107ee654/src/backend/tcop/postgres.c#L4891-L4891
+func (c *conn) prohibitUnderReplicationMode(ctx context.Context) error {
+	if c.sessionArgs.ReplicationMode == sessiondatapb.ReplicationMode_REPLICATION_MODE_DISABLED {
+		return nil
+	}
+	pgErr := pgerror.New(
+		pgcode.ProtocolViolation,
+		"extended query protocol not supported in a replication connection",
+	)
+	if err := c.stmtBuf.Push(ctx, sql.SendError{
+		Err: pgErr,
+	}); err != nil {
+		return err
+	}
+	// return the same error so that ignoreUntilSync is hit.
+	return pgErr
 }
 
 // readCancelKey retrieves the "backend data" key that identifies

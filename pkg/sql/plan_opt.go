@@ -713,10 +713,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 	if bld.ContainsNonDefaultKeyLocking {
 		planTop.flags.Set(planFlagContainsNonDefaultLocking)
 	}
-	if planTop.instrumentation.ShouldSaveMemo() {
-		planTop.mem = mem
-		planTop.catalog = opc.catalog
-	}
+	planTop.mem = mem
+	planTop.catalog = opc.catalog
 	return nil
 }
 
@@ -812,4 +810,9 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	)
 
 	return indexRecs, nil
+}
+
+// Optimizer returns the Optimizer associated with this planning context.
+func (opc *optPlanningCtx) Optimizer() interface{} {
+	return &opc.optimizer
 }

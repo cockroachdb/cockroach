@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -42,10 +41,9 @@ func TestCopyOutTransaction(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	_, err := db.Exec(`
 		CREATE TABLE t (
@@ -90,9 +88,9 @@ func TestCopyOutRandom(t *testing.T) {
 	const numRows = 100
 
 	ctx := context.Background()
-
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	colNames := []string{"id"}
 	colTypes := []*types.T{types.Int}
@@ -106,7 +104,7 @@ func TestCopyOutRandom(t *testing.T) {
 
 	rng := randutil.NewTestRandWithSeed(0)
 	sqlutils.CreateTable(
-		t, tc.ServerConn(0), "t",
+		t, db, "t",
 		colStr,
 		numRows,
 		func(row int) []tree.Datum {
@@ -122,7 +120,6 @@ func TestCopyOutRandom(t *testing.T) {
 
 	// Use pgx for this next bit as it allows selecting rows by raw values.
 	// Furthermore, it handles CopyTo!
-	s := tc.Server(0)
 	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
 		s.AdvSQLAddr(),
 		"StartServer", /* prefix */

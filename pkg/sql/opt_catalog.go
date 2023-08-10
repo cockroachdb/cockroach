@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -487,6 +488,15 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 // RoleExists is part of the cat.Catalog interface.
 func (oc *optCatalog) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
 	return RoleExists(ctx, oc.planner.InternalSQLTxn(), role)
+}
+
+// Optimizer is part of the cat.Catalog interface.
+func (oc *optCatalog) Optimizer() interface{} {
+	if oc.planner == nil {
+		return nil
+	}
+	plannerInterface := eval.Planner(oc.planner)
+	return plannerInterface.Optimizer()
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.

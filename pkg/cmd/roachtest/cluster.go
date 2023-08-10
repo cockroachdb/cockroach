@@ -115,7 +115,6 @@ const (
 	defaultEncryptionProbability = 1
 	defaultFIPSProbability       = 0
 	defaultARM64Probability      = 0
-	defaultCockroachPath         = "./cockroach-default"
 )
 
 type errBinaryOrLibraryNotFound struct {
@@ -741,7 +740,7 @@ func MachineTypeToCPUs(s string) int {
 		if _, err := fmt.Sscanf(s, "n2-standard-%d", &v); err == nil {
 			return v
 		}
-		if _, err := fmt.Sscanf(s, "n2-standard-%d", &v); err == nil {
+		if _, err := fmt.Sscanf(s, "t2a-standard-%d", &v); err == nil {
 			return v
 		}
 		if _, err := fmt.Sscanf(s, "n2-highcpu-%d", &v); err == nil {
@@ -1347,7 +1346,7 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, l *logger.Logger) error {
 			}
 		}
 
-		if err := c.RunE(ctx, c.All(), fmt.Sprintf("mkdir -p logs/redacted && %s debug merge-logs --redact logs/*.log > logs/redacted/combined.log", defaultCockroachPath)); err != nil {
+		if err := c.RunE(ctx, c.All(), fmt.Sprintf("mkdir -p logs/redacted && %s debug merge-logs --redact logs/*.log > logs/redacted/combined.log", test.DefaultCockroachPath)); err != nil {
 			l.Printf("failed to redact logs: %v", err)
 			if ctx.Err() != nil {
 				return err
@@ -1428,7 +1427,7 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger)
 			sec = fmt.Sprintf("--certs-dir=%s", certs)
 		}
 		if err := c.RunE(
-			ctx, c.Node(node), fmt.Sprintf("%s debug tsdump %s --format=raw > tsdump.gob", defaultCockroachPath, sec),
+			ctx, c.Node(node), fmt.Sprintf("%s debug tsdump %s --format=raw > tsdump.gob", test.DefaultCockroachPath, sec),
 		); err != nil {
 			return err
 		}
@@ -1499,7 +1498,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest 
 			// Ignore the files in the the log directory; we pull the logs separately anyway
 			// so this would only cause duplication.
 			excludeFiles := "*.log,*.txt,*.pprof"
-			cmd := roachtestutil.NewCommand("%s debug zip", defaultCockroachPath).
+			cmd := roachtestutil.NewCommand("%s debug zip", test.DefaultCockroachPath).
 				Option("include-range-info").
 				Flag("exclude-files", fmt.Sprintf("'%s'", excludeFiles)).
 				Flag("url", fmt.Sprintf("{pgurl:%d}", i)).
@@ -1507,7 +1506,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest 
 				Arg(zipName).
 				String()
 			if err := c.RunE(ctx, c.Node(i), cmd); err != nil {
-				l.Printf("%s debug zip failed on node %d: %v", defaultCockroachPath, i, err)
+				l.Printf("%s debug zip failed on node %d: %v", test.DefaultCockroachPath, i, err)
 				if i < c.spec.NodeCount {
 					continue
 				}
@@ -1529,7 +1528,7 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
 	}
 
 	t.L().Printf("checking for dead nodes")
-	ch, err := roachprod.Monitor(ctx, t.L(), c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
+	eventsCh, err := roachprod.Monitor(ctx, t.L(), c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
 
 	// An error here means there was a problem initialising a SyncedCluster.
 	if err != nil {
@@ -1537,14 +1536,12 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
 	}
 
 	deadNodes := 0
-	for n := range ch {
-		// If there's an error, it means either that the monitor command failed
-		// completely, or that it found a dead node worth complaining about.
-		if n.Err != nil || strings.HasPrefix(n.Msg, "dead") {
+	for info := range eventsCh {
+		t.L().Printf("%s", info)
+
+		if _, isDeath := info.Event.(install.MonitorNodeDead); isDeath {
 			deadNodes++
 		}
-
-		t.L().Printf("n%d: err=%v,msg=%s", n.Node, n.Err, n.Msg)
 	}
 
 	if deadNodes > 0 {
@@ -1928,7 +1925,7 @@ func (c *clusterImpl) PutE(
 }
 
 // PutDefaultCockroach uploads the cockroach binary passed in the
-// command line to `defaultCockroachPath` in every node in the
+// command line to `test.DefaultCockroachPath` in every node in the
 // cluster. This binary is used by the test runner to collect failure
 // artifacts since tests are free to upload the cockroach binary they
 // use to any location they desire.
@@ -1936,7 +1933,7 @@ func (c *clusterImpl) PutDefaultCockroach(
 	ctx context.Context, l *logger.Logger, cockroachPath string,
 ) error {
 	c.status("uploading default cockroach binary to nodes")
-	return c.PutE(ctx, l, cockroachPath, defaultCockroachPath, c.All())
+	return c.PutE(ctx, l, cockroachPath, test.DefaultCockroachPath, c.All())
 }
 
 // PutLibraries inserts the specified libraries, by name, into all nodes on the cluster

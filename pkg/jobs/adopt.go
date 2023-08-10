@@ -132,7 +132,7 @@ const (
 	// NextRunClause calculates the next execution time of a job with exponential backoff delay, calculated
 	// using last_run and num_runs values.
 	NextRunClause = `
-COALESCE(last_run, created) + least(
+COALESCE(last_run::timestamptz, created::timestamptz) + least(
 	IF(
 		args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT >= 0.0,
 		args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT,

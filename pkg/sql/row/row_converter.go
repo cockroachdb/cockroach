@@ -489,7 +489,7 @@ func NewDatumRowConverter(
 	return c, nil
 }
 
-const rowIDBits = 64 - builtinconstants.NodeIDBits
+const rowIDBits = 64 - builtinconstants.UniqueIntNodeIDBits
 
 // Row inserts kv operations into the current kv batch, and triggers a SendBatch
 // if necessary.

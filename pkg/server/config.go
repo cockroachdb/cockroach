@@ -204,9 +204,6 @@ type BaseConfig struct {
 	// Environment Variable: COCKROACH_DISABLE_SPAN_CONFIGS
 	SpanConfigsDisabled bool
 
-	// Disables the default test tenant.
-	DisableDefaultTestTenant bool
-
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 
@@ -747,19 +744,19 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 
-		if spec.InMemory && spec.StickyInMemoryEngineID != "" {
+		if spec.InMemory && spec.StickyVFSID != "" {
 			if cfg.TestingKnobs.Server == nil {
 				return Engines{}, errors.AssertionFailedf("Could not create a sticky " +
 					"engine no server knobs available to get a registry. " +
-					"Please use Knobs.Server.StickyEngineRegistry to provide one.")
+					"Please use Knobs.Server.StickyVFSRegistry to provide one.")
 			}
 			knobs := cfg.TestingKnobs.Server.(*TestingKnobs)
-			if knobs.StickyEngineRegistry == nil {
+			if knobs.StickyVFSRegistry == nil {
 				return Engines{}, errors.Errorf("Could not create a sticky " +
 					"engine no registry available. Please use " +
-					"Knobs.Server.StickyEngineRegistry to provide one.")
+					"Knobs.Server.StickyVFSRegistry to provide one.")
 			}
-			eng, err := knobs.StickyEngineRegistry.GetOrCreateStickyInMemEngine(ctx, cfg, spec)
+			eng, err := knobs.StickyVFSRegistry.Open(ctx, cfg, spec)
 			if err != nil {
 				return Engines{}, err
 			}

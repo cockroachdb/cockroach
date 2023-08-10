@@ -933,7 +933,7 @@ func (m *Manager) AcquireByName(
 			// If the name we had doesn't match the newest descriptor in the DB, then
 			// we're trying to use an old name.
 			desc.Release(ctx)
-			return nil, catalog.ErrDescriptorNotFound
+			return nil, catalog.NewDescriptorNotFoundError(id)
 		}
 	}
 	return validateDescriptorForReturn(desc)
@@ -974,7 +974,10 @@ func (m *Manager) resolveName(
 		return id, err
 	}
 	if id == descpb.InvalidID {
-		return id, catalog.ErrDescriptorNotFound
+		return id, errors.Wrapf(catalog.ErrDescriptorNotFound,
+			"resolving name %s with parentID %d and parentSchemaID %d",
+			name, parentID, parentSchemaID,
+		)
 	}
 	return id, nil
 }

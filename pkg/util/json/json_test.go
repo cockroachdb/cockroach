@@ -66,6 +66,9 @@ func TestJSONOrdering(t *testing.T) {
 	// We test here that every element in order sorts before every one that comes
 	// after it, and is equal to itself.
 	sources := []string{
+		// In Postgres's sorting rules, the empty array comes before everything,
+		// even null.
+		`[]`,
 		`null`,
 		`"a"`,
 		`"aa"`,
@@ -76,10 +79,8 @@ func TestJSONOrdering(t *testing.T) {
 		`100`,
 		`false`,
 		`true`,
-		// In Postgres's sorting rules, the empty array comes before everything (even null),
-		// so this is a departure.
-		// Shorter arrays sort before longer arrays (this is the same as in Postgres).
-		`[]`,
+		// Shorter arrays sort before longer arrays (this is the same as in
+		// Postgres).
 		`[1]`,
 		`[2]`,
 		`[1, 2]`,
@@ -88,8 +89,9 @@ func TestJSONOrdering(t *testing.T) {
 		`{}`,
 		`{"a": 1}`,
 		`{"a": 2}`,
-		// In Postgres, keys which are shorter sort before keys which are longer. This
-		// is not true for us (right now). TODO(justin): unclear if it should be.
+		// In Postgres, keys which are shorter sort before keys which are
+		// longer. This is not true for us (right now).
+		// TODO(justin): unclear if it should be.
 		`{"aa": 1}`,
 		`{"b": 1}`,
 		`{"b": 2}`,

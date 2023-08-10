@@ -1730,6 +1730,9 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *eval.Context) {
 			if cached.HasCorrelatedSubquery {
 				shared.HasCorrelatedSubquery = true
 			}
+			if cached.HasUDF {
+				shared.HasUDF = true
+			}
 		} else {
 			BuildSharedProps(e.Child(i), shared, evalCtx)
 		}

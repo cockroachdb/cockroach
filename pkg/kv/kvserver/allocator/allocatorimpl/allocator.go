@@ -1961,13 +1961,13 @@ func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerO
 func (a *Allocator) ValidLeaseTargets(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
+	desc *roachpb.RangeDescriptor,
 	conf roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
-		Desc() *roachpb.RangeDescriptor
 	},
 	opts allocator.TransferLeaseOptions,
 ) []roachpb.ReplicaDescriptor {
@@ -2014,9 +2014,8 @@ func (a *Allocator) ValidLeaseTargets(
 			// replica set, however are in the candidate list. Uninitialized
 			// replicas will always need a snapshot.
 			existingCandidates := []roachpb.ReplicaDescriptor{}
-			rangeDesc := leaseRepl.Desc()
 			for _, candidate := range candidates {
-				if _, ok := rangeDesc.GetReplicaDescriptor(candidate.StoreID); ok {
+				if _, ok := desc.GetReplicaDescriptor(candidate.StoreID); ok {
 					existingCandidates = append(existingCandidates, candidate)
 				} else {
 					validSnapshotCandidates = append(validSnapshotCandidates, candidate)
@@ -2027,7 +2026,7 @@ func (a *Allocator) ValidLeaseTargets(
 
 		status := leaseRepl.RaftStatus()
 		if a.knobs != nil && a.knobs.RaftStatusFn != nil {
-			status = a.knobs.RaftStatusFn(leaseRepl)
+			status = a.knobs.RaftStatusFn(desc, leaseRepl.StoreID())
 		}
 
 		candidates = append(validSnapshotCandidates, excludeReplicasInNeedOfSnapshots(
@@ -2220,6 +2219,7 @@ func (a *Allocator) IOOverloadOptions() IOOverloadOptions {
 func (a *Allocator) TransferLeaseTarget(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
+	desc *roachpb.RangeDescriptor,
 	conf roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
@@ -2227,7 +2227,6 @@ func (a *Allocator) TransferLeaseTarget(
 		GetRangeID() roachpb.RangeID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
-		Desc() *roachpb.RangeDescriptor
 	},
 	usageInfo allocator.RangeUsageInfo,
 	forceDecisionWithoutStats bool,
@@ -2259,7 +2258,7 @@ func (a *Allocator) TransferLeaseTarget(
 		return roachpb.ReplicaDescriptor{}
 	}
 
-	validTargets := a.ValidLeaseTargets(ctx, storePool, conf, existing, leaseRepl, opts)
+	validTargets := a.ValidLeaseTargets(ctx, storePool, desc, conf, existing, leaseRepl, opts)
 
 	// Short-circuit if there are no valid targets out there.
 	if len(validTargets) == 0 || (len(validTargets) == 1 && validTargets[0].StoreID == leaseRepl.StoreID()) {
@@ -2494,13 +2493,13 @@ func getLoadDelta(
 func (a *Allocator) ShouldTransferLease(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
+	desc *roachpb.RangeDescriptor,
 	conf roachpb.SpanConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
-		Desc() *roachpb.RangeDescriptor
 	},
 	usageInfo allocator.RangeUsageInfo,
 ) bool {
@@ -2510,6 +2509,7 @@ func (a *Allocator) ShouldTransferLease(
 	existing = a.ValidLeaseTargets(
 		ctx,
 		storePool,
+		desc,
 		conf,
 		existing,
 		leaseRepl,

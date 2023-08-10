@@ -198,12 +198,13 @@ func TestRegistrySettingUpdate(t *testing.T) {
 	}
 
 	for _, test := range [...]struct {
-		name       string      // Test case ID.
-		setting    string      // Cluster setting key.
-		value      interface{} // Duration when expecting a large number of job runs.
-		matchStmt  string      // SQL statement to match to identify the target job.
-		initCount  int         // Initial number of jobs to ignore at the beginning of the test.
-		toOverride *settings.DurationSetting
+		name         string      // Test case ID.
+		setting      string      // Cluster setting key.
+		value        interface{} // Duration when expecting a large number of job runs.
+		matchStmt    string      // SQL statement to match to identify the target job.
+		matchAppName string
+		initCount    int // Initial number of jobs to ignore at the beginning of the test.
+		toOverride   *settings.DurationSetting
 	}{
 		{
 			name:       "adopt setting",
@@ -238,33 +239,44 @@ func TestRegistrySettingUpdate(t *testing.T) {
 			toOverride: jobs.CancelIntervalSetting,
 		},
 		{
-			name:       "gc setting",
-			setting:    jobs.GcIntervalSettingKey,
-			value:      shortDuration,
-			matchStmt:  jobs.GcQuery,
-			initCount:  0,
-			toOverride: jobs.GcIntervalSetting,
+			name:         "gc setting",
+			setting:      jobs.GcIntervalSettingKey,
+			value:        shortDuration,
+			matchAppName: "$ internal-gc-jobs",
+			initCount:    0,
+			toOverride:   jobs.GcIntervalSetting,
 		},
 		{
-			name:       "gc setting with base",
-			setting:    jobs.IntervalBaseSettingKey,
-			value:      shortDurationBase,
-			matchStmt:  jobs.GcQuery,
-			initCount:  0,
-			toOverride: jobs.GcIntervalSetting,
+			name:         "gc setting with base",
+			setting:      jobs.IntervalBaseSettingKey,
+			value:        shortDurationBase,
+			matchAppName: "$ internal-gc-jobs",
+			initCount:    0,
+			toOverride:   jobs.GcIntervalSetting,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			// Replace multiple white spaces with a single space, remove the last ';', and
-			// trim leading and trailing spaces.
-			matchStmt := strings.TrimSpace(regexp.MustCompile(`(\s+|;+)`).ReplaceAllString(test.matchStmt, " "))
+			var stmtMatcher func(*sessiondata.SessionData, string) bool
+			if test.matchAppName != "" {
+				stmtMatcher = func(sd *sessiondata.SessionData, _ string) bool {
+					return sd.ApplicationName == test.matchAppName
+				}
+			} else {
+				// Replace multiple white spaces with a single space, remove the last ';', and
+				// trim leading and trailing spaces.
+				matchStmt := strings.TrimSpace(regexp.MustCompile(`(\s+|;+)`).ReplaceAllString(test.matchStmt, " "))
+				stmtMatcher = func(_ *sessiondata.SessionData, stmt string) bool {
+					return stmt == matchStmt
+				}
+			}
+
 			var seen = int32(0)
-			stmtFilter := func(ctxt context.Context, _ *sessiondata.SessionData, stmt string, err error) {
+			stmtFilter := func(_ context.Context, sd *sessiondata.SessionData, stmt string, err error) {
 				if err != nil {
 					return
 				}
-				if stmt == matchStmt {
+				if stmtMatcher(sd, stmt) {
 					atomic.AddInt32(&seen, 1)
 				}
 			}
@@ -327,13 +339,12 @@ func TestGCDurationControl(t *testing.T) {
 	//
 	// Replace multiple white spaces with a single space, remove the last ';', and
 	// trim leading and trailing spaces.
-	gcStmt := strings.TrimSpace(regexp.MustCompile(`(\s+|;+)`).ReplaceAllString(jobs.GcQuery, " "))
 	var seen = int32(0)
-	stmtFilter := func(ctxt context.Context, _ *sessiondata.SessionData, stmt string, err error) {
+	stmtFilter := func(_ context.Context, sd *sessiondata.SessionData, _ string, err error) {
 		if err != nil {
 			return
 		}
-		if stmt == gcStmt {
+		if sd.ApplicationName == "$ internal-gc-jobs" {
 			atomic.AddInt32(&seen, 1)
 		}
 	}

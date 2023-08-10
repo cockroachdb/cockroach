@@ -505,34 +505,34 @@ func makeMetrics(internal bool) Metrics {
 			SQLOptPlanCacheMisses: metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheMisses, internal)),
 			// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
 			DistSQLExecLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:     metric.HistogramModePreferHdrLatency,
-				Metadata: getMetricMeta(MetaDistSQLExecLatency, internal),
-				Duration: 6 * metricsSampleInterval,
-				Buckets:  metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     getMetricMeta(MetaDistSQLExecLatency, internal),
+				Duration:     6 * metricsSampleInterval,
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			SQLExecLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:     metric.HistogramModePreferHdrLatency,
-				Metadata: getMetricMeta(MetaSQLExecLatency, internal),
-				Duration: 6 * metricsSampleInterval,
-				Buckets:  metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     getMetricMeta(MetaSQLExecLatency, internal),
+				Duration:     6 * metricsSampleInterval,
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			DistSQLServiceLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:     metric.HistogramModePreferHdrLatency,
-				Metadata: getMetricMeta(MetaDistSQLServiceLatency, internal),
-				Duration: 6 * metricsSampleInterval,
-				Buckets:  metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     getMetricMeta(MetaDistSQLServiceLatency, internal),
+				Duration:     6 * metricsSampleInterval,
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			SQLServiceLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:     metric.HistogramModePreferHdrLatency,
-				Metadata: getMetricMeta(MetaSQLServiceLatency, internal),
-				Duration: 6 * metricsSampleInterval,
-				Buckets:  metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     getMetricMeta(MetaSQLServiceLatency, internal),
+				Duration:     6 * metricsSampleInterval,
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			SQLTxnLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:     metric.HistogramModePreferHdrLatency,
-				Metadata: getMetricMeta(MetaSQLTxnLatency, internal),
-				Duration: 6 * metricsSampleInterval,
-				Buckets:  metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     getMetricMeta(MetaSQLTxnLatency, internal),
+				Duration:     6 * metricsSampleInterval,
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			SQLTxnsOpen:         metric.NewGauge(getMetricMeta(MetaSQLTxnsOpen, internal)),
 			SQLActiveStatements: metric.NewGauge(getMetricMeta(MetaSQLActiveQueries, internal)),
@@ -558,36 +558,36 @@ func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 	return ServerMetrics{
 		StatsMetrics: StatsMetrics{
 			SQLStatsMemoryMaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
-				Metadata: MetaSQLStatsMemMaxBytes,
-				Duration: cfg.HistogramWindowInterval,
-				MaxVal:   log10int64times1000,
-				SigFigs:  3,
-				Buckets:  metric.MemoryUsage64MBBuckets,
+				Metadata:     MetaSQLStatsMemMaxBytes,
+				Duration:     cfg.HistogramWindowInterval,
+				MaxVal:       log10int64times1000,
+				SigFigs:      3,
+				BucketConfig: metric.MemoryUsage64MBBuckets,
 			}),
 			SQLStatsMemoryCurBytesCount: metric.NewGauge(MetaSQLStatsMemCurBytes),
 			ReportedSQLStatsMemoryMaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
-				Metadata: MetaReportedSQLStatsMemMaxBytes,
-				Duration: cfg.HistogramWindowInterval,
-				MaxVal:   log10int64times1000,
-				SigFigs:  3,
-				Buckets:  metric.MemoryUsage64MBBuckets,
+				Metadata:     MetaReportedSQLStatsMemMaxBytes,
+				Duration:     cfg.HistogramWindowInterval,
+				MaxVal:       log10int64times1000,
+				SigFigs:      3,
+				BucketConfig: metric.MemoryUsage64MBBuckets,
 			}),
 			ReportedSQLStatsMemoryCurBytesCount: metric.NewGauge(MetaReportedSQLStatsMemCurBytes),
 			DiscardedStatsCount:                 metric.NewCounter(MetaDiscardedSQLStats),
 			SQLStatsFlushStarted:                metric.NewCounter(MetaSQLStatsFlushStarted),
 			SQLStatsFlushFailure:                metric.NewCounter(MetaSQLStatsFlushFailure),
 			SQLStatsFlushDuration: metric.NewHistogram(metric.HistogramOptions{
-				Mode:     metric.HistogramModePreferHdrLatency,
-				Metadata: MetaSQLStatsFlushDuration,
-				Duration: 6 * metricsSampleInterval,
-				Buckets:  metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     MetaSQLStatsFlushDuration,
+				Duration:     6 * metricsSampleInterval,
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 			SQLStatsRemovedRows: metric.NewCounter(MetaSQLStatsRemovedRows),
 			SQLTxnStatsCollectionOverhead: metric.NewHistogram(metric.HistogramOptions{
-				Mode:     metric.HistogramModePreferHdrLatency,
-				Metadata: MetaSQLTxnStatsCollectionOverhead,
-				Duration: 6 * metricsSampleInterval,
-				Buckets:  metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     MetaSQLTxnStatsCollectionOverhead,
+				Duration:     6 * metricsSampleInterval,
+				BucketConfig: metric.IOLatencyBuckets,
 			}),
 		},
 		ContentionSubsystemMetrics: txnidcache.NewMetrics(),
@@ -2789,7 +2789,6 @@ func (ex *connExecutor) execCopyOut(
 		ex.planner.maybeLogStatement(
 			ctx,
 			ex.executorType,
-			true, /* isCopy */
 			int(ex.state.mu.autoRetryCounter),
 			ex.extraTxnState.txnCounter,
 			numOutputRows,
@@ -3041,7 +3040,7 @@ func (ex *connExecutor) execCopyIn(
 			ex.planner.CurrentDatabase(),
 		)
 		var stats topLevelQueryStats
-		ex.planner.maybeLogStatement(ctx, ex.executorType, true,
+		ex.planner.maybeLogStatement(ctx, ex.executorType,
 			int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter,
 			numInsertedRows, ex.state.mu.stmtCount,
 			0, /* bulkJobId */
@@ -3283,6 +3282,28 @@ func errIsRetriable(err error) bool {
 		// be marked as a client visible retry error.
 		errors.Is(err, descidgen.ErrDescIDSequenceMigrationInProgress) ||
 		descs.IsTwoVersionInvariantViolationError(err)
+}
+
+// convertRetriableErrorIntoUserVisibleError converts internal retriable
+// errors into external, so that the client goes and retries this
+// transaction. One example of this is two version invariant errors, which
+// happens when a schema change is waiting for a schema change transition to
+// propagate. When this happens, we either need to retry externally or internally,
+// depending on if we are in an explicit transaction.
+func (ex *connExecutor) convertRetriableErrorIntoUserVisibleError(
+	ctx context.Context, origErr error,
+) (modifiedErr error, err error) {
+	if descs.IsTwoVersionInvariantViolationError(origErr) {
+		if resetErr := ex.resetTransactionOnSchemaChangeRetry(ctx); resetErr != nil {
+			return nil, resetErr
+		}
+		// Generating a forced retry error here, right after resetting the
+		// transaction is not exactly necessary, but it's a sound way to
+		// generate the only type of ClientVisibleRetryError we have.
+		return ex.state.mu.txn.GenerateForcedRetryableError(ctx, redact.Sprint(origErr)), nil
+	}
+	// Return the original error, this error will not be surfaced to the user.
+	return origErr, nil
 }
 
 // makeErrEvent takes an error and returns either an eventRetriableErr or an

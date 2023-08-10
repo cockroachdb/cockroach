@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // ValidateName validates a name.
@@ -89,9 +90,17 @@ func HasInactiveDescriptorError(err error) bool {
 // found with the given id.
 var ErrDescriptorNotFound = errors.New("descriptor not found")
 
+func NewDescriptorNotFoundError(id descpb.ID) error {
+	return errors.Wrapf(ErrDescriptorNotFound, "looking up ID %d", errors.Safe(id))
+}
+
 // ErrReferencedDescriptorNotFound is like ErrDescriptorNotFound but for
 // descriptors referenced within another descriptor.
 var ErrReferencedDescriptorNotFound = errors.New("referenced descriptor not found")
+
+func NewReferencedDescriptorNotFoundError(descType string, id descpb.ID) error {
+	return errors.Wrapf(ErrReferencedDescriptorNotFound, "referenced %s ID %d", redact.SafeString(descType), errors.Safe(id))
+}
 
 // ErrDescriptorWrongType is returned to signal that a descriptor was found but
 // that it wasn't of the expected type.

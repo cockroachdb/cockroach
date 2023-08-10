@@ -63,7 +63,7 @@ func defaultLoadGen() gen.BasicLoad {
 
 const (
 	defaultRanges            = 1
-	defaultPlacementType     = gen.Uniform
+	defaultPlacementType     = gen.Even
 	defaultReplicationFactor = 1
 	defaultBytes             = 0
 )

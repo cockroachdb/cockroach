@@ -579,9 +579,29 @@ func cmpJSONTypes(a Type, b Type) int {
 	return 0
 }
 
-func (j jsonNull) Compare(other JSON) (int, error)  { return cmpJSONTypes(j.Type(), other.Type()), nil }
-func (j jsonFalse) Compare(other JSON) (int, error) { return cmpJSONTypes(j.Type(), other.Type()), nil }
-func (j jsonTrue) Compare(other JSON) (int, error)  { return cmpJSONTypes(j.Type(), other.Type()), nil }
+// isEmptyArray returns true if j is a JSON array with length 0.
+func isEmptyArray(j JSON) bool {
+	return j.Type() == ArrayJSONType && j.Len() == 0
+}
+
+func (j jsonNull) Compare(other JSON) (int, error) {
+	if isEmptyArray(other) {
+		return 1, nil
+	}
+	return cmpJSONTypes(j.Type(), other.Type()), nil
+}
+func (j jsonFalse) Compare(other JSON) (int, error) {
+	if isEmptyArray(other) {
+		return 1, nil
+	}
+	return cmpJSONTypes(j.Type(), other.Type()), nil
+}
+func (j jsonTrue) Compare(other JSON) (int, error) {
+	if isEmptyArray(other) {
+		return 1, nil
+	}
+	return cmpJSONTypes(j.Type(), other.Type()), nil
+}
 
 func decodeIfNeeded(j JSON) (JSON, error) {
 	if enc, ok := j.(*jsonEncoded); ok {
@@ -595,6 +615,9 @@ func decodeIfNeeded(j JSON) (JSON, error) {
 }
 
 func (j jsonNumber) Compare(other JSON) (int, error) {
+	if isEmptyArray(other) {
+		return 1, nil
+	}
 	cmp := cmpJSONTypes(j.Type(), other.Type())
 	if cmp != 0 {
 		return cmp, nil
@@ -609,6 +632,9 @@ func (j jsonNumber) Compare(other JSON) (int, error) {
 }
 
 func (j jsonString) Compare(other JSON) (int, error) {
+	if isEmptyArray(other) {
+		return 1, nil
+	}
 	cmp := cmpJSONTypes(j.Type(), other.Type())
 	if cmp != 0 {
 		return cmp, nil
@@ -629,6 +655,14 @@ func (j jsonString) Compare(other JSON) (int, error) {
 }
 
 func (j jsonArray) Compare(other JSON) (int, error) {
+	switch {
+	case isEmptyArray(j) && isEmptyArray(other):
+		return 0, nil
+	case isEmptyArray(j):
+		return -1, nil
+	case isEmptyArray(other):
+		return 1, nil
+	}
 	cmp := cmpJSONTypes(j.Type(), other.Type())
 	if cmp != 0 {
 		return cmp, nil
@@ -660,6 +694,8 @@ func (j jsonArray) Compare(other JSON) (int, error) {
 }
 
 func (j jsonObject) Compare(other JSON) (int, error) {
+	// NOTE: There is no need to check if other is an empty array because all
+	// arrays are less than all objects, so the type comparison is sufficient.
 	cmp := cmpJSONTypes(j.Type(), other.Type())
 	if cmp != 0 {
 		return cmp, nil
@@ -1978,7 +2014,7 @@ func (j jsonTrue) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte
 }
 
 func (j jsonArray) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error) {
-	buf = encoding.EncodeJSONArrayKeyMarker(buf, dir)
+	buf = encoding.EncodeJSONArrayKeyMarker(buf, dir, int64(len(j)))
 	buf = encoding.EncodeJSONValueLength(buf, dir, int64(len(j)))
 
 	var err error

@@ -3475,3 +3475,284 @@ SELECT pk FROM regional_by_row_table_virt GROUP BY v;
 # can be proven to be monotonically increasing or decreasing.
 statement error pq: column "pk" must appear in the GROUP BY clause or be used in an aggregate function
 SELECT pk FROM regional_by_row_table_virt GROUP BY (a+10);
+
+# Regression test for incorrectly setting bytes limit in the streamer on remote
+# lookups (#108206).
+statement ok
+CREATE TABLE t108206_p (
+  id INT PRIMARY KEY,
+  p_id INT,
+  INDEX (p_id),
+  FAMILY (id, p_id)
+) LOCALITY REGIONAL BY ROW;
+CREATE TABLE t108206_c (
+  c_id INT PRIMARY KEY,
+  c_p_id INT,
+  INDEX (c_p_id),
+  FAMILY (c_id, c_p_id)
+) LOCALITY REGIONAL BY ROW;
+INSERT INTO t108206_p (crdb_region, id, p_id) VALUES ('ap-southeast-2', 1, 10), ('ca-central-1', 2, 20), ('us-east-1', 3, 30);
+INSERT INTO t108206_c (crdb_region, c_id, c_p_id) VALUES ('ap-southeast-2', 10, 10), ('ca-central-1', 20, 20), ('us-east-1', 30, 30)
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t108206_c WHERE EXISTS (SELECT * FROM t108206_p WHERE p_id = c_p_id) AND c_id = 20; SET tracing = off
+
+# If the row is not found in the local region, the other regions are searched in
+# parallel.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/138/1/"@"/20/0
+Scan /Table/138/1/"\x80"/20/0, /Table/138/1/"\xc0"/20/0
+fetched: /t108206_c/t108206_c_pkey/?/20/c_p_id -> /20
+Scan /Table/137/2/"@"/2{0-1}
+Scan /Table/137/2/"\x80"/2{0-1}, /Table/137/2/"\xc0"/2{0-1}
+fetched: /t108206_p/t108206_p_p_id_idx/'ca-central-1'/20/2 -> <undecoded>
+output row: [20 20]
+
+# Left join with locality optimized search enabled.
+query T retry
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM t108206_c WHERE EXISTS (SELECT * FROM t108206_p WHERE p_id = c_p_id) AND c_id = 20] OFFSET 2
+----
+·
+• lookup join (semi)
+│ table: t108206_p@t108206_p_p_id_idx
+│ lookup condition: (crdb_region = 'ap-southeast-2') AND (c_p_id = p_id)
+│ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (c_p_id = p_id)
+│
+└── • union all
+    │ limit: 1
+    │
+    ├── • scan
+    │     missing stats
+    │     table: t108206_c@t108206_c_pkey
+    │     spans: [/'ap-southeast-2'/20 - /'ap-southeast-2'/20]
+    │
+    └── • scan
+          missing stats
+          table: t108206_c@t108206_c_pkey
+          spans: [/'ca-central-1'/20 - /'ca-central-1'/20] [/'us-east-1'/20 - /'us-east-1'/20]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fr6koQx9_vpxjmRb1scRPLRRYKlhq5KVZ7jXALVSRNpnZPYzZnd0Mtxe9-2Oix6tFyWk4eQjI7-9v__Gf2Dc33DAVGQT-4GsPf0BsNb-A-uLvtX4YDqHfDaBz912_AfoL1eNvn_8wS-P_fYBRAcOfyoH48q9hkFTOZwgUkM_fRgMtBF-rJOubzxhSGvV4UjMFHhrlKaRAvyKC4Rw-nDAutEjJGaRd6qxLCdImCM5R5UVoXnjJMlCYUb2ilzQgFjuOHjEYUp6SbHBmmZGOZVdhtEZ3t16x4pldkeKWycpEbAU4e2yhGhlERu2hzgpPJss0n2PR5k0Ocp-CBsk-kcbpiqEr7rsjYeE4ovJ0Swi4KvmJfq8L7g1V0NhWcVO0fqPZOqn4Xa0jLOIMyVzolTeme3unqSHkDdaaKpr9fWF8upAXvpDR-IM3_jKHXSuYbP1v7x45fCxLQD3pjiIKbEK6H4QDZ1uZia3NR2TmT6RIZ9pV6Lgv4pmQOKhdQ75zDBSxr57wmhOh4nHu8vRn5jg8X0Gk1kOGIFsoSZEd2u9u3rLV39zNY1pI94K_Ebc-Ldc91-jDTNJcqP2lk68DI1meMHJEpVG7ooMm_17Izz00DpXNaT5BRpU7oVqukyl3_DitQFUjJ2PWqv_4J82rJcydoihfbEd0leV8l8UOS_yGptUfiuyT_kNT6kHR-msSdY4-ZenFXWSDfPGdHXj8fdBviuXFti57US4V1Y25QPMaZIYY38TN1yZJeyFwaKxMUVpe0Wv31IwAA__-d1uWE
+
+statement ok
+SET vectorize=on
+
+query T
+EXPLAIN (VEC) SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10
+----
+│
+└ Node 1
+  └ *rowexec.joinReader
+    └ *colexec.limitOp
+      └ *colexec.SerialUnorderedSynchronizer
+        ├ *colfetcher.ColBatchScan
+        └ *colfetcher.ColBatchScan
+
+statement ok
+RESET vectorize
+
+statement ok
+CREATE TABLE abc (
+  id UUID PRIMARY KEY,
+  id1 UUID NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  id2 UUID NULL,
+  INDEX (id1 ASC, id2 ASC)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE xyz (
+  id UUID PRIMARY KEY,
+  str STRING NOT NULL,
+  abc_id UUID NOT NULL,
+  id2 UUID NULL,
+  FOREIGN KEY (abc_id) REFERENCES abc(id) ON DELETE CASCADE,
+  INDEX (abc_id ASC, id2 ASC),
+  INDEX (id2 ASC, str ASC, abc_id ASC)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "avg_size": 3000,
+    "columns": ["id"],
+    "distinct_count": 100,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  }
+]';
+
+statement ok
+ALTER TABLE xyz INJECT STATISTICS '[
+  {
+    "avg_size": 3000,
+    "columns": ["id"],
+    "distinct_count": 100,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  }
+]';
+
+# Regression test for #105942
+# The following should produce 2 lookup joins with a local distribution.
+query T retry
+EXPLAIN SELECT
+  xyz.str,
+  abc.id,
+  abc.id1,
+  abc.id2,
+  abc.created_at,
+  abc.updated_at
+FROM
+  abc JOIN xyz ON
+    xyz.abc_id = abc.id
+    AND xyz.id2 = abc.id2
+    AND xyz.crdb_region = abc.crdb_region
+WHERE
+  abc.id1 = '6da4f356-e526-4b78-b9f9-bbb1a7fc12d6'
+  AND abc.id2 = '68088706-02c6-47d1-b993-a421cd761f2b'
+  AND abc.crdb_region = 'ap-southeast-2'
+  AND xyz.crdb_region = 'ap-southeast-2';
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ estimated row count: 1
+│ table: abc@abc_pkey
+│ equality: (crdb_region, id) = (crdb_region,id)
+│ equality cols are key
+│
+└── • lookup join
+    │ estimated row count: 0
+    │ table: abc@abc_id1_id2_idx
+    │ equality: (crdb_region, lookup_join_const_col_@2, id2, abc_id) = (crdb_region,id1,id2,id)
+    │ equality cols are key
+    │ pred: (id2 = '68088706-02c6-47d1-b993-a421cd761f2b') AND (crdb_region = 'ap-southeast-2')
+    │
+    └── • render
+        │
+        └── • scan
+              estimated row count: 4 (3.7% of the table; stats collected <hidden> ago)
+              table: xyz@xyz_id2_str_abc_id_idx
+              spans: [/'ap-southeast-2'/'68088706-02c6-47d1-b993-a421cd761f2b' - /'ap-southeast-2'/'68088706-02c6-47d1-b993-a421cd761f2b']
+
+# The following should use a string of 4 lookup joins with a cost under 200.
+query T retry
+EXPLAIN(opt,verbose) SELECT
+  x.str,
+  a.id1,
+  a.id2,
+  a.created_at,
+  a.updated_at,
+  b.id1,
+  b.id2,
+  b.created_at,
+  b.updated_at
+FROM
+  abc a
+  INNER JOIN xyz x ON
+    x.abc_id = a.id
+    AND x.id2 = a.id2
+    AND x.crdb_region = a.crdb_region
+  INNER JOIN abc b ON
+    x.abc_id = b.id
+    AND x.id2 = b.id2
+    AND x.crdb_region = b.crdb_region
+WHERE
+  a.id1 = '6da4f356-e526-4b78-b9f9-bbb1a7fc12d6'
+  AND a.id2 = '68088706-02c6-47d1-b993-a421cd761f2b'
+  AND a.crdb_region = 'ap-southeast-2'
+  AND b.id1 = '6da4f356-e526-4b78-b9f9-bbb1a7fc12d6'
+  AND b.id2 = '68088706-02c6-47d1-b993-a421cd761f2b'
+  AND b.crdb_region = 'ap-southeast-2'
+  AND x.crdb_region = 'ap-southeast-2';
+----
+project
+ ├── columns: str:10 id1:2 id2:5 created_at:3 updated_at:4 id1:17 id2:20 created_at:18 updated_at:19
+ ├── immutable
+ ├── stats: [rows=1.031997]
+ ├── cost: 112.377461
+ ├── fd: ()-->(2,5,17,20), (2)==(17), (17)==(2), (3)==(18), (18)==(3), (4)==(19), (19)==(4)
+ ├── distribution: ap-southeast-2
+ ├── prune: (2-5,10,17-20)
+ └── inner-join (lookup abc [as=a])
+      ├── columns: a.id:1 a.id1:2 a.created_at:3 a.updated_at:4 a.id2:5 a.crdb_region:6 str:10 abc_id:11 x.id2:12 x.crdb_region:13 b.id:16 b.id1:17 b.created_at:18 b.updated_at:19 b.id2:20 b.crdb_region:21
+      ├── key columns: [6 1] = [6 1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── stats: [rows=1.031997, distinct(11)=0.936667, null(11)=0, distinct(12)=0.936667, null(12)=0, distinct(13)=0.936667, null(13)=0, distinct(16)=0.936667, null(16)=0, distinct(20)=0.936667, null(20)=0, distinct(21)=0.936667, null(21)=0]
+      ├── cost: 112.347141
+      ├── fd: ()-->(2,5,6,12,13,17,20,21), (1)-->(3,4), (1)==(11,16), (11)==(1,16), (5)==(12,20), (12)==(5,20), (6)==(13,21), (13)==(6,21), (16)-->(18,19), (16)==(1,11), (20)==(5,12), (21)==(6,13), (2)==(17), (17)==(2), (3)==(18), (18)==(3), (4)==(19), (19)==(4)
+      ├── distribution: ap-southeast-2
+      ├── lookup table distribution: ap-southeast-2,ca-central-1,us-east-1
+      ├── inner-join (lookup abc@abc_id1_id2_idx [as=a])
+      │    ├── columns: a.id:1 a.id1:2 a.id2:5 a.crdb_region:6 str:10 abc_id:11 x.id2:12 x.crdb_region:13 b.id:16 b.id1:17 b.created_at:18 b.updated_at:19 b.id2:20 b.crdb_region:21
+      │    ├── key columns: [13 17 12 11] = [6 2 5 1]
+      │    ├── lookup columns are key
+      │    ├── immutable
+      │    ├── stats: [rows=0.01031997, distinct(1)=0.01032, null(1)=0, distinct(2)=0.01032, null(2)=0, distinct(5)=0.01032, null(5)=0, distinct(6)=0.01032, null(6)=0, distinct(10)=0.0102714, null(10)=0, distinct(11)=0.01032, null(11)=0, distinct(12)=0.01032, null(12)=0, distinct(13)=0.01032, null(13)=0, distinct(16)=0.0102638, null(16)=0, distinct(17)=0.01032, null(17)=0, distinct(18)=0.010244, null(18)=0, distinct(19)=0.010244, null(19)=0, distinct(20)=0.0102638, null(20)=0, distinct(21)=0.0102638, null(21)=0, distinct(2,5,6)=0.01032, null(2,5,6)=0]
+      │    ├── cost: 112.088874
+      │    ├── fd: ()-->(2,5,6,12,13,17,20,21), (16)-->(18,19), (11)==(1,16), (16)==(1,11), (12)==(5,20), (20)==(5,12), (13)==(6,21), (21)==(6,13), (6)==(13,21), (2)==(17), (17)==(2), (5)==(12,20), (1)==(11,16)
+      │    ├── distribution: ap-southeast-2
+      │    ├── lookup table distribution: ap-southeast-2,ca-central-1,us-east-1
+      │    ├── inner-join (lookup abc [as=b])
+      │    │    ├── columns: str:10 abc_id:11 x.id2:12 x.crdb_region:13 b.id:16 b.id1:17 b.created_at:18 b.updated_at:19 b.id2:20 b.crdb_region:21
+      │    │    ├── key columns: [21 16] = [21 16]
+      │    │    ├── lookup columns are key
+      │    │    ├── immutable
+      │    │    ├── stats: [rows=1.101776, distinct(10)=1.08174, null(10)=0, distinct(11)=0.936667, null(11)=0, distinct(12)=0.936667, null(12)=0, distinct(13)=0.936667, null(13)=0, distinct(16)=0.936667, null(16)=0, distinct(17)=0.709904, null(17)=0, distinct(18)=0.693547, null(18)=0, distinct(19)=0.693547, null(19)=0, distinct(20)=0.936667, null(20)=0, distinct(21)=0.936667, null(21)=0]
+      │    │    ├── cost: 107.514948
+      │    │    ├── fd: ()-->(12,13,17,20,21), (16)-->(18,19), (11)==(16), (16)==(11), (12)==(20), (20)==(12), (13)==(21), (21)==(13)
+      │    │    ├── distribution: ap-southeast-2
+      │    │    ├── lookup table distribution: ap-southeast-2,ca-central-1,us-east-1
+      │    │    ├── interesting orderings: (+11 opt(12,13)) (+10,+11 opt(12,13)) (+16 opt(17,20,21))
+      │    │    ├── inner-join (lookup abc@abc_id1_id2_idx [as=b])
+      │    │    │    ├── columns: str:10 abc_id:11 x.id2:12 x.crdb_region:13 b.id:16 b.id1:17 b.id2:20 b.crdb_region:21
+      │    │    │    ├── key columns: [13 28 12 11] = [21 17 20 16]
+      │    │    │    ├── lookup columns are key
+      │    │    │    ├── immutable
+      │    │    │    ├── stats: [rows=0.03434444, distinct(11)=0.0343444, null(11)=0, distinct(12)=0.0343444, null(12)=0, distinct(13)=0.0343444, null(13)=0, distinct(16)=0.0343444, null(16)=0, distinct(17)=0.0343444, null(17)=0, distinct(20)=0.0343444, null(20)=0, distinct(21)=0.0343444, null(21)=0, distinct(28)=0.0343444, null(28)=0, distinct(17,20,21)=0.0343444, null(17,20,21)=0]
+      │    │    │    ├── cost: 88.4621065
+      │    │    │    ├── fd: ()-->(12,13,17,20,21), (13)==(21), (21)==(13), (12)==(20), (20)==(12), (11)==(16), (16)==(11)
+      │    │    │    ├── distribution: ap-southeast-2
+      │    │    │    ├── lookup table distribution: ap-southeast-2,ca-central-1,us-east-1
+      │    │    │    ├── interesting orderings: (+(11|16) opt(12,13,17,20,21,28)) (+10,+(11|16) opt(12,13,17,20,21,28))
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: "lookup_join_const_col_@17":28 str:10 abc_id:11 x.id2:12 x.crdb_region:13
+      │    │    │    │    ├── immutable
+      │    │    │    │    ├── stats: [rows=3.666667, distinct(10)=3.11719, null(10)=0, distinct(11)=3.11719, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0, distinct(28)=1, null(28)=0]
+      │    │    │    │    ├── cost: 73.3666668
+      │    │    │    │    ├── fd: ()-->(12,13,28)
+      │    │    │    │    ├── distribution: ap-southeast-2
+      │    │    │    │    ├── interesting orderings: (+11 opt(12,13,28)) (+10,+11 opt(12,13,28))
+      │    │    │    │    ├── scan xyz@xyz_id2_str_abc_id_idx [as=x]
+      │    │    │    │    │    ├── columns: str:10 abc_id:11 x.id2:12 x.crdb_region:13
+      │    │    │    │    │    ├── constraint: /13/12/10/11/9: [/'ap-southeast-2'/'68088706-02c6-47d1-b993-a421cd761f2b' - /'ap-southeast-2'/'68088706-02c6-47d1-b993-a421cd761f2b']
+      │    │    │    │    │    ├── immutable
+      │    │    │    │    │    ├── stats: [rows=3.666667, distinct(10)=3.11719, null(10)=0, distinct(11)=3.11719, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0, distinct(12,13)=1, null(12,13)=0]
+      │    │    │    │    │    │   histogram(13)=  0       3.6667
+      │    │    │    │    │    │                 <--- 'ap-southeast-2'
+      │    │    │    │    │    ├── cost: 73.2733335
+      │    │    │    │    │    ├── fd: ()-->(12,13)
+      │    │    │    │    │    ├── distribution: ap-southeast-2
+      │    │    │    │    │    ├── prune: (10,11)
+      │    │    │    │    │    └── interesting orderings: (+11 opt(12,13)) (+10,+11 opt(12,13))
+      │    │    │    │    └── projections
+      │    │    │    │         └── '6da4f356-e526-4b78-b9f9-bbb1a7fc12d6' [as="lookup_join_const_col_@17":28]
+      │    │    │    └── filters
+      │    │    │         ├── b.id2:20 = '68088706-02c6-47d1-b993-a421cd761f2b' [outer=(20), constraints=(/20: [/'68088706-02c6-47d1-b993-a421cd761f2b' - /'68088706-02c6-47d1-b993-a421cd761f2b']; tight), fd=()-->(20)]
+      │    │    │         └── b.crdb_region:21 = 'ap-southeast-2' [outer=(21), immutable, constraints=(/21: [/'ap-southeast-2' - /'ap-southeast-2']; tight), fd=()-->(21)]
+      │    │    └── filters (true)
+      │    └── filters
+      │         ├── a.id2:5 = '68088706-02c6-47d1-b993-a421cd761f2b' [outer=(5), constraints=(/5: [/'68088706-02c6-47d1-b993-a421cd761f2b' - /'68088706-02c6-47d1-b993-a421cd761f2b']; tight), fd=()-->(5)]
+      │         ├── a.crdb_region:6 = 'ap-southeast-2' [outer=(6), immutable, constraints=(/6: [/'ap-southeast-2' - /'ap-southeast-2']; tight), fd=()-->(6)]
+      │         └── a.id1:2 = '6da4f356-e526-4b78-b9f9-bbb1a7fc12d6' [outer=(2), constraints=(/2: [/'6da4f356-e526-4b78-b9f9-bbb1a7fc12d6' - /'6da4f356-e526-4b78-b9f9-bbb1a7fc12d6']; tight), fd=()-->(2)]
+      └── filters
+           ├── a.created_at:3 = b.created_at:18 [outer=(3,18), constraints=(/3: (/NULL - ]; /18: (/NULL - ]), fd=(3)==(18), (18)==(3)]
+           └── a.updated_at:4 = b.updated_at:19 [outer=(4,19), constraints=(/4: (/NULL - ]; /19: (/NULL - ]), fd=(4)==(19), (19)==(4)]

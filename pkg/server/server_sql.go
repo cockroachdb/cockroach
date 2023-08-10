@@ -955,19 +955,23 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		SessionInitCache: sessioninit.NewCache(
 			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper,
 		),
+		AuditConfig: &auditlogging.AuditConfigLock{
+			Config: auditlogging.EmptyAuditConfig(),
+		},
 		ClientCertExpirationCache: security.NewClientCertExpirationCache(
 			ctx, cfg.Settings, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
 		),
-		RootMemoryMonitor:         rootSQLMemoryMonitor,
-		TestingKnobs:              sqlExecutorTestingKnobs,
-		CompactEngineSpanFunc:     storageEngineClient.CompactEngineSpan,
-		CompactionConcurrencyFunc: storageEngineClient.SetCompactionConcurrency,
-		GetTableMetricsFunc:       storageEngineClient.GetTableMetrics,
-		TraceCollector:            traceCollector,
-		TenantUsageServer:         cfg.tenantUsageServer,
-		KVStoresIterator:          cfg.kvStoresIterator,
-		InspectzServer:            cfg.inspectzServer,
-		RangeDescIteratorFactory:  cfg.rangeDescIteratorFactory,
+		RootMemoryMonitor:           rootSQLMemoryMonitor,
+		TestingKnobs:                sqlExecutorTestingKnobs,
+		CompactEngineSpanFunc:       storageEngineClient.CompactEngineSpan,
+		CompactionConcurrencyFunc:   storageEngineClient.SetCompactionConcurrency,
+		GetTableMetricsFunc:         storageEngineClient.GetTableMetrics,
+		ScanStorageInternalKeysFunc: storageEngineClient.ScanStorageInternalKeys,
+		TraceCollector:              traceCollector,
+		TenantUsageServer:           cfg.tenantUsageServer,
+		KVStoresIterator:            cfg.kvStoresIterator,
+		InspectzServer:              cfg.inspectzServer,
+		RangeDescIteratorFactory:    cfg.rangeDescIteratorFactory,
 		SyntheticPrivilegeCache: syntheticprivilegecache.New(
 			cfg.Settings, cfg.stopper, cfg.db,
 			serverCacheMemoryMonitor.MakeBoundAccount(),
@@ -1351,7 +1355,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	vmoduleSetting.SetOnChange(&cfg.Settings.SV, fn)
 	fn(ctx)
 
-	auditlogging.ConfigureRoleBasedAuditClusterSettings(ctx, execCfg.SessionInitCache.AuditConfig, execCfg.Settings, &execCfg.Settings.SV)
+	auditlogging.ConfigureRoleBasedAuditClusterSettings(ctx, execCfg.AuditConfig, execCfg.Settings, &execCfg.Settings.SV)
 
 	return &SQLServer{
 		ambientCtx:                     cfg.BaseConfig.AmbientCtx,

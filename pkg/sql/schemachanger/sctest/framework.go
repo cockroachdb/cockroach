@@ -644,83 +644,90 @@ func (cs CumulativeTestCaseSpec) run(t *testing.T, fn func(t *testing.T)) bool {
 	return t.Run(fmt.Sprintf("%s_stage_%d_of_%d", prefix, cs.StageOrdinal, cs.StagesCount), fn)
 }
 
+// cumulativeTestForEachPostCommitStage invokes `tf` once for each stage in the
+// PostCommitPhase. These invocation are run in parallel.
 func cumulativeTestForEachPostCommitStage(
 	t *testing.T,
 	relTestCaseDir string,
 	factory TestServerFactory,
 	tf func(t *testing.T, spec CumulativeTestCaseSpec),
 ) {
-	testFunc := func(t *testing.T, spec CumulativeTestSpec) {
-		// Skip this test if any of the stmts is not fully supported.
-		if err := areStmtsFullySupportedAtClusterVersion(t, spec, factory); err != nil {
-			skip.IgnoreLint(t, "test is skipped because", err.Error())
-		}
-		var postCommitCount, postCommitNonRevertibleCount int
-		var after [][]string
-		var dbName string
-		prepfn := func(db *gosql.DB, p scplan.Plan) {
-			for _, s := range p.Stages {
-				switch s.Phase {
-				case scop.PostCommitPhase:
-					postCommitCount++
-				case scop.PostCommitNonRevertiblePhase:
-					postCommitNonRevertibleCount++
+	// Grouping the parallel subtests into a non-parallel subtest allows any defer
+	// calls to work as expected.
+	t.Run("group", func(t *testing.T) {
+		testFunc := func(t *testing.T, spec CumulativeTestSpec) {
+			// Skip this test if any of the stmts is not fully supported.
+			if err := areStmtsFullySupportedAtClusterVersion(t, spec, factory); err != nil {
+				skip.IgnoreLint(t, "test is skipped because", err.Error())
+			}
+			var postCommitCount, postCommitNonRevertibleCount int
+			var after [][]string
+			var dbName string
+			prepfn := func(db *gosql.DB, p scplan.Plan) {
+				for _, s := range p.Stages {
+					switch s.Phase {
+					case scop.PostCommitPhase:
+						postCommitCount++
+					case scop.PostCommitNonRevertiblePhase:
+						postCommitNonRevertibleCount++
+					}
+				}
+				tdb := sqlutils.MakeSQLRunner(db)
+				var ok bool
+				dbName, ok = maybeGetDatabaseForIDs(t, tdb, screl.AllTargetStateDescIDs(p.TargetState))
+				if ok {
+					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
+				}
+				after = tdb.QueryStr(t, fetchDescriptorStateQuery)
+			}
+			withPostCommitPlanAfterSchemaChange(t, spec, factory, prepfn)
+			if postCommitCount+postCommitNonRevertibleCount == 0 {
+				skip.IgnoreLint(t, "test case has no post-commit stages")
+				return
+			}
+			if dbName == "" {
+				skip.IgnoreLint(t, "test case has no usable database")
+				return
+			}
+			var testCases []CumulativeTestCaseSpec
+			for stageOrdinal := 1; stageOrdinal <= postCommitCount; stageOrdinal++ {
+				testCases = append(testCases, CumulativeTestCaseSpec{
+					CumulativeTestSpec: spec,
+					Phase:              scop.PostCommitPhase,
+					StageOrdinal:       stageOrdinal,
+					StagesCount:        postCommitCount,
+					After:              after,
+					DatabaseName:       dbName,
+				})
+			}
+			for stageOrdinal := 1; stageOrdinal <= postCommitNonRevertibleCount; stageOrdinal++ {
+				testCases = append(testCases, CumulativeTestCaseSpec{
+					CumulativeTestSpec: spec,
+					Phase:              scop.PostCommitNonRevertiblePhase,
+					StageOrdinal:       stageOrdinal,
+					StagesCount:        postCommitNonRevertibleCount,
+					After:              after,
+					DatabaseName:       dbName,
+				})
+			}
+			var hasFailed bool
+			for _, tc := range testCases {
+				tc := tc // capture loop variable
+				fn := func(t *testing.T) {
+					tf(t, tc)
+				}
+				if hasFailed {
+					fn = func(t *testing.T) {
+						skip.IgnoreLint(t, "skipping test cases subsequent to earlier failure")
+					}
+				}
+				if !tc.run(t, fn) {
+					hasFailed = true
 				}
 			}
-			tdb := sqlutils.MakeSQLRunner(db)
-			var ok bool
-			dbName, ok = maybeGetDatabaseForIDs(t, tdb, screl.AllTargetStateDescIDs(p.TargetState))
-			if ok {
-				tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
-			}
-			after = tdb.QueryStr(t, fetchDescriptorStateQuery)
 		}
-		withPostCommitPlanAfterSchemaChange(t, spec, factory, prepfn)
-		if postCommitCount+postCommitNonRevertibleCount == 0 {
-			skip.IgnoreLint(t, "test case has no post-commit stages")
-			return
-		}
-		if dbName == "" {
-			skip.IgnoreLint(t, "test case has no usable database")
-			return
-		}
-		var testCases []CumulativeTestCaseSpec
-		for stageOrdinal := 1; stageOrdinal <= postCommitCount; stageOrdinal++ {
-			testCases = append(testCases, CumulativeTestCaseSpec{
-				CumulativeTestSpec: spec,
-				Phase:              scop.PostCommitPhase,
-				StageOrdinal:       stageOrdinal,
-				StagesCount:        postCommitCount,
-				After:              after,
-				DatabaseName:       dbName,
-			})
-		}
-		for stageOrdinal := 1; stageOrdinal <= postCommitNonRevertibleCount; stageOrdinal++ {
-			testCases = append(testCases, CumulativeTestCaseSpec{
-				CumulativeTestSpec: spec,
-				Phase:              scop.PostCommitNonRevertiblePhase,
-				StageOrdinal:       stageOrdinal,
-				StagesCount:        postCommitNonRevertibleCount,
-				After:              after,
-				DatabaseName:       dbName,
-			})
-		}
-		var hasFailed bool
-		for _, tc := range testCases {
-			fn := func(t *testing.T) {
-				tf(t, tc)
-			}
-			if hasFailed {
-				fn = func(t *testing.T) {
-					skip.IgnoreLint(t, "skipping test cases subsequent to earlier failure")
-				}
-			}
-			if !tc.run(t, fn) {
-				hasFailed = true
-			}
-		}
-	}
-	cumulativeTest(t, relTestCaseDir, testFunc)
+		cumulativeTest(t, relTestCaseDir, testFunc)
+	})
 }
 
 // fetchDescriptorStateQuery returns the CREATE statements for all descriptors

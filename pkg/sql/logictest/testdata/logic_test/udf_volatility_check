@@ -5,7 +5,8 @@ statement ok
 CREATE TABLE t1(a INT PRIMARY KEY, b INT);
 CREATE TABLE t2(a INT PRIMARY KEY, b INT);
 
-# TODO(107369): These do not appear to error in postgres.
+# Note: postgres does not error in the following cases. CRDB provides stronger
+# protections against adding volatility to non-volatile functions.
 statement error pgcode 22023 pq: referencing relations is not allowed in immutable function
 CREATE FUNCTION f() RETURNS FLOAT LANGUAGE SQL IMMUTABLE AS $$ SELECT a FROM t1 $$;
 

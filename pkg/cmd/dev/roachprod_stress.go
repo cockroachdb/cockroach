@@ -21,7 +21,9 @@ import (
 )
 
 const (
-	clusterFlag = "cluster"
+	clusterFlag    = "cluster"
+	stressArgsFlag = "stress-args"
+	stressTarget   = "@com_github_cockroachdb_stress//:stress"
 )
 
 func makeRoachprodStressCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -37,6 +39,7 @@ func makeRoachprodStressCmd(runE func(cmd *cobra.Command, args []string) error) 
 	roachprodStressCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
 	roachprodStressCmd.Flags().String(clusterFlag, "", "the name of the cluster (must be set)")
 	roachprodStressCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
+	roachprodStressCmd.Flags().Bool(deadlockFlag, false, "run tests using the deadlock detector")
 	return roachprodStressCmd
 }
 
@@ -46,6 +49,7 @@ func (d *dev) roachprodStress(cmd *cobra.Command, commandLine []string) error {
 		cluster       = mustGetFlagString(cmd, clusterFlag)
 		volume        = mustGetFlagString(cmd, volumeFlag)
 		race          = mustGetFlagBool(cmd, raceFlag)
+		deadlock      = mustGetFlagBool(cmd, deadlockFlag)
 		stressCmdArgs = mustGetFlagString(cmd, stressArgsFlag)
 	)
 	if cluster == "" {
@@ -106,6 +110,9 @@ func (d *dev) roachprodStress(cmd *cobra.Command, commandLine []string) error {
 	}
 	if race {
 		crossArgs = append(crossArgs, "--config=race")
+	}
+	if deadlock {
+		crossArgs = append(crossArgs, "--define", "gotags=bazel,gss,deadlock")
 	}
 	err = d.crossBuild(ctx, crossArgs, targets, "crosslinux", volume, nil)
 	if err != nil {

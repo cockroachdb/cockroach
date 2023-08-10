@@ -99,6 +99,12 @@ type instrumentationHelper struct {
 	// statement; it triggers saving of extra information like the plan string.
 	collectBundle bool
 
+	// planGistMatchingBundle is set when the bundle collection was enabled for
+	// a request with plan-gist matching enabled. In particular, such a bundle
+	// will be somewhat incomplete (it'll miss the plan string as well as the
+	// trace will miss all the events that happened in the optimizer).
+	planGistMatchingBundle bool
+
 	// collectExecStats is set when we are collecting execution statistics for a
 	// statement.
 	collectExecStats bool
@@ -117,21 +123,30 @@ type instrumentationHelper struct {
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry
 	withStatementTrace      func(trace tracingpb.Recording, stmt string)
 
-	// sp is always populated by the instrumentationHelper Setup method, except in
-	// the scenario where we do not need tracing information. This scenario occurs
-	// with the confluence of:
+	// sp is populated by the instrumentationHelper, except in the scenario
+	// where we do not need tracing information. This scenario occurs with the
+	// confluence of:
 	// - not collecting a bundle (collectBundle is false)
 	// - withStatementTrace is nil (only populated by testing knobs)
 	// - outputMode is unmodifiedOutput (i.e. outputMode not specified)
 	// - not collecting execution statistics (collectExecStats is false)
 	// TODO(yuzefovich): refactor statement span creation #85820
 	sp *tracing.Span
+	// parentSp, if set, is the parent span of sp, created by the
+	// instrumentationHelper for plan-gist based bundle collection. It is set
+	// if both Setup and setupWithPlanGist methods create their own spans, but
+	// Setup one is non-verbose (which is insufficient for the bundle
+	// collection). It is stored only to be finished in Finish and should
+	// **not** be accessed otherwise.
+	parentSp *tracing.Span
 
-	// shouldFinishSpan determines whether sp needs to be finished in
-	// instrumentationHelper.Finish.
+	// shouldFinishSpan determines whether sp and parentSp (if set) need to be
+	// finished in instrumentationHelper.Finish.
 	shouldFinishSpan bool
-	origCtx          context.Context
-	evalCtx          *eval.Context
+	// needFinish determines whether Finish must be called.
+	needFinish bool
+	origCtx    context.Context
+	evalCtx    *eval.Context
 
 	queryLevelStatsWithErr *execstats.QueryLevelStatsWithErr
 
@@ -249,9 +264,19 @@ func (ih *instrumentationHelper) SetOutputMode(outputMode outputMode, explainFla
 	ih.explainFlags = explainFlags
 }
 
+func (ih *instrumentationHelper) finalizeSetup(ctx context.Context) {
+	if ih.ShouldBuildExplainPlan() {
+		// Populate traceMetadata at the end once we have all properties of the
+		// helper setup.
+		ih.traceMetadata = make(execNodeTraceMetadata)
+	}
+	// Make sure that the builtins use the correct context.
+	ih.evalCtx.SetDeprecatedContext(ctx)
+}
+
 // Setup potentially enables verbose tracing for the statement, depending on
 // output mode or statement diagnostic activation requests. Finish() must be
-// called after the statement finishes execution (unless needFinish=false, in
+// called after the statement finishes execution (unless ih.needFinish=false, in
 // which case Finish() is a no-op).
 func (ih *instrumentationHelper) Setup(
 	ctx context.Context,
@@ -263,7 +288,7 @@ func (ih *instrumentationHelper) Setup(
 	implicitTxn bool,
 	txnPriority roachpb.UserPriority,
 	collectTxnExecStats bool,
-) (newCtx context.Context, needFinish bool) {
+) (newCtx context.Context) {
 	ih.fingerprint = fingerprint
 	ih.implicitTxn = implicitTxn
 	ih.txnPriority = txnPriority
@@ -287,7 +312,7 @@ func (ih *instrumentationHelper) Setup(
 
 	default:
 		ih.collectBundle, ih.diagRequestID, ih.diagRequest =
-			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, fingerprint)
+			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, fingerprint, "" /* planGist */)
 	}
 
 	ih.stmtDiagnosticsRecorder = stmtDiagnosticsRecorder
@@ -296,15 +321,7 @@ func (ih *instrumentationHelper) Setup(
 	var previouslySampled bool
 	previouslySampled, ih.savePlanForStats = statsCollector.ShouldSample(fingerprint, implicitTxn, p.SessionData().Database)
 
-	defer func() {
-		if ih.ShouldBuildExplainPlan() {
-			// Populate traceMetadata at the end once we have all properties of
-			// the helper setup.
-			ih.traceMetadata = make(execNodeTraceMetadata)
-		}
-		// Make sure that the builtins use the correct context.
-		ih.evalCtx.SetDeprecatedContext(newCtx)
-	}()
+	defer func() { ih.finalizeSetup(newCtx) }()
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
 		if sp.IsVerbose() {
@@ -317,7 +334,8 @@ func (ih *instrumentationHelper) Setup(
 			// span in order to fetch the trace from it, but the span won't be
 			// finished.
 			ih.sp = sp
-			return ctx, true /* needFinish */
+			ih.needFinish = true
+			return ctx
 		}
 	} else {
 		if buildutil.CrdbTestBuild {
@@ -344,9 +362,10 @@ func (ih *instrumentationHelper) Setup(
 			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement",
 				tracing.WithRecording(tracingpb.RecordingStructured))
 			ih.shouldFinishSpan = true
-			return newCtx, true
+			ih.needFinish = true
+			return newCtx
 		}
-		return ctx, false
+		return ctx
 	}
 
 	ih.collectExecStats = true
@@ -362,7 +381,53 @@ func (ih *instrumentationHelper) Setup(
 	}
 	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(recType))
 	ih.shouldFinishSpan = true
-	return newCtx, true
+	ih.needFinish = true
+	return newCtx
+}
+
+// setupWithPlanGist checks whether the bundle should be collected for the
+// provided fingerprint and plan gist. It assumes that the bundle is not
+// currently being collected.
+func (ih *instrumentationHelper) setupWithPlanGist(
+	ctx context.Context, cfg *ExecutorConfig, fingerprint, planGist string, plan *planTop,
+) context.Context {
+	ih.collectBundle, ih.diagRequestID, ih.diagRequest =
+		ih.stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, fingerprint, planGist)
+	if ih.collectBundle {
+		ih.needFinish = true
+		ih.collectExecStats = true
+		ih.planGistMatchingBundle = true
+		if ih.sp == nil || !ih.sp.IsVerbose() {
+			// We will create a verbose span
+			// - if we don't have a span yet, or
+			// - we do have a span, but it's not verbose.
+			//
+			// ih.sp can be non-nil and non-verbose when it was created in Setup
+			// because the stmt got sampled (i.e. ih.collectExecStats was true).
+			// (Note that it couldn't have been EXPLAIN ANALYZE code path in
+			// Setup because it uses a different output mode.) In any case,
+			// we're responsible for finishing this span, so we reassign it to
+			// ih.parentSp to keep track of.
+			//
+			// Note that we don't need to explicitly use ih.sp when creating a
+			// child span because it's implicitly stored in ctx.
+			if ih.sp != nil {
+				ih.parentSp = ih.sp
+			}
+			ctx, ih.sp = tracing.EnsureChildSpan(
+				ctx, cfg.AmbientCtx.Tracer, "plan-gist bundle",
+				tracing.WithRecording(tracingpb.RecordingVerbose),
+			)
+			ih.shouldFinishSpan = true
+			ih.finalizeSetup(ctx)
+			log.VEventf(ctx, 1, "plan-gist matching bundle collection began after the optimizer finished its part")
+		}
+	} else {
+		// We won't need the memo and the catalog, so free it up.
+		plan.mem = nil
+		plan.catalog = nil
+	}
+	return ctx
 }
 
 func (ih *instrumentationHelper) Finish(
@@ -388,7 +453,15 @@ func (ih *instrumentationHelper) Finish(
 
 	if ih.shouldFinishSpan {
 		trace = ih.sp.FinishAndGetConfiguredRecording()
+		if ih.parentSp != nil {
+			defer ih.parentSp.Finish()
+		}
 	} else {
+		if buildutil.CrdbTestBuild {
+			if ih.parentSp != nil {
+				panic(errors.AssertionFailedf("parentSp is non-nil but shouldFinishSpan is false"))
+			}
+		}
 		trace = ih.sp.GetConfiguredRecording()
 	}
 
@@ -424,17 +497,42 @@ func (ih *instrumentationHelper) Finish(
 			if pwe, ok := retPayload.(payloadWithError); ok {
 				payloadErr = pwe.errorCause()
 			}
+			bundleCtx := ctx
+			if bundleCtx.Err() != nil {
+				// The only two possible errors on the context are the context
+				// cancellation or the context deadline being exceeded. The
+				// former seems more likely, and the cancellation is most likely
+				// to have occurred due to a statement timeout, so we still want
+				// to proceed with saving the statement bundle. Thus, we
+				// override the canceled context, but first we'll log the error
+				// as a warning.
+				log.Warningf(
+					bundleCtx, "context has an error when saving the bundle, proceeding "+
+						"with the background one (with deadline of 10 seconds): %v", bundleCtx.Err(),
+				)
+				// We want to be conservative, so we add a deadline of 10
+				// seconds on top of the background context.
+				var cancel context.CancelFunc
+				bundleCtx, cancel = context.WithTimeout(context.Background(), 10*time.Second) // nolint:context
+				defer cancel()
+			}
+			planString := ob.BuildString()
+			if ih.planGistMatchingBundle {
+				// We don't have the plan string available since the stmt bundle
+				// collection was enabled _after_ the optimizer was done.
+				planString = "-- plan elided due to gist matching"
+			}
 			bundle = buildStatementBundle(
-				ctx, ih.explainFlags, cfg.DB, ie.(*InternalExecutor), stmtRawSQL, &p.curPlan,
-				ob.BuildString(), trace, placeholders, res.Err(), payloadErr, retErr,
-				&p.extendedEvalCtx.Settings.SV,
+				bundleCtx, ih.explainFlags, cfg.DB, ie.(*InternalExecutor),
+				stmtRawSQL, &p.curPlan, planString, trace, placeholders, res.Err(),
+				payloadErr, retErr, &p.extendedEvalCtx.Settings.SV,
 			)
 			// Include all non-critical errors as warnings. Note that these
 			// error strings might contain PII, but the warnings are only shown
 			// to the current user and aren't included into the bundle.
 			warnings = append(warnings, bundle.errorStrings...)
 			bundle.insert(
-				ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
+				bundleCtx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
 			)
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
 		}
@@ -507,11 +605,6 @@ func (ih *instrumentationHelper) ShouldBuildExplainPlan() bool {
 // statistics.
 func (ih *instrumentationHelper) ShouldCollectExecStats() bool {
 	return ih.collectExecStats
-}
-
-// ShouldSaveMemo returns true if we should save the memo and catalog in planTop.
-func (ih *instrumentationHelper) ShouldSaveMemo() bool {
-	return ih.collectBundle
 }
 
 // RecordExplainPlan records the explain.Plan for this query.

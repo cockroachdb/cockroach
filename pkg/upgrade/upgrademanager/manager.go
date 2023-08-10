@@ -778,26 +778,56 @@ func (m *Manager) getOrCreateMigrationJob(
 	return alreadyCompleted, alreadyExisting, jobID, nil
 }
 
+const (
+	preJobInfoTableQuery = `
+SELECT id, status
+FROM (
+     SELECT id, status,
+     crdb_internal.pb_to_json(
+	'cockroach.sql.jobs.jobspb.Payload',
+	payload,
+	false -- emit_defaults
+     ) AS pl
+     FROM system.jobs
+     WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
+)
+WHERE ((pl->'migration')->'clusterVersion') = $1::JSONB`
+	// postJobInfoQuery avoids the crdb_internal.system_jobs table
+	// to avoid expensive full scans.
+	postJobInfoTableQuery = `
+WITH
+running_migration_jobs AS (
+    SELECT id, status
+    FROM system.jobs
+    WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
+    AND job_type = 'MIGRATION'
+),
+payloads AS (
+    SELECT job_id, value
+    FROM system.job_info AS payload
+    WHERE info_key = 'legacy_payload'
+    AND job_id IN (SELECT id FROM running_migration_jobs)
+    ORDER BY written DESC
+)
+SELECT id, status FROM (
+    SELECT id, status, crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payloads.value, false) AS pl
+    FROM running_migration_jobs AS j
+    INNER JOIN payloads ON j.id = payloads.job_id
+) WHERE ((pl->'migration')->'clusterVersion') = $1::JSONB`
+)
+
 func (m *Manager) getRunningMigrationJob(
 	ctx context.Context, txn isql.Txn, version roachpb.Version,
 ) (found bool, jobID jobspb.JobID, _ error) {
 	// Wrap the version into a ClusterVersion so that the JSON looks like what the
 	// Payload proto has inside.
 	cv := clusterversion.ClusterVersion{Version: version}
-	const query = `
-SELECT id, status
-	FROM (
-		SELECT id,
-		status,
-		crdb_internal.pb_to_json(
-			'cockroach.sql.jobs.jobspb.Payload',
-			payload,
-      false -- emit_defaults
-		) AS pl
-	FROM crdb_internal.system_jobs
-  WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
-	)
-	WHERE pl->'migration'->'clusterVersion' = $1::JSON;`
+	var query string
+	if m.settings.Version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
+		query = postJobInfoTableQuery
+	} else {
+		query = preJobInfoTableQuery
+	}
 	jsonMsg, err := protoreflect.MessageToJSON(&cv, protoreflect.FmtFlags{EmitDefaults: false})
 	if err != nil {
 		return false, 0, errors.Wrap(err, "failed to marshal version to JSON")

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -598,6 +599,26 @@ type Reader interface {
 	// with the iterator to free resources. The caller can change IterOptions
 	// after this function returns.
 	NewEngineIterator(opts IterOptions) EngineIterator
+	// ScanInternal allows a caller to inspect the underlying engine's InternalKeys
+	// using a visitor pattern, while also allowing for keys in shared files to be
+	// skipped if a visitor is provided for visitSharedFiles. Useful for
+	// fast-replicating state from one Reader to another. Point keys are collapsed
+	// such that only one internal key per user key is exposed, and rangedels and
+	// range keys are collapsed and defragmented with each span being surfaced
+	// exactly once, alongside the highest seqnum for a rangedel on that span
+	// (for rangedels) or all coalesced rangekey.Keys in that span (for range
+	// keys). A point key deleted by a rangedel will not be exposed, but the
+	// rangedel would be exposed.
+	//
+	// Note that ScanInternal does not obey the guarantees indicated by
+	// ConsistentIterators.
+	ScanInternal(
+		ctx context.Context, lower, upper roachpb.Key,
+		visitPointKey func(key *pebble.InternalKey, value pebble.LazyValue, info pebble.IteratorLevel) error,
+		visitRangeDel func(start, end []byte, seqNum uint64) error,
+		visitRangeKey func(start, end []byte, keys []rangekey.Key) error,
+		visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	) error
 	// ConsistentIterators returns true if the Reader implementation guarantees
 	// that the different iterators constructed by this Reader will see the same
 	// underlying Engine state. This is not true about Batch writes: new iterators
@@ -854,6 +875,32 @@ type Writer interface {
 	BufferedSize() int
 }
 
+// InternalWriter is an extension of Writer that supports additional low-level
+// methods to operate on internal keys in Pebble. These additional methods
+// should only be used sparingly, when one of the high-level methods cannot
+// achieve the same ends.
+type InternalWriter interface {
+	Writer
+	// ClearRawEncodedRange is similar to ClearRawRange, except it takes pre-encoded
+	// start, end keys and bypasses the EngineKey encoding step. It also only
+	// operates on point keys; for range keys, use ClearEngineRangeKey or
+	// PutInternalRangeKey.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	ClearRawEncodedRange(start, end []byte) error
+
+	// PutInternalRangeKey adds an InternalRangeKey to this batch. This is a very
+	// low-level method that should be used sparingly.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	PutInternalRangeKey(start, end []byte, key rangekey.Key) error
+	// PutInternalPointKey adds a point InternalKey to this batch. This is a very
+	// low-level method that should be used sparingly.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	PutInternalPointKey(key *pebble.InternalKey, value []byte) error
+}
+
 // ClearOptions holds optional parameters to methods that clear keys from the
 // storage engine.
 type ClearOptions struct {
@@ -977,13 +1024,22 @@ type Engine interface {
 	NewSnapshot() Reader
 	// Type returns engine type.
 	Type() enginepb.EngineType
-	// IngestExternalFiles atomically links a slice of files into the RocksDB
+	// IngestLocalFiles atomically links a slice of files into the RocksDB
 	// log-structured merge-tree.
-	IngestExternalFiles(ctx context.Context, paths []string) error
-	// IngestExternalFilesWithStats is a variant of IngestExternalFiles that
+	IngestLocalFiles(ctx context.Context, paths []string) error
+	// IngestLocalFilesWithStats is a variant of IngestLocalFiles that
 	// additionally returns ingestion stats.
-	IngestExternalFilesWithStats(
+	IngestLocalFilesWithStats(
 		ctx context.Context, paths []string) (pebble.IngestOperationStats, error)
+	// IngestAndExciseFiles is a variant of IngestLocalFilesWithStats
+	// that excises an ExciseSpan, and ingests either local or shared sstables or
+	// both.
+	IngestAndExciseFiles(
+		ctx context.Context, paths []string, shared []pebble.SharedSSTMeta, exciseSpan roachpb.Span) (pebble.IngestOperationStats, error)
+	// IngestExternalFiles is a variant of IngestLocalFiles that takes external
+	// files. These files can be referred to by multiple stores, but are not
+	// modified or deleted by the Engine doing the ingestion.
+	IngestExternalFiles(ctx context.Context, external []pebble.ExternalFile) (pebble.IngestOperationStats, error)
 	// PreIngestDelay offers an engine the chance to backpressure ingestions.
 	// When called, it may choose to block if the engine determines that it is in
 	// or approaching a state where further ingestions may risk its health.
@@ -996,6 +1052,8 @@ type Engine interface {
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
 	CompactRange(start, end roachpb.Key) error
+	// ScanStorageInternalKeys returns key level statistics for each level of a pebble store (that overlap start and end).
+	ScanStorageInternalKeys(start, end roachpb.Key, megabytesPerSecond int64) ([]enginepb.StorageInternalKeysMetrics, error)
 	// GetTableMetrics returns information about sstables that overlap start and end.
 	GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetricsInfo, error)
 	// RegisterFlushCompletedCallback registers a callback that will be run for
@@ -1048,7 +1106,7 @@ type Batch interface {
 
 // WriteBatch is the interface for write batch specific operations.
 type WriteBatch interface {
-	Writer
+	InternalWriter
 	// Close closes the batch, freeing up any outstanding resources.
 	Close()
 	// Commit atomically applies any batched updates to the underlying engine. If

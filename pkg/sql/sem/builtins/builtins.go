@@ -2106,9 +2106,9 @@ var regularBuiltins = map[string]builtinDefinition{
 				return tree.NewDInt(v), nil
 			},
 			Info: "Returns a unique ID. The value is a combination of the " +
-				"insert timestamp and the ID of the node executing the statement, which " +
-				"guarantees this combination is globally unique. The way it is generated " +
-				"there is no ordering",
+				"insert timestamp (bit-reversed) and the ID of the node executing the statement, which " +
+				"guarantees this combination is globally unique. The way it is generated is statistically " +
+				"likely to not have any ordering relative to previously generated values.",
 			Volatility: volatility.Volatile,
 		},
 	),
@@ -5729,6 +5729,38 @@ SELECT
 			Volatility: volatility.Immutable,
 		},
 	),
+	// Return if a key belongs to a system table, which should make it to print
+	// within redacted output.
+	"crdb_internal.is_system_table_key": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategorySystemInfo,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "raw_key", Typ: types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				_, tableID, err := evalCtx.Codec.DecodeTablePrefix(roachpb.Key(tree.MustBeDBytes(args[0])))
+				if err != nil {
+					// If a key isn't prefixed with a table ID ignore.
+					//nolint:returnerrcheck
+					return tree.DBoolFalse, nil
+				}
+				isSystemTable, err := evalCtx.PrivilegedAccessor.IsSystemTable(ctx, int64(tableID))
+				if err != nil {
+					// If we can't find the descriptor or its not the right type then its
+					// not a system table.
+					//nolint:returnerrcheck
+					return tree.DBoolFalse, nil
+				}
+				return tree.MakeDBool(tree.DBool(isSystemTable)), nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Stable,
+		},
+	),
 
 	// Return a pretty string for a given span, skipping the specified number of
 	// fields.
@@ -7745,65 +7777,9 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true, // applicable only on the gateway
 		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "stmtFingerprint", Typ: types.String},
-				{Name: "samplingProbability", Typ: types.Float},
-				{Name: "minExecutionLatency", Typ: types.Interval},
-				{Name: "expiresAfter", Typ: types.Interval},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				hasViewActivity, err := evalCtx.SessionAccessor.HasRoleOption(
-					ctx, roleoption.VIEWACTIVITY)
-				if err != nil {
-					return nil, err
-				}
-
-				if !hasViewActivity {
-					return nil, errors.New("requesting statement bundle requires " +
-						"VIEWACTIVITY or ADMIN role option")
-				}
-
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
-					return nil, err
-				}
-
-				hasViewActivityRedacted, err := evalCtx.SessionAccessor.HasRoleOption(
-					ctx, roleoption.VIEWACTIVITYREDACTED)
-				if err != nil {
-					return nil, err
-				}
-
-				if !isAdmin && hasViewActivityRedacted {
-					return nil, errors.New("VIEWACTIVITYREDACTED role option cannot request " +
-						"statement bundle")
-				}
-
-				stmtFingerprint := string(tree.MustBeDString(args[0]))
-				samplingProbability := float64(tree.MustBeDFloat(args[1]))
-				minExecutionLatency := time.Duration(tree.MustBeDInterval(args[2]).Nanos())
-				expiresAfter := time.Duration(tree.MustBeDInterval(args[3]).Nanos())
-
-				if err := evalCtx.StmtDiagnosticsRequestInserter(
-					ctx,
-					stmtFingerprint,
-					samplingProbability,
-					minExecutionLatency,
-					expiresAfter,
-				); err != nil {
-					return nil, err
-				}
-
-				return tree.DBoolTrue, nil
-			},
-			Volatility: volatility.Volatile,
-			Info: `Used to request statement bundle for a given statement fingerprint
-that has execution latency greater than the 'minExecutionLatency'. If the
-'expiresAfter' argument is empty, then the statement bundle request never
-expires until the statement bundle is collected`,
-		},
+		makeRequestStatementBundleBuiltinOverload(false /* withPlanGist */, false /* withAntiPlanGist */),
+		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, false /* withAntiPlanGist */),
+		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, true /* withAntiPlanGist */),
 	),
 
 	"crdb_internal.set_compaction_concurrency": makeBuiltin(
@@ -9983,13 +9959,16 @@ func GenerateUniqueUnorderedID(instanceID base.SQLInstanceID) tree.DInt {
 }
 
 // mapToUnorderedUniqueInt is used by GenerateUniqueUnorderedID to convert a
-// serial unique uint64 to an unordered unique int64. The bit manipulation
+// serial unique uint64 to an unordered unique int64. It accomplishes this by
+// reversing the timestamp portion of the unique ID. This bit manipulation
 // should preserve the number of 1-bits.
-func mapToUnorderedUniqueInt(val uint64) uint64 {
+func mapToUnorderedUniqueInt(uniqueInt uint64) uint64 {
 	// val is [0][48 bits of ts][15 bits of node id]
-	ts := (val & ((uint64(math.MaxUint64) >> 16) << 15)) >> 15
-	v := (bits.Reverse64(ts) >> 1) | (val & (1<<15 - 1))
-	return v
+	ts := uniqueInt & builtinconstants.UniqueIntTimestampMask
+	nodeID := uniqueInt & builtinconstants.UniqueIntNodeIDMask
+	reversedTS := bits.Reverse64(ts<<builtinconstants.UniqueIntLeadingZeroBits) << builtinconstants.UniqueIntNodeIDBits
+	unorderedUniqueInt := reversedTS | nodeID
+	return unorderedUniqueInt
 }
 
 // ProcessUniqueID is an ID which is unique to this process in the cluster.
@@ -10048,7 +10027,7 @@ func GenerateUniqueInt(instanceID ProcessUniqueID) tree.DInt {
 func GenerateUniqueID(instanceID int32, timestamp uint64) tree.DInt {
 	// We xor in the instanceID so that instanceIDs larger than 32K will flip bits
 	// in the timestamp portion of the final value instead of always setting them.
-	id := (timestamp << builtinconstants.NodeIDBits) ^ uint64(instanceID)
+	id := (timestamp << builtinconstants.UniqueIntNodeIDBits) ^ uint64(instanceID)
 	return tree.DInt(id)
 }
 
@@ -11123,6 +11102,113 @@ func spanToDatum(span roachpb.Span) (tree.Datum, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+func makeRequestStatementBundleBuiltinOverload(
+	withPlanGist bool, withAntiPlanGist bool,
+) tree.Overload {
+	typs := tree.ParamTypes{{Name: "stmtFingerprint", Typ: types.String}}
+	lastTyps := tree.ParamTypes{
+		{Name: "samplingProbability", Typ: types.Float},
+		{Name: "minExecutionLatency", Typ: types.Interval},
+		{Name: "expiresAfter", Typ: types.Interval},
+	}
+	info := `Used to request statement bundle for a given statement fingerprint
+that has execution latency greater than the 'minExecutionLatency'. If the
+'expiresAfter' argument is empty, then the statement bundle request never
+expires until the statement bundle is collected`
+	if withPlanGist {
+		typs = append(typs, tree.ParamType{Name: "planGist", Typ: types.String})
+		info += `. If 'planGist' argument is
+not empty, then only the execution of the statement with the matching plan
+will be used`
+		if withAntiPlanGist {
+			typs = append(typs, tree.ParamType{Name: "antiPlanGist", Typ: types.Bool})
+			info += `. If 'antiPlanGist' argument is
+true, then any plan other then the specified gist will be used`
+		}
+	}
+	typs = append(typs, lastTyps...)
+	return tree.Overload{
+		Types:      typs,
+		ReturnType: tree.FixedReturnType(types.Bool),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			hasViewActivity, err := evalCtx.SessionAccessor.HasRoleOption(
+				ctx, roleoption.VIEWACTIVITY)
+			if err != nil {
+				return nil, err
+			}
+
+			if !hasViewActivity {
+				return nil, errors.New("requesting statement bundle requires " +
+					"VIEWACTIVITY or ADMIN role option")
+			}
+
+			isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			hasViewActivityRedacted, err := evalCtx.SessionAccessor.HasRoleOption(
+				ctx, roleoption.VIEWACTIVITYREDACTED)
+			if err != nil {
+				return nil, err
+			}
+
+			if !isAdmin && hasViewActivityRedacted {
+				return nil, errors.New("VIEWACTIVITYREDACTED role option cannot request " +
+					"statement bundle")
+			}
+
+			if args[0] == tree.DNull {
+				return nil, errors.New("stmtFingerprint must be non-NULL")
+			}
+
+			stmtFingerprint := string(tree.MustBeDString(args[0]))
+			var planGist string
+			var antiPlanGist bool
+			spIdx, melIdx, eaIdx := 1, 2, 3
+			if withPlanGist {
+				if args[1] != tree.DNull {
+					planGist = string(tree.MustBeDString(args[1]))
+				}
+				spIdx, melIdx, eaIdx = 2, 3, 4
+				if withAntiPlanGist {
+					if args[2] != tree.DNull {
+						antiPlanGist = bool(tree.MustBeDBool(args[2]))
+					}
+					spIdx, melIdx, eaIdx = 3, 4, 5
+				}
+			}
+			var samplingProbability float64
+			if args[spIdx] != tree.DNull {
+				samplingProbability = float64(tree.MustBeDFloat(args[spIdx]))
+			}
+			var minExecutionLatency, expiresAfter time.Duration
+			if args[melIdx] != tree.DNull {
+				minExecutionLatency = time.Duration(tree.MustBeDInterval(args[melIdx]).Nanos())
+			}
+			if args[eaIdx] != tree.DNull {
+				expiresAfter = time.Duration(tree.MustBeDInterval(args[eaIdx]).Nanos())
+			}
+
+			if err = evalCtx.StmtDiagnosticsRequestInserter(
+				ctx,
+				stmtFingerprint,
+				planGist,
+				antiPlanGist,
+				samplingProbability,
+				minExecutionLatency,
+				expiresAfter,
+			); err != nil {
+				return nil, err
+			}
+
+			return tree.DBoolTrue, nil
+		},
+		Volatility: volatility.Volatile,
+		Info:       info,
+	}
 }
 
 func bitmaskAnd(aStr, bStr string) (*tree.DBitArray, error) {

@@ -45,7 +45,7 @@ const mapStateToProps = (
   props: RouteComponentProps,
 ): DatabaseDetailsPageData => {
   const database = getMatchParamByName(props.match, databaseNameCCAttr);
-  const databaseDetails = state.adminUI.databaseDetails;
+  const databaseDetails = state.adminUI?.databaseDetails;
   const dbTables =
     databaseDetails[database]?.data?.results.tablesResp.tables || [];
   const nodeRegions = nodeRegionsByIDSelector(state);

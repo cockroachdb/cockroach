@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -39,24 +38,24 @@ import (
 
 type testCase struct {
 	query       string
-	fingerprint string
+	stmtNoConst string
 	count       int64
 }
 
 var testQueries = []testCase{
 	{
 		query:       "SELECT 1",
-		fingerprint: "SELECT _",
+		stmtNoConst: "SELECT _",
 		count:       3,
 	},
 	{
 		query:       "SELECT 1, 2, 3",
-		fingerprint: "SELECT _, _, _",
+		stmtNoConst: "SELECT _, _, _",
 		count:       10,
 	},
 	{
 		query:       "SELECT 1, 1 WHERE 1 < 10",
-		fingerprint: "SELECT _, _ WHERE _ < _",
+		stmtNoConst: "SELECT _, _ WHERE _ < _",
 		count:       7,
 	},
 }
@@ -121,8 +120,8 @@ func TestSQLStatsFlush(t *testing.T) {
 		// For each test case, we verify that it's being properly inserted exactly
 		// once and it is exactly executed tc.count number of times.
 		for _, tc := range testQueries {
-			verifyNumOfInsertedEntries(t, secondSQLConn, tc.fingerprint, firstServer.SQLInstanceID(), 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
-			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.fingerprint, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count)
+			verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, firstServer.SQLInstanceID(), 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
+			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count)
 		}
 	}
 
@@ -146,10 +145,10 @@ func TestSQLStatsFlush(t *testing.T) {
 		verifyInMemoryStatsEmpty(t, testQueries, secondServerSQLStats)
 
 		for _, tc := range testQueries {
-			verifyNumOfInsertedEntries(t, secondSQLConn, tc.fingerprint, firstServer.SQLInstanceID(), 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
+			verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, firstServer.SQLInstanceID(), 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
 			// The execution count is doubled here because we execute all of the
 			// statements here in the same aggregation interval.
-			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.fingerprint, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count+tc.count-1 /* expectedCount */)
+			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count+tc.count-1 /* expectedCount */)
 		}
 	}
 
@@ -173,8 +172,8 @@ func TestSQLStatsFlush(t *testing.T) {
 
 		for _, tc := range testQueries {
 			// We expect exactly 2 entries since we are in a different aggregation window.
-			verifyNumOfInsertedEntries(t, secondSQLConn, tc.fingerprint, firstServer.SQLInstanceID(), 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
-			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.fingerprint, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count)
+			verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, firstServer.SQLInstanceID(), 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
+			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count)
 		}
 	}
 
@@ -197,10 +196,10 @@ func TestSQLStatsFlush(t *testing.T) {
 		// Ensure that we encode the correct node_id for the new entry and did not
 		// accidentally tamper the entries written by another server.
 		for _, tc := range testQueries {
-			verifyNumOfInsertedEntries(t, firstSQLConn, tc.fingerprint, secondServer.SQLInstanceID(), 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
-			verifyInsertedFingerprintExecCount(t, firstSQLConn, tc.fingerprint, fakeTime.getAggTimeTs(), secondServer.SQLInstanceID(), tc.count)
-			verifyNumOfInsertedEntries(t, secondSQLConn, tc.fingerprint, firstServer.SQLInstanceID(), 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
-			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.fingerprint, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count)
+			verifyNumOfInsertedEntries(t, firstSQLConn, tc.stmtNoConst, secondServer.SQLInstanceID(), 1 /* expectedStmtEntryCnt */, 1 /* expectedTxnEntryCtn */)
+			verifyInsertedFingerprintExecCount(t, firstSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), secondServer.SQLInstanceID(), tc.count)
+			verifyNumOfInsertedEntries(t, secondSQLConn, tc.stmtNoConst, firstServer.SQLInstanceID(), 2 /* expectedStmtEntryCnt */, 2 /* expectedTxnEntryCtn */)
+			verifyInsertedFingerprintExecCount(t, secondSQLConn, tc.stmtNoConst, fakeTime.getAggTimeTs(), firstServer.SQLInstanceID(), tc.count)
 		}
 	}
 }
@@ -209,8 +208,7 @@ func TestSQLStatsInitialDelay(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-	srv := serverutils.StartServerOnly(t, params)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 
@@ -237,12 +235,12 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 	}
 	fakeTime.setTime(timeutil.Now())
 
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
 		StubTimeNow: fakeTime.Now,
 	}
 	srv, conn, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.Background())
+	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
@@ -303,9 +301,8 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	srv, conn, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.Background())
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	observer := s.SQLConn(t, "")
@@ -415,9 +412,8 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	srv, conn, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.Background())
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
@@ -459,9 +455,10 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
+	params.Knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
 	srv, conn, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.Background())
+	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
@@ -581,8 +578,10 @@ func TestSQLStatsPlanSampling(t *testing.T) {
 		stubTime.setTime(parsedTime)
 	}
 
-	params, _ := tests.CreateTestServerParams()
-	params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs).StubTimeNow = stubTime.Now
+	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+	sqlStatsKnobs.StubTimeNow = stubTime.Now
+	var params base.TestServerArgs
+	params.Knobs.SQLStatsKnobs = sqlStatsKnobs
 
 	ctx := context.Background()
 	srv, conn, _ := serverutils.StartServer(t, params)
@@ -801,8 +800,8 @@ func verifyInMemoryStatsCorrectness(
 ) {
 	for _, tc := range tcs {
 		err := statsProvider.SQLStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-			if tc.fingerprint == statistics.Key.Query {
-				require.Equal(t, tc.count, statistics.Stats.Count, "fingerprint: %s", tc.fingerprint)
+			if tc.stmtNoConst == statistics.Key.Query {
+				require.Equal(t, tc.count, statistics.Stats.Count, "fingerprint: %s", tc.stmtNoConst)
 			}
 
 			// All the queries should be under 1 minute
@@ -828,8 +827,8 @@ func verifyInMemoryStatsEmpty(
 ) {
 	for _, tc := range tcs {
 		err := statsProvider.SQLStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-			if tc.fingerprint == statistics.Key.Query {
-				require.Equal(t, 0 /* expected */, statistics.Stats.Count, "fingerprint: %s", tc.fingerprint)
+			if tc.stmtNoConst == statistics.Key.Query {
+				require.Equal(t, 0 /* expected */, statistics.Stats.Count, "fingerprint: %s", tc.stmtNoConst)
 			}
 			return nil
 		})

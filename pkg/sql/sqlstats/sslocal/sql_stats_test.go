@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -56,7 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/jackc/pgx/v4"
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -322,19 +320,14 @@ func TestNodeLocalInMemoryViewDoesNotReturnPersistedStats(t *testing.T) {
 
 	ctx := context.Background()
 
-	params, _ := tests.CreateTestServerParams()
-	cluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: params,
-	})
-
-	server := cluster.Server(0 /* idx */)
+	cluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{})
+	defer cluster.Stopper().Stop(ctx)
+	server := cluster.Server(0 /* idx */).ApplicationLayer()
 
 	// Open two connections so that we can run statements without messing up
 	// the SQL stats.
-	testConn := cluster.ServerConn(0 /* idx */)
+	testConn := server.SQLConn(t, "")
 	sqlDB := sqlutils.MakeSQLRunner(testConn)
-	defer cluster.Stopper().Stop(ctx)
-
 	sqlDB.Exec(t, "SET application_name = 'app1'")
 	sqlDB.Exec(t, "SELECT 1 WHERE true")
 
@@ -536,11 +529,11 @@ func BenchmarkRecordStatement(b *testing.B) {
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
 		metric.NewGauge(sql.MetaReportedSQLStatsMemCurBytes), /* curMemoryBytesCount */
 		metric.NewHistogram(metric.HistogramOptions{
-			Metadata: sql.MetaReportedSQLStatsMemMaxBytes,
-			Duration: 10 * time.Second,
-			MaxVal:   19 * 1000,
-			SigFigs:  3,
-			Buckets:  metric.MemoryUsage64MBBuckets,
+			Metadata:     sql.MetaReportedSQLStatsMemMaxBytes,
+			Duration:     10 * time.Second,
+			MaxVal:       19 * 1000,
+			SigFigs:      3,
+			BucketConfig: metric.MemoryUsage64MBBuckets,
 		}), /* maxMemoryBytesHist */
 		insightsProvider.Writer,
 		monitor,
@@ -786,9 +779,7 @@ func TestTxnStatsDiscardedAfterPrematureStatementExecutionAbortion(t *testing.T)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	server, sqlConn, _ := serverutils.StartServer(t, params)
-
+	server, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlConn)
 
@@ -865,7 +856,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 	currentTestCaseIdx := 0
 	const latencyThreshold = time.Second * 5
 
-	params, _ := tests.CreateTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string) {
 			if !isInternal && testData[currentTestCaseIdx].query == stmt {
@@ -907,12 +898,8 @@ func TestFingerprintCreation(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	testServer, sqlConn, _ := serverutils.StartServer(t, params)
-	defer func() {
-		require.NoError(t, sqlConn.Close())
-		testServer.Stopper().Stop(ctx)
-	}()
+	testServer, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer testServer.Stopper().Stop(ctx)
 
 	testConn := sqlutils.MakeSQLRunner(sqlConn)
 	testConn.Exec(t, "CREATE TABLE t (v INT)")
@@ -1262,11 +1249,12 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	// Max limit safety check on the expected idle latency in seconds. Mostly a paranoia check.
+	// Max limit safety check on the expected idle latency in seconds. Mostly a
+	// paranoia check.
 	const idleLatCap float64 = 30
 
 	testCases := []struct {
@@ -1293,7 +1281,8 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			stmtLats: map[string]float64{"SELECT _": 0},
 			txnLat:   0,
 			ops: func(t *testing.T, db *gosql.DB) {
-				// These 100ms don't count because we're not in an explicit transaction.
+				// These 100ms don't count because we're not in an explicit
+				// transaction.
 				time.Sleep(100 * time.Millisecond)
 				_, err := db.Exec("SELECT 1")
 				require.NoError(t, err)
@@ -1416,18 +1405,12 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			// Note that we're not using pgx here because it *always* prepares
 			// statements, and we want to test our client latency measurements
 			// both with and without prepared statements.
-			dbUrl, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
-			defer cleanup()
-			connector, err := pq.NewConnector(dbUrl.String())
-			require.NoError(t, err)
-			opsDB := gosql.OpenDB(connector)
-			defer func() {
-				_ = opsDB.Close()
-			}()
+			opsDB := s.SQLConn(t, "")
 
-			// Set a unique application name for our session, so we can find our stats easily.
+			// Set a unique application name for our session, so we can find our
+			// stats easily.
 			appName := t.Name()
-			_, err = opsDB.Exec("SET application_name = $1", appName)
+			_, err := opsDB.Exec("SET application_name = $1", appName)
 			require.NoError(t, err)
 
 			// Run the test operations.
@@ -1449,8 +1432,9 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 					actual[query] = latency
 				}
 				require.NoError(t, rows.Err())
-				// Ensure that all test case statements have at least the minimum expected idle latency and do not exceed the
-				// safety check cap.
+				// Ensure that all test case statements have at least the
+				// minimum expected idle latency and do not exceed the safety
+				// check cap.
 				for tc_stmt, tc_latency := range tc.stmtLats {
 					require.GreaterOrEqual(t, actual[tc_stmt], tc_latency)
 					require.Less(t, actual[tc_stmt], idleLatCap)
@@ -1465,8 +1449,8 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 					 WHERE app_name = $1`, appName)
 				err := row.Scan(&actual)
 				require.NoError(t, err)
-				// Ensure the test case transaction has at least the minimum expected idle latency and do not exceed the safety
-				// check cap.
+				// Ensure the test case transaction has at least the minimum
+				// expected idle latency and do not exceed the safety check cap.
 				require.GreaterOrEqual(t, actual, tc.txnLat)
 				require.Less(t, actual, idleLatCap)
 			})
@@ -1484,12 +1468,8 @@ func TestSQLStatsIndexesUsed(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	testServer, sqlConn, _ := serverutils.StartServer(t, params)
-	defer func() {
-		require.NoError(t, sqlConn.Close())
-		testServer.Stopper().Stop(ctx)
-	}()
+	testServer, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer testServer.Stopper().Stop(ctx)
 	testConn := sqlutils.MakeSQLRunner(sqlConn)
 	appName := "indexes-usage"
 	testConn.Exec(t, "SET application_name = $1", appName)
@@ -1592,12 +1572,8 @@ func TestSQLStatsLatencyInfo(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := tests.CreateTestServerParams()
-	testServer, sqlConn, _ := serverutils.StartServer(t, params)
-	defer func() {
-		require.NoError(t, sqlConn.Close())
-		testServer.Stopper().Stop(ctx)
-	}()
+	testServer, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer testServer.Stopper().Stop(ctx)
 	testConn := sqlutils.MakeSQLRunner(sqlConn)
 	appName := "latency-info"
 	testConn.Exec(t, "SET application_name = $1", appName)
@@ -1685,9 +1661,7 @@ func TestSQLStatsRegions(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			params, _ := tests.CreateTestServerParams()
-			params.Locality = tc.locality
-			s, conn, _ := serverutils.StartServer(t, params)
+			s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{Locality: tc.locality})
 			defer s.Stopper().Stop(ctx)
 
 			db := sqlutils.MakeSQLRunner(conn)

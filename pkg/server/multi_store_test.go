@@ -46,8 +46,7 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 
 	ctx := context.Background()
 
-	ser := server.NewStickyInMemEnginesRegistry()
-	defer ser.CloseAllStickyInMemEngines()
+	ser := server.NewStickyVFSRegistry()
 
 	const (
 		numNodes                     = 3
@@ -63,17 +62,18 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 			// again explicitly.
 			ReplicationMode:   base.ReplicationAuto,
 			ServerArgsPerNode: map[int]base.TestServerArgs{},
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TODOTestTenantDisabled,
+			},
 		}
 		for srvIdx := 0; srvIdx < numNodes; srvIdx++ {
-			serverArgs := base.TestServerArgs{
-				DefaultTestTenant: base.TODOTestTenantDisabled,
-			}
-			serverArgs.Knobs.Server = &server.TestingKnobs{StickyEngineRegistry: ser}
+			serverArgs := base.TestServerArgs{}
+			serverArgs.Knobs.Server = &server.TestingKnobs{StickyVFSRegistry: ser}
 			for storeIdx := 0; storeIdx < numStoresPerNode; storeIdx++ {
 				id := fmt.Sprintf("s%d.%d", srvIdx+1, storeIdx+1)
 				serverArgs.StoreSpecs = append(
 					serverArgs.StoreSpecs,
-					base.StoreSpec{InMemory: true, StickyInMemoryEngineID: id},
+					base.StoreSpec{InMemory: true, StickyVFSID: id},
 				)
 			}
 			tcArgs.ServerArgsPerNode[srvIdx] = serverArgs

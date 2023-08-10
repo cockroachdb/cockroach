@@ -633,7 +633,7 @@ ALTER TABLE t_alter ALTER b TYPE TEXT
 statement ok
 ALTER TABLE t_alter ADD COLUMN d INT;
 
-statement error pgcode 42P13 pq: return type mismatch in function declared to return record
+statement error pgcode 42P13 pq: return type mismatch in function declared to return t_alter
 CREATE OR REPLACE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS $$
   SELECT 1, 'foobar', 2
 $$

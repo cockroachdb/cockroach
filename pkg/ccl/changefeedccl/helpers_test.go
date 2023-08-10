@@ -58,26 +58,17 @@ import (
 
 var testSinkFlushFrequency = 100 * time.Millisecond
 
-// disableDeclarativeSchemaChangesForTest will disable the declarative schema
-// changer with a probability of 10% using the provided SQL DB connection. This
-// returns true if the declarative schema changer is disabled.
-func maybeDisableDeclarativeSchemaChangesForTest(
-	t testing.TB, sqlDB *sqlutils.SQLRunner, rnd *rand.Rand,
-) bool {
-	disable := rnd.Float32() < 0.1
+// maybeDisableDeclarativeSchemaChangesForTest will disable the declarative
+// schema changer with a probability of 10% using the provided SQL DB
+// connection. This returns true if the declarative schema changer is disabled.
+func maybeDisableDeclarativeSchemaChangesForTest(t testing.TB, sqlDB *sqlutils.SQLRunner) bool {
+	disable := rand.Float32() < 0.1
 	if disable {
 		t.Log("using legacy schema changer")
 		sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
 		sqlDB.Exec(t, "SET CLUSTER SETTING  sql.defaults.use_declarative_schema_changer='off'")
 	}
 	return disable
-}
-
-// disableDeclarativeSchemaChangesForTest tests that are disabled due to differences
-// in changefeed behaviour and are tracked by issue #80545.
-func disableDeclarativeSchemaChangesForTest(t testing.TB, sqlDB *sqlutils.SQLRunner) {
-	sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
-	sqlDB.Exec(t, "SET CLUSTER SETTING  sql.defaults.use_declarative_schema_changer='off'")
 }
 
 func waitForSchemaChange(

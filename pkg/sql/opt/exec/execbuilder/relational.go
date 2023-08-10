@@ -167,11 +167,6 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	var err error
 
 	if opt.IsDDLOp(e) {
-		if b.evalCtx.Txn.IsoLevel().ToleratesWriteSkew() {
-			return execPlan{}, pgerror.Newf(
-				pgcode.FeatureNotSupported, "transaction involving a schema change needs to be SERIALIZABLE",
-			)
-		}
 		// Mark the statement as containing DDL for use
 		// in the SQL executor.
 		b.IsDDL = true
@@ -2316,7 +2311,8 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 	if lookupTable.IsGlobalTable() || join.LocalityOptimized || join.ChildOfLocalityOptimizedSearch {
 		// HomeRegion() does not automatically fill in the home region of a global
 		// table as the gateway region, so let's manually set it here.
-		// Locality optimized joins are considered local in phase 1.
+		// Locality optimized joins are considered local for static
+		// enforce_home_region checks.
 		homeRegion = gatewayRegion
 	} else {
 		homeRegion, _ = lookupTable.HomeRegion()
@@ -2348,7 +2344,19 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 			}
 		}
 	}
-
+	// If the specialized methods of setting the home region above don't succeed,
+	// see if `GetLookupJoinLookupTableDistribution` can find the lookup table's
+	// distribution.
+	// TODO(msirek): Check if the specialized methods above are even needed any
+	// more.
+	if homeRegion == "" && b.optimizer != nil && b.optimizer.Coster() != nil {
+		_, physicalDistribution := distribution.BuildLookupJoinLookupTableDistribution(
+			b.ctx, b.evalCtx, join, join.RequiredPhysical(), b.optimizer.MaybeGetBestCostRelation,
+		)
+		if len(physicalDistribution.Regions) == 1 {
+			homeRegion = physicalDistribution.Regions[0]
+		}
+	}
 	if homeRegion != "" {
 		if foundLocalRegion {
 			if queryHasHomeRegion {

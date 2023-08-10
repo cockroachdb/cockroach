@@ -401,6 +401,9 @@ type Planner interface {
 	// less than numAnnotations entries. If updated, the annotations in the eval
 	// context held in the planner is also updated.
 	MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx)
+
+	// Optimizer returns the optimizer associated with this Planner, if any.
+	Optimizer() interface{}
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -444,6 +447,13 @@ type CompactEngineSpanFunc func(
 type GetTableMetricsFunc func(
 	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
 ) ([]enginepb.SSTableMetricsInfo, error)
+
+// ScanStorageInternalKeysFunc is used to retrieve pebble metrics on a key span
+// (end-exclusive) at the given (nodeID, storeID).
+// megabytesPerSecond is used to specify the maximmum number of bytes read per second.
+type ScanStorageInternalKeysFunc func(
+	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte, megabytesPerSecond int64,
+) ([]enginepb.StorageInternalKeysMetrics, error)
 
 // SetCompactionConcurrencyFunc is used to change the compaction concurrency of a
 // store.
@@ -531,6 +541,9 @@ type PrivilegedAccessor interface {
 	// Returns the config byte array, a bool representing whether the namespace exists,
 	// and an error if there is one.
 	LookupZoneConfigByNamespaceID(ctx context.Context, id int64) (tree.DBytes, bool, error)
+
+	// IsSystemTable returns if a given descriptor ID is a system table.s
+	IsSystemTable(ctx context.Context, id int64) (bool, error)
 }
 
 // RegionOperator gives access to the current region, validation for all
@@ -680,6 +693,8 @@ type IndexUsageStatsController interface {
 type StmtDiagnosticsRequestInsertFunc func(
 	ctx context.Context,
 	stmtFingerprint string,
+	planGist string,
+	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,

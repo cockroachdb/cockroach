@@ -1310,6 +1310,12 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop, cleanupLogsDir)
 
 	t.setSessionUser(username.RootUser, 0 /* nodeIdx */)
+
+	// These tests involve stopping and starting nodes, so to reduce flakiness,
+	// we increase the lease Transfer timeout.
+	if _, err := t.db.Exec("SET CLUSTER SETTING server.shutdown.lease_transfer_wait = '40s'"); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // newCluster creates a new cluster. It should be called after the logic tests's
@@ -1361,9 +1367,7 @@ func (t *logicTest) newCluster(
 			DeterministicExplain:            true,
 			UseTransactionalDescIDGenerator: true,
 		}
-		knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
-			AOSTClause: "AS OF SYSTEM TIME '-1us'",
-		}
+		knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
 		if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
 			knobs.SQLDeclarativeSchemaChanger = &scexec.TestingKnobs{
 				BeforeStage: t.declarativeCorpusCollector.GetBeforeStage(t.rootT.Name(), t.t()),
@@ -1490,6 +1494,7 @@ func (t *logicTest) newCluster(
 	stats.DefaultRefreshInterval = time.Millisecond
 
 	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.NumNodes, params)
+	t.purgeZoneConfig()
 	if cfg.UseFakeSpanResolver {
 		// We need to update the DistSQL span resolver with the fake resolver.
 		// Note that DistSQL was disabled in makeClusterSetting above, so we

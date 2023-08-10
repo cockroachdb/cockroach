@@ -25,6 +25,8 @@ import (
 type supportedStatement struct {
 	// fn is a function to perform a schema change.
 	fn interface{}
+	// statementTag tag for this statement.
+	statementTag string
 	// checks contains a coarse-grained function to filter out most
 	// unsupported statements.
 	// It's possible for certain unsupported statements to pass it but will
@@ -44,27 +46,31 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	// Alter table will have commands individually whitelisted via the
 	// supportedAlterTableStatements list, so wwe will consider it fully supported
 	// here.
-	reflect.TypeOf((*tree.AlterTable)(nil)):          {fn: AlterTable, on: true, checks: alterTableChecks},
-	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.DropDatabase)(nil)):        {fn: DropDatabase, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {fn: DropOwnedBy, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.DropSchema)(nil)):          {fn: DropSchema, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropSequence)(nil)):        {fn: DropSequence, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropTable)(nil)):           {fn: DropTable, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropType)(nil)):            {fn: DropType, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropView)(nil)):            {fn: DropView, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {fn: CommentOnSchema, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {fn: CommentOnTable, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.DropFunction)(nil)):        {fn: DropFunction, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {fn: CreateFunction, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.CreateSchema)(nil)):        {fn: CreateSchema, on: true, checks: isV232Active},
-	reflect.TypeOf((*tree.CreateSequence)(nil)):      {fn: CreateSequence, on: true, checks: isV232Active},
+	reflect.TypeOf((*tree.AlterTable)(nil)):          {fn: AlterTable, statementTag: tree.AlterTableTag, on: true, checks: alterTableChecks},
+	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, statementTag: tree.CreateIndexTag, on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.DropDatabase)(nil)):        {fn: DropDatabase, statementTag: tree.DropDatabaseTag, on: true, checks: isV221Active},
+	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {fn: DropOwnedBy, statementTag: tree.DropOwnedByTag, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.DropSchema)(nil)):          {fn: DropSchema, statementTag: tree.DropSchemaTag, on: true, checks: isV221Active},
+	reflect.TypeOf((*tree.DropSequence)(nil)):        {fn: DropSequence, statementTag: tree.DropSequenceTag, on: true, checks: isV221Active},
+	reflect.TypeOf((*tree.DropTable)(nil)):           {fn: DropTable, statementTag: tree.DropTableTag, on: true, checks: isV221Active},
+	reflect.TypeOf((*tree.DropType)(nil)):            {fn: DropType, statementTag: tree.DropTypeTag, on: true, checks: isV221Active},
+	reflect.TypeOf((*tree.DropView)(nil)):            {fn: DropView, statementTag: tree.DropViewTag, on: true, checks: isV221Active},
+	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, statementTag: tree.CommentOnConstraintTag, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, statementTag: tree.CommentOnDatabaseTag, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {fn: CommentOnSchema, statementTag: tree.CommentOnSchemaTag, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {fn: CommentOnTable, statementTag: tree.CommentOnTableTag, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, statementTag: tree.CommentOnColumnTag, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, statementTag: tree.CommentOnIndexTag, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, statementTag: tree.DropIndexTag, on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.DropFunction)(nil)):        {fn: DropFunction, statementTag: tree.DropFunctionTag, on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {fn: CreateFunction, statementTag: tree.CreateRoutineTag, on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.CreateSchema)(nil)):        {fn: CreateSchema, statementTag: tree.CreateSchemaTag, on: false, checks: isV232Active},
+	reflect.TypeOf((*tree.CreateSequence)(nil)):      {fn: CreateSequence, statementTag: tree.CreateSequenceTag, on: false, checks: isV232Active},
 }
+
+// supportedStatementTags tracks statement tags which are implemented
+// by the declarative schema changer.
+var supportedStatementTags = map[string]struct{}{}
 
 func init() {
 	boolType := reflect.TypeOf((*bool)(nil)).Elem()
@@ -99,6 +105,9 @@ func init() {
 					statementType, checks))
 			}
 		}
+		// Fetch the statement tag using the statement tag method on the type,
+		// we can use this as a blacklist of blocked schema changes.
+		supportedStatementTags[statementEntry.statementTag] = struct{}{}
 	}
 }
 
@@ -157,9 +166,16 @@ func isFullySupportedWithFalsePositiveInternal(
 // Process dispatches on the statement type to populate the BuilderState
 // embedded in the BuildCtx. Any error will be panicked.
 func Process(b BuildCtx, n tree.Statement) {
+	newSchemaChangerMode := b.EvalCtx().SessionData().NewSchemaChangerMode
+	// Check if the feature is either forced disabled or enabled,
+	// using a cluster setting.
+	disabledStatements := getSchemaChangerStatementControl(&b.ClusterSettings().SV)
+	if forcedEnabled := disabledStatements.CheckStatementControl(n); forcedEnabled {
+		newSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
+	}
 	// Run a few "quick checks" to see if the statement is not supported.
 	if !IsFullySupportedWithFalsePositive(n, b.EvalCtx().Settings.Version.ActiveVersion(b),
-		b.EvalCtx().SessionData().NewSchemaChangerMode) {
+		newSchemaChangerMode) {
 		panic(scerrors.NotImplementedError(n))
 	}
 

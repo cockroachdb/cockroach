@@ -2616,7 +2616,7 @@ sort
 
 # Grouping columns cannot be reused inside an aggregate input expression
 # because the aggregate input expressions and grouping expressions are
-# built as part of the same projection. 
+# built as part of the same projection.
 build
 SELECT max((k+v)/(k-v)) AS r, (k+v)*(k-v) AS s FROM kv GROUP BY k+v, k-v
 ----

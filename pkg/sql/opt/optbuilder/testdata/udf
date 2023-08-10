@@ -1032,6 +1032,47 @@ project
 
 
 # --------------------------------------------------
+# UDFs with VOID return type.
+# --------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION retvoid(i INT) RETURNS VOID LANGUAGE SQL AS 'SELECT i'
+----
+
+build format=show-scalars
+SELECT retvoid(1)
+----
+project
+ ├── columns: retvoid:5
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: retvoid [as=retvoid:5]
+           ├── args
+           │    └── const: 1
+           ├── params: i:1
+           └── body
+                ├── project
+                │    ├── columns: i:2
+                │    ├── values
+                │    │    └── tuple
+                │    └── projections
+                │         └── variable: i:1 [as=i:2]
+                └── project
+                     ├── columns: column4:4
+                     ├── limit
+                     │    ├── columns: column1:3
+                     │    ├── values
+                     │    │    ├── columns: column1:3
+                     │    │    └── tuple
+                     │    │         └── null
+                     │    └── const: 1
+                     └── projections
+                          └── assignment-cast: VOID [as=column4:4]
+                               └── variable: column1:3
+
+
+# --------------------------------------------------
 # UDFs that are STRICT/RETURNS NULL ON NULL INPUT.
 # --------------------------------------------------
 
@@ -1699,11 +1740,11 @@ build set=enable_multiple_modifications_of_table=true
 SELECT upd_ups(1, 2, 3)
 ----
 project
- ├── columns: upd_ups:27
+ ├── columns: upd_ups:29
  ├── values
  │    └── ()
  └── projections
-      └── upd_ups(1, 2, 3) [as=upd_ups:27]
+      └── upd_ups(1, 2, 3) [as=upd_ups:29]
 
 exec-ddl
 CREATE FUNCTION ups2(a1 INT, b1 INT, c1 INT, a2 INT, b2 INT, c2 INT) RETURNS BOOL LANGUAGE SQL AS $$

@@ -90,7 +90,8 @@ func registerNetworkLogging(r registry.Registry) {
 			// URLs already are wrapped in '', but we need to add a timeout flag.
 			// Trim the trailing ' and re-add with the flag.
 			trimmed := strings.TrimSuffix(url, "'")
-			workloadPGURLs[i] = fmt.Sprintf("%s&statement_timeout=10s'", trimmed)
+			// Define a 60s client statement timeout.
+			workloadPGURLs[i] = fmt.Sprintf("%s&statement_timeout=60000'", trimmed)
 		}
 
 		// Init & run a workload on the workload node.

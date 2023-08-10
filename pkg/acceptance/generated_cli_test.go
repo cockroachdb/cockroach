@@ -298,6 +298,13 @@ func TestDockerCLI_test_log_flags(t *testing.T) {
 	runTestDockerCLI(t, "test_log_flags", "../cli/interactive_tests/test_log_flags.tcl")
 }
 
+func TestDockerCLI_test_missing_log_output(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_missing_log_output", "../cli/interactive_tests/test_missing_log_output.tcl")
+}
+
 func TestDockerCLI_test_multiline_statements(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
@@ -345,6 +352,13 @@ func TestDockerCLI_test_reconnect(t *testing.T) {
 	defer s.Close(t)
 
 	runTestDockerCLI(t, "test_reconnect", "../cli/interactive_tests/test_reconnect.tcl")
+}
+
+func TestDockerCLI_test_replication_protocol(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_replication_protocol", "../cli/interactive_tests/test_replication_protocol.tcl")
 }
 
 func TestDockerCLI_test_secure(t *testing.T) {

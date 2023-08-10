@@ -16,9 +16,9 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,10 +33,9 @@ func TestReplicationConnect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := tests.CreateTestServerParams()
-
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -116,7 +115,7 @@ func TestReplicationConnect(t *testing.T) {
 			}
 			require.NoError(t, err)
 			var val string
-			require.NoError(t, conn.QueryRow(ctx, "SELECT current_setting('replication')").Scan(&val))
+			require.NoError(t, conn.QueryRow(ctx, "SELECT current_setting('replication')", pgx.QueryExecModeSimpleProtocol).Scan(&val))
 			require.Equal(t, tc.expectedSessionVar, val)
 		})
 	}

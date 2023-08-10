@@ -72,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -469,6 +470,29 @@ func TestIsOnePhaseCommit(t *testing.T) {
 				}
 			})
 	}
+}
+
+func TestReplicaStringAndSafeFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This test really only needs a hollow shell of a Store and Replica.
+	s := &Store{}
+	s.Ident = &roachpb.StoreIdent{NodeID: 1, StoreID: 2}
+	r := &Replica{}
+	r.store = s
+	r.rangeStr.store(4, &roachpb.RangeDescriptor{
+		RangeID:  3,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("b"),
+	})
+
+	// String.
+	assert.Equal(t, "[n1,s2,r3/4:{a-b}]", r.String())
+	// Redactable string.
+	assert.EqualValues(t, "[n1,s2,r3/4:‹{a-b}›]", redact.Sprint(r))
+	// Redacted string.
+	assert.EqualValues(t, "[n1,s2,r3/4:‹×›]", redact.Sprint(r).Redact())
 }
 
 // TestReplicaContains verifies that the range uses Key.Address() in
@@ -7159,7 +7183,7 @@ func TestReplicaDestroy(t *testing.T) {
 	expectedKeys := []roachpb.Key{keys.RangeTombstoneKey(tc.repl.RangeID)}
 	actualKeys := []roachpb.Key{}
 
-	require.NoError(t, rditer.IterateReplicaKeySpans(tc.repl.Desc(), engSnapshot, false, /* replicatedOnly */
+	require.NoError(t, rditer.IterateReplicaKeySpans(tc.repl.Desc(), engSnapshot, false /* replicatedOnly */, rditer.ReplicatedSpansAll,
 		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
 			require.Equal(t, storage.IterKeyTypePointsOnly, keyType)
 			var err error
@@ -13433,7 +13457,9 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 	requeue, err := tc.store.replicateQueue.processOneChange(
 		ctx,
 		tc.repl,
-		func(ctx context.Context, repl plan.LeaseCheckReplica) bool { return false },
+		tc.repl.Desc(),
+		tc.repl.SpanConfig(),
+		func(ctx context.Context, repl plan.LeaseCheckReplica, conf roachpb.SpanConfig) bool { return false },
 		false, /* scatter */
 		true,  /* dryRun */
 	)

@@ -77,7 +77,6 @@ go_test(
         "//pkg/sql/row",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

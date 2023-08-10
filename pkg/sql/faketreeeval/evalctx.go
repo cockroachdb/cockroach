@@ -327,6 +327,11 @@ func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 	return nil
 }
 
+// Optimizer is part of the cat.Catalog interface.
+func (*DummyEvalPlanner) Optimizer() interface{} {
+	return nil
+}
+
 var _ eval.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
@@ -528,6 +533,11 @@ func (ep *DummyPrivilegedAccessor) LookupZoneConfigByNamespaceID(
 	ctx context.Context, id int64,
 ) (tree.DBytes, bool, error) {
 	return "", false, errors.WithStack(errEvalPrivileged)
+}
+
+// IsSystemTable is part of the tree.PrivilegedAccessor interface.
+func (ep *DummyPrivilegedAccessor) IsSystemTable(ctx context.Context, id int64) (bool, error) {
+	return false, errors.WithStack(errEvalPrivileged)
 }
 
 // DummySessionAccessor implements the eval.SessionAccessor interface by returning errors.

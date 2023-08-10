@@ -26,28 +26,25 @@ import (
 
 func registerClearRange(r registry.Registry) {
 	for _, checks := range []bool{true, false} {
-		for _, rangeTombstones := range []bool{true, false} {
-			checks := checks
-			rangeTombstones := rangeTombstones
-			r.Add(registry.TestSpec{
-				Name:  fmt.Sprintf(`clearrange/checks=%t/rangeTs=%t`, checks, rangeTombstones),
-				Owner: registry.OwnerStorage,
-				// 5h for import, 90 for the test. The import should take closer
-				// to <3:30h but it varies.
-				Timeout: 5*time.Hour + 90*time.Minute,
-				Cluster: r.MakeClusterSpec(10, spec.CPU(16)),
-				Leases:  registry.MetamorphicLeases,
-				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runClearRange(ctx, t, c, checks, rangeTombstones)
-				},
-			})
-		}
+		checks := checks
+		r.Add(registry.TestSpec{
+			Name:  fmt.Sprintf(`clearrange/checks=%t`, checks),
+			Owner: registry.OwnerStorage,
+			// 5h for import, 90 for the test. The import should take closer
+			// to <3:30h but it varies.
+			Timeout: 5*time.Hour + 90*time.Minute,
+			Cluster: r.MakeClusterSpec(10, spec.CPU(16)),
+			Leases:  registry.MetamorphicLeases,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runClearRange(ctx, t, c, checks)
+			},
+		})
 	}
 	// Using a separate clearrange test on zfs instead of randomly
 	// using the same test, cause the Timeout might be different,
 	// and may need to be tweaked.
 	r.Add(registry.TestSpec{
-		Name:  `clearrange/zfs/checks=true/rangeTs=true`,
+		Name:  `clearrange/zfs/checks=true`,
 		Owner: registry.OwnerStorage,
 		// 5h for import, 120 for the test. The import should take closer
 		// to <3:30h but it varies.
@@ -56,32 +53,16 @@ func registerClearRange(r registry.Registry) {
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runClearRange(ctx, t, c, true /* checks */, true /* rangeTombstones */)
+			runClearRange(ctx, t, c, true /* checks */)
 		},
 	})
 }
 
-func runClearRange(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	aggressiveChecks bool,
-	useRangeTombstones bool,
-) {
+func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressiveChecks bool) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	t.Status("restoring fixture")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-
-	{
-		conn := c.Conn(ctx, t.L(), 1)
-		if _, err := conn.ExecContext(ctx,
-			`SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = $1`,
-			useRangeTombstones); err != nil {
-			t.Fatal(err)
-		}
-		conn.Close()
-	}
 
 	// NB: on a 10 node cluster, this should take well below 3h.
 	tBegin := timeutil.Now()
@@ -147,7 +128,7 @@ ORDER BY raw_start_key ASC LIMIT 1`,
 	m := c.NewMonitor(ctx)
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, c.Node(1), `./cockroach workload init kv`)
-		c.Run(ctx, c.All(), `./cockroach workload run kv --concurrency=32 --duration=1h`)
+		c.Run(ctx, c.All(), `./cockroach workload run kv --concurrency=32 --duration=1h --tolerate-errors`)
 		return nil
 	})
 	m.Go(func(ctx context.Context) error {

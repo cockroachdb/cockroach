@@ -17,10 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,12 +32,22 @@ func TestShowTransferState(t *testing.T) {
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
-	tenant, tenantDB := serverutils.StartTenant(t, s, tests.CreateTestTenantParams(serverutils.TestTenantID()))
+	tenant, tenantDB := serverutils.StartTenant(t, s, base.TestTenantArgs{
+		TenantID: serverutils.TestTenantID(),
+	})
 	defer tenant.Stopper().Stop(ctx)
 
 	_, err := tenantDB.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
 	require.NoError(t, err)
 	_, err = mainDB.Exec("ALTER TENANT ALL SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
+	require.NoError(t, err)
+	_, err = tenantDB.Exec("CREATE TYPE typ AS ENUM ('foo', 'bar')")
+	require.NoError(t, err)
+	_, err = tenantDB.Exec("CREATE TABLE tab (a INT4, b typ)")
+	require.NoError(t, err)
+	_, err = tenantDB.Exec("INSERT INTO tab VALUES (1, 'foo')")
+	require.NoError(t, err)
+	_, err = tenantDB.Exec("GRANT SELECT ON tab TO testuser")
 	require.NoError(t, err)
 
 	testUserConn := tenant.SQLConnForUser(t, username.TestUser, "")
@@ -81,24 +91,36 @@ func TestShowTransferState(t *testing.T) {
 		q := pgURL.Query()
 		q.Add("application_name", "carl")
 		pgURL.RawQuery = q.Encode()
-		conn, err := gosql.Open("postgres", pgURL.String())
+		conn, err := pgx.Connect(ctx, pgURL.String())
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func() { _ = conn.Close(ctx) }()
 
 		// Add a prepared statement to make sure SHOW TRANSFER STATE handles it.
-		// Since lib/pq doesn't tell us the name of the prepared statement, we won't
-		// be able to test that we can use it after deserializing the session, but
-		// there are other tests for that.
-		stmt, err := conn.Prepare("SELECT 1 WHERE 1 = 1")
+		_, err = conn.Prepare(ctx, "prepared_stmt_const", "SELECT $1::INT4, 'foo'::typ WHERE 1 = 1")
 		require.NoError(t, err)
-		defer stmt.Close()
+		_, err = conn.Prepare(ctx, "prepared_stmt_aost", "SELECT a, b FROM tab AS OF SYSTEM TIME '-1us'")
+		require.NoError(t, err)
 
-		rows, err := conn.Query(`SHOW TRANSFER STATE WITH 'foobar'`)
+		var intResult int
+		var enumResult string
+		err = conn.QueryRow(ctx, "prepared_stmt_const", 1).Scan(&intResult, &enumResult)
+		require.NoError(t, err)
+		require.Equal(t, 1, intResult)
+		require.Equal(t, "foo", enumResult)
+		err = conn.QueryRow(ctx, "prepared_stmt_aost").Scan(&intResult, &enumResult)
+		require.NoError(t, err)
+		require.Equal(t, 1, intResult)
+		require.Equal(t, "foo", enumResult)
+
+		rows, err := conn.Query(ctx, `SHOW TRANSFER STATE WITH 'foobar'`, pgx.QueryExecModeSimpleProtocol)
 		require.NoError(t, err, "show transfer state failed")
 		defer rows.Close()
 
-		resultColumns, err := rows.Columns()
-		require.NoError(t, err)
+		fieldDescriptions := rows.FieldDescriptions()
+		var resultColumns []string
+		for _, f := range fieldDescriptions {
+			resultColumns = append(resultColumns, f.Name)
+		}
 
 		require.Equal(t, []string{
 			"error",
@@ -135,26 +157,52 @@ func TestShowTransferState(t *testing.T) {
 		q.Add("application_name", "someotherapp")
 		q.Add("crdb:session_revival_token_base64", token)
 		pgURL.RawQuery = q.Encode()
-		conn, err := gosql.Open("postgres", pgURL.String())
+		conn, err := pgx.Connect(ctx, pgURL.String())
 		require.NoError(t, err)
-		defer conn.Close()
+		defer func() { _ = conn.Close(ctx) }()
 
 		var appName string
-		err = conn.QueryRow("SHOW application_name").Scan(&appName)
+		err = conn.QueryRow(ctx, "SHOW application_name").Scan(&appName)
 		require.NoError(t, err)
 		require.Equal(t, "someotherapp", appName)
 
 		var b bool
 		err = conn.QueryRow(
+			ctx,
 			"SELECT crdb_internal.deserialize_session(decode($1, 'base64'))",
 			state,
 		).Scan(&b)
 		require.NoError(t, err)
 		require.True(t, b)
 
-		err = conn.QueryRow("SHOW application_name").Scan(&appName)
+		err = conn.QueryRow(ctx, "SHOW application_name").Scan(&appName)
 		require.NoError(t, err)
 		require.Equal(t, "carl", appName)
+
+		// Confirm that the prepared statement can be used after deserializing the
+		// session.
+		result := conn.PgConn().ExecPrepared(
+			ctx,
+			"prepared_stmt_const",
+			[][]byte{{0, 0, 0, 2}}, // binary representation of 2
+			[]int16{1},             // paramFormats - 1 means binary
+			[]int16{1, 1},          // resultFormats - 1 means binary
+		).Read()
+		require.NoError(t, result.Err)
+		require.Equal(t, [][][]byte{{
+			{0, 0, 0, 2}, {0x66, 0x6f, 0x6f}, // binary representation of 2, 'foo'
+		}}, result.Rows)
+		result = conn.PgConn().ExecPrepared(
+			ctx,
+			"prepared_stmt_aost",
+			[][]byte{},    // paramValues
+			[]int16{},     // paramFormats
+			[]int16{1, 1}, // resultFormats - 1 means binary
+		).Read()
+		require.NoError(t, result.Err)
+		require.Equal(t, [][][]byte{{
+			{0, 0, 0, 1}, {0x66, 0x6f, 0x6f}, // binary representation of 1, 'foo'
+		}}, result.Rows)
 	})
 
 	// Errors should be displayed as a SQL value.
