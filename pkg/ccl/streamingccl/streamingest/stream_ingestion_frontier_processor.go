@@ -159,13 +159,15 @@ type heartbeatSender struct {
 	streamID        streampb.StreamID
 	frontierUpdates chan hlc.Timestamp
 	frontier        hlc.Timestamp
-	flowCtx         *execinfra.FlowCtx
+	sv              *settings.Values
 	// cg runs the heartbeatSender thread.
 	cg ctxgroup.Group
 	// cancel stops heartbeat sender.
 	cancel func()
 	// heartbeatSender closes this channel when it stops.
 	stoppedChan chan struct{}
+	timeSource  timeutil.TimeSource
+	timer       timeutil.TimerI
 }
 
 func newHeartbeatSender(
@@ -175,24 +177,26 @@ func newHeartbeatSender(
 	if err != nil {
 		return nil, err
 	}
+	ts := timeutil.DefaultTimeSource{}
 	return &heartbeatSender{
 		client:          streamClient,
 		streamID:        streampb.StreamID(spec.StreamID),
-		flowCtx:         flowCtx,
+		sv:              &flowCtx.EvalCtx.Settings.SV,
 		frontierUpdates: make(chan hlc.Timestamp),
 		cancel:          func() {},
 		stoppedChan:     make(chan struct{}),
+		timeSource:      ts,
+		timer:           ts.NewTimer(),
 	}, nil
 }
 
 func (h *heartbeatSender) maybeHeartbeat(
-	ctx context.Context, frontier hlc.Timestamp,
+	ctx context.Context, frontier hlc.Timestamp, heartbeatFrequency time.Duration,
 ) (bool, streampb.StreamReplicationStatus, error) {
-	heartbeatFrequency := streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(&h.flowCtx.EvalCtx.Settings.SV)
-	if h.lastSent.Add(heartbeatFrequency).After(timeutil.Now()) {
+	if h.lastSent.Add(heartbeatFrequency).After(h.timeSource.Now()) {
 		return false, streampb.StreamReplicationStatus{}, nil
 	}
-	h.lastSent = timeutil.Now()
+	h.lastSent = h.timeSource.Now()
 	s, err := h.client.Heartbeat(ctx, h.streamID, frontier)
 	return true, s, err
 }
@@ -206,24 +210,24 @@ func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
 			// The heartbeat thread send heartbeats when there is a frontier update,
 			// and it has been a while since last time we sent it, or when we need
 			// to heartbeat to keep the stream alive even if the frontier has no update.
-			timer := time.NewTimer(streamingccl.StreamReplicationConsumerHeartbeatFrequency.
-				Get(&h.flowCtx.EvalCtx.Settings.SV))
-			defer timer.Stop()
+			h.timer.Reset(streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(h.sv))
+			defer h.timer.Stop()
 			unknownStreamStatusRetryErr := log.Every(1 * time.Minute)
 			for {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case <-timer.C:
-					timer.Reset(streamingccl.StreamReplicationConsumerHeartbeatFrequency.
-						Get(&h.flowCtx.EvalCtx.Settings.SV))
+				case <-h.timer.Ch():
+					h.timer.MarkRead()
+					h.timer.Reset(streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(h.sv))
 				case frontier := <-h.frontierUpdates:
 					h.frontier.Forward(frontier)
 				}
-				sent, streamStatus, err := h.maybeHeartbeat(ctx, h.frontier)
-				// TODO(casper): add unit tests to test different kinds of client errors.
+				heartbeatFrequency := streamingccl.StreamReplicationConsumerHeartbeatFrequency.Get(h.sv)
+				sent, streamStatus, err := h.maybeHeartbeat(ctx, h.frontier, heartbeatFrequency)
 				if err != nil {
-					return err
+					log.Errorf(ctx, "replication stream %d received an error from the producer job: %v", h.streamID, err)
+					continue
 				}
 
 				if !sent || streamStatus.StreamStatus == streampb.StreamReplicationStatus_STREAM_ACTIVE {
