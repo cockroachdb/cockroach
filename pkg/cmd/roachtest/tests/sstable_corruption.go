@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/errors"
 )
 
 func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -132,44 +131,35 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	{
+		workloadDone := make(chan struct{})
+		const timeout = 10 * time.Minute
 		m := c.NewMonitor(ctx)
 		// Run a workload to try to get the node to notice corruption and crash.
 		m.Go(func(ctx context.Context) error {
-			const timeout = 10 * time.Minute
-			ctx, cancel := context.WithTimeout(ctx, timeout)
-			defer cancel()
-			for {
-				err := errors.CombineErrors(
-					c.RunE(
-						ctx, workloadNode,
-						"./cockroach workload run tpcc --warehouses=100 --tolerate-errors",
-					),
-					errors.New("workload unexpectedly returned nil"),
-				)
-				// NOTE: the workload is fallible, however, we don't want to return the
-				// error to the caller of WaitE (below), as we want it to see any error
-				// caused due to a node death. The workload is just a means of surfacing
-				// the corruption. The workload could also return early with a nil
-				// error, which is unexpected. In both cases, simply log the error and
-				// determine whether to continue based on the context (timeout, or other
-				// context cancellation).
-				if err != nil {
-					t.L().Printf("workload failed: %s", err)
-				}
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-time.After(time.Second):
-					// Loop.
-				}
-			}
-		})
+			defer close(workloadDone)
 
-		t.L().Printf("waiting for monitor to observe error ...")
-		err := m.WaitE()
-		t.L().Printf("monitor observed error: %s", err)
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-			t.Fatal(err)
+			return c.RunE(
+				ctx, workloadNode,
+				fmt.Sprintf(
+					"./cockroach workload run tpcc --warehouses=100 --tolerate-errors --duration %s",
+					timeout,
+				),
+			)
+		})
+		defer m.Wait()
+
+		t.L().Printf("waiting for monitor to observe error...")
+		deathChan := make(chan error, 1)
+		go func() {
+			deathChan <- m.WaitForNodeDeath()
+		}()
+
+		select {
+		case err := <-deathChan:
+			t.L().Printf("monitor observed: %v", err)
+			// success
+		case <-workloadDone:
+			t.Fatalf("workload ran for %s without observing node crash", timeout)
 		}
 	}
 
