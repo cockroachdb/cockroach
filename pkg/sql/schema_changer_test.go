@@ -7586,6 +7586,7 @@ CREATE TABLE t.test (pk INT PRIMARY KEY, v INT);
 // to conclude. If the locks were not dropped, a deadlock could occur.
 func TestConcurrentSchemaChangesDoNotDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})

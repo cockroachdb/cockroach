@@ -284,13 +284,9 @@ func StartNewTestCluster(
 ) TestClusterInterface {
 	cluster := NewTestCluster(t, numNodes, args)
 	cluster.Start(t)
-	for i := 0; i < cluster.NumServers(); i++ {
-		sysconfigProvider := cluster.Server(i).SystemConfigProvider()
-		sysconfig := sysconfigProvider.GetSystemConfig()
-		if sysconfig != nil {
-			sysconfig.PurgeZoneConfigCache()
-		}
-	}
+	// Note: do not add logic here. To customize cluster configuration,
+	// add testing knobs and check them in testcluster.NewTestCluster.
+	// Not all tests use StartNewTestCluster.
 	return cluster
 }
 
