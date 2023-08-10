@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -264,10 +265,7 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 		// chances that the refresh fails.
 		bumpedTxn := br.Txn.Clone()
 		bumpedTxn.WriteTooOld = false
-		pErr = kvpb.NewErrorWithTxn(
-			kvpb.NewTransactionRetryError(kvpb.RETRY_WRITE_TOO_OLD,
-				"WriteTooOld flag converted to WriteTooOldError"),
-			bumpedTxn)
+		pErr = kvpb.NewErrorWithTxn(kvpb.NewTransactionRetryError(kvpb.RETRY_WRITE_TOO_OLD, "WriteTooOld flag converted to WriteTooOldError"), bumpedTxn)
 		br = nil
 	}
 	if pErr != nil {
@@ -525,16 +523,22 @@ func newRetryErrorOnFailedPreemptiveRefresh(
 	if txn.WriteTooOld {
 		reason = kvpb.RETRY_WRITE_TOO_OLD
 	}
+	var conflictingTxn *enginepb.TxnMeta
 	msg := redact.StringBuilder{}
 	msg.SafeString("failed preemptive refresh")
 	if refreshErr != nil {
 		if refreshErr, ok := refreshErr.GetDetail().(*kvpb.RefreshFailedError); ok {
-			msg.Printf(" due to a conflict: %s on key %s", refreshErr.FailureReason(), refreshErr.Key)
+			if refreshErr.ConflictingTxn != nil {
+				conflictingTxn = refreshErr.ConflictingTxn
+				msg.Printf(" due to a conflict: %s on key %s with conflicting txn %s", refreshErr.FailureReason(), refreshErr.Key, refreshErr.ConflictingTxn.Short())
+			} else {
+				msg.Printf(" due to a conflict: %s on key %s", refreshErr.FailureReason(), refreshErr.Key)
+			}
 		} else {
 			msg.Printf(" - unknown error: %s", refreshErr)
 		}
 	}
-	retryErr := kvpb.NewTransactionRetryError(reason, msg.RedactableString())
+	retryErr := kvpb.NewTransactionRetryError(reason, msg.RedactableString(), kvpb.ErrorWithConflictingTxn(conflictingTxn))
 	return kvpb.NewErrorWithTxn(retryErr, txn)
 }
 
