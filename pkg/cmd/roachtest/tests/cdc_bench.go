@@ -548,7 +548,8 @@ func waitForChangefeed(
 ) (changefeedInfo, error) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	for attempt := 0; ; attempt++ {
+	const maxLoadJobAttempts = 5
+	for loadJobAttempt := 0; ; loadJobAttempt++ {
 		select {
 		case <-ticker.C:
 		case <-ctx.Done():
@@ -557,9 +558,9 @@ func waitForChangefeed(
 
 		info, err := getChangefeedInfo(conn, jobID)
 		if err != nil {
-			logger.Errorf("error getting changefeed info: %v (attempt %d)", err, attempt+1)
-			if attempt > 5 {
-				return changefeedInfo{}, errors.Wrap(err, "failed 5 attempts to get changefeed info")
+			logger.Errorf("error getting changefeed info: %v (attempt %d)", err, loadJobAttempt+1)
+			if loadJobAttempt > 5 {
+				return changefeedInfo{}, errors.Wrapf(err, "failed %d attempts to get changefeed info", maxLoadJobAttempts)
 			}
 			continue
 		} else if info.errMsg != "" {
@@ -570,6 +571,7 @@ func waitForChangefeed(
 		} else if ok {
 			return *info, nil
 		}
+		loadJobAttempt = 0
 	}
 }
 
