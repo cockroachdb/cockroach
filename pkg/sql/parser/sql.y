@@ -7665,6 +7665,11 @@ show_backup_options:
  {
  $$.val = &tree.ShowBackupOptions{SkipSize: true}
  }
+ | NOWAIT
+ {
+ /* SKIP DOC */
+ $$.val = &tree.ShowBackupOptions{SkipSize: true}
+ }
  | DEBUG_IDS
  {
  $$.val = &tree.ShowBackupOptions{DebugIDs: true}
