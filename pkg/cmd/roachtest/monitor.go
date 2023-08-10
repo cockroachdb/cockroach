@@ -188,6 +188,10 @@ func (m *monitorImpl) wait() error {
 			}()
 			setErr(errors.Wrap(m.g.Wait(), "function passed to monitor.Go failed"))
 		}()
+	} else {
+		// If we have no tasks running with this monitor, ensure the
+		// goroutine below terminates.
+		m.cancel()
 	}
 
 	// 2. The second goroutine reads from the monitoring channel, watching for any
