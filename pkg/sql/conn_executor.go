@@ -3281,7 +3281,8 @@ func errIsRetriable(err error) bool {
 		// client in implicit transactions. This is not great; it should
 		// be marked as a client visible retry error.
 		errors.Is(err, descidgen.ErrDescIDSequenceMigrationInProgress) ||
-		descs.IsTwoVersionInvariantViolationError(err)
+		descs.IsTwoVersionInvariantViolationError(err) ||
+		pgerror.IsSQLRetryableError(err)
 }
 
 // convertRetriableErrorIntoUserVisibleError converts internal retriable
