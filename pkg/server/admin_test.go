@@ -1120,6 +1120,60 @@ func TestAdminAPIEvents(t *testing.T) {
 	}
 	testcases = append(testcases, testcase{allEvents, false, 0, false, minTotalEvents})
 
+	checkExpectedEvents := func(tcIdx int, eventType string, numEvents int, expCount int) {
+		if eventType == allEvents {
+			// When retrieving all events, we expect that there will be some system
+			// database migrations, unrelated to this test, that add to the log entry
+			// count. So, we do a looser check here.
+			if numEvents < expCount {
+				t.Fatalf("%d: total # of events %d < min %d", tcIdx, numEvents, expCount)
+			}
+		} else {
+			if numEvents != expCount {
+				t.Fatalf("%d: # of %s events %d != expected %d", tcIdx, eventType, numEvents, expCount)
+			}
+		}
+	}
+
+	checkEventValidity := func(i int, tc testcase, e serverpb.EventsResponse_Event) {
+		if e.Timestamp == (time.Time{}) {
+			t.Errorf("%d: missing/empty timestamp", i)
+		}
+
+		if len(tc.eventType) > 0 {
+			if a, e := e.EventType, tc.eventType; a != e {
+				t.Errorf("%d: event type %s != expected %s", i, a, e)
+			}
+		} else {
+			if len(e.EventType) == 0 {
+				t.Errorf("%d: missing event type in event", i)
+			}
+		}
+
+		isSettingChange := e.EventType == "set_cluster_setting"
+
+		if e.ReportingID == 0 {
+			t.Errorf("%d: missing/empty ReportingID", i)
+		}
+		if len(e.Info) == 0 {
+			t.Errorf("%d: missing/empty Info", i)
+		}
+		if isSettingChange && strings.Contains(e.Info, "cluster.organization") {
+			if tc.unredacted {
+				if !strings.Contains(e.Info, "somestring") {
+					t.Errorf("%d: require 'somestring' in Info", i)
+				}
+			} else {
+				if strings.Contains(e.Info, "somestring") {
+					t.Errorf("%d: un-redacted 'somestring' in Info", i)
+				}
+			}
+		}
+		if len(e.UniqueID) == 0 {
+			t.Errorf("%d: missing/empty UniqueID", i)
+		}
+	}
+
 	for i, tc := range testcases {
 		url := "events"
 		if tc.eventType != allEvents {
@@ -1137,57 +1191,45 @@ func TestAdminAPIEvents(t *testing.T) {
 			if err := getAdminJSONProto(s, url, &resp); err != nil {
 				t.Fatal(err)
 			}
-			if tc.eventType == allEvents {
-				// When retrieving all events, we expect that there will be some system
-				// database migrations, unrelated to this test, that add to the log entry
-				// count. So, we do a looser check here.
-				if a, min := len(resp.Events), tc.expCount; a < tc.expCount {
-					t.Fatalf("%d: total # of events %d < min %d", i, a, min)
-				}
-			} else {
-				if a, e := len(resp.Events), tc.expCount; a != e {
-					t.Fatalf("%d: # of %s events %d != expected %d", i, tc.eventType, a, e)
-				}
-			}
+			checkExpectedEvents(i, tc.eventType, len(resp.Events), tc.expCount)
 
 			// Ensure we don't have blank / nonsensical fields.
 			for _, e := range resp.Events {
-				if e.Timestamp == (time.Time{}) {
-					t.Errorf("%d: missing/empty timestamp", i)
-				}
+				checkEventValidity(i, tc, e)
+			}
+		})
+		t.Run(url, func(t *testing.T) {
+			// Non-admin user should get permission errors.
+			var resp serverpb.EventsResponse
+			err := getAdminJSONProtoWithAdminOption(s, url, &resp, false)
+			if !testutils.IsError(err, "only users with ADMIN or VIEWACTIVITY/VIEWACTIVITYREDACTED and VIEWCLUSTERMETADATA and VIEWCLUSTERSETTING can view system event") {
+				t.Fatalf("expected privilege error, got %v", err)
+			}
 
-				if len(tc.eventType) > 0 {
-					if a, e := e.EventType, tc.eventType; a != e {
-						t.Errorf("%d: event type %s != expected %s", i, a, e)
-					}
-				} else {
-					if len(e.EventType) == 0 {
-						t.Errorf("%d: missing event type in event", i)
-					}
-				}
+			sqlRunner := sqlutils.MakeSQLRunner(db)
+			// Grant VIEWACTIVITY, VIEWCLUSTERMETADATA, VIEWCLUSTERSETTING permissions to non-admin user.
+			sqlRunner.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWACTIVITY TO %s", authenticatedUserNameNoAdmin().Normalized()))
+			sqlRunner.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWCLUSTERMETADATA TO %s", authenticatedUserNameNoAdmin().Normalized()))
+			sqlRunner.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWCLUSTERSETTING TO %s", authenticatedUserNameNoAdmin().Normalized()))
 
-				isSettingChange := e.EventType == "set_cluster_setting"
+			err = getAdminJSONProtoWithAdminOption(s, url, &resp, false)
+			if !testutils.IsError(err, "") {
+				t.Fatalf("expected no privilege error, got %v", err)
+			}
 
-				if e.ReportingID == 0 {
-					t.Errorf("%d: missing/empty ReportingID", i)
-				}
-				if len(e.Info) == 0 {
-					t.Errorf("%d: missing/empty Info", i)
-				}
-				if isSettingChange && strings.Contains(e.Info, "cluster.organization") {
-					if tc.unredacted {
-						if !strings.Contains(e.Info, "somestring") {
-							t.Errorf("%d: require 'somestring' in Info", i)
-						}
-					} else {
-						if strings.Contains(e.Info, "somestring") {
-							t.Errorf("%d: un-redacted 'somestring' in Info", i)
-						}
-					}
-				}
-				if len(e.UniqueID) == 0 {
-					t.Errorf("%d: missing/empty UniqueID", i)
-				}
+			// Ensure we returned the expected number of events.
+			checkExpectedEvents(i, tc.eventType, len(resp.Events), tc.expCount)
+
+			// Ensure we don't have blank / nonsensical fields.
+			for _, e := range resp.Events {
+				checkEventValidity(i, tc, e)
+			}
+
+			// Revoke a permission, check that we get a permission error.
+			sqlRunner.Exec(t, fmt.Sprintf("REVOKE SYSTEM VIEWACTIVITY FROM %s", authenticatedUserNameNoAdmin().Normalized()))
+			err = getAdminJSONProtoWithAdminOption(s, url, &resp, false)
+			if !testutils.IsError(err, "only users with ADMIN or VIEWACTIVITY/VIEWACTIVITYREDACTED and VIEWCLUSTERMETADATA and VIEWCLUSTERSETTING can view system event") {
+				t.Fatalf("expected privilege error, got %v", err)
 			}
 		})
 	}

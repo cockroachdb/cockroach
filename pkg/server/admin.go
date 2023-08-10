@@ -1436,10 +1436,20 @@ func (s *adminServer) Events(
 
 	userName, err := s.requireAdminUser(ctx)
 	if err != nil {
-		// NB: not using serverError() here since the priv checker
-		// already returns a proper gRPC error status.
-		return nil, err
+		if !errors.Is(err, errRequiresAdmin) {
+			return nil, err
+		}
+		viewActivityPermErr := s.adminPrivilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx)
+		viewClusterMetadataPermErr := s.adminPrivilegeChecker.requireViewClusterMetadataPermission(ctx)
+		var hasViewClusterSetting bool
+		if s.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+			hasViewClusterSetting = s.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWCLUSTERSETTING)
+		}
+		if viewActivityPermErr != nil || viewClusterMetadataPermErr != nil || !hasViewClusterSetting {
+			return nil, errors.New("only users with ADMIN or VIEWACTIVITY/VIEWACTIVITYREDACTED and VIEWCLUSTERMETADATA and VIEWCLUSTERSETTING can view system event")
+		}
 	}
+
 	redactEvents := !req.UnredactedEvents
 
 	limit := req.Limit
@@ -1483,7 +1493,7 @@ func (s *adminServer) eventsHelper(
 	}
 	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-events", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: userName},
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		q.String(), q.QueryArguments()...)
 	if err != nil {
 		return nil, err
