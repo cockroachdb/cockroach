@@ -157,7 +157,7 @@ func newRemoteClockMonitor(
 			// NB: the choice of IO over Network buckets is somewhat debatable, but
 			// it's fine. Heartbeats can take >1s which the IO buckets can represent,
 			// but the Network buckets top out at 1s.
-			Buckets: metric.IOLatencyBuckets,
+			BucketConfig: metric.IOLatencyBuckets,
 		}),
 	}
 	return &r
