@@ -12,11 +12,9 @@
 package kvpb
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // PrepareTransactionForRetry returns a new Transaction to be used for retrying
@@ -34,14 +32,18 @@ import (
 // In case retryErr tells us that a new Transaction needs to be created,
 // isolation and name help initialize this new transaction.
 func PrepareTransactionForRetry(
-	ctx context.Context, pErr *Error, pri roachpb.UserPriority, clock *hlc.Clock,
-) roachpb.Transaction {
-	if pErr.TransactionRestart() == TransactionRestart_NONE {
-		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
+	pErr *Error, pri roachpb.UserPriority, clock *hlc.Clock,
+) (roachpb.Transaction, error) {
+	if pErr == nil {
+		return roachpb.Transaction{}, errors.AssertionFailedf("nil error")
 	}
-
+	if pErr.TransactionRestart() == TransactionRestart_NONE {
+		return roachpb.Transaction{}, errors.AssertionFailedf(
+			"invalid retryable error (%T): %s", pErr.GetDetail(), pErr)
+	}
 	if pErr.GetTxn() == nil {
-		log.Fatalf(ctx, "missing txn for retryable error: %s", pErr)
+		return roachpb.Transaction{}, errors.AssertionFailedf(
+			"missing txn for retryable error: %s", pErr)
 	}
 
 	txn := *pErr.GetTxn()
@@ -108,19 +110,20 @@ func PrepareTransactionForRetry(
 		// IntentMissingErrors are not expected to be handled at this level;
 		// We instead expect the txnPipeliner to transform them into a
 		// TransactionRetryErrors(RETRY_ASYNC_WRITE_FAILURE) error.
-		log.Fatalf(
-			ctx, "unexpected intent missing error (%T); should be transformed into retry error", pErr.GetDetail(),
-		)
+		return roachpb.Transaction{}, errors.AssertionFailedf(
+			"unexpected intent missing error (%T); should be transformed into retry error", pErr.GetDetail())
 	default:
-		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
+		return roachpb.Transaction{}, errors.AssertionFailedf(
+			"invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
 	}
 	if !aborted {
 		if txn.Status.IsFinalized() {
-			log.Fatalf(ctx, "transaction unexpectedly finalized in (%T): %s", pErr.GetDetail(), pErr)
+			return roachpb.Transaction{}, errors.AssertionFailedf(
+				"transaction unexpectedly finalized in (%T): %s", pErr.GetDetail(), pErr)
 		}
 		txn.Restart(pri, txn.Priority, txn.WriteTimestamp)
 	}
-	return txn
+	return txn, nil
 }
 
 // TransactionRefreshTimestamp returns whether the supplied error is a retry

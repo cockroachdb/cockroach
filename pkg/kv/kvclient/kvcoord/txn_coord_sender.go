@@ -804,9 +804,7 @@ func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
 // not be usable afterwards (in case of TransactionAbortedError). The caller is
 // expected to check the ID of the resulting transaction. If the TxnCoordSender
 // can still be used, it will have been prepared for a new epoch.
-func (tc *TxnCoordSender) handleRetryableErrLocked(
-	ctx context.Context, pErr *kvpb.Error,
-) *kvpb.TransactionRetryWithProtoRefreshError {
+func (tc *TxnCoordSender) handleRetryableErrLocked(ctx context.Context, pErr *kvpb.Error) error {
 	// If the error is a transaction retry error, update metrics to
 	// reflect the reason for the restart. More details about the
 	// different error types are documented above on the metaRestart
@@ -842,7 +840,10 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 		tc.metrics.RestartsUnknown.Inc()
 	}
 	errTxnID := pErr.GetTxn().ID
-	newTxn := kvpb.PrepareTransactionForRetry(ctx, pErr, tc.mu.userPriority, tc.clock)
+	newTxn, assertErr := kvpb.PrepareTransactionForRetry(pErr, tc.mu.userPriority, tc.clock)
+	if assertErr != nil {
+		return assertErr
+	}
 
 	// We'll pass a TransactionRetryWithProtoRefreshError up to the next layer.
 	retErr := kvpb.NewTransactionRetryWithProtoRefreshError(
