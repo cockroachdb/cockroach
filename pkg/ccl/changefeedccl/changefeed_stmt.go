@@ -1047,13 +1047,20 @@ func (b *changefeedResumer) resumeWithRetries(
 		// Re-load the job in order to update our progress object, which may have
 		// been updated by the changeFrontier processor since the flow started.
 		reloadedJob, reloadErr := execCfg.JobRegistry.LoadClaimedJob(ctx, jobID)
+		knobs, _ := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
+		// NB: We don't want the knob to overwrite a non-nil reloadErr
+		// with a nil one. If we do that, we will panic trying to read
+		// the nil reloadedJob later.
+		if knobs != nil && knobs.LoadJobErr != nil && reloadErr == nil {
+			reloadErr = knobs.LoadJobErr()
+		}
 		if reloadErr != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			log.Warningf(ctx, `CHANGEFEED job %d could not reload job progress; `+
-				`continuing from last known high-water of %s: %v`,
-				jobID, progress.GetHighWater(), reloadErr)
+			log.Errorf(ctx, `CHANGEFEED job %d could not reload job progress;
+				marking error as job-level retry error`, jobID)
+			return jobs.MarkAsRetryJobError(err)
 		} else {
 			progress = reloadedJob.Progress()
 		}

@@ -7586,6 +7586,148 @@ func TestAlterChangefeedAddTargetTracksPTS(t *testing.T) {
 
 		require.Equal(t, 1, getNumPTSRecords())
 	}
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
 
+// Regression test for #1rt08450. When a changefeed hits a retryable error
+// and retries, it should start with the most up-to-date highwater (ie. the
+// highwater in the job record). If there is an error reading the highwater
+// from the job record, there should be retries until we are able to get the
+// highwater.
+func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(10 * time.Millisecond)()
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		// NB: We call this in a testing knob which runs in a separate goroutine, so we prefer
+		// not to use `require.NoError` because that may panic.
+		loadProgressErr := func(jobID jobspb.JobID, jobRegistry *jobs.Registry) (jobspb.Progress, error) {
+			job, err := jobRegistry.LoadJob(context.Background(), jobID)
+			if err != nil {
+				return jobspb.Progress{}, err
+			}
+			return job.Progress(), nil
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '10ms'`)
+		defer closeFeed(t, foo)
+
+		// Rough estimate of the statement time. The test only asserts that
+		// things happen after the statement time. Asserting things happen after
+		// this is good enough.
+		initialHighwater := s.Server.Clock().Now()
+
+		jobFeed := foo.(cdctest.EnterpriseTestFeed)
+		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
+
+		// Pause the changefeed to configure testing knobs which need the job ID.
+		require.NoError(t, jobFeed.Pause())
+
+		// A flag we toggle on to put the changefeed in a retrying state.
+		var changefeedIsRetrying atomic.Bool
+		knobs.RaiseRetryableError = func() error {
+			if changefeedIsRetrying.Load() {
+				return errors.New("test retryable error")
+			}
+			return nil
+		}
+
+		// NB: We use the errCh to return errors in testing knobs because they run in separate goroutines.
+		// Avoid using `require` because it can panic and the goroutines may `recover()` the panic.
+		doneCh := make(chan struct{}, 1)
+		errCh := make(chan error, 1)
+		sendErrWithCtx := func(ctx context.Context, err error) {
+			t.Errorf("sending error: %s", err)
+			select {
+			case <-ctx.Done():
+				return
+			case errCh <- err:
+				return
+			}
+		}
+
+		knobs.StartDistChangefeedInitialHighwater = func(ctx context.Context, retryHighwater hlc.Timestamp) {
+			if changefeedIsRetrying.Load() {
+				progress, err := loadProgressErr(jobFeed.JobID(), jobRegistry)
+				if err != nil {
+					sendErrWithCtx(ctx, err)
+					return
+				}
+				progressHighwater := progress.GetHighWater()
+				// Sanity check that the highwater is not nil, meaning that a
+				// highwater timestamp was written to the job record.
+				if progressHighwater == nil {
+					sendErrWithCtx(ctx, errors.AssertionFailedf("job highwater is nil"))
+					return
+				}
+				// Assert that the retry highwater is equal to the one in the job
+				// record.
+				if !progressHighwater.Equal(retryHighwater) {
+					sendErrWithCtx(ctx, errors.AssertionFailedf("highwater %s does not match job highwater %s",
+						retryHighwater, progressHighwater))
+					return
+				}
+				// Terminate the test.
+				t.Log("signalling for test completion")
+				select {
+				case <-ctx.Done():
+					return
+				case doneCh <- struct{}{}:
+					return
+				}
+			}
+		}
+
+		loadJobErrCount := 2
+		knobs.LoadJobErr = func() error {
+			if loadJobErrCount > 0 {
+				loadJobErrCount -= 1
+				return errors.New("test error")
+			}
+			return nil
+		}
+
+		require.NoError(t, jobFeed.Resume())
+
+		// Step 1: Wait for the highwater to advance. This guarantees that there is some highwater
+		//         in the changefeed job record to use when retrying.
+		testutils.SucceedsSoon(t, func() error {
+			progress, err := loadProgressErr(jobFeed.JobID(), jobRegistry)
+			if err != nil {
+				return err
+			}
+			progressHighwater := progress.GetHighWater()
+			if progressHighwater != nil && initialHighwater.Less(*progressHighwater) {
+				changefeedIsRetrying.Store(true)
+				return nil
+			}
+			return errors.Newf("waiting for highwater %s to advance ahead of initial highwater %s",
+				progressHighwater, initialHighwater)
+		})
+
+		// Check that the following happens soon.
+		//
+		// Step 2: Since `changefeedIsRetrying` is true, the changefeed will now attempt retries in
+		//         via `knobs.RaiseRetryableError`.
+		// Step 3: `knobs.LoadJobErr` will result an in error when reading the job record a couple of times, causing
+		//          more retries.
+		// Step 4: Eventually, a dist changefeed is started at a certain highwater timestamp.
+		//         `knobs.StartDistChangefeedInitialHighwater`. should see this stimetsamp and assert that it's the one
+		//         from the job record.
+		select {
+		case <-time.After(30 * time.Second):
+			t.Fatal("test timed out")
+		case err := <-errCh:
+			t.Fatal(err)
+		case <-doneCh:
+		}
+	}
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
