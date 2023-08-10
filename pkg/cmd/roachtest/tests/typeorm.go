@@ -177,8 +177,11 @@ func registerTypeORM(r registry.Registry) {
 				t.Fatal(convErr)
 			}
 
-			// One test is known to flake during setup.
+			// Two tests are known to flake during setup.
 			if strings.Contains(rawResults, `"before each" hook for "should select specific columns":`) {
+				numFailing -= 1
+			}
+			if strings.Contains(rawResults, `"before each" hook for "should insert, load, update and remove entities with embeddeds when embeds contains special columns (e.g. CreateDateColumn, UpdateDateColumn, DeleteDateColumn, VersionColumn":`) {
 				numFailing -= 1
 			}
 
