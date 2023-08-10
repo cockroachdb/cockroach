@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tsql",
+    srcs = [
+        "crdb_internal.go",
+        "json.go",
+        "tsql.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/sqlutils/tsql",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/sem/builtins",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treecmp",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "tsql_test",
+    srcs = ["tsql_test.go"],
+    args = ["-test.timeout=295s"],
+    deps = [
+        ":tsql",
+        "//pkg/sql/sem/tree",
+        "@com_github_stretchr_testify//require",
+    ],
+)
