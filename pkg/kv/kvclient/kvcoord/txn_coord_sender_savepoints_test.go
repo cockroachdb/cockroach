@@ -127,7 +127,9 @@ func TestSavepoints(t *testing.T) {
 
 			case "reset":
 				prevID := txn.ID()
-				txn.PrepareForRetry(ctx)
+				if err := txn.PrepareForRetry(ctx); err != nil {
+					t.Fatal(err)
+				}
 				changed := "changed"
 				if prevID == txn.ID() {
 					changed = "not changed"

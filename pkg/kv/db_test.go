@@ -872,7 +872,7 @@ func TestPreservingSteppingOnSenderReplacement(t *testing.T) {
 		require.NotEqual(t, pErr.TxnID, pErr.Transaction.ID)
 
 		// Reset the handle in order to get a new sender.
-		txn.PrepareForRetry(ctx)
+		require.NoError(t, txn.PrepareForRetry(ctx))
 
 		// Make sure we have a new txn ID.
 		require.NotEqual(t, pErr.TxnID, txn.ID())

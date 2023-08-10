@@ -912,7 +912,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			stopper.Stop(ctx)
 
 			if test.callPrepareForRetry {
-				txn.PrepareForRetry(ctx)
+				if err := txn.PrepareForRetry(ctx); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if test.name != "nil" && err == nil {
 				t.Fatalf("expected an error")
