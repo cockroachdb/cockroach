@@ -153,12 +153,6 @@ func TestMultiRegionDataDriven(t *testing.T) {
 					}
 					serverArgs[i] = base.TestServerArgs{
 						Locality: localityCfg,
-						// We need to disable the default test tenant here
-						// because it appears as though operations like
-						// "wait-for-zone-config-changes" only work correctly
-						// when called from the system tenant. More
-						// investigation is required (tracked with #76378).
-						DefaultTestTenant: base.TODOTestTenantDisabled,
 						Knobs: base.TestingKnobs{
 							SQLExecutor: &sql.ExecutorTestingKnobs{
 								WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
@@ -175,6 +169,14 @@ func TestMultiRegionDataDriven(t *testing.T) {
 				numServers := len(localityNames)
 				tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
 					ServerArgsPerNode: serverArgs,
+					ServerArgs: base.TestServerArgs{
+						// We need to disable the default test tenant here
+						// because it appears as though operations like
+						// "wait-for-zone-config-changes" only work correctly
+						// when called from the system tenant. More
+						// investigation is required (tracked with #76378).
+						DefaultTestTenant: base.TODOTestTenantDisabled,
+					},
 				})
 				ds.tc = tc
 

@@ -281,9 +281,6 @@ var (
 
 	// InternalNonDefaultDecision is a sentinel value used inside a
 	// mechanism in serverutils. Should not be used by tests directly.
-	//
-	// TODO(#76378): Investigate how we can remove the need for this
-	// sentinel value.
 	InternalNonDefaultDecision = DefaultTestTenantOptions{testBehavior: ttDisabled, allowAdditionalTenants: true}
 )
 

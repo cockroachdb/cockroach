@@ -110,13 +110,6 @@ func TestingCreateMultiRegionClusterWithRegionList(
 				Knobs:         knobs,
 				ExternalIODir: params.baseDir,
 				UseDatabase:   params.useDatabase,
-				// Disabling this due to failures in the rtt_analysis tests. Ideally
-				// we could disable multi-tenancy just for those tests, but this function
-				// is used to create the MR cluster for all test cases. For
-				// bonus points, the code to re-enable this should also provide more
-				// flexibility in disabling the default test tenant by callers of this
-				// function. Re-enablement is tracked with #76378.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
 				Locality: roachpb.Locality{
 					Tiers: []roachpb.Tier{{Key: "region", Value: region}},
 				},
@@ -128,6 +121,15 @@ func TestingCreateMultiRegionClusterWithRegionList(
 	tc := testcluster.StartTestCluster(t, totalServerCount, base.TestClusterArgs{
 		ReplicationMode:   params.replicationMode,
 		ServerArgsPerNode: serverArgs,
+		ServerArgs: base.TestServerArgs{
+			// Disabling this due to failures in the rtt_analysis tests. Ideally
+			// we could disable multi-tenancy just for those tests, but this function
+			// is used to create the MR cluster for all test cases. For
+			// bonus points, the code to re-enable this should also provide more
+			// flexibility in disabling the default test tenant by callers of this
+			// function. Re-enablement is tracked with #76378.
+			DefaultTestTenant: base.TODOTestTenantDisabled,
+		},
 	})
 
 	ctx := context.Background()

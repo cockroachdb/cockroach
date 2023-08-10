@@ -55,6 +55,7 @@ go_test(
     srcs = [
         "api_test.go",
         "batch_test.go",
+        "data_test.go",
         "errors_test.go",
         "node_decommissioned_error_test.go",
         "replica_unavailable_error_test.go",
@@ -74,6 +75,7 @@ go_test(
         "//pkg/util/buildutil",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",

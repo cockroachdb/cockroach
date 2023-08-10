@@ -5689,10 +5689,7 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 		nodeDrainChannels[n].Store(make(chan struct{}))
 
 		return base.TestServerArgs{
-			// Test uses SPLIT AT, which isn't currently supported for
-			// secondary tenants. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			UseDatabase:       "test",
+			UseDatabase: "test",
 			Knobs: base.TestingKnobs{
 				DistSQL: &execinfra.TestingKnobs{
 					DrainFast: true,
@@ -5770,6 +5767,11 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 			}
 			return perNode
 		}(),
+		ServerArgs: base.TestServerArgs{
+			// Test uses SPLIT AT, which isn't currently supported for
+			// secondary tenants. Tracked with #76378.
+			DefaultTestTenant: base.TODOTestTenantDisabled,
+		},
 	})
 	defer tc.Stopper().Stop(context.Background())
 
@@ -5882,9 +5884,6 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 	perServerKnobs := make(map[int]base.TestServerArgs, numNodes)
 	for i := 0; i < numNodes; i++ {
 		perServerKnobs[i] = base.TestServerArgs{
-			// Test uses SPLIT AT, which isn't currently supported for
-			// secondary tenants. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				DistSQL: &execinfra.TestingKnobs{
 					DrainFast:  true,
@@ -5901,6 +5900,11 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 		base.TestClusterArgs{
 			ServerArgsPerNode: perServerKnobs,
 			ReplicationMode:   base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				// Test uses SPLIT AT, which isn't currently supported for
+				// secondary tenants. Tracked with #76378.
+				DefaultTestTenant: base.TODOTestTenantDisabled,
+			},
 		})
 	defer tc.Stopper().Stop(context.Background())
 
@@ -8241,13 +8245,17 @@ func TestChangefeedExecLocality(t *testing.T) {
 	str := strconv.Itoa
 
 	const nodes = 4
-	args := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{}}
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TODOTestTenantDisabled, // need nodelocal and splits.
+		},
+		ServerArgsPerNode: map[int]base.TestServerArgs{},
+	}
 	for i := 0; i < nodes; i++ {
 		args.ServerArgsPerNode[i] = base.TestServerArgs{
 			ExternalIODir: path.Join(dir, str(i)),
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "x", Value: str(i / 2)}, {Key: "y", Value: str(i % 2)}}},
-			DefaultTestTenant: base.TODOTestTenantDisabled, // need nodelocal and splits.
 		}
 	}
 

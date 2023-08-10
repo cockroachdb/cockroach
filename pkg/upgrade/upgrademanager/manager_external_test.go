@@ -612,8 +612,6 @@ func TestPrecondition(t *testing.T) {
 	ctx := context.Background()
 	args := func() base.TestServerArgs {
 		return base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107397),
-
 			Knobs: knobs,
 			Settings: cluster.MakeTestingClusterSettingsWithVersions(
 				v2,    // binaryVersion
@@ -623,6 +621,9 @@ func TestPrecondition(t *testing.T) {
 		}
 	}
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107397),
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: args(),
 			1: args(),
