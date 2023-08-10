@@ -472,7 +472,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	defer snapshot.Close()
 
 	var results int
-	return rditer.IterateReplicaKeySpans(&desc, snapshot, debugCtx.replicated,
+	return rditer.IterateReplicaKeySpans(&desc, snapshot, debugCtx.replicated, rditer.ReplicatedSpansAll,
 		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
 				switch keyType {

@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -412,4 +414,60 @@ func TestTenantInstanceIDReclaimLoop(t *testing.T) {
 func TestSystemConfigWatcherCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	systemconfigwatchertest.TestSystemConfigWatcher(t, false /* skipSecondary */)
+}
+
+// TestStartTenantWithStaleInstance covers the following scenario:
+// - a sql server starts up and is assigned port 'a'
+// - the sql server shuts down and releases port 'a'
+// - something else starts up and claims port 'a'. In the test that is the
+// listener. This is important because the listener causes connections to 'a' to
+// hang instead of responding with a RESET packet.
+// - a different server with stale instance information schedules a distsql
+// flow and attempts to dial port 'a'.
+func TestStartTenantWithStaleInstance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	var listener net.Listener
+	// In rare cases under stress net.Listen call can result in an error that
+	// the address is already in use (because the stopped tenant hasn't released
+	// the socket); thus, we allow for some retries to go around that issue.
+	testutils.SucceedsSoon(t, func() error {
+		rpcAddr := func() string {
+			tenantStopper := stop.NewStopper()
+			defer tenantStopper.Stop(ctx)
+			server, db := serverutils.StartTenant(t, s, base.TestTenantArgs{
+				Stopper:  tenantStopper,
+				TenantID: serverutils.TestTenantID(),
+			},
+			)
+			defer db.Close()
+			return server.RPCAddr()
+		}()
+
+		var err error
+		listener, err = net.Listen("tcp", rpcAddr)
+		return err
+	})
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	_, db := serverutils.StartTenant(t, s, base.TestTenantArgs{
+		TenantID: serverutils.TestTenantID(),
+	})
+	defer func() {
+		_ = db.Close()
+	}()
+
+	// Query a table to make sure the tenant is healthy, doesn't really matter
+	// which table.
+	_, err := db.Exec("SELECT count(*) FROM system.sqlliveness")
+	require.NoError(t, err)
 }

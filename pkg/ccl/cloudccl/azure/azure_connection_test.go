@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // import External Connection providers.
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -29,9 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func (a azureConfig) URI(file string) string {
-	return fmt.Sprintf("azure-storage://%s/%s?%s=%s&%s=%s&%s=%s",
-		a.bucket, file,
+func (a azureConfig) URI(file string, testID uint64) string {
+	return fmt.Sprintf("azure-storage://%s/%s-%d?%s=%s&%s=%s&%s=%s",
+		a.bucket, file, testID,
 		azure.AzureAccountKeyParam, url.QueryEscape(a.key),
 		azure.AzureAccountNameParam, url.QueryEscape(a.account),
 		azure.AzureEnvironmentKeyParam, url.QueryEscape(a.environment))
@@ -97,7 +98,8 @@ func TestExternalConnections(t *testing.T) {
 		return
 	}
 
+	testID := cloudtestutils.NewTestID()
 	ecName := "azure-ec"
-	createExternalConnection(ecName, cfg.URI("backup-ec"))
+	createExternalConnection(ecName, cfg.URI("backup-ec", testID))
 	backupAndRestoreFromExternalConnection(ecName)
 }
