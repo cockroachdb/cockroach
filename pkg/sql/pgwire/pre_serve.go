@@ -192,10 +192,10 @@ func makeTenantIndependentMetrics(histogramWindow time.Duration) tenantIndepende
 		PreServeNewConns:      metric.NewCounter(MetaPreServeNewConns),
 		PreServeConnFailures:  metric.NewCounter(MetaPreServeConnFailures),
 		PreServeMaxBytes: metric.NewHistogram(metric.HistogramOptions{
-			Metadata: MetaPreServeMaxBytes,
-			Duration: histogramWindow,
-			Buckets:  metric.MemoryUsage64MBBuckets,
-			Mode:     metric.HistogramModePrometheus,
+			Metadata:     MetaPreServeMaxBytes,
+			Duration:     histogramWindow,
+			BucketConfig: metric.MemoryUsage64MBBuckets,
+			Mode:         metric.HistogramModePrometheus,
 		}),
 		PreServeCurBytes: metric.NewGauge(MetaPreServeCurBytes),
 	}
