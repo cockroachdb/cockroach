@@ -246,7 +246,7 @@ func (tc testCase) runTest(
 	if numNodes == 0 {
 		numNodes = 1
 	}
-	cfg.ServerArgs.DefaultTestTenant = base.TestTenantProbabilistic
+	cfg.ServerArgs.DefaultTestTenant = base.TestControlsTenantsExplicitly
 	testCluster := serverutils.StartNewTestCluster(t, numNodes, cfg.TestClusterArgs)
 	defer testCluster.Stopper().Stop(ctx)
 
