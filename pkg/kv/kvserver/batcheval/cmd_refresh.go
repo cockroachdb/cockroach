@@ -64,15 +64,14 @@ func Refresh(
 	} else if res.Value != nil {
 		if ts := res.Value.Timestamp; refreshFrom.Less(ts) {
 			return result.Result{},
-				kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, args.Key, ts)
+				kvpb.NewRefreshFailedError(ctx, kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, args.Key, ts)
 		}
 	}
 
 	// Check if an intent which is not owned by this transaction was written
 	// at or beneath the refresh timestamp.
 	if res.Intent != nil && res.Intent.Txn.ID != h.Txn.ID {
-		return result.Result{}, kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_INTENT,
-			res.Intent.Key, res.Intent.Txn.WriteTimestamp)
+		return result.Result{}, kvpb.NewRefreshFailedError(ctx, kvpb.RefreshFailedError_REASON_INTENT, res.Intent.Key, res.Intent.Txn.WriteTimestamp, kvpb.WithConflictingTxn(&res.Intent.Txn))
 	}
 
 	return result.Result{}, nil

@@ -56,7 +56,7 @@ func RefreshRange(
 	}
 
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), refreshFrom, refreshTo)
-	return result.Result{}, refreshRange(reader, args.Span(), refreshFrom, refreshTo, h.Txn.ID)
+	return result.Result{}, refreshRange(ctx, reader, args.Span(), refreshFrom, refreshTo, h.Txn.ID)
 }
 
 // refreshRange iterates over the specified key span until it discovers a value
@@ -68,7 +68,11 @@ func RefreshRange(
 // If such a conflict is found, the function returns an error. Otherwise, no
 // error is returned.
 func refreshRange(
-	reader storage.Reader, span roachpb.Span, refreshFrom, refreshTo hlc.Timestamp, txnID uuid.UUID,
+	ctx context.Context,
+	reader storage.Reader,
+	span roachpb.Span,
+	refreshFrom, refreshTo hlc.Timestamp,
+	txnID uuid.UUID,
 ) error {
 	// Construct an incremental iterator with the desired time bounds. Incremental
 	// iterators will emit MVCC tombstones by default and will emit intents when
@@ -94,8 +98,7 @@ func refreshRange(
 		key := iter.UnsafeKey().Clone()
 
 		if _, hasRange := iter.HasPointAndRange(); hasRange {
-			return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_COMMITTED_VALUE,
-				key.Key, iter.RangeKeys().Versions[0].Timestamp)
+			return kvpb.NewRefreshFailedError(ctx, kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, key.Key, iter.RangeKeys().Versions[0].Timestamp)
 		}
 
 		if !key.IsValue() {
@@ -129,13 +132,11 @@ func refreshRange(
 				}
 				continue
 			}
-			return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_INTENT,
-				key.Key, meta.Txn.WriteTimestamp)
+			return kvpb.NewRefreshFailedError(ctx, kvpb.RefreshFailedError_REASON_INTENT, key.Key, meta.Txn.WriteTimestamp, kvpb.WithConflictingTxn(meta.Txn))
 		}
 
 		// If a committed value is found, return an error.
-		return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_COMMITTED_VALUE,
-			key.Key, key.Timestamp)
+		return kvpb.NewRefreshFailedError(ctx, kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, key.Key, key.Timestamp)
 	}
 	return nil
 }
