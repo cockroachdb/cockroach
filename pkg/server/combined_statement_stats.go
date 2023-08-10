@@ -216,7 +216,7 @@ FROM crdb_internal.statement_activity
 	// Format string "2006-01-02 15:04:05.00" is a golang-specific string
 	it, err := ie.QueryIteratorEx(
 		ctx,
-		"activity-min-ts",
+		"console-combined-stmts-activity-min-ts",
 		nil,
 		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(queryWithPlaceholders, zeroDate.Format("2006-01-02 15:04:05.00"), testingKnobs.GetAOSTClause()))
@@ -278,7 +278,7 @@ func getTotalRuntimeSecs(
 	getRuntime := func(table string) (float32, error) {
 		it, err := ie.QueryIteratorEx(
 			ctx,
-			fmt.Sprintf(`%s-total-runtime`, table),
+			fmt.Sprintf(`console-combined-stmts-%s-total-runtime`, table),
 			nil,
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(`
@@ -738,8 +738,9 @@ func getIterator(
 		whereClause,
 		aostClause,
 		orderAndLimit)
+	opName := fmt.Sprintf(`console-combined-stmts-%s`, queryInfo)
 
-	it, err := ie.QueryIteratorEx(ctx, queryInfo, nil,
+	it, err := ie.QueryIteratorEx(ctx, opName, nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
 	if err != nil {
 		return it, serverError(ctx, err)
@@ -921,7 +922,7 @@ GROUP BY
 	}()
 
 	if activityTableHasAllData {
-		it, err = ie.QueryIteratorEx(ctx, "stmts-activity-for-txn", nil,
+		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-activity-for-txn", nil,
 			sessiondata.NodeUserSessionDataOverride, fmt.Sprintf(`
 SELECT fingerprint_id,
        transaction_fingerprint_id,
@@ -952,7 +953,7 @@ GROUP BY
 			queryFormat,
 			"crdb_internal.statement_statistics_persisted"+tableSuffix,
 			whereClause)
-		it, err = ie.QueryIteratorEx(ctx, "stmts-persisted-for-txn", nil,
+		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-persisted-for-txn", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 
 		if err != nil {
@@ -969,7 +970,7 @@ GROUP BY
 		}
 		query = fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics", whereClause)
 
-		it, err = ie.QueryIteratorEx(ctx, "stmts-with-memory-for-txn", nil,
+		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-with-memory-for-txn", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 
 		if err != nil {
@@ -1343,7 +1344,7 @@ LIMIT $%d`
 	args = append(args, limit)
 
 	if activityTableHasAllData {
-		it, err = ie.QueryIteratorEx(ctx, "combined-stmts-activity-details-by-aggregated-timestamp", nil,
+		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-activity-details-by-aggregated-timestamp", nil,
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(`
 SELECT aggregated_ts,
@@ -1373,7 +1374,7 @@ LIMIT $%d`, whereClause, len(args)),
 			whereClause,
 			len(args))
 
-		it, err = ie.QueryIteratorEx(ctx, "combined-stmts-persisted-details-by-aggregated-timestamp", nil,
+		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-persisted-details-by-aggregated-timestamp", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 
 		if err != nil {
@@ -1386,7 +1387,7 @@ LIMIT $%d`, whereClause, len(args)),
 	if !it.HasResults() {
 		err = closeIterator(it, err)
 		query = fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics", whereClause, len(args))
-		it, err = ie.QueryIteratorEx(ctx, "combined-stmts-details-by-aggregated-timestamp-with-memory", nil,
+		it, err = ie.QueryIteratorEx(ctx, "console-combined-stmts-details-by-aggregated-timestamp-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 		if err != nil {
 			return nil, serverError(ctx, err)
@@ -1442,7 +1443,7 @@ func getExplainPlanFromGist(ctx context.Context, ie *sql.InternalExecutor, planG
 	const query = `SELECT crdb_internal.decode_plan_gist($1)`
 	args = append(args, planGist)
 
-	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-get-explain-plan", nil,
+	it, err := ie.QueryIteratorEx(ctx, "console-combined-stmts-details-get-explain-plan", nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
 
 	defer func() {
@@ -1541,7 +1542,7 @@ LIMIT $%d`
 	}()
 
 	if activityTableHasAllData {
-		it, iterErr = ie.QueryIteratorEx(ctx, "combined-stmts-activity-details-by-plan-hash", nil,
+		it, iterErr = ie.QueryIteratorEx(ctx, "console-combined-stmts-activity-details-by-plan-hash", nil,
 			sessiondata.NodeUserSessionDataOverride, fmt.Sprintf(`
 SELECT plan_hash,
        (statistics -> 'statistics' -> 'planGists' ->> 0)                 AS plan_gist,
@@ -1570,7 +1571,7 @@ LIMIT $%d`, whereClause, len(args)), args...)
 			"crdb_internal.statement_statistics_persisted"+tableSuffix,
 			whereClause,
 			len(args))
-		it, iterErr = ie.QueryIteratorEx(ctx, "combined-stmts-persisted-details-by-plan-hash", nil,
+		it, iterErr = ie.QueryIteratorEx(ctx, "console-combined-stmts-persisted-details-by-plan-hash", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 		if iterErr != nil {
 			return nil, serverError(ctx, err)
@@ -1582,7 +1583,7 @@ LIMIT $%d`, whereClause, len(args)), args...)
 	if !it.HasResults() {
 		err = closeIterator(it, err)
 		query = fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics", whereClause, len(args))
-		it, iterErr = ie.QueryIteratorEx(ctx, "combined-stmts-details-by-plan-hash-with-memory", nil,
+		it, iterErr = ie.QueryIteratorEx(ctx, "console-combined-stmts-details-by-plan-hash-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 		if iterErr != nil {
 			return nil, serverError(ctx, err)
