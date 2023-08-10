@@ -813,8 +813,10 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(ctx context.Context, pErr *kv
 	// reflect the reason for the restart. More details about the
 	// different error types are documented above on the metaRestart
 	// variables.
+	var conflictingTxn *enginepb.TxnMeta
 	switch tErr := pErr.GetDetail().(type) {
 	case *kvpb.TransactionRetryError:
+		conflictingTxn = tErr.ConflictingTxn
 		switch tErr.Reason {
 		case kvpb.RETRY_WRITE_TOO_OLD:
 			tc.metrics.RestartsWriteTooOld.Inc()
@@ -857,6 +859,7 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(ctx context.Context, pErr *kv
 		prevTxn.ID,          /* prevTxnID */
 		prevTxn.Epoch,       /* prevTxnEpoch */
 		nextTxn,             /* nextTxn */
+		kvpb.WithConflictingTxn(conflictingTxn),
 	)
 
 	// Update the TxnCoordSender's state.
