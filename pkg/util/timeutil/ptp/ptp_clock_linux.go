@@ -38,18 +38,33 @@ type Clock struct {
 	// from closing the device and invalidating the clockDeviceID.
 	clockDevice   *os.File
 	clockDeviceID uintptr
+	// Set for test to return a normal temp file.
+	devOpener func(name string) (*os.File, error)
+	// Set for test to mock the result.
+	cGetTime func(fd fdType, ts *structTimespec) error
 }
 
+type fdType = C.int
+type structTimespec = C.struct_timespec
+
 // MakeClock creates a new Clock for the given device path.
-func MakeClock(ctx context.Context, clockDevicePath string) (Clock, error) {
-	var result Clock
+func MakeClock(ctx context.Context, clockDevicePath string) (*Clock, error) {
+	return (&Clock{}).initClock(ctx, clockDevicePath)
+}
+
+// initClock initializes a new Clock for the given device path.
+func (p *Clock) initClock(ctx context.Context, clockDevicePath string) (*Clock, error) {
 	var err error
-	result.clockDevice, err = os.Open(clockDevicePath)
+	if p.devOpener == nil {
+		p.clockDevice, err = os.Open(clockDevicePath)
+	} else {
+		p.clockDevice, err = p.devOpener(clockDevicePath)
+	}
 	if err != nil {
-		return result, errors.Wrapf(err, "cannot open %s", clockDevicePath)
+		return p, errors.Wrapf(err, "cannot open %s", clockDevicePath)
 	}
 
-	clockDeviceFD := result.clockDevice.Fd()
+	clockDeviceFD := p.clockDevice.Fd()
 	// For clarification of how the clock id is computed:
 	// https://lore.kernel.org/patchwork/patch/868609/
 	// https://github.com/torvalds/linux/blob/7e63420847ae5f1036e4f7c42f0b3282e73efbc2/tools/testing/selftests/ptp/testptp.c#L87
@@ -62,19 +77,29 @@ func MakeClock(ctx context.Context, clockDevicePath string) (Clock, error) {
 		clockID,
 	)
 	var ts C.struct_timespec
-	_, err = C.clock_gettime(C.clockid_t(clockID), &ts)
-	if err != nil {
-		return result, errors.Wrap(err, "UseClockDevice: error calling clock_gettime")
+	if p.cGetTime == nil {
+		_, err = C.clock_gettime(C.clockid_t(clockID), &ts)
+	} else {
+		err = p.cGetTime(C.clockid_t(clockID), &ts)
 	}
-	result.clockDeviceID = clockID
 
-	return result, nil
+	if err != nil {
+		return p, errors.Wrap(err, "UseClockDevice: error calling clock_gettime")
+	}
+	p.clockDeviceID = clockID
+
+	return p, nil
 }
 
 // Now implements the hlc.WallClock interface.
-func (p Clock) Now() time.Time {
+func (p *Clock) Now() time.Time {
 	var ts C.struct_timespec
-	_, err := C.clock_gettime(C.clockid_t(p.clockDeviceID), &ts)
+	var err error
+	if p.cGetTime == nil {
+		_, err = C.clock_gettime(C.clockid_t(p.clockDeviceID), &ts)
+	} else {
+		err = p.cGetTime(C.clockid_t(p.clockDeviceID), &ts)
+	}
 	if err != nil {
 		panic(err)
 	}
@@ -83,6 +108,6 @@ func (p Clock) Now() time.Time {
 }
 
 // realtime returns a clock using the system CLOCK_REALTIME device. For testing.
-func realtime() Clock {
-	return Clock{clockDeviceID: uintptr(C.CLOCK_REALTIME)}
+func realtime() *Clock {
+	return &Clock{clockDeviceID: uintptr(C.CLOCK_REALTIME)}
 }

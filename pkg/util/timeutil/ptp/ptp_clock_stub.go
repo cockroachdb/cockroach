@@ -24,11 +24,11 @@ import (
 type Clock struct{}
 
 // MakeClock us not used on platforms other than Linux
-func MakeClock(_ context.Context, _ string) (Clock, error) {
-	return Clock{}, errors.New("clock device not supported on this platform")
+func MakeClock(_ context.Context, _ string) (*Clock, error) {
+	return &Clock{}, errors.New("clock device not supported on this platform")
 }
 
 // Now implements the hlc.WallClock interface.
-func (p Clock) Now() time.Time {
+func (p *Clock) Now() time.Time {
 	panic(errors.New("clock device not supported on this platform"))
 }

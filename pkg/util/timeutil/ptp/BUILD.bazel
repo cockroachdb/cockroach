@@ -68,9 +68,11 @@ go_test(
     deps = select({
         "@io_bazel_rules_go//go/platform:android": [
             "//pkg/util/timeutil",
+            "@com_github_stretchr_testify//require",
         ],
         "@io_bazel_rules_go//go/platform:linux": [
             "//pkg/util/timeutil",
+            "@com_github_stretchr_testify//require",
         ],
         "//conditions:default": [],
     }),

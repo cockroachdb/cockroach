@@ -14,10 +14,13 @@
 package ptp
 
 import (
+	"context"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 // TestClockNow sanity checks that Clock.Now() sourced from the CLOCK_REALTIME
@@ -27,4 +30,30 @@ func TestClockNow(t *testing.T) {
 	if got, want := realtime().Now(), timeutil.Now(); want.Sub(got).Abs() > 10*time.Second {
 		t.Errorf("clock mismatch: got %v; timeutil says %v", got, want)
 	}
+}
+
+func TestInitClock(t *testing.T) {
+	var file *os.File
+	var err error
+	var devOpenerCallCount int
+	clock := &Clock{
+		devOpener: func(name string) (*os.File, error) {
+			require.Equal(t, "/dev/ptp-test", name)
+			file, err = os.CreateTemp("", "")
+			require.NoError(t, err)
+			require.NotNil(t, file)
+			devOpenerCallCount++
+			return file, err
+		},
+		cGetTime: func(fd fdType, ts *structTimespec) error {
+			require.Equal(t, 1, devOpenerCallCount)
+			require.EqualValues(t, ^file.Fd()<<3|3, fd)
+			*ts = structTimespec{tv_sec: 3, tv_nsec: 5}
+			return nil
+		},
+	}
+	ctx := context.Background()
+	_, err = clock.initClock(ctx, "/dev/ptp-test")
+	require.NoError(t, err)
+	require.EqualValues(t, 3*1e9+5, clock.Now().UnixNano())
 }
