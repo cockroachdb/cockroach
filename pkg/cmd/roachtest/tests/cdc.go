@@ -1327,7 +1327,10 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1})
+			// Run tpcc workload for tiny bit.  Roachtest monitor does not
+			// like when there are no tasks that were started with the monitor
+			// (This can be removed once #108530 resolved).
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30s"})
 
 			kafkaNode := ct.kafkaSinkNode()
 			kafka := kafkaManager{

@@ -2434,12 +2434,12 @@ var builtinOidsArray = []string{
 	2461: `crdb_internal.plpgsql_raise(severity: string, message: string, detail: string, hint: string, code: string) -> int`,
 	2462: `workload_index_recs() -> string`,
 	2463: `workload_index_recs(timestamptz: timestamptz) -> string`,
-	2464: `workload_index_recs(budget: string) -> string`,
-	2465: `workload_index_recs(timestamptz: timestamptz, budget: string) -> string`,
 	2466: `crdb_internal.setup_span_configs_stream(tenant_name: string) -> bytes`,
 	2467: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, samplingProbability: float, minExecutionLatency: interval, expiresAfter: interval) -> bool`,
 	2468: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, antiPlanGist: bool, samplingProbability: float, minExecutionLatency: interval, expiresAfter: interval) -> bool`,
 	2469: `crdb_internal.is_system_table_key(raw_key: bytes) -> bool`,
+	2470: `crdb_internal.scan_storage_internal_keys(node_id: int, store_id: int, start_key: bytes, end_key: bytes) -> tuple{int AS level, int AS node_id, int AS store_id, int AS snapshot_pinned_keys, int AS snapshot_pinned_keys_bytes, int AS point_key_delete_count, int AS point_key_set_count, int AS range_delete_count, int AS range_key_set_count, int AS range_key_delete_count}`,
+	2471: `crdb_internal.scan_storage_internal_keys(node_id: int, store_id: int, start_key: bytes, end_key: bytes, mb_per_second: int4) -> tuple{int AS level, int AS node_id, int AS store_id, int AS snapshot_pinned_keys, int AS snapshot_pinned_keys_bytes, int AS point_key_delete_count, int AS point_key_set_count, int AS range_delete_count, int AS range_key_set_count, int AS range_key_delete_count}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
