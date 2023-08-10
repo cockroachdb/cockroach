@@ -84,7 +84,7 @@ func alterChangefeedPlanHook(
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
-		typedExpr, err := alterChangefeedStmt.Jobs.TypeCheck(ctx, p.SemaCtx(), types.Int)
+		typedExpr, err := tree.TypeCheckAndRequire(ctx, alterChangefeedStmt.Jobs, p.SemaCtx(), types.Int, "get-job-id")
 		if err != nil {
 			return err
 		}
