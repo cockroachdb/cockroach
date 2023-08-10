@@ -1438,6 +1438,15 @@ func TestInjectRetryErrors(t *testing.T) {
 
 	ctx := context.Background()
 	params := base.TestServerArgs{}
+
+	var readCommittedStmtRetries int
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		OnReadCommittedStmtRetry: func(retryReason error) {
+			if strings.Contains(retryReason.Error(), "inject_retry_errors_enabled") {
+				readCommittedStmtRetries++
+			}
+		},
+	}
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	defer db.Close()
@@ -1510,6 +1519,8 @@ func TestInjectRetryErrors(t *testing.T) {
 	})
 
 	t.Run("read_committed_txn", func(t *testing.T) {
+		readCommittedStmtRetries = 0
+
 		tx, err := db.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
 		require.NoError(t, err)
 
@@ -1518,9 +1529,12 @@ func TestInjectRetryErrors(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, tx.Commit())
 		require.Equal(t, 3, txRes)
+		require.Equal(t, 3, readCommittedStmtRetries)
 	})
 
 	t.Run("read_committed_txn_retries_exceeded", func(t *testing.T) {
+		readCommittedStmtRetries = 0
+
 		// inject_retry_errors_enabled is hardcoded to always inject an error
 		// 3 times, so if we lower max_retries_for_read_committed,
 		// the error should bubble up to the client.
@@ -1538,6 +1552,7 @@ func TestInjectRetryErrors(t *testing.T) {
 		require.Equal(t, "40001", string(pqErr.Code), "expected a transaction retry error code. got %v", pqErr)
 		require.ErrorContains(t, pqErr, "read committed retry limit exceeded")
 		require.NoError(t, tx.Rollback())
+		require.Equal(t, 2, readCommittedStmtRetries)
 	})
 }
 
