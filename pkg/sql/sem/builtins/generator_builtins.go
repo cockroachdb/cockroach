@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/workloadindexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
@@ -284,31 +285,14 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverload(
 			tree.ParamTypes{},
 			types.String,
-			makeWorkloadIndexRecsGeneratorFactory(false /* hasTimstamp */, false /* hasBudget */),
+			makeWorkloadIndexRecsGeneratorFactory(false /* hasTimestamp */),
 			"Returns set of index recommendations",
 			volatility.Immutable,
 		),
 		makeGeneratorOverload(
 			tree.ParamTypes{{Name: "timestamptz", Typ: types.TimestampTZ}},
 			types.String,
-			makeWorkloadIndexRecsGeneratorFactory(true /* hasTimstamp */, false /* hasBudget */),
-			"Returns set of index recommendations",
-			volatility.Immutable,
-		),
-		makeGeneratorOverload(
-			tree.ParamTypes{{Name: "budget", Typ: types.String}},
-			types.String,
-			makeWorkloadIndexRecsGeneratorFactory(false /* hasTimstamp */, true /* hasBudget */),
-			"Returns set of index recommendations",
-			volatility.Immutable,
-		),
-		makeGeneratorOverload(
-			tree.ParamTypes{
-				{Name: "timestamptz", Typ: types.TimestampTZ},
-				{Name: "budget", Typ: types.String},
-			},
-			types.String,
-			makeWorkloadIndexRecsGeneratorFactory(true /* hasTimstamp */, true /* hasBudget */),
+			makeWorkloadIndexRecsGeneratorFactory(true /* hasTimestamp */),
 			"Returns set of index recommendations",
 			volatility.Immutable,
 		),
@@ -682,6 +666,36 @@ The last argument is a JSONB object containing the following optional fields:
 			makeTableMetricsGenerator,
 			"Returns statistics for the sstables containing keys in the range start_key and end_key for the provided node id.",
 			volatility.Stable,
+		),
+	),
+	"crdb_internal.scan_storage_internal_keys": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "node_id", Typ: types.Int},
+				{Name: "store_id", Typ: types.Int},
+				{Name: "start_key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
+			},
+			storageInternalKeysGeneratorType,
+			makeStorageInternalKeysGenerator,
+			"Scans a store's storage engine, computing statistics describing the internal keys within the span [start_key, end_key). This function is rate limited to 10 megabytes per second.",
+			volatility.Volatile,
+		),
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "node_id", Typ: types.Int},
+				{Name: "store_id", Typ: types.Int},
+				{Name: "start_key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
+				{Name: "mb_per_second", Typ: types.Int4},
+			},
+			storageInternalKeysGeneratorType,
+			makeStorageInternalKeysGenerator,
+			"Scans a store's storage engine, computing statistics describing the internal keys within the span [start_key, end_key).",
+			volatility.Volatile,
 		),
 	),
 }
@@ -1161,19 +1175,28 @@ func (s *multipleArrayValueGenerator) Values() (tree.Datums, error) {
 }
 
 // makeWorkloadIndexRecsGeneratorFactory uses the arrayValueGenerator to return
-// all the index recommendations as an array of strings. When the hasTimestamp
-// is true, it means that we only care about the index after some timestamp. The
-// hasBudget represents that there is a space limit if it is true.
-func makeWorkloadIndexRecsGeneratorFactory(
-	hasTimestamp bool, hasBudget bool,
-) eval.GeneratorOverload {
-	return func(_ context.Context, _ *eval.Context, _ tree.Datums) (eval.ValueGenerator, error) {
-		// Invoke the workloadindexrec.FindWorkloadRecs() to get indexRecs, err once
-		// it is implemented. The string array {"1", "2", "3"} is just dummy data
-		indexRecs := []string{"1", "2", "3"}
+// all the index recommendations as an array of strings. The hasTimestamp
+// represents whether there is a timestamp filter.
+func makeWorkloadIndexRecsGeneratorFactory(hasTimestamp bool) eval.GeneratorOverload {
+	return func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+		var ts tree.DTimestampTZ
+		var err error
+
+		if hasTimestamp {
+			ts = tree.MustBeDTimestampTZ(args[0])
+		} else {
+			ts = tree.DTimestampTZ{Time: tree.MinSupportedTime}
+		}
+
+		var indexRecs []string
+		indexRecs, err = workloadindexrec.FindWorkloadRecs(ctx, evalCtx, &ts)
+		if err != nil {
+			return &arrayValueGenerator{}, err
+		}
+
 		arr := tree.NewDArray(types.String)
 		for _, indexRec := range indexRecs {
-			if err := arr.Append(tree.NewDString(indexRec)); err != nil {
+			if err = arr.Append(tree.NewDString(indexRec)); err != nil {
 				return nil, err
 			}
 		}
@@ -3270,6 +3293,116 @@ func makeTableMetricsGenerator(
 	end := []byte(tree.MustBeDBytes(args[3]))
 
 	return newTableMetricsIterator(evalCtx, nodeID, storeID, start, end), nil
+}
+
+type storageInternalKeysIterator struct {
+	metrics []enginepb.StorageInternalKeysMetrics
+	evalCtx *eval.Context
+
+	iterIdx            int
+	nodeID             int32
+	storeID            int32
+	megabytesPerSecond int64
+	start              []byte
+	end                []byte
+}
+
+var storageInternalKeysGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int,
+		types.Int, types.Int},
+	[]string{
+		"level",
+		"node_id",
+		"store_id",
+		"snapshot_pinned_keys",
+		"snapshot_pinned_keys_bytes",
+		"point_key_delete_count",
+		"point_key_set_count",
+		"range_delete_count",
+		"range_key_set_count",
+		"range_key_delete_count",
+	},
+)
+
+var _ eval.ValueGenerator = (*storageInternalKeysIterator)(nil)
+
+func newStorageInternalKeysGenerator(
+	evalCtx *eval.Context, nodeID, storeID int32, start, end []byte, megaBytesPerSecond int64,
+) *storageInternalKeysIterator {
+	return &storageInternalKeysIterator{evalCtx: evalCtx, nodeID: nodeID, storeID: storeID, start: start, end: end, megabytesPerSecond: megaBytesPerSecond}
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (s *storageInternalKeysIterator) Start(ctx context.Context, _ *kv.Txn) error {
+	var err error
+	s.metrics, err = s.evalCtx.ScanStorageInternalKeys(ctx, s.nodeID, s.storeID, s.start, s.end, s.megabytesPerSecond)
+	if err != nil {
+		err = errors.Wrapf(err, "getting table metrics for node %d store %d", s.nodeID, s.storeID)
+	}
+
+	return err
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (s *storageInternalKeysIterator) Next(_ context.Context) (bool, error) {
+	s.iterIdx++
+	return s.iterIdx <= len(s.metrics), nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (s *storageInternalKeysIterator) Values() (tree.Datums, error) {
+	metricsInfo := s.metrics[s.iterIdx-1]
+	levelDatum := tree.DNull
+
+	if metricsInfo.Level != -1 {
+		levelDatum = tree.NewDInt(tree.DInt(metricsInfo.Level))
+	}
+
+	return tree.Datums{
+		levelDatum,
+		tree.NewDInt(tree.DInt(s.nodeID)),
+		tree.NewDInt(tree.DInt(s.storeID)),
+		tree.NewDInt(tree.DInt(metricsInfo.SnapshotPinnedKeys)),
+		tree.NewDInt(tree.DInt(metricsInfo.SnapshotPinnedKeysBytes)),
+		tree.NewDInt(tree.DInt(metricsInfo.PointKeyDeleteCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.PointKeySetCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.RangeDeleteCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.RangeKeySetCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.RangeKeyDeleteCount)),
+	}, nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (tmi *storageInternalKeysIterator) Close(_ context.Context) {}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (tmi *storageInternalKeysIterator) ResolvedType() *types.T {
+	return storageInternalKeysGeneratorType
+}
+
+func makeStorageInternalKeysGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin {
+		return nil, errInsufficientPriv
+	}
+	nodeID := int32(tree.MustBeDInt(args[0]))
+	storeID := int32(tree.MustBeDInt(args[1]))
+	start := []byte(tree.MustBeDBytes(args[2]))
+	end := []byte(tree.MustBeDBytes(args[3]))
+
+	var megabytesPerSecond int64
+	if len(args) > 4 {
+		megabytesPerSecond = int64(tree.MustBeDInt(args[4]))
+	} else {
+		megabytesPerSecond = int64(10)
+	}
+
+	return newStorageInternalKeysGenerator(evalCtx, nodeID, storeID, start, end, megabytesPerSecond), nil
 }
 
 var tableSpanStatsGeneratorType = types.MakeLabeledTuple(

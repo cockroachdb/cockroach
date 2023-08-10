@@ -227,6 +227,9 @@ type Context struct {
 	// GetTableMetrics is used in crdb_internal.sstable_metrics.
 	GetTableMetrics GetTableMetricsFunc
 
+	// ScanStorageInternalKeys is used in crdb_internal.scan_storage_internal_keys.
+	ScanStorageInternalKeys ScanStorageInternalKeysFunc
+
 	// SetCompactionConcurrency is used to change the compaction concurrency of
 	// a store.
 	SetCompactionConcurrency SetCompactionConcurrencyFunc

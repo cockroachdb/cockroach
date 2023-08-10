@@ -76,6 +76,33 @@ func (c *StorageEngineClient) GetTableMetrics(
 	return resp.TableMetrics, nil
 }
 
+// ScanStorageInternalKeys is a tree.ScanStorageInternalKeys
+func (c *StorageEngineClient) ScanStorageInternalKeys(
+	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte, megabytesPerSecond int64,
+) ([]enginepb.StorageInternalKeysMetrics, error) {
+	conn, err := c.nd.Dial(ctx, roachpb.NodeID(nodeID), rpc.DefaultClass)
+	if err != nil {
+		return []enginepb.StorageInternalKeysMetrics{}, errors.Wrapf(err, "could not dial node ID %d", nodeID)
+	}
+
+	client := NewPerStoreClient(conn)
+	req := &ScanStorageInternalKeysRequest{
+		StoreRequestHeader: StoreRequestHeader{
+			NodeID:  roachpb.NodeID(nodeID),
+			StoreID: roachpb.StoreID(storeID),
+		},
+		Span:               roachpb.Span{Key: roachpb.Key(startKey), EndKey: roachpb.Key(endKey)},
+		MegabytesPerSecond: megabytesPerSecond,
+	}
+
+	resp, err := client.ScanStorageInternalKeys(ctx, req)
+
+	if err != nil {
+		return []enginepb.StorageInternalKeysMetrics{}, err
+	}
+	return resp.AdvancedPebbleMetrics, nil
+}
+
 // SetCompactionConcurrency is a tree.CompactionConcurrencyFunc.
 func (c *StorageEngineClient) SetCompactionConcurrency(
 	ctx context.Context, nodeID, storeID int32, compactionConcurrency uint64,

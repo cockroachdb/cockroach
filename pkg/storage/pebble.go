@@ -2109,6 +2109,44 @@ func (p *Pebble) GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetr
 	return metricsInfo, nil
 }
 
+// ScanStorageInternalKeys implements the Engine interface.
+func (p *Pebble) ScanStorageInternalKeys(
+	start, end roachpb.Key, megabytesPerSecond int64,
+) ([]enginepb.StorageInternalKeysMetrics, error) {
+	stats, err := p.db.ScanStatistics(context.TODO(), start, end, pebble.ScanStatisticsOptions{LimitBytesPerSecond: 1000000 * megabytesPerSecond})
+	if err != nil {
+		return []enginepb.StorageInternalKeysMetrics{}, err
+	}
+
+	var metrics []enginepb.StorageInternalKeysMetrics
+
+	for level := 0; level < 7; level++ {
+		metrics = append(metrics, enginepb.StorageInternalKeysMetrics{
+			Level:                   int32(level),
+			SnapshotPinnedKeys:      uint64(stats.Levels[level].SnapshotPinnedKeys),
+			SnapshotPinnedKeysBytes: stats.Levels[level].SnapshotPinnedKeysBytes,
+			PointKeyDeleteCount:     uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindDelete]),
+			PointKeySetCount:        uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindSet]),
+			RangeDeleteCount:        uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindRangeDelete]),
+			RangeKeySetCount:        uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindRangeKeySet]),
+			RangeKeyDeleteCount:     uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindRangeKeyDelete]),
+		})
+	}
+
+	metrics = append(metrics, enginepb.StorageInternalKeysMetrics{
+		Level:                   -1,
+		SnapshotPinnedKeys:      uint64(stats.Accumulated.SnapshotPinnedKeys),
+		SnapshotPinnedKeysBytes: stats.Accumulated.SnapshotPinnedKeysBytes,
+		PointKeyDeleteCount:     uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindDelete]),
+		PointKeySetCount:        uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindSet]),
+		RangeDeleteCount:        uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindRangeDelete]),
+		RangeKeySetCount:        uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindRangeKeySet]),
+		RangeKeyDeleteCount:     uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindRangeKeyDelete]),
+	})
+
+	return metrics, nil
+}
+
 // ApproximateDiskBytes implements the Engine interface.
 func (p *Pebble) ApproximateDiskBytes(
 	from, to roachpb.Key,
