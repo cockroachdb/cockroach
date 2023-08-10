@@ -722,8 +722,8 @@ var overrideAlterPrimaryRegionInSuperRegion = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
-var errNoTransactionInProgress = errors.New("there is no transaction in progress")
-var errTransactionInProgress = errors.New("there is already a transaction in progress")
+var errNoTransactionInProgress = pgerror.New(pgcode.NoActiveSQLTransaction, "there is no transaction in progress")
+var errTransactionInProgress = pgerror.New(pgcode.ActiveSQLTransaction, "there is already a transaction in progress")
 
 const sqlTxnName string = "sql txn"
 const metricsSampleInterval = 10 * time.Second
