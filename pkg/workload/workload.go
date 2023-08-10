@@ -211,6 +211,9 @@ func Tuples(count int, fn func(int) []interface{}) BatchedTuples {
 const (
 	// timestampOutputFormat is used to output all timestamps.
 	timestampOutputFormat = "2006-01-02 15:04:05.999999-07:00"
+
+	// defaultDNSCacheRefresh is used to change the default --dns-refresh interval
+	defaultDNSCacheRefresh = 30 * time.Second
 )
 
 // TypedTuples returns a BatchedTuples where each batch has size 1. It's

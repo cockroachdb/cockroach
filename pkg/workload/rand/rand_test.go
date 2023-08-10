@@ -47,7 +47,9 @@ func TestRandRun(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	dbName := "rand_test"
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: dbName})
 	defer s.Stopper().Stop(ctx)
