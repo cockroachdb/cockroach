@@ -17,7 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 // TestClockNow sanity checks that Clock.Now() sourced from the CLOCK_REALTIME
@@ -27,4 +29,12 @@ func TestClockNow(t *testing.T) {
 	if got, want := realtime().Now(), timeutil.Now(); want.Sub(got).Abs() > 10*time.Second {
 		t.Errorf("clock mismatch: got %v; timeutil says %v", got, want)
 	}
+}
+
+func TestClockNowWithMockCGetTime(t *testing.T) {
+	defer testutils.TestingHook(&cGetTime, func(_ fdType, t *structTimespec) error {
+		*t = structTimespec{tv_sec: 3, tv_nsec: 5}
+		return nil
+	})()
+	require.EqualValues(t, 3*1e9+5, realtime().Now().UnixNano())
 }

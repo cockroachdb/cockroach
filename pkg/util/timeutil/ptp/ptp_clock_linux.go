@@ -40,6 +40,14 @@ type Clock struct {
 	clockDeviceID uintptr
 }
 
+type fdType = C.int
+type structTimespec = C.struct_timespec
+
+var cGetTime = func(fd fdType, ts *structTimespec) error {
+	_, err := C.clock_gettime(fd, ts)
+	return err
+}
+
 // MakeClock creates a new Clock for the given device path.
 func MakeClock(ctx context.Context, clockDevicePath string) (Clock, error) {
 	var result Clock
@@ -62,7 +70,7 @@ func MakeClock(ctx context.Context, clockDevicePath string) (Clock, error) {
 		clockID,
 	)
 	var ts C.struct_timespec
-	_, err = C.clock_gettime(C.clockid_t(clockID), &ts)
+	err = cGetTime(C.clockid_t(clockID), &ts)
 	if err != nil {
 		return result, errors.Wrap(err, "UseClockDevice: error calling clock_gettime")
 	}
@@ -74,7 +82,7 @@ func MakeClock(ctx context.Context, clockDevicePath string) (Clock, error) {
 // Now implements the hlc.WallClock interface.
 func (p Clock) Now() time.Time {
 	var ts C.struct_timespec
-	_, err := C.clock_gettime(C.clockid_t(p.clockDeviceID), &ts)
+	err := cGetTime(C.clockid_t(p.clockDeviceID), &ts)
 	if err != nil {
 		panic(err)
 	}

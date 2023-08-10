@@ -67,10 +67,14 @@ go_test(
     embed = [":ptp"],
     deps = select({
         "@io_bazel_rules_go//go/platform:android": [
+            "//pkg/testutils",
             "//pkg/util/timeutil",
+            "@com_github_stretchr_testify//require",
         ],
         "@io_bazel_rules_go//go/platform:linux": [
+            "//pkg/testutils",
             "//pkg/util/timeutil",
+            "@com_github_stretchr_testify//require",
         ],
         "//conditions:default": [],
     }),
