@@ -69,3 +69,16 @@ func (Level) SafeValue() {}
 // Levels returns a list of all isolation levels, ordered from strongest to
 // weakest.
 func Levels() []Level { return []Level{Serializable, Snapshot, ReadCommitted} }
+
+// RunEachLevel calls f in a subtest for each isolation level.
+func RunEachLevel[T testingTB[T]](t T, f func(T, Level)) {
+	for _, l := range Levels() {
+		t.Run(l.String(), func(t T) { f(t, l) })
+	}
+}
+
+// testingTB is an interface that matches *testing.T and *testing.B, without
+// incurring the package dependency.
+type testingTB[T any] interface {
+	Run(name string, f func(t T)) bool
+}
