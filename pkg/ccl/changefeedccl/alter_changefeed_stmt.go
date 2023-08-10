@@ -84,11 +84,12 @@ func alterChangefeedPlanHook(
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
-		typedExpr, err := alterChangefeedStmt.Jobs.TypeCheck(ctx, p.SemaCtx(), types.Int)
-		if err != nil {
-			return err
+		var jobID jobspb.JobID
+		if d, ok := tree.AsDInt(alterChangefeedStmt.Jobs); ok {
+			jobID = jobspb.JobID(d)
+		} else {
+			return pgerror.Newf(pgcode.DatatypeMismatch, "expected INT job argument")
 		}
-		jobID := jobspb.JobID(tree.MustBeDInt(typedExpr))
 
 		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
 		if err != nil {
