@@ -152,7 +152,7 @@ type PLpgSQLStmtIf struct {
 	PLpgSQLStatementImpl
 	Condition  PLpgSQLExpr
 	ThenBody   []PLpgSQLStatement
-	ElseIfList []*PLpgSQLStmtIfElseIfArm
+	ElseIfList []PLpgSQLStmtIfElseIfArm
 	ElseBody   []PLpgSQLStatement
 }
 
@@ -201,7 +201,6 @@ func (s *PLpgSQLStmtIf) WalkStmt(visitor PLpgSQLStmtVisitor) {
 
 type PLpgSQLStmtIfElseIfArm struct {
 	PLpgSQLStatementImpl
-	LineNo    int
 	Condition PLpgSQLExpr
 	Stmts     []PLpgSQLStatement
 }

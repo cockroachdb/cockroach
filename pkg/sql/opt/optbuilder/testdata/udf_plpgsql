@@ -3079,3 +3079,120 @@ project
                      │                        └── projections
                      │                             └── const: 0 [as=stmt_return_3:2]
                      └── const: 1
+
+# Testing IF statements with ELSIF branches.
+exec-ddl
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := -1;
+  BEGIN
+    IF n = 0 THEN
+      RETURN 0;
+    ELSIF n = 1 THEN
+      i := 100;
+    ELSIF n = 2 THEN
+      i := 200;
+      RETURN i;
+    END IF;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f(0);
+----
+project
+ ├── columns: f:13
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:13]
+           ├── args
+           │    └── const: 0
+           ├── params: n:1
+           └── body
+                └── limit
+                     ├── columns: stmt_if_5:12
+                     ├── project
+                     │    ├── columns: stmt_if_5:12
+                     │    ├── project
+                     │    │    ├── columns: i:2!null
+                     │    │    ├── values
+                     │    │    │    └── tuple
+                     │    │    └── projections
+                     │    │         └── const: -1 [as=i:2]
+                     │    └── projections
+                     │         └── case [as=stmt_if_5:12]
+                     │              ├── true
+                     │              ├── when
+                     │              │    ├── eq
+                     │              │    │    ├── variable: n:1
+                     │              │    │    └── const: 0
+                     │              │    └── subquery
+                     │              │         └── project
+                     │              │              ├── columns: stmt_return_3:6!null
+                     │              │              ├── values
+                     │              │              │    └── tuple
+                     │              │              └── projections
+                     │              │                   └── const: 0 [as=stmt_return_3:6]
+                     │              ├── when
+                     │              │    ├── eq
+                     │              │    │    ├── variable: n:1
+                     │              │    │    └── const: 1
+                     │              │    └── subquery
+                     │              │         └── project
+                     │              │              ├── columns: stmt_if_1:8
+                     │              │              ├── project
+                     │              │              │    ├── columns: i:7!null
+                     │              │              │    ├── values
+                     │              │              │    │    └── tuple
+                     │              │              │    └── projections
+                     │              │              │         └── const: 100 [as=i:7]
+                     │              │              └── projections
+                     │              │                   └── udf: stmt_if_1 [as=stmt_if_1:8]
+                     │              │                        ├── args
+                     │              │                        │    ├── variable: i:7
+                     │              │                        │    └── variable: n:1
+                     │              │                        ├── params: i:3 n:4
+                     │              │                        └── body
+                     │              │                             └── project
+                     │              │                                  ├── columns: stmt_return_2:5
+                     │              │                                  ├── values
+                     │              │                                  │    └── tuple
+                     │              │                                  └── projections
+                     │              │                                       └── variable: i:3 [as=stmt_return_2:5]
+                     │              ├── when
+                     │              │    ├── eq
+                     │              │    │    ├── variable: n:1
+                     │              │    │    └── const: 2
+                     │              │    └── subquery
+                     │              │         └── project
+                     │              │              ├── columns: stmt_return_4:10!null
+                     │              │              ├── project
+                     │              │              │    ├── columns: i:9!null
+                     │              │              │    ├── values
+                     │              │              │    │    └── tuple
+                     │              │              │    └── projections
+                     │              │              │         └── const: 200 [as=i:9]
+                     │              │              └── projections
+                     │              │                   └── variable: i:9 [as=stmt_return_4:10]
+                     │              └── subquery
+                     │                   └── project
+                     │                        ├── columns: stmt_if_1:11
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── udf: stmt_if_1 [as=stmt_if_1:11]
+                     │                                  ├── args
+                     │                                  │    ├── variable: i:2
+                     │                                  │    └── variable: n:1
+                     │                                  ├── params: i:3 n:4
+                     │                                  └── body
+                     │                                       └── project
+                     │                                            ├── columns: stmt_return_2:5
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── variable: i:3 [as=stmt_return_2:5]
+                     └── const: 1
