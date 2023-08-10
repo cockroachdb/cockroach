@@ -133,30 +133,30 @@ func getAllCols(existingIndex cat.Index) intsets.Fast {
 // explicit columns).
 //
 // Among all the candidates, it selects the one that stores the most columns
-// from actuallyScannedCols. If found, it returns TypeReplaceIndex, the best
+// from newStoredCols. If found, it returns TypeReplaceIndex, the best
 // candidate for existing index, and its already stored columns. If not found,
 // this means that there does not exist an index that satisfy the requirement to
 // be a candidate. So no existing indexes can be replaced, and creating a new
 // index is necessary. It returns TypeCreateIndex, nil, and intsets.Fast. If
-// there is a candidate that stores every column from actuallyScannedCols,
+// there is a candidate that stores every column from newStoredCols,
 // typeUseless, nil, {} is returned. Theoretically, this should never happen.
 func findBestExistingIndexToReplace(
-	table cat.Table, hypIndex *hypotheticalIndex, actuallyScannedCols intsets.Fast,
+	table cat.Table, hypIndex *hypotheticalIndex, newStoredCols intsets.Fast,
 ) (Type, cat.Index, intsets.Fast) {
 
-	// To find the existing index with most columns in actuallyScannedCol, we keep
+	// To find the existing index with most columns in newStoredCols, we keep
 	// track of the best candidate for existing index and its stored columns.
 	//
-	// Difference is a list of cols that are in actuallyScannedCol but not in the
+	// Difference is a list of cols that are in newStoredCols but not in the
 	// existing index's stored cols. And we are looking for the minimum length of
 	// difference among all existing indexes. We know that if the diff is empty,
-	// that means the existing index stores every column in actuallyScannedCol.
+	// that means the existing index stores every column in newStoredCols.
 	//
 	// minColsDiff keeps track of the minimum difference length so far. It is
-	// initialized to the length of actuallyScannedCol which is the maximum
+	// initialized to the length of newStoredCols which is the maximum
 	// possible difference (existing index does not contain any columns in
-	// actuallyScannedCol).
-	minColsDiff := actuallyScannedCols.Len()
+	// newStoredCols).
+	minColsDiff := newStoredCols.Len()
 	var existingIndexCandidate cat.Index
 	var existingIndexCandidateStoredCol intsets.Fast
 
@@ -168,18 +168,20 @@ func findBestExistingIndexToReplace(
 			continue
 		}
 		if existingIndex.GetInvisibility() != 0.0 {
-			existingIndexAllCols := getAllCols(existingIndex)
-			if actuallyScannedCols.Difference(existingIndexAllCols).Empty() {
-				// There exists an invisible index containing every explicit column in
-				// hypIndex and column in actuallyScannedCol. Recommend alter index
-				// visible.
-				//
-				// Note that we do not require an invisible index to have the same
-				// explicit colum as the hypIndex. This is because: consider query
-				// SELECT a FROM t WHERE b > 0, hypIndex(a), actuallyScannedCol b.
-				// invisible_idx(a, b) could still be used. Creating a new index with
-				// idx(a) STORING b is unnecessary.
-				return TypeAlterIndex, existingIndex, intsets.Fast{}
+			if hypIndex.hasPrefixOfExplicitCols(existingIndex, hypIndex.IsInverted()) {
+				existingIndexAllCols := getAllCols(existingIndex)
+				if newStoredCols.Difference(existingIndexAllCols).Empty() {
+					// There exists an invisible index containing every explicit column in
+					// hypIndex and column in newStoredCols. Recommend alter index
+					// visible.
+					//
+					// Note that we do not require an invisible index to have the same
+					// explicit columns as the hypIndex. This is because: consider query
+					// SELECT a FROM t WHERE b > 0, hypIndex(a), newStoredCols b.
+					// invisible_idx(a, b) could still be used. Creating a new index with
+					// idx(a) STORING b is unnecessary.
+					return TypeAlterIndex, existingIndex, intsets.Fast{}
+				}
 			}
 			// Skip any invisible indexes.
 			continue
@@ -197,7 +199,7 @@ func findBestExistingIndexToReplace(
 			// storedColsDiffSet is the list of cols that are in actuallyScannedCol
 			// but not in the existing index's stored cols. We are looking for the
 			// minimum diff set.
-			storedColsDiffSet := actuallyScannedCols.Difference(existingIndexStoredCols)
+			storedColsDiffSet := newStoredCols.Difference(existingIndexStoredCols)
 			if storedColsDiffSet.Empty() {
 				// If storedColsDiffSet is empty, that means the existing index stores
 				// every column in actuallyScannedCol. This index recommendation is
@@ -243,7 +245,9 @@ func findBestExistingIndexToReplace(
 // recommendation and the type of the index recommendation.
 func (ir *indexRecommendation) constructIndexRec(ctx context.Context) (Rec, error) {
 	var sb strings.Builder
-	recType, existingIndex, existingIndexStoredCol := findBestExistingIndexToReplace(ir.index.tab.Table, ir.index, ir.newStoredColOrds)
+	recType, existingIndex, existingIndexStoredCol := findBestExistingIndexToReplace(
+		ir.index.tab.Table, ir.index, ir.newStoredColOrds,
+	)
 	indexCols := ir.indexCols()
 	if existingIndex != nil {
 		// After finding out the existing index, update newStoredColOrds to contain
