@@ -16,7 +16,7 @@ import moment from "moment-timezone";
 
 export const statementDiagnostics = createSelector(
   (state: AppState) => state.adminUI,
-  state => state.statementDiagnostics,
+  state => state?.statementDiagnostics,
 );
 
 export const selectStatementDiagnosticsReports = createSelector(
