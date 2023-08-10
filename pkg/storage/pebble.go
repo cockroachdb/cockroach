@@ -582,8 +582,7 @@ func DefaultPebbleOptions() *pebble.Options {
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
 		BlockPropertyCollectors:     PebbleBlockPropertyCollectors,
-		// Minimum supported format.
-		FormatMajorVersion: MinimumSupportedFormatVersion,
+		FormatMajorVersion:          MinimumSupportedFormatVersion,
 	}
 	// Automatically flush 10s after the first range tombstone is added to a
 	// memtable. This ensures that we can reclaim space even when there's no
@@ -2041,20 +2040,20 @@ func (p *Pebble) Type() enginepb.EngineType {
 	return enginepb.EngineTypePebble
 }
 
-// IngestExternalFiles implements the Engine interface.
-func (p *Pebble) IngestExternalFiles(ctx context.Context, paths []string) error {
+// IngestLocalFiles implements the Engine interface.
+func (p *Pebble) IngestLocalFiles(ctx context.Context, paths []string) error {
 	return p.db.Ingest(paths)
 }
 
-// IngestExternalFilesWithStats implements the Engine interface.
-func (p *Pebble) IngestExternalFilesWithStats(
+// IngestLocalFilesWithStats implements the Engine interface.
+func (p *Pebble) IngestLocalFilesWithStats(
 	ctx context.Context, paths []string,
 ) (pebble.IngestOperationStats, error) {
 	return p.db.IngestWithStats(paths)
 }
 
-// IngestAndExciseExternalFiles implements the Engine interface.
-func (p *Pebble) IngestAndExciseExternalFiles(
+// IngestAndExciseFiles implements the Engine interface.
+func (p *Pebble) IngestAndExciseFiles(
 	ctx context.Context, paths []string, shared []pebble.SharedSSTMeta, exciseSpan roachpb.Span,
 ) (pebble.IngestOperationStats, error) {
 	rawSpan := pebble.KeyRange{
@@ -2062,6 +2061,13 @@ func (p *Pebble) IngestAndExciseExternalFiles(
 		End:   EngineKey{Key: exciseSpan.EndKey}.Encode(),
 	}
 	return p.db.IngestAndExcise(paths, shared, rawSpan)
+}
+
+// IngestExternalFiles implements the Engine interface.
+func (p *Pebble) IngestExternalFiles(
+	ctx context.Context, external []pebble.ExternalFile,
+) (pebble.IngestOperationStats, error) {
+	return p.db.IngestExternalFiles(external)
 }
 
 // PreIngestDelay implements the Engine interface.

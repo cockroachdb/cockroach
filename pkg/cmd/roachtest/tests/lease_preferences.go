@@ -252,6 +252,14 @@ func runLeasePreferences(
 	// enforcement.
 	require.NoError(t, WaitForReplication(ctx, t, conn, spec.replFactor))
 
+	// Set a lease preference for the liveness range, to be on n5. This test
+	// would occasionally fail due to the liveness heartbeat failures, when the
+	// liveness lease is on a stopped node. This is not ideal behavior, #108512.
+	configureZone(t, ctx, conn, "RANGE liveness", zoneConfig{
+		replicas:  spec.replFactor,
+		leaseNode: 5,
+	})
+
 	t.L().Printf("setting lease preferences: %s", spec.preferences)
 	setLeasePreferences(ctx, spec.preferences)
 	t.L().Printf("waiting for initial lease preference conformance")
