@@ -1911,7 +1911,13 @@ func (s unixSocketDetails) String() string {
 }
 
 func (c *transientCluster) NumNodes() int {
-	return len(c.servers)
+	numNodes := 0
+	for _, s := range c.servers {
+		if s.TestServerInterface != nil {
+			numNodes++
+		}
+	}
+	return numNodes
 }
 
 func (c *transientCluster) NumServers() int {
