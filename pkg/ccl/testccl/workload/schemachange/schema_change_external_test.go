@@ -39,7 +39,9 @@ func TestWorkload(t *testing.T) {
 	scope := log.Scope(t)
 	defer scope.Close(t)
 	dir := scope.GetDirectory()
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // NOTE: Required to cleanup dnscache refresh Go routine
+
 	tc, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t,
 		3, /* numServers */
