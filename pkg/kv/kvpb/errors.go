@@ -16,6 +16,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -726,11 +727,24 @@ func (e *TransactionAbortedError) SafeFormatError(p errors.Printer) (next error)
 func NewTransactionRetryWithProtoRefreshError(
 	msg redact.RedactableString, txnID uuid.UUID, txn roachpb.Transaction,
 ) *TransactionRetryWithProtoRefreshError {
+	return NewTransactionRetryWithProtoRefreshErrorWithConflictingTxn(msg, txnID, txn, nil)
+}
+
+// NewTransactionRetryWithProtoRefreshErrorWithConflictingTxn is like
+// NewTransactionRetryWithProtoRefreshError but with a conflicting txn if
+// available.
+func NewTransactionRetryWithProtoRefreshErrorWithConflictingTxn(
+	msg redact.RedactableString,
+	txnID uuid.UUID,
+	txn roachpb.Transaction,
+	conflictingTxn *enginepb.TxnMeta,
+) *TransactionRetryWithProtoRefreshError {
 	return &TransactionRetryWithProtoRefreshError{
-		Msg:           msg.StripMarkers(),
-		MsgRedactable: msg,
-		TxnID:         txnID,
-		Transaction:   txn,
+		Msg:            msg.StripMarkers(),
+		MsgRedactable:  msg,
+		TxnID:          txnID,
+		Transaction:    txn,
+		ConflictingTxn: conflictingTxn,
 	}
 }
 
@@ -783,10 +797,19 @@ var _ transactionRestartError = &TransactionPushError{}
 func NewTransactionRetryError(
 	reason TransactionRetryReason, extraMsg redact.RedactableString,
 ) *TransactionRetryError {
+	return NewTransactionRetryErrorWithConflictingTxn(reason, extraMsg, nil)
+}
+
+// NewTransactionRetryErrorWithConflictingTxn initializes a new
+// TransactionRetryError with a conflicting txn included.
+func NewTransactionRetryErrorWithConflictingTxn(
+	reason TransactionRetryReason, extraMsg redact.RedactableString, conflictingTxn *enginepb.TxnMeta,
+) *TransactionRetryError {
 	return &TransactionRetryError{
 		Reason:             reason,
 		ExtraMsg:           extraMsg.StripMarkers(),
 		ExtraMsgRedactable: extraMsg,
+		ConflictingTxn:     conflictingTxn,
 	}
 }
 
@@ -1442,10 +1465,23 @@ var _ ErrorDetailInterface = &MinTimestampBoundUnsatisfiableError{}
 func NewRefreshFailedError(
 	reason RefreshFailedError_Reason, key roachpb.Key, ts hlc.Timestamp,
 ) *RefreshFailedError {
+	return NewRefreshFailedErrorWithConflictingTxn(reason, key, ts, nil /* conflictingTxn */)
+}
+
+// NewRefreshFailedErrorWithConflictingTxn is like NewRefreshFailedError but
+// includes a *enginepb.TxnMeta for a conflicting transaction if its write
+// intent is found.
+func NewRefreshFailedErrorWithConflictingTxn(
+	reason RefreshFailedError_Reason,
+	key roachpb.Key,
+	ts hlc.Timestamp,
+	conflictingTxn *enginepb.TxnMeta,
+) *RefreshFailedError {
 	return &RefreshFailedError{
-		Reason:    reason,
-		Key:       key,
-		Timestamp: ts,
+		Reason:         reason,
+		Key:            key,
+		Timestamp:      ts,
+		ConflictingTxn: conflictingTxn,
 	}
 }
 

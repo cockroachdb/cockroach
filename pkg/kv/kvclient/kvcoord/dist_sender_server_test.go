@@ -4287,3 +4287,95 @@ func BenchmarkReturnOnRangeBoundary(b *testing.B) {
 		require.NoError(b, txn.Commit(ctx))
 	}
 }
+
+func TestRefreshFailureIncludesConflictingTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		name         string
+		committed    bool
+		rangeRefresh bool
+		key1         string
+		key2         string
+	}{
+		{
+			name:         "write intent found in single key refresh",
+			committed:    false,
+			rangeRefresh: false,
+			key1:         "a",
+			key2:         "b",
+		},
+		{
+			name:         "committed value found in single key refresh",
+			committed:    true,
+			rangeRefresh: false,
+			key1:         "a",
+			key2:         "b",
+		},
+		{
+			name:         "write intent found in range refresh",
+			committed:    false,
+			rangeRefresh: true,
+			key1:         "a",
+			key2:         "b",
+		},
+		{
+			name:         "committed value found in range refresh",
+			committed:    true,
+			rangeRefresh: true,
+			key1:         "a",
+			key2:         "b",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+
+			err := db.Put(ctx, tc.key1, "put")
+			require.NoError(t, err)
+
+			txn1 := db.NewTxn(ctx, "original txn")
+			txn2 := db.NewTxn(ctx, "contending txn")
+
+			if tc.rangeRefresh {
+				_, err = txn1.Scan(ctx, tc.key1, tc.key1+"2", 10)
+				require.NoError(t, err)
+			} else {
+				_, err = txn1.Get(ctx, tc.key1)
+				require.NoError(t, err)
+			}
+
+			_, err = txn2.Get(ctx, tc.key2)
+			require.NoError(t, err)
+
+			err = txn2.Put(ctx, tc.key1, "put")
+			require.NoError(t, err)
+
+			if tc.committed {
+				require.NoError(t, txn2.Commit(ctx))
+				// force intent clean up
+				_, err = db.Get(ctx, tc.key1)
+				require.NoError(t, err)
+			}
+
+			err = txn1.Put(ctx, tc.key2, "put")
+			require.NoError(t, err)
+
+			err = txn1.Commit(ctx)
+			require.Error(t, err)
+
+			tErr := (*kvpb.TransactionRetryWithProtoRefreshError)(nil)
+			require.ErrorAs(t, err, &tErr)
+
+			if tc.committed {
+				require.Nil(t, tErr.ConflictingTxn)
+			} else {
+				require.NotNil(t, tErr.ConflictingTxn)
+				require.Equal(t, txn2.ID(), tErr.ConflictingTxn.ID)
+				require.Equal(t, int32(1), tErr.ConflictingTxn.CoordinatorNodeID)
+			}
+		})
+	}
+}

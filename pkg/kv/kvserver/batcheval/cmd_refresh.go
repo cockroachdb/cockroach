@@ -71,8 +71,8 @@ func Refresh(
 	// Check if an intent which is not owned by this transaction was written
 	// at or beneath the refresh timestamp.
 	if res.Intent != nil && res.Intent.Txn.ID != h.Txn.ID {
-		return result.Result{}, kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_INTENT,
-			res.Intent.Key, res.Intent.Txn.WriteTimestamp)
+		return result.Result{}, kvpb.NewRefreshFailedErrorWithConflictingTxn(kvpb.RefreshFailedError_REASON_INTENT,
+			res.Intent.Key, res.Intent.Txn.WriteTimestamp, &res.Intent.Txn)
 	}
 
 	return result.Result{}, nil
