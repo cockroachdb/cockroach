@@ -115,6 +115,7 @@ func BenchmarkUniqueRowID(b *testing.B) {
 // - ownership removal
 func TestSequenceOwnershipDependencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params := base.TestServerArgs{}

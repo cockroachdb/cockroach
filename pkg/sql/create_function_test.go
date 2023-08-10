@@ -151,6 +151,7 @@ SELECT nextval(105:::REGCLASS);`,
 
 func TestVersionGatingUDFInCheckConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Run("new_schema_changer_version_enabled", func(t *testing.T) {
 		params, _ := createTestServerParams()
