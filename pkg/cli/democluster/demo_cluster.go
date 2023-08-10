@@ -397,77 +397,14 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 	phaseCtx = logtags.AddTag(ctx, "phase", 8)
 	if err := func(ctx context.Context) error {
 		if c.demoCtx.Multitenant {
-			c.infoLog(ctx, "starting tenant nodes")
+			c.infoLog(ctx, "starting tenant servers")
 
 			c.tenantServers = make([]serverutils.ApplicationLayerInterface, c.demoCtx.NumNodes)
 			for i := 0; i < c.demoCtx.NumNodes; i++ {
 				createTenant := i == 0
-
-				var latencyMap rpc.InjectedLatencyOracle
-				if knobs := c.servers[i].TestingKnobs().Server; knobs != nil {
-					latencyMap = knobs.(*server.TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle
+				if err := c.startTenantService(ctx, i, createTenant); err != nil {
+					return err
 				}
-				c.infoLog(ctx, "starting tenant node %d", i)
-
-				var ts serverutils.ApplicationLayerInterface
-				if c.demoCtx.DisableServerController {
-					tenantStopper := stop.NewStopper()
-					args := base.TestTenantArgs{
-						DisableCreateTenant:     !createTenant,
-						TenantName:              demoTenantName,
-						TenantID:                roachpb.MustMakeTenantID(secondaryTenantID),
-						Stopper:                 tenantStopper,
-						ForceInsecure:           c.demoCtx.Insecure,
-						SSLCertsDir:             c.demoDir,
-						DisableTLSForHTTP:       true,
-						EnableDemoLoginEndpoint: true,
-						StartingRPCAndSQLPort:   c.demoCtx.sqlPort(i, true) - secondaryTenantID,
-						StartingHTTPPort:        c.demoCtx.httpPort(i, true) - secondaryTenantID,
-						Locality:                c.demoCtx.Localities[i],
-						TestingKnobs: base.TestingKnobs{
-							Server: &server.TestingKnobs{
-								ContextTestingKnobs: rpc.ContextTestingKnobs{
-									InjectedLatencyOracle:  latencyMap,
-									InjectedLatencyEnabled: c.latencyEnabled.Get,
-								},
-							},
-						},
-					}
-
-					var err error
-					ts, err = c.servers[i].StartTenant(ctx, args)
-					c.stopper.AddCloser(stop.CloserFn(func() {
-						stopCtx := context.Background()
-						if ts != nil {
-							stopCtx = ts.AnnotateCtx(stopCtx)
-						}
-						tenantStopper.Stop(stopCtx)
-					}))
-					if err != nil {
-						return err
-					}
-				} else {
-					var err error
-					ts, _, err = c.servers[i].StartSharedProcessTenant(ctx,
-						base.TestSharedProcessTenantArgs{
-							TenantID:   roachpb.MustMakeTenantID(secondaryTenantID),
-							TenantName: demoTenantName,
-							Knobs: base.TestingKnobs{
-								Server: &server.TestingKnobs{
-									ContextTestingKnobs: rpc.ContextTestingKnobs{
-										InjectedLatencyOracle:  latencyMap,
-										InjectedLatencyEnabled: c.latencyEnabled.Get,
-									},
-								},
-							},
-						})
-					if err != nil {
-						return err
-					}
-				}
-
-				c.tenantServers[i] = ts
-				c.infoLog(ctx, "started tenant server %d: %s", i, ts.SQLAddr())
 			}
 		}
 		return nil
@@ -560,6 +497,84 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 		return err
 	}
 
+	return nil
+}
+
+func (c *transientCluster) startTenantService(
+	ctx context.Context, serverIdx int, createTenant bool,
+) (resErr error) {
+	var tenantStopper *stop.Stopper
+	defer func() {
+		if resErr != nil && tenantStopper != nil {
+			tenantStopper.Stop(context.Background())
+		}
+	}()
+
+	var latencyMap rpc.InjectedLatencyOracle
+	if knobs := c.servers[serverIdx].TestingKnobs().Server; knobs != nil {
+		latencyMap = knobs.(*server.TestingKnobs).ContextTestingKnobs.InjectedLatencyOracle
+	}
+	c.infoLog(ctx, "starting tenant node %d", serverIdx)
+
+	var ts serverutils.ApplicationLayerInterface
+	if c.demoCtx.DisableServerController {
+		tenantStopper = stop.NewStopper()
+		args := base.TestTenantArgs{
+			DisableCreateTenant:     !createTenant,
+			TenantName:              demoTenantName,
+			TenantID:                roachpb.MustMakeTenantID(secondaryTenantID),
+			Stopper:                 tenantStopper,
+			ForceInsecure:           c.demoCtx.Insecure,
+			SSLCertsDir:             c.demoDir,
+			DisableTLSForHTTP:       true,
+			EnableDemoLoginEndpoint: true,
+			StartingRPCAndSQLPort:   c.demoCtx.sqlPort(serverIdx, true) - secondaryTenantID,
+			StartingHTTPPort:        c.demoCtx.httpPort(serverIdx, true) - secondaryTenantID,
+			Locality:                c.demoCtx.Localities[serverIdx],
+			TestingKnobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ContextTestingKnobs: rpc.ContextTestingKnobs{
+						InjectedLatencyOracle:  latencyMap,
+						InjectedLatencyEnabled: c.latencyEnabled.Get,
+					},
+				},
+			},
+		}
+
+		var err error
+		ts, err = c.servers[serverIdx].StartTenant(ctx, args)
+		if err != nil {
+			return err
+		}
+		c.stopper.AddCloser(stop.CloserFn(func() {
+			stopCtx := context.Background()
+			if ts != nil {
+				stopCtx = ts.AnnotateCtx(stopCtx)
+			}
+			tenantStopper.Stop(stopCtx)
+		}))
+	} else {
+		var err error
+		ts, _, err = c.servers[serverIdx].StartSharedProcessTenant(ctx,
+			base.TestSharedProcessTenantArgs{
+				TenantID:   roachpb.MustMakeTenantID(secondaryTenantID),
+				TenantName: demoTenantName,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						ContextTestingKnobs: rpc.ContextTestingKnobs{
+							InjectedLatencyOracle:  latencyMap,
+							InjectedLatencyEnabled: c.latencyEnabled.Get,
+						},
+					},
+				},
+			})
+		if err != nil {
+			return err
+		}
+	}
+
+	c.tenantServers[serverIdx] = ts
+	c.infoLog(ctx, "started tenant server %d: %s", serverIdx, ts.SQLAddr())
 	return nil
 }
 
@@ -1024,6 +1039,9 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 	}
 	c.servers[serverIdx].TestServerInterface = nil
 	c.servers[serverIdx].adminClient = nil
+	if c.demoCtx.Multitenant {
+		c.tenantServers[serverIdx] = nil
+	}
 	return nil
 }
 
@@ -1198,6 +1216,17 @@ func (c *transientCluster) startServerInternal(
 		adminClient:         serverpb.NewAdminClient(conn),
 		nodeID:              nodeID,
 	}
+
+	if c.demoCtx.Multitenant {
+		if err := c.startTenantService(ctx, serverIdx, false /* createTenant */); err != nil {
+			s.Stopper().Stop(ctx)
+			c.servers[serverIdx].TestServerInterface = nil
+			c.servers[serverIdx].adminClient = nil
+			c.tenantServers[serverIdx] = nil
+			return 0, err
+		}
+	}
+
 	return int32(nodeID), nil
 }
 
@@ -1236,6 +1265,7 @@ func (c *transientCluster) AddNode(
 	// Create a new empty server element and add associated locality info.
 	// When we call startServerInternal below, this element will be properly initialized.
 	c.servers = append(c.servers, serverEntry{})
+	c.tenantServers = append(c.tenantServers, nil)
 	c.demoCtx.Localities = append(c.demoCtx.Localities, loc)
 	c.demoCtx.NumNodes++
 
