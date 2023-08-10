@@ -126,8 +126,7 @@ Commands specific to the demo shell (EXPERIMENTAL):
   \demo ls                     list the demo nodes and their connection URLs.
   \demo shutdown <nodeid>      stop a demo node.
   \demo restart <nodeid>       restart a stopped demo node.
-  \demo decommission <nodeid>  decommission a node.
-  \demo recommission <nodeid>  recommission a node.
+  \demo decommission <nodeid>  decommission a node. This implies a shutdown.
   \demo add <locality>         add a node (locality specified as "region=<region>,zone=<zone>").
 `
 
@@ -689,7 +688,7 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 	//
 	//	- A lone command (currently, only ls)
 	//	- A command followed by a string (add followed by locality string)
-	//	- A command followed by a node number (shutdown, restart, decommission, recommission)
+	//	- A command followed by a node number (shutdown, restart, decommission)
 	//
 	// We parse these commands separately, in the following blocks.
 	if len(cmd) == 1 && cmd[0] == "ls" {
@@ -784,12 +783,6 @@ func (c *cliState) handleDemoNodeCommands(
 			return c.internalServerError(errState, err)
 		}
 		fmt.Fprintf(c.iCtx.stdout, "node %d has been restarted\n", nodeID)
-		return nextState
-	case "recommission":
-		if err := c.sqlCtx.DemoCluster.Recommission(ctx, int32(nodeID)); err != nil {
-			return c.internalServerError(errState, err)
-		}
-		fmt.Fprintf(c.iCtx.stdout, "node %d has been recommissioned\n", nodeID)
 		return nextState
 	case "decommission":
 		if err := c.sqlCtx.DemoCluster.Decommission(ctx, int32(nodeID)); err != nil {
