@@ -112,7 +112,6 @@ func newRemoteSession(l *logger.Logger, command *remoteCommand) *remoteSession {
 		}
 	}
 
-	//const logfile = ""
 	args := []string{
 		command.user + "@" + command.host,
 

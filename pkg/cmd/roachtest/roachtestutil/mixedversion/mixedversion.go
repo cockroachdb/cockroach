@@ -653,6 +653,7 @@ func (s restartWithNewBinaryStep) Description() string {
 func (s restartWithNewBinaryStep) Run(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper,
 ) error {
+	h.ExpectDeath()
 	return clusterupgrade.RestartNodesWithNewBinary(
 		ctx,
 		s.rt,
