@@ -554,7 +554,10 @@ func (b *plpgsqlBuilder) makeRaiseFormatMessage(
 				if argIdx >= len(args) {
 					panic(pgerror.Newf(pgcode.Syntax, "too few parameters specified for RAISE"))
 				}
-				addToResult(b.buildPLpgSQLExpr(args[argIdx], types.String, s))
+				// If the argument is NULL, postgres prints "<NULL>".
+				arg := b.buildPLpgSQLExpr(args[argIdx], types.String, s)
+				arg = b.ob.factory.ConstructCoalesce(memo.ScalarListExpr{arg, makeConstStr("<NULL>")})
+				addToResult(arg)
 				argIdx++
 			}
 			addToResult(makeConstStr(paramSubstr))

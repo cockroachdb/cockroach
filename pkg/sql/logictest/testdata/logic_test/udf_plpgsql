@@ -700,6 +700,42 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+# NULL formatting arguments are printed as "<NULL>".
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE 'foo % bar %', NULL::TEXT, NULL::INT;
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode P0001 pq: foo <NULL> bar <NULL>
+SELECT f();
+
+# NULL values cannot be supplied as RAISE options.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  BEGIN
+    IF n = 0 THEN
+      RAISE division_by_zero USING message = NULL::TEXT;
+    END IF;
+    IF n = 1 THEN
+      RAISE division_by_zero USING detail = NULL::TEXT;
+    END IF;
+    RAISE division_by_zero USING hint = (SELECT 'foo' FROM xy WHERE False);
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22004 pq: RAISE statement option cannot be null
+SELECT f(0);
+
+statement error pgcode 22004 pq: RAISE statement option cannot be null
+SELECT f(1);
+
+statement error pgcode 22004 pq: RAISE statement option cannot be null
+SELECT f(2);
+
 statement error pgcode 42601 pq: \"i\" is not a known variable
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   BEGIN
