@@ -950,7 +950,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		args.HTTPAddr = fmt.Sprintf("127.0.0.1:%d", httpPort)
 	}
 
-	if demoCtx.Localities != nil {
+	if len(demoCtx.Localities) > serverIdx {
 		args.Locality = demoCtx.Localities[serverIdx]
 	}
 	if demoCtx.Insecure {
@@ -1930,7 +1930,11 @@ func (c *transientCluster) Server(i int) serverutils.TestServerInterface {
 }
 
 func (c *transientCluster) GetLocality(nodeID int32) string {
-	return c.demoCtx.Localities[nodeID-1].String()
+	serverIdx := c.findServer(roachpb.NodeID(nodeID))
+	if serverIdx == -1 {
+		return "(invalid server)"
+	}
+	return c.demoCtx.Localities[serverIdx].String()
 }
 
 func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool) {
