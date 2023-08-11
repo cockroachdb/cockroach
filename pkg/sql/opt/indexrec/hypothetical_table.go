@@ -144,6 +144,11 @@ func (ht *HypotheticalTable) Index(i cat.IndexOrdinal) cat.Index {
 	return &ht.hypotheticalIndexes[i-existingIndexCount]
 }
 
+// IsHypothetical is part of the cat.Table interface.
+func (ht *HypotheticalTable) IsHypothetical() bool {
+	return true
+}
+
 // FullyQualifiedName returns the fully qualified name of the hypothetical
 // table.
 func (ht *HypotheticalTable) FullyQualifiedName(ctx context.Context) (cat.DataSourceName, error) {

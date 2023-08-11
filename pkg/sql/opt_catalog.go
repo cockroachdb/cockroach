@@ -1369,6 +1369,11 @@ func (ot *optTable) GetDatabaseID() descpb.ID {
 	return ot.desc.GetParentID()
 }
 
+// IsHypothetical is part of the cat.Table interface.
+func (ot *optTable) IsHypothetical() bool {
+	return false
+}
+
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
 func (ot *optTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
@@ -2356,6 +2361,11 @@ func (ot *optVirtualTable) HomeRegionColName() (colName string, ok bool) {
 // GetDatabaseID is part of the cat.Table interface.
 func (ot *optVirtualTable) GetDatabaseID() descpb.ID {
 	return 0
+}
+
+// IsHypothetical is part of the cat.Table interface.
+func (ot *optVirtualTable) IsHypothetical() bool {
+	return false
 }
 
 // CollectTypes is part of the cat.DataSource interface.
