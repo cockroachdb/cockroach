@@ -212,15 +212,16 @@ func (g *githubIssues) createPostRequest(
 	}
 
 	return issues.PostRequest{
-		MentionOnCreate: mention,
-		ProjectColumnID: projColID,
-		PackageName:     "roachtest",
-		TestName:        issueName,
-		Message:         messagePrefix + message,
-		Artifacts:       artifacts,
-		ExtraLabels:     labels,
-		ExtraParams:     clusterParams,
-		HelpCommand:     generateHelpCommand(issueClusterName, spec.Cluster.Cloud, start, end),
+		MentionOnCreate:      mention,
+		ProjectColumnID:      projColID,
+		PackageName:          "roachtest",
+		TestName:             issueName,
+		Message:              messagePrefix + message,
+		SkipLabelTestFailure: infraFlake, // infra-flakes are not marked as C-test-failure
+		Artifacts:            artifacts,
+		ExtraLabels:          labels,
+		ExtraParams:          clusterParams,
+		HelpCommand:          generateHelpCommand(issueClusterName, spec.Cluster.Cloud, start, end),
 	}, nil
 }
 

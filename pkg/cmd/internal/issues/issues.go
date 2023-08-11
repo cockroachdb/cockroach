@@ -45,18 +45,37 @@ func enforceMaxLength(s string) string {
 	return s
 }
 
-var (
-	// Set of labels attached to created issues.
-	issueLabels = []string{"O-robot", "C-test-failure"}
-	// Label we expect when checking existing issues. Sometimes users open
-	// issues about flakes and don't assign all the labels. We want to at
-	// least require the test-failure label to avoid pathological situations
-	// in which a test name is so generic that it matches lots of random issues.
-	// Note that we'll only post a comment into an existing label if the labels
-	// match 100%, but we also cross-link issues whose labels differ. But we
-	// require that they all have searchLabel as a baseline.
-	searchLabel = issueLabels[1]
+const (
+	robotLabel       = "O-robot"
+	testFailureLabel = "C-test-failure"
 )
+
+// Label we expect when checking existing issues. Sometimes users open
+// issues about flakes and don't assign all the labels. We want to at
+// least require the one label to avoid pathological situations in
+// which a test name is so generic that it matches lots of random
+// issues.  Note that we'll only post a comment into an existing label
+// if the labels match 100%, but we also cross-link issues whose
+// labels differ. But we require that they all have searchLabel as a
+// baseline.
+func searchLabel(req PostRequest) string {
+	if req.SkipLabelTestFailure {
+		return robotLabel
+	}
+
+	return testFailureLabel
+}
+
+// issueLabels returns the set of labels attached by default to
+// created issues.
+func issueLabels(req PostRequest) []string {
+	labels := []string{robotLabel}
+	if req.SkipLabelTestFailure {
+		return labels
+	}
+
+	return append(labels, testFailureLabel)
+}
 
 // context augments context.Context with a logger.
 type postCtx struct {
@@ -302,7 +321,7 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 	// that would match if it weren't for their branch label.
 	qBase := fmt.Sprintf(
 		`repo:%q user:%q is:issue is:open in:title label:%q sort:created-desc %q`,
-		p.Repo, p.Org, searchLabel, title)
+		p.Repo, p.Org, searchLabel(req), title)
 
 	releaseLabel := fmt.Sprintf("branch-%s", p.Branch)
 	qExisting := qBase + " label:" + releaseLabel + " -label:X-noreuse"
@@ -353,7 +372,7 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 
 	body := enforceMaxLength(r.buf.String())
 
-	createLabels := append(issueLabels, releaseLabel)
+	createLabels := append(issueLabels(req), releaseLabel)
 	createLabels = append(createLabels, req.ExtraLabels...)
 	if foundIssue == nil {
 		issueRequest := github.IssueRequest{
@@ -426,6 +445,8 @@ type PostRequest struct {
 	PackageName string
 	// The name of the failing test.
 	TestName string
+	// If set, the C-test-failure label will not be applied.
+	SkipLabelTestFailure bool
 	// The test output.
 	Message string
 	// ExtraParams contains the parameters to be included in a failure
