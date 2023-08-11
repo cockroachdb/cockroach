@@ -428,6 +428,13 @@ func checkMissingIntroducedSpans(
 		// backed up from ts=0).
 		tablesIntroduced := make(map[descpb.ID]struct{})
 		for _, span := range mainBackupManifests[i].IntroducedSpans {
+			if rest, _, err := keys.DecodeTenantPrefix(span.Key); err != nil {
+				return err
+			} else if len(rest) == 0 {
+				// The key span represents a whole tenant's key space. Checking for
+				// introduced tables does not apply.
+				continue
+			}
 			_, tableID, err := codec.DecodeTablePrefix(span.Key)
 			if err != nil {
 				return err
