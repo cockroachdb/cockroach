@@ -199,6 +199,7 @@ const (
 	CrdbInternalKVFlowTokenDeductions
 	CrdbInternalRepairableCatalogCorruptionsViewID
 	CrdbInternalKVProtectedTS
+	CrdbInternalEventsTableID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

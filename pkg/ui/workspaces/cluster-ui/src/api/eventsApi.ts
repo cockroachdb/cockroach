@@ -39,7 +39,7 @@ export type NonRedactedEventsRequest = {
 
 export type EventsResponse = EventColumns[];
 
-export const baseEventsQuery = `SELECT timestamp, "eventType", "reportingID", info, "uniqueID" FROM system.eventlog`;
+export const baseEventsQuery = `SELECT timestamp, "eventType", "reportingID", info, "uniqueID" FROM crdb_internal.eventlog`;
 
 function buildEventStatement({
   type,
