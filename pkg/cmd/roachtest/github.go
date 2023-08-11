@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
@@ -49,7 +50,7 @@ func roachtestPrefix(p string) string {
 
 // generateHelpCommand creates a HelpCommand for createPostRequest
 func generateHelpCommand(
-	clusterName string, start time.Time, end time.Time,
+	clusterName string, cloud string, start time.Time, end time.Time,
 ) func(renderer *issues.Renderer) {
 	return func(renderer *issues.Renderer) {
 		issues.HelpCommandAsLink(
@@ -60,8 +61,9 @@ func generateHelpCommand(
 			"How To Investigate (internal)",
 			"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
 		)(renderer)
-		// An empty clusterName corresponds to a cluster creation failure
-		if clusterName != "" {
+		// An empty clusterName corresponds to a cluster creation failure.
+		// We only scrape metrics from GCE clusters for now.
+		if spec.GCE == cloud && clusterName != "" {
 			issues.HelpCommandAsLink(
 				"Grafana",
 				fmt.Sprintf("https://go.crdb.dev/p/roachfana/%s/%d/%d", clusterName, start.UnixMilli(), end.UnixMilli()),
@@ -215,7 +217,7 @@ func (g *githubIssues) createPostRequest(
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
 		ExtraParams:     clusterParams,
-		HelpCommand:     generateHelpCommand(issueClusterName, start, end),
+		HelpCommand:     generateHelpCommand(issueClusterName, spec.Cluster.Cloud, start, end),
 	}, nil
 }
 
