@@ -105,17 +105,18 @@ func TestShouldPost(t *testing.T) {
 
 func TestCreatePostRequest(t *testing.T) {
 	testCases := []struct {
-		nonReleaseBlocker      bool
-		clusterCreationFailed  bool
-		loadTeamsFailed        bool
-		localSSD               bool
-		arch                   vm.CPUArch
-		category               issueCategory
-		expectedPost           bool
-		expectedReleaseBlocker bool
-		expectedParams         map[string]string
+		nonReleaseBlocker       bool
+		clusterCreationFailed   bool
+		loadTeamsFailed         bool
+		localSSD                bool
+		arch                    vm.CPUArch
+		category                issueCategory
+		expectedPost            bool
+		expectedReleaseBlocker  bool
+		expectedSkipTestFailure bool
+		expectedParams          map[string]string
 	}{
-		{true, false, false, false, "", otherErr, true, false, // non release-blocker
+		{true, false, false, false, "", otherErr, true, false /* non release-blocker */, false,
 			prefixAll(map[string]string{
 				"cloud":     "gce",
 				"encrypted": "false",
@@ -126,7 +127,7 @@ func TestCreatePostRequest(t *testing.T) {
 				"localSSD":  "false",
 			}),
 		},
-		{false, false, false, false, "", otherErr, true, true,
+		{false, false, false, false, "", otherErr, true, true, false,
 			prefixAll(map[string]string{
 				"cloud":     "gce",
 				"encrypted": "false",
@@ -137,7 +138,7 @@ func TestCreatePostRequest(t *testing.T) {
 				"localSSD":  "false",
 			}),
 		},
-		{false, false, false, true, vm.ArchARM64, clusterCreationErr, true, false,
+		{false, false, false, true, vm.ArchARM64, clusterCreationErr, true, false, true,
 			prefixAll(map[string]string{
 				"cloud":     "gce",
 				"encrypted": "false",
@@ -151,7 +152,7 @@ func TestCreatePostRequest(t *testing.T) {
 		// Assert that release-blocker label exists when !nonReleaseBlocker
 		// Also ensure that in the event of a failed cluster creation,
 		// nil `vmOptions` and `clusterImpl` are not dereferenced
-		{false, true, false, false, "", sshErr, true, false,
+		{false, true, false, false, "", sshErr, true, false, true,
 			prefixAll(map[string]string{
 				"cloud": "gce",
 				"ssd":   "0",
@@ -159,7 +160,7 @@ func TestCreatePostRequest(t *testing.T) {
 			}),
 		},
 		//Simulate failure loading TEAMS.yaml
-		{true, false, true, false, "", otherErr, false, false, nil},
+		{true, false, true, false, "", otherErr, false, false, false, nil},
 	}
 
 	reg, err := makeTestRegistry(spec.GCE, "", "", false, false)
@@ -217,6 +218,7 @@ func TestCreatePostRequest(t *testing.T) {
 
 			require.True(t, contains(req.ExtraLabels, nil, "O-roachtest"))
 			require.Equal(t, c.expectedReleaseBlocker, contains(req.ExtraLabels, nil, "release-blocker"))
+			require.Equal(t, c.expectedSkipTestFailure, req.SkipLabelTestFailure)
 
 			expectedTeam := "@cockroachdb/unowned"
 			expectedName := "github_test"
