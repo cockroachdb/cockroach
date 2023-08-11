@@ -996,3 +996,142 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	cutoverOutput := replicationtestutils.DecimalTimeToHLC(c.T, showCutover)
 	require.Equal(c.T, futureTime, cutoverOutput)
 }
+
+// TestTenantStreamingPauseProducer verifies that pausing the producer job pauses the ingestion job.
+func TestTenantStreamingPauseProducer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	// Pause the producer job.
+	c.SrcSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", producerJobID))
+	jobutils.WaitForJobToPause(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+
+	// Verify the ingestion job is paused.
+	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+}
+
+// TestTenantStreamingCancelProducer verifies that canceling the producer job pauses the ingestion job.
+func TestTenantStreamingCancelProducer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	// Cancel the producer job, which should fail the ingestion job.
+	c.SrcSysSQL.Exec(t, fmt.Sprintf("CANCEL JOB %d", producerJobID))
+	jobutils.WaitForJobToCancel(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+
+	// Verify the ingestion job is paused.
+	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+}
+
+// TestTenantStreamingRetryLoadJob verifies the resumer retries loading the job
+// if that fails, otherwise we might fail when, for example, the node is busy.
+func TestTenantStreamingRetryLoadJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var knobLoadErr error
+	var mu syncutil.Mutex
+	knobDoneCh := make(chan struct{})
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.TestingKnobs = &sql.StreamingTestingKnobs{
+		AfterResumerJobLoad: func(err error) error {
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				return err
+			}
+			if knobLoadErr == nil {
+				return nil
+			}
+			// We only need to see the error once, and then we can clear it.
+			close(knobDoneCh)
+			defer func() { knobLoadErr = nil }()
+			return knobLoadErr
+		},
+	}
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	c.SrcSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", producerJobID))
+	jobutils.WaitForJobToPause(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+
+	// Write a bit more to be verified at the end.
+	c.SrcTenantSQL.Exec(t, "INSERT INTO d.t2 VALUES (3);")
+
+	// Inject an error to fail the resumer.
+	mu.Lock()
+	knobLoadErr = errors.Newf("test error")
+	mu.Unlock()
+
+	// Resume ingestion.
+	c.SrcSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", producerJobID))
+	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+
+	// Wait for the resumer to see the error and clear it, after this it should
+	// succeed resuming.
+	<-knobDoneCh
+
+	// Verify the job succeeds now.
+	srcTime = c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
+}
+
+func TestLoadProducerAndIngestionProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, replicationJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
+
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(replicationJobID))
+
+	srcDB := c.SrcSysServer.ExecutorConfig().(sql.ExecutorConfig).InternalDB
+	producerProgress, err := replicationutils.LoadReplicationProgress(ctx, srcDB, jobspb.JobID(producerJobID))
+	require.NoError(t, err)
+	require.Equal(t, jobspb.StreamReplicationProgress_NOT_FINISHED, producerProgress.StreamIngestionStatus)
+
+	destDB := c.DestSysServer.ExecutorConfig().(sql.ExecutorConfig).InternalDB
+	ingestionProgress, err := replicationutils.LoadIngestionProgress(ctx, destDB, jobspb.JobID(replicationJobID))
+	require.NoError(t, err)
+	require.Equal(t, jobspb.Replicating, ingestionProgress.ReplicationStatus)
+}

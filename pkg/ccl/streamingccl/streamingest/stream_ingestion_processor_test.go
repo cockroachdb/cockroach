@@ -60,6 +60,9 @@ import (
 type mockStreamClient struct {
 	partitionEvents map[string][]streamingccl.Event
 	doneCh          chan struct{}
+	heartbeatErr    error
+	heartbeatStatus streampb.StreamReplicationStatus
+	onHeartbeat     func() (streampb.StreamReplicationStatus, error)
 }
 
 var _ streamclient.Client = &mockStreamClient{}
@@ -87,7 +90,10 @@ func (m *mockStreamClient) Dial(_ context.Context) error {
 func (m *mockStreamClient) Heartbeat(
 	_ context.Context, _ streampb.StreamID, _ hlc.Timestamp,
 ) (streampb.StreamReplicationStatus, error) {
-	panic("unimplemented")
+	if m.onHeartbeat != nil {
+		return m.onHeartbeat()
+	}
+	return m.heartbeatStatus, m.heartbeatErr
 }
 
 // Plan implements the Client interface.

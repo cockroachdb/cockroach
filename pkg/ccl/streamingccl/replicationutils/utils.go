@@ -177,23 +177,8 @@ func ReplicatedTimeFromProgress(p *jobspb.Progress) hlc.Timestamp {
 func LoadIngestionProgress(
 	ctx context.Context, db isql.DB, jobID jobspb.JobID,
 ) (*jobspb.StreamIngestionProgress, error) {
-	var (
-		progressBytes []byte
-		exists        bool
-	)
-	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		infoStorage := jobs.InfoStorageForJob(txn, jobID)
-		var err error
-		progressBytes, exists, err = infoStorage.GetLegacyProgress(ctx)
-		return err
-	}); err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, nil
-	}
-	progress := &jobspb.Progress{}
-	if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
+	progress, err := jobs.LoadJobProgress(ctx, db, jobID)
+	if err != nil || progress == nil {
 		return nil, err
 	}
 
@@ -203,6 +188,24 @@ func LoadIngestionProgress(
 			progress.GetDetails(), jobID)
 	}
 	return sp.StreamIngest, nil
+}
+
+// LoadReplicationProgress loads the latest persisted stream replication progress.
+// The method returns nil if the progress does not exist yet.
+func LoadReplicationProgress(
+	ctx context.Context, db isql.DB, jobID jobspb.JobID,
+) (*jobspb.StreamReplicationProgress, error) {
+	progress, err := jobs.LoadJobProgress(ctx, db, jobID)
+	if err != nil || progress == nil {
+		return nil, err
+	}
+
+	sp, ok := progress.GetDetails().(*jobspb.Progress_StreamReplication)
+	if !ok {
+		return nil, errors.Newf("unknown progress details type %T in stream replication job %d",
+			progress.GetDetails(), jobID)
+	}
+	return sp.StreamReplication, nil
 }
 
 // InvestigateFingerprints checks that the src and dst cluster data match, table

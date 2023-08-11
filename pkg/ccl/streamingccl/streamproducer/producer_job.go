@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -93,19 +94,30 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 		case <-p.timer.Ch():
 			p.timer.MarkRead()
 			p.timer.Reset(streamingccl.StreamReplicationStreamLivenessTrackFrequency.Get(execCfg.SV()))
-			j, err := execCfg.JobRegistry.LoadJob(ctx, p.job.ID())
+			progress, err := replicationutils.LoadReplicationProgress(ctx, execCfg.InternalDB, p.job.ID())
+			if knobs := execCfg.StreamingTestingKnobs; knobs != nil && knobs.AfterResumerJobLoad != nil {
+				err = knobs.AfterResumerJobLoad(err)
+			}
 			if err != nil {
-				return err
+				if jobs.HasJobNotFoundError(err) {
+					return errors.Wrapf(err, "replication stream %d failed loading producer job progress", p.job.ID())
+				}
+				log.Errorf(ctx,
+					"replication stream %d failed loading producer job progress (retrying): %v", p.job.ID(), err)
+				continue
+			}
+			if progress == nil {
+				log.Errorf(ctx, "replication stream %d cannot find producer job progress (retrying)", p.job.ID())
+				continue
 			}
 
-			prog := j.Progress()
-			switch prog.GetStreamReplication().StreamIngestionStatus {
+			switch progress.StreamIngestionStatus {
 			case jobspb.StreamReplicationProgress_FINISHED_SUCCESSFULLY:
 				return p.releaseProtectedTimestamp(ctx, execCfg)
 			case jobspb.StreamReplicationProgress_FINISHED_UNSUCCESSFULLY:
 				return errors.New("destination cluster job finished unsuccessfully")
 			case jobspb.StreamReplicationProgress_NOT_FINISHED:
-				expiration := prog.GetStreamReplication().Expiration
+				expiration := progress.Expiration
 				log.VEventf(ctx, 1, "checking if stream replication expiration %s timed out", expiration)
 				if expiration.Before(p.timeSource.Now()) {
 					return errors.Errorf("replication stream %d timed out", p.job.ID())
