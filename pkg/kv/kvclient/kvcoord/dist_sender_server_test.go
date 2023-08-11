@@ -3938,11 +3938,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			for _, isoLevel := range isolation.Levels() {
-				t.Run(isoLevel.String(), func(t *testing.T) {
-					run(t, tc, isoLevel)
-				})
-			}
+			isolation.RunEachLevel(t, func(t *testing.T, isoLevel isolation.Level) {
+				run(t, tc, isoLevel)
+			})
 		})
 	}
 }
