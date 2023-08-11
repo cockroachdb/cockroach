@@ -57,6 +57,7 @@ import { CircleFilled } from "../icon";
 import { createTimeScaleFromDateRange, TimeScale } from "src/timeScaleDropdown";
 import moment from "moment-timezone";
 import { Timestamp } from "../timestamp";
+import { FixLong } from "../util";
 
 const cx = classNames.bind(styles);
 const statementsPageCx = classNames.bind(statementsPageStyles);
@@ -93,7 +94,9 @@ export const MemoryUsageItem: React.FC<{
   <SummaryCardItem
     label={"Memory Usage"}
     value={
-      Bytes(alloc_bytes?.toNumber()) + "/" + Bytes(max_alloc_bytes?.toNumber())
+      Bytes(FixLong(alloc_bytes ?? 0).toNumber()) +
+      "/" +
+      Bytes(FixLong(max_alloc_bytes ?? 0).toNumber())
     }
   />
 );
