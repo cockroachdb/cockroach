@@ -25,6 +25,7 @@ import {
 } from "src/store/nodes";
 import {
   selectAutomaticStatsCollectionEnabled,
+  selectDropUnusedIndexDuration,
   selectIndexRecommendationsEnabled,
   selectIndexUsageStatsEnabled,
 } from "src/store/clusterSettings/clusterSettings.selectors";
@@ -74,6 +75,7 @@ export const mapStateToProps = (
       selectAutomaticStatsCollectionEnabled(state),
     indexUsageStatsEnabled: selectIndexUsageStatsEnabled(state),
     showIndexRecommendations: selectIndexRecommendationsEnabled(state),
+    csIndexUnusedDuration: selectDropUnusedIndexDuration(state),
     hasAdminRole: selectHasAdminRole(state),
     indexStats: {
       loading: !!indexStatsState?.inFlight,
@@ -88,8 +90,14 @@ export const mapStateToProps = (
 export const mapDispatchToProps = (
   dispatch: Dispatch,
 ): DatabaseTablePageActions => ({
-  refreshTableDetails: (database: string, table: string) => {
-    dispatch(tableDetailsActions.refresh({ database, table }));
+  refreshTableDetails: (
+    database: string,
+    table: string,
+    csIndexUnusedDuration: string,
+  ) => {
+    dispatch(
+      tableDetailsActions.refresh({ database, table, csIndexUnusedDuration }),
+    );
   },
   refreshIndexStats: (database: string, table: string) => {
     dispatch(

@@ -108,11 +108,11 @@ class TestDriver {
   }
 
   async refreshDatabaseDetails() {
-    return this.actions.refreshDatabaseDetails(this.database);
+    return this.actions.refreshDatabaseDetails(this.database, "168h");
   }
 
   async refreshTableDetails(table: string) {
-    return this.actions.refreshTableDetails(this.database, table);
+    return this.actions.refreshTableDetails(this.database, table, "168h");
   }
 
   private findTable(name: string) {
@@ -150,12 +150,16 @@ describe("Database Details Page", function () {
       sortSettingGrants: { ascending: true, columnTitle: "name" },
       tables: [],
       showIndexRecommendations: false,
+      csIndexUnusedDuration: "168h",
     });
   });
 
   it("makes a row for each table", async function () {
     fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
-      clusterUiApi.createDatabaseDetailsReq("things"),
+      clusterUiApi.createDatabaseDetailsReq({
+        database: "things",
+        csIndexUnusedDuration: "168h",
+      }),
       [
         // Id
         { rows: [] },
@@ -183,6 +187,7 @@ describe("Database Details Page", function () {
       isTenant: false,
       showNodeRegionsColumn: false,
       showIndexRecommendations: false,
+      csIndexUnusedDuration: "168h",
       viewMode: ViewMode.Tables,
       sortSettingTables: { ascending: true, columnTitle: "name" },
       sortSettingGrants: { ascending: true, columnTitle: "name" },
@@ -237,7 +242,10 @@ describe("Database Details Page", function () {
 
   it("loads table details", async function () {
     fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
-      clusterUiApi.createDatabaseDetailsReq("things"),
+      clusterUiApi.createDatabaseDetailsReq({
+        database: "things",
+        csIndexUnusedDuration: "168h",
+      }),
       [
         // Id
         { rows: [] },
@@ -255,7 +263,7 @@ describe("Database Details Page", function () {
     const mockStatsLastCreatedTimestamp = moment();
 
     fakeApi.stubSqlApiCall<clusterUiApi.TableDetailsRow>(
-      clusterUiApi.createTableDetailsReq("things", `"public"."foo"`),
+      clusterUiApi.createTableDetailsReq("things", `"public"."foo"`, "168h"),
       [
         // Table ID query
         { rows: [{ table_id: "1" }] },
@@ -306,7 +314,7 @@ describe("Database Details Page", function () {
     );
 
     fakeApi.stubSqlApiCall<clusterUiApi.TableDetailsRow>(
-      clusterUiApi.createTableDetailsReq("things", `"public"."bar"`),
+      clusterUiApi.createTableDetailsReq("things", `"public"."bar"`, "168h"),
       [
         // Table ID query
         { rows: [{ table_id: "2" }] },
@@ -404,7 +412,10 @@ describe("Database Details Page", function () {
 
   it("sorts roles meaningfully", async function () {
     fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
-      clusterUiApi.createDatabaseDetailsReq("things"),
+      clusterUiApi.createDatabaseDetailsReq({
+        database: "things",
+        csIndexUnusedDuration: "168h",
+      }),
       [
         // Id
         { rows: [] },
@@ -418,7 +429,7 @@ describe("Database Details Page", function () {
     );
 
     fakeApi.stubSqlApiCall<clusterUiApi.TableDetailsRow>(
-      clusterUiApi.createTableDetailsReq("things", `"public"."foo"`),
+      clusterUiApi.createTableDetailsReq("things", `"public"."foo"`, "168h"),
       [
         // Table ID query
         {},
@@ -451,7 +462,10 @@ describe("Database Details Page", function () {
 
   it("sorts grants meaningfully", async function () {
     fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
-      clusterUiApi.createDatabaseDetailsReq("things"),
+      clusterUiApi.createDatabaseDetailsReq({
+        database: "things",
+        csIndexUnusedDuration: "168h",
+      }),
       [
         // Id
         { rows: [] },
@@ -465,7 +479,7 @@ describe("Database Details Page", function () {
     );
 
     fakeApi.stubSqlApiCall<clusterUiApi.TableDetailsRow>(
-      clusterUiApi.createTableDetailsReq("things", `"public"."foo"`),
+      clusterUiApi.createTableDetailsReq("things", `"public"."foo"`, "168h"),
       [
         // Table ID query
         {},

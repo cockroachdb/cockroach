@@ -109,7 +109,9 @@ const databasesReducerObj = new CachedDataReducer(
 );
 export const refreshDatabases = databasesReducerObj.refresh;
 
-export const databaseRequestPayloadToID = (dbName: string): string => dbName;
+export const databaseRequestPayloadToID = (
+  params: clusterUiApi.DatabaseDetailsReqParams,
+): string => params.database;
 
 const databaseDetailsReducerObj = new KeyedCachedDataReducer(
   clusterUiApi.getDatabaseDetails,
