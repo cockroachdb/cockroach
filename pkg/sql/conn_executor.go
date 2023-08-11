@@ -1442,6 +1442,11 @@ type connExecutor struct {
 		// Set via setTxnRewindPos().
 		txnRewindPos CmdPos
 
+		// injectedTxnRetryCounter keeps track of how many errors have been
+		// injected in this transaction with the inject_retry_errors_enabled
+		// flag.
+		injectedTxnRetryCounter int
+
 		// prepStmtNamespace contains the prepared statements and portals that the
 		// session currently has access to.
 		// Portals are bound to a transaction and they're all destroyed once the
@@ -3845,10 +3850,13 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case txnRollback:
 		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent)
 		// Since we're doing a complete rollback, there's no need to keep the
-		// prepared stmts for a txn rewind.
+		// prepared stmts for a txn rewind. We also reset the counter for
+		// the number of retry errors injected in the transaction, which we
+		// don't want to reset for the txnRestart case.
 		ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
 			ex.Ctx(), &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
+		ex.extraTxnState.injectedTxnRetryCounter = 0
 	case txnRestart:
 		// In addition to resetting the extraTxnState, the restart event may
 		// also need to reset the sqlliveness.Session.
