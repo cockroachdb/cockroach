@@ -922,8 +922,7 @@ func waitForShutdown(
 	select {
 	case shutdownRequest := <-shutdownC:
 		returnErr = shutdownRequest.ShutdownCause()
-		// There's no point in draining if the server didn't even fully start.
-		drain := shutdownRequest.Reason != serverctl.ShutdownReasonServerStartupError
+		drain := shutdownRequest.TerminateUsingGracefulDrain()
 		startShutdownAsync(serverStatusMu, stopWithoutDrain, drain)
 
 	case sig := <-signalCh:
@@ -1027,6 +1026,23 @@ func waitForShutdown(
 				redact.Safe(sig), redact.Safe(hardShutdownHint))
 			handleSignalDuringShutdown(sig)
 			panic("unreachable")
+
+		case shutdownRequest := <-shutdownC:
+			if shutdownRequest.TerminateUsingGracefulDrain() {
+				// Internal graceful drain request during graceful shutdown:
+				// continue the graceful shutdown.
+				log.Ops.Infof(shutdownCtx, "received additional shutdown request '%s'; continuing graceful shutdown", shutdownRequest.ShutdownCause())
+				continue
+			} else {
+				// A non-graceful shutdown request: we're done.
+				const msgDone = "internal error during drain; used hard shutdown instead"
+				returnErr = shutdownRequest.ShutdownCause()
+				log.Ops.Infof(shutdownCtx, "received additional shutdown request '%s'; initiating hard shutdown%s",
+					shutdownRequest.ShutdownCause(), redact.Safe(hardShutdownHint))
+				if !startCtx.inBackground {
+					fmt.Fprintln(os.Stdout, msgDone)
+				}
+			}
 
 		case <-stopper.IsStopped():
 			const msgDone = "server drained and shutdown completed"

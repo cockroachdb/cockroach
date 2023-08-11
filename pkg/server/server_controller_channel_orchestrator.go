@@ -429,15 +429,22 @@ func (o *channelOrchestrator) startControlledServer(
 		close(startedOrStoppedCh)
 
 		// Wait for a request to shut down.
-		select {
-		case <-tenantStopper.ShouldQuiesce():
-			log.Infof(ctx, "tenant %q finishing their own control loop", tenantName)
+		for {
+			select {
+			case <-tenantStopper.ShouldQuiesce():
+				log.Infof(ctx, "tenant %q finishing their own control loop", tenantName)
+				return
 
-		case shutdownRequest := <-tenantServer.shutdownRequested():
-			log.Infof(ctx, "tenant %q requesting their own shutdown: %v",
-				tenantName, shutdownRequest.ShutdownCause())
-			// Make the async stop goroutine above pick up the task of shutting down.
-			state.requestImmediateStop()
+			case shutdownRequest := <-tenantServer.shutdownRequested():
+				log.Infof(ctx, "tenant %q requesting their own shutdown: %v",
+					tenantName, shutdownRequest.ShutdownCause())
+				// Make the async stop goroutine above pick up the task of shutting down.
+				if shutdownRequest.TerminateUsingGracefulDrain() {
+					state.requestGracefulStop()
+				} else {
+					state.requestImmediateStop()
+				}
+			}
 		}
 	}); err != nil {
 		// Clean up the task we just started before.

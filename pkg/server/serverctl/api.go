@@ -83,7 +83,6 @@ const (
 	// failed.
 	ShutdownReasonServerStartupError
 	// ShutdownReasonFatalError identifies an error that requires the server be
-	// terminated. Compared to a panic or log.Fatal(), the termination can be more
-	// graceful, though.
+	// terminated immediately.
 	ShutdownReasonFatalError
 )
