@@ -39,7 +39,7 @@ import {
 } from "src/dropdown/dropdown";
 import { Button } from "src/button/button";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import { computeOrUseStmtSummary } from "../util";
+import { computeOrUseStmtSummary, FixLong } from "../util";
 import {
   statisticsTableTitles,
   StatisticType,
@@ -230,10 +230,16 @@ export function makeSessionsColumns(
       title: statisticsTableTitles.memUsage(statType),
       className: cx("cl-table__col-session"),
       cell: session =>
-        BytesWithPrecision(session.session.alloc_bytes?.toNumber(), 0) +
+        BytesWithPrecision(
+          FixLong(session.session.alloc_bytes ?? 0).toNumber(),
+          0,
+        ) +
         "/" +
-        BytesWithPrecision(session.session.max_alloc_bytes?.toNumber(), 0),
-      sort: session => session.session.alloc_bytes?.toNumber(),
+        BytesWithPrecision(
+          FixLong(session.session.max_alloc_bytes ?? 0).toNumber(),
+          0,
+        ),
+      sort: session => FixLong(session.session.alloc_bytes ?? 0).toNumber(),
     },
     {
       name: "clientAddress",
