@@ -62,6 +62,8 @@ func TestTenantUpgrade(t *testing.T) {
 	// Initialize the version to the BinaryMinSupportedVersion.
 	require.NoError(t, clusterversion.Initialize(ctx,
 		clusterversion.TestingBinaryMinSupportedVersion, &settings.SV))
+
+	t.Log("starting server")
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Settings:          settings,
@@ -101,33 +103,32 @@ func TestTenantUpgrade(t *testing.T) {
 	}
 
 	t.Run("upgrade tenant", func(t *testing.T) {
-		// Create a tenant before upgrading anything and verify its version.
+		t.Log("create a tenant before upgrading anything")
 		const initialTenantID = 10
 		tenantServer, conn := startAndConnectToTenant(t, initialTenantID)
 		db := sqlutils.MakeSQLRunner(conn)
 
-		// Ensure that the tenant works.
+		t.Log("ensure that the tenant works")
 		db.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
 			[][]string{{expectedInitialTenantVersion.String()}})
 		db.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY)")
 		db.Exec(t, "INSERT INTO t VALUES (1), (2)")
 
-		// Upgrade the host cluster.
+		t.Log("upgrade the storage cluster to v2")
 		sysDB.Exec(t, "SET CLUSTER SETTING version = $1", v2.String())
 
-		// Ensure that the tenant still works.
+		t.Log("ensure that the tenant still works")
 		db.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
 
-		// Upgrade the tenant cluster.
+		t.Log("upgrade the tenant cluster to v2")
 		db.Exec(t, "SET CLUSTER SETTING version = $1", v2.String())
 
-		// Ensure that the tenant still works.
+		t.Log("ensure that the tenant still works")
 		db.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
 		db.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{v2.String()}})
 
-		// Restart the tenant and ensure that the version is correct.
+		t.Log("restart the tenant")
 		tenantServer.Stopper().Stop(ctx)
-
 		tenantServer, err := ts.StartTenant(ctx, base.TestTenantArgs{
 			TenantID: roachpb.MustMakeTenantID(initialTenantID),
 		})
@@ -135,18 +136,21 @@ func TestTenantUpgrade(t *testing.T) {
 		conn = tenantServer.SQLConn(t, "")
 		db = sqlutils.MakeSQLRunner(conn)
 
+		t.Log("ensure that the version is still at v2")
 		db.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
 		db.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{v2.String()}})
 	})
 
 	t.Run("post-upgrade tenant", func(t *testing.T) {
-		// Create a new tenant and ensure it has the right version.
+		t.Log("create a new tenant")
 		const postUpgradeTenantID = 11
 		tenant, conn := startAndConnectToTenant(t, postUpgradeTenantID)
+
+		t.Log("verify it is at v2")
 		sqlutils.MakeSQLRunner(conn).CheckQueryResults(t,
 			"SHOW CLUSTER SETTING version", [][]string{{v2.String()}})
 
-		// Restart the new tenant and ensure it has the right version.
+		t.Log("restart the new tenant")
 		tenant.Stopper().Stop(ctx)
 		var err error
 		tenant, err = ts.StartTenant(ctx, base.TestTenantArgs{
@@ -155,6 +159,7 @@ func TestTenantUpgrade(t *testing.T) {
 		require.NoError(t, err)
 		conn = tenant.SQLConn(t, "")
 
+		t.Log("verify it still is at v2")
 		sqlutils.MakeSQLRunner(conn).CheckQueryResults(t,
 			"SHOW CLUSTER SETTING version", [][]string{{v2.String()}})
 	})
@@ -194,6 +199,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 	}
 	require.NotEqual(t, v1, roachpb.Version{})
 
+	t.Log("starting server")
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		v2,
@@ -251,6 +257,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 								func(
 									ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 								) error {
+									t.Logf("v1 migration running")
 									return nil
 								}), true
 						case v2:
@@ -260,7 +267,9 @@ func TestTenantUpgradeFailure(t *testing.T) {
 								func(
 									ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 								) error {
+									t.Log("v2 migration starts running")
 									tenantStopperChannel <- struct{}{}
+									t.Log("v2 migration finishes running")
 									return nil
 								}), true
 						default:
@@ -279,11 +288,12 @@ func TestTenantUpgradeFailure(t *testing.T) {
 
 	t.Run("upgrade tenant have it crash then resume", func(t *testing.T) {
 		skip.WithIssue(t, 106279)
-		// Create a tenant before upgrading anything and verify its version.
+		t.Log("create a tenant before upgrading anything")
 		const initialTenantID = 10
 		tenant, conn := startAndConnectToTenant(t, initialTenantID)
 		db := sqlutils.MakeSQLRunner(conn)
-		// Ensure that the tenant works.
+
+		t.Log("ensure that the tenant works and verify its version")
 		db.CheckQueryResults(t,
 			"SHOW CLUSTER SETTING version", [][]string{{v0.String()}})
 		db.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY)")
@@ -293,32 +303,38 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		// Cause the upgrade to crash on v1.
 		go func() {
 			<-tenantStopperChannel
+			t.Log("received async notification to stop tenant")
 			tenant.Stopper().Stop(ctx)
+			t.Log("tenant stopped")
 			waitForTenantClose <- struct{}{}
 		}()
 
-		// Upgrade the host cluster to the latest version.
+		t.Log("upgrade the storage cluster to v2")
 		sysDB.Exec(t, "SET CLUSTER SETTING version = $1", v2.String())
-		// Ensure that the tenant still works.
+
+		t.Log("ensure that the tenant still works")
 		db.CheckQueryResults(t,
 			"SELECT * FROM t", [][]string{{"1"}, {"2"}})
-		// Upgrade the tenant cluster, but the upgrade will fail on v1.
+		t.Log("upgrade the tenant cluster, expecting the upgrade to fail on v1")
 		db.ExpectErr(t,
 			".*(database is closed|failed to connect|closed network connection|upgrade failed due to transient SQL servers)+",
 			"SET CLUSTER SETTING version = $1", v2.String())
+
+		t.Log("waiting for tenant shutdown to complete")
 		<-waitForTenantClose
 
+		t.Log("restart the tenant server")
 		tenant, conn = startAndConnectToTenant(t, initialTenantID)
 		db = sqlutils.MakeSQLRunner(conn)
-		// Ensure that the tenant still works and the target
-		// version wasn't reached.
+
+		t.Log("ensure that the tenant still works and the target version wasn't reached")
 		db.CheckQueryResults(t,
 			"SELECT * FROM t", [][]string{{"1"}, {"2"}})
 		db.CheckQueryResults(t,
 			"SELECT split_part(version, '-', 1) FROM [SHOW CLUSTER SETTING version]",
 			[][]string{{v1.String()}})
 
-		// Restart the tenant and ensure that the version is correct.
+		t.Log("restart the tenant")
 		tenant.Stopper().Stop(ctx)
 		tenant, conn = startAndConnectToTenant(t, initialTenantID)
 		defer tenant.Stopper().Stop(ctx)
@@ -331,11 +347,12 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			for {
 				_, ok := <-tenantStopperChannel
 				if !ok {
+					t.Log("tenant stopper channel closed")
 					return
 				}
 			}
 		}()
-		// Make sure that all shutdown SQL instance are gone before proceeding.
+		t.Log("make sure that all shutdown SQL instance are gone before proceeding")
 		// We need to wait here because if we don't, the upgrade may hit
 		// errors because it's trying to bump the cluster version for a SQL
 		// instance which doesn't exist (i.e. the one that was restarted above).
@@ -343,11 +360,12 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			"SELECT count(*) FROM system.sql_instances WHERE session_id IS NOT NULL",
 			[][]string{{"1"}})
 
-		// Upgrade the tenant cluster.
-		db.Exec(t,
-			"SET CLUSTER SETTING version = $1", v2.String())
+		t.Log("upgrade the tenant cluster to v2")
+		db.Exec(t, "SET CLUSTER SETTING version = $1", v2.String())
+
 		close(tenantStopperChannel)
-		// Validate the target version has been reached.
+
+		t.Log("validate the target version v2 has been reached")
 		db.CheckQueryResults(t,
 			"SELECT * FROM t", [][]string{{"1"}, {"2"}})
 		db.CheckQueryResults(t,
