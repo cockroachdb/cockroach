@@ -1708,14 +1708,14 @@ func (s *SQLServer) startCheckService(ctx context.Context, stopper *stop.Stopper
 
 	var entry tenantcapabilities.Entry
 	var updateCh <-chan struct{}
-	check := func() error {
+	check := func() (useGracefulDrain bool, err error) {
 		entry, updateCh = s.tenantConnect.TenantInfo()
 		return checkServerModeMatchesEntry(s.serviceMode, entry)
 	}
 
 	// Do a synchronous check, to prevent starting the SQL service
 	// outright if the service mode is initially incorrect.
-	if err := check(); err != nil {
+	if _, err := check(); err != nil {
 		return err
 	}
 
@@ -1727,9 +1727,14 @@ func (s *SQLServer) startCheckService(ctx context.Context, stopper *stop.Stopper
 			case <-ctx.Done():
 				return
 			case <-updateCh:
-				if err := check(); err != nil {
-					s.stopTrigger.signalStop(ctx,
-						serverctl.MakeShutdownRequest(serverctl.ShutdownReasonFatalError, err))
+				if useGracefulDrain, err := check(); err != nil {
+					var req serverctl.ShutdownRequest
+					if useGracefulDrain {
+						req = serverctl.MakeShutdownRequest(serverctl.ShutdownReasonGracefulStopRequestedByOrchestration, err)
+					} else {
+						req = serverctl.MakeShutdownRequest(serverctl.ShutdownReasonFatalError, err)
+					}
+					s.stopTrigger.signalStop(ctx, req)
 				}
 			}
 		}
@@ -1738,7 +1743,7 @@ func (s *SQLServer) startCheckService(ctx context.Context, stopper *stop.Stopper
 
 func checkServerModeMatchesEntry(
 	expectedMode mtinfopb.TenantServiceMode, entry tenantcapabilities.Entry,
-) error {
+) (useGracefulDrain bool, err error) {
 	if !entry.Ready() {
 		// At the version this check was introduced, the server was
 		// already modified to provide metadata during the initial
@@ -1746,19 +1751,21 @@ func checkServerModeMatchesEntry(
 		//
 		// If we don't have the metadata here, this means that the
 		// connector is talking to an older-version server.
-		return errors.AssertionFailedf("storage layer did not communicate metadata, is it running an older binary version than the client?")
+		return false, errors.AssertionFailedf("storage layer did not communicate metadata, is it running an older binary version than the client?")
 	}
 
 	if actualMode := entry.ServiceMode; expectedMode != actualMode {
-		return errors.Newf("service check failed: expected service mode %v, record says %v", expectedMode, actualMode)
+		// We can only use a graceful drain if the data state is still ready.
+		useGracefulDrain = entry.DataState == mtinfopb.DataStateReady
+		return useGracefulDrain, errors.Newf("service check failed: expected service mode %v, record says %v", expectedMode, actualMode)
 	}
 	// Extra sanity check. This should never happen (we should enforce
 	// a valid data state when the service mode is not NONE) but it's
 	// cheap to check.
 	if expected, actual := mtinfopb.DataStateReady, entry.DataState; expected != actual {
-		return errors.AssertionFailedf("service check failed: expected data state %v, record says %v", expected, actual)
+		return false, errors.AssertionFailedf("service check failed: expected data state %v, record says %v", expected, actual)
 	}
-	return nil
+	return true, nil
 }
 
 // SQLInstanceID returns the ephemeral ID assigned to each SQL instance. The ID
