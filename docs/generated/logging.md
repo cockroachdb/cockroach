@@ -129,6 +129,8 @@ data access to sensitive data:
 
   - Data access audit events (when table audit is enabled via
     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+  - Data access audit events (when role-based audit is enabled via
+    [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
   - SQL statements executed by users with the admin role
   - Operations that write to system tables
 
