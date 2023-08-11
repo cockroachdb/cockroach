@@ -3300,7 +3300,7 @@ func (ex *connExecutor) convertRetriableErrorIntoUserVisibleError(
 		// Generating a forced retry error here, right after resetting the
 		// transaction is not exactly necessary, but it's a sound way to
 		// generate the only type of ClientVisibleRetryError we have.
-		return ex.state.mu.txn.GenerateForcedRetryableError(ctx, redact.Sprint(origErr)), nil
+		return ex.state.mu.txn.GenerateForcedRetryableErr(ctx, redact.Sprint(origErr)), nil
 	}
 	// Return the original error, this error will not be surfaced to the user.
 	return origErr, nil

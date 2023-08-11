@@ -1012,7 +1012,7 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 
-	retryErr := txn.mu.sender.GetTxnRetryableErr(ctx)
+	retryErr := txn.mu.sender.GetRetryableErr(ctx)
 	if retryErr == nil {
 		return nil
 	}
@@ -1044,7 +1044,7 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) error {
 		// If the retryable error doesn't correspond to an aborted transaction,
 		// there's no need to switch out the transaction. We simply clear the
 		// retryable error and proceed.
-		txn.mu.sender.ClearTxnRetryableErr(ctx)
+		txn.mu.sender.ClearRetryableErr(ctx)
 		return nil
 	}
 
@@ -1398,24 +1398,22 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) error {
 	return txn.mu.sender.SetFixedTimestamp(ctx, ts)
 }
 
-// GenerateForcedRetryableError returns a TransactionRetryWithProtoRefreshError
+// GenerateForcedRetryableErr returns a TransactionRetryWithProtoRefreshError
 // that will cause the txn to be retried.
 //
 // The transaction's epoch is bumped, simulating to an extent what the
 // TxnCoordSender does on retriable errors. The transaction's timestamp is only
-// bumped to the extent that txn.ReadTimestamp is racheted up to txn.WriteTimestamp.
+// bumped to the extent that txn.ReadTimestamp is ratcheted up to txn.WriteTimestamp.
 // TODO(andrei): This method should take in an up-to-date timestamp, but
 // unfortunately its callers don't currently have that handy.
 //
 // As with other transaction retry errors, the caller must call PrepareForRetry
 // before continuing to use the transaction.
-func (txn *Txn) GenerateForcedRetryableError(
-	ctx context.Context, msg redact.RedactableString,
-) error {
+func (txn *Txn) GenerateForcedRetryableErr(ctx context.Context, msg redact.RedactableString) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	now := txn.db.clock.NowAsClockTimestamp()
-	return txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now.ToTimestamp(), msg)
+	return txn.mu.sender.GenerateForcedRetryableErr(ctx, now.ToTimestamp(), msg)
 }
 
 // IsSerializablePushAndRefreshNotPossible returns true if the transaction is

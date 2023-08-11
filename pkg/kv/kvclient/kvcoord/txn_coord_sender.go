@@ -47,7 +47,7 @@ const (
 	// txnRetryableError means that the transaction encountered a
 	// TransactionRetryWithProtoRefreshError, and calls to Send() fail in this
 	// state. It is possible to move back to txnPending by calling
-	// ClearTxnRetryableErr().
+	// ClearRetryableErr().
 	txnRetryableError
 
 	// txnError means that a batch encountered a non-retriable error. Further
@@ -788,15 +788,6 @@ func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context) {
 	}
 }
 
-// UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
-func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
-	ctx context.Context, pErr *kvpb.Error,
-) *kvpb.Error {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	return kvpb.NewError(tc.handleRetryableErrLocked(ctx, pErr))
-}
-
 // handleRetryableErrLocked takes a retriable error and creates a
 // TransactionRetryWithProtoRefreshError containing the transaction that needs
 // to be used by the next attempt. It also handles various aspects of updating
@@ -1153,20 +1144,20 @@ func (tc *TxnCoordSender) RequiredFrontier() hlc.Timestamp {
 	return tc.mu.txn.RequiredFrontier()
 }
 
-// ManualRestart is part of the kv.TxnSender interface.
-func (tc *TxnCoordSender) ManualRestart(
-	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp, msg redact.RedactableString,
+// GenerateForcedRetryableErr is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) GenerateForcedRetryableErr(
+	ctx context.Context, ts hlc.Timestamp, msg redact.RedactableString,
 ) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	if tc.mu.txnState != txnPending && tc.mu.txnState != txnRetryableError {
-		return errors.AssertionFailedf("cannot manually restart, current state: %s", tc.mu.txnState)
+		return errors.AssertionFailedf("cannot generate retryable error, current state: %s", tc.mu.txnState)
 	}
 
 	// Invalidate any writes performed by any workers after the retry updated
 	// the txn's proto but before we synchronized (some of these writes might
 	// have been performed at the wrong epoch).
-	tc.mu.txn.Restart(pri, 0 /* upgradePriority */, ts)
+	tc.mu.txn.Restart(tc.mu.userPriority, 0 /* upgradePriority */, ts)
 
 	pErr := kvpb.NewTransactionRetryWithProtoRefreshError(
 		msg, tc.mu.txn.ID, tc.mu.txn)
@@ -1181,6 +1172,37 @@ func (tc *TxnCoordSender) ManualRestart(
 		reqInt.epochBumpedLocked()
 	}
 	return pErr
+}
+
+// UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
+	ctx context.Context, pErr *kvpb.Error,
+) *kvpb.Error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return kvpb.NewError(tc.handleRetryableErrLocked(ctx, pErr))
+}
+
+// GetRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) GetRetryableErr(
+	ctx context.Context,
+) *kvpb.TransactionRetryWithProtoRefreshError {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnRetryableError {
+		return tc.mu.storedRetryableErr
+	}
+	return nil
+}
+
+// ClearRetryableErr is part of the TxnSender interface.
+func (tc *TxnCoordSender) ClearRetryableErr(ctx context.Context) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnRetryableError {
+		tc.mu.storedRetryableErr = nil
+		tc.mu.txnState = txnPending
+	}
 }
 
 // IsSerializablePushAndRefreshNotPossible is part of the kv.TxnSender interface.
@@ -1479,28 +1501,6 @@ func (tc *TxnCoordSender) DeferCommitWait(ctx context.Context) func(context.Cont
 			return nil
 		}
 		return tc.maybeCommitWait(ctx, true /* deferred */)
-	}
-}
-
-// GetTxnRetryableErr is part of the TxnSender interface.
-func (tc *TxnCoordSender) GetTxnRetryableErr(
-	ctx context.Context,
-) *kvpb.TransactionRetryWithProtoRefreshError {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	if tc.mu.txnState == txnRetryableError {
-		return tc.mu.storedRetryableErr
-	}
-	return nil
-}
-
-// ClearTxnRetryableErr is part of the TxnSender interface.
-func (tc *TxnCoordSender) ClearTxnRetryableErr(ctx context.Context) {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	if tc.mu.txnState == txnRetryableError {
-		tc.mu.storedRetryableErr = nil
-		tc.mu.txnState = txnPending
 	}
 }
 

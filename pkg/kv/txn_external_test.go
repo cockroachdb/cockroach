@@ -607,7 +607,7 @@ func TestGenerateForcedRetryableErrorAfterRollback(t *testing.T) {
 		e1 := txn.Put(ctx, mkKey("a"), 1)
 		require.NoError(t, e1)
 		// Prepare an error to return after the rollback.
-		retryErr := txn.GenerateForcedRetryableError(ctx, "force retry")
+		retryErr := txn.GenerateForcedRetryableErr(ctx, "force retry")
 		// Rolling back completes the transaction, returning an error is invalid.
 		require.NoError(t, txn.Rollback(ctx))
 		return retryErr
@@ -647,7 +647,7 @@ func TestGenerateForcedRetryableErrorSimple(t *testing.T) {
 		require.NoError(t, txn.Put(ctx, mkKey("a"), 1))
 		// Retry exactly once by propagating a retry error.
 		if i++; i == 1 {
-			return txn.GenerateForcedRetryableError(ctx, "force retry")
+			return txn.GenerateForcedRetryableErr(ctx, "force retry")
 		}
 		require.NoError(t, txn.Put(ctx, mkKey("b"), 2))
 		return nil
@@ -690,7 +690,7 @@ func TestGenerateForcedRetryableErrorByPoisoning(t *testing.T) {
 		if i++; i == 1 {
 			// Generate an error and then return nil (not the ideal implementation but
 			// should work).
-			_ = txn.GenerateForcedRetryableError(ctx, "force retry")
+			_ = txn.GenerateForcedRetryableErr(ctx, "force retry")
 			return nil
 		}
 		require.NoError(t, txn.Put(ctx, mkKey("b"), 2))
@@ -753,7 +753,7 @@ func TestUpdateStateOnRemoteRetryableErr(t *testing.T) {
 		// Ensure what we got back is a TransactionRetryWithProtoRefreshError.
 		require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
 		// Ensure the same thing is stored on the TxnCoordSender as well.
-		retErr := txn.Sender().GetTxnRetryableErr(ctx)
+		retErr := txn.Sender().GetRetryableErr(ctx)
 		require.Equal(t, retErr, err)
 		if tc.epochBumped {
 			require.Greater(t, txn.Epoch(), epochBefore)
