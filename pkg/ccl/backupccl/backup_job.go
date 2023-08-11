@@ -156,6 +156,23 @@ func backup(
 		}
 	}
 
+	// Add the spans for any tables that are excluded from backup to the set of
+	// already-completed spans, as there is nothing to do for them.
+	descs := iterFactory.NewDescIter(ctx)
+	defer descs.Close()
+	for ; ; descs.Next() {
+		if ok, err := descs.Valid(); err != nil {
+			return roachpb.RowCount{}, 0, err
+		} else if !ok {
+			break
+		}
+
+		if tbl, _, _, _, _ := descpb.GetDescriptors(descs.Value()); tbl != nil && tbl.ExcludeDataFromBackup {
+			prefix := execCtx.ExecCfg().Codec.TablePrefix(uint32(tbl.ID))
+			completedSpans = append(completedSpans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
+		}
+	}
+
 	// Subtract out any completed spans.
 	spans := filterSpans(backupManifest.Spans, completedSpans)
 	introducedSpans := filterSpans(backupManifest.IntroducedSpans, completedIntroducedSpans)
