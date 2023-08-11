@@ -92,36 +92,14 @@ func (c *serverController) startInitialSecondaryTenantServers(
 }
 
 // scanTenantsForRunnableServices checks which tenants need to be
-// started/stopped and queues the necessary server lifecycle changes.
+// started and queues the necessary server lifecycle changes.
 func (c *serverController) scanTenantsForRunnableServices(
 	ctx context.Context, ie isql.Executor,
 ) error {
-	// Gather the list of servers currently running.
-	// We capture this early so that we don't accidentally look
-	// at entries created after the call to `getExpectedRunningTenants()`
-	// by concurrent calls to `createServerEntryLocked()`.
-	curEntries := c.getAllEntries()
-
 	// The list of tenants that should have a running server.
 	reqTenants, err := c.getExpectedRunningTenants(ctx, ie)
 	if err != nil {
 		return err
-	}
-
-	// Create a lookup map for the first loop below.
-	nameLookup := make(map[roachpb.TenantName]struct{}, len(reqTenants))
-	for _, name := range reqTenants {
-		nameLookup[name] = struct{}{}
-	}
-
-	// First check if there are any servers that shouldn't be running
-	// right now.
-	for name, srv := range curEntries {
-		if _, ok := nameLookup[name]; !ok {
-			log.Infof(ctx, "tenant %q has changed service mode, should now stop", name)
-			// Mark the server for async shutdown.
-			srv.requestGracefulShutdown(ctx)
-		}
 	}
 
 	// Now add all the missing servers.

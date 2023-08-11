@@ -918,11 +918,15 @@ func waitForShutdown(
 	defer shutdownSpan.Finish()
 
 	stopWithoutDrain := make(chan struct{}) // closed if interrupted very early
+	msgDrain := redact.SafeString("initiating graceful shutdown of server")
 
 	select {
 	case shutdownRequest := <-shutdownC:
 		returnErr = shutdownRequest.ShutdownCause()
 		drain := shutdownRequest.TerminateUsingGracefulDrain()
+		if !drain {
+			msgDrain = "initiating hard shutdown of server"
+		}
 		startShutdownAsync(serverStatusMu, stopWithoutDrain, drain)
 
 	case sig := <-signalCh:
@@ -974,8 +978,7 @@ func waitForShutdown(
 	// stop. From this point on, we just have to wait until the server
 	// indicates it has stopped.
 
-	const msgDrain = "initiating graceful shutdown of server"
-	log.Ops.Info(shutdownCtx, msgDrain)
+	log.Ops.Infof(shutdownCtx, "%s", msgDrain)
 	if !startCtx.inBackground {
 		fmt.Fprintln(os.Stdout, msgDrain)
 	}
