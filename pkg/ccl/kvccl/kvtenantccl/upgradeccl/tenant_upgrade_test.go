@@ -50,9 +50,13 @@ func TestTenantUpgrade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+
+	v1 := clusterversion.TestingBinaryMinSupportedVersion
+	v2 := clusterversion.TestingBinaryVersion
+
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
+		v2,
+		v1,
 		false, // initializeVersion
 	)
 	// Initialize the version to the BinaryMinSupportedVersion.
@@ -64,7 +68,7 @@ func TestTenantUpgrade(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+				BinaryVersionOverride:          v1,
 			},
 			// Make the upgrade faster by accelerating jobs.
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -76,8 +80,8 @@ func TestTenantUpgrade(t *testing.T) {
 	expectedInitialTenantVersion, _, _ := v0v1v2()
 	startAndConnectToTenant := func(t *testing.T, id uint64) (tenant serverutils.ApplicationLayerInterface, tenantDB *gosql.DB) {
 		settings := cluster.MakeTestingClusterSettingsWithVersions(
-			clusterversion.TestingBinaryVersion,
-			clusterversion.TestingBinaryMinSupportedVersion,
+			v2,
+			v1,
 			false, // initializeVersion
 		)
 		// Initialize the version to the minimum it could be.
@@ -109,22 +113,17 @@ func TestTenantUpgrade(t *testing.T) {
 		db.Exec(t, "INSERT INTO t VALUES (1), (2)")
 
 		// Upgrade the host cluster.
-		sysDB.Exec(t,
-			"SET CLUSTER SETTING version = $1",
-			clusterversion.TestingBinaryVersion.String())
+		sysDB.Exec(t, "SET CLUSTER SETTING version = $1", v2.String())
 
 		// Ensure that the tenant still works.
 		db.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
 
 		// Upgrade the tenant cluster.
-		db.Exec(t,
-			"SET CLUSTER SETTING version = $1",
-			clusterversion.TestingBinaryVersion.String())
+		db.Exec(t, "SET CLUSTER SETTING version = $1", v2.String())
 
 		// Ensure that the tenant still works.
 		db.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
-		db.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
-			[][]string{{clusterversion.TestingBinaryVersion.String()}})
+		db.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{v2.String()}})
 
 		// Restart the tenant and ensure that the version is correct.
 		tenantServer.Stopper().Stop(ctx)
@@ -137,8 +136,7 @@ func TestTenantUpgrade(t *testing.T) {
 		db = sqlutils.MakeSQLRunner(conn)
 
 		db.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1"}, {"2"}})
-		db.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
-			[][]string{{clusterversion.TestingBinaryVersion.String()}})
+		db.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{v2.String()}})
 	})
 
 	t.Run("post-upgrade tenant", func(t *testing.T) {
@@ -146,8 +144,7 @@ func TestTenantUpgrade(t *testing.T) {
 		const postUpgradeTenantID = 11
 		tenant, conn := startAndConnectToTenant(t, postUpgradeTenantID)
 		sqlutils.MakeSQLRunner(conn).CheckQueryResults(t,
-			"SHOW CLUSTER SETTING version",
-			[][]string{{clusterversion.TestingBinaryVersion.String()}})
+			"SHOW CLUSTER SETTING version", [][]string{{v2.String()}})
 
 		// Restart the new tenant and ensure it has the right version.
 		tenant.Stopper().Stop(ctx)
@@ -159,8 +156,7 @@ func TestTenantUpgrade(t *testing.T) {
 		conn = tenant.SQLConn(t, "")
 
 		sqlutils.MakeSQLRunner(conn).CheckQueryResults(t,
-			"SHOW CLUSTER SETTING version",
-			[][]string{{clusterversion.TestingBinaryVersion.String()}})
+			"SHOW CLUSTER SETTING version", [][]string{{v2.String()}})
 	})
 }
 
@@ -300,16 +296,16 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			tenant.Stopper().Stop(ctx)
 			waitForTenantClose <- struct{}{}
 		}()
+
 		// Upgrade the host cluster to the latest version.
-		sysDB.Exec(t, "SET CLUSTER SETTING version = $1", clusterversion.TestingBinaryVersion.String())
+		sysDB.Exec(t, "SET CLUSTER SETTING version = $1", v2.String())
 		// Ensure that the tenant still works.
 		db.CheckQueryResults(t,
 			"SELECT * FROM t", [][]string{{"1"}, {"2"}})
 		// Upgrade the tenant cluster, but the upgrade will fail on v1.
 		db.ExpectErr(t,
 			".*(database is closed|failed to connect|closed network connection|upgrade failed due to transient SQL servers)+",
-			"SET CLUSTER SETTING version = $1",
-			v2.String())
+			"SET CLUSTER SETTING version = $1", v2.String())
 		<-waitForTenantClose
 
 		tenant, conn = startAndConnectToTenant(t, initialTenantID)
