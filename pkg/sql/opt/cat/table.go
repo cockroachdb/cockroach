@@ -176,6 +176,10 @@ type Table interface {
 	// GetDatabaseID returns the owning database id of the table, or zero, if the
 	// owning database could not be determined.
 	GetDatabaseID() descpb.ID
+
+	// IsHypothetical returns true if this is a hypothetical table (used when
+	// searching for index recommendations).
+	IsHypothetical() bool
 }
 
 // CheckConstraint contains the SQL text and the validity status for a check
