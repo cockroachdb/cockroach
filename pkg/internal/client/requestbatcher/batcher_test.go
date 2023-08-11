@@ -388,7 +388,7 @@ func TestBatchTimeout(t *testing.T) {
 	}
 	t.Run("WithTimeoutAndPagination", func(t *testing.T) {
 		maxTimeout := 45 * time.Second
-		firstAndSecondSendTimeDiff := 10 * time.Millisecond
+		firstAndSecondSendTimeDiff := 20 * time.Millisecond
 		sc := make(chanSender)
 		b := New(Config{
 			// MaxMsgsPerBatch of 1 is chosen so that the first call to Send will
@@ -399,17 +399,22 @@ func TestBatchTimeout(t *testing.T) {
 			MaxTimeout:      maxTimeout,
 		})
 		// This test will simulate multiple calls to Send (due to pagination) and
-		// test that the MaxTimeout set is a timeout per batch rather than a timeout
-		// per request. MaxTimeout is set to a large value, so the timeout should
-		// never actually be hit. This means that the subtest does not face the same
-		// timing issues that the subtests above do.
+		// test that the MaxTimeout set is a timeout per BatchRequest rather than
+		// a timeout per batch. MaxTimeout is set to a large value, so the timeout
+		// should never actually be hit. This means that the subtest does not face
+		// the same timing issues that the subtests above do.
 		ctx := context.Background()
 		respChan := make(chan Response, 1)
+		minStartTimeForFirstBatchRequest := timeutil.Now()
 		err := b.SendWithChan(ctx, respChan, 1, &kvpb.GetRequest{})
 		require.NoError(t, err)
 		// First call to Send.
 		s := <-sc
+		deadline, hasDeadline := s.ctx.Deadline()
+		assert.True(t, hasDeadline)
+		assert.GreaterOrEqual(t, deadline.Sub(minStartTimeForFirstBatchRequest), maxTimeout)
 		time.Sleep(firstAndSecondSendTimeDiff)
+		minStartTimeForSecondBatchRequest := timeutil.Now()
 		s.respChan <- batchResp{
 			br: &kvpb.BatchResponse{
 				Responses: []kvpb.ResponseUnion{
@@ -428,9 +433,9 @@ func TestBatchTimeout(t *testing.T) {
 		// Second call to Send occurs at least firstAndSecondSendTimeDiff time
 		// after first call to Send.
 		s = <-sc
-		deadline, hasDeadline := s.ctx.Deadline()
+		deadline, hasDeadline = s.ctx.Deadline()
 		assert.True(t, hasDeadline)
-		assert.Less(t, timeutil.Until(deadline), maxTimeout-firstAndSecondSendTimeDiff)
+		assert.GreaterOrEqual(t, deadline.Sub(minStartTimeForSecondBatchRequest), maxTimeout)
 		s.respChan <- batchResp{}
 	})
 	t.Run("NoTimeout", func(t *testing.T) {
