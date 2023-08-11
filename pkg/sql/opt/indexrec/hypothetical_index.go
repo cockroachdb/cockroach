@@ -252,7 +252,20 @@ func (hi *hypotheticalIndex) hasSameExplicitCols(existingIndex cat.Index, isInve
 	if existingIndex.ExplicitColumnCount() != len(indexCols) {
 		return false
 	}
-	for j, m := 0, existingIndex.ExplicitColumnCount(); j < m; j++ {
+	return hi.hasPrefixOfExplicitCols(existingIndex, isInverted)
+}
+
+// hasPrefixOfExplicitCols returns true if the explicit columns in the
+// hypothetical index are a prefix of the explicit columns in the given existing
+// index.
+func (hi *hypotheticalIndex) hasPrefixOfExplicitCols(
+	existingIndex cat.Index, isInverted bool,
+) bool {
+	indexCols := hi.cols
+	if existingIndex.ExplicitColumnCount() < len(indexCols) {
+		return false
+	}
+	for j, m := 0, len(indexCols); j < m; j++ {
 		// Compare every existingIndex columns with indexCols.
 		existingIndexCol := existingIndex.Column(j)
 		indexCol := indexCols[j]

@@ -2258,3 +2258,59 @@ project
       ├── columns: v:2!null i:3
       ├── constraint: /2/1: [/2 - ]
       └── cost: 368.02
+
+# Regression test for #108490. Alter the correct index when there are multiple
+# invisible indexes.
+exec-ddl
+CREATE TABLE t108490 (
+  k INT PRIMARY KEY,
+  v INT,
+  i INT,
+  j INT,
+  INDEX idx_v_invisible(v) NOT VISIBLE,
+  INDEX idx_j_invisible(j) NOT VISIBLE,
+  INDEX idx_i_j_invisible(i, j) NOT VISIBLE
+)
+----
+
+index-recommendations
+SELECT j FROM t108490 WHERE j > 1
+----
+alteration: ALTER INDEX t.public.t108490@idx_j_invisible VISIBLE;
+--
+optimal plan:
+scan t108490@_hyp_4
+ ├── columns: j:4!null
+ ├── constraint: /4/1: [/2 - ]
+ └── cost: 368.02
+
+# We can use idx_i_j_invisible for this query, even though the hypothetical
+# index would be (i) STORING j.
+index-recommendations
+SELECT j FROM t108490 WHERE i > 1
+----
+alteration: ALTER INDEX t.public.t108490@idx_i_j_invisible VISIBLE;
+--
+optimal plan:
+project
+ ├── columns: j:4
+ ├── cost: 374.706667
+ └── scan t108490@_hyp_4
+      ├── columns: i:3!null j:4
+      ├── constraint: /3/1: [/2 - ]
+      └── cost: 371.353333
+
+# We can't use idx_v_invisible for this query, since it doesn't include j.
+index-recommendations
+SELECT j FROM t108490 WHERE v > 1
+----
+creation: CREATE INDEX ON t.public.t108490 (v) STORING (j);
+--
+optimal plan:
+project
+ ├── columns: j:4
+ ├── cost: 374.706667
+ └── scan t108490@_hyp_4
+      ├── columns: v:2!null j:4
+      ├── constraint: /2/1: [/2 - ]
+      └── cost: 371.353333
