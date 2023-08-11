@@ -35,6 +35,7 @@ const (
 	nogoDisableFlag    = "--//build/toolchains:nogo_disable_flag"
 	geosTarget         = "//c-deps:libgeos"
 	devTarget          = "//pkg/cmd/dev:dev"
+	testbuildonly      = "test-build-only"
 )
 
 type buildTarget struct {
@@ -68,6 +69,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 	buildCmd.Flags().String(crossFlag, "", "cross-compiles using the builder image (options: linux, linuxarm, macos, macosarm, windows)")
 	buildCmd.Flags().Lookup(crossFlag).NoOptDefVal = "linux"
 	buildCmd.Flags().StringArray(dockerArgsFlag, []string{}, "additional arguments to pass to Docker (only used for cross builds)")
+	buildCmd.Flags().Bool(testbuildonly, false, "only check test binaries can be built; do not link them")
 	addCommonBuildFlags(buildCmd)
 	return buildCmd
 }
@@ -147,6 +149,7 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	targets, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	cross := mustGetFlagString(cmd, crossFlag)
+	testbuildonly := mustGetFlagBool(cmd, testbuildonly)
 	dockerArgs := mustGetFlagStringArray(cmd, dockerArgsFlag)
 
 	// Set up dev cache unless it's disabled via the environment variable or the
@@ -166,7 +169,7 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 		}
 	}
 
-	args, buildTargets, err := d.getBasicBuildArgs(ctx, targets)
+	args, buildTargets, err := d.getBasicBuildArgsInternal(ctx, targets, testbuildonly)
 	if err != nil {
 		return err
 	}
@@ -388,6 +391,12 @@ func targetToBinBasename(target string) string {
 func (d *dev) getBasicBuildArgs(
 	ctx context.Context, targets []string,
 ) (args []string, buildTargets []buildTarget, _ error) {
+	return d.getBasicBuildArgsInternal(ctx, targets, false)
+}
+
+func (d *dev) getBasicBuildArgsInternal(
+	ctx context.Context, targets []string, testbuildonly bool,
+) (args []string, buildTargets []buildTarget, _ error) {
 	if len(targets) == 0 {
 		// Default to building the cockroach binary.
 		targets = append(targets, "cockroach")
@@ -457,7 +466,11 @@ func (d *dev) getBasicBuildArgs(
 	}
 
 	if shouldBuildWithTestConfig {
-		args = append(args, "--config=test")
+		if testbuildonly {
+			args = append(args, "--config=testbuildonly")
+		} else {
+			args = append(args, "--config=test")
+		}
 	}
 	if canDisableNogo {
 		args = append(args, nogoDisableFlag)

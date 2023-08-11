@@ -30,6 +30,7 @@ build:nolintonbuild --nolintonbuild
 # Note: nonogo is classically the name of the nolintonbuild configuration.
 build:nonogo --nolintonbuild
 build:test --crdb_test
+build:testbuildonly --crdb_test --@io_bazel_rules_go//go/config:testbuildonly
 
 # Basic settings.
 build --define gotags=bazel,gss
