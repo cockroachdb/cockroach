@@ -1136,7 +1136,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				CanAutoRetry: fsm.FromBool(canAutoRetry),
 			}
 			payload := eventRetriableErrPayload{
-				err:    txn.GenerateForcedRetryableError(ctx, "serializable transaction timestamp pushed (detected by connExecutor)"),
+				err:    txn.GenerateForcedRetryableErr(ctx, "serializable transaction timestamp pushed (detected by connExecutor)"),
 				rewCap: rc,
 			}
 			return ev, payload, nil
@@ -1311,7 +1311,7 @@ func (ex *connExecutor) commitSQLTransaction(
 		GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 	if ex.sessionData().InjectRetryErrorsOnCommitEnabled && ast.StatementTag() == "COMMIT" {
 		if ex.planner.Txn().Epoch() < ex.state.lastEpoch+numTxnRetryErrors {
-			retryErr := ex.state.mu.txn.GenerateForcedRetryableError(
+			retryErr := ex.state.mu.txn.GenerateForcedRetryableErr(
 				ctx, "injected by `inject_retry_errors_on_commit_enabled` session variable")
 			return ex.makeErrEvent(retryErr, ast)
 		} else {
@@ -1746,7 +1746,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		if ex.sessionData().InjectRetryErrorsEnabled && !isSetOrShow &&
 			planner.Txn().Sender().TxnStatus() == roachpb.PENDING {
 			if planner.Txn().Epoch() < ex.state.lastEpoch+numTxnRetryErrors {
-				retryErr := planner.Txn().GenerateForcedRetryableError(
+				retryErr := planner.Txn().GenerateForcedRetryableErr(
 					ctx, "injected by `inject_retry_errors_enabled` session variable")
 				res.SetError(retryErr)
 			} else {
