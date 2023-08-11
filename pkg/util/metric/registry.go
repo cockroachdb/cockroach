@@ -17,6 +17,7 @@ import (
 	"reflect"
 	"regexp"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/gogo/protobuf/proto"
@@ -104,12 +105,12 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 	for i := 0; i < v.NumField(); i++ {
 		vfield, tfield := v.Field(i), t.Field(i)
 		tname := tfield.Name
+
 		if !vfield.CanInterface() {
-			if log.V(2) {
-				log.Infof(ctx, "skipping unexported field %s", tname)
-			}
+			checkFieldCanBeSkipped("unexported", tname, tfield.Type, t)
 			continue
 		}
+
 		switch vfield.Kind() {
 		case reflect.Array:
 			for i := 0; i < vfield.Len(); i++ {
@@ -117,18 +118,18 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 				telemName := fmt.Sprintf("%s[%d]", tname, i)
 				// Permit elements in the array to be nil.
 				const skipNil = true
-				r.addMetricValue(ctx, velem, telemName, skipNil)
+				r.addMetricValue(ctx, velem, telemName, skipNil, t)
 			}
 		default:
 			// No metric fields should be nil.
 			const skipNil = false
-			r.addMetricValue(ctx, vfield, tname, skipNil)
+			r.addMetricValue(ctx, vfield, tname, skipNil, t)
 		}
 	}
 }
 
 func (r *Registry) addMetricValue(
-	ctx context.Context, val reflect.Value, name string, skipNil bool,
+	ctx context.Context, val reflect.Value, name string, skipNil bool, parentType reflect.Type,
 ) {
 	if val.Kind() == reflect.Ptr && val.IsNil() {
 		if skipNil {
@@ -146,9 +147,7 @@ func (r *Registry) addMetricValue(
 	case Struct:
 		r.AddMetricStruct(typ)
 	default:
-		if log.V(2) {
-			log.Infof(ctx, "skipping non-metric field %s", name)
-		}
+		checkFieldCanBeSkipped("non-metric", name, val.Type(), parentType)
 	}
 }
 
@@ -216,4 +215,102 @@ func exportedName(name string) string {
 // exportedLabel takes a metric name and generates a valid prometheus name.
 func exportedLabel(name string) string {
 	return prometheusLabelReplaceRE.ReplaceAllString(name, "_")
+}
+
+var panicHandler = log.Fatalf
+
+func testingSetPanicHandler(h func(ctx context.Context, msg string, args ...interface{})) func() {
+	panicHandler = h
+	return func() { panicHandler = log.Fatalf }
+}
+
+// checkFieldCanBeSkipped detects common mis-use patterns with metrics registry
+// when running under test.
+func checkFieldCanBeSkipped(
+	skipReason, fieldName string, fieldType reflect.Type, parentType reflect.Type,
+) {
+	if !buildutil.CrdbTestBuild {
+		if log.V(2) {
+			log.Infof(context.Background(), "skipping %s field %s", skipReason, fieldName)
+		}
+		return
+	}
+
+	qualifiedFieldName := func() string {
+		if parentType == nil {
+			return fieldName
+		}
+		parentName := parentType.Name()
+		if parentName == "" {
+			parentName = "<unnamed>"
+		}
+		return fmt.Sprintf("%s.%s", parentName, fieldName)
+	}()
+
+	if isMetricType(fieldType) {
+		panicHandler(context.Background(),
+			"metric field %s (or any of embedded metrics) must be exported", qualifiedFieldName)
+	}
+
+	switch fieldType.Kind() {
+	case reflect.Slice:
+		if isMetricType(fieldType.Elem()) {
+			panicHandler(context.Background(),
+				"expected array, found slice instead for field %s (%s)", qualifiedFieldName, fieldType)
+		}
+	case reflect.Array:
+		checkFieldCanBeSkipped(skipReason, fieldName, fieldType.Elem(), parentType)
+	case reflect.Struct:
+		containsMetrics := false
+		for i := 0; i < fieldType.NumField() && !containsMetrics; i++ {
+			containsMetrics = containsMetricType(fieldType.Field(i).Type)
+		}
+
+		if containsMetrics {
+			// Embedded struct contains metrics.  Make sure the struct implements
+			// metric.Struct interface.
+			_, isStruct := reflect.New(fieldType).Interface().(Struct)
+			if !isStruct {
+				panicHandler(context.Background(),
+					"embedded struct field %s (%s) does not implement metric.Struct interface", qualifiedFieldName, fieldType)
+			}
+		}
+	}
+}
+
+// isMetricType returns true if the type is one of the metric type interfaces.
+func isMetricType(ft reflect.Type) bool {
+	v := reflect.Zero(ft)
+	if !v.CanInterface() {
+		return false
+	}
+
+	switch v.Interface().(type) {
+	case Iterable, Struct:
+		return true
+	default:
+		return false
+	}
+}
+
+// containsMetricTypes returns true if the type or any types inside aggregate
+// type (array, struct, etc) is metric type.
+func containsMetricType(ft reflect.Type) bool {
+	if isMetricType(ft) {
+		return true
+	}
+
+	switch ft.Kind() {
+	case reflect.Slice, reflect.Array:
+		return containsMetricType(ft.Elem())
+	case reflect.Struct:
+		for i := 0; i < ft.NumField(); i++ {
+			if containsMetricType(ft.Field(i).Type) {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
 }

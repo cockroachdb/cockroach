@@ -2850,14 +2850,14 @@ func TestStatusSafeFormatter(t *testing.T) {
 }
 
 type fakeMetrics struct {
-	n *metric.Counter
+	N *metric.Counter
 }
 
 func (fm fakeMetrics) MetricStruct() {}
 
 func makeFakeMetrics() fakeMetrics {
 	return fakeMetrics{
-		n: metric.NewCounter(metric.Metadata{
+		N: metric.NewCounter(metric.Metadata{
 			Name:        "fake.count",
 			Help:        "utterly fake metric",
 			Measurement: "N",
@@ -2901,7 +2901,7 @@ func TestMetrics(t *testing.T) {
 		func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return jobs.FakeResumer{
 				OnResume: func(ctx context.Context) error {
-					defer fakeBackupMetrics.n.Inc(1)
+					defer fakeBackupMetrics.N.Inc(1)
 					return waitForErr(ctx)
 				},
 				FailOrCancel: func(ctx context.Context) error {
@@ -2954,7 +2954,7 @@ func TestMetrics(t *testing.T) {
 		require.Equal(t, int64(1), backupMetrics.CurrentlyRunning.Value())
 		errCh <- nil
 		int64EqSoon(t, backupMetrics.ResumeCompleted.Count, 1)
-		int64EqSoon(t, registry.MetricsStruct().JobSpecificMetrics[jobspb.TypeBackup].(fakeMetrics).n.Count, 1)
+		int64EqSoon(t, registry.MetricsStruct().JobSpecificMetrics[jobspb.TypeBackup].(fakeMetrics).N.Count, 1)
 
 	})
 	t.Run("restart, pause, resume, then success", func(t *testing.T) {
