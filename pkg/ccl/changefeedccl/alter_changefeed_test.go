@@ -563,6 +563,11 @@ func TestAlterChangefeedErrors(t *testing.T) {
 			`pq: cannot specify both "initial_scan" and "no_initial_scan"`,
 			fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar WITH initial_scan, no_initial_scan`, feed.JobID()),
 		)
+
+		sqlDB.ExpectErr(t, "pq: changefeed ID must be an INT value: subqueries are not allowed in cdc",
+			"ALTER CHANGEFEED (SELECT 1) ADD bar")
+		sqlDB.ExpectErr(t, "pq: changefeed ID must be an INT value: could not parse \"two\" as type int",
+			"ALTER CHANGEFEED 'two' ADD bar")
 	}
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
