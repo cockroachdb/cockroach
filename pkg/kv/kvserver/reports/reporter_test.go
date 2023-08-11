@@ -48,6 +48,8 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 	// don't make progress.
 	skip.UnderStressRace(t)
 	skip.UnderRace(t, "takes >1min under race")
+	// Similarly, skip the test under deadlock builds.
+	skip.UnderDeadlock(t, "takes >1min under deadlock")
 
 	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, 5, base.TestClusterArgs{
