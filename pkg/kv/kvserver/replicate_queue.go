@@ -765,7 +765,7 @@ func (rq *replicateQueue) process(
 		}
 
 		if requeue {
-			log.KvDistribution.VEventf(ctx, 1, "re-processing")
+			log.KvDistribution.VEventf(ctx, 1, "re-queuing")
 			rq.maybeAdd(ctx, repl, rq.store.Clock().NowAsClockTimestamp())
 		}
 		return true, nil
