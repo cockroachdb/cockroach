@@ -1305,12 +1305,11 @@ func (ex *connExecutor) commitSQLTransaction(
 	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().
 		GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 	if ex.sessionData().InjectRetryErrorsOnCommitEnabled && ast.StatementTag() == "COMMIT" {
-		if ex.planner.Txn().Epoch() < ex.state.lastEpoch+numTxnRetryErrors {
+		if ex.state.injectedTxnRetryCounter < numTxnRetryErrors {
 			retryErr := ex.state.mu.txn.GenerateForcedRetryableErr(
 				ctx, "injected by `inject_retry_errors_on_commit_enabled` session variable")
+			ex.state.injectedTxnRetryCounter++
 			return ex.makeErrEvent(retryErr, ast)
-		} else {
-			ex.state.lastEpoch = ex.planner.Txn().Epoch()
 		}
 	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionCommit, timeutil.Now())
@@ -1740,12 +1739,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		isSetOrShow := stmt.AST.StatementTag() == "SET" || stmt.AST.StatementTag() == "SHOW"
 		if ex.sessionData().InjectRetryErrorsEnabled && !isSetOrShow &&
 			planner.Txn().Sender().TxnStatus() == roachpb.PENDING {
-			if planner.Txn().Epoch() < ex.state.lastEpoch+numTxnRetryErrors {
+			if ex.state.injectedTxnRetryCounter < numTxnRetryErrors {
 				retryErr := planner.Txn().GenerateForcedRetryableErr(
 					ctx, "injected by `inject_retry_errors_enabled` session variable")
 				res.SetError(retryErr)
-			} else {
-				ex.state.lastEpoch = planner.Txn().Epoch()
+				ex.state.injectedTxnRetryCounter++
 			}
 		}
 	}

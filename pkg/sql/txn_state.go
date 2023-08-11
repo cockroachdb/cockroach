@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -108,8 +107,10 @@ type txnState struct {
 	// through the use of AS OF SYSTEM TIME.
 	isHistorical bool
 
-	// lastEpoch is the last observed epoch in the current txn.
-	lastEpoch enginepb.TxnEpoch
+	// injectedTxnRetryCounter keeps track of how many errors have been
+	// injected in this transaction with the inject_retry_errors_enabled
+	// flag.
+	injectedTxnRetryCounter int
 
 	// mon tracks txn-bound objects like the running state of
 	// planNode in the midst of performing a computation.
@@ -191,7 +192,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
 	ts.isHistorical = false
-	ts.lastEpoch = 0
+	ts.injectedTxnRetryCounter = 0
 
 	// Create a context for this transaction. It will include a root span that
 	// will contain everything executed as part of the upcoming SQL txn, including
