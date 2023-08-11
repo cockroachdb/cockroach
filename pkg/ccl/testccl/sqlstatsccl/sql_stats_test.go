@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +38,6 @@ func TestSQLStatsRegions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 107582, "flaky test")
 	skip.UnderRace(t, "test is to slow for race")
 	skip.UnderStress(t, "test is too heavy to run under stress")
 
@@ -64,8 +62,7 @@ func TestSQLStatsRegions(t *testing.T) {
 	for i := 0; i < numServers; i++ {
 		signalAfter[i] = make(chan struct{})
 		args := base.TestServerArgs{
-			Settings:        st,
-			ScanMaxIdleTime: 1 * time.Millisecond,
+			Settings: st,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i%len(regionNames)]}},
 			},
@@ -84,6 +81,9 @@ func TestSQLStatsRegions(t *testing.T) {
 	host := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
 		ServerArgsPerNode: serverArgs,
 		ParallelStart:     true,
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TODOTestTenantDisabled,
+		},
 	})
 	defer host.Stopper().Stop(ctx)
 
@@ -93,13 +93,12 @@ func TestSQLStatsRegions(t *testing.T) {
 		}
 	}()
 
-	tdb := sqlutils.MakeSQLRunner(host.ServerConn(1))
+	tdb := sqlutils.MakeSQLRunner(host.ServerConn(0))
 
 	// Shorten the closed timestamp target duration so that span configs
 	// propagate more rapidly.
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '200ms'`)
 	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off")
-	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '10ms'")
 
 	// Lengthen the lead time for the global tables to prevent overload from
 	// resulting in delays in propagating closed timestamps and, ultimately
@@ -132,8 +131,6 @@ func TestSQLStatsRegions(t *testing.T) {
 	tenantDbName := "testDbTenant"
 	createMultiRegionDbAndTable(t, tenantRunner, regionNames, tenantDbName)
 
-	require.NoError(t, host.WaitForFullReplication())
-
 	testCases := []struct {
 		name   string
 		dbName string
@@ -144,7 +141,7 @@ func TestSQLStatsRegions(t *testing.T) {
 		name:   "system tenant",
 		dbName: systemDbName,
 		db: func(t *testing.T, host *testcluster.TestCluster, _ *cluster.Settings) *sqlutils.SQLRunner {
-			return sqlutils.MakeSQLRunner(host.ServerConn(0))
+			return tdb
 		},
 	}, {
 		// This test runs against a secondary tenant, launching a SQL instance
@@ -159,12 +156,47 @@ func TestSQLStatsRegions(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			db := tc.db(t, host, st)
-
 			db.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 1;`)
+
+			// In order to ensure that ranges are replicated across all regions, following
+			// SucceedsWithin block performs following:
+			// - wait for full replication, which doesn't guarantee that there's no
+			// more splits should happen
+			// - query `show ranges` to check that at least one leaseholder is present
+			// in every locality.
+			// - if localitiesMap has localities for all regions defined in regionNames then
+			// it means we have leaseholders in every region.
+			// - otherwise enqueue replica split for all ranges to speed up splits and
+			// try again with new cycle.
+			testutils.SucceedsWithin(t, func() error {
+				require.NoError(t, host.WaitForFullReplication())
+				rows := db.QueryStr(t, `select range_id, lease_holder, lease_holder_locality from [show ranges from table test with details]`)
+
+				localitiesMap := map[string] /*locality*/ []string /*leaseholderNodeID*/ {}
+				for _, row := range rows {
+					leaseholderNodeID := row[1]
+					leaseholderLocality := row[2]
+					localitiesMap[leaseholderLocality] = append(localitiesMap[leaseholderLocality], leaseholderNodeID)
+				}
+
+				if len(localitiesMap) < len(regionNames) {
+					for _, row := range rows {
+						rangeID, err := strconv.Atoi(row[0])
+						require.NoError(t, err)
+						lhID, err := strconv.Atoi(row[1])
+						require.NoError(t, err)
+						systemSqlDb := host.SystemLayer(lhID-1).SQLConn(t, tc.dbName)
+						// ignore errors of enqueued splits to make sure it doesn't affect test execution.
+						_, _ = systemSqlDb.Exec(`SELECT crdb_internal.kv_enqueue_replica($1, 'split', true)`, rangeID)
+					}
+					t.Logf("expected to have leaseholders distributed across all localities, but got: %v", localitiesMap)
+					return fmt.Errorf("expected %d localities, but got %d", len(regionNames), len(localitiesMap))
+				}
+				return nil
+			}, 5*time.Minute)
 
 			// It takes a while for the region replication to complete.
 			testutils.SucceedsWithin(t, func() error {
-				var expectedNodes []int64
 				var expectedRegions []string
 				_, err := db.DB.ExecContext(ctx, fmt.Sprintf(`USE %s`, tc.dbName))
 				if err != nil {
@@ -192,28 +224,6 @@ func TestSQLStatsRegions(t *testing.T) {
 							return fmt.Errorf("rows are not replicated to all regions %s\n", expectedRegions)
 						}
 					}
-
-					// Example str " nodes: n1, n2, n4, n9"
-					if strings.HasPrefix(explainStr, "nodes:") {
-						explainStr = strings.ReplaceAll(explainStr, "nodes:", "")
-						explainStr = strings.ReplaceAll(explainStr, "n", "")
-
-						split := strings.Split(explainStr, ",")
-						if len(split) < len(regionNames) {
-							return fmt.Errorf("rows are not replicated to all regions %s\n", split)
-						}
-
-						// Gateway node was not included in the explain plan. Add it to the list
-						if split[0] != "1" {
-							expectedNodes = append(expectedNodes, int64(1))
-						}
-
-						for _, val := range split {
-							node, err := strconv.Atoi(val)
-							require.NoError(t, err)
-							expectedNodes = append(expectedNodes, int64(node))
-						}
-					}
 				}
 
 				// Select from the table and see what statement statistics were written.
@@ -229,13 +239,6 @@ func TestSQLStatsRegions(t *testing.T) {
 				var actual appstatspb.StatementStatistics
 				err = json.Unmarshal([]byte(actualJSON), &actual)
 				require.NoError(t, err)
-
-				// Replication to all regions can take some time to complete. During
-				// this time a incomplete list will be returned.
-				if !assert.ObjectsAreEqual(expectedNodes, actual.Nodes) {
-					return fmt.Errorf("nodes are not equal. Expected: %d, Actual: %d", expectedNodes, actual.Nodes)
-				}
-
 				require.Equal(t, expectedRegions, actual.Regions)
 				return nil
 			}, 3*time.Minute)
