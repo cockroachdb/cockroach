@@ -88,12 +88,20 @@ func alterChangefeedPlanHook(
 		if err := validateSettings(ctx, p); err != nil {
 			return err
 		}
+		jobID, err := func() (jobspb.JobID, error) {
+			origProps := p.SemaCtx().Properties
+			p.SemaCtx().Properties.Require("cdc", tree.RejectSubqueries)
+			defer p.SemaCtx().Properties.Restore(origProps)
 
-		typedExpr, err := alterChangefeedStmt.Jobs.TypeCheck(ctx, p.SemaCtx(), types.Int)
+			id, err := p.ExprEvaluator("ALTER CHANGEFEED").Int(ctx, alterChangefeedStmt.Jobs)
+			if err != nil {
+				return jobspb.JobID(0), err
+			}
+			return jobspb.JobID(id), nil
+		}()
 		if err != nil {
-			return err
+			return pgerror.Wrap(err, pgcode.DatatypeMismatch, "changefeed ID must be an INT value")
 		}
-		jobID := jobspb.JobID(tree.MustBeDInt(typedExpr))
 
 		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.Txn())
 		if err != nil {
