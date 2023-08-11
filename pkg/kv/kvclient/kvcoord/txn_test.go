@@ -145,7 +145,7 @@ func TestTxnLostIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	run := func(isoLevel isolation.Level, commitInBatch bool) {
+	run := func(t *testing.T, isoLevel isolation.Level, commitInBatch bool) {
 		s := createTestDB(t)
 		defer s.Stop()
 		ctx := context.Background()
@@ -208,13 +208,11 @@ func TestTxnLostIncrement(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	for _, isoLevel := range isolation.Levels() {
-		t.Run(isoLevel.String(), func(t *testing.T) {
-			testutils.RunTrueAndFalse(t, "commitInBatch", func(t *testing.T, commitInBatch bool) {
-				run(isoLevel, commitInBatch)
-			})
+	isolation.RunEachLevel(t, func(t *testing.T, isoLevel isolation.Level) {
+		testutils.RunTrueAndFalse(t, "commitInBatch", func(t *testing.T, commitInBatch bool) {
+			run(t, isoLevel, commitInBatch)
 		})
-	}
+	})
 }
 
 // TestTxnLostUpdate verifies that transactions are not susceptible to the
@@ -233,7 +231,7 @@ func TestTxnLostUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	run := func(isoLevel isolation.Level, commitInBatch bool) {
+	run := func(t *testing.T, isoLevel isolation.Level, commitInBatch bool) {
 		s := createTestDB(t)
 		defer s.Stop()
 		ctx := context.Background()
@@ -308,13 +306,11 @@ func TestTxnLostUpdate(t *testing.T) {
 		require.Equal(t, []byte(expVal), gr.ValueBytes())
 	}
 
-	for _, isoLevel := range isolation.Levels() {
-		t.Run(isoLevel.String(), func(t *testing.T) {
-			testutils.RunTrueAndFalse(t, "commitInBatch", func(t *testing.T, commitInBatch bool) {
-				run(isoLevel, commitInBatch)
-			})
+	isolation.RunEachLevel(t, func(t *testing.T, isoLevel isolation.Level) {
+		testutils.RunTrueAndFalse(t, "commitInBatch", func(t *testing.T, commitInBatch bool) {
+			run(t, isoLevel, commitInBatch)
 		})
-	}
+	})
 }
 
 // TestTxnWeakIsolationLevelsTolerateWriteSkew verifies that transactions run
@@ -325,7 +321,7 @@ func TestTxnWeakIsolationLevelsTolerateWriteSkew(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	run := func(isoLevel isolation.Level) {
+	run := func(t *testing.T, isoLevel isolation.Level) {
 		s := createTestDB(t)
 		defer s.Stop()
 		ctx := context.Background()
@@ -373,9 +369,7 @@ func TestTxnWeakIsolationLevelsTolerateWriteSkew(t *testing.T) {
 		}
 	}
 
-	for _, isoLevel := range isolation.Levels() {
-		t.Run(isoLevel.String(), func(t *testing.T) { run(isoLevel) })
-	}
+	isolation.RunEachLevel(t, run)
 }
 
 // TestTxnReadCommittedPerStatementReadSnapshot verifies that transactions run
@@ -387,7 +381,7 @@ func TestTxnReadCommittedPerStatementReadSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	run := func(isoLevel isolation.Level, mode kv.SteppingMode, step bool, expObserveExternalWrites bool) {
+	run := func(t *testing.T, isoLevel isolation.Level, mode kv.SteppingMode, step, expObserveExternalWrites bool) {
 		s := createTestDB(t)
 		defer s.Stop()
 		ctx := context.Background()
@@ -441,29 +435,27 @@ func TestTxnReadCommittedPerStatementReadSnapshot(t *testing.T) {
 		require.Equal(t, expVals, readVals)
 	}
 
-	for _, isoLevel := range isolation.Levels() {
-		t.Run(isoLevel.String(), func(t *testing.T) {
-			testutils.RunTrueAndFalse(t, "steppingMode", func(t *testing.T, modeBool bool) {
-				mode := kv.SteppingMode(modeBool)
-				if mode == kv.SteppingEnabled {
-					// If stepping is enabled, run a variant of the test where the
-					// transaction is stepped between reads and a variant of the test
-					// where it is not.
-					testutils.RunTrueAndFalse(t, "step", func(t *testing.T, step bool) {
-						// Expect a new read snapshot on each kv operation if the
-						// transaction is read committed and is manually stepped.
-						expObserveExternalWrites := isoLevel == isolation.ReadCommitted && step
-						run(isoLevel, mode, step, expObserveExternalWrites)
-					})
-				} else {
+	isolation.RunEachLevel(t, func(t *testing.T, isoLevel isolation.Level) {
+		testutils.RunTrueAndFalse(t, "steppingMode", func(t *testing.T, modeBool bool) {
+			mode := kv.SteppingMode(modeBool)
+			if mode == kv.SteppingEnabled {
+				// If stepping is enabled, run a variant of the test where the
+				// transaction is stepped between reads and a variant of the test
+				// where it is not.
+				testutils.RunTrueAndFalse(t, "step", func(t *testing.T, step bool) {
 					// Expect a new read snapshot on each kv operation if the
-					// transaction is read committed.
-					expObserveExternalWrites := isoLevel == isolation.ReadCommitted
-					run(isoLevel, mode, false, expObserveExternalWrites)
-				}
-			})
+					// transaction is read committed and is manually stepped.
+					expObserveExternalWrites := isoLevel == isolation.ReadCommitted && step
+					run(t, isoLevel, mode, step, expObserveExternalWrites)
+				})
+			} else {
+				// Expect a new read snapshot on each kv operation if the
+				// transaction is read committed.
+				expObserveExternalWrites := isoLevel == isolation.ReadCommitted
+				run(t, isoLevel, mode, false, expObserveExternalWrites)
+			}
 		})
-	}
+	})
 }
 
 // TestTxnWriteReadConflict verifies that write-read conflicts are non-blocking
@@ -476,7 +468,7 @@ func TestTxnWriteReadConflict(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	run := func(writeIsoLevel, readIsoLevel isolation.Level) {
+	run := func(t *testing.T, writeIsoLevel, readIsoLevel isolation.Level) {
 		s := createTestDB(t)
 		defer s.Stop()
 		ctx := context.Background()
@@ -516,7 +508,7 @@ func TestTxnWriteReadConflict(t *testing.T) {
 	for _, writeIsoLevel := range isolation.Levels() {
 		for _, readIsoLevel := range isolation.Levels() {
 			name := fmt.Sprintf("writeIso=%s,readIso=%s", writeIsoLevel, readIsoLevel)
-			t.Run(name, func(t *testing.T) { run(writeIsoLevel, readIsoLevel) })
+			t.Run(name, func(t *testing.T) { run(t, writeIsoLevel, readIsoLevel) })
 		}
 	}
 }
