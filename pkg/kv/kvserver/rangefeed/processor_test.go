@@ -1301,7 +1301,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 		PushTxnsInterval: pushTxnInterval,
 		PushTxnsAge:      pushTxnAge,
 		EventChanCap:     channelCapacity,
-		EventChanTimeout: time.Millisecond,
+		EventChanTimeout: 100 * time.Millisecond, // enough time for registration to process events
 		MemBudget:        fb,
 		Metrics:          NewMetrics(),
 	})
