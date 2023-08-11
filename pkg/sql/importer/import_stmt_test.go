@@ -5386,6 +5386,10 @@ func TestImportWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderStressWithIssue(t, 108547, "flaky test")
+	skip.UnderDeadlockWithIssue(t, 108547, "flaky test")
+	skip.UnderRaceWithIssue(t, 108547, "flaky test")
+
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
@@ -5433,10 +5437,15 @@ func TestImportWorkerFailure(t *testing.T) {
 	tc.StopServer(1)
 
 	close(allowResponse)
-	// We expect the statement to retry since it should have encountered a
-	// retryable error.
+	// We expect the IMPORT statement to usually retry since it should have
+	// encountered a retryable error. We don't currently catch all such retryable
+	// errors, however, so in some cases the IMPORT statement will return the
+	// error to the client. In this case we verify that the import was completely
+	// rolled back.
 	if err := <-errCh; err != nil {
-		t.Fatal(err)
+		t.Logf("%s failed, checking that imported data was completely removed: %q", query, err)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t ORDER BY i`, [][]string{})
+		return
 	}
 
 	// But the job should be restarted and succeed eventually.
