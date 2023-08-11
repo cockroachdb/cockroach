@@ -701,11 +701,18 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 		resp := br.Responses[i].GetInner()
 
 		if qiReq, ok := req.(*kvpb.QueryIntentRequest); ok {
-			// Remove any in-flight writes that were proven to exist.
-			// It shouldn't be possible for a QueryIntentRequest with
-			// the ErrorIfMissing option set to return without error
-			// and with FoundIntent=false, but we handle that case here
-			// because it happens a lot in tests.
+			// Remove any in-flight writes that were proven to exist. It should not be
+			// possible for a QueryIntentRequest with the ErrorIfMissing option set to
+			// return without error and with FoundIntent=false if the request was
+			// evaluated on the server.
+			//
+			// However, it is possible that the batch was split on a range boundary
+			// and hit a batch-wide key or byte limit before a portion was even sent
+			// by the DistSender. In such cases, an empty response will be returned
+			// for the requests that were not evaluated (see fillSkippedResponses).
+			// For these requests, we neither proved nor disproved the existence of
+			// their intent, so we ignore the response.
+			//
 			// TODO(nvanbenschoten): we only need to check FoundIntent, but this field
 			// was not set before v23.2, so for now, we check both fields. Remove this
 			// in the future.
@@ -714,9 +721,6 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence)
 				// Move to lock footprint.
 				tp.lockFootprint.insert(roachpb.Span{Key: qiReq.Key})
-			} else {
-				log.Warningf(ctx,
-					"QueryIntent(ErrorIfMissing=true) found no intent, but did not error; resp=%+v", qiResp)
 			}
 		} else if kvpb.IsLocking(req) {
 			// If the request intended to acquire locks, track its lock spans.
