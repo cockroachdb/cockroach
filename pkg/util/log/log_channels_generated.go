@@ -4192,6 +4192,8 @@ type loggerSensitiveAccess struct{}
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4215,6 +4217,8 @@ var _ ChannelLogger = SensitiveAccess
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4238,6 +4242,8 @@ func (loggerSensitiveAccess) Infof(ctx context.Context, format string, args ...i
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4261,6 +4267,8 @@ func (loggerSensitiveAccess) VInfof(ctx context.Context, level Level, format str
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4283,6 +4291,8 @@ func (loggerSensitiveAccess) Info(ctx context.Context, msg string) {
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4304,6 +4314,8 @@ func (loggerSensitiveAccess) InfofDepth(ctx context.Context, depth int, format s
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4327,6 +4339,8 @@ func (loggerSensitiveAccess) Warningf(ctx context.Context, format string, args .
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4350,6 +4364,8 @@ func (loggerSensitiveAccess) VWarningf(ctx context.Context, level Level, format 
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4372,6 +4388,8 @@ func (loggerSensitiveAccess) Warning(ctx context.Context, msg string) {
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4393,6 +4411,8 @@ func (loggerSensitiveAccess) WarningfDepth(ctx context.Context, depth int, forma
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4417,6 +4437,8 @@ func (loggerSensitiveAccess) Errorf(ctx context.Context, format string, args ...
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4441,6 +4463,8 @@ func (loggerSensitiveAccess) VErrorf(ctx context.Context, level Level, format st
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4464,6 +4488,8 @@ func (loggerSensitiveAccess) Error(ctx context.Context, msg string) {
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4486,6 +4512,8 @@ func (loggerSensitiveAccess) ErrorfDepth(ctx context.Context, depth int, format 
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4510,6 +4538,8 @@ func (loggerSensitiveAccess) Fatalf(ctx context.Context, format string, args ...
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4534,6 +4564,8 @@ func (loggerSensitiveAccess) VFatalf(ctx context.Context, level Level, format st
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4557,6 +4589,8 @@ func (loggerSensitiveAccess) Fatal(ctx context.Context, msg string) {
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4578,6 +4612,8 @@ func (loggerSensitiveAccess) FatalfDepth(ctx context.Context, depth int, format 
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4596,6 +4632,8 @@ func (loggerSensitiveAccess) Shout(ctx context.Context, sev Severity, msg string
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4613,6 +4651,8 @@ func (loggerSensitiveAccess) Shoutf(ctx context.Context, sev Severity, format st
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4630,6 +4670,8 @@ func (loggerSensitiveAccess) VEvent(ctx context.Context, level Level, msg string
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4646,6 +4688,8 @@ func (loggerSensitiveAccess) VEventf(ctx context.Context, level Level, format st
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
