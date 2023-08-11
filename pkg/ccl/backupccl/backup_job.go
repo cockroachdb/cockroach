@@ -181,7 +181,7 @@ func backup(
 	defer descs.Close()
 	for ; ; descs.Next() {
 		if ok, err := descs.Valid(); err != nil {
-			return roachpb.RowCount{}, 0, err
+			return roachpb.RowCount{}, err
 		} else if !ok {
 			break
 		}
