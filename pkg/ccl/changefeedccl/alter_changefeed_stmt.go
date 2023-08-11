@@ -84,11 +84,20 @@ func alterChangefeedPlanHook(
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
-		typedExpr, err := tree.TypeCheckAndRequire(ctx, alterChangefeedStmt.Jobs, p.SemaCtx(), types.Int, "get-job-id")
+		jobID, err := func() (jobspb.JobID, error) {
+			origProps := p.SemaCtx().Properties
+			p.SemaCtx().Properties.Require("cdc", tree.RejectSubqueries)
+			defer p.SemaCtx().Properties.Restore(origProps)
+
+			id, err := p.ExprEvaluator("ALTER CHANGEFEED").Int(ctx, alterChangefeedStmt.Jobs)
+			if err != nil {
+				return jobspb.JobID(0), err
+			}
+			return jobspb.JobID(id), nil
+		}()
 		if err != nil {
-			return err
+			return pgerror.Wrap(err, pgcode.DatatypeMismatch, "changefeed ID must be an INT value")
 		}
-		jobID := jobspb.JobID(tree.MustBeDInt(typedExpr))
 
 		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
 		if err != nil {
