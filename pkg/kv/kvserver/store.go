@@ -73,7 +73,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -2980,22 +2979,36 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 // the provided stream and returns a future with an optional error when the rangefeed is
 // complete.
 func (s *Store) RangeFeed(
-	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink,
-) *future.ErrorFuture {
+	ctx context.Context,
+	args *kvpb.RangeFeedRequest,
+	newStream rangefeed.NewStream,
+	newBufferedStream rangefeed.NewBufferedStream,
+) error {
+	// TODO(oleg): need a more comprehensive solution.
+	// Current issue is that we don't know which type of feed underlying processor
+	// will ask for. We cache unbuffered stream, but it only works in limited
+	// cases.
 	if filter := s.TestingKnobs().TestingRangefeedFilter; filter != nil {
+		stream := newStream()
 		if pErr := filter(args, stream); pErr != nil {
-			return future.MakeCompletedErrorFuture(pErr.GoError())
+			return pErr.GoError()
+		}
+		newStream = func() rangefeed.Stream {
+			return stream
+		}
+		newBufferedStream = func(drained func()) rangefeed.BufferedStream {
+			panic("test tried to use TestingRangefeedFilter with scheduled processor")
 		}
 	}
 
 	if err := verifyKeys(args.Span.Key, args.Span.EndKey, true); err != nil {
-		return future.MakeCompletedErrorFuture(err)
+		return err
 	}
 
 	// Get range and add command to the range for execution.
 	repl, err := s.GetReplica(args.RangeID)
 	if err != nil {
-		return future.MakeCompletedErrorFuture(err)
+		return err
 	}
 	if !repl.IsInitialized() {
 		// (*Store).Send has an optimization for uninitialized replicas to send back
@@ -3003,12 +3016,12 @@ func (s *Store) RangeFeed(
 		// be found. RangeFeeds can always be served from followers and so don't
 		// otherwise return NotLeaseHolderError. For simplicity we also don't return
 		// one here.
-		return future.MakeCompletedErrorFuture(kvpb.NewRangeNotFoundError(args.RangeID, s.StoreID()))
+		return kvpb.NewRangeNotFoundError(args.RangeID, s.StoreID())
 	}
 
 	tenID, _ := repl.TenantID()
 	pacer := s.cfg.KVAdmissionController.AdmitRangefeedRequest(tenID, args)
-	return repl.RangeFeed(args, stream, pacer)
+	return repl.RangeFeed(ctx, args, newStream, newBufferedStream, pacer)
 }
 
 // updateReplicationGauges counts a number of simple replication statistics for

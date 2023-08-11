@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
@@ -56,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -1673,7 +1673,25 @@ func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_Range
 	n.metrics.ActiveRangeFeed.Inc(1)
 	defer n.metrics.ActiveRangeFeed.Inc(-1)
 
-	if err := errors.CombineErrors(future.Wait(ctx, n.stores.RangeFeed(args, stream))); err != nil {
+	var done func() *kvpb.Error
+	err := n.stores.RangeFeed(ctx, args, func() rangefeed.Stream {
+		resC := make(chan *kvpb.Error, 1)
+		done = func() *kvpb.Error {
+			select {
+			case e := <-resC:
+				return e
+			case <-ctx.Done():
+				return kvpb.NewError(ctx.Err())
+			}
+		}
+		return rangefeed.NewSingleFeedStream(ctx, resC, stream)
+	}, func(drained func()) rangefeed.BufferedStream {
+		s := rangefeed.NewSingleBufferedStream(ctx, stream, kvserver.DefaultEventChanCap, false,
+			drained)
+		done = s.Done
+		return s
+	})
+	if err != nil {
 		// Got stream context error, probably won't be able to propagate it to the stream,
 		// but give it a try anyway.
 		var event kvpb.RangeFeedEvent
@@ -1682,36 +1700,15 @@ func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_Range
 		})
 		return stream.Send(&event)
 	}
-
+	if feedErr := done(); feedErr != nil {
+		var event kvpb.RangeFeedEvent
+		event.SetValue(&kvpb.RangeFeedError{
+			Error: *feedErr,
+		})
+		return stream.Send(&event)
+	}
 	return nil
 }
-
-// setRangeIDEventSink annotates each response with range and stream IDs.
-// This is used by MuxRangeFeed.
-// TODO: This code can be removed in 22.2 once MuxRangeFeed is the default, and
-// the old style RangeFeed deprecated.
-type setRangeIDEventSink struct {
-	ctx      context.Context
-	cancel   context.CancelFunc
-	rangeID  roachpb.RangeID
-	streamID int64
-	wrapped  *lockedMuxStream
-}
-
-func (s *setRangeIDEventSink) Context() context.Context {
-	return s.ctx
-}
-
-func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
-	response := &kvpb.MuxRangeFeedEvent{
-		RangeFeedEvent: *event,
-		RangeID:        s.rangeID,
-		StreamID:       s.streamID,
-	}
-	return s.wrapped.Send(response)
-}
-
-var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
 
 // lockedMuxStream provides support for concurrent calls to Send.
 // The underlying MuxRangeFeedServer is not safe for concurrent calls to Send.
@@ -1720,50 +1717,88 @@ type lockedMuxStream struct {
 	sendMu  syncutil.Mutex
 }
 
+func (s *lockedMuxStream) Context() context.Context {
+	return s.wrapped.Context()
+}
+
 func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
 	return s.wrapped.Send(e)
 }
 
-// newMuxRangeFeedCompletionWatcher returns 2 functions: one to forward mux
-// rangefeed completion events to the sender, and a cleanup function. Mux
-// rangefeed completion events can be triggered at any point, and we would like
-// to avoid blocking on IO (sender.Send) during potentially critical areas.
-// Thus, the forwarding should happen on a dedicated goroutine.
-func newMuxRangeFeedCompletionWatcher(
-	ctx context.Context, stopper *stop.Stopper, send func(e *kvpb.MuxRangeFeedEvent) error,
-) (doneFn func(event *kvpb.MuxRangeFeedEvent), cleanup func(), _ error) {
-	// structure to help coordination of event forwarding and shutdown.
-	var fin = struct {
-		syncutil.Mutex
-		completed []*kvpb.MuxRangeFeedEvent
-		signalC   chan struct{}
-	}{
-		// NB: a buffer of 1 ensures we can always send a signal when rangefeed completes.
-		signalC: make(chan struct{}, 1),
+var _ kvpb.MuxRangeFeedEventSink = (*lockedMuxStream)(nil)
+
+// MuxRangeFeed implements the roachpb.InternalServer interface.
+func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
+	muxStream := &lockedMuxStream{wrapped: stream}
+
+	type ctxAndCancel struct {
+		ctx    context.Context
+		cancel func()
+	}
+	var activeStreams sync.Map
+
+	// All context created below should derive from this context, which is
+	// cancelled once MuxRangeFeed exits.
+	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
+	defer cancel()
+
+	// Transform error returned by individual feed into client side error based
+	// on feed status.
+	transformSingleFeedError := func(muxErr rangefeed.MuxFeedError) *kvpb.MuxRangeFeedEvent {
+		n.metrics.ActiveMuxRangeFeed.Inc(-1)
+
+		// If stream is unknown then it was deleted by CloseStream request above
+		// and error here is the cause of that.
+		sCtx, loaded := activeStreams.LoadAndDelete(muxErr.StreamID)
+		streamClosedByClient := !loaded
+		var ctxErr error
+		if loaded {
+			streamCtx := sCtx.(*ctxAndCancel)
+			ctxErr = streamCtx.ctx.Err()
+			streamCtx.cancel()
+		}
+
+		err := muxErr.Err
+		if streamClosedByClient && ctxErr != nil {
+			// If the stream was explicitly closed by the client, we expect to see
+			// context.Canceled error. In this case, return
+			// kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED to the client.
+			err = kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))
+		}
+
+		if err == nil {
+			cause := kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED
+			if !n.storeCfg.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
+				cause = kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED
+			}
+			err = kvpb.NewError(kvpb.NewRangeFeedRetryError(cause))
+		}
+
+		e := &kvpb.MuxRangeFeedEvent{
+			RangeID:  muxErr.RangeID,
+			StreamID: muxErr.StreamID,
+		}
+		e.SetValue(&kvpb.RangeFeedError{
+			Error: *err,
+		})
+		return e
 	}
 
-	// forwardCompletion listens to completion notifications and forwards
-	// them to the sender.
-	forwardCompletion := func(ctx context.Context) {
+	muxErrorsC := make(chan rangefeed.MuxFeedError, 10)
+	handleErrors := func(ctx context.Context) {
 		for {
 			select {
-			case <-fin.signalC:
-				var toSend []*kvpb.MuxRangeFeedEvent
-				fin.Lock()
-				toSend, fin.completed = fin.completed, nil
-				fin.Unlock()
-				for _, e := range toSend {
-					if err := send(e); err != nil {
-						// If we failed to send, there is nothing else we can do.
-						// The stream is broken anyway.
-						return
-					}
+			case muxErr := <-muxErrorsC:
+				e := transformSingleFeedError(muxErr)
+				// When rangefeed completes, we must notify the client about that.
+				if err := muxStream.Send(e); err != nil {
+					return
 				}
 			case <-ctx.Done():
 				return
-			case <-stopper.ShouldQuiesce():
+			case <-n.stopper.ShouldQuiesce():
 				// There is nothing we can do here; stream cancellation is usually
 				// triggered by the client.  We don't have access to stream cancellation
 				// function; so, just let things proceed until the server shuts down.
@@ -1773,46 +1808,21 @@ func newMuxRangeFeedCompletionWatcher(
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	if err := stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
+	defer wg.Wait()
+	if err := n.stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
+		wg.Add(1)
 		defer wg.Done()
-		forwardCompletion(ctx)
+		handleErrors(ctx)
 	}); err != nil {
-		return nil, nil, err
-	}
-
-	addCompleted := func(event *kvpb.MuxRangeFeedEvent) {
-		fin.Lock()
-		fin.completed = append(fin.completed, event)
-		fin.Unlock()
-		select {
-		case fin.signalC <- struct{}{}:
-		default:
-		}
-	}
-	return addCompleted, wg.Wait, nil
-}
-
-// MuxRangeFeed implements the roachpb.InternalServer interface.
-func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
-	muxStream := &lockedMuxStream{wrapped: stream}
-
-	// All context created below should derive from this context, which is
-	// cancelled once MuxRangeFeed exits.
-	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
-	defer cancel()
-
-	rangefeedCompleted, cleanup, err := newMuxRangeFeedCompletionWatcher(ctx, n.stopper, muxStream.Send)
-	if err != nil {
 		return err
 	}
-	defer cleanup()
+
+	var muxer *rangefeed.StreamMuxer
+	var startMuxer sync.Once
 
 	n.metrics.NumMuxRangeFeed.Inc(1)
 	n.metrics.ActiveMuxRangeFeed.Inc(1)
 	defer n.metrics.ActiveMuxRangeFeed.Inc(-1)
-
-	var activeStreams sync.Map
 
 	for {
 		req, err := stream.Recv()
@@ -1823,7 +1833,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		if req.CloseStream {
 			// Client issued a request to close previously established stream.
 			if v, loaded := activeStreams.LoadAndDelete(req.StreamID); loaded {
-				s := v.(*setRangeIDEventSink)
+				s := v.(*ctxAndCancel)
 				s.cancel()
 			} else {
 				// This is a bit strange, but it could happen if this stream completes
@@ -1835,64 +1845,60 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			continue
 		}
 
-		streamCtx, cancel := context.WithCancel(ctx)
+		streamCtx, streamCtxCancel := context.WithCancel(ctx)
 		streamCtx = logtags.AddTag(streamCtx, "r", req.RangeID)
 		streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
 		streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
 
-		streamSink := &setRangeIDEventSink{
-			ctx:      streamCtx,
-			cancel:   cancel,
-			rangeID:  req.RangeID,
-			streamID: req.StreamID,
-			wrapped:  muxStream,
-		}
-		activeStreams.Store(req.StreamID, streamSink)
-
 		n.metrics.NumMuxRangeFeed.Inc(1)
 		n.metrics.ActiveMuxRangeFeed.Inc(1)
-		f := n.stores.RangeFeed(req, streamSink)
-		f.WhenReady(func(err error) {
-			n.metrics.ActiveMuxRangeFeed.Inc(-1)
-
-			_, loaded := activeStreams.LoadAndDelete(req.StreamID)
-			streamClosedByClient := !loaded
-			streamSink.cancel()
-
-			if streamClosedByClient && streamSink.ctx.Err() != nil {
-				// If the stream was explicitly closed by the client, we expect to see
-				// context.Canceled error.  In this case, return
-				// kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED to the client.
-				err = kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)
-			}
-
-			if err == nil {
-				cause := kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED
-				if !n.storeCfg.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
-					cause = kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED
-				}
-				err = kvpb.NewRangeFeedRetryError(cause)
-			}
-
-			e := &kvpb.MuxRangeFeedEvent{
-				RangeID:  req.RangeID,
-				StreamID: req.StreamID,
-			}
-
-			e.SetValue(&kvpb.RangeFeedError{
-				Error: *kvpb.NewError(err),
+		err = n.stores.RangeFeed(streamCtx, req, func() rangefeed.Stream {
+			// Single feed doesn't need anything other than reading error.
+			s := rangefeed.NewMuxFeedStream(
+				streamCtx, req.StreamID, req.RangeID, muxErrorsC, muxStream, streamCtxCancel)
+			activeStreams.Store(req.StreamID, &ctxAndCancel{
+				ctx:    streamCtx,
+				cancel: func() {
+					s.Error(kvpb.NewError(
+						kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED),
+					))
+					streamCtxCancel()
+				},
 			})
-
-			// When rangefeed completes, we must notify the client about that.
-			//
-			// NB: even though calling sink.Send() to send notification might seem
-			// correct, it is also unsafe.  This future may be completed at any point,
-			// including during critical section when some important lock (such as
-			// raftMu in processor) may be held. Issuing potentially blocking IO
-			// during that time is not a good idea. Thus, we shunt the notification to
-			// a dedicated goroutine.
-			rangefeedCompleted(e)
+			return s
+		}, func(done func()) rangefeed.BufferedStream {
+			startMuxer.Do(func() {
+				// Give mux rangefeed extra buffer capacity to be able to handle data
+				// during stream catch ups. This is less of a waste as we have it per
+				// mux feed.
+				muxer = rangefeed.NewStreamMuxer(muxStream, kvserver.DefaultEventChanCap*2)
+				// If we can't start muxer then we are shutting down. Rangefeed should
+				// also stop before starting. But we may need a saner recovery here.
+				_ = n.stopper.RunAsyncTask(ctx, "mux-rangefeed-output", func(ctx context.Context) {
+					wg.Add(1)
+					defer wg.Done()
+					muxer.OutputLoop(ctx)
+				})
+			})
+			s := rangefeed.NewMuxBufferedStream(streamCtx, req.StreamID, req.RangeID, done, muxer)
+			activeStreams.Store(req.StreamID, &ctxAndCancel{
+				ctx:    streamCtx,
+				cancel: func() {
+					s.SendError(kvpb.NewError(
+						kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED),
+					))
+					streamCtxCancel()
+				},
+			})
+			return s
 		})
+		if err != nil {
+			muxErrorsC <- rangefeed.MuxFeedError{
+				Err:      kvpb.NewError(err),
+				StreamID: req.StreamID,
+				RangeID:  req.RangeID,
+			}
+		}
 	}
 }
 

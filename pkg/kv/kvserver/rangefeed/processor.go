@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -122,14 +121,12 @@ type Processor interface {
 	// initResolvedTSScan. The Processor promises to clean up the iterator by
 	// calling its Close method when it is finished.
 	//
-	// Note that newRtsIter must be called under the same lock as first
-	// registration to ensure that all there would be no missing events.
-	// This is currently achieved by Register function synchronizing with
-	// the work loop before the lock is released.
+	// Note that rtsIter must be closed by processor even if start fails as
+	// caller assumes processor to take ownership.
 	//
 	// If the iterator is nil then no initialization scan will be performed and
 	// the resolved timestamp will immediately be considered initialized.
-	Start(stopper *stop.Stopper, newRtsIter IntentScannerConstructor) error
+	Start(stopper *stop.Stopper, rtsIter IntentScanner) error
 	// Stop processor and close all registrations.
 	//
 	// It is meant to be called by replica when it finds that all streams were
@@ -166,9 +163,9 @@ type Processor interface {
 		startTS hlc.Timestamp, // exclusive
 		catchUpIterConstructor CatchUpIteratorConstructor,
 		withDiff bool,
-		stream Stream,
+		newStream NewStream,
+		newBufferedStream NewBufferedStream,
 		disconnectFn func(),
-		done *future.ErrorFuture,
 	) (bool, *Filter)
 	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 	// the given span with the given error.
@@ -320,7 +317,7 @@ func NewLegacyProcessor(cfg Config) *LegacyProcessor {
 // IntentScannerConstructor is used to construct an IntentScanner. It
 // should be called from underneath a stopper task to ensure that the
 // engine has not been closed.
-type IntentScannerConstructor func() IntentScanner
+type IntentScannerConstructor func() (IntentScanner, error)
 
 // CatchUpIteratorConstructor is used to construct an iterator that can be used
 // for catchup-scans. Takes the key span and exclusive start time to run the
@@ -335,10 +332,10 @@ type CatchUpIteratorConstructor func(roachpb.Span, hlc.Timestamp) (*CatchUpItera
 //
 // Note that to fulfill newRtsIter contract, LegacyProcessor will create
 // iterator at the start of its work loop prior to firing async task.
-func (p *LegacyProcessor) Start(stopper *stop.Stopper, newRtsIter IntentScannerConstructor) error {
+func (p *LegacyProcessor) Start(stopper *stop.Stopper, rtsIter IntentScanner) error {
 	ctx := p.AnnotateCtx(context.Background())
 	if err := stopper.RunAsyncTask(ctx, "rangefeed.LegacyProcessor", func(ctx context.Context) {
-		p.run(ctx, p.RangeID, newRtsIter, stopper)
+		p.run(ctx, p.RangeID, rtsIter, stopper)
 	}); err != nil {
 		p.reg.DisconnectWithErr(all, kvpb.NewError(err))
 		close(p.stoppedC)
@@ -349,10 +346,7 @@ func (p *LegacyProcessor) Start(stopper *stop.Stopper, newRtsIter IntentScannerC
 
 // run is called from Start and runs the rangefeed.
 func (p *LegacyProcessor) run(
-	ctx context.Context,
-	_forStacks roachpb.RangeID,
-	rtsIterFunc IntentScannerConstructor,
-	stopper *stop.Stopper,
+	ctx context.Context, _forStacks roachpb.RangeID, rtsIter IntentScanner, stopper *stop.Stopper,
 ) {
 	// Close the memory budget last, or there will be a period of time during
 	// which requests are still ongoing but will run into the closed budget,
@@ -366,8 +360,7 @@ func (p *LegacyProcessor) run(
 
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
-	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
+	if rtsIter != nil {
 		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
 		err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
 		if err != nil {
@@ -555,9 +548,9 @@ func (p *LegacyProcessor) Register(
 	startTS hlc.Timestamp,
 	catchUpIterConstructor CatchUpIteratorConstructor,
 	withDiff bool,
-	stream Stream,
+	newStream NewStream,
+	_ NewBufferedStream,
 	disconnectFn func(),
-	done *future.ErrorFuture,
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
@@ -567,7 +560,7 @@ func (p *LegacyProcessor) Register(
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
+		p.Config.EventChanCap, blockWhenFull, p.Metrics, newStream(), disconnectFn,
 	)
 	select {
 	case p.regC <- r:

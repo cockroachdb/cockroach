@@ -231,7 +231,7 @@ func (s *Scheduler) enqueueInternalLocked(id int64, evt processorEventType) bool
 }
 
 // EnqueueAll enqueues event for all existing non-stopped id's. Enqueueing is
-// done in chunks to avoid holding lock for too long and interfering with other
+// assertError in chunks to avoid holding lock for too long and interfering with other
 // enqueue operations.
 //
 // If id is not known or already stopped it is ignored.

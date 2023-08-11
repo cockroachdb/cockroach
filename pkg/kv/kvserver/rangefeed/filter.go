@@ -24,17 +24,21 @@ type Filter struct {
 	needVals     interval.RangeGroup
 }
 
-func newFilterFromRegistry(reg *registry) *Filter {
+type filterable interface {
+	needsPrev() bool
+}
+
+func newFilterFromFilterTree(tree interval.Tree) *Filter {
 	f := &Filter{
 		needPrevVals: interval.NewRangeList(),
 		needVals:     interval.NewRangeList(),
 	}
-	reg.tree.Do(func(i interval.Interface) (done bool) {
-		r := i.(*registration)
-		if r.withDiff {
-			f.needPrevVals.Add(r.Range())
+	tree.Do(func(i interval.Interface) (done bool) {
+		r := i.(filterable)
+		if r.needsPrev() {
+			f.needPrevVals.Add(i.Range())
 		}
-		f.needVals.Add(r.Range())
+		f.needVals.Add(i.Range())
 		return false
 	})
 	return f

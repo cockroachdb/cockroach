@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,7 +34,11 @@ type Stream interface {
 	// Send blocks until it sends m, the stream is done, or the stream breaks.
 	// Send must be safe to call on the same stream in different goroutines.
 	Send(*kvpb.RangeFeedEvent) error
+	// Send close stram with error.
+	Error(err *kvpb.Error)
 }
+
+type NewStream func() Stream
 
 // Shared event is an entry stored in registration channel. Each entry is
 // specific to registration but allocation is shared between all registrations
@@ -92,7 +95,6 @@ type registration struct {
 
 	// Output.
 	stream Stream
-	done   *future.ErrorFuture
 	unreg  func()
 	// Internal.
 	id            int64
@@ -130,7 +132,6 @@ func newRegistration(
 	metrics *Metrics,
 	stream Stream,
 	unregisterFn func(),
-	done *future.ErrorFuture,
 ) registration {
 	r := registration{
 		span:                   span,
@@ -139,7 +140,6 @@ func newRegistration(
 		withDiff:               withDiff,
 		metrics:                metrics,
 		stream:                 stream,
-		done:                   done,
 		unreg:                  unregisterFn,
 		buf:                    make(chan *sharedEvent, bufferSz),
 		blockWhenFull:          blockWhenFull,
@@ -157,7 +157,7 @@ func newRegistration(
 func (r *registration) publish(
 	ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) {
-	r.validateEvent(event)
+	validateEvent(event)
 	e := getPooledSharedEvent(sharedEvent{event: r.maybeStripEvent(event), alloc: alloc})
 
 	r.mu.Lock()
@@ -195,7 +195,7 @@ func (r *registration) publish(
 
 // validateEvent checks that the event contains enough information for the
 // registation.
-func (r *registration) validateEvent(event *kvpb.RangeFeedEvent) {
+func validateEvent(event *kvpb.RangeFeedEvent) {
 	switch t := event.GetValue().(type) {
 	case *kvpb.RangeFeedValue:
 		if t.Key == nil {
@@ -297,6 +297,7 @@ func (r *registration) disconnect(pErr *kvpb.Error) {
 	defer r.mu.Unlock()
 	if !r.mu.disconnected {
 		if r.mu.catchUpIter != nil {
+			log.Infof(context.Background(), "closing catchup iter for span %s", r.span)
 			r.mu.catchUpIter.Close()
 			r.mu.catchUpIter = nil
 		}
@@ -304,7 +305,7 @@ func (r *registration) disconnect(pErr *kvpb.Error) {
 			r.mu.outputLoopCancelFn()
 		}
 		r.mu.disconnected = true
-		r.done.Set(pErr.GoError())
+		r.stream.Error(pErr)
 	}
 }
 
@@ -401,6 +402,7 @@ func (r *registration) maybeRunCatchUpScan(ctx context.Context) error {
 	}
 	start := timeutil.Now()
 	defer func() {
+		log.Infof(ctx, "closing catchup iter for span %s", r.span)
 		catchUpIter.Close()
 		r.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
@@ -416,6 +418,10 @@ func (r *registration) ID() uintptr {
 // Range implements interval.Interface.
 func (r *registration) Range() interval.Range {
 	return r.keys
+}
+
+func (r *registration) needsPrev() bool {
+	return r.withDiff
 }
 
 func (r registration) String() string {
@@ -444,7 +450,7 @@ func (reg *registry) Len() int {
 // NewFilter returns a operation filter reflecting the registrations
 // in the registry.
 func (reg *registry) NewFilter() *Filter {
-	return newFilterFromRegistry(reg)
+	return newFilterFromFilterTree(reg.tree)
 }
 
 // Register adds the provided registration to the registry.

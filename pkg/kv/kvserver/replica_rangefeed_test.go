@@ -12,6 +12,7 @@ package kvserver_test
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sync/atomic"
 	"testing"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -34,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -89,9 +90,44 @@ func (s *testStream) Events() []*kvpb.RangeFeedEvent {
 	return s.mu.events
 }
 
-func waitRangeFeed(store *kvserver.Store, req *kvpb.RangeFeedRequest, stream *testStream) error {
-	retErr, _ := future.Wait(context.Background(), store.RangeFeed(req, stream))
-	return retErr
+func waitRangeFeed(
+	store *kvserver.Store, req *kvpb.RangeFeedRequest, sink kvpb.RangeFeedEventSink,
+) error {
+	return runRangeFeed(sink, func(
+		newStream rangefeed.NewStream,
+		newBufferedStream rangefeed.NewBufferedStream,
+	) error {
+		return store.RangeFeed(sink.Context(), req, newStream, newBufferedStream)
+	})
+}
+
+type NewRangeFeed func(
+	newStream rangefeed.NewStream,
+	newBufferedStream rangefeed.NewBufferedStream,
+) error
+
+// runRangeFeed starts RangeFeed request handler and blocks until it completes.
+// provided mkFeed function could delegate to various means of creating a
+// rangefeed like store or replica as needed.
+func runRangeFeed(stream kvpb.RangeFeedEventSink, mkFeed NewRangeFeed) error {
+	resC := make(chan *kvpb.Error, 1)
+	err := mkFeed(func() rangefeed.Stream {
+		return rangefeed.NewSingleFeedStream(stream.Context(), resC, stream)
+	}, func(done func()) rangefeed.BufferedStream {
+		panic("implement me to run tests with scheduled processor")
+	})
+	fmt.Printf("creating rangefeed (err=%s)\n", err)
+	if err != nil {
+		return err
+	}
+	feedErr := <-resC
+	fmt.Printf("received feed error: %s\n", feedErr)
+	var event kvpb.RangeFeedEvent
+	event.SetValue(&kvpb.RangeFeedError{
+		Error: *feedErr,
+	})
+	_ = stream.Send(&event)
+	return feedErr.GoError()
 }
 
 func TestReplicaRangefeed(t *testing.T) {
@@ -442,7 +478,12 @@ func TestReplicaRangefeed(t *testing.T) {
 	// Cancel each of the rangefeed streams.
 	for _, stream := range streams {
 		stream.Cancel()
-		require.True(t, errors.Is(<-streamErrC, context.Canceled))
+		fmt.Printf("cancelling feed\n")
+		streamErr := <-streamErrC
+		// Cancellation error could be either nil or error because output loop could
+		// abort if it sees stream context cancellation before sending internal
+		// propagated cancellation.
+		require.True(t, errors.Is(streamErr, context.Canceled) || streamErr == nil)
 	}
 
 	// Bump the GC threshold and assert that RangeFeed below the timestamp will
@@ -494,11 +535,6 @@ func TestReplicaRangefeed(t *testing.T) {
 		}
 		return nil
 	})
-}
-
-func waitErrorFuture(f *future.ErrorFuture) error {
-	resultErr, _ := future.Wait(context.Background(), f)
-	return resultErr
 }
 
 func TestReplicaRangefeedErrors(t *testing.T) {
@@ -992,7 +1028,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			}
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
-			streamErrC <- waitErrorFuture(store.RangeFeed(&req, stream))
+			streamErrC <- waitRangeFeed(store, &req, stream)
 		}()
 
 		// Check the error.
@@ -1012,7 +1048,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 			}
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
-			streamErrC <- waitErrorFuture(store.RangeFeed(&req, stream))
+			streamErrC <- waitRangeFeed(store, &req, stream)
 		}()
 
 		// Wait for the first checkpoint event.

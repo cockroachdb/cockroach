@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -46,7 +45,7 @@ const (
 // BenchmarkRangefeed benchmarks the processor and registrations, by submitting
 // a set of events and waiting until they are all emitted.
 func BenchmarkRangefeed(b *testing.B) {
-	for _, procType := range testTypes {
+	for _, procType := range allProcessorTypes {
 		for _, opType := range []opType{writeOpType, commitOpType, closedTSOpType} {
 			for _, numRegistrations := range []int{1, 10, 100} {
 				name := fmt.Sprintf("opType=%s/numRegs=%d/procType=%s", opType, numRegistrations, procType)
@@ -95,19 +94,30 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 	span := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
 
 	p, h, stopper := newTestProcessor(b, withSpan(span), withBudget(budget), withChanCap(b.N),
-		withEventTimeout(time.Hour), withProcType(legacyProcessor))
+		withEventTimeout(time.Hour), withProcType(opts.procType))
 	defer stopper.Stop(ctx)
 
 	// Add registrations.
 	streams := make([]*noopStream, opts.numRegistrations)
-	futures := make([]*future.ErrorFuture, opts.numRegistrations)
+	futures := make([]chan *kvpb.Error, opts.numRegistrations)
 	for i := 0; i < opts.numRegistrations; i++ {
 		// withDiff does not matter for these benchmarks, since the previous value
 		// is fetched and populated during Raft application.
 		const withDiff = false
 		streams[i] = &noopStream{ctx: ctx}
-		futures[i] = &future.ErrorFuture{}
-		ok, _ := p.Register(span, hlc.MinTimestamp, nil, withDiff, streams[i], nil, futures[i])
+		futures[i] = make(chan *kvpb.Error, 1)
+		ok, _ := p.Register(span, hlc.MinTimestamp, nil, withDiff,
+			func() Stream {
+				return NewSingleFeedStream(ctx, futures[i], streams[i])
+			},
+			func(done func()) BufferedStream {
+				s := NewSingleBufferedStream(ctx, streams[i], 1000, true, done)
+				go func(c chan *kvpb.Error) {
+					c <- s.Done()
+				}(futures[i])
+				return s
+			},
+			nil)
 		require.True(b, ok)
 	}
 
@@ -173,6 +183,8 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 			b.Fatal("failed to forward closed timestamp")
 		}
 	}
+	// TODO(oleg): This is not enough for scheduled processor as we must wait for
+	// stream buffers to flush.
 	h.syncEventAndRegistrations()
 
 	// Check that all registrations ended successfully, and emitted the expected
@@ -181,9 +193,12 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 	p.Stop()
 
 	for i, f := range futures {
-		regErr, err := future.Wait(ctx, f)
-		require.NoError(b, err)
-		require.NoError(b, regErr)
+		select {
+		case regErr := <-f:
+			require.NoError(b, regErr.GoError())
+		case <-time.After(30 * time.Second):
+			b.Fatalf("failed to get processor termination")
+		}
 		require.Equal(b, b.N, streams[i].events-1) // ignore checkpoint after catchup
 	}
 }

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -41,7 +40,7 @@ type ScheduledProcessor struct {
 	Config
 	scheduler ClientScheduler
 
-	reg registry
+	reg nonBufferedRegistry
 	rts resolvedTimestamp
 
 	requestQueue chan request
@@ -67,7 +66,7 @@ func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
 	p := &ScheduledProcessor{
 		Config:    cfg,
 		scheduler: NewClientScheduler(cfg.Scheduler),
-		reg:       makeRegistry(cfg.Metrics),
+		reg:       makeNonBufferedRegistry(cfg.Metrics),
 		rts:       makeResolvedTimestamp(),
 
 		requestQueue: make(chan request, 20),
@@ -86,9 +85,7 @@ func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
 // calling its Close method when it is finished. If the iterator is nil then
 // no initialization scan will be performed and the resolved timestamp will
 // immediately be considered initialized.
-func (p *ScheduledProcessor) Start(
-	stopper *stop.Stopper, rtsIterFunc IntentScannerConstructor,
-) error {
+func (p *ScheduledProcessor) Start(stopper *stop.Stopper, rtsIter IntentScanner) error {
 	ctx := p.Config.AmbientContext.AnnotateCtx(context.Background())
 	ctx, p.startupCancel = context.WithCancel(ctx)
 	p.stopper = stopper
@@ -96,14 +93,16 @@ func (p *ScheduledProcessor) Start(
 	// Note that callback registration must be performed before starting resolved
 	// timestamp init because resolution posts resolvedTS event when it is done.
 	if err := p.scheduler.Register(p.process); err != nil {
+		if rtsIter != nil {
+			rtsIter.Close()
+		}
 		p.cleanup()
 		return err
 	}
 
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue.
-	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
+	if rtsIter != nil {
 		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
 		// TODO(oleg): we need to cap number of tasks that we can fire up across
 		// all feeds as they could potentially generate O(n) tasks during start.
@@ -282,39 +281,69 @@ func (p *ScheduledProcessor) Register(
 	startTS hlc.Timestamp,
 	catchUpIterConstructor CatchUpIteratorConstructor,
 	withDiff bool,
-	stream Stream,
+	_ NewStream,
+	newBufferedStream NewBufferedStream,
 	disconnectFn func(),
-	done *future.ErrorFuture,
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
 	// it should see these events during its catch up scan.
 	p.syncEventC()
 
-	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
-	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
-	)
-
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
 		if p.stopping {
 			return nil
 		}
-		if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
-			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
+
+		regSpan := span.AsRawSpanWithNoLocals()
+		if !p.Span.AsRawSpanWithNoLocals().Contains(regSpan) {
+			log.Fatalf(ctx, "registration span %v not in Processor's key range %v", regSpan, p.Span)
 		}
 
-		// Construct the catchUpIter before notifying the registration that it
-		// has been registered. Note that if the catchUpScan is never run, then
-		// the iterator constructed here will be closed in disconnect.
-		if err := r.maybeConstructCatchUpIter(); err != nil {
-			r.disconnect(kvpb.NewError(err))
+		r := newNonBufferedRegistration(regSpan, startTS, withDiff, p.Metrics)
+
+		// This callback is notified by external worker that is responsible for
+		// handling buffered stream. We can't rely on this being called on processor
+		// scheduler and we can't make assumptions if it would be called only after
+		// this registration request is complete.
+		regDrained := func() {
+			// It's ok to stop unconnected registration.
+			r.cancelCatchUp()
+			if p.unregisterClient(r) {
+				// disconnectFn callback is provided by replica to tear down processors
+				// that have zero registrations left and to update event filters.
+				if disconnectFn != nil {
+					disconnectFn()
+				}
+			}
+		}
+
+		// First construct a stream, we might need to send an error if we fail
+		// to construct registration for any reason.
+		stream := newBufferedStream(regDrained)
+
+		var catchUpIter *CatchUpIterator
+		if catchUpIterConstructor != nil {
+			var err error
+			if catchUpIter, err = catchUpIterConstructor(regSpan, startTS); err != nil {
+				// We don't have a registration ready yet, must fall back to sending error
+				// directly. It is fine to receive drained notification at this point as
+				// we have appropriate checks.
+				stream.SendError(kvpb.NewError(err))
+				return nil
+			}
+		}
+
+		// Connect registration and check if we were not disconnected by stream
+		// in between.
+		if !r.connect(stream, p.Config.EventChanCap, catchUpIter) {
+			// Stream was cancelled, we can just abandon the request here as we didn't
+			// acquire any resources.
 			return nil
 		}
 
 		// Add the new registration to the registry.
-		p.reg.Register(&r)
+		p.reg.Register(r)
 
 		// Prep response with filter that includes the new registration.
 		f := p.reg.NewFilter()
@@ -327,34 +356,28 @@ func (p *ScheduledProcessor) Register(
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
 		// Run an output loop for the registry.
-		runOutputLoop := func(ctx context.Context) {
-			r.runOutputLoop(ctx, p.RangeID)
-			if p.unregisterClient(&r) {
-				// unreg callback is set by replica to tear down processors that have
-				// zero registrations left and to update event filters.
-				if r.unreg != nil {
-					r.unreg()
-				}
-			}
+		runCatchupScan := func(ctx context.Context) {
+			r.runCatchupScan(ctx, p.RangeID)
 		}
-		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
+		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runCatchupScan); err != nil {
 			// If we can't schedule internally, processor is already stopped which
-			// could only happen on shutdown. Disconnect stream and just remove
-			// registration.
-			r.disconnect(kvpb.NewError(err))
-			p.reg.Unregister(ctx, &r)
+			// could only happen on shutdown.
+			r.abortAndDisconnectNonStarted(kvpb.NewError(err))
+			p.reg.Unregister(r)
+			return nil
 		}
 		return f
 	})
+
 	if filter != nil {
 		return true, filter
 	}
 	return false, nil
 }
 
-func (p *ScheduledProcessor) unregisterClient(r *registration) bool {
+func (p *ScheduledProcessor) unregisterClient(r *nonBufferedRegistration) bool {
 	return runRequest(p, func(ctx context.Context, p *ScheduledProcessor) bool {
-		p.reg.Unregister(ctx, r)
+		p.reg.Unregister(r)
 		return true
 	})
 }
@@ -561,7 +584,7 @@ func (p *ScheduledProcessor) Len() int {
 // the processor. Returns nil if the processor has been stopped already.
 func (p *ScheduledProcessor) Filter() *Filter {
 	return runRequest(p, func(_ context.Context, p *ScheduledProcessor) *Filter {
-		return newFilterFromRegistry(&p.reg)
+		return newFilterFromFilterTree(p.reg.tree)
 	})
 }
 
@@ -606,15 +629,10 @@ func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 	case e.sst != nil:
 		p.consumeSSTable(ctx, e.sst.data, e.sst.span, e.sst.ts, e.alloc)
 	case e.sync != nil:
-		if e.sync.testRegCatchupSpan != nil {
-			if err := p.reg.waitForCaughtUp(*e.sync.testRegCatchupSpan); err != nil {
-				log.Errorf(
-					ctx,
-					"error waiting for registries to catch up during test, results might be impacted: %s",
-					err,
-				)
-			}
-		}
+		// Note that this behaviour is different form LegacyProcessor as it can
+		// ensure that registrations that it controls directly flushed all their
+		// buffers. Unbuffered registrations used by ScheduledProcessor doesn't have
+		// such luxury.
 		close(e.sync.c)
 	default:
 		panic(fmt.Sprintf("missing event variant: %+v", e))
