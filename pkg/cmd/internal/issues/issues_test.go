@@ -57,6 +57,7 @@ func TestPost(t *testing.T) {
 		message              string
 		artifacts            string
 		reproCmd             string
+		skipTestFailure      bool
 		reproTitle, reproURL string
 	}
 
@@ -150,6 +151,13 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 			message:     "boom",
 			reproURL:    "https://github.com/cockroachdb/cockroach",
 			reproTitle:  "FooBar README",
+		},
+		{
+			name:            "infrastructure-flake",
+			packageName:     "roachtest",
+			testName:        "TestCDC",
+			message:         "Something went wrong",
+			skipTestFailure: true,
 		},
 	}
 
@@ -353,14 +361,15 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 				repro = HelpCommandAsLink(c.reproTitle, c.reproURL)
 			}
 			req := PostRequest{
-				PackageName:     c.packageName,
-				TestName:        c.testName,
-				Message:         c.message,
-				Artifacts:       c.artifacts,
-				MentionOnCreate: []string{"@cockroachdb/idonotexistbecausethisisatest"},
-				HelpCommand:     repro,
-				ExtraLabels:     []string{"release-blocker"},
-				ExtraParams:     map[string]string{"ROACHTEST_cloud": "gce"},
+				PackageName:          c.packageName,
+				TestName:             c.testName,
+				Message:              c.message,
+				SkipLabelTestFailure: c.skipTestFailure,
+				Artifacts:            c.artifacts,
+				MentionOnCreate:      []string{"@cockroachdb/idonotexistbecausethisisatest"},
+				HelpCommand:          repro,
+				ExtraLabels:          []string{"release-blocker"},
+				ExtraParams:          map[string]string{"ROACHTEST_cloud": "gce"},
 			}
 			require.NoError(t, p.post(context.Background(), UnitTestFormatter, req))
 
