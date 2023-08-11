@@ -400,7 +400,9 @@ func (h *Histogram) ToPrometheusMetricWindowed() *prometheusgo.Metric {
 // GetMetadata returns the metric's metadata including the Prometheus
 // MetricType.
 func (h *Histogram) GetMetadata() Metadata {
-	return h.Metadata
+	baseMetadata := h.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_HISTOGRAM
+	return baseMetadata
 }
 
 // Inspect calls the closure.
@@ -586,7 +588,9 @@ func (mwh *ManualWindowHistogram) Rotate() error {
 // GetMetadata returns the metric's metadata including the Prometheus
 // MetricType.
 func (mwh *ManualWindowHistogram) GetMetadata() Metadata {
-	return mwh.Metadata
+	baseMetadata := mwh.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_HISTOGRAM
+	return baseMetadata
 }
 
 // Inspect calls the closure.
