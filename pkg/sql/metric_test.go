@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/stretchr/testify/require"
 )
 
 type queryCounter struct {
@@ -389,4 +391,29 @@ func TestSavepointMetrics(t *testing.T) {
 	if _, err := checkCounterDelta(s, sql.MetaTxnRollbackStarted, accum.txnRollbackCount, 2); err != nil {
 		t.Error(err)
 	}
+}
+
+func TestMemMetricsCorrectlyRegistered(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	r := metric.NewRegistry()
+	mm := sql.MakeMemMetrics("test", base.DefaultHistogramWindowInterval())
+	r.AddMetricStruct(mm)
+
+	expectedMetrics := []string{
+		"sql.mem.test.max",
+		"sql.mem.test.current",
+		"sql.mem.test.txn.max",
+		"sql.mem.test.txn.current",
+		"sql.mem.test.session.max",
+		"sql.mem.test.session.current",
+		"sql.mem.test.session.prepared.max",
+		"sql.mem.test.session.prepared.current",
+	}
+	var registered []string
+	r.Each(func(name string, val interface{}) {
+		registered = append(registered, name)
+	})
+	require.ElementsMatch(t, expectedMetrics, registered)
 }

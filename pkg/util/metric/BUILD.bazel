@@ -23,6 +23,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/syncutil",
@@ -58,6 +59,7 @@ go_test(
     deps = [
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/echotest",
+        "//pkg/util/buildutil",
         "//pkg/util/log",
         "@com_github_kr_pretty//:pretty",
         "@com_github_prometheus_client_golang//prometheus",
