@@ -26,6 +26,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rogpeppe/go-internal v1.8.1 // indirect
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
-	golang.org/x/net v0.0.0-20211008194852-3b03d305991f // indirect
-	golang.org/x/sys v0.0.0-20220209214540-3681064d5158 // indirect
+	golang.org/x/net v0.7.0 // indirect
+	golang.org/x/sys v0.5.0 // indirect
 )
