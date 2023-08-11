@@ -39,3 +39,13 @@ export const selectIndexUsageStatsEnabled = (state: AppState): boolean => {
   const value = settings["version"]?.value || "";
   return greaterOrEqualThanVersion(value, [22, 1, 0]);
 };
+
+export const selectDropUnusedIndexDuration = (state: AppState): string => {
+  const settings = state.adminUI?.clusterSettings.data?.key_values;
+  if (!settings) {
+    return "168h";
+  }
+  return (
+    settings["sql.index_recommendation.drop_unused_duration"]?.value || "168h"
+  );
+};
