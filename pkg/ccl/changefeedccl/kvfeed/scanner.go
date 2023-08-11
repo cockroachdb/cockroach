@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -254,7 +253,7 @@ func (p *scanRequestScanner) exportSpan(
 func getRangesToProcess(
 	ctx context.Context, ds *kvcoord.DistSender, targetSpans []roachpb.Span,
 ) ([]roachpb.Span, int, error) {
-	ranges, numNodes, err := AllRangeSpans(ctx, ds, targetSpans)
+	ranges, numNodes, err := ds.AllRangeSpans(ctx, targetSpans)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -322,40 +321,6 @@ func slurpScanResponse(
 		}
 	}
 	return nil
-}
-
-// AllRangeSpans returns the list of all ranges that cover input spans along with the
-// nodeCountHint indicating the number of nodes that host those ranges.
-func AllRangeSpans(
-	ctx context.Context, ds *kvcoord.DistSender, spans []roachpb.Span,
-) (_ []roachpb.Span, nodeCountHint int, _ error) {
-	ranges := make([]roachpb.Span, 0, len(spans))
-
-	it := kvcoord.MakeRangeIterator(ds)
-	var replicas util.FastIntMap
-
-	for i := range spans {
-		rSpan, err := keys.SpanAddr(spans[i])
-		if err != nil {
-			return nil, 0, err
-		}
-		for it.Seek(ctx, rSpan.Key, kvcoord.Ascending); ; it.Next(ctx) {
-			if !it.Valid() {
-				return nil, 0, it.Error()
-			}
-			ranges = append(ranges, roachpb.Span{
-				Key: it.Desc().StartKey.AsRawKey(), EndKey: it.Desc().EndKey.AsRawKey(),
-			})
-			for _, r := range it.Desc().InternalReplicas {
-				replicas.Set(int(r.NodeID), 0)
-			}
-			if !it.NeedAnother(rSpan) {
-				break
-			}
-		}
-	}
-
-	return ranges, replicas.Len(), nil
 }
 
 // maxConcurrentScanRequests returns the number of concurrent scan requests.
