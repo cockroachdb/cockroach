@@ -476,22 +476,20 @@ type TableIndexUsageStats = {
 };
 
 const getTableIndexUsageStats: TableDetailsQuery<IndexUsageStatistic> = {
-  createStmt: (dbName, tableName) => {
+  createStmt: (dbName, tableName, csIndexUnusedDuration) => {
     const escFullTableName = Join(
       [new Identifier(dbName), new SQL(tableName)],
       new SQL("."),
     );
     return {
       sql: Format(
-        `WITH 
-     cs AS (SELECT value FROM crdb_internal.cluster_settings WHERE variable = 'sql.index_recommendation.drop_unused_duration'),
-     tableId AS (SELECT $1::regclass::int as table_id)
+        `WITH tableId AS (SELECT $1::regclass::int as table_id)
           SELECT * FROM (SELECT
                   ti.created_at,
                   us.last_read,
                   us.total_reads,
-                  cs.value as unused_threshold,
-                  cs.value::interval as interval_threshold,
+                  '${csIndexUnusedDuration}' as unused_threshold,
+                  '${csIndexUnusedDuration}'::interval as interval_threshold,
                   now() - COALESCE(us.last_read AT TIME ZONE 'UTC', COALESCE(ti.created_at, '0001-01-01')) as unused_interval
                   FROM %1.crdb_internal.index_usage_statistics AS us
                   JOIN tableId ON us.table_id = tableId.table_id
@@ -499,7 +497,6 @@ const getTableIndexUsageStats: TableDetailsQuery<IndexUsageStatistic> = {
                       us.index_id = ti.index_id AND 
                       tableId.table_id = ti.descriptor_id
                   )
-                  CROSS JOIN cs
                  WHERE $2 != 'system' AND ti.is_unique IS false)
                WHERE unused_interval > interval_threshold
                ORDER BY total_reads DESC`,
@@ -522,7 +519,11 @@ const getTableIndexUsageStats: TableDetailsQuery<IndexUsageStatistic> = {
 };
 
 type TableDetailsQuery<RowType> = {
-  createStmt: (dbName: string, tableName: string) => SqlStatement;
+  createStmt: (
+    dbName: string,
+    tableName: string,
+    csIndexUnusedDuration: string,
+  ) => SqlStatement;
   addToTableDetail: (
     response: SqlTxnResult<RowType>,
     tableDetail: TableDetailsResponse,
@@ -557,11 +558,12 @@ const tableDetailQueries: TableDetailsQuery<TableDetailsRow>[] = [
 export function createTableDetailsReq(
   dbName: string,
   tableName: string,
+  csIndexUnusedDuration: string,
 ): SqlExecutionRequest {
   return {
     execute: true,
     statements: tableDetailQueries.map(query =>
-      query.createStmt(dbName, tableName),
+      query.createStmt(dbName, tableName, csIndexUnusedDuration),
     ),
     max_result_size: LARGE_RESULT_SIZE,
     timeout: LONG_TIMEOUT,
@@ -573,23 +575,33 @@ export type TableDetailsReqParams = {
   database: string;
   // Note: table name is expected in the following format: "schemaName"."tableName"
   table: string;
+  csIndexUnusedDuration: string;
 };
 
 export async function getTableDetails(
   params: TableDetailsReqParams,
   timeout?: moment.Duration,
 ): Promise<SqlApiResponse<TableDetailsResponse>> {
-  return withTimeout(fetchTableDetails(params.database, params.table), timeout);
+  return withTimeout(
+    fetchTableDetails(
+      params.database,
+      params.table,
+      params.csIndexUnusedDuration,
+    ),
+    timeout,
+  );
 }
 
 async function fetchTableDetails(
   databaseName: string,
   tableName: string,
+  csIndexUnusedDuration: string,
 ): Promise<SqlApiResponse<TableDetailsResponse>> {
   const detailsResponse: TableDetailsResponse = newTableDetailsResponse();
   const req: SqlExecutionRequest = createTableDetailsReq(
     databaseName,
     tableName,
+    csIndexUnusedDuration,
   );
   const resp = await executeInternalSql<TableDetailsRow>(req);
   resp.execution.txn_results.forEach(txn_result => {
