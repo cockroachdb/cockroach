@@ -40,6 +40,7 @@ crdb_internal  create_type_statements                  table  admin  NULL  NULL
 crdb_internal  cross_db_references                     table  admin  NULL  NULL
 crdb_internal  databases                               table  admin  NULL  NULL
 crdb_internal  default_privileges                      table  admin  NULL  NULL
+crdb_internal  eventlog                                table  admin  NULL  NULL
 crdb_internal  feature_usage                           table  admin  NULL  NULL
 crdb_internal  forward_dependencies                    table  admin  NULL  NULL
 crdb_internal  gossip_alerts                           table  admin  NULL  NULL
@@ -63,8 +64,8 @@ crdb_internal  kv_flow_token_deductions                table  admin  NULL  NULL
 crdb_internal  kv_inherited_role_members               table  admin  NULL  NULL
 crdb_internal  kv_node_liveness                        table  admin  NULL  NULL
 crdb_internal  kv_node_status                          table  admin  NULL  NULL
-crdb_internal  kv_repairable_catalog_corruptions       view   admin  NULL  NULL
 crdb_internal  kv_protected_ts_records                 table  admin  NULL  NULL
+crdb_internal  kv_repairable_catalog_corruptions       view   admin  NULL  NULL
 crdb_internal  kv_store_status                         table  admin  NULL  NULL
 crdb_internal  kv_system_privileges                    view   admin  NULL  NULL
 crdb_internal  leases                                  table  admin  NULL  NULL

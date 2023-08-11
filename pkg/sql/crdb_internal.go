@@ -219,6 +219,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalKVFlowTokenDeductions:              crdbInternalKVFlowTokenDeductions,
 		catconstants.CrdbInternalRepairableCatalogCorruptionsViewID: crdbInternalRepairableCatalogCorruptions,
 		catconstants.CrdbInternalKVProtectedTS:                      crdbInternalKVProtectedTSTable,
+		catconstants.CrdbInternalEventsTableID:                      crdbInternalEventsTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -8770,6 +8771,106 @@ func populateFlowTokensResponse(
 				}
 			}
 		}
+	}
+	return nil
+}
+
+var eventLogNonAdminAccessible = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.eventlog.non_admin_accessible",
+	"set to true to allow non-admin users access to the crdb_internal.eventlog table."+
+		"Non-admin users will need a confluence of the VIEWACTIVITY/VIEWACTIVITYREDACTED permission, "+
+		"VIEWCLUSTERDMETADATA permission, and VIEWCLUSTERSETTING/MODIFYCLUSTERSETTING permission.",
+	false,
+).WithPublic()
+
+var crdbInternalEventsTable = virtualSchemaTable{
+	comment: `virtual table exposing system events`,
+	schema: `
+CREATE TABLE crdb_internal.eventlog (
+	timestamp     TIMESTAMP  NOT NULL,
+  "eventType"   STRING     NOT NULL,
+  "reportingID" INT8       NOT NULL,
+  info          STRING,
+  "uniqueID"    BYTES			 NOT NULL
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		if eventLogNonAdminAccessible.Get(&p.execCfg.Settings.SV) {
+			err := hasNonAdminEventLogAccess(ctx, p)
+			if err != nil {
+				return err
+			}
+		} else {
+			err := p.RequireAdminRole(ctx, "access crdb_internal.eventlog (see sql.event_log.non_admin_accessible to allow access to non-admin users")
+			if err != nil {
+				return err
+			}
+		}
+
+		var retErr error
+		it, err := p.InternalSQLTxn().QueryIteratorEx(
+			ctx, "crdb-internal-events-table", p.Txn(),
+			sessiondata.NodeUserSessionDataOverride,
+			`SELECT timestamp, "eventType", "reportingID", info, "uniqueID" FROM system.eventlog`,
+		)
+		cleanup := func(ctx context.Context) {
+			if err := it.Close(); err != nil {
+				retErr = errors.CombineErrors(retErr, err)
+			}
+		}
+		defer cleanup(ctx)
+
+		if err != nil {
+			return err
+		}
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			if err != nil {
+				return err
+			}
+			r := it.Cur()
+			err = addRow(r...)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+func hasNonAdminEventLogAccess(ctx context.Context, p *planner) error {
+	hasViewActivityOrViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+	if err != nil {
+		return err
+	}
+	if !hasViewActivityOrViewActivityRedacted {
+		return noViewActivityOrViewActivityRedactedRoleError(p.User())
+	}
+	hasViewClusterMetadata, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA, p.User())
+	if err != nil {
+		return err
+	}
+	if !hasViewClusterMetadata {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"user %s does not have %s privilege",
+			p.User(),
+			privilege.VIEWCLUSTERMETADATA,
+		)
+	}
+
+	hasViewClusterSetting, err := p.HasViewClusterSettingOrModifyClusterSetting(ctx)
+	if err != nil {
+		return err
+	}
+	if !hasViewClusterSetting {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			"user %s does not have %s or %s privilege",
+			p.User(),
+			privilege.VIEWCLUSTERSETTING,
+			privilege.MODIFYCLUSTERSETTING,
+		)
 	}
 	return nil
 }

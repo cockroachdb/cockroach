@@ -53,6 +53,7 @@ test           crdb_internal       create_type_statements                  publi
 test           crdb_internal       cross_db_references                     public   SELECT          false
 test           crdb_internal       databases                               public   SELECT          false
 test           crdb_internal       default_privileges                      public   SELECT          false
+test           crdb_internal       eventlog                                public   SELECT          false
 test           crdb_internal       feature_usage                           public   SELECT          false
 test           crdb_internal       forward_dependencies                    public   SELECT          false
 test           crdb_internal       gossip_alerts                           public   SELECT          false
@@ -76,8 +77,8 @@ test           crdb_internal       kv_flow_token_deductions                publi
 test           crdb_internal       kv_inherited_role_members               public   SELECT          false
 test           crdb_internal       kv_node_liveness                        public   SELECT          false
 test           crdb_internal       kv_node_status                          public   SELECT          false
-test           crdb_internal       kv_repairable_catalog_corruptions       public   SELECT          false
 test           crdb_internal       kv_protected_ts_records                 public   SELECT          false
+test           crdb_internal       kv_repairable_catalog_corruptions       public   SELECT          false
 test           crdb_internal       kv_store_status                         public   SELECT          false
 test           crdb_internal       kv_system_privileges                    public   SELECT          false
 test           crdb_internal       leases                                  public   SELECT          false

@@ -1006,6 +1006,30 @@ func (p *planner) HasViewActivity(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
+func (p *planner) HasViewClusterSettingOrModifyClusterSetting(ctx context.Context) (bool, error) {
+	if hasViewClusterSetting, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING, p.User()); err != nil {
+		return false, err
+	} else if hasViewClusterSetting {
+		return true, nil
+	}
+	if hasViewClusterSetting, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING); err != nil {
+		return false, err
+	} else if hasViewClusterSetting {
+		return true, nil
+	}
+	if hasModifyClusterSetting, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING, p.User()); err != nil {
+		return false, err
+	} else if hasModifyClusterSetting {
+		return true, nil
+	}
+	if hasModifyClusterSetting, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING); err != nil {
+		return false, err
+	} else if hasModifyClusterSetting {
+		return true, nil
+	}
+	return false, nil
+}
+
 func insufficientPrivilegeError(
 	user username.SQLUsername, kind privilege.Kind, object privilege.Object,
 ) error {
