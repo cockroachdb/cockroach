@@ -29,9 +29,6 @@ eexpect "defaultdb>"
 send "\\demo decommission 8\r"
 eexpect "node 8 does not exist"
 eexpect "defaultdb>"
-send "\\demo recommission 8\r"
-eexpect "node 8 does not exist"
-eexpect "defaultdb>"
 
 # Cannot restart a node that is not shut down.
 send "\\demo restart 2\r"
@@ -76,6 +73,7 @@ eexpect "defaultdb>"
 
 # Try decommissioning commands
 send "\\demo decommission 4\r"
+eexpect "node is draining"
 eexpect "node 4 has been decommissioned"
 eexpect "defaultdb>"
 
@@ -83,12 +81,8 @@ send "select node_id, draining, membership from crdb_internal.kv_node_liveness O
 eexpect "1 |    f     | active"
 eexpect "2 |    f     | active"
 eexpect "3 |    f     | active"
-eexpect "4 |    f     | decommissioned"
+eexpect "4 |    t     | decommissioned"
 eexpect "5 |    f     | active"
-eexpect "defaultdb>"
-
-send "\\demo recommission 4\r"
-eexpect "can only recommission a decommissioning node"
 eexpect "defaultdb>"
 
 send "\\demo add blah\r"
@@ -128,9 +122,19 @@ send "select node_id, draining, membership from crdb_internal.kv_node_liveness O
 eexpect "1 |    f     | active"
 eexpect "2 |    f     | active"
 eexpect "3 |    f     | active"
-eexpect "4 |    f     | decommissioned"
+eexpect "4 |    t     | decommissioned"
 eexpect "5 |    f     | active"
 eexpect "6 |    t     | active"
+eexpect "defaultdb>"
+
+send "\\demo restart 4\r"
+eexpect "node 4 is permanently decommissioned"
+eexpect "defaultdb>"
+send "\\demo shutdown 4\r"
+eexpect "node 4 is permanently decommissioned"
+eexpect "defaultdb>"
+send "\\demo decommission 4\r"
+eexpect "node 4 is permanently decommissioned"
 eexpect "defaultdb>"
 
 send "\\q\r"

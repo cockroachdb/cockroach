@@ -67,7 +67,8 @@ import (
 
 type serverEntry struct {
 	*server.TestServer
-	nodeID roachpb.NodeID
+	nodeID         roachpb.NodeID
+	decommissioned bool
 }
 
 type transientCluster struct {
@@ -1000,15 +1001,21 @@ func (c *transientCluster) Close(ctx context.Context) {
 // findServer looks for the index of the server with the given node
 // ID. We need to do this search because the mapping between server
 // index and node ID is not guaranteed.
-func (c *transientCluster) findServer(nodeID roachpb.NodeID) int {
+func (c *transientCluster) findServer(nodeID roachpb.NodeID) (int, error) {
 	serverIdx := -1
 	for i, s := range c.servers {
 		if s.nodeID == nodeID {
+			if s.decommissioned {
+				return -1, errors.Newf("node %d is permanently decommissioned", nodeID)
+			}
 			serverIdx = i
 			break
 		}
 	}
-	return serverIdx
+	if serverIdx == -1 {
+		return -1, errors.Newf("node %d does not exist", nodeID)
+	}
+	return serverIdx, nil
 }
 
 // DrainAndShutdown will gracefully attempt to drain a node in the cluster, and
@@ -1019,10 +1026,9 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 	}
 
 	// Find which server has the requested node ID.
-	serverIdx := c.findServer(roachpb.NodeID(nodeID))
-
-	if serverIdx == -1 {
-		return errors.Errorf("node %d does not exist", nodeID)
+	serverIdx, err := c.findServer(roachpb.NodeID(nodeID))
+	if err != nil {
+		return err
 	}
 	if c.servers[serverIdx].TestServer == nil {
 		return errors.Errorf("node %d is already shut down", nodeID)
@@ -1052,48 +1058,41 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 	return nil
 }
 
-// Recommission recommissions a given node.
-func (c *transientCluster) Recommission(ctx context.Context, nodeID int32) error {
-	nodeIndex := int(nodeID - 1)
-
-	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
-		return errors.Errorf("node %d does not exist", nodeID)
+// findOtherServer returns an admin RPC client to another
+// server than the one referred to by the node ID.
+func (c *transientCluster) findOtherServer(
+	ctx context.Context, nodeID int32, op string,
+) (serverpb.AdminClient, func(), error) {
+	// Find a node to use as the sender.
+	for _, s := range c.servers {
+		if s.TestServer != nil && s.nodeID != roachpb.NodeID(nodeID) {
+			return c.getAdminClient(ctx, *(s.TestServer.Cfg))
+		}
 	}
-
-	req := &serverpb.DecommissionRequest{
-		NodeIDs:          []roachpb.NodeID{roachpb.NodeID(nodeID)},
-		TargetMembership: livenesspb.MembershipStatus_ACTIVE,
-	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	adminClient, finish, err := c.getAdminClient(ctx, *(c.firstServer.Cfg))
-	if err != nil {
-		return err
-	}
-
-	defer finish()
-	_, err = adminClient.Decommission(ctx, req)
-	if err != nil {
-		return errors.Wrap(err, "while trying to mark as decommissioning")
-	}
-
-	return nil
+	return nil, nil, errors.Newf("no other nodes available to send a %s request", op)
 }
 
 // Decommission decommissions a given node.
 func (c *transientCluster) Decommission(ctx context.Context, nodeID int32) error {
-	nodeIndex := int(nodeID - 1)
-
-	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
-		return errors.Errorf("node %d does not exist", nodeID)
+	// It's important to drain the node before decommissioning it;
+	// otherwise it's possible for other nodes (and the front-end SQL
+	// shell) to experience weird errors and timeouts while still trying
+	// to use the decommissioned node.
+	if err := c.DrainAndShutdown(ctx, nodeID); err != nil {
+		return err
 	}
+
+	// Mark the node ID as permanently unavailable.
+	// We do not need to check the error return of findServer()
+	// because we know DrainAndShutdown above succeeded and it
+	// already checked findServer().
+	serverIdx, _ := c.findServer(roachpb.NodeID(nodeID))
+	c.servers[serverIdx].decommissioned = true
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	adminClient, finish, err := c.getAdminClient(ctx, *(c.firstServer.Cfg))
+	adminClient, finish, err := c.findOtherServer(ctx, nodeID, "decommission")
 	if err != nil {
 		return err
 	}
@@ -1132,16 +1131,15 @@ func (c *transientCluster) Decommission(ctx context.Context, nodeID int32) error
 // The node will restart, connecting to the same in memory node.
 func (c *transientCluster) RestartNode(ctx context.Context, nodeID int32) error {
 	// Find which server has the requested node ID.
-	serverIdx := c.findServer(roachpb.NodeID(nodeID))
-
-	if serverIdx == -1 {
-		return errors.Errorf("node %d does not exist", nodeID)
+	serverIdx, err := c.findServer(roachpb.NodeID(nodeID))
+	if err != nil {
+		return err
 	}
 	if c.servers[serverIdx].TestServer != nil {
 		return errors.Errorf("node %d is already running", nodeID)
 	}
 
-	_, err := c.startServerInternal(ctx, serverIdx)
+	_, err = c.startServerInternal(ctx, serverIdx)
 	return err
 }
 
@@ -1902,9 +1900,9 @@ func (c *transientCluster) Server(i int) serverutils.TestServerInterface {
 }
 
 func (c *transientCluster) GetLocality(nodeID int32) string {
-	serverIdx := c.findServer(roachpb.NodeID(nodeID))
-	if serverIdx == -1 {
-		return "(invalid server)"
+	serverIdx, err := c.findServer(roachpb.NodeID(nodeID))
+	if err != nil {
+		return fmt.Sprintf("(%v)", err)
 	}
 	return c.demoCtx.Localities[serverIdx].String()
 }
