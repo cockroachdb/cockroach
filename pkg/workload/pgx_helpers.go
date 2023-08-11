@@ -29,7 +29,7 @@ import (
 type MultiConnPool struct {
 	Pools []*pgxpool.Pool
 	// Atomic counter used by Get().
-	counter uint32
+	counter atomic.Uint32
 
 	mu struct {
 		syncutil.RWMutex
@@ -276,7 +276,7 @@ func (m *MultiConnPool) Get() *pgxpool.Pool {
 	if numPools == 1 {
 		return m.Pools[0]
 	}
-	i := atomic.AddUint32(&m.counter, 1) - 1
+	i := m.counter.Add(1) - 1
 
 	return m.Pools[i%numPools]
 }

@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
@@ -131,7 +130,7 @@ func createNewOrder(
 }
 
 func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
-	atomic.AddUint64(&n.config.auditor.newOrderTransactions, 1)
+	n.config.auditor.newOrderTransactions.Add(1)
 
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
@@ -146,7 +145,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 	n.config.auditor.Lock()
 	n.config.auditor.orderLinesFreq[d.oOlCnt]++
 	n.config.auditor.Unlock()
-	atomic.AddUint64(&n.config.auditor.totalOrderLines, uint64(d.oOlCnt))
+	n.config.auditor.totalOrderLines.Add(uint64(d.oOlCnt))
 
 	// itemIDs tracks the item ids in the order so that we can prevent adding
 	// multiple items with the same ID. This would not make sense because each
@@ -273,7 +272,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 						// can't find the item. The spec requires us to actually go
 						// to the database for this, even though we know earlier
 						// that the item has an invalid number.
-						atomic.AddUint64(&n.config.auditor.newOrderRollbacks, 1)
+						n.config.auditor.newOrderRollbacks.Add(1)
 						return errSimulated
 					}
 					return errors.New("missing item row")

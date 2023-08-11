@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"strings"
-	"sync/atomic"
 
 	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -80,7 +79,7 @@ func createDelivery(
 }
 
 func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
-	atomic.AddUint64(&del.config.auditor.deliveryTransactions, 1)
+	del.config.auditor.deliveryTransactions.Add(1)
 
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
@@ -98,7 +97,7 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 				if err := del.selectNewOrder.QueryRowTx(ctx, tx, wID, dID).Scan(&oID); err != nil {
 					// If no matching order is found, the delivery of this order is skipped.
 					if !errors.Is(err, gosql.ErrNoRows) {
-						atomic.AddUint64(&del.config.auditor.skippedDelivieries, 1)
+						del.config.auditor.skippedDelivieries.Add(1)
 						return err
 					}
 					continue

@@ -61,7 +61,7 @@ type insights struct {
 	payloadBytes, ranges int
 	totalTableCount      int
 	scaleStats           bool
-	appCount             uint64
+	appCount             atomic.Uint64
 }
 
 func init() {
@@ -324,7 +324,7 @@ func (b *insights) incrementAppName(db *gosql.DB) error {
 	if !b.scaleStats {
 		return nil
 	}
-	appNum := atomic.AddUint64(&b.appCount, 1)
+	appNum := b.appCount.Add(1)
 	appName := fmt.Sprintf("%s %d", "insightsapp", appNum)
 	_, err := db.Exec("SET application_name = $1;", appName)
 	return err
