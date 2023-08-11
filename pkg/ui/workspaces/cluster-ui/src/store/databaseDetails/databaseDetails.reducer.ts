@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import {
+  DatabaseDetailsReqParams,
   DatabaseDetailsResponse,
   ErrorWithKey,
   SqlApiResponse,
@@ -55,16 +56,16 @@ const databaseDetailsReducer = createSlice({
         lastError: action.payload.err,
       };
     },
-    refresh: (state, action: PayloadAction<string>) => {
-      state[action.payload] = {
+    refresh: (state, action: PayloadAction<DatabaseDetailsReqParams>) => {
+      state[action.payload.database] = {
         valid: false,
         inFlight: true,
         data: null,
         lastError: null,
       };
     },
-    request: (state, action: PayloadAction<string>) => {
-      state[action.payload] = {
+    request: (state, action: PayloadAction<DatabaseDetailsReqParams>) => {
+      state[action.payload.database] = {
         valid: false,
         inFlight: true,
         data: null,

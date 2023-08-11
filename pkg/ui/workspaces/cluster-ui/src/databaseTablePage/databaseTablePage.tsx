@@ -116,6 +116,7 @@ export interface DatabaseTablePageData {
   showIndexRecommendations: boolean;
   automaticStatsCollectionEnabled?: boolean;
   hasAdminRole?: UIConfigState["hasAdminRole"];
+  csIndexUnusedDuration: string;
 }
 
 export interface DatabaseTablePageDataDetails {
@@ -162,7 +163,11 @@ interface Grant {
 }
 
 export interface DatabaseTablePageActions {
-  refreshTableDetails: (database: string, table: string) => void;
+  refreshTableDetails: (
+    database: string,
+    table: string,
+    csIndexUnusedDuration: string,
+  ) => void;
   refreshSettings: () => void;
   refreshIndexStats?: (database: string, table: string) => void;
   resetIndexUsageStats?: (database: string, table: string) => void;
@@ -274,6 +279,7 @@ export class DatabaseTablePage extends React.Component<
       return this.props.refreshTableDetails(
         this.props.databaseName,
         this.props.name,
+        this.props.csIndexUnusedDuration,
       );
     }
 

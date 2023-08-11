@@ -42,14 +42,19 @@ describe("table id generator", function () {
 describe("request to string functions", function () {
   it("correctly generates a string from a database details request", function () {
     const database = "testDatabase";
-    expect(databaseRequestPayloadToID(database)).toEqual(database);
+    const csIndexUnusedDuration = "168h";
+    expect(
+      databaseRequestPayloadToID({ database, csIndexUnusedDuration }),
+    ).toEqual(database);
   });
   it("correctly generates a string from a table details request", function () {
     const database = "testDatabase";
     const table = "testTable";
+    const csIndexUnusedDuration = "168h";
     const tableRequest: clusterUiApi.TableDetailsReqParams = {
       database,
       table,
+      csIndexUnusedDuration,
     };
     expect(tableRequestToID(tableRequest)).toEqual(
       util.generateTableID(database, table),
