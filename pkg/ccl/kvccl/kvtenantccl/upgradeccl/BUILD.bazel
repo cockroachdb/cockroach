@@ -24,7 +24,6 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
-        "//pkg/testutils/testcluster",
         "//pkg/upgrade",
         "//pkg/upgrade/upgradebase",
         "//pkg/util/leaktest",
