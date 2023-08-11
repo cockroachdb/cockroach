@@ -67,7 +67,8 @@ import (
 
 type serverEntry struct {
 	*server.TestServer
-	nodeID roachpb.NodeID
+	nodeID         roachpb.NodeID
+	decommissioned bool
 }
 
 type transientCluster struct {
@@ -398,75 +399,15 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 	phaseCtx = logtags.AddTag(ctx, "phase", 8)
 	if err := func(ctx context.Context) error {
 		if c.demoCtx.Multitenant {
-			c.infoLog(ctx, "starting tenant nodes")
+			c.infoLog(ctx, "starting tenant servers")
 
 			c.tenantServers = make([]serverutils.TestTenantInterface, c.demoCtx.NumNodes)
 			for i := 0; i < c.demoCtx.NumNodes; i++ {
 				createTenant := i == 0
 
-				latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).
-					ContextTestingKnobs.InjectedLatencyOracle
-				c.infoLog(ctx, "starting tenant node %d", i)
-
-				var ts serverutils.TestTenantInterface
-				if c.demoCtx.DisableServerController {
-					tenantStopper := stop.NewStopper()
-					args := base.TestTenantArgs{
-						DisableCreateTenant:     !createTenant,
-						TenantName:              demoTenantName,
-						TenantID:                roachpb.MustMakeTenantID(secondaryTenantID),
-						Stopper:                 tenantStopper,
-						ForceInsecure:           c.demoCtx.Insecure,
-						SSLCertsDir:             c.demoDir,
-						DisableTLSForHTTP:       true,
-						EnableDemoLoginEndpoint: true,
-						StartingRPCAndSQLPort:   c.demoCtx.sqlPort(i, true) - secondaryTenantID,
-						StartingHTTPPort:        c.demoCtx.httpPort(i, true) - secondaryTenantID,
-						Locality:                c.demoCtx.Localities[i],
-						TestingKnobs: base.TestingKnobs{
-							Server: &server.TestingKnobs{
-								ContextTestingKnobs: rpc.ContextTestingKnobs{
-									InjectedLatencyOracle:  latencyMap,
-									InjectedLatencyEnabled: c.latencyEnabled.Get,
-								},
-							},
-						},
-					}
-
-					var err error
-					ts, err = c.servers[i].StartTenant(ctx, args)
-					c.stopper.AddCloser(stop.CloserFn(func() {
-						stopCtx := context.Background()
-						if ts != nil {
-							stopCtx = ts.AnnotateCtx(stopCtx)
-						}
-						tenantStopper.Stop(stopCtx)
-					}))
-					if err != nil {
-						return err
-					}
-				} else {
-					var err error
-					ts, _, err = c.servers[i].StartSharedProcessTenant(ctx,
-						base.TestSharedProcessTenantArgs{
-							TenantID:   roachpb.MustMakeTenantID(secondaryTenantID),
-							TenantName: demoTenantName,
-							Knobs: base.TestingKnobs{
-								Server: &server.TestingKnobs{
-									ContextTestingKnobs: rpc.ContextTestingKnobs{
-										InjectedLatencyOracle:  latencyMap,
-										InjectedLatencyEnabled: c.latencyEnabled.Get,
-									},
-								},
-							},
-						})
-					if err != nil {
-						return err
-					}
+				if err := c.startTenantService(ctx, i, createTenant); err != nil {
+					return err
 				}
-
-				c.tenantServers[i] = ts
-				c.infoLog(ctx, "started tenant server %d: %s", i, ts.SQLAddr())
 			}
 		}
 		return nil
@@ -558,6 +499,84 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 	}(phaseCtx); err != nil {
 		return err
 	}
+
+	return nil
+}
+
+// startTenantServer starts the server for the demo secondary tenant.
+func (c *transientCluster) startTenantService(
+	ctx context.Context, serverIdx int, createTenant bool,
+) (resErr error) {
+	var tenantStopper *stop.Stopper
+	defer func() {
+		if resErr != nil && tenantStopper != nil {
+			tenantStopper.Stop(context.Background())
+		}
+	}()
+
+	latencyMap := c.servers[serverIdx].Cfg.TestingKnobs.Server.(*server.TestingKnobs).
+		ContextTestingKnobs.InjectedLatencyOracle
+	c.infoLog(ctx, "starting tenant node %d", serverIdx)
+
+	var ts serverutils.TestTenantInterface
+	if c.demoCtx.DisableServerController {
+		tenantStopper := stop.NewStopper()
+		args := base.TestTenantArgs{
+			DisableCreateTenant:     !createTenant,
+			TenantName:              demoTenantName,
+			TenantID:                roachpb.MustMakeTenantID(secondaryTenantID),
+			Stopper:                 tenantStopper,
+			ForceInsecure:           c.demoCtx.Insecure,
+			SSLCertsDir:             c.demoDir,
+			DisableTLSForHTTP:       true,
+			EnableDemoLoginEndpoint: true,
+			StartingRPCAndSQLPort:   c.demoCtx.sqlPort(serverIdx, true) - secondaryTenantID,
+			StartingHTTPPort:        c.demoCtx.httpPort(serverIdx, true) - secondaryTenantID,
+			Locality:                c.demoCtx.Localities[serverIdx],
+			TestingKnobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ContextTestingKnobs: rpc.ContextTestingKnobs{
+						InjectedLatencyOracle:  latencyMap,
+						InjectedLatencyEnabled: c.latencyEnabled.Get,
+					},
+				},
+			},
+		}
+
+		var err error
+		ts, err = c.servers[serverIdx].StartTenant(ctx, args)
+		c.stopper.AddCloser(stop.CloserFn(func() {
+			stopCtx := context.Background()
+			if ts != nil {
+				stopCtx = ts.AnnotateCtx(stopCtx)
+			}
+			tenantStopper.Stop(stopCtx)
+		}))
+		if err != nil {
+			return err
+		}
+	} else {
+		var err error
+		ts, _, err = c.servers[serverIdx].StartSharedProcessTenant(ctx,
+			base.TestSharedProcessTenantArgs{
+				TenantID:   roachpb.MustMakeTenantID(secondaryTenantID),
+				TenantName: demoTenantName,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						ContextTestingKnobs: rpc.ContextTestingKnobs{
+							InjectedLatencyOracle:  latencyMap,
+							InjectedLatencyEnabled: c.latencyEnabled.Get,
+						},
+					},
+				},
+			})
+		if err != nil {
+			return err
+		}
+	}
+
+	c.tenantServers[serverIdx] = ts
+	c.infoLog(ctx, "started tenant server %d: %s", serverIdx, ts.SQLAddr())
 
 	return nil
 }
@@ -926,7 +945,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		args.HTTPAddr = fmt.Sprintf("127.0.0.1:%d", httpPort)
 	}
 
-	if demoCtx.Localities != nil {
+	if len(demoCtx.Localities) > serverIdx {
 		args.Locality = demoCtx.Localities[serverIdx]
 	}
 	if demoCtx.Insecure {
@@ -979,6 +998,26 @@ func (c *transientCluster) Close(ctx context.Context) {
 	}
 }
 
+// findServer looks for the index of the server with the given node
+// ID. We need to do this search because the mapping between server
+// index and node ID is not guaranteed.
+func (c *transientCluster) findServer(nodeID roachpb.NodeID) (int, error) {
+	serverIdx := -1
+	for i, s := range c.servers {
+		if s.nodeID == nodeID {
+			if s.decommissioned {
+				return -1, errors.Newf("node %d is permanently decommissioned", nodeID)
+			}
+			serverIdx = i
+			break
+		}
+	}
+	if serverIdx == -1 {
+		return -1, errors.Newf("node %d does not exist", nodeID)
+	}
+	return serverIdx, nil
+}
+
 // DrainAndShutdown will gracefully attempt to drain a node in the cluster, and
 // then shut it down.
 func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) error {
@@ -986,18 +1025,10 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 		return errors.Errorf("shutting down nodes is not supported in --%s configurations", cliflags.Global.Name)
 	}
 
-	// Find which server has the requested node ID. We need to do this
-	// search because the mapping between server index and node ID is
-	// not guaranteed.
-	serverIdx := -1
-	for i, s := range c.servers {
-		if s.nodeID == roachpb.NodeID(nodeID) {
-			serverIdx = i
-		}
-	}
-
-	if serverIdx == -1 {
-		return errors.Errorf("node %d does not exist", nodeID)
+	// Find which server has the requested node ID.
+	serverIdx, err := c.findServer(roachpb.NodeID(nodeID))
+	if err != nil {
+		return err
 	}
 	if c.servers[serverIdx].TestServer == nil {
 		return errors.Errorf("node %d is already shut down", nodeID)
@@ -1021,51 +1052,47 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 		return err
 	}
 	c.servers[serverIdx].TestServer = nil
+	if c.demoCtx.Multitenant {
+		c.tenantServers[serverIdx] = nil
+	}
 	return nil
 }
 
-// Recommission recommissions a given node.
-func (c *transientCluster) Recommission(ctx context.Context, nodeID int32) error {
-	nodeIndex := int(nodeID - 1)
-
-	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
-		return errors.Errorf("node %d does not exist", nodeID)
+// findOtherServer returns an admin RPC client to another
+// server than the one referred to by the node ID.
+func (c *transientCluster) findOtherServer(
+	ctx context.Context, nodeID int32, op string,
+) (serverpb.AdminClient, func(), error) {
+	// Find a node to use as the sender.
+	for _, s := range c.servers {
+		if s.TestServer != nil && s.nodeID != roachpb.NodeID(nodeID) {
+			return c.getAdminClient(ctx, *(s.TestServer.Cfg))
+		}
 	}
-
-	req := &serverpb.DecommissionRequest{
-		NodeIDs:          []roachpb.NodeID{roachpb.NodeID(nodeID)},
-		TargetMembership: livenesspb.MembershipStatus_ACTIVE,
-	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	adminClient, finish, err := c.getAdminClient(ctx, *(c.firstServer.Cfg))
-	if err != nil {
-		return err
-	}
-
-	defer finish()
-	_, err = adminClient.Decommission(ctx, req)
-	if err != nil {
-		return errors.Wrap(err, "while trying to mark as decommissioning")
-	}
-
-	return nil
+	return nil, nil, errors.Newf("no other nodes available to send a %s request", op)
 }
 
 // Decommission decommissions a given node.
 func (c *transientCluster) Decommission(ctx context.Context, nodeID int32) error {
-	nodeIndex := int(nodeID - 1)
-
-	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
-		return errors.Errorf("node %d does not exist", nodeID)
+	// It's important to drain the node before decommissioning it;
+	// otherwise it's possible for other nodes (and the front-end SQL
+	// shell) to experience weird errors and timeouts while still trying
+	// to use the decommissioned node.
+	if err := c.DrainAndShutdown(ctx, nodeID); err != nil {
+		return err
 	}
+
+	// Mark the node ID as permanently unavailable.
+	// We do not need to check the error return of findServer()
+	// because we know DrainAndShutdown above succeeded and it
+	// already checked findServer().
+	serverIdx, _ := c.findServer(roachpb.NodeID(nodeID))
+	c.servers[serverIdx].decommissioned = true
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	adminClient, finish, err := c.getAdminClient(ctx, *(c.firstServer.Cfg))
+	adminClient, finish, err := c.findOtherServer(ctx, nodeID, "decommission")
 	if err != nil {
 		return err
 	}
@@ -1103,24 +1130,16 @@ func (c *transientCluster) Decommission(ctx context.Context, nodeID int32) error
 // The node must have been shut down beforehand.
 // The node will restart, connecting to the same in memory node.
 func (c *transientCluster) RestartNode(ctx context.Context, nodeID int32) error {
-	// Find which server has the requested node ID. We need to do this
-	// search because the mapping between server index and node ID is
-	// not guaranteed.
-	serverIdx := -1
-	for i, s := range c.servers {
-		if s.nodeID == roachpb.NodeID(nodeID) {
-			serverIdx = i
-		}
-	}
-
-	if serverIdx == -1 {
-		return errors.Errorf("node %d does not exist", nodeID)
+	// Find which server has the requested node ID.
+	serverIdx, err := c.findServer(roachpb.NodeID(nodeID))
+	if err != nil {
+		return err
 	}
 	if c.servers[serverIdx].TestServer != nil {
 		return errors.Errorf("node %d is already running", nodeID)
 	}
 
-	_, err := c.startServerInternal(ctx, serverIdx)
+	_, err = c.startServerInternal(ctx, serverIdx)
 	return err
 }
 
@@ -1167,7 +1186,18 @@ func (c *transientCluster) startServerInternal(
 
 	c.stopper.AddCloser(stop.CloserFn(serv.Stop))
 	nodeID := serv.NodeID()
+
 	c.servers[serverIdx] = serverEntry{TestServer: serv, nodeID: nodeID}
+
+	if c.demoCtx.Multitenant {
+		if err := c.startTenantService(ctx, serverIdx, false /* createTenant */); err != nil {
+			serv.Stopper().Stop(ctx)
+			c.servers[serverIdx].TestServer = nil
+			c.tenantServers[serverIdx] = nil
+			return 0, err
+		}
+	}
+
 	return int32(nodeID), nil
 }
 
@@ -1206,6 +1236,7 @@ func (c *transientCluster) AddNode(
 	// Create a new empty server element and add associated locality info.
 	// When we call startServerInternal below, this element will be properly initialized.
 	c.servers = append(c.servers, serverEntry{})
+	c.tenantServers = append(c.tenantServers, nil)
 	c.demoCtx.Localities = append(c.demoCtx.Localities, loc)
 	c.demoCtx.NumNodes++
 
@@ -1851,7 +1882,13 @@ func (s unixSocketDetails) String() string {
 }
 
 func (c *transientCluster) NumNodes() int {
-	return len(c.servers)
+	numNodes := 0
+	for _, s := range c.servers {
+		if s.TestServer != nil {
+			numNodes++
+		}
+	}
+	return numNodes
 }
 
 func (c *transientCluster) NumServers() int {
@@ -1863,7 +1900,11 @@ func (c *transientCluster) Server(i int) serverutils.TestServerInterface {
 }
 
 func (c *transientCluster) GetLocality(nodeID int32) string {
-	return c.demoCtx.Localities[nodeID-1].String()
+	serverIdx, err := c.findServer(roachpb.NodeID(nodeID))
+	if err != nil {
+		return fmt.Sprintf("(%v)", err)
+	}
+	return c.demoCtx.Localities[serverIdx].String()
 }
 
 func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool) {
