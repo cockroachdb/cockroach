@@ -18,8 +18,8 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -400,9 +400,11 @@ func (ss *raftSchedulerShard) worker(
 				state.flags |= stateRaftReady
 			}
 		}
-
-		_ = must.Equal(ctx, state.flags&stateRaftTick != 0, state.ticks != 0,
-			"flags %d with %d ticks", state.flags, state.ticks) // safe to continue
+		if util.RaceEnabled { // assert the ticks invariant
+			if tick := state.flags&stateRaftTick != 0; tick != (state.ticks != 0) {
+				log.Fatalf(ctx, "stateRaftTick is %v with ticks %v", tick, state.ticks)
+			}
+		}
 		if state.flags&stateRaftTick != 0 {
 			for t := state.ticks; t > 0; t-- {
 				// processRaftTick returns true if the range should perform ready
