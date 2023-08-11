@@ -30,6 +30,7 @@ const withLoadingIndicator: DatabaseTablePageProps = {
   indexUsageStatsEnabled: false,
   showIndexRecommendations: false,
   automaticStatsCollectionEnabled: true,
+  csIndexUnusedDuration: "168h",
   details: {
     loading: true,
     loaded: false,
@@ -76,6 +77,7 @@ const withData: DatabaseTablePageProps = {
   indexUsageStatsEnabled: true,
   showIndexRecommendations: true,
   automaticStatsCollectionEnabled: true,
+  csIndexUnusedDuration: "168h",
   details: {
     loading: false,
     loaded: true,

@@ -139,7 +139,7 @@ class TestDriver {
     return this.actions.refreshSettings();
   }
   async refreshTableDetails() {
-    return this.actions.refreshTableDetails(this.database, this.table);
+    return this.actions.refreshTableDetails(this.database, this.table, "168h");
   }
 
   async refreshIndexStats() {
@@ -196,6 +196,7 @@ describe("Database Table Page", function () {
       automaticStatsCollectionEnabled: true,
       indexUsageStatsEnabled: true,
       showIndexRecommendations: true,
+      csIndexUnusedDuration: "168h",
       hasAdminRole: false,
       indexStats: {
         loading: false,
@@ -211,7 +212,7 @@ describe("Database Table Page", function () {
     const mockStatsLastCreatedTimestamp = moment();
 
     fakeApi.stubSqlApiCall<clusterUiApi.TableDetailsRow>(
-      clusterUiApi.createTableDetailsReq("DATABASE", "TABLE"),
+      clusterUiApi.createTableDetailsReq("DATABASE", "TABLE", "168h"),
       [
         // Table ID query
         { rows: [{ table_id: "1" }] },

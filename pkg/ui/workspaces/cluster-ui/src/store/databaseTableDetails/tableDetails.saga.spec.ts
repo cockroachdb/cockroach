@@ -40,9 +40,10 @@ import { generateTableID } from "../../util";
 describe("TableDetails sagas", () => {
   const database = "test_db";
   const table = "test_table";
+  const csIndexUnusedDuration = "168h";
   const key = generateTableID(database, table);
   const requestAction: PayloadAction<TableDetailsReqParams> = {
-    payload: { database, table },
+    payload: { database, table, csIndexUnusedDuration },
     type: "request",
   };
   const tableDetailsResponse: SqlApiResponse<TableDetailsResponse> = {

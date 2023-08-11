@@ -109,6 +109,7 @@ export interface DatabaseDetailsPageData {
   viewMode: ViewMode;
   showNodeRegionsColumn?: boolean;
   showIndexRecommendations: boolean;
+  csIndexUnusedDuration: string;
 }
 
 export interface DatabaseDetailsPageDataTable {
@@ -141,8 +142,15 @@ export interface DatabaseDetailsPageDataTableDetails {
 }
 
 export interface DatabaseDetailsPageActions {
-  refreshDatabaseDetails: (database: string) => void;
-  refreshTableDetails: (database: string, table: string) => void;
+  refreshDatabaseDetails: (
+    database: string,
+    csIndexUnusedDuration: string,
+  ) => void;
+  refreshTableDetails: (
+    database: string,
+    table: string,
+    csIndexUnusedDuration: string,
+  ) => void;
   onFilterChange?: (value: Filters) => void;
   onSearchComplete?: (query: string) => void;
   onSortingTablesChange?: (columnTitle: string, ascending: boolean) => void;
@@ -245,7 +253,10 @@ export class DatabaseDetailsPage extends React.Component<
 
   componentDidMount(): void {
     if (!this.props.loaded && !this.props.loading && !this.props.lastError) {
-      this.props.refreshDatabaseDetails(this.props.name);
+      this.props.refreshDatabaseDetails(
+        this.props.name,
+        this.props.csIndexUnusedDuration,
+      );
     } else {
       // If the props are already loaded then componentDidUpdate
       // will not get called so call refresh to make sure details
@@ -342,7 +353,11 @@ export class DatabaseDetailsPage extends React.Component<
         (table.lastError === undefined ||
           table.lastError?.name === "GetDatabaseInfoError")
       ) {
-        this.props.refreshTableDetails(this.props.name, table.name);
+        this.props.refreshTableDetails(
+          this.props.name,
+          table.name,
+          this.props.csIndexUnusedDuration,
+        );
       }
     });
   }
