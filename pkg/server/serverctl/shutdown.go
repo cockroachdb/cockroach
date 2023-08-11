@@ -22,6 +22,14 @@ func (r ShutdownRequest) ShutdownCause() error {
 	}
 }
 
+// Graceful determines whether the shutdown should be effected via a
+// graceful drain first.
+func (r ShutdownRequest) TerminateUsingGracefulDrain() bool {
+	// As of this patch, none of the existing reasons for shutdown
+	// can be correctly followed by a graceful drain.
+	return false
+}
+
 // Empty returns true if the receiver is the zero value.
 func (r ShutdownRequest) Empty() bool {
 	return r == (ShutdownRequest{})
