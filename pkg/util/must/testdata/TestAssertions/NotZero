@@ -1,8 +1,0 @@
-echo
-----
-message with ‹argument›: false is zero-valued
-message with ‹argument›: 0 is zero-valued
-message with ‹argument›: 0 is zero-valued
-message with ‹argument›: ‹""› is zero-valued
-message with ‹argument›: hlc.Timestamp{WallTime:0, Logical:0, Synthetic:false} is zero-valued
-message with ‹argument›: (*hlc.Timestamp)(nil) is zero-valued

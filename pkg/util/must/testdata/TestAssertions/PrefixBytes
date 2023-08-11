@@ -1,8 +1,0 @@
-echo
-----
-message with ‹argument›: ‹"foo"› does not have prefix ‹"foobar"›
-message with ‹argument›: ‹"foo"› does not have prefix ‹"bar"›
-message with ‹argument›: ‹""› does not have prefix ‹"bar"›
-message with ‹argument›: ‹"\x01\x02\x03"› does not have prefix ‹"\a\b\t"›
-message with ‹argument›: ‹"foo"› does not have prefix ‹"bar"›
-message with ‹argument›: /System/NodeLiveness/1 does not have prefix /Local‹/›‹"›‹"›

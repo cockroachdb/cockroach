@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -274,11 +274,19 @@ func evalExport(
 					reply.ResumeReason = kvpb.RESUME_ELASTIC_CPU_LIMIT
 					break
 				} else {
-					// There should be no condition aside from resource constraints that
-					// results in an early exit without exporting any data. Regardless, if
-					// we have a resumeKey we immediately retry the ExportRequest from
-					// that key and timestamp onwards.
-					_ = must.True(ctx, resumeInfo.CPUOverlimit, "Export returned no data: %+v", resumeInfo)
+					if !resumeInfo.CPUOverlimit {
+						// We should never come here. There should be no condition aside from
+						// resource constraints that results in an early exit without
+						// exporting any data. Regardless, if we have a resumeKey we
+						// immediately retry the ExportRequest from that key and timestamp
+						// onwards.
+						if !build.IsRelease() {
+							return result.Result{}, errors.AssertionFailedf("ExportRequest exited without " +
+								"exporting any data for an unknown reason; programming error")
+						} else {
+							log.Warningf(ctx, "unexpected resume span from ExportRequest without exporting any data for an unknown reason: %v", resumeInfo)
+						}
+					}
 					start = resumeInfo.ResumeKey.Key
 					resumeKeyTS = resumeInfo.ResumeKey.Timestamp
 					continue
