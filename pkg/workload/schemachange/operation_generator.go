@@ -42,7 +42,7 @@ import (
 // seqNum may be shared across multiple instances of this, so it should only
 // be change atomically.
 type operationGeneratorParams struct {
-	seqNum             *int64
+	seqNum             *atomic.Int64
 	errorRate          int
 	enumPct            int
 	rng                *rand.Rand
@@ -3825,7 +3825,7 @@ func (og *operationGenerator) randIntn(topBound int) int {
 }
 
 func (og *operationGenerator) newUniqueSeqNum() int64 {
-	return atomic.AddInt64(og.params.seqNum, 1)
+	return og.params.seqNum.Add(1)
 }
 
 // typeFromTypeName resolves a type string to a types.T struct so that it can be

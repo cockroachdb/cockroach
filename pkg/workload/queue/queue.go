@@ -165,8 +165,8 @@ func (o *queueOp) run(ctx context.Context) error {
 }
 
 func makeSequenceFunc() func() int {
-	i := int64(0)
+	var i atomic.Int64
 	return func() int {
-		return int(atomic.AddInt64(&i, 1))
+		return int(i.Add(1))
 	}
 }
