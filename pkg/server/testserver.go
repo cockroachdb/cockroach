@@ -643,6 +643,9 @@ func (ts *TestServer) Start(ctx context.Context) error {
 		case req := <-ts.Server.ShutdownRequested():
 			shutdownCtx := ts.Server.AnnotateCtx(context.Background())
 			log.Infof(shutdownCtx, "server requesting spontaneous shutdown: %v", req.ShutdownCause())
+			// TODO(knz): evaluate whether there is value in shutting down
+			// test servers using a graceful drain when
+			// req.TerminateUsingGracefulDrain() is true.
 			ts.Stopper().Stop(shutdownCtx)
 		case <-ts.Stopper().ShouldQuiesce():
 		}

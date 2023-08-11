@@ -18,8 +18,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// stopTrigger is used by modules to signal the desire to stop the server. When
-// signaled, the stopTrigger notifies listeners on a channel.
+// stopTrigger is used by modules to signal the desire to stop the
+// server. When signaled, the stopTrigger notifies listeners on a
+// channel.
 type stopTrigger struct {
 	mu struct {
 		syncutil.Mutex
@@ -32,7 +33,7 @@ func newStopTrigger() *stopTrigger {
 	return &stopTrigger{
 		// The channel is buffered so that there's no requirement that anyone ever
 		// calls C() and reads from this channel.
-		c: make(chan ShutdownRequest, 1),
+		c: make(chan ShutdownRequest, 2),
 	}
 }
 
@@ -44,11 +45,24 @@ func (s *stopTrigger) signalStop(ctx context.Context, r ShutdownRequest) {
 	if !s.mu.shutdownRequest.Empty() {
 		// Someone else already triggered the shutdown.
 		log.Infof(ctx, "received a second shutdown request: %s", r.ShutdownCause())
-		return
+		// We want to ensure that non-graceful shutdowns are always queued.
+		// We have three possible situations:
+		// - the first shutdown request was graceful, and the second one
+		//   is not, in which case we want to ensure that the second one
+		//   is queued.
+		// - the first shutdown request was non-graceful, in which case we can
+		//   ignore the second one.
+		// - the first shutdown request was graceful, and the second one is
+		//   too, in which case we can ignore the second one too.
+		if !s.mu.shutdownRequest.TerminateUsingGracefulDrain() || r.TerminateUsingGracefulDrain() {
+			return
+		}
+		// Other cases: we replace the previous one (which was graceful)
+		// with the new one (which isn't graceful).
 	}
 	s.mu.shutdownRequest = r
-	// Writing to s.c is done under the lock, so there can ever only be one value
-	// written and the writer does not block.
+	// Writing to s.c is done under the lock, so there can ever only be
+	// one or two values written and the writer does not block.
 	s.c <- r
 }
 
@@ -95,6 +109,14 @@ func (r ShutdownRequest) ShutdownCause() error {
 	default:
 		return r.Err
 	}
+}
+
+// Graceful determines whether the shutdown should be effected via a
+// graceful drain first.
+func (r ShutdownRequest) TerminateUsingGracefulDrain() bool {
+	// As of this patch, none of the existing reasons for shutdown
+	// can be correctly followed by a graceful drain.
+	return false
 }
 
 // C returns the channel that is signaled by signaledStop().
