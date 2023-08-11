@@ -167,7 +167,7 @@ func (s *Scheduler) Start(ctx context.Context, stopper *stop.Stopper) error {
 			return err
 		}
 	}
-	if err := stopper.RunAsyncTask(ctx, fmt.Sprintf("terminate scheduler"),
+	if err := stopper.RunAsyncTask(ctx, "terminate scheduler",
 		func(ctx context.Context) {
 			<-stopper.ShouldQuiesce()
 			log.VEvent(ctx, 2, "scheduler quiescing")

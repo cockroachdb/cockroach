@@ -46,7 +46,7 @@ const (
 // BenchmarkRangefeed benchmarks the processor and registrations, by submitting
 // a set of events and waiting until they are all emitted.
 func BenchmarkRangefeed(b *testing.B) {
-	for _, procType := range testTypes {
+	for _, procType := range allProcessorTypes {
 		for _, opType := range []opType{writeOpType, commitOpType, closedTSOpType} {
 			for _, numRegistrations := range []int{1, 10, 100} {
 				name := fmt.Sprintf("opType=%s/numRegs=%d/procType=%s", opType, numRegistrations, procType)
@@ -107,7 +107,14 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 		const withDiff = false
 		streams[i] = &noopStream{ctx: ctx}
 		futures[i] = &future.ErrorFuture{}
-		ok, _ := p.Register(span, hlc.MinTimestamp, nil, withDiff, streams[i], nil, futures[i])
+		ok, _ := p.Register(span, hlc.MinTimestamp, nil, withDiff,
+			func() Stream {
+				return streams[i]
+			},
+			func(done func()) BufferedStream {
+				return nil
+			},
+			nil)
 		require.True(b, ok)
 	}
 
@@ -201,4 +208,7 @@ func (s *noopStream) Context() context.Context {
 func (s *noopStream) Send(*kvpb.RangeFeedEvent) error {
 	s.events++
 	return nil
+}
+
+func (s *noopStream) Error(*kvpb.Error) {
 }

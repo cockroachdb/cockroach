@@ -70,6 +70,10 @@ var procTypes = []feedProcessorType{
 		feed: rangefeed.MuxRangefeedDisabled,
 	},
 	{
+		feed:         rangefeed.MuxRangefeedDisabled,
+		useScheduler: true,
+	},
+	{
 		feed: rangefeed.MuxRangefeedEnabled,
 	},
 	{
@@ -171,6 +175,7 @@ func TestRangeFeedIntegration(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, int64(4), updated)
 		}
+		t.Log("test complete")
 	})
 }
 

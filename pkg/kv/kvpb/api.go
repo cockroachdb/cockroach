@@ -1884,6 +1884,11 @@ type RangeFeedEventSink interface {
 	Send(*RangeFeedEvent) error
 }
 
+type MuxRangeFeedEventSink interface {
+	Context() context.Context
+	Send(*MuxRangeFeedEvent) error
+}
+
 // RangeFeedEventProducer is an adapter for receiving rangefeed events with either
 // the legacy RangeFeed RPC, or the MuxRangeFeed RPC.
 type RangeFeedEventProducer interface {
