@@ -28,12 +28,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -1627,4 +1632,262 @@ func TestVirtualTableDoesntHangOnQueryCanceledError(t *testing.T) {
 
 	// Sanity check that the callback was added at least once.
 	require.Greater(t, numCallbacksAdded.Load(), int32(0))
+}
+
+// systemPTSTableRow is a struct representing a row in system.protected_ts_records.
+type systemPTSTableRow struct {
+	id       string
+	ts       string
+	metaType string
+	meta     []byte
+	numSpans int
+	spans    []byte
+	verified bool
+	target   []byte
+}
+
+// systemPTSTableRow is a struct representing a row in
+// crdb_internal.kv_protected_ts_records.
+type virtualPTSTableRow struct {
+	systemPTSTableRow
+	decodedMeta    []byte
+	decodedTargets []byte
+	internalMeta   []byte
+	numRanges      int
+}
+
+func protect(
+	t *testing.T, ctx context.Context, internalDB isql.DB, ptm *ptstorage.Manager, rec *ptpb.Record,
+) {
+	err := internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return ptm.WithTxn(txn).Protect(ctx, rec)
+	})
+	require.NoError(t, err)
+}
+
+// Reads a row from the system PTS table and the virtual PTS table and returns them.
+// Asserts the common columns match before returning.
+func scanRecord(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, recID uuid.Bytes,
+) (systemPTSTableRow, virtualPTSTableRow) {
+	systemRow := sqlDB.QueryRow(t, "SELECT * FROM system.protected_ts_records WHERE id = $1", recID.String())
+	virtualRow := sqlDB.QueryRow(t, "SELECT * FROM crdb_internal.kv_protected_ts_records WHERE id = $1",
+		recID.String())
+
+	var systemRowData systemPTSTableRow
+	systemRow.Scan(&systemRowData.id, &systemRowData.ts, &systemRowData.metaType, &systemRowData.meta,
+		&systemRowData.numSpans, &systemRowData.spans, &systemRowData.verified, &systemRowData.target)
+
+	var virtualRowData virtualPTSTableRow
+	virtualRow.Scan(&virtualRowData.id, &virtualRowData.ts, &virtualRowData.metaType, &virtualRowData.meta,
+		&virtualRowData.numSpans, &virtualRowData.spans, &virtualRowData.verified, &virtualRowData.target,
+		&virtualRowData.decodedMeta, &virtualRowData.decodedTargets, &virtualRowData.internalMeta,
+		&virtualRowData.numRanges)
+
+	require.Equal(t, systemRowData.id, virtualRowData.id)
+	require.Equal(t, systemRowData.ts, virtualRowData.ts)
+	require.Equal(t, systemRowData.metaType, virtualRowData.metaType)
+	require.Equal(t, systemRowData.meta, virtualRowData.meta)
+	require.Equal(t, systemRowData.numSpans, virtualRowData.numSpans)
+	require.Equal(t, systemRowData.spans, virtualRowData.spans)
+	require.Equal(t, systemRowData.verified, virtualRowData.verified)
+	require.Equal(t, systemRowData.target, virtualRowData.target)
+
+	return systemRowData, virtualRowData
+}
+
+func TestVirtualPTSTableDeprecated(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx2 := context.Background()
+
+	var testServerArgs base.TestServerArgs
+	ptsKnobs := &protectedts.TestingKnobs{}
+	ptsKnobs.DisableProtectedTimestampForMultiTenant = true
+	testServerArgs.Knobs.ProtectedTS = ptsKnobs
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: testServerArgs})
+	defer tc.Stopper().Stop(ctx2)
+
+	s := tc.Server(0)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	internalDB := s.InternalDB().(isql.DB)
+	ptm := ptstorage.New(s.ClusterSettings(), ptsKnobs)
+
+	t.Run("nil-targets", func(t *testing.T) {
+		rec := &ptpb.Record{
+			ID:        uuid.MakeV4().GetBytes(),
+			Timestamp: tc.Server(0).Clock().Now(),
+			Mode:      ptpb.PROTECT_AFTER,
+			DeprecatedSpans: []roachpb.Span{
+				{
+					Key:    keys.SystemSQLCodec.TablePrefix(42),
+					EndKey: keys.SystemSQLCodec.TablePrefix(42).PrefixEnd(),
+				},
+			},
+			MetaType: "foo",
+		}
+
+		protect(t, ctx2, internalDB, ptm, rec)
+		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
+		require.Equal(t, []byte(nil), virtualRow.decodedMeta)
+		require.Equal(t, []byte(nil), virtualRow.internalMeta)
+		require.Equal(t, []byte(nil), virtualRow.decodedTargets)
+		require.Equal(t, -1, virtualRow.numRanges)
+	})
+}
+
+// TestVirtualPTSTable asserts the behavior of
+// crdb_internal.kv_protected_ts_records, which includes showing records from
+// the underlying system table and decoding them.
+func TestVirtualPTSTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx2 := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx2)
+
+	s := tc.Server(0)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	internalDB := s.InternalDB().(isql.DB)
+	ptm := ptstorage.New(s.ClusterSettings(), nil)
+
+	tableTargets := func(ids ...uint32) *ptpb.Target {
+		var tableIDs []descpb.ID
+		for _, id := range ids {
+			tableIDs = append(tableIDs, descpb.ID(id))
+		}
+		return ptpb.MakeSchemaObjectsTarget(tableIDs)
+	}
+
+	// Assert the columns expected in the system table and the columns expected in the virtual table.
+	systemRows := sqlDB.Query(t, "SELECT * FROM system.protected_ts_records")
+	internalRows := sqlDB.Query(t, "SELECT * FROM crdb_internal.kv_protected_ts_records")
+	systemCols, err := systemRows.Columns()
+	require.NoError(t, err)
+	internalCols, err := internalRows.Columns()
+	require.NoError(t, err)
+	require.Equal(t, systemCols, []string{"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified", "target"},
+		"unexpected column in PTS system.protected_ts_records. make sure to add this column to "+
+			" crdb_internal.kv_protected_ts_records as well")
+	require.Equal(t, internalCols, []string{
+		"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified", "target", "decoded_meta", "decoded_target",
+		"internal_meta", "num_ranges",
+	})
+
+	// Assert the job metadata that is extracted when the PTS record meta type is jobsprotectedts.Jobs.
+	t.Run("meta-type-is-jobs", func(t *testing.T) {
+		// Create a dummy job. We need the job ID to reference a real job because the virtual table
+		// looks up job metadata via the job registry.
+		jobRec := jobs.Record{
+			Details:  jobspb.BackupDetails{},
+			Progress: jobspb.BackupProgress{},
+			Username: username.TestUserName(),
+		}
+
+		reg := s.JobRegistry().(*jobs.Registry)
+		jobID := reg.MakeJobID()
+
+		job, err := reg.CreateJobWithTxn(ctx2, jobRec, jobID, nil /* txn */)
+		require.NoError(t, err)
+
+		rec := jobsprotectedts.MakeRecord(
+			uuid.MakeV4(),
+			int64(job.ID()),
+			tc.Server(0).Clock().Now(),
+			[]roachpb.Span{},
+			jobsprotectedts.Jobs,
+			tableTargets(),
+		)
+		protect(t, ctx2, internalDB, ptm, rec)
+
+		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
+		require.Equal(t, []byte(fmt.Sprintf(`{"jobID": %d}`, jobID)), virtualRow.decodedMeta)
+		require.Equal(t, []byte(fmt.Sprintf(`{"jobUsername": "%s"}`, username.TestUserName().Normalized())),
+			virtualRow.internalMeta)
+		require.Equal(t, []byte(`{"schemaObjects": {}}`), virtualRow.decodedTargets)
+		require.Equal(t, 0, virtualRow.numRanges)
+	})
+
+	t.Run("table-covers-all-meta-types", func(t *testing.T) {
+		require.Equal(t, "", jobsprotectedts.GetMetaType(3),
+			"expected there to only be two meta types, but found more. if a new meta type was added, "+
+				"please add support for it in the `crdb_internal.kv_protected_ts_records table and update this test. "+
+				"alternatively, file an issue and leave a todo")
+	})
+
+	// Assert the schedule metadata that is extracted when the PTS record meta type is jobsprotectedts.Schedules.
+	t.Run("meta-type-is-schedules", func(t *testing.T) {
+		// No reason to use JobSchedulerTestEnv, which lets one manipulate time,
+		// the PTS table, and executors.
+		schedEnv := scheduledjobs.ProdJobSchedulerEnv
+
+		sj := jobs.NewScheduledJob(schedEnv)
+		sj.SetOwner(username.TestUserName())
+		sj.SetScheduleLabel("test-schedule")
+		sj.SetExecutionDetails(tree.ScheduledBackupExecutor.InternalName(), jobspb.ExecutionArguments{})
+
+		err := internalDB.Txn(ctx2, func(ctx3 context.Context, txn isql.Txn) error {
+			err2 := jobs.ScheduledJobTxn(txn).Create(ctx3, sj)
+			require.NoError(t, err2)
+			return nil
+		})
+		require.NoError(t, err)
+
+		rec := jobsprotectedts.MakeRecord(
+			uuid.MakeV4(),
+			sj.ScheduleID(),
+			tc.Server(0).Clock().Now(),
+			[]roachpb.Span{},
+			jobsprotectedts.Schedules,
+			tableTargets(),
+		)
+		protect(t, ctx2, internalDB, ptm, rec)
+
+		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
+		require.Equal(t, []byte(fmt.Sprintf(`{"scheduleID": %d}`, sj.ScheduleID())), virtualRow.decodedMeta)
+		require.Equal(t, []byte(fmt.Sprintf(`{"scheduleLabel": "%s", "scheduleOwner": "%s"}`,
+			"test-schedule", username.TestUserName().Normalized())), virtualRow.internalMeta)
+		require.Equal(t, []byte(`{"schemaObjects": {}}`), virtualRow.decodedTargets)
+		require.Equal(t, 0, virtualRow.numRanges)
+	})
+
+	// Assert that the table descriptor ids are correctly decoded and the number of ranges calculation is
+	// accurate.
+	t.Run("table-desc-ids-and-num-ranges", func(t *testing.T) {
+		// Create two tables with 101 and 201 ranges respectively.
+		sqlDB.ExecMultiple(t,
+			`CREATE TABLE foo (i INT PRIMARY KEY)`,
+			`INSERT INTO foo (i) SELECT * FROM generate_series(1, 200);`,
+			`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 200, 2));`,
+
+			`CREATE TABLE foo2 (i INT PRIMARY KEY)`,
+			`INSERT INTO foo2 (i) SELECT * FROM generate_series(1, 200);`,
+			`ALTER TABLE foo2 SPLIT AT (SELECT * FROM generate_series(1, 200, 1));`,
+		)
+		var tableID1 uint32
+		var tableID2 uint32
+		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables`+
+			` WHERE name = 'foo' AND database_name = current_database()`).Scan(&tableID1)
+		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables`+
+			` WHERE name = 'foo2' AND database_name = current_database()`).Scan(&tableID2)
+
+		rec := ptpb.Record{
+			ID:        uuid.MakeV4().GetBytes(),
+			Timestamp: tc.Server(0).Clock().Now(),
+			Mode:      ptpb.PROTECT_AFTER,
+			MetaType:  "foo",
+			Meta:      []byte("bar"),
+			Target:    tableTargets(tableID1, tableID2),
+		}
+		protect(t, ctx2, internalDB, ptm, &rec)
+
+		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
+		require.Equal(t, []byte(nil), virtualRow.decodedMeta)
+		require.Equal(t, []byte(nil), virtualRow.internalMeta)
+		require.Equal(t, []byte(fmt.Sprintf(`{"schemaObjects": {"ids": [%d, %d]}}`, tableID1, tableID2)), virtualRow.decodedTargets)
+		require.Equal(t, 302, virtualRow.numRanges)
+	})
 }
