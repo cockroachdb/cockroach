@@ -52,6 +52,8 @@ import (
 // been called, usage of the cluster version (through Handle) is illegal and
 // leads to a fatal error.
 //
+// Test!!
+//
 // Initialization of the cluster version is tightly coupled with the setting of
 // the active cluster version (`Handle.SetActiveVersion` below). Look towards
 // there for additional commentary.
