@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -71,6 +72,8 @@ func TestEval(t *testing.T) {
 	// we have to also figure out what the expected output type is so we
 	// can correctly format the datum.
 	t.Run("sql", func(t *testing.T) {
+		defer log.Scope(t).Close(t)
+
 		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(ctx)
 
