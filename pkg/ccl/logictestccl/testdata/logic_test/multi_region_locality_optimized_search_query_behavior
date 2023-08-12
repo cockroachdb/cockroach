@@ -10,6 +10,9 @@ SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
 statement ok
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
 
+statement ok
+SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms';
+
 ############################################
 # Regression tests for support issue #1780 #
 ############################################

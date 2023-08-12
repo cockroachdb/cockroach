@@ -69,6 +69,7 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 	tdb.Exec(t, "SET CLUSTER SETTING kv.replication_reports.interval = '1ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 
 	// Create a table and a zone config for it.
 	// The zone will be configured with a constraints that can't be satisfied
@@ -174,6 +175,7 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	tdb.Exec(t, "SET CLUSTER SETTING kv.replication_reports.interval = '1ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 
 	// Since we're using ReplicationManual, all the ranges will start with a
 	// single replica on node 1. So, the node's dc and the node's region are
@@ -323,6 +325,7 @@ func TestReplicationStatusReportIntegration(t *testing.T) {
 	tdb.Exec(t, "SET CLUSTER SETTING kv.replication_reports.interval = '1ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 
 	// Create a table with a dummy zone config. Configuring the zone is useful
 	// only for creating the zone; we don't actually care about the configuration.

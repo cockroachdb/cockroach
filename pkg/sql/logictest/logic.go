@@ -1585,6 +1585,11 @@ func (t *logicTest) newCluster(
 			); err != nil {
 				t.Fatal(err)
 			}
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '50ms'",
+			); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		tenantID := serverutils.TestTenantID()

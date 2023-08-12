@@ -80,6 +80,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 			roachpb.Key(systemOnlySetting),
 			roachpb.Key("kv.closed_timestamp.target_duration"),
 			roachpb.Key("kv.closed_timestamp.side_transport_interval"),
+			roachpb.Key("kv.rangefeed.closed_timestamp_refresh_interval"),
 		}
 		isSys := func(key roachpb.Key) bool {
 			for _, s := range sys {
@@ -174,6 +175,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	// checkpointing code while also speeding up the test.
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 	copySettingsFromSystemToFakeTenant()
 	testutils.SucceedsSoon(t, func() error {
 		return checkStoredValuesMatch(storage.getKVs())
@@ -424,6 +426,7 @@ func TestOverflowRestart(t *testing.T) {
 	// checkpointing code while also speeding up the test.
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 
 	checkSettings := func() {
 		testutils.SucceedsSoon(t, func() error {

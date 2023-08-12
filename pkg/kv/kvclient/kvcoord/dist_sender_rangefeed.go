@@ -76,7 +76,7 @@ var catchupScanConcurrency = settings.RegisterIntSetting(
 var rangefeedRangeStuckThreshold = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"kv.rangefeed.range_stuck_threshold",
-	"restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.closed_timestamp.side_transport_interval takes precedence)",
+	"restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.rangefeed.closed_timestamp_refresh_interval takes precedence)",
 	time.Minute,
 	settings.NonNegativeDuration,
 	settings.WithPublic)

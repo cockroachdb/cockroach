@@ -70,6 +70,7 @@ func SetShortRangeFeedIntervals(t *testing.T, db sqlutils.DBHandle) {
 	}
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = `+short)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = `+short)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = `+short)
 }
 
 // AddDefaultZoneConfig adds an entry for the given id into system.zones.
