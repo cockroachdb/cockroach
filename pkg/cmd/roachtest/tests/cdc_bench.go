@@ -123,8 +123,8 @@ func registerCDCBench(r registry.Registry) {
 			// Control run that only runs the workload, with no changefeed.
 			r.Add(registry.TestSpec{
 				Name: fmt.Sprintf(
-					"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%d/control",
-					readPercent, nodes, cpus, ranges),
+					"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/control",
+					readPercent, nodes, cpus, formatSI(ranges)),
 				Owner:           registry.OwnerCDC,
 				Benchmark:       true,
 				Cluster:         r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
@@ -141,8 +141,8 @@ func registerCDCBench(r registry.Registry) {
 					server, protocol := server, protocol // pin loop variables
 					r.Add(registry.TestSpec{
 						Name: fmt.Sprintf(
-							"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%d/server=%s/protocol=%s/format=%s/sink=null",
-							readPercent, nodes, cpus, ranges, server, protocol, format),
+							"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=%s/format=%s/sink=null",
+							readPercent, nodes, cpus, formatSI(ranges), server, protocol, format),
 						Owner:           registry.OwnerCDC,
 						Benchmark:       true,
 						Cluster:         r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
