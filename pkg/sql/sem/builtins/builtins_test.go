@@ -18,6 +18,7 @@ import (
 	"math/bits"
 	"math/rand"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
@@ -125,11 +126,18 @@ func TestGenerateUniqueUnorderedIDOrder(t *testing.T) {
 
 	// We test our null hypothesis by running 100 trials and then performing
 	// a z-test (https://en.wikipedia.org/wiki/Z-test) for the observed mean
-	// number of swaps. We then compare it against the critical value of +-1.96,
-	// which corresponds to a confidence level of 95%.
+	// number of swaps.
 	const (
 		numTrials       = 100
 		numGensPerTrial = 101
+	)
+
+	// We then compare it against the critical value of +-2.58,
+	// which corresponds to a confidence level of 99%.
+	const (
+		confidenceLevel = 0.99
+		pValue          = 1 - confidenceLevel
+		criticalVal     = 2.58
 	)
 
 	// Run trials.
@@ -159,6 +167,8 @@ func TestGenerateUniqueUnorderedIDOrder(t *testing.T) {
 		}
 		swapCountsMean := float64(swapCountsSum) / float64(numTrials)
 
+		t.Logf("mean: %f", swapCountsMean)
+
 		stdErr := float64(distStdDev) / math.Sqrt(numTrials)
 		zScore = (swapCountsMean - float64(distMean)) / stdErr
 
@@ -166,8 +176,9 @@ func TestGenerateUniqueUnorderedIDOrder(t *testing.T) {
 	}
 
 	// Compare z-score to critical value.
-	if zScore < -1.96 || zScore > 1.96 {
-		t.Fatalf("there is evidence that the generated IDs are not unordered (p < 0.05)")
+	if zScore < -criticalVal || zScore > criticalVal {
+		t.Fatalf("there is evidence that the generated IDs are not unordered (p < %s)",
+			strconv.FormatFloat(pValue, 'f' /* fmt */, -1 /* prec */, 64 /* bitSize */))
 	}
 }
 
