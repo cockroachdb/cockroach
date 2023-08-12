@@ -514,7 +514,7 @@ func (tc *TxnCoordSender) Send(
 		return nil, nil
 	}
 
-	if tc.mu.txn.IsoLevel.PerStatementReadSnapshot() {
+	if tc.shouldStepReadTimestampLocked() {
 		tc.maybeAutoStepReadTimestampLocked()
 	}
 
@@ -1374,7 +1374,7 @@ func (tc *TxnCoordSender) Step(ctx context.Context) error {
 	//}
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	if tc.mu.txn.IsoLevel.PerStatementReadSnapshot() {
+	if tc.shouldStepReadTimestampLocked() {
 		tc.manualStepReadTimestampLocked()
 	}
 	return tc.interceptorAlloc.txnSeqNumAllocator.manualStepReadSeqLocked(ctx)
@@ -1488,6 +1488,16 @@ func (tc *TxnCoordSender) stepReadTimestampLocked() {
 	now := tc.clock.Now()
 	tc.mu.txn.BumpReadTimestamp(now)
 	tc.interceptorAlloc.txnSpanRefresher.resetRefreshSpansLocked()
+}
+
+// shouldStepReadTimestampLocked returns true if the transaction's read
+// timestamp should be advanced on each step, based on the transaction's
+// isolation level and whether its read timestamp has been fixed.
+//
+// The specific approach to stepping (manual vs. automatic) depends on the
+// configured the stepping mode.
+func (tc *TxnCoordSender) shouldStepReadTimestampLocked() bool {
+	return tc.mu.txn.IsoLevel.PerStatementReadSnapshot() && !tc.mu.txn.ReadTimestampFixed
 }
 
 // DeferCommitWait is part of the TxnSender interface.
