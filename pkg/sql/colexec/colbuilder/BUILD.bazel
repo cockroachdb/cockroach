@@ -43,6 +43,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/util/buildutil",
+        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/intsets",
         "//pkg/util/log",
         "//pkg/util/mon",
