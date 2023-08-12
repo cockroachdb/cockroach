@@ -854,7 +854,7 @@ func TestBitmaskOrAndXor(t *testing.T) {
 		{bitmaskAnd, "001010010000", "", "000000000000"},
 		{bitmaskAnd, "", "01000100", "00000000"},
 		{bitmaskXor, "010", "101", "111"},
-		{bitmaskXor, "010", "01", "11"},
+		{bitmaskXor, "010", "01", "011"},
 		{bitmaskXor, "101", "100", "001"},
 		{bitmaskXor, "110", "001", "111"},
 		{bitmaskXor, "0101010", "1011", "0100001"},
