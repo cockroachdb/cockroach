@@ -190,9 +190,9 @@ type ObjectLookupFlags struct {
 	Required bool
 	// RequireMutable specifies whether to return a mutable descriptor.
 	RequireMutable bool
-	// AvoidLeased, if set, avoid the leased (possibly stale) version of the
+	// AssertNotLeased, if set, avoid the leased (possibly stale) version of the
 	// descriptor. It must be set when callers want consistent reads.
-	AvoidLeased bool
+	AssertNotLeased bool
 	// IncludeOffline specifies if offline descriptors should be visible.
 	IncludeOffline bool
 	// AllowWithoutPrimaryKey specifies if tables without PKs can be resolved.

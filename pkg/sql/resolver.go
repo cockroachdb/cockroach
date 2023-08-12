@@ -1214,7 +1214,7 @@ func (p *planner) ResolveExistingObjectEx(
 ) (res catalog.TableDescriptor, err error) {
 	lookupFlags := tree.ObjectLookupFlags{
 		Required:             required,
-		AvoidLeased:          p.skipDescriptorCache,
+		AssertNotLeased:      p.skipDescriptorCache,
 		DesiredObjectKind:    tree.TableObject,
 		DesiredTableDescKind: requiredType,
 	}
