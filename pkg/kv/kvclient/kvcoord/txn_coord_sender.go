@@ -1086,30 +1086,32 @@ func (tc *TxnCoordSender) ProvisionalCommitTimestamp() hlc.Timestamp {
 }
 
 // CommitTimestamp is part of the kv.TxnSender interface.
-func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
+func (tc *TxnCoordSender) CommitTimestamp() (hlc.Timestamp, error) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	txn := &tc.mu.txn
-	if txn.Status == roachpb.COMMITTED {
-		return txn.ReadTimestamp
+	switch txn.Status {
+	case roachpb.COMMITTED:
+		return txn.ReadTimestamp, nil
+	case roachpb.ABORTED:
+		return hlc.Timestamp{}, errors.Errorf("CommitTimestamp called on aborted transaction")
+	default:
+		// If the transaction is not yet committed, configure the ReadTimestampFixed
+		// flag to ensure that the transaction's read timestamp is not pushed before
+		// it commits.
+		//
+		// This operates by disabling the transaction refresh mechanism. For
+		// isolation levels that can tolerate write skew, this is not enough to
+		// prevent the transaction from committing with a later timestamp. In fact,
+		// it's not even clear what timestamp to consider the "commit timestamp" for
+		// these transactions. For this reason, we disable the CommitTimestamp
+		// method for these isolation levels.
+		if txn.IsoLevel.ToleratesWriteSkew() {
+			return hlc.Timestamp{}, errors.Errorf("CommitTimestamp called on weak isolation transaction")
+		}
+		tc.mu.txn.ReadTimestampFixed = true
+		return txn.ReadTimestamp, nil
 	}
-	// If the transaction is not yet committed, configure the ReadTimestampFixed
-	// flag to ensure that the transaction's read timestamp is not pushed before
-	// it commits.
-	//
-	// This operates by disabling the transaction refresh mechanism. For isolation
-	// levels that can tolerate write skew, this is not enough to prevent the
-	// transaction from committing with a later timestamp. In fact, it's not even
-	// clear what timestamp to consider the "commit timestamp" for these
-	// transactions. For this reason, we currently disable the CommitTimestamp
-	// method for these isolation levels.
-	// TODO(nvanbenschoten): figure out something better to do here. At least
-	// return an error. Tracked in #103245.
-	if txn.IsoLevel.ToleratesWriteSkew() {
-		panic("unsupported")
-	}
-	tc.mu.txn.ReadTimestampFixed = true
-	return txn.ReadTimestamp
 }
 
 // SetFixedTimestamp is part of the kv.TxnSender interface.

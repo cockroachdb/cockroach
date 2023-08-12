@@ -397,12 +397,25 @@ func (txn *Txn) ReadTimestampFixed() bool {
 	return txn.mu.sender.ReadTimestampFixed()
 }
 
-// CommitTimestamp returns the transaction's start timestamp.
-// The start timestamp can get pushed but the use of this
-// method will guarantee that if a timestamp push is needed
-// the commit will fail with a retryable error.
-// TODO(nvanbenschoten): clean up this comment.
-func (txn *Txn) CommitTimestamp() hlc.Timestamp {
+// CommitTimestamp returns the transaction's commit timestamp.
+//
+// If the transaction is committed, the method returns timestamp at which
+// the transaction performed all of its writes.
+//
+// If the transaction is aborted, the method returns an error.
+//
+// If the transaction is pending and running under serializable isolation,
+// the method returns the transaction's current provisional commit
+// timestamp. It also fixes the transaction's read timestamp to ensure
+// that the transaction cannot be pushed to a later timestamp and still
+// commit. It does so by disabling read refreshes. As a result, using this
+// method just once increases the likelihood that a retry error will
+// bubble up to a client.
+//
+// If the transaction is pending and running under a weak isolation level,
+// the method returns an error. Fixing the commit timestamp prematurely is
+// not supported for transactions running under weak isolation levels.
+func (txn *Txn) CommitTimestamp() (hlc.Timestamp, error) {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.CommitTimestamp()

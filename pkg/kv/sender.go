@@ -224,19 +224,25 @@ type TxnSender interface {
 	// and cannot be pushed forward.
 	ReadTimestampFixed() bool
 
-	// CommitTimestamp returns the transaction's start timestamp.
+	// CommitTimestamp returns the transaction's commit timestamp.
 	//
-	// This method is guaranteed to always return the same value while
-	// the transaction is open. To achieve this, the first call to this
-	// method also anchors the start timestamp and prevents the sender
-	// from automatically pushing transactions forward (i.e. handling
-	// certain forms of contention / txn conflicts automatically).
+	// If the transaction is committed, the method returns timestamp at which
+	// the transaction performed all of its writes.
 	//
-	// In other words, using this method just once increases the
-	// likelihood that a retry error will bubble up to a client.
+	// If the transaction is aborted, the method returns an error.
 	//
-	// See ReadTimestampFixed() above.
-	CommitTimestamp() hlc.Timestamp
+	// If the transaction is pending and running under serializable isolation,
+	// the method returns the transaction's current provisional commit
+	// timestamp. It also fixes the transaction's read timestamp to ensure
+	// that the transaction cannot be pushed to a later timestamp and still
+	// commit. It does so by disabling read refreshes. As a result, using this
+	// method just once increases the likelihood that a retry error will
+	// bubble up to a client.
+	//
+	// If the transaction is pending and running under a weak isolation level,
+	// the method returns an error. Fixing the commit timestamp early is not
+	// supported for transactions running under weak isolation levels.
+	CommitTimestamp() (hlc.Timestamp, error)
 
 	// ProvisionalCommitTimestamp returns the transaction's provisional
 	// commit timestamp. This can move forward throughout the txn's
