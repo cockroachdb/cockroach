@@ -79,6 +79,7 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '50ms'`)
 
 	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(
