@@ -226,11 +226,17 @@ func (tm *TableMeta) IsIndexNotVisible(indexOrd cat.IndexOrdinal, rng *rand.Rand
 	if tm.notVisibleIndexMap == nil {
 		tm.notVisibleIndexMap = make(map[cat.IndexOrdinal]bool)
 	}
+	// See if the visibility is already cached.
 	if val, ok := tm.notVisibleIndexMap[indexOrd]; ok {
 		return val
 	}
 	// Otherwise, roll the dice to assign index visibility.
 	indexInvisibility := tm.Table.Index(indexOrd).GetInvisibility()
+	// If we are making an index recommendation, we do not want to use partially
+	// visible indexes.
+	if tm.Table.IsHypothetical() && indexInvisibility != 0 {
+		indexInvisibility = 1
+	}
 
 	// If the index invisibility is 40%, we want to make this index invisible 40%
 	// of the time (invisible to 40% of the queries).

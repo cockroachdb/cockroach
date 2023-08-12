@@ -931,6 +931,11 @@ func (tt *Table) GetDatabaseID() descpb.ID {
 	return tt.DatabaseID
 }
 
+// IsHypothetical is part of the cat.Table interface.
+func (tt *Table) IsHypothetical() bool {
+	return false
+}
+
 // FindOrdinal returns the ordinal of the column with the given name.
 func (tt *Table) FindOrdinal(name string) int {
 	for i, col := range tt.Columns {
