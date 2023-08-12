@@ -124,8 +124,8 @@ func (m *MockTransactionalSender) ProvisionalCommitTimestamp() hlc.Timestamp {
 }
 
 // CommitTimestamp is part of the TxnSender interface.
-func (m *MockTransactionalSender) CommitTimestamp() hlc.Timestamp {
-	return m.txn.ReadTimestamp
+func (m *MockTransactionalSender) CommitTimestamp() (hlc.Timestamp, error) {
+	return m.txn.ReadTimestamp, nil
 }
 
 // SetFixedTimestamp is part of the TxnSender interface.

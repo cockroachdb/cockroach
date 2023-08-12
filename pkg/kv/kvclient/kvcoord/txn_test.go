@@ -985,7 +985,8 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 		if !injected {
 			return errors.Errorf("didn't inject err")
 		}
-		commitTS := txn.CommitTimestamp()
+		commitTS, err := txn.CommitTimestamp()
+		require.NoError(t, err)
 		// We expect to have refreshed just after the timestamp injected by the error.
 		expTS := refreshTS.Add(0, 1)
 		if !commitTS.Equal(expTS) {
@@ -1242,11 +1243,12 @@ func TestRetrySerializableBumpsToNow(t *testing.T) {
 		bumpClosedTimestamp(delay)
 		attempt++
 		// Fixing transaction commit timestamp to disallow read refresh.
-		_ = txn.CommitTimestamp()
+		_, err := txn.CommitTimestamp()
+		require.NoError(t, err)
 		// Perform a scan to populate the transaction's read spans and mandate a refresh
 		// if the transaction's write timestamp is ever bumped. Because we fixed the
 		// transaction's commit timestamp, it will be forced to retry.
-		_, err := txn.Scan(ctx, roachpb.Key("a"), roachpb.Key("p"), 1000)
+		_, err = txn.Scan(ctx, roachpb.Key("a"), roachpb.Key("p"), 1000)
 		require.NoError(t, err, "Failed Scan request")
 		// Perform a write, which will run into the closed timestamp and get pushed.
 		require.NoError(t, txn.Put(ctx, roachpb.Key("b"), []byte(fmt.Sprintf("value-%d", attempt))))
