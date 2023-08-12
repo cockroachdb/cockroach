@@ -4149,7 +4149,7 @@ SELECT bitmask_and('1111', 'xfe8c');
 query T
 SELECT bitmask_xor('xfe8c', '1111');
 ----
-0000000000000111
+1111111010000011
 
 # Test on a large (>64 bit) input.
 query T
