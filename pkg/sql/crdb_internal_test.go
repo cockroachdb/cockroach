@@ -1271,11 +1271,11 @@ func TestExecutionInsights(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	// We'll check both the cluster-wide table and the node-local one.
-	virtualTables := []interface{}{
+	virtualTables := []string{
 		"cluster_execution_insights",
 		"node_execution_insights",
 	}
-	testutils.RunValues(t, "table", virtualTables, func(t *testing.T, table interface{}) {
+	testutils.RunValues(t, "table", virtualTables, func(t *testing.T, table string) {
 		testCases := []struct {
 			option  string
 			granted bool

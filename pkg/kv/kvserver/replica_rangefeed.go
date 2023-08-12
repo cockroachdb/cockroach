@@ -74,6 +74,14 @@ var RangeFeedSmearInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+var RangeFeedUseScheduler = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.rangefeed.scheduler_processor.enabled",
+	"type of rangefeed processor used by replicas. false - gorotine per replica, "+
+		"false - processors share fixed sized pool of goroutines",
+	false,
+)
+
 // defaultEventChanCap is the channel capacity of the rangefeed processor and
 // each registration.
 //
@@ -263,25 +271,25 @@ func (r *Replica) RangeFeed(
 	return &done
 }
 
-func (r *Replica) getRangefeedProcessorAndFilter() (*rangefeed.Processor, *rangefeed.Filter) {
+func (r *Replica) getRangefeedProcessorAndFilter() (rangefeed.Processor, *rangefeed.Filter) {
 	r.rangefeedMu.RLock()
 	defer r.rangefeedMu.RUnlock()
 	return r.rangefeedMu.proc, r.rangefeedMu.opFilter
 }
 
-func (r *Replica) getRangefeedProcessor() *rangefeed.Processor {
+func (r *Replica) getRangefeedProcessor() rangefeed.Processor {
 	p, _ := r.getRangefeedProcessorAndFilter()
 	return p
 }
 
-func (r *Replica) setRangefeedProcessor(p *rangefeed.Processor) {
+func (r *Replica) setRangefeedProcessor(p rangefeed.Processor) {
 	r.rangefeedMu.Lock()
 	defer r.rangefeedMu.Unlock()
 	r.rangefeedMu.proc = p
 	r.store.addReplicaWithRangefeed(r.RangeID)
 }
 
-func (r *Replica) unsetRangefeedProcessorLocked(p *rangefeed.Processor) {
+func (r *Replica) unsetRangefeedProcessorLocked(p rangefeed.Processor) {
 	if r.rangefeedMu.proc != p {
 		// The processor was already unset.
 		return
@@ -291,7 +299,7 @@ func (r *Replica) unsetRangefeedProcessorLocked(p *rangefeed.Processor) {
 	r.store.removeReplicaWithRangefeed(r.RangeID)
 }
 
-func (r *Replica) unsetRangefeedProcessor(p *rangefeed.Processor) {
+func (r *Replica) unsetRangefeedProcessor(p rangefeed.Processor) {
 	r.rangefeedMu.Lock()
 	defer r.rangefeedMu.Unlock()
 	r.unsetRangefeedProcessorLocked(p)
@@ -339,19 +347,31 @@ func logSlowRangefeedRegistration(ctx context.Context) func() {
 func (r *Replica) registerWithRangefeedRaftMuLocked(
 	ctx context.Context,
 	span roachpb.RSpan,
-	startTS hlc.Timestamp, // exclusive
+	startTS hlc.Timestamp,
 	catchUpIter rangefeed.CatchUpIteratorConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,
 	done *future.ErrorFuture,
-) *rangefeed.Processor {
+) rangefeed.Processor {
 	defer logSlowRangefeedRegistration(ctx)()
+
+	useScheduledProcessor := RangeFeedUseScheduler.Get(&r.ClusterSettings().SV)
 
 	// Attempt to register with an existing Rangefeed processor, if one exists.
 	// The locking here is a little tricky because we need to handle the case
 	// of concurrent processor shutdowns (see maybeDisconnectEmptyRangefeed).
 	r.rangefeedMu.Lock()
 	p := r.rangefeedMu.proc
+
+	// Check if existing processor matches currently configured one. If not,
+	// we need to stop it and restart a different one.
+	if p != nil && useScheduledProcessor != p.UsingScheduler() {
+		pErr := kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))
+		p.StopWithErr(pErr)
+		r.unsetRangefeedProcessorLocked(p)
+		p = nil
+	}
+
 	if p != nil {
 		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
 		if reg {
@@ -372,12 +392,18 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(r.startKey)
 
+	var sched rangefeed.ClientScheduler
+	if useScheduledProcessor {
+		sched = r.store.allocRangefeedScheduler()
+	}
+
 	// Create a new rangefeed.
 	desc := r.Desc()
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r}
 	cfg := rangefeed.Config{
 		AmbientContext:   r.AmbientContext,
 		Clock:            r.Clock(),
+		Stopper:          r.store.stopper,
 		RangeID:          r.RangeID,
 		Span:             desc.RSpan(),
 		TxnPusher:        &tp,
@@ -387,6 +413,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		EventChanTimeout: defaultEventChanTimeout,
 		Metrics:          r.store.metrics.RangeFeedMetrics,
 		MemBudget:        feedBudget,
+		Scheduler:        sched,
 	}
 	p = rangefeed.NewProcessor(cfg)
 
@@ -447,7 +474,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 // maybeDisconnectEmptyRangefeed tears down the provided Processor if it is
 // still active and if it no longer has any registrations.
-func (r *Replica) maybeDisconnectEmptyRangefeed(p *rangefeed.Processor) {
+func (r *Replica) maybeDisconnectEmptyRangefeed(p rangefeed.Processor) {
 	r.rangefeedMu.Lock()
 	defer r.rangefeedMu.Unlock()
 	if p == nil || p != r.rangefeedMu.proc {
@@ -464,7 +491,7 @@ func (r *Replica) maybeDisconnectEmptyRangefeed(p *rangefeed.Processor) {
 
 // disconnectRangefeedWithErr broadcasts the provided error to all rangefeed
 // registrations and tears down the provided rangefeed Processor.
-func (r *Replica) disconnectRangefeedWithErr(p *rangefeed.Processor, pErr *kvpb.Error) {
+func (r *Replica) disconnectRangefeedWithErr(p rangefeed.Processor, pErr *kvpb.Error) {
 	p.StopWithErr(pErr)
 	r.unsetRangefeedProcessor(p)
 }

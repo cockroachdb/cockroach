@@ -267,7 +267,7 @@ func (f *RangeFeed) Close() {
 // will be reset.
 const resetThreshold = 30 * time.Second
 
-var useMuxRangeFeed = util.ConstantWithMetamorphicTestBool("use-mux-rangefeed", true)
+var useMuxRangeFeedDefault = util.ConstantWithMetamorphicTestBool("use-mux-rangefeed", true)
 
 // run will run the RangeFeed until the context is canceled or if the client
 // indicates that an initial scan error is non-recoverable.
@@ -295,7 +295,14 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 	if f.scanConfig.overSystemTable {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithSystemTablePriority())
 	}
-	if useMuxRangeFeed {
+	useMuxRangefeed := useMuxRangeFeedDefault
+	switch f.useMuxRangefeed {
+	case MuxRangefeedEnabled:
+		useMuxRangefeed = true
+	case MuxRangefeedDisabled:
+		useMuxRangefeed = false
+	}
+	if useMuxRangefeed {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithMuxRangeFeed())
 	}
 	if f.withDiff {
