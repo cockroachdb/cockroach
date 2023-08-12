@@ -11220,15 +11220,13 @@ func bitmaskOr(aStr, bStr string) (*tree.DBitArray, error) {
 }
 
 func bitmaskXor(aStr, bStr string) (*tree.DBitArray, error) {
-	return bitmaskOp(aStr, bStr, func(a, b byte) byte { return a ^ b + '0' })
+	return bitmaskOp(aStr, bStr, func(a, b byte) byte { return (a ^ b) + '0' })
 }
 
 // Perform bitwise operation on the 2 bit strings that may have different
 // lengths. The function applies left padding implicitly with 0s. The function
 // also assumes both input strings are only comprised of charactor '0' and '1'.
-func bitmaskOp(
-	aStr, bStr string, op func(byte, byte) byte,
-) (*tree.DBitArray, error) {
+func bitmaskOp(aStr, bStr string, op func(byte, byte) byte) (*tree.DBitArray, error) {
 	aLen, bLen := len(aStr), len(bStr)
 	bufLen := max(aLen, bLen)
 	buf := make([]byte, bufLen)

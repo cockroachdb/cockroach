@@ -4084,8 +4084,8 @@ query T
 SELECT bitmask_and('1010010', '0101'::bit(4));
 ----
 0000000
-query T
 
+query T
 SELECT bitmask_and('1010010'::varbit, '0101'::varbit);
 ----
 0000000
