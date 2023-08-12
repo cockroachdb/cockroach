@@ -390,7 +390,6 @@ message Transaction {
   // be modified. If true, this prevents the transaction's timestamp from being
   // adjusted by a read refresh or, for read committed transactions, by a read
   // timestamp step.
-  // TODO(nvanbenschoten): implement this second limitation.
   //
   // For serializable transactions (who do not tolerate write skew), this flag
   // also has the effect of fixing the transaction's commit timestamp. This
