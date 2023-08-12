@@ -242,7 +242,10 @@ func (f *fullReconciler) reconcile(
 	}); err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	readTimestamp := kvTxn.CommitTimestamp()
+	readTimestamp, err := kvTxn.CommitTimestamp()
+	if err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
 
 	updates := make([]spanconfig.Update, len(records))
 	for i, record := range records {

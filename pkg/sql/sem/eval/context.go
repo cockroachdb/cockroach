@@ -557,7 +557,10 @@ func (ec *Context) GetClusterTimestamp() (*tree.DDecimal, error) {
 		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "unsupported in %s isolation", treeIso.String())
 	}
 
-	ts := ec.Txn.CommitTimestamp()
+	ts, err := ec.Txn.CommitTimestamp()
+	if err != nil {
+		return nil, err
+	}
 	if ts.IsEmpty() {
 		return nil, errors.AssertionFailedf("zero cluster timestamp in txn")
 	}

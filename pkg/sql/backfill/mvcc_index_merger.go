@@ -353,11 +353,12 @@ func (ibm *IndexBackfillMerger) merge(
 	) error {
 		var deletedCount int
 		txn.KV().AddCommitTrigger(func(ctx context.Context) {
+			commitTs, _ := txn.KV().CommitTimestamp()
 			log.VInfof(ctx, 2, "merged batch of %d keys (%d deletes) (span: %s) (commit timestamp: %s)",
 				len(sourceKeys),
 				deletedCount,
 				sourceSpan,
-				txn.KV().CommitTimestamp(),
+				commitTs,
 			)
 		})
 		if len(sourceKeys) == 0 {

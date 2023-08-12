@@ -780,7 +780,11 @@ func TestDropTableDeleteData(t *testing.T) {
 
 func writeTableDesc(ctx context.Context, db *kv.DB, tableDesc *tabledesc.Mutable) error {
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		tableDesc.ModificationTime = txn.CommitTimestamp()
+		var err error
+		tableDesc.ModificationTime, err = txn.CommitTimestamp()
+		if err != nil {
+			return err
+		}
 		return txn.Put(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID), tableDesc.DescriptorProto())
 	})
 }

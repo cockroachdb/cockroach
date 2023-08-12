@@ -68,7 +68,7 @@ func (idb *internalDBWithLastCommit) Txn(
 		return f(ctx, txn)
 	})
 	if err == nil {
-		idb.lastCommit = kvTxn.CommitTimestamp()
+		idb.lastCommit, err = kvTxn.CommitTimestamp()
 	}
 	return err
 }
