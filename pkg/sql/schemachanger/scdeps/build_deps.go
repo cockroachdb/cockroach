@@ -179,7 +179,7 @@ func (d *buildDeps) MayResolveTable(
 	ctx context.Context, name tree.UnresolvedObjectName,
 ) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor) {
 	desc, prefix, err := resolver.ResolveExistingObject(ctx, d.schemaResolver, &name, tree.ObjectLookupFlags{
-		AvoidLeased:       true,
+		AssertNotLeased:   true,
 		DesiredObjectKind: tree.TableObject,
 	})
 	if err != nil {
@@ -196,7 +196,7 @@ func (d *buildDeps) MayResolveType(
 	ctx context.Context, name tree.UnresolvedObjectName,
 ) (catalog.ResolvedObjectPrefix, catalog.TypeDescriptor) {
 	desc, prefix, err := resolver.ResolveExistingObject(ctx, d.schemaResolver, &name, tree.ObjectLookupFlags{
-		AvoidLeased:       true,
+		AssertNotLeased:   true,
 		DesiredObjectKind: tree.TypeObject,
 	})
 	if err != nil {
