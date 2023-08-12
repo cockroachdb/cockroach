@@ -57,6 +57,7 @@ func TestSystemConfigWatcher(t *testing.T, skipSecondary bool) {
 	// checkpointing code while also speeding up the test.
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 
 	t.Run("system", func(t *testing.T) {
 		runTest(t, s, sqlDB, nil)

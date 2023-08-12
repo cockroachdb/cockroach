@@ -1651,6 +1651,7 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 	db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s'`,
 		testingTargetDuration))
 	db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s'`, testingSideTransportInterval))
+	db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '%s'`, testingRangeFeedInterval))
 	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)

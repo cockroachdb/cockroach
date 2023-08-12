@@ -71,6 +71,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 
 	t.Run("reset_sql_stats", func(t *testing.T) {
 		skip.UnderDeadlockWithIssue(t, 99559)
