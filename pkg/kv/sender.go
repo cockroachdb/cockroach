@@ -220,6 +220,10 @@ type TxnSender interface {
 	// timestamp. Use CommitTimestamp() when needed.
 	ReadTimestamp() hlc.Timestamp
 
+	// ReadTimestampFixed returns true if the read timestamp has been fixed
+	// and cannot be pushed forward.
+	ReadTimestampFixed() bool
+
 	// CommitTimestamp returns the transaction's start timestamp.
 	//
 	// This method is guaranteed to always return the same value while
@@ -231,12 +235,8 @@ type TxnSender interface {
 	// In other words, using this method just once increases the
 	// likelihood that a retry error will bubble up to a client.
 	//
-	// See CommitTimestampFixed() below.
+	// See ReadTimestampFixed() above.
 	CommitTimestamp() hlc.Timestamp
-
-	// CommitTimestampFixed returns true if the commit timestamp has
-	// been fixed to the start timestamp and cannot be pushed forward.
-	CommitTimestampFixed() bool
 
 	// ProvisionalCommitTimestamp returns the transaction's provisional
 	// commit timestamp. This can move forward throughout the txn's
