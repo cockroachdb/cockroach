@@ -563,11 +563,11 @@ var nonZeroTxn = Transaction{
 			Synthetic: true, // normally not set, but needed for zerofields.NoZeroField
 		},
 	}},
-	WriteTooOld:          true,
-	LockSpans:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
-	InFlightWrites:       []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
-	CommitTimestampFixed: true,
-	IgnoredSeqNums:       []enginepb.IgnoredSeqNumRange{{Start: 888, End: 999}},
+	WriteTooOld:        true,
+	LockSpans:          []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	InFlightWrites:     []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
+	ReadTimestampFixed: true,
+	IgnoredSeqNums:     []enginepb.IgnoredSeqNumRange{{Start: 888, End: 999}},
 }
 
 func TestTransactionUpdate(t *testing.T) {
@@ -657,7 +657,7 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn5.InFlightWrites = nil
 	expTxn5.IgnoredSeqNums = nil
 	expTxn5.WriteTooOld = false
-	expTxn5.CommitTimestampFixed = false
+	expTxn5.ReadTimestampFixed = false
 	require.Equal(t, expTxn5, txn5)
 
 	// Updating a different transaction fatals.
@@ -788,7 +788,7 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn.WriteTimestamp = makeTS(25, 1)
 	expTxn.ReadTimestamp = makeTS(25, 1)
 	expTxn.WriteTooOld = false
-	expTxn.CommitTimestampFixed = false
+	expTxn.ReadTimestampFixed = false
 	expTxn.LockSpans = nil
 	expTxn.InFlightWrites = nil
 	expTxn.IgnoredSeqNums = nil

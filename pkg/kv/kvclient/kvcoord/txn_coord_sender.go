@@ -1071,6 +1071,13 @@ func (tc *TxnCoordSender) ReadTimestamp() hlc.Timestamp {
 	return tc.mu.txn.ReadTimestamp
 }
 
+// ReadTimestampFixed is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) ReadTimestampFixed() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.ReadTimestampFixed
+}
+
 // ProvisionalCommitTimestamp is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) ProvisionalCommitTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
@@ -1086,8 +1093,8 @@ func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
 	if txn.Status == roachpb.COMMITTED {
 		return txn.ReadTimestamp
 	}
-	// If the transaction is not yet committed, configure the CommitTimestampFixed
-	// flag to ensure that the transaction's commit timestamp is not pushed before
+	// If the transaction is not yet committed, configure the ReadTimestampFixed
+	// flag to ensure that the transaction's read timestamp is not pushed before
 	// it commits.
 	//
 	// This operates by disabling the transaction refresh mechanism. For isolation
@@ -1101,15 +1108,8 @@ func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
 	if txn.IsoLevel.ToleratesWriteSkew() {
 		panic("unsupported")
 	}
-	tc.mu.txn.CommitTimestampFixed = true
+	tc.mu.txn.ReadTimestampFixed = true
 	return txn.ReadTimestamp
-}
-
-// CommitTimestampFixed is part of the kv.TxnSender interface.
-func (tc *TxnCoordSender) CommitTimestampFixed() bool {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	return tc.mu.txn.CommitTimestampFixed
 }
 
 // SetFixedTimestamp is part of the kv.TxnSender interface.
@@ -1128,8 +1128,8 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 
 	tc.mu.txn.ReadTimestamp = ts
 	tc.mu.txn.WriteTimestamp = ts
+	tc.mu.txn.ReadTimestampFixed = true
 	tc.mu.txn.GlobalUncertaintyLimit = ts
-	tc.mu.txn.CommitTimestampFixed = true
 
 	// Set the MinTimestamp to the minimum of the existing MinTimestamp and the fixed
 	// timestamp. This ensures that the MinTimestamp is always <= the other timestamps.
@@ -1213,8 +1213,8 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 	isTxnSerializable := tc.mu.txn.IsoLevel == isolation.Serializable
 	isTxnPushed := tc.mu.txn.WriteTimestamp != tc.mu.txn.ReadTimestamp
 	refreshAttemptNotPossible := tc.interceptorAlloc.txnSpanRefresher.refreshInvalid ||
-		tc.mu.txn.CommitTimestampFixed
-	// We check CommitTimestampFixed here because, if that's set, refreshing
+		tc.mu.txn.ReadTimestampFixed
+	// We check ReadTimestampFixed here because, if that's set, refreshing
 	// of reads is not performed.
 	return isTxnSerializable && isTxnPushed && refreshAttemptNotPossible
 }

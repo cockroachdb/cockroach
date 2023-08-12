@@ -1235,10 +1235,10 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 	require.Equal(t, int64(0), tsr.metrics.ClientRefreshAutoRetries.Count())
 	require.Equal(t, int64(1), tsr.metrics.ServerRefreshSuccess.Count())
 
-	// Send a Put request for a transaction with a fixed commit timestamp.
+	// Send a Put request for a transaction with a fixed read timestamp.
 	// Should NOT set CanForwardReadTimestamp flag.
 	txnFixed := txn.Clone()
-	txnFixed.CommitTimestampFixed = true
+	txnFixed.ReadTimestampFixed = true
 	baFixed := &kvpb.BatchRequest{}
 	baFixed.Header = kvpb.Header{Txn: txnFixed}
 	baFixed.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})

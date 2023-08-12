@@ -389,22 +389,23 @@ func (txn *Txn) readTimestampLocked() hlc.Timestamp {
 	return txn.mu.sender.ReadTimestamp()
 }
 
+// ReadTimestampFixed returns true if the read timestamp has been fixed
+// and cannot be pushed forward.
+func (txn *Txn) ReadTimestampFixed() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.ReadTimestampFixed()
+}
+
 // CommitTimestamp returns the transaction's start timestamp.
 // The start timestamp can get pushed but the use of this
 // method will guarantee that if a timestamp push is needed
 // the commit will fail with a retryable error.
+// TODO(nvanbenschoten): clean up this comment.
 func (txn *Txn) CommitTimestamp() hlc.Timestamp {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.CommitTimestamp()
-}
-
-// CommitTimestampFixed returns true if the commit timestamp has
-// been fixed to the start timestamp and cannot be pushed forward.
-func (txn *Txn) CommitTimestampFixed() bool {
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
-	return txn.mu.sender.CommitTimestampFixed()
 }
 
 // ProvisionalCommitTimestamp returns the transaction's provisional
@@ -1237,7 +1238,7 @@ func (txn *Txn) checkNegotiateAndSendPreconditions(
 	assert(ba.IsReadOnly(), "batch must be read-only")
 	assert(!ba.IsLocking(), "batch must not be locking")
 	assert(txn.typ == RootTxn, "txn must be root")
-	assert(!txn.CommitTimestampFixed(), "txn commit timestamp must not be fixed")
+	assert(!txn.ReadTimestampFixed(), "txn read timestamp must not be fixed")
 	return err
 }
 
