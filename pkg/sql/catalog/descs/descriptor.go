@@ -481,7 +481,7 @@ func (tc *Collection) getVirtualDescriptorByName(
 // getNonVirtualDescriptorID looks up a non-virtual descriptor ID by name by
 // going through layers in sequence.
 //
-// All flags except AvoidLeased, RequireMutable and AvoidSynthetic are ignored.
+// All flags except AssertNotLeased, RequireMutable and AvoidSynthetic are ignored.
 func (tc *Collection) getNonVirtualDescriptorID(
 	ctx context.Context,
 	txn *kv.Txn,
