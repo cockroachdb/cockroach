@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -344,10 +343,6 @@ func TestTxnNegotiateAndSendDoesNotBlock(t *testing.T) {
 }
 
 func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, routeNearest bool) {
-	if multiRange {
-		skip.IgnoreLint(t, "unimplemented, blocked on #67554.")
-	}
-
 	const testTime = 1 * time.Second
 	ctx := context.Background()
 
@@ -379,8 +374,13 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 	}
 	keySpan := roachpb.Span{Key: scratchKey, EndKey: scratchKey.PrefixEnd()}
 
-	// TODO(nvanbenschoten): if multiRange, split on each key in keySet.
-	// if multiRange { ... }
+	// If multiRange, split on each key in keySet.
+	if multiRange {
+		for _, key := range keySet {
+			_, _, err := tc.SplitRange(key)
+			require.NoError(t, err)
+		}
+	}
 
 	var g errgroup.Group
 	var done int32
@@ -408,8 +408,7 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 		})
 	}
 
-	// Reader goroutines: perform bounded-staleness reads that hit the server-side
-	// negotiation fast-path.
+	// Reader goroutines: perform bounded-staleness reads.
 	for _, s := range tc.Servers {
 		store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 		require.NoError(t, err)
@@ -496,7 +495,12 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 					// assertion.
 					rec := collectAndFinish()
 					expFollowerRead := store.StoreID() != lh.StoreID && strict && routeNearest
-					wasFollowerRead := kv.OnlyFollowerReads(rec)
+					wasFollowerRead := false
+					if multiRange {
+						wasFollowerRead = kv.OnlyFollowerReadsOrAllowedRequestType(rec, "QueryResolvedTimestamp")
+					} else {
+						wasFollowerRead = kv.OnlyFollowerReads(rec)
+					}
 					ambiguous := !strict && routeNearest
 					if expFollowerRead != wasFollowerRead && !ambiguous {
 						if expFollowerRead {
