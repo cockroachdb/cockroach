@@ -701,19 +701,18 @@ type inOrderBufferedResult struct {
 // spill updates r to represent a result that has been spilled to disk and is
 // identified by the provided ordinal in the disk buffer.
 func (r *inOrderBufferedResult) spill(diskResultID int) {
-	isScanComplete := r.scanComplete
 	*r = inOrderBufferedResult{
 		Result: Result{
 			memoryTok:      r.memoryTok,
 			Position:       r.Position,
 			subRequestIdx:  r.subRequestIdx,
 			subRequestDone: r.subRequestDone,
+			scanComplete:   r.scanComplete,
 		},
 		addEpoch:     r.addEpoch,
 		onDisk:       true,
 		diskResultID: diskResultID,
 	}
-	r.scanComplete = isScanComplete
 }
 
 // get returns the Result, deserializing it from disk if necessary. toConsume
