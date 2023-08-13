@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -73,6 +74,11 @@ var RangeFeedSmearInterval = settings.RegisterDurationSetting(
 	0,
 	settings.NonNegativeDuration,
 )
+
+func init() {
+	// Inject into kvserverbase to allow usage from kvcoord.
+	kvserverbase.RangeFeedRefreshInterval = RangeFeedRefreshInterval
+}
 
 // lockedRangefeedStream is an implementation of rangefeed.Stream which provides
 // support for concurrent calls to Send. Note that the default implementation of

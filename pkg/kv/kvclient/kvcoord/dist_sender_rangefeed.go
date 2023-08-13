@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -655,13 +656,17 @@ func makeRangeFeedRequest(
 func defaultStuckRangeThreshold(st *cluster.Settings) func() time.Duration {
 	return func() time.Duration {
 		// Before the introduction of kv.rangefeed.range_stuck_threshold = 1m,
-		// clusters may already have kv.closed_timestamp.side_transport_interval set
-		// to >1m. This would cause rangefeeds to continually restart. We therefore
-		// conservatively use the highest value.
+		// clusters may already have kv.closed_timestamp.side_transport_interval or
+		// kv.rangefeed.closed_timestamp_refresh_interval set to >1m. This would
+		// cause rangefeeds to continually restart. We therefore conservatively use
+		// the highest value, with a 1.2 safety factor.
 		threshold := rangefeedRangeStuckThreshold.Get(&st.SV)
 		if threshold > 0 {
-			if t := time.Duration(math.Round(
-				1.2 * float64(closedts.SideTransportCloseInterval.Get(&st.SV)))); t > threshold {
+			interval := kvserverbase.RangeFeedRefreshInterval.Get(&st.SV)
+			if i := closedts.SideTransportCloseInterval.Get(&st.SV); i > interval {
+				interval = i
+			}
+			if t := time.Duration(math.Round(1.2 * float64(interval))); t > threshold {
 				threshold = t
 			}
 		}
