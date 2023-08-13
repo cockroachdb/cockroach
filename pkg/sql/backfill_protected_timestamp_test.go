@@ -77,6 +77,9 @@ func TestValidationWithProtectedTS(t *testing.T) {
 	protectedts.PollInterval.Override(ctx, &tenantSettings.SV, time.Millisecond)
 	r := sqlutils.MakeSQLRunner(db)
 
+	systemSqlDb := s.SystemLayer().SQLConn(t, "system")
+	rSys := sqlutils.MakeSQLRunner(systemSqlDb)
+
 	// Refreshes the in-memory protected timestamp state to asOf.
 	refreshTo := func(t *testing.T, tableKey roachpb.Key, asOf hlc.Timestamp) {
 		store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
@@ -109,7 +112,13 @@ func TestValidationWithProtectedTS(t *testing.T) {
 
 	for _, sql := range []string{
 		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'",
+		"ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'",
 		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval ='10ms'",
+		"ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval ='10ms'",
+	} {
+		rSys.Exec(t, sql)
+	}
+	for _, sql := range []string{
 		"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1",
 		"CREATE TABLE t(n int)",
 		"ALTER TABLE t CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 67108864, gc.ttlseconds = 1",
@@ -126,7 +135,6 @@ func TestValidationWithProtectedTS(t *testing.T) {
 	tableID := getTableID()
 	tableKey := ts.Codec().TablePrefix(tableID)
 
-	systemSqlDb := s.SystemLayer().SQLConn(t, "system")
 	grp := ctxgroup.WithContext(ctx)
 	grp.Go(func() error {
 		<-indexValidationQueryWait

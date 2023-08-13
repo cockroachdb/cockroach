@@ -409,8 +409,9 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 				// installed splits. To ensure it works with the span configs
 				// infrastructure quickly enough, we set a low closed timestamp
 				// target duration.
-				tdb := sqlutils.MakeSQLRunner(conn)
-				tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+				sysDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t, ""))
+				sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+				sysDB.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 			}
 
 			var err error
