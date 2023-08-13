@@ -92,7 +92,6 @@ func TestChangefeedExternalConnections(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(s.DB)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	enableEnterprise := utilccl.TestingDisableEnterprise()
 	enableEnterprise()
 	unknownParams := func(sink string, params ...string) string {
