@@ -76,8 +76,21 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		return rows
 	}
 	filterSystemOnly := func(rows []kv.KeyValue) (filtered []kv.KeyValue) {
+		sys := []roachpb.Key{
+			roachpb.Key(systemOnlySetting),
+			roachpb.Key("kv.closed_timestamp.target_duration"),
+			roachpb.Key("kv.closed_timestamp.side_transport_interval"),
+		}
+		isSys := func(key roachpb.Key) bool {
+			for _, s := range sys {
+				if bytes.Contains(key, s) {
+					return true
+				}
+			}
+			return false
+		}
 		for _, row := range rows {
-			if !bytes.Contains(row.Key, []byte(systemOnlySetting)) {
+			if !isSys(row.Key) {
 				filtered = append(filtered, row)
 			}
 		}
