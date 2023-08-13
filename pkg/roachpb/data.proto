@@ -369,12 +369,6 @@ message Transaction {
   // large diff that doesn't seem worth it, given that we never feed this
   // timestamp back into a clock.
   util.hlc.Timestamp last_heartbeat = 5 [(gogoproto.nullable) = false];
-  // This flag is set if the transaction's timestamp was "leaked" beyond the
-  // transaction (e.g. via cluster_logical_timestamp()). If true, this prevents
-  // the transaction's timestamp from being pushed, which means that the txn
-  // can't commit at a higher timestamp without resorting to a client-side
-  // retry.
-  bool commit_timestamp_fixed = 16;
   // The transaction's read timestamp. All reads are performed at this
   // timestamp, ensuring that the transaction runs on top of a consistent
   // snapshot of the database.
@@ -392,6 +386,18 @@ message Transaction {
   // successful refresh or, if the refresh is unsuccessful, after a transaction
   // restart.
   util.hlc.Timestamp read_timestamp = 15 [(gogoproto.nullable) = false];
+  // This flag is set if the transaction's read timestamp is fixed and can not
+  // be modified. If true, this prevents the transaction's timestamp from being
+  // adjusted by a read refresh or, for read committed transactions, by a read
+  // timestamp step.
+  //
+  // For serializable transactions (who do not tolerate write skew), this flag
+  // also has the effect of fixing the transaction's commit timestamp. This
+  // means that the txn can not commit at a higher timestamp than its read
+  // timestamp without resorting to a client-side retry. For this reason, the
+  // flag is set if the transaction's timestamp was "leaked" beyond the
+  // transaction (e.g. via cluster_logical_timestamp()).
+  bool read_timestamp_fixed = 16;
   // The transaction's global uncertainty limit is its initial timestamp +
   // maximum cluster-wide clock skew. This value defines the inclusive upper
   // bound of the transaction's uncertainty interval.

@@ -558,7 +558,8 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 			}
 			if tt.serializable && !tt.refreshable {
 				// Fix the txn's timestamp to prevent refreshes.
-				txn.CommitTimestamp()
+				_, err := txn.CommitTimestamp()
+				require.NoError(t, err)
 			}
 
 			// Are txn.IsSerializablePushAndRefreshNotPossible() and the connExecutor

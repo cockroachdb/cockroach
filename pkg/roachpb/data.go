@@ -1168,7 +1168,7 @@ func (t *Transaction) Restart(
 	// Reset all epoch-scoped state.
 	t.Sequence = 0
 	t.WriteTooOld = false
-	t.CommitTimestampFixed = false
+	t.ReadTimestampFixed = false
 	t.LockSpans = nil
 	t.InFlightWrites = nil
 	t.IgnoredSeqNums = nil
@@ -1238,7 +1238,7 @@ func (t *Transaction) Update(o *Transaction) {
 		t.Epoch = o.Epoch
 		t.Status = o.Status
 		t.WriteTooOld = o.WriteTooOld
-		t.CommitTimestampFixed = o.CommitTimestampFixed
+		t.ReadTimestampFixed = o.ReadTimestampFixed
 		t.Sequence = o.Sequence
 		t.LockSpans = o.LockSpans
 		t.InFlightWrites = o.InFlightWrites
@@ -1264,7 +1264,7 @@ func (t *Transaction) Update(o *Transaction) {
 			// If neither of the transactions has a bumped ReadTimestamp, then the
 			// WriteTooOld flag is cumulative.
 			t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
-			t.CommitTimestampFixed = t.CommitTimestampFixed || o.CommitTimestampFixed
+			t.ReadTimestampFixed = t.ReadTimestampFixed || o.ReadTimestampFixed
 		} else if t.ReadTimestamp.Less(o.ReadTimestamp) {
 			// If `o` has a higher ReadTimestamp (i.e. it's the result of a refresh,
 			// which refresh generally clears the WriteTooOld field), then it dictates
@@ -1272,7 +1272,7 @@ func (t *Transaction) Update(o *Transaction) {
 			// concurrently with any requests whose response's WriteTooOld field
 			// matters.
 			t.WriteTooOld = o.WriteTooOld
-			t.CommitTimestampFixed = o.CommitTimestampFixed
+			t.ReadTimestampFixed = o.ReadTimestampFixed
 		}
 		// If t has a higher ReadTimestamp, than it gets to dictate the
 		// WriteTooOld field - so there's nothing to update.

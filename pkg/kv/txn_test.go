@@ -580,13 +580,13 @@ func TestTxnNegotiateAndSend(t *testing.T) {
 			require.Nil(t, pErr)
 			require.NotNil(t, br)
 			require.Equal(t, ts20, br.Timestamp)
-			require.True(t, txn.CommitTimestampFixed())
-			require.Equal(t, ts20, txn.CommitTimestamp())
+			require.True(t, txn.ReadTimestampFixed())
+			require.Equal(t, ts20, txn.ReadTimestamp())
 		} else {
 			require.Nil(t, br)
 			require.NotNil(t, pErr)
 			require.Regexp(t, "unimplemented: cross-range bounded staleness reads not yet implemented", pErr)
-			require.False(t, txn.CommitTimestampFixed())
+			require.False(t, txn.ReadTimestampFixed())
 		}
 	})
 }
@@ -691,13 +691,13 @@ func TestTxnNegotiateAndSendWithDeadline(t *testing.T) {
 				require.Nil(t, pErr)
 				require.NotNil(t, br)
 				require.Equal(t, minTSBound, br.Timestamp)
-				require.True(t, txn.CommitTimestampFixed())
-				require.Equal(t, minTSBound, txn.CommitTimestamp())
+				require.True(t, txn.ReadTimestampFixed())
+				require.Equal(t, minTSBound, txn.ReadTimestamp())
 			} else {
 				require.Nil(t, br)
 				require.NotNil(t, pErr)
 				require.Regexp(t, test.expErr, pErr)
-				require.False(t, txn.CommitTimestampFixed())
+				require.False(t, txn.ReadTimestampFixed())
 			}
 		})
 	}
@@ -762,8 +762,8 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 			require.NotNil(t, br)
 			// The negotiated timestamp should be returned and fixed.
 			require.Equal(t, ts20, br.Timestamp)
-			require.True(t, txn.CommitTimestampFixed())
-			require.Equal(t, ts20, txn.CommitTimestamp())
+			require.True(t, txn.ReadTimestampFixed())
+			require.Equal(t, ts20, txn.ReadTimestamp())
 			// Even though the response is paginated and carries a resume span.
 			require.Len(t, br.Responses, 1)
 			scanResp := br.Responses[0].GetScan()
@@ -776,7 +776,7 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 			require.Nil(t, br)
 			require.NotNil(t, pErr)
 			require.Regexp(t, "unimplemented: cross-range bounded staleness reads not yet implemented", pErr)
-			require.False(t, txn.CommitTimestampFixed())
+			require.False(t, txn.ReadTimestampFixed())
 		}
 	})
 }

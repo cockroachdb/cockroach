@@ -514,7 +514,7 @@ func (tc *TxnCoordSender) Send(
 		return nil, nil
 	}
 
-	if tc.mu.txn.IsoLevel.PerStatementReadSnapshot() {
+	if tc.shouldStepReadTimestampLocked() {
 		tc.maybeAutoStepReadTimestampLocked()
 	}
 
@@ -1071,6 +1071,13 @@ func (tc *TxnCoordSender) ReadTimestamp() hlc.Timestamp {
 	return tc.mu.txn.ReadTimestamp
 }
 
+// ReadTimestampFixed is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) ReadTimestampFixed() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.ReadTimestampFixed
+}
+
 // ProvisionalCommitTimestamp is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) ProvisionalCommitTimestamp() hlc.Timestamp {
 	tc.mu.Lock()
@@ -1079,37 +1086,33 @@ func (tc *TxnCoordSender) ProvisionalCommitTimestamp() hlc.Timestamp {
 }
 
 // CommitTimestamp is part of the kv.TxnSender interface.
-func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
+func (tc *TxnCoordSender) CommitTimestamp() (hlc.Timestamp, error) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	txn := &tc.mu.txn
-	if txn.Status == roachpb.COMMITTED {
-		return txn.ReadTimestamp
+	switch txn.Status {
+	case roachpb.COMMITTED:
+		return txn.ReadTimestamp, nil
+	case roachpb.ABORTED:
+		return hlc.Timestamp{}, errors.Errorf("CommitTimestamp called on aborted transaction")
+	default:
+		// If the transaction is not yet committed, configure the ReadTimestampFixed
+		// flag to ensure that the transaction's read timestamp is not pushed before
+		// it commits.
+		//
+		// This operates by disabling the transaction refresh mechanism. For
+		// isolation levels that can tolerate write skew, this is not enough to
+		// prevent the transaction from committing with a later timestamp. In fact,
+		// it's not even clear what timestamp to consider the "commit timestamp" for
+		// these transactions, given that they can read at one or more different
+		// timestamps than the one they eventually write at. For this reason, we
+		// disable the CommitTimestamp method for these isolation levels.
+		if txn.IsoLevel.ToleratesWriteSkew() {
+			return hlc.Timestamp{}, errors.Errorf("CommitTimestamp called on weak isolation transaction")
+		}
+		tc.mu.txn.ReadTimestampFixed = true
+		return txn.ReadTimestamp, nil
 	}
-	// If the transaction is not yet committed, configure the CommitTimestampFixed
-	// flag to ensure that the transaction's commit timestamp is not pushed before
-	// it commits.
-	//
-	// This operates by disabling the transaction refresh mechanism. For isolation
-	// levels that can tolerate write skew, this is not enough to prevent the
-	// transaction from committing with a later timestamp. In fact, it's not even
-	// clear what timestamp to consider the "commit timestamp" for these
-	// transactions. For this reason, we currently disable the CommitTimestamp
-	// method for these isolation levels.
-	// TODO(nvanbenschoten): figure out something better to do here. At least
-	// return an error. Tracked in #103245.
-	if txn.IsoLevel.ToleratesWriteSkew() {
-		panic("unsupported")
-	}
-	tc.mu.txn.CommitTimestampFixed = true
-	return txn.ReadTimestamp
-}
-
-// CommitTimestampFixed is part of the kv.TxnSender interface.
-func (tc *TxnCoordSender) CommitTimestampFixed() bool {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	return tc.mu.txn.CommitTimestampFixed
 }
 
 // SetFixedTimestamp is part of the kv.TxnSender interface.
@@ -1128,8 +1131,8 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 
 	tc.mu.txn.ReadTimestamp = ts
 	tc.mu.txn.WriteTimestamp = ts
+	tc.mu.txn.ReadTimestampFixed = true
 	tc.mu.txn.GlobalUncertaintyLimit = ts
-	tc.mu.txn.CommitTimestampFixed = true
 
 	// Set the MinTimestamp to the minimum of the existing MinTimestamp and the fixed
 	// timestamp. This ensures that the MinTimestamp is always <= the other timestamps.
@@ -1213,8 +1216,8 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 	isTxnSerializable := tc.mu.txn.IsoLevel == isolation.Serializable
 	isTxnPushed := tc.mu.txn.WriteTimestamp != tc.mu.txn.ReadTimestamp
 	refreshAttemptNotPossible := tc.interceptorAlloc.txnSpanRefresher.refreshInvalid ||
-		tc.mu.txn.CommitTimestampFixed
-	// We check CommitTimestampFixed here because, if that's set, refreshing
+		tc.mu.txn.ReadTimestampFixed
+	// We check ReadTimestampFixed here because, if that's set, refreshing
 	// of reads is not performed.
 	return isTxnSerializable && isTxnPushed && refreshAttemptNotPossible
 }
@@ -1372,7 +1375,7 @@ func (tc *TxnCoordSender) Step(ctx context.Context) error {
 	//}
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	if tc.mu.txn.IsoLevel.PerStatementReadSnapshot() {
+	if tc.shouldStepReadTimestampLocked() {
 		tc.manualStepReadTimestampLocked()
 	}
 	return tc.interceptorAlloc.txnSeqNumAllocator.manualStepReadSeqLocked(ctx)
@@ -1486,6 +1489,16 @@ func (tc *TxnCoordSender) stepReadTimestampLocked() {
 	now := tc.clock.Now()
 	tc.mu.txn.BumpReadTimestamp(now)
 	tc.interceptorAlloc.txnSpanRefresher.resetRefreshSpansLocked()
+}
+
+// shouldStepReadTimestampLocked returns true if the transaction's read
+// timestamp should be advanced on each step, based on the transaction's
+// isolation level and whether its read timestamp has been fixed.
+//
+// The specific approach to stepping (manual vs. automatic) depends on the
+// configured the stepping mode.
+func (tc *TxnCoordSender) shouldStepReadTimestampLocked() bool {
+	return tc.mu.txn.IsoLevel.PerStatementReadSnapshot() && !tc.mu.txn.ReadTimestampFixed
 }
 
 // DeferCommitWait is part of the TxnSender interface.

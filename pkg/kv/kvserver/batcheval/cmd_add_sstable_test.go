@@ -1879,7 +1879,8 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsTSCache(t *testing.T) {
 	txn := db.NewTxn(ctx, "txn")
 	require.NoError(t, txn.Put(ctx, "key", "txn"))
 	require.NoError(t, txn.Commit(ctx))
-	txnTS := txn.CommitTimestamp()
+	txnTS, err := txn.CommitTimestamp()
+	require.NoError(t, err)
 
 	// Add an SST writing below the previous write.
 	sst, start, end := storageutils.MakeSST(t, s.ClusterSettings(), kvs{pointKV("key", 1, "sst")})

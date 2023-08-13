@@ -462,14 +462,14 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 						return pErr.GoError()
 					}
 
-					// Validate that the transaction timestamp is now fixed and set to the
-					// request timestamp.
-					if !txn.CommitTimestampFixed() {
-						return errors.Errorf("transaction timestamp not fixed")
+					// Validate that the transaction's read timestamp is now fixed and set
+					// to the request timestamp.
+					if !txn.ReadTimestampFixed() {
+						return errors.Errorf("transaction's read timestamp not fixed")
 					}
-					txnTS := txn.CommitTimestamp()
+					txnTS := txn.ReadTimestamp()
 					if txnTS != br.Timestamp {
-						return errors.Errorf("transaction timestamp (%s) does not equal request timestamp (%s)", txnTS, br.Timestamp)
+						return errors.Errorf("transaction's read timestamp (%s) does not equal request timestamp (%s)", txnTS, br.Timestamp)
 					}
 
 					// Validate that the transaction timestamp increases monotonically
@@ -796,7 +796,7 @@ func TestUpdateRootWithLeafFinalStateReadsBelowRefreshTimestamp(t *testing.T) {
 		if err := conflictTxn.Commit(ctx); err != nil {
 			return hlc.Timestamp{}, err
 		}
-		return conflictTxn.CommitTimestamp(), nil
+		return conflictTxn.CommitTimestamp()
 	}
 	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Perform a read to set the timestamp.

@@ -381,7 +381,19 @@ func TestTxnReadCommittedPerStatementReadSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	run := func(t *testing.T, isoLevel isolation.Level, mode kv.SteppingMode, step, expObserveExternalWrites bool) {
+	run := func(
+		t *testing.T,
+		// The transaction's isolation level.
+		isoLevel isolation.Level,
+		// Is the transaction's read timestamp fixed?
+		fixedReadTs bool,
+		// Is manual stepping enabled?
+		mode kv.SteppingMode,
+		// If manual stepping is enabled, is the transaction actually stepped?
+		step bool,
+		// Do we expect the transaction to observe intermediate, external writes?
+		expObserveExternalWrites bool,
+	) {
 		s := createTestDB(t)
 		defer s.Stop()
 		ctx := context.Background()
@@ -396,6 +408,10 @@ func TestTxnReadCommittedPerStatementReadSnapshot(t *testing.T) {
 		// Begin the test's transaction.
 		txn1 := s.DB.NewTxn(ctx, "txn1")
 		require.NoError(t, txn1.SetIsoLevel(isoLevel))
+		initReadTs := txn1.ReadTimestamp()
+		if fixedReadTs {
+			require.NoError(t, txn1.SetFixedTimestamp(ctx, initReadTs))
+		}
 		txn1.ConfigureStepping(ctx, mode)
 
 		// In a loop, increment the key outside the transaction, then read it in the
@@ -433,27 +449,35 @@ func TestTxnReadCommittedPerStatementReadSnapshot(t *testing.T) {
 			expVals = []int64{1, 1, 1}
 		}
 		require.Equal(t, expVals, readVals)
+
+		// Check whether the transaction's read timestamp changed.
+		sameReadTs := initReadTs == txn1.ReadTimestamp()
+		require.Equal(t, expObserveExternalWrites, !sameReadTs)
 	}
 
 	isolation.RunEachLevel(t, func(t *testing.T, isoLevel isolation.Level) {
-		testutils.RunTrueAndFalse(t, "steppingMode", func(t *testing.T, modeBool bool) {
-			mode := kv.SteppingMode(modeBool)
-			if mode == kv.SteppingEnabled {
-				// If stepping is enabled, run a variant of the test where the
-				// transaction is stepped between reads and a variant of the test
-				// where it is not.
-				testutils.RunTrueAndFalse(t, "step", func(t *testing.T, step bool) {
+		testutils.RunTrueAndFalse(t, "fixedReadTs", func(t *testing.T, fixedReadTs bool) {
+			testutils.RunTrueAndFalse(t, "steppingMode", func(t *testing.T, modeBool bool) {
+				mode := kv.SteppingMode(modeBool)
+				if mode == kv.SteppingEnabled {
+					// If stepping is enabled, run a variant of the test where the
+					// transaction is stepped between reads and a variant of the test
+					// where it is not.
+					testutils.RunTrueAndFalse(t, "step", func(t *testing.T, step bool) {
+						// Expect a new read snapshot on each kv operation if the
+						// transaction is read committed, its read timestamp is not
+						// fixed, and it is manually stepped.
+						expObserveExternalWrites := isoLevel == isolation.ReadCommitted && !fixedReadTs && step
+						run(t, isoLevel, fixedReadTs, mode, step, expObserveExternalWrites)
+					})
+				} else {
 					// Expect a new read snapshot on each kv operation if the
-					// transaction is read committed and is manually stepped.
-					expObserveExternalWrites := isoLevel == isolation.ReadCommitted && step
-					run(t, isoLevel, mode, step, expObserveExternalWrites)
-				})
-			} else {
-				// Expect a new read snapshot on each kv operation if the
-				// transaction is read committed.
-				expObserveExternalWrites := isoLevel == isolation.ReadCommitted
-				run(t, isoLevel, mode, false, expObserveExternalWrites)
-			}
+					// transaction is read committed and its read timestamp is not
+					// fixed.
+					expObserveExternalWrites := isoLevel == isolation.ReadCommitted && !fixedReadTs
+					run(t, isoLevel, fixedReadTs, mode, false, expObserveExternalWrites)
+				}
+			})
 		})
 	})
 }
@@ -985,7 +1009,8 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 		if !injected {
 			return errors.Errorf("didn't inject err")
 		}
-		commitTS := txn.CommitTimestamp()
+		commitTS, err := txn.CommitTimestamp()
+		require.NoError(t, err)
 		// We expect to have refreshed just after the timestamp injected by the error.
 		expTS := refreshTS.Add(0, 1)
 		if !commitTS.Equal(expTS) {
@@ -1242,11 +1267,12 @@ func TestRetrySerializableBumpsToNow(t *testing.T) {
 		bumpClosedTimestamp(delay)
 		attempt++
 		// Fixing transaction commit timestamp to disallow read refresh.
-		_ = txn.CommitTimestamp()
+		_, err := txn.CommitTimestamp()
+		require.NoError(t, err)
 		// Perform a scan to populate the transaction's read spans and mandate a refresh
 		// if the transaction's write timestamp is ever bumped. Because we fixed the
 		// transaction's commit timestamp, it will be forced to retry.
-		_, err := txn.Scan(ctx, roachpb.Key("a"), roachpb.Key("p"), 1000)
+		_, err = txn.Scan(ctx, roachpb.Key("a"), roachpb.Key("p"), 1000)
 		require.NoError(t, err, "Failed Scan request")
 		// Perform a write, which will run into the closed timestamp and get pushed.
 		require.NoError(t, txn.Put(ctx, roachpb.Key("b"), []byte(fmt.Sprintf("value-%d", attempt))))

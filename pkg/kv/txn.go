@@ -389,22 +389,36 @@ func (txn *Txn) readTimestampLocked() hlc.Timestamp {
 	return txn.mu.sender.ReadTimestamp()
 }
 
-// CommitTimestamp returns the transaction's start timestamp.
-// The start timestamp can get pushed but the use of this
-// method will guarantee that if a timestamp push is needed
-// the commit will fail with a retryable error.
-func (txn *Txn) CommitTimestamp() hlc.Timestamp {
+// ReadTimestampFixed returns true if the read timestamp has been fixed
+// and cannot be pushed forward.
+func (txn *Txn) ReadTimestampFixed() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.ReadTimestampFixed()
+}
+
+// CommitTimestamp returns the transaction's commit timestamp.
+//
+// If the transaction is committed, the method returns the timestamp at
+// which the transaction performed all of its writes.
+//
+// If the transaction is aborted, the method returns an error.
+//
+// If the transaction is pending and running under serializable isolation,
+// the method returns the transaction's current provisional commit
+// timestamp. It also fixes the transaction's read timestamp to ensure
+// that the transaction cannot be pushed to a later timestamp and still
+// commit. It does so by disabling read refreshes. As a result, using this
+// method just once increases the likelihood that a retry error will
+// bubble up to a client.
+//
+// If the transaction is pending and running under a weak isolation level,
+// the method returns an error. Fixing the commit timestamp prematurely is
+// not supported for transactions running under weak isolation levels.
+func (txn *Txn) CommitTimestamp() (hlc.Timestamp, error) {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.CommitTimestamp()
-}
-
-// CommitTimestampFixed returns true if the commit timestamp has
-// been fixed to the start timestamp and cannot be pushed forward.
-func (txn *Txn) CommitTimestampFixed() bool {
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
-	return txn.mu.sender.CommitTimestampFixed()
 }
 
 // ProvisionalCommitTimestamp returns the transaction's provisional
@@ -1237,7 +1251,7 @@ func (txn *Txn) checkNegotiateAndSendPreconditions(
 	assert(ba.IsReadOnly(), "batch must be read-only")
 	assert(!ba.IsLocking(), "batch must not be locking")
 	assert(txn.typ == RootTxn, "txn must be root")
-	assert(!txn.CommitTimestampFixed(), "txn commit timestamp must not be fixed")
+	assert(!txn.ReadTimestampFixed(), "txn read timestamp must not be fixed")
 	return err
 }
 

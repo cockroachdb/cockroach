@@ -290,7 +290,11 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 		defer ts.mu.Unlock()
 		txnID = ts.mu.txn.ID()
 		if ts.mu.txn.IsCommitted() {
-			timestamp = ts.mu.txn.CommitTimestamp()
+			var err error
+			timestamp, err = ts.mu.txn.CommitTimestamp()
+			if err != nil {
+				panic(errors.Wrapf(err, "failed to get commit timestamp of committed txn"))
+			}
 		}
 		ts.mu.txn = nil
 		ts.mu.txnStart = time.Time{}
