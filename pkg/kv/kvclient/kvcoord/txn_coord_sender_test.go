@@ -2808,11 +2808,11 @@ func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
 			if test.expErr != "" {
 				require.Error(t, err)
 				require.Regexp(t, test.expErr, err)
-				require.False(t, txn.CommitTimestampFixed())
+				require.False(t, txn.ReadTimestampFixed())
 			} else {
 				require.NoError(t, err)
-				require.True(t, txn.CommitTimestampFixed())
-				require.Equal(t, ts, txn.CommitTimestamp())
+				require.True(t, txn.ReadTimestampFixed())
+				require.Equal(t, ts, txn.ReadTimestamp())
 			}
 		})
 	}

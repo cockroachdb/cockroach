@@ -86,8 +86,8 @@ func PrepareTransactionForRetry(
 		if tErr.Reason == RETRY_SERIALIZABLE {
 			// For RETRY_SERIALIZABLE case, we want to bump timestamp further than
 			// timestamp cache.
-			// This helps transactions that had their commit timestamp fixed (See
-			// roachpb.Transaction.CommitTimestampFixed for details on when it happens)
+			// This helps transactions that had their read timestamp fixed (See
+			// roachpb.Transaction.ReadTimestampFixed for details on when it happens)
 			// or transactions that hit read-write contention and can't bump
 			// read timestamp because of later writes.
 			// Upon retry, we want those transactions to restart on now() instead of

@@ -58,9 +58,11 @@ func (ex *connExecutor) execShowCommitTimestampInOpenState(
 	err := ex.commitSQLTransactionInternal(ctx)
 	if err == nil {
 
-		if err := writeShowCommitTimestampRow(
-			ctx, res, ex.state.mu.txn.CommitTimestamp(),
-		); err != nil {
+		ts, err := ex.state.mu.txn.CommitTimestamp()
+		if err != nil {
+			return ex.makeErrEvent(err, s)
+		}
+		if err := writeShowCommitTimestampRow(ctx, res, ts); err != nil {
 			return ex.makeErrEvent(err, s)
 		}
 
@@ -108,9 +110,11 @@ func (ex *connExecutor) execShowCommitTimestampInOpenState(
 func (ex *connExecutor) execShowCommitTimestampInCommitWaitState(
 	ctx context.Context, s *tree.ShowCommitTimestamp, res RestrictedCommandResult,
 ) (fsm.Event, fsm.EventPayload) {
-	if err := writeShowCommitTimestampRow(
-		ctx, res, ex.state.mu.txn.CommitTimestamp(),
-	); err != nil {
+	ts, err := ex.state.mu.txn.CommitTimestamp()
+	if err != nil {
+		return ex.makeErrEvent(err, s)
+	}
+	if err := writeShowCommitTimestampRow(ctx, res, ts); err != nil {
 		return ex.makeErrEvent(err, s)
 	}
 	return nil, nil

@@ -570,11 +570,16 @@ func prepareTxnForRetry(args fsm.Args) error {
 
 func moveToCommitWaitAfterInternalCommit(args fsm.Args) error {
 	ts := args.Extended.(*txnState)
-	txnID, commitTimestamp := func() (uuid.UUID, hlc.Timestamp) {
+	txnID, commitTimestamp, err := func() (uuid.UUID, hlc.Timestamp, error) {
 		ts.mu.Lock()
 		defer ts.mu.Unlock()
-		return ts.mu.txn.ID(), ts.mu.txn.CommitTimestamp()
+		txnID := ts.mu.txn.ID()
+		commitTimestamp, err := ts.mu.txn.CommitTimestamp()
+		return txnID, commitTimestamp, err
 	}()
+	if err != nil {
+		return err
+	}
 	ts.setAdvanceInfo(
 		advanceOne,
 		noRewind,

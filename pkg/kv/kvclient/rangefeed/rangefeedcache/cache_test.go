@@ -88,14 +88,18 @@ func TestCache(t *testing.T) {
 		}))
 		testutils.SucceedsSoon(t, func() error {
 			_, ts, ok := c.GetSnapshot()
-			if !ok || ts.Less(copied.CommitTimestamp()) {
+			commitTs, err := copied.CommitTimestamp()
+			require.NoError(t, err)
+			if !ok || ts.Less(commitTs) {
 				return errors.Errorf("cache not yet up to date")
 			}
 			return nil
 		})
 		resp := readRowsAt(t, s.Clock().Now())
 		got, _, _ := c.GetSnapshot()
-		require.Equalf(t, resp, got, "%v", copied.CommitTimestamp())
+		commitTs, err := copied.CommitTimestamp()
+		require.NoError(t, err)
+		require.Equalf(t, resp, got, "%v", commitTs)
 	}
 
 	// Initialize an empty cache.

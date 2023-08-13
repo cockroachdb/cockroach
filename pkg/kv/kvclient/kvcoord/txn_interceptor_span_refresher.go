@@ -645,7 +645,7 @@ func (sr *txnSpanRefresher) resetRefreshSpansLocked() {
 // It also requires that the txnSpanRefresher has been configured to allow
 // auto-retries.
 func (sr *txnSpanRefresher) canForwardReadTimestamp(txn *roachpb.Transaction) bool {
-	return sr.canAutoRetry && !txn.CommitTimestampFixed
+	return sr.canAutoRetry && !txn.ReadTimestampFixed
 }
 
 // canForwardReadTimestampWithoutRefresh returns whether the transaction can

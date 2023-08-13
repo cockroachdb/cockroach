@@ -1836,7 +1836,8 @@ func TestPropagateTxnOnError(t *testing.T) {
 	epoch := 0
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Observe the commit timestamp to prevent refreshes.
-		_ = txn.CommitTimestamp()
+		_, err := txn.CommitTimestamp()
+		require.NoError(t, err)
 
 		epoch++
 		proto := txn.TestingCloneTxn()
@@ -1858,7 +1859,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 		b.Put(keyA, "val")
 		b.CPut(keyB, "new_val", origBytes)
 		b.Put(keyC, "val2")
-		err := txn.CommitInBatch(ctx, b)
+		err = txn.CommitInBatch(ctx, b)
 		if epoch == 1 {
 			if retErr := (*kvpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &retErr) {
 				if !testutils.IsError(retErr, "ReadWithinUncertaintyIntervalError") {
@@ -3892,7 +3893,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				// Read the commit timestamp so the expectation is that
 				// this transaction cannot be restarted internally.
-				_ = txn.CommitTimestamp()
+				_, err := txn.CommitTimestamp()
+				require.NoError(t, err)
 			}
 
 			if tc.priorReads {

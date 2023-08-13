@@ -220,23 +220,29 @@ type TxnSender interface {
 	// timestamp. Use CommitTimestamp() when needed.
 	ReadTimestamp() hlc.Timestamp
 
-	// CommitTimestamp returns the transaction's start timestamp.
-	//
-	// This method is guaranteed to always return the same value while
-	// the transaction is open. To achieve this, the first call to this
-	// method also anchors the start timestamp and prevents the sender
-	// from automatically pushing transactions forward (i.e. handling
-	// certain forms of contention / txn conflicts automatically).
-	//
-	// In other words, using this method just once increases the
-	// likelihood that a retry error will bubble up to a client.
-	//
-	// See CommitTimestampFixed() below.
-	CommitTimestamp() hlc.Timestamp
+	// ReadTimestampFixed returns true if the read timestamp has been fixed
+	// and cannot be pushed forward.
+	ReadTimestampFixed() bool
 
-	// CommitTimestampFixed returns true if the commit timestamp has
-	// been fixed to the start timestamp and cannot be pushed forward.
-	CommitTimestampFixed() bool
+	// CommitTimestamp returns the transaction's commit timestamp.
+	//
+	// If the transaction is committed, the method returns the timestamp at
+	// which the transaction performed all of its writes.
+	//
+	// If the transaction is aborted, the method returns an error.
+	//
+	// If the transaction is pending and running under serializable isolation,
+	// the method returns the transaction's current provisional commit
+	// timestamp. It also fixes the transaction's read timestamp to ensure
+	// that the transaction cannot be pushed to a later timestamp and still
+	// commit. It does so by disabling read refreshes. As a result, using this
+	// method just once increases the likelihood that a retry error will
+	// bubble up to a client.
+	//
+	// If the transaction is pending and running under a weak isolation level,
+	// the method returns an error. Fixing the commit timestamp early is not
+	// supported for transactions running under weak isolation levels.
+	CommitTimestamp() (hlc.Timestamp, error)
 
 	// ProvisionalCommitTimestamp returns the transaction's provisional
 	// commit timestamp. This can move forward throughout the txn's
