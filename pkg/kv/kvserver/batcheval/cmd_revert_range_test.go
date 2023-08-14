@@ -167,7 +167,7 @@ func TestCmdRevertRange(t *testing.T) {
 		})
 	}
 
-	txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, tsC, 1, 1)
+	txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, tsC, 1, 1, 0)
 	if err := storage.MVCCPut(
 		ctx, eng, []byte("0012"), tsC, roachpb.MakeValueFromBytes([]byte("i")), storage.MVCCWriteOptions{Txn: &txn, Stats: &stats},
 	); err != nil {

@@ -466,15 +466,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 					defer close(abortErrC)
 
 					now := srv.Clock().NowAsClockTimestamp()
-					pusherProto := roachpb.MakeTransaction(
-						"pusher",
-						nil, // baseKey
-						isolation.Serializable,
-						roachpb.MaxUserPriority,
-						now.ToTimestamp(),
-						srv.Clock().MaxOffset().Nanoseconds(),
-						int32(srv.SQLInstanceID()),
-					)
+					pusherProto := roachpb.MakeTransaction("pusher", nil, isolation.Serializable, roachpb.MaxUserPriority, now.ToTimestamp(), srv.Clock().MaxOffset().Nanoseconds(), int32(srv.SQLInstanceID()), 0)
 					pusher := kv.NewTxnFromProto(ctx, db, srv.NodeID(), now, kv.RootTxn, &pusherProto)
 					if err := pusher.Put(ctx, txnKey, []byte("pushit")); err != nil {
 						abortErrC <- err

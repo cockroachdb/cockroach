@@ -139,6 +139,7 @@ func NewTxnWithAdmissionControl(
 		now.ToTimestamp(),
 		db.clock.MaxOffset().Nanoseconds(),
 		int32(db.ctx.NodeID.SQLInstanceID()),
+		priority,
 	)
 	txn := NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
 	txn.admissionHeader = kvpb.AdmissionHeader{
@@ -1638,19 +1639,17 @@ func (txn *Txn) AdmissionHeader() kvpb.AdmissionHeader {
 	h := txn.admissionHeader
 	if txn.mu.sender.IsLocking() {
 		// Assign higher priority to requests by txns that are locking, so that
-		// they release locks earlier. Note that this is a crude approach, and is
-		// worse than priority inheritance used for locks in realtime systems. We
-		// do this because admission control does not have visibility into the
-		// exact locks held by waiters in the admission queue, and cannot compare
-		// that with priorities of waiting requests in the various lock table
-		// queues. This crude approach has shown some benefit in tpcc with 3000
-		// warehouses, where it halved the number of lock waiters, and increased
-		// the transaction throughput by 10+%. In that experiment 40% of the
-		// BatchRequests evaluated by KV had been assigned high priority due to
+		// they release locks earlier. Note that this is a crude approach, unlike
+		// priority inheritance used for locks in realtime systems. See the longer
+		// comment in intent_resolver.go for detailed justification.
+		//
+		// This approach has shown some benefit in tpcc with 3000 warehouses,
+		// where it halved the number of lock waiters, and increased the
+		// transaction throughput by 10+%. In that experiment 40% of the
+		// BatchRequests evaluated by KV had been assigned higher priority due to
 		// locking.
-		if h.Priority < int32(admissionpb.LockingPri) {
-			h.Priority = int32(admissionpb.LockingPri)
-		}
+		h.Priority = int32(admissionpb.AdjustedPriorityWhenHoldingLocks(
+			admissionpb.WorkPriority(h.Priority)))
 	}
 	return h
 }
@@ -1663,4 +1662,54 @@ var _ error = OnePCNotAllowedError{}
 
 func (OnePCNotAllowedError) Error() string {
 	return "could not commit in one phase as requested"
+}
+
+// AdmissionHeaderForLockUpdate constructs the admission header for the given
+// LockUpdate.
+//
+// TODO(sumeer): We don't have a way of injecting TenantID, since the TenantID
+// is decided in rpc.kvAuth. The RPC will be sent from one storage server to
+// another, so it will run with the SystemTenantID, which is not desirable for
+// multi-tenant CockroachDB. We should be deciding the TenantID based on which
+// tenant the range belongs to.
+func AdmissionHeaderForLockUpdate(
+	lu roachpb.LockUpdate, bypassAdmission bool,
+) kvpb.AdmissionHeader {
+	source := kvpb.AdmissionHeader_ROOT_KV
+	if bypassAdmission {
+		source = kvpb.AdmissionHeader_OTHER
+	}
+	return kvpb.AdmissionHeader{
+		Priority: int32(admissionpb.AdjustedPriorityWhenHoldingLocks(admissionpb.WorkPriority(
+			lu.Txn.AdmissionPriority))),
+		CreateTime: lu.Txn.MinTimestamp.WallTime,
+		Source:     source,
+	}
+}
+
+// MergeAdmissionHeaderForBatch merges admission headers to pick the highest
+// priority and oldest CreateTime.
+//
+// TODO(sumeer): the oldest CreateTime is based on the assumption of FIFO
+// ordering for the same priority, and does not play well with epoch-LIFO. But
+// no one is using epoch-LIFO in production, so this is ok for now.
+func MergeAdmissionHeaderForBatch(
+	bh kvpb.AdmissionHeader, h kvpb.AdmissionHeader,
+) kvpb.AdmissionHeader {
+	if bh.Source == kvpb.AdmissionHeader_OTHER {
+		return bh
+	}
+	if h.Source == kvpb.AdmissionHeader_OTHER {
+		return h
+	}
+	if h.Priority > bh.Priority {
+		return h
+	} else if h.Priority < bh.Priority {
+		return bh
+	}
+	// h.Priority == bh.Priority
+	if bh.CreateTime > h.CreateTime {
+		return h
+	}
+	return bh
 }

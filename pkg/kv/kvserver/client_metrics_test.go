@@ -201,7 +201,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 	store.Metrics().ResolveAbortCount.Clear()
 	store.Metrics().ResolvePoisonCount.Clear()
 
-	txn := roachpb.MakeTransaction("foo", span.Key, isolation.Serializable, roachpb.MinUserPriority, hlc.Timestamp{WallTime: 123}, 999, int32(s.NodeID()))
+	txn := roachpb.MakeTransaction("foo", span.Key, isolation.Serializable, roachpb.MinUserPriority, hlc.Timestamp{WallTime: 123}, 999, int32(s.NodeID()), 0)
 
 	const resolveCommitCount = int64(200)
 	const resolveAbortCount = int64(800)

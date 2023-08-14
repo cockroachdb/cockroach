@@ -320,6 +320,7 @@ func (t *unresolvedTxn) asTxnMeta() enginepb.TxnMeta {
 		// state, we disallow the construction of a TxnMeta.
 		panic("asTxnMeta called on unresolvedTxn with negative reference count")
 	}
+	// NB: only the fields needed for pushing are populated.
 	return enginepb.TxnMeta{
 		ID:             t.txnID,
 		Key:            t.txnKey,

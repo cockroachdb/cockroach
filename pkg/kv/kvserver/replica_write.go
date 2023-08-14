@@ -217,6 +217,9 @@ func (r *Replica) executeWriteBatch(
 				}
 			}
 			if len(propResult.EncounteredIntents) > 0 {
+				// TODO: if these are non-interfering, why are we applying
+				// backpressure, instead of just doing the subset that can be done
+				// asynchronously.
 				if err := r.store.intentResolver.CleanupIntentsAsync(
 					ctx, propResult.EncounteredIntents, true, /* allowSync */
 				); err != nil {

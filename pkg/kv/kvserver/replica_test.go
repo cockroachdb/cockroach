@@ -319,7 +319,7 @@ func newTransaction(
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	txn := roachpb.MakeTransaction(name, baseKey, isoLevel, userPriority, now, offset, 0)
+	txn := roachpb.MakeTransaction(name, baseKey, isoLevel, userPriority, now, offset, 0, 0)
 	return &txn
 }
 
@@ -4804,8 +4804,7 @@ func TestErrorsDontCarryWriteTooOldFlag(t *testing.T) {
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
 	// Start a transaction early to get a low timestamp.
-	txn := roachpb.MakeTransaction("test", keyA, isolation.Serializable, roachpb.NormalUserPriority,
-		tc.Clock().Now(), 0 /* maxOffsetNs */, 0 /* coordinatorNodeID */)
+	txn := roachpb.MakeTransaction("test", keyA, isolation.Serializable, roachpb.NormalUserPriority, tc.Clock().Now(), 0, 0, 0)
 
 	// Write a value outside of the txn to cause a WriteTooOldError later.
 	put := putArgs(keyA, []byte("val1"))
@@ -8411,7 +8410,7 @@ func TestRefreshFromBelowGCThreshold(t *testing.T) {
 				RefreshFrom:   ts2,
 			}
 		}
-		txn := roachpb.MakeTransaction("test", keyA, 0, 0, ts2, 0, 0)
+		txn := roachpb.MakeTransaction("test", keyA, 0, 0, ts2, 0, 0, 0)
 		txn.BumpReadTimestamp(ts4)
 
 		for _, testCase := range []struct {
@@ -10369,8 +10368,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 	tc.manualClock.Advance(1)
 
 	newTxn := func(key string, ts hlc.Timestamp) *roachpb.Transaction {
-		txn := roachpb.MakeTransaction(
-			"test", roachpb.Key(key), isolation.Serializable, roachpb.NormalUserPriority, ts, 0, 0)
+		txn := roachpb.MakeTransaction("test", roachpb.Key(key), isolation.Serializable, roachpb.NormalUserPriority, ts, 0, 0, 0)
 		return &txn
 	}
 	send := func(ba *kvpb.BatchRequest) (hlc.Timestamp, error) {
@@ -11004,7 +11002,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 
 	// Start a transaction and assign its ReadTimestamp.
 	ts1 := tc.Clock().Now()
-	txn := roachpb.MakeTransaction("test", k, isolation.Serializable, roachpb.NormalUserPriority, ts1, 0, 0)
+	txn := roachpb.MakeTransaction("test", k, isolation.Serializable, roachpb.NormalUserPriority, ts1, 0, 0, 0)
 
 	// Write a value outside the transaction.
 	tc.manualClock.Advance(10)

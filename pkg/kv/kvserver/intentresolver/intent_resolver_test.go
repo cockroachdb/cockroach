@@ -837,8 +837,7 @@ func newTransaction(
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	txn := roachpb.MakeTransaction(
-		name, baseKey, isolation.Serializable, userPriority, now, offset, 1 /* coordinatorNodeID */)
+	txn := roachpb.MakeTransaction(name, baseKey, isolation.Serializable, userPriority, now, offset, 1, 0)
 	return &txn
 }
 

@@ -616,10 +616,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 
 	ds := NewDistSender(cfg)
 
-	txn := roachpb.MakeTransaction(
-		"test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
-		clock.Now(), clock.MaxOffset().Nanoseconds(), int32(ds.getNodeID()),
-	)
+	txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, clock.Now(), clock.MaxOffset().Nanoseconds(), int32(ds.getNodeID()), 0)
 	origTxnTs := txn.WriteTimestamp
 
 	// An optimization does copy-on-write if we haven't observed anything,
@@ -2450,15 +2447,7 @@ func TestMultiRangeGapReverse(t *testing.T) {
 
 	ds := NewDistSender(cfg)
 
-	txn := roachpb.MakeTransaction(
-		"foo",
-		nil,                    // baseKey
-		isolation.Serializable, // isoLevel
-		1.0,                    // userPriority
-		clock.Now(),
-		0, // maxOffsetNs
-		1, // coordinatorNodeID
-	)
+	txn := roachpb.MakeTransaction("foo", nil, isolation.Serializable, 1.0, clock.Now(), 0, 1, 0)
 
 	ba := &kvpb.BatchRequest{}
 	ba.Txn = &txn
@@ -3262,10 +3251,7 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 	g := makeGossip(t, stopper, rpcContext)
 
 	key := roachpb.Key("a")
-	txn := roachpb.MakeTransaction(
-		"test", key, isolation.Serializable, roachpb.NormalUserPriority,
-		clock.Now(), clock.MaxOffset().Nanoseconds(), 1, /* coordinatorNodeID */
-	)
+	txn := roachpb.MakeTransaction("test", key, isolation.Serializable, roachpb.NormalUserPriority, clock.Now(), clock.MaxOffset().Nanoseconds(), 1, 0)
 
 	txnRecordPresent := true
 	txnRecordSynthesized := false
@@ -3649,10 +3635,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 		descriptor2,
 	)
 
-	txn := roachpb.MakeTransaction(
-		"test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
-		clock.Now(), clock.MaxOffset().Nanoseconds(), 1, /* coordinatorNodeID */
-	)
+	txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, clock.Now(), clock.MaxOffset().Nanoseconds(), 1, 0)
 	// We're also going to check that the highest bumped WriteTimestamp makes it
 	// to the merged error.
 	err1WriteTimestamp := txn.WriteTimestamp.Add(100, 0)

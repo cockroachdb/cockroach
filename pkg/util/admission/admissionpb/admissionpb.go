@@ -13,6 +13,7 @@ package admissionpb
 import (
 	"math"
 
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -21,6 +22,8 @@ import (
 // priority work.
 type WorkPriority int8
 
+// When adding to this list, remember to update the initialization logic of
+// workPriorityToLockPriMap.
 const (
 	// LowPri is low priority work.
 	LowPri WorkPriority = math.MinInt8
@@ -69,15 +72,71 @@ var WorkPriorityDict = map[WorkPriority]string{
 	HighPri:       "high-pri",
 }
 
+// workPriorityToLockPriMap maps WorkPriority to another WorkPriority for when
+// the txn has already acquired a lock. Since WorkPriority can be negative,
+// and this map is an array, the index into the array is priToArrayIndex(p)
+// where p is a WorkPriority.
+//
+// The priority mapping is not simply p+1 since the enum values are used in
+// exported metrics, and we don't want to increase the number of such metrics.
+var workPriorityToLockPriMap [math.MaxInt8 - math.MinInt8 + 1]WorkPriority
+
 // TestingReverseWorkPriorityDict is the reverse-lookup dictionary for
 // WorkPriorityDict, for use in tests.
 var TestingReverseWorkPriorityDict map[string]WorkPriority
+
+func priToArrayIndex(pri WorkPriority) int {
+	return int(pri) - math.MinInt8
+}
 
 func init() {
 	TestingReverseWorkPriorityDict = make(map[string]WorkPriority)
 	for k, v := range WorkPriorityDict {
 		TestingReverseWorkPriorityDict[v] = k
 	}
+
+	for i := 0; i < priToArrayIndex(TTLLowPri); i++ {
+		workPriorityToLockPriMap[i] = TTLLowPri
+	}
+	for i := priToArrayIndex(TTLLowPri); i < priToArrayIndex(UserLowPri); i++ {
+		workPriorityToLockPriMap[i] = UserLowPri
+	}
+	for i := priToArrayIndex(UserLowPri); i < priToArrayIndex(BulkNormalPri); i++ {
+		workPriorityToLockPriMap[i] = BulkNormalPri
+	}
+	for i := priToArrayIndex(BulkNormalPri); i < priToArrayIndex(NormalPri); i++ {
+		workPriorityToLockPriMap[i] = NormalPri
+	}
+	for i := priToArrayIndex(NormalPri); i < priToArrayIndex(UserHighPri); i++ {
+		workPriorityToLockPriMap[i] = UserHighPri
+	}
+	for i := priToArrayIndex(UserHighPri); i < priToArrayIndex(LockingPri); i++ {
+		workPriorityToLockPriMap[i] = LockingPri
+	}
+	for i := priToArrayIndex(LockingPri); i <= priToArrayIndex(HighPri); i++ {
+		workPriorityToLockPriMap[i] = HighPri
+	}
+	for i := range workPriorityToLockPriMap {
+		if priToArrayIndex(workPriorityToLockPriMap[i]) < i {
+			panic(errors.AssertionFailedf("workPriorityToLockPriMap at index %d has value %d",
+				i, workPriorityToLockPriMap[i]))
+		}
+		if priToArrayIndex(workPriorityToLockPriMap[i]) == i && i != priToArrayIndex(math.MaxInt8) {
+			panic(errors.AssertionFailedf(
+				"workPriorityToLockPriMap at index %d has no change for locking", i))
+		}
+	}
+}
+
+// AdjustedPriorityWhenHoldingLocks takes the original priority of a
+// transaction and updates it under the knowledge that the transaction is
+// holding locks.
+//
+// This broader context of locking is technically not in scope of the
+// admission package, but we define this function here as the WorkPriority
+// enum values are defined here.
+func AdjustedPriorityWhenHoldingLocks(pri WorkPriority) WorkPriority {
+	return workPriorityToLockPriMap[priToArrayIndex(pri)]
 }
 
 // WorkClass represents the class of work, which is defined entirely by its

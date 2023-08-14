@@ -191,6 +191,9 @@ func (r *Replica) executeReadOnlyBatch(
 	// resolution is semi-synchronous in that there is a limited number of
 	// outstanding asynchronous resolution tasks allowed after which
 	// further calls will block.
+	//
+	// TODO: if these are non-interfering, why are we applying backpressure,
+	// instead of just doing the subset that can be done asynchronously.
 	if len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
 		// We only allow synchronous intent resolution for consistent requests.
