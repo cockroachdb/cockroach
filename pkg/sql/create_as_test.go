@@ -328,9 +328,9 @@ func TestFormat(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
-	defer testCluster.Stopper().Stop(ctx)
-	sqlRunner := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlRunner := sqlutils.MakeSQLRunner(db)
 	var p parser.Parser
 
 	for _, tc := range testCases {
