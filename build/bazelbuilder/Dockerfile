@@ -93,10 +93,10 @@ RUN apt-get purge -y \
 # NB: we don't use apt-get because we need an up to date version of awscli
 # If you update the below, you should probably also update build/builder/Dockerfile.
 RUN case ${TARGETPLATFORM} in \
-    "linux/amd64") ARCH=x86_64; SHASUM=7ee475f22c1b35cc9e53affbf96a9ffce91706e154a9441d0d39cbf8366b718e ;; \
-    "linux/arm64") ARCH=aarch64; SHASUM=624ebb04705d4909eb0d56d467fe6b8b5c53a8c59375ed520e70236120125077 ;; \
+    "linux/amd64") ARCH=x86_64; SHASUM=e679933eec90b0e5a75d485be6c2fae0f89a3f9ccdcb1748be69f8f456e9a85f ;; \
+    "linux/arm64") ARCH=aarch64; SHASUM=7d6460f795712ebdac7e3c60d4800dde682d136d909810402aac164f2789b860 ;; \
   esac && \
- curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$ARCH-2.0.30.zip" -o "awscliv2.zip" && \
+ curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$ARCH-2.13.9.zip" -o "awscliv2.zip" && \
  echo "$SHASUM awscliv2.zip" | sha256sum -c - && \
  unzip awscliv2.zip && \
  ./aws/install && \
