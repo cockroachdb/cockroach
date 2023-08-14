@@ -22,12 +22,13 @@ func (r ShutdownRequest) ShutdownCause() error {
 	}
 }
 
-// Graceful determines whether the shutdown should be effected via a
-// graceful drain first.
+// TerminateUsingGracefulDrain determines whether the shutdown should
+// be effected via a graceful drain first.
 func (r ShutdownRequest) TerminateUsingGracefulDrain() bool {
-	// As of this patch, none of the existing reasons for shutdown
-	// can be correctly followed by a graceful drain.
-	return false
+	// Note: ShutdownReasonDrainRPC despite its name cannot be effected
+	// via a graceful drain, because at the time it is generated
+	// the RPC subsystem is shut down already.
+	return r.Reason == ShutdownReasonGracefulStopRequestedByOrchestration
 }
 
 // Empty returns true if the receiver is the zero value.
