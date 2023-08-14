@@ -174,8 +174,8 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # awscli - roachtests
 # NB: we don't use apt-get because we need an up to date version of awscli
 # If you update the below, you should probably also update build/bazelbuilder/Dockerfile.
-RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.0.30.zip" -o "awscliv2.zip" && \
- echo "7ee475f22c1b35cc9e53affbf96a9ffce91706e154a9441d0d39cbf8366b718e  awscliv2.zip" | sha256sum -c - && \
+RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.13.9.zip" -o "awscliv2.zip" && \
+ echo "e679933eec90b0e5a75d485be6c2fae0f89a3f9ccdcb1748be69f8f456e9a85f  awscliv2.zip" | sha256sum -c - && \
  unzip awscliv2.zip && \
  ./aws/install && \
  rm -rf aws awscliv2.zip
