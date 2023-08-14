@@ -31,10 +31,6 @@ type LockTableMetrics struct {
 	// The aggregate nanoseconds locks have been active in the lock table and
 	// marked as held.
 	TotalLockHoldDurationNanos int64
-	// The number of locks not held, but with reservations.
-	// TODO(arul): this needs to be fixed now that we don't have reservations
-	// anymore. See https://github.com/cockroachdb/cockroach/issues/103894.
-	LocksWithReservation int64
 	// The number of locks with non-empty wait-queues.
 	LocksWithWaitQueues int64
 
@@ -90,8 +86,6 @@ func (m *LockTableMetrics) addLockMetrics(lm LockMetrics) {
 		m.LocksHeld++
 		m.TotalLockHoldDurationNanos += lm.HoldDurationNanos
 		m.addToTopKLocksByHoldDuration(lm)
-	} else {
-		m.LocksWithReservation++
 	}
 	if lm.Waiters > 0 {
 		m.LocksWithWaitQueues++

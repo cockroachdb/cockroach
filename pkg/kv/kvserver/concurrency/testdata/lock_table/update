@@ -107,7 +107,6 @@ metrics
 locks: 1
 locksheld: 1
 totallockholddurationnanos: 0
-lockswithreservation: 0
 lockswithwaitqueues: 1
 waiters: 4
 waitingreaders: 2
