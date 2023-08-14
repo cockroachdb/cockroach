@@ -153,6 +153,14 @@ func (sr *schemaResolver) LookupObject(
 
 	b := sr.descCollection.ByName(sr.txn)
 	if !sr.skipDescriptorCache && !flags.RequireMutable {
+		// The caller requires this descriptor to *not* be leased,
+		// so lets assert this here. Normally the planner / resolver
+		// will propagate flags so we don' need to check on a
+		// look up level.
+		if flags.AssertNotLeased {
+			return false, prefix, nil,
+				errors.AssertionFailedf("unable to get leased descriptor for (%q), resolver was not configured properly", obName)
+		}
 		b = sr.descCollection.ByNameWithLeased(sr.txn)
 	}
 	if flags.IncludeOffline {
