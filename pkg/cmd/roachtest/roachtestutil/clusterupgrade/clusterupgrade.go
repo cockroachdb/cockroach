@@ -264,7 +264,10 @@ func WaitForClusterUpgrade(
 	// expected cluster version within the given timeout.
 	waitForUpgrade := func(node int, timeout time.Duration) error {
 		var latestVersion roachpb.Version
-		err := retry.ForDuration(timeout, func() error {
+		var opts retry.Options
+		retryCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		err := opts.Do(retryCtx, func(ctx context.Context) error {
 			currentVersion, err := ClusterVersion(ctx, dbFunc(node))
 			if err != nil {
 				return err
