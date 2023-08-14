@@ -38,29 +38,29 @@
 
 #!/pkg/sql/                    @cockroachdb/sql-queries-noreview
 
-/pkg/sql/inverted/           @cockroachdb/sql-queries
-/pkg/sql/opt/                @cockroachdb/sql-queries
-/pkg/sql/opt_*.go            @cockroachdb/sql-queries
+/pkg/sql/inverted/           @cockroachdb/sql-queries-prs
+/pkg/sql/opt/                @cockroachdb/sql-queries-prs
+/pkg/sql/opt_*.go            @cockroachdb/sql-queries-prs
 #!/pkg/sql/opt/exec/execbuilder/testdata/ @cockroachdb/sql-queries-noreview
-/pkg/sql/plan_opt*.go        @cockroachdb/sql-queries
-/pkg/sql/querycache/         @cockroachdb/sql-queries
-/pkg/sql/span/               @cockroachdb/sql-queries
-/pkg/sql/stats/              @cockroachdb/sql-queries
+/pkg/sql/plan_opt*.go        @cockroachdb/sql-queries-prs
+/pkg/sql/querycache/         @cockroachdb/sql-queries-prs
+/pkg/sql/span/               @cockroachdb/sql-queries-prs
+/pkg/sql/stats/              @cockroachdb/sql-queries-prs
 
-/pkg/sql/col*                @cockroachdb/sql-queries
-/pkg/sql/distsql*.go         @cockroachdb/sql-queries
-/pkg/sql/exec*               @cockroachdb/sql-queries
+/pkg/sql/col*                @cockroachdb/sql-queries-prs
+/pkg/sql/distsql*.go         @cockroachdb/sql-queries-prs
+/pkg/sql/exec*               @cockroachdb/sql-queries-prs
 #!/pkg/sql/exec_log*.go        @cockroachdb/sql-queries-noreview
 #!/pkg/sql/exec_util*.go       @cockroachdb/sql-queries-noreview
-/pkg/sql/flowinfra/          @cockroachdb/sql-queries
-/pkg/sql/physicalplan/       @cockroachdb/sql-queries
-/pkg/sql/row*                @cockroachdb/sql-queries
-/pkg/sql/control_job*        @cockroachdb/sql-queries @cockroachdb/jobs-prs
-/pkg/sql/job_exec_context*   @cockroachdb/sql-queries @cockroachdb/jobs-prs
+/pkg/sql/flowinfra/          @cockroachdb/sql-queries-prs
+/pkg/sql/physicalplan/       @cockroachdb/sql-queries-prs
+/pkg/sql/row*                @cockroachdb/sql-queries-prs
+/pkg/sql/control_job*        @cockroachdb/sql-queries-prs @cockroachdb/jobs-prs
+/pkg/sql/job_exec_context*   @cockroachdb/sql-queries-prs @cockroachdb/jobs-prs
 /pkg/sql/delegate/*job*.go   @cockroachdb/jobs-prs
 
-/pkg/sql/importer/           @cockroachdb/sql-queries
-/pkg/ccl/importerccl/        @cockroachdb/sql-queries
+/pkg/sql/importer/           @cockroachdb/sql-queries-prs
+/pkg/ccl/importerccl/        @cockroachdb/sql-queries-prs
 
 /pkg/sql/appstatspb          @cockroachdb/cluster-observability
 /pkg/sql/execstats/          @cockroachdb/cluster-observability
@@ -199,7 +199,7 @@
 /pkg/kv/kvbase/                         @cockroachdb/kv-prs
 /pkg/kv/kvclient/                       @cockroachdb/kv-prs
 /pkg/kv/kvclient/kvcoord/*rangefeed*    @cockroachdb/repl-prs
-/pkg/kv/kvclient/kvstreamer             @cockroachdb/sql-queries
+/pkg/kv/kvclient/kvstreamer             @cockroachdb/sql-queries-prs
 /pkg/kv/kvclient/rangefeed/             @cockroachdb/repl-prs
 /pkg/kv/kvnemesis/                      @cockroachdb/kv-prs
 /pkg/kv/kvpb/                           @cockroachdb/kv-prs
@@ -315,7 +315,7 @@
 /pkg/ccl/serverccl/statusccl @cockroachdb/cluster-observability @cockroachdb/multi-tenant
 /pkg/ccl/telemetryccl/       @cockroachdb/obs-inf-prs
 /pkg/ccl/testccl/authccl/    @cockroachdb/cloud-identity
-/pkg/ccl/testccl/sqlccl/     @cockroachdb/sql-queries
+/pkg/ccl/testccl/sqlccl/     @cockroachdb/sql-queries-prs
 /pkg/ccl/testccl/workload/schemachange/ @cockroachdb/sql-foundations
 #!/pkg/ccl/testutilsccl/       @cockroachdb/test-eng-noreview
 /pkg/ccl/utilccl/            @cockroachdb/server-prs
@@ -358,7 +358,7 @@
 /pkg/cmd/protoc-gen-gogoroach/ @cockroachdb/dev-inf
 /pkg/cmd/publish-artifacts/  @cockroachdb/dev-inf
 /pkg/cmd/publish-provisional-artifacts/ @cockroachdb/dev-inf
-/pkg/cmd/reduce/             @cockroachdb/sql-queries
+/pkg/cmd/reduce/             @cockroachdb/sql-queries-prs
 /pkg/cmd/release/            @cockroachdb/dev-inf
 /pkg/cmd/returncheck/        @cockroachdb/dev-inf
 /pkg/cmd/roachprod/          @cockroachdb/test-eng
@@ -377,9 +377,9 @@
 /pkg/cmd/skip-test/          @cockroachdb/test-eng
 /pkg/cmd/skiperrs/           @cockroachdb/sql-foundations
 /pkg/cmd/skipped-tests/      @cockroachdb/test-eng
-/pkg/cmd/smith/              @cockroachdb/sql-queries
-/pkg/cmd/smithcmp/           @cockroachdb/sql-queries
-/pkg/cmd/smithtest/          @cockroachdb/sql-queries
+/pkg/cmd/smith/              @cockroachdb/sql-queries-prs
+/pkg/cmd/smithcmp/           @cockroachdb/sql-queries-prs
+/pkg/cmd/smithtest/          @cockroachdb/sql-queries-prs
 /pkg/cmd/teamcity-trigger/   @cockroachdb/dev-inf
 /pkg/cmd/testfilter/         @cockroachdb/test-eng
 /pkg/cmd/uptodate/           @cockroachdb/dev-inf
@@ -388,7 +388,7 @@
 /pkg/cmd/workload/           @cockroachdb/test-eng #! @cockroachdb/sql-foundations-noreview
 #!/pkg/cmd/wraprules/          @cockroachdb/obs-inf-prs-noreview
 #!/pkg/cmd/zerosum/            @cockroachdb/kv-noreview
-/pkg/col/                    @cockroachdb/sql-queries
+/pkg/col/                    @cockroachdb/sql-queries-prs
 /pkg/compose/                @cockroachdb/sql-foundations
 /pkg/config/                 @cockroachdb/kv-prs @cockroachdb/server-prs
 # TODO(nickvigilante): add the cockroach repo to the docs-infra-prs team so that
@@ -400,8 +400,8 @@
 /pkg/internal/client/requestbatcher/ @cockroachdb/kv-prs
 /pkg/internal/codeowners/    @cockroachdb/test-eng
 /pkg/internal/reporoot       @cockroachdb/dev-inf
-/pkg/internal/rsg/           @cockroachdb/sql-queries
-/pkg/internal/sqlsmith/      @cockroachdb/sql-queries
+/pkg/internal/rsg/           @cockroachdb/sql-queries-prs
+/pkg/internal/sqlsmith/      @cockroachdb/sql-queries-prs
 /pkg/internal/team/          @cockroachdb/test-eng
 /pkg/jobs/                   @cockroachdb/jobs-prs
 /pkg/keys/                   @cockroachdb/kv-prs
@@ -435,8 +435,8 @@
 /pkg/spanconfig/             @cockroachdb/kv-prs
 /pkg/repstream/              @cockroachdb/disaster-recovery
 #!/pkg/testutils/              @cockroachdb/test-eng-noreview
-/pkg/testutils/reduce/       @cockroachdb/sql-queries
-/pkg/testutils/sqlutils/     @cockroachdb/sql-queries
+/pkg/testutils/reduce/       @cockroachdb/sql-queries-prs
+/pkg/testutils/sqlutils/     @cockroachdb/sql-queries-prs
 /pkg/testutils/jobutils/     @cockroachdb/jobs-prs
 /pkg/ts/                     @cockroachdb/kv-prs
 /pkg/ts/catalog/             @cockroachdb/obs-inf-prs
