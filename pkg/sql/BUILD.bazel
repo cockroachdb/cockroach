@@ -734,7 +734,9 @@ go_test(
         "//pkg/sql/vtable:pg_catalog.go",
     ],
     embed = [":sql"],
+    exec_properties = {"Pool": "large"},
     shard_count = 16,
+    tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",
