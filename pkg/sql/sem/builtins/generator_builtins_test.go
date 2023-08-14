@@ -66,7 +66,7 @@ func TestGetSSTableMetricsMultiNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings: st,
 		},

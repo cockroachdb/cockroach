@@ -42,7 +42,7 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 
 	defer testCluster.Stopper().Stop(ctx)
 

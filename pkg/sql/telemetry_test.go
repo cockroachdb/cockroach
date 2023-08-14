@@ -45,7 +45,7 @@ func TestTelemetry(t *testing.T) {
 func TestTelemetryRecordCockroachShell(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	cluster := serverutils.StartNewTestCluster(
+	cluster := serverutils.StartCluster(
 		t,
 		1,
 		base.TestClusterArgs{},

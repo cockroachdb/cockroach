@@ -155,7 +155,7 @@ func (tt *telemetryTest) Start(t *testing.T, serverArgs []base.TestServerArgs) {
 		v.ExternalIODir = tempExternalIODir
 		mapServerArgs[i] = v
 	}
-	tt.cluster = serverutils.StartNewTestCluster(
+	tt.cluster = serverutils.StartCluster(
 		tt.t,
 		len(serverArgs),
 		base.TestClusterArgs{

@@ -88,7 +88,7 @@ func TestCancelQueryOtherNode(t *testing.T) {
 			},
 		},
 	}
-	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 
 	proxy, err := net.Listen("tcp", util.TestAddr.String())

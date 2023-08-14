@@ -30,6 +30,7 @@ const withLoadingIndicator: DatabaseTablePageProps = {
   schemaName: randomName(),
   indexUsageStatsEnabled: false,
   showIndexRecommendations: false,
+  csIndexUnusedDuration: "168h",
   details: {
     loading: true,
     loaded: false,
@@ -76,6 +77,7 @@ const withData: DatabaseTablePageProps = {
   schemaName: randomName(),
   indexUsageStatsEnabled: true,
   showIndexRecommendations: true,
+  csIndexUnusedDuration: "168h",
   details: {
     loading: false,
     loaded: true,

@@ -143,7 +143,7 @@ func NewTestTenantHelper(
 ) TenantTestHelper {
 	t.Helper()
 
-	testCluster := serverutils.StartNewTestCluster(t, 1 /* numNodes */, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 1 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs:             knobs,
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,

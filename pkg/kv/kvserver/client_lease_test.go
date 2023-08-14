@@ -1481,7 +1481,7 @@ func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) 
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 
 	manualClock := hlc.NewHybridManualClock()
-	tci := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+	tci := serverutils.StartCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Settings: st,
@@ -1552,7 +1552,7 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 	)
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 
-	tci := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+	tci := serverutils.StartCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Settings: st,

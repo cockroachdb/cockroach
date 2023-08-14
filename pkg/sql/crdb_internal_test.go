@@ -576,7 +576,7 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs:      params,
 	})
@@ -1596,7 +1596,7 @@ func TestVirtualTableDoesntHangOnQueryCanceledError(t *testing.T) {
 	var addCallback atomic.Bool
 	var numCallbacksAdded atomic.Int32
 	err := cancelchecker.QueryCanceledError
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
