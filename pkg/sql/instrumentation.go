@@ -148,6 +148,8 @@ type instrumentationHelper struct {
 	origCtx    context.Context
 	evalCtx    *eval.Context
 
+	inFlightTraceCollector
+
 	queryLevelStatsWithErr *execstats.QueryLevelStatsWithErr
 
 	// If savePlanForStats is true and the explainPlan was collected, the
@@ -264,7 +266,134 @@ func (ih *instrumentationHelper) SetOutputMode(outputMode outputMode, explainFla
 	ih.explainFlags = explainFlags
 }
 
-func (ih *instrumentationHelper) finalizeSetup(ctx context.Context) {
+type inFlightTraceCollector struct {
+	// cancel is nil if the collector goroutine is not started.
+	cancel context.CancelFunc
+	// waitCh will be closed by the collector goroutine when it exits. It serves
+	// as a synchronization mechanism for accessing trace and errors fields.
+	waitCh chan struct{}
+	// trace contains the latest recording that the collector goroutine polled.
+	trace []traceFromSQLInstance
+	// errors accumulates all errors that the collector ran into throughout its
+	// lifecycle.
+	errors []error
+}
+
+type traceFromSQLInstance struct {
+	nodeID int64
+	trace  string
+	jaeger string
+}
+
+func (c inFlightTraceCollector) finish() {
+	if c.cancel == nil {
+		// The in-flight trace collector goroutine wasn't started.
+		return
+	}
+	// Cancel the collector goroutine and block until it exits.
+	c.cancel()
+	<-c.waitCh
+}
+
+var inFlightTraceCollectorEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.stmt_diagnostics.in_flight_trace_collector.enabled",
+	"determines whether in-flight trace collection is enabled while collecting the statement bundle",
+	false,
+)
+
+var inFlightTraceCollectorPollInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"sql.stmt_diagnostics.in_flight_trace_collector.poll_interval",
+	"determines the interval between polling done by the in-flight trace collector for the statement bundle",
+	10*time.Second,
+	settings.PositiveDuration,
+)
+
+// startInFlightTraceCollector starts another goroutine that will periodically
+// query the crdb_internal virtual table to obtain the in-flight trace for the
+// span of the instrumentationHelper. It should only be called when we're
+// collecting a bundle and inFlightTraceCollector.finish must be called when
+// building the bundle.
+func (ih *instrumentationHelper) startInFlightTraceCollector(
+	ctx context.Context, cfg *ExecutorConfig,
+) {
+	traceID := ih.sp.TraceID()
+	c := &ih.inFlightTraceCollector
+	ctx, c.cancel = context.WithCancel(ctx)
+	c.waitCh = make(chan struct{})
+	go func(ctx context.Context, ie isql.Executor) {
+		defer close(c.waitCh)
+		// Derive a detached tracing span that won't pollute the recording we're
+		// collecting for the bundle.
+		const opName = "bundle-in-flight-trace"
+		var sp *tracing.Span
+		ctx, sp = ih.sp.Tracer().StartSpanCtx(ctx, opName, tracing.WithDetachedRecording())
+		defer sp.Finish()
+
+		handleError := func(err error) {
+			if ctx.Err() == nil {
+				// When the context is canceled, we expect to receive an error.
+				// Note that the context cancellation occurs in the "happy" case
+				// too when the execution of the traced query finished, and
+				// we're building the bundle, so we're ignoring such an error.
+				c.errors = append(c.errors, err)
+			}
+		}
+
+		var timer *time.Timer
+		defer func() {
+			if timer != nil {
+				timer.Stop()
+			}
+		}()
+
+		for {
+			it, err := ie.QueryIterator(
+				ctx, opName, nil, /* txn */
+				"SELECT node_id, trace_str, jaeger_json FROM crdb_internal.cluster_inflight_traces WHERE trace_id = $1",
+				traceID,
+			)
+			if err != nil {
+				handleError(err)
+			} else {
+				// Preserve the old trace in case we hit an error.
+				oldTrace := c.trace
+				c.trace = c.trace[:0]
+				var ok bool
+				for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+					row := it.Cur()
+					c.trace = append(c.trace, traceFromSQLInstance{
+						nodeID: int64(tree.MustBeDInt(row[0])),
+						trace:  string(tree.MustBeDString(row[1])),
+						jaeger: string(tree.MustBeDString(row[2])),
+					})
+				}
+				if err != nil || len(c.trace) == 0 {
+					c.trace = oldTrace
+				}
+				if err != nil {
+					handleError(err)
+				}
+			}
+			// Now sleep for the duration of the poll interval (or until we're
+			// canceled).
+			pollInterval := inFlightTraceCollectorPollInterval.Get(cfg.SV())
+			if timer == nil {
+				timer = time.NewTimer(pollInterval)
+			} else {
+				timer.Reset(pollInterval)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+			}
+		}
+	}(ctx, cfg.InternalDB.Executor())
+}
+
+func (ih *instrumentationHelper) finalizeSetup(ctx context.Context, cfg *ExecutorConfig) {
 	if ih.ShouldBuildExplainPlan() {
 		// Populate traceMetadata at the end once we have all properties of the
 		// helper setup.
@@ -272,6 +401,9 @@ func (ih *instrumentationHelper) finalizeSetup(ctx context.Context) {
 	}
 	// Make sure that the builtins use the correct context.
 	ih.evalCtx.SetDeprecatedContext(ctx)
+	if ih.collectBundle && inFlightTraceCollectorEnabled.Get(cfg.SV()) {
+		ih.startInFlightTraceCollector(ctx, cfg)
+	}
 }
 
 // Setup potentially enables verbose tracing for the statement, depending on
@@ -321,7 +453,7 @@ func (ih *instrumentationHelper) Setup(
 	var previouslySampled bool
 	previouslySampled, ih.savePlanForStats = statsCollector.ShouldSample(fingerprint, implicitTxn, p.SessionData().Database)
 
-	defer func() { ih.finalizeSetup(newCtx) }()
+	defer func() { ih.finalizeSetup(newCtx, cfg) }()
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
 		if sp.IsVerbose() {
@@ -419,7 +551,7 @@ func (ih *instrumentationHelper) setupWithPlanGist(
 				tracing.WithRecording(tracingpb.RecordingVerbose),
 			)
 			ih.shouldFinishSpan = true
-			ih.finalizeSetup(ctx)
+			ih.finalizeSetup(ctx, cfg)
 			log.VEventf(ctx, 1, "plan-gist matching bundle collection began after the optimizer finished its part")
 		}
 	} else {
@@ -481,6 +613,7 @@ func (ih *instrumentationHelper) Finish(
 	var bundle diagnosticsBundle
 	var warnings []string
 	if ih.collectBundle {
+		ih.inFlightTraceCollector.finish()
 		ie := p.extendedEvalCtx.ExecCfg.InternalDB.Executor(
 			isql.WithSessionData(p.SessionData()),
 		)
@@ -526,6 +659,7 @@ func (ih *instrumentationHelper) Finish(
 				bundleCtx, ih.explainFlags, cfg.DB, ie.(*InternalExecutor),
 				stmtRawSQL, &p.curPlan, planString, trace, placeholders, res.Err(),
 				payloadErr, retErr, &p.extendedEvalCtx.Settings.SV,
+				ih.inFlightTraceCollector.trace, ih.inFlightTraceCollector.errors,
 			)
 			// Include all non-critical errors as warnings. Note that these
 			// error strings might contain PII, but the warnings are only shown
