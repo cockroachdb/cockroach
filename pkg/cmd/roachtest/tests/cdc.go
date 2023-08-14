@@ -633,7 +633,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
-	tc, err := kafka.consumer(ctx, "bank")
+	tc, err := kafka.newConsumer(ctx, "bank")
 	if err != nil {
 		t.Fatal(errors.Wrap(err, "could not create kafka consumer"))
 	}
@@ -2234,7 +2234,7 @@ func (k kafkaManager) createTopic(ctx context.Context, topic string) error {
 	})
 }
 
-func (k kafkaManager) consumer(ctx context.Context, topic string) (*topicConsumer, error) {
+func (k kafkaManager) newConsumer(ctx context.Context, topic string) (*topicConsumer, error) {
 	kafkaAddrs := []string{k.consumerURL(ctx)}
 	config := sarama.NewConfig()
 	// I was seeing "error processing FetchRequest: kafka: error decoding

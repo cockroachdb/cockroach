@@ -105,6 +105,12 @@ func (h *Helper) BackgroundCommand(cmd string, nodes option.NodeListOption) cont
 	})
 }
 
+// Command runs the command on the provided nodes.
+func (h *Helper) Command(cmd string, nodes option.NodeListOption) error {
+	h.stepLogger.Printf("running command `%s` on nodes %v", cmd, nodes)
+	return h.runner.cluster.RunE(h.ctx, nodes, cmd)
+}
+
 // ExpectDeath alerts the testing infrastructure that a node is
 // expected to die. Regular restarts as part of the mixedversion
 // testing are already taken into account. This function should only
