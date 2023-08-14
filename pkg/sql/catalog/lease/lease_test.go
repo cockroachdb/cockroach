@@ -1475,6 +1475,121 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 // to the user and the transaction continues on to make a schema change,
 // whenever the table lease two version invariant is violated and the
 // transaction needs to be restarted, a retryable error is returned to the
+// user. This specific version validations that release savepoint does the
+// same with cockroach_restart, which commits on release.
+func TestTwoVersionInvariantRetryErrorWitSavePoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var violations int64
+	var params base.TestServerArgs
+	params.Knobs = base.TestingKnobs{
+		// Disable execution of schema changers after the schema change
+		// transaction commits. This is to prevent executing the default
+		// WaitForOneVersion() code that holds up a schema change
+		// transaction until the new version has been published to the
+		// entire cluster.
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SchemaChangeJobNoOp: func() bool {
+				return true
+			},
+			TwoVersionLeaseViolation: func() {
+				atomic.AddInt64(&violations, 1)
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.kv VALUES ('a', 'b');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	if tableDesc.GetVersion() != 1 {
+		t.Fatalf("invalid version %d", tableDesc.GetVersion())
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Grab a lease on the table.
+	rows, err := tx.Query("SELECT * FROM t.kv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Modify the table descriptor increments the version.
+	if _, err := sqlDB.Exec(`ALTER TABLE t.kv RENAME to t.kv1`); err != nil {
+		t.Fatal(err)
+	}
+
+	txRetry, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = txRetry.Exec("SAVEPOINT cockroach_restart;")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Read some data using the transaction so that it cannot be
+	// retried internally
+	rows, err = txRetry.Query(`SELECT 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := txRetry.Exec(`ALTER TABLE t.kv1 RENAME TO t.kv2`); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// This can hang waiting for one version before tx.Commit() is
+		// called below, so it is executed in another goroutine.
+		_, err := txRetry.Exec("RELEASE SAVEPOINT cockroach_restart;")
+		if !testutils.IsError(err,
+			fmt.Sprintf(`TransactionRetryWithProtoRefreshError: cannot publish new versions for descriptors: \[\{kv1 %d 1\}\], old versions still in use`, tableDesc.GetID()),
+		) {
+			t.Errorf("err = %v", err)
+		}
+		err = txRetry.Rollback()
+		if err != nil {
+			t.Errorf("err = %v", err)
+		}
+	}()
+
+	// Make sure that txRetry does violate the two version lease invariant.
+	testutils.SucceedsSoon(t, func() error {
+		if atomic.LoadInt64(&violations) == 0 {
+			return errors.Errorf("didnt retry schema change")
+		}
+		return nil
+	})
+	// Commit the first transaction, unblocking txRetry.
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	wg.Wait()
+}
+
+// Tests that when a transaction has already returned results
+// to the user and the transaction continues on to make a schema change,
+// whenever the table lease two version invariant is violated and the
+// transaction needs to be restarted, a retryable error is returned to the
 // user.
 func TestTwoVersionInvariantRetryError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
