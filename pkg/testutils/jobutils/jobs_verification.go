@@ -85,7 +85,12 @@ func waitForJobToHaveStatus(
 		var status string
 		var payloadBytes []byte
 		query := fmt.Sprintf("SELECT status, payload FROM (%s)", InternalSystemJobsBaseQuery)
-		db.QueryRow(t, query, jobID).Scan(&status, &payloadBytes)
+		if err := db.DB.QueryRowContext(context.Background(), query, jobID).Scan(&status, &payloadBytes); err != nil {
+			if testutils.IsError(err, "sql: no rows in result set") {
+				return errors.Newf("job %d not found", jobID)
+			}
+			return err
+		}
 		if jobs.Status(status) == jobs.StatusFailed {
 			if expectedStatus == jobs.StatusFailed {
 				return nil
