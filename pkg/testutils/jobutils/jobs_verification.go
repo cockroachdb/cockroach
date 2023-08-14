@@ -82,10 +82,19 @@ func waitForJobToHaveStatus(
 ) {
 	t.Helper()
 	testutils.SucceedsWithin(t, func() error {
+		query := fmt.Sprintf("SELECT status, payload FROM (%s)", InternalSystemJobsBaseQuery)
+		rows, err := db.DB.QueryContext(context.Background(), query, jobID)
+		if err != nil {
+			return err
+		}
 		var status string
 		var payloadBytes []byte
-		query := fmt.Sprintf("SELECT status, payload FROM (%s)", InternalSystemJobsBaseQuery)
-		db.QueryRow(t, query, jobID).Scan(&status, &payloadBytes)
+		if !rows.Next() {
+			return errors.Errorf("no rows returned")
+		}
+		if err := rows.Scan(&status, &payloadBytes); err != nil {
+			return err
+		}
 		if jobs.Status(status) == jobs.StatusFailed {
 			if expectedStatus == jobs.StatusFailed {
 				return nil
