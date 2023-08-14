@@ -88,6 +88,10 @@ pkg/kv/kvserver:kvserver_test) instead.`,
         Run a test repeatedly until at least N seconds have passed (useful if "dev test --stress" ends too quickly and you want to keep the test running for a while)
 
     dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule='raft=1'
+        Run a specific test, multiple times, with increased logging verbosity
+
+    dev test pkg/server -- --test_env=COCKROACH_RANDOM_SEED=1234
+        Run a test with a specified seed by passing the --test_env flag directly to bazel
 `,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
