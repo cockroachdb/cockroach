@@ -205,6 +205,7 @@ go_test(
     }),
     data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":backupccl"],
+    exec_properties = {"Pool": "large"},
     shard_count = 48,
     tags = ["ccl_test"],
     deps = [

@@ -50,7 +50,10 @@ go_test(
     ],
     args = ["-test.timeout=55s"],
     embed = [":streamclient"],
-    tags = ["ccl_test"],
+    tags = [
+        "ccl_test",
+        "no-remote-exec",
+    ],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

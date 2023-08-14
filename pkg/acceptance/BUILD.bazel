@@ -53,6 +53,7 @@ go_test(
         "//pkg/cli:interactive_tests",
     ],
     embed = [":acceptance"],
+    exec_properties = {"Pool": "large"},
     gotags = ["acceptance"],
     shard_count = 16,
     tags = ["integration"],
