@@ -36,10 +36,12 @@ func TestRoleMembersIDMigration10Users(t *testing.T) {
 	runTestRoleMembersIDMigration(t, 10)
 }
 
-func TestRoleMembersIDMigration1500Users(t *testing.T) {
+func TestRoleMembersIDMigration1200Users(t *testing.T) {
 	skip.UnderRace(t)
 	skip.UnderStress(t)
-	runTestRoleMembersIDMigration(t, 1500)
+	// Choosing a number larger than 1000 tests that the batching logic in
+	// this upgrade works correctly.
+	runTestRoleMembersIDMigration(t, 1200)
 }
 
 func runTestRoleMembersIDMigration(t *testing.T, numUsers int) {
