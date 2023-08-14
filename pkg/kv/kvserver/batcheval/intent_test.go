@@ -128,7 +128,7 @@ func TestCollectIntentsUsesSameIterator(t *testing.T) {
 
 				// Write an intent.
 				val := roachpb.MakeValueFromBytes([]byte("val"))
-				txn := roachpb.MakeTransaction("test", key, isolation.Serializable, roachpb.NormalUserPriority, ts, 0, 1)
+				txn := roachpb.MakeTransaction("test", key, isolation.Serializable, roachpb.NormalUserPriority, ts, 0, 1, 0)
 				var err error
 				if delete {
 					_, err = storage.MVCCDelete(ctx, db, key, ts, storage.MVCCWriteOptions{Txn: &txn})

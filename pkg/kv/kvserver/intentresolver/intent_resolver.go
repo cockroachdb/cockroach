@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,6 +37,97 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+// Admission control and locking (including intents):
+//
+// Admission control (AC) has a work scheduling mechanism based on (tenantID,
+// priority, createTime), where the priority values are defined in
+// admissionpb.WorkPriority, and can be one of three values for user txns
+// {UserLowPri, NormalPri, UserHighPri} (NB: these priorities are different
+// from enginepb.TxnPriority used inside concurrency control). All internal
+// background work in CockroachDB uses a priority < NormalPri. The high level
+// goal is to provide performance isolation of different queries by one of two
+// methods:
+// - Using AC's tenantID, for fair sharing. AC's tenantID can be decoupled
+//   from the serverless concept of tenantID (though this is not done yet), so
+//   we consider this more general setup below.
+// - Using different priorities.
+//
+// A challenge here is that AC queueing is barely aware of concurrency
+// control, so we have a lock priority inversion problem. Our initial solution
+// addressed this in a crude manner: (a) using LockingPri (which is greater
+// than UserHighPri) for work from txns that have already acquired locks,
+// regardless of the txn's original priority, (b) not subjecting intent
+// resolution to AC. But (b) caused overload (see
+// https://github.com/cockroachdb/cockroach/issues/97108). And (a) violates
+// our isolation goals: e.g. a user A could be running write txns at
+// UserLowPri on some set of tables T_A, while another user B could be running
+// txns at NormalPri on an unrelated set of tables T_B, and user A will
+// interfere with user B since A's txns will get elevated to LockingPri.
+//
+// The priority inversion problem is complicated from a software structure
+// perspective, since it requires taking information from the lock table and
+// feeding it into AC queues. And there are more fundamental difficulties:
+//
+// - Distributed priority inversion: The AC queue on node n1 could have low
+//   priority work from txn T1 waiting behind high priority work from txn T2,
+//   and low priority work from txn T3 waiting on a lock already held by T2 in
+//   the lock table. There is no need for T1 to skip past T2 in the AC queue
+//   since T3 is similarly low priority. But on node n2, a lock held by T3
+//   could have T1 waiting for it to be released (and no AC queueing).
+//
+// - Importance inversion: Using tenantID to isolate different workloads could
+//   have tenant U1 with lower shares holding a lock and tenant U2 with higher
+//   shares waiting on that lock. That is, the general problem cannot be
+//   captured solely using priorities.
+//
+// We define the performance isolation goals of AC in a more limited manner,
+// to sidestep this problem.
+//
+// Performance isolation between user txns can be achieved using different
+// tenantID or different priority only for txns that touch different parts (in
+// some partitioning) of the key space, with a few exceptions:
+//
+// - Lower importance (smaller tenant share or lower priority) non-locking
+//   read txns can share the key space with higher importance read or write
+//   txns.
+//
+// - One can switch between lower importance and higher importance (and vice
+//   versa) txns on a part of the key space. If there is time overlap during
+//   this switch where both lower and higher importance txns are running,
+//   priority inversion can happen.
+//
+// These goals are achieved by the following set of mechanisms:
+//
+// - Txns that already hold locks/intents use an AC priority that is logically
+//   +1 of the original txn priority. Since there are gaps between the
+//   different user priorities (UserLowPri=-50, NormalPri=0, UserHighPri=50),
+//   work in one part of the key space that executes with NormalPri+1 will not
+//   get prioritized over another part of the key space executing at
+//   UserHighPri. And when different tenantIDs are being used for performance
+//   isolation, the priority is irrelevant. The actual implementation uses a
+//   step that is bigger than +1. See Txn.AdmissionHeader.
+//
+// - Intent resolution is subject to AC. The baseline (tenantID, priority,
+//   createTime) of intent resolution is that of the txn that created the
+//   intent, regardless of whether the intent is being resolved at commit
+//   time, or by another user-facing txns, or by internal background work.
+//   Adopting the same idea of +1, the intent resolution executes at
+//   priority+1.
+
+// SendImmediatelyBypassAdmissionControl sets the admission control behavior
+// for the less commonly used sendImmediately option. Since that option is
+// used when a waiter on the lock table is trying to resolve one intent, and
+// the waiter has already been admitted, the default is to bypass admission
+// control.
+var SendImmediatelyBypassAdmissionControl = settings.RegisterBoolSetting(
+	settings.SystemOnly, "kv.intent_resolver.send_immediately.bypass_admission_control",
+	"determines whether the sendImmediately option on intent resolution bypasses admission control",
+	true)
+
+var BatchBypassAdmissionControl = settings.RegisterBoolSetting(
+	settings.SystemOnly, "kv.intent_resolver.batch.bypass_admission_control",
+	"determined whether batched intent resolution bypasses admission control", false)
 
 const (
 	// defaultTaskLimit is the maximum number of asynchronous tasks
@@ -130,6 +223,8 @@ type Config struct {
 	MaxGCBatchIdle               time.Duration
 	MaxIntentResolutionBatchWait time.Duration
 	MaxIntentResolutionBatchIdle time.Duration
+
+	Settings *cluster.Settings
 }
 
 // RangeCache is a simplified interface to the rngcache.RangeCache.
@@ -147,6 +242,7 @@ type IntentResolver struct {
 	db           *kv.DB
 	stopper      *stop.Stopper
 	testingKnobs kvserverbase.IntentResolverTestingKnobs
+	settings     *cluster.Settings
 	ambientCtx   log.AmbientContext
 	sem          *quotapool.IntPool // semaphore to limit async goroutines
 
@@ -213,6 +309,7 @@ func New(c Config) *IntentResolver {
 		Metrics:      makeMetrics(),
 		rdc:          c.RangeDescriptorCache,
 		testingKnobs: c.TestingKnobs,
+		settings:     c.Settings,
 	}
 	c.Stopper.AddCloser(ir.sem.Closer("stopper"))
 	ir.mu.inFlightPushes = map[uuid.UUID]int{}
@@ -482,6 +579,11 @@ func (ir *IntentResolver) runAsyncTask(
 // encountered during another command but did not interfere with the
 // execution of that command. This occurs during inconsistent
 // reads.
+//
+// TODO(sumeer): "This occurs during inconsistent reads" is stale, since is
+// being called for consistent reads, and for writes. Simply delete the last
+// sentence?
+//
 // TODO(nvanbenschoten): is this needed if the intents could not have
 // expired yet (i.e. they are not at least 5s old)? Should we filter
 // those out? If we don't, will this be too expensive for SKIP LOCKED?
@@ -992,12 +1094,16 @@ func (ir *IntentResolver) resolveIntents(
 
 	// Construct a slice of requests to send.
 	var singleReq [1]kvpb.Request //gcassert:noescape
-	reqs := resolveIntentReqs(intents, opts, singleReq[:])
+	bypassAdmission := opts.sendImmediately &&
+		(ir.settings == nil || SendImmediatelyBypassAdmissionControl.Get(&ir.settings.SV))
+	reqs, admissionHeader := resolveIntentReqs(
+		intents, opts, singleReq[:], opts.sendImmediately, bypassAdmission)
 
 	// Send the requests ...
 	if opts.sendImmediately {
 		// ... using a single batch.
 		b := &kv.Batch{}
+		b.AdmissionHeader = admissionHeader
 		b.AddRawRequest(reqs...)
 		if err := ir.db.Run(ctx, b); err != nil {
 			return b.MustPErr()
@@ -1006,7 +1112,8 @@ func (ir *IntentResolver) resolveIntents(
 	}
 	// ... using their corresponding request batcher.
 	respChan := make(chan requestbatcher.Response, len(reqs))
-	for _, req := range reqs {
+	batcherBypassAdmission := ir.settings == nil || BatchBypassAdmissionControl.Get(&ir.settings.SV)
+	for i, req := range reqs {
 		var batcher *requestbatcher.RequestBatcher
 		switch req.Method() {
 		case kvpb.ResolveIntent:
@@ -1017,7 +1124,8 @@ func (ir *IntentResolver) resolveIntents(
 			panic("unexpected")
 		}
 		rangeID := ir.lookupRangeID(ctx, req.Header().Key)
-		if err := batcher.SendWithChan(ctx, respChan, rangeID, req); err != nil {
+		ah := kv.AdmissionHeaderForLockUpdate(intents.Index(i), batcherBypassAdmission)
+		if err := batcher.SendWithChan(ctx, respChan, rangeID, req, ah); err != nil {
 			return kvpb.NewError(err)
 		}
 	}
@@ -1039,10 +1147,15 @@ func (ir *IntentResolver) resolveIntents(
 }
 
 func resolveIntentReqs(
-	intents lockUpdates, opts ResolveOptions, alloc []kvpb.Request,
-) []kvpb.Request {
+	intents lockUpdates,
+	opts ResolveOptions,
+	alloc []kvpb.Request,
+	constructAdmissionHeader bool,
+	bypassAdmission bool,
+) ([]kvpb.Request, kvpb.AdmissionHeader) {
 	var pointReqs []kvpb.ResolveIntentRequest
 	var rangeReqs []kvpb.ResolveIntentRangeRequest
+	var header kvpb.AdmissionHeader
 	for i := 0; i < intents.Len(); i++ {
 		intent := intents.Index(i)
 		if len(intent.EndKey) == 0 {
@@ -1065,6 +1178,14 @@ func resolveIntentReqs(
 				ClockWhilePending: intent.ClockWhilePending,
 			})
 		}
+		if constructAdmissionHeader {
+			h := kv.AdmissionHeaderForLockUpdate(intent, bypassAdmission)
+			if i == 0 {
+				header = h
+			} else {
+				header = kv.MergeAdmissionHeaderForBatch(header, h)
+			}
+		}
 	}
 	var reqs []kvpb.Request
 	if cap(alloc) >= intents.Len() {
@@ -1078,7 +1199,7 @@ func resolveIntentReqs(
 	for i := range rangeReqs {
 		reqs = append(reqs, &rangeReqs[i])
 	}
-	return reqs
+	return reqs, header
 }
 
 // intentsByTxn implements sort.Interface to sort intents based on txnID.

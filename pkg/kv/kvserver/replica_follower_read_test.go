@@ -81,15 +81,7 @@ func TestCanServeFollowerRead(t *testing.T) {
 			}
 
 			gArgs := getArgs(key)
-			txn := roachpb.MakeTransaction(
-				"test",
-				key,
-				isolation.Serializable,
-				roachpb.NormalUserPriority,
-				test.readTimestamp,
-				clock.MaxOffset().Nanoseconds(),
-				0, // coordinatorNodeID
-			)
+			txn := roachpb.MakeTransaction("test", key, isolation.Serializable, roachpb.NormalUserPriority, test.readTimestamp, clock.MaxOffset().Nanoseconds(), 0, 0)
 
 			ba := &kvpb.BatchRequest{}
 			ba.Header = kvpb.Header{Txn: &txn}
@@ -162,15 +154,7 @@ func TestCheckExecutionCanProceedAllowsFollowerReadWithInvalidLease(t *testing.T
 	require.False(t, ls.IsValid())
 
 	gArgs := getArgs(key)
-	txn := roachpb.MakeTransaction(
-		"test",
-		key,
-		isolation.Serializable,
-		roachpb.NormalUserPriority,
-		tsBelowClosedTimestamp,
-		clock.MaxOffset().Nanoseconds(),
-		0, // coordinatorNodeID
-	)
+	txn := roachpb.MakeTransaction("test", key, isolation.Serializable, roachpb.NormalUserPriority, tsBelowClosedTimestamp, clock.MaxOffset().Nanoseconds(), 0, 0)
 
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{

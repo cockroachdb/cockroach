@@ -37,7 +37,7 @@ func TestRecoverTxn(t *testing.T) {
 	ctx := context.Background()
 	k, k2 := roachpb.Key("a"), roachpb.Key("b")
 	ts := hlc.Timestamp{WallTime: 1}
-	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1)
+	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1, 0)
 	txn.Status = roachpb.STAGING
 	txn.LockSpans = []roachpb.Span{{Key: k}}
 	txn.InFlightWrites = []roachpb.SequencedWrite{{Key: k2, Sequence: 0}}
@@ -104,7 +104,7 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 	ctx := context.Background()
 	k := roachpb.Key("a")
 	ts := hlc.Timestamp{WallTime: 1}
-	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1)
+	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1, 0)
 	txn.Status = roachpb.STAGING
 
 	testCases := []struct {

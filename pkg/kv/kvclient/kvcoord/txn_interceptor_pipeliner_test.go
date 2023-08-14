@@ -100,8 +100,7 @@ func makeMockTxnPipeliner(iter condensableSpanSetRangeIterator) (txnPipeliner, *
 }
 
 func makeTxnProto() roachpb.Transaction {
-	return roachpb.MakeTransaction("test", []byte("key"), isolation.Serializable, 0,
-		hlc.Timestamp{WallTime: 10}, 0 /* maxOffsetNs */, 0 /* coordinatorNodeID */)
+	return roachpb.MakeTransaction("test", []byte("key"), isolation.Serializable, 0, hlc.Timestamp{WallTime: 10}, 0, 0, 0)
 }
 
 // TestTxnPipeliner1PCTransaction tests that the writes performed by 1PC

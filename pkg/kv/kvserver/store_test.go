@@ -2140,7 +2140,7 @@ func TestStoreSkipLockedTSCache(t *testing.T) {
 			t1 := timeutil.Unix(2, 0)
 			manualClock.MustAdvanceTo(t1)
 			lockedKey := roachpb.Key("b")
-			txn := roachpb.MakeTransaction("locker", lockedKey, 0, 0, makeTS(t1.UnixNano(), 0), 0, 0)
+			txn := roachpb.MakeTransaction("locker", lockedKey, 0, 0, makeTS(t1.UnixNano(), 0), 0, 0, 0)
 			txnH := kvpb.Header{Txn: &txn}
 			putArgs := putArgs(lockedKey, []byte("newval"))
 			_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), txnH, &putArgs)

@@ -32,15 +32,7 @@ import (
 
 func TestBatchRequestString(t *testing.T) {
 	ba := kvpb.BatchRequest{}
-	txn := roachpb.MakeTransaction(
-		"test",
-		nil, // baseKey
-		isolation.Serializable,
-		roachpb.NormalUserPriority,
-		hlc.Timestamp{}, // now
-		0,               // maxOffsetNs
-		99,              // coordinatorNodeID
-	)
+	txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, hlc.Timestamp{}, 0, 99, 0)
 	txn.ID = uuid.NamespaceDNS
 	ba.Txn = &txn
 	ba.WaitPolicy = lock.WaitPolicy_Error

@@ -1998,7 +1998,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	})
 
 	// Add an intent at k3@ts3.
-	txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, ts3, 1, 1)
+	txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, ts3, 1, 1, 0)
 	addIntent := func(t *testing.T, rw ReadWriter) {
 		require.NoError(t, MVCCPut(ctx, rw, testKey3, ts3, value3, MVCCWriteOptions{Txn: &txn}))
 	}

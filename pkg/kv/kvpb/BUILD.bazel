@@ -30,6 +30,7 @@ go_library(
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
         "//pkg/storage/enginepb",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/caller",
         "//pkg/util/hlc",

@@ -945,6 +945,7 @@ func testTxnCoordSenderTxnUpdatedOnError(t *testing.T, isoLevel isolation.Level)
 				now.ToTimestamp(),
 				clock.MaxOffset().Nanoseconds(),
 				0, /* coordinatorNodeID */
+				0,
 			)
 			// TODO(andrei): I've monkeyed with the priorities on this initial
 			// Transaction to keep the test happy from a previous version in which the

@@ -58,15 +58,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 
 	for _, d := range testData {
 		ts := hlc.ClockTimestamp{WallTime: d.walltime, Logical: d.logical}
-		txnProto := roachpb.MakeTransaction(
-			"test",
-			nil, // baseKey
-			isolation.Serializable,
-			roachpb.NormalUserPriority,
-			ts.ToTimestamp(),
-			0, // maxOffsetNs
-			1, // coordinatorNodeID
-		)
+		txnProto := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority, ts.ToTimestamp(), 0, 1, 0)
 
 		ctx := eval.Context{
 			Txn: kv.NewTxnFromProto(

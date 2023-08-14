@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -949,6 +950,7 @@ func MakeTransaction(
 	now hlc.Timestamp,
 	maxOffsetNs int64,
 	coordinatorNodeID int32,
+	admissionPriority admissionpb.WorkPriority,
 ) Transaction {
 	u := uuid.FastMakeV4()
 	// TODO(nvanbenschoten): technically, gul should be a synthetic timestamp.
@@ -1325,6 +1327,10 @@ func (t *Transaction) Update(o *Transaction) {
 
 	// Ratchet the transaction priority.
 	t.UpgradePriority(o.Priority)
+	// TODO: do we need to do this for given this does not change? It seems o
+	// was at some point copied from t, and only some fields have been updated
+	// in t. In which case we don't need this assignment.
+	t.AdmissionPriority = o.AdmissionPriority
 }
 
 // UpgradePriority sets transaction priority to the maximum of current

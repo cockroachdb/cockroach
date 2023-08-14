@@ -129,6 +129,17 @@ message TxnMeta {
   // transactions) and was introduced for the purposes of SQL Observability.
   // TODO(sarkesian): Refactor to use gogoproto.casttype GenericNodeID when #73309 completes.
   int32 coordinator_node_id = 10 [(gogoproto.customname) = "CoordinatorNodeID"];
+
+  // Admission control (AC) fields. AC needs the tuple (TenantID, Priority,
+  // CreateTime). TenantID can be inferred from the key space that is being
+  // operated on (in the future we will generalize the AC concept of TenantID,
+  // but for now this is tied to the serverless concept), so does not need to
+  // be stored. CreateTime is the same as MinTimestamp. So we only store the
+  // AdmissionPriority.
+
+  // AdmissionPriority is the priority assigned for admission control, at
+  // transaction creation time.
+  sint32 admission_priority = 19;
 }
 
 // IgnoredSeqNumRange describes a range of ignored seqnums.
