@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/errors"
 )
 
 func (h *Helper) RandomNode(prng *rand.Rand, nodes option.NodeListOption) int {
@@ -103,6 +104,37 @@ func (h *Helper) BackgroundCommand(cmd string, nodes option.NodeListOption) cont
 		l.Printf("running command `%s` on nodes %v in the background", cmd, nodes)
 		return h.runner.cluster.RunE(ctx, nodes, cmd)
 	})
+}
+
+// Command runs the command on the provided nodes.
+func (h *Helper) Command(cmd string, nodes option.NodeListOption) error {
+	h.stepLogger.Printf("running command `%s` on nodes %v", cmd, nodes)
+	return h.runner.cluster.RunE(h.ctx, nodes, cmd)
+}
+
+// ExpectNoRestarts is a function which you should call at the beginning of a
+// hook to asser that no node restarts happen while its running. Note that this
+// does not block restarts, but will cause them to fail (and eventually fail the
+// test).
+// The expected usage is:
+//
+// reset, err := h.ExpectNoRestarts()
+//
+//	if err != nil {
+//	  return err
+//	}
+//
+// defer reset()
+// {
+// ... critical section
+// }
+func (h *Helper) ExpectNoRestarts() (reset func(), err error) {
+	if !h.upgradeFlag.TryLock() {
+		return nil, errors.New("hook expected no restarts but a restart was detected")
+	}
+	return func() {
+		h.upgradeFlag.Unlock()
+	}, nil
 }
 
 // ExpectDeath alerts the testing infrastructure that a node is
