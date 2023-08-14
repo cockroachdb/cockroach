@@ -45,7 +45,7 @@ func TestNormRules(t *testing.T) {
 
 	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps |
 		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes |
-		memo.ExprFmtHideNotVisibleIndexInfo
+		memo.ExprFmtHideNotVisibleIndexInfo | memo.ExprFmtHideFastPathChecks
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "rules"), func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -66,7 +66,7 @@ func TestNormRuleProps(t *testing.T) {
 
 	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost |
 		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars | memo.ExprFmtHideTypes |
-		memo.ExprFmtHideNotVisibleIndexInfo
+		memo.ExprFmtHideNotVisibleIndexInfo | memo.ExprFmtHideFastPathChecks
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "ruleprops"), func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
