@@ -99,6 +99,8 @@ func TestCreateAsVTable(t *testing.T) {
 	waitForJobsSuccess(t, sqlRunner)
 }
 
+// TestCreateAsVTable verifies that SHOW commands can be used as the source of
+// CREATE TABLE AS and CREATE MATERIALIZED VIEW AS.
 func TestCreateAsShow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -294,6 +296,7 @@ AND status != 'succeeded'`
 	sqlRunner.CheckQueryResultsRetry(t, query, [][]string{})
 }
 
+// TestFormat verifies the statement in the schema change job description.
 func TestFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
