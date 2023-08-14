@@ -13,6 +13,7 @@ go_test(
         "//pkg/cloud",
         "//pkg/cloud/amazon",
         "//pkg/cloud/cloudpb",
+        "//pkg/cloud/cloudtestutils",
         "//pkg/cloud/externalconn/providers",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
