@@ -176,6 +176,7 @@ func runLeasePreferences(
 	// https://github.com/cockroachdb/cockroach/issues/105274
 	settings := install.MakeClusterSettings()
 	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
+	settings.ClusterSettings["kv.eager_replicate_enqueue_on_span_config_update.enabled"] = "true"
 
 	startNodes := func(nodes ...int) {
 		for _, node := range nodes {

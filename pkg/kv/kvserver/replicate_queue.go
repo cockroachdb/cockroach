@@ -102,6 +102,17 @@ var MinLeaseTransferInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// EagerReplicateEnqueueOnSpanConfigUpdateEnabled controls whether replicas are
+// enqueued into the replicate queue, following a span config update which
+// affects the replica.
+var EagerReplicateEnqueueOnSpanConfigUpdateEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.eager_replicate_enqueue_on_span_config_update.enabled",
+	"controls whether replicas are enqueued into the replicate queue for "+
+		"processing, when a span config update occurs, which affects the replica",
+	false,
+)
+
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
 		Name:        "queue.replicate.addreplica",
