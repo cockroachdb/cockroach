@@ -333,7 +333,7 @@ func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
 
 	b.z.AddFile("opt.txt", formatOptPlan(memo.ExprFmtHideAll))
 	b.z.AddFile("opt-v.txt", formatOptPlan(
-		memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo,
+		memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo|memo.ExprFmtHideFastPathChecks,
 	))
 	b.z.AddFile("opt-vv.txt", formatOptPlan(memo.ExprFmtHideQualifications|memo.ExprFmtHideNotVisibleIndexInfo))
 }
