@@ -281,7 +281,6 @@ metrics
 locks: 5
 locksheld: 3
 totallockholddurationnanos: 11400000000
-lockswithreservation: 2
 lockswithwaitqueues: 3
 waiters: 3
 waitingreaders: 0
@@ -461,7 +460,6 @@ metrics
 locks: 5
 locksheld: 3
 totallockholddurationnanos: 12600000000
-lockswithreservation: 2
 lockswithwaitqueues: 3
 waiters: 4
 waitingreaders: 0
@@ -618,7 +616,6 @@ metrics
 locks: 5
 locksheld: 3
 totallockholddurationnanos: 13350000000
-lockswithreservation: 2
 lockswithwaitqueues: 3
 waiters: 5
 waitingreaders: 0
@@ -790,7 +787,6 @@ metrics
 locks: 5
 locksheld: 2
 totallockholddurationnanos: 10900000000
-lockswithreservation: 3
 lockswithwaitqueues: 4
 waiters: 6
 waitingreaders: 1
@@ -1017,7 +1013,6 @@ metrics
 locks: 4
 locksheld: 3
 totallockholddurationnanos: 8650000000
-lockswithreservation: 1
 lockswithwaitqueues: 3
 waiters: 3
 waitingreaders: 0
@@ -1185,7 +1180,6 @@ metrics
 locks: 3
 locksheld: 2
 totallockholddurationnanos: 12650000000
-lockswithreservation: 1
 lockswithwaitqueues: 2
 waiters: 2
 waitingreaders: 0
@@ -1335,7 +1329,6 @@ metrics
 locks: 3
 locksheld: 1
 totallockholddurationnanos: 10690000000
-lockswithreservation: 2
 lockswithwaitqueues: 2
 waiters: 3
 waitingreaders: 0
@@ -1500,7 +1493,6 @@ metrics
 locks: 0
 locksheld: 0
 totallockholddurationnanos: 0
-lockswithreservation: 0
 lockswithwaitqueues: 0
 waiters: 0
 waitingreaders: 0
@@ -1615,7 +1607,6 @@ metrics
 locks: 1
 locksheld: 1
 totallockholddurationnanos: 0
-lockswithreservation: 0
 lockswithwaitqueues: 0
 waiters: 0
 waitingreaders: 0
@@ -1747,7 +1738,6 @@ metrics
 locks: 1
 locksheld: 1
 totallockholddurationnanos: 0
-lockswithreservation: 0
 lockswithwaitqueues: 1
 waiters: 3
 waitingreaders: 0
@@ -1873,7 +1863,6 @@ metrics
 locks: 1
 locksheld: 0
 totallockholddurationnanos: 0
-lockswithreservation: 1
 lockswithwaitqueues: 1
 waiters: 3
 waitingreaders: 0
@@ -1989,7 +1978,6 @@ metrics
 locks: 1
 locksheld: 1
 totallockholddurationnanos: 0
-lockswithreservation: 0
 lockswithwaitqueues: 1
 waiters: 1
 waitingreaders: 0
@@ -2128,7 +2116,6 @@ metrics
 locks: 1
 locksheld: 0
 totallockholddurationnanos: 0
-lockswithreservation: 1
 lockswithwaitqueues: 1
 waiters: 1
 waitingreaders: 0
@@ -2284,7 +2271,6 @@ metrics
 locks: 0
 locksheld: 0
 totallockholddurationnanos: 0
-lockswithreservation: 0
 lockswithwaitqueues: 0
 waiters: 0
 waitingreaders: 0
@@ -2432,7 +2418,6 @@ metrics
 locks: 2
 locksheld: 2
 totallockholddurationnanos: 0
-lockswithreservation: 0
 lockswithwaitqueues: 2
 waiters: 2
 waitingreaders: 0
@@ -2554,7 +2539,6 @@ metrics
 locks: 2
 locksheld: 1
 totallockholddurationnanos: 0
-lockswithreservation: 1
 lockswithwaitqueues: 2
 waiters: 3
 waitingreaders: 0
@@ -2757,7 +2741,6 @@ metrics
 locks: 2
 locksheld: 2
 totallockholddurationnanos: 0
-lockswithreservation: 0
 lockswithwaitqueues: 1
 waiters: 1
 waitingreaders: 0
@@ -2905,7 +2888,6 @@ metrics
 locks: 2
 locksheld: 0
 totallockholddurationnanos: 0
-lockswithreservation: 2
 lockswithwaitqueues: 2
 waiters: 3
 waitingreaders: 0
@@ -3027,7 +3009,6 @@ metrics
 locks: 0
 locksheld: 0
 totallockholddurationnanos: 0
-lockswithreservation: 0
 lockswithwaitqueues: 0
 waiters: 0
 waitingreaders: 0
