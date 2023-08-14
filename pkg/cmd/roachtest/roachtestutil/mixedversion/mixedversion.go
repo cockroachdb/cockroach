@@ -654,6 +654,16 @@ func (s restartWithNewBinaryStep) Run(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper,
 ) error {
 	h.ExpectDeath()
+
+	// If a hook set this flag before we did, the hook expects there to
+	// be no upgrades while it is holding the lock. Return an error to indicate
+	// this.
+	if !h.upgradeFlag.TryLock() {
+		return errors.New("attempted to restart when a hook expected" +
+			" no restarts to occur")
+	}
+	defer h.upgradeFlag.Unlock()
+
 	return clusterupgrade.RestartNodesWithNewBinary(
 		ctx,
 		s.rt,

@@ -47,6 +47,16 @@ type (
 		bgCount    int64
 		runner     *testRunner
 		stepLogger *logger.Logger
+
+		// A mutex held during node restart used to signal to a hook that the
+		// restart is taking place.
+		// The expected usage is:
+		//
+		//   if !upgradeFlag.TryLock() {
+		//     return errors.New()
+		//   }
+		//   defer upgradeFlag.Unlock()
+		upgradeFlag sync.Mutex
 	}
 
 	// backgroundEvent is the struct sent by background steps when they
