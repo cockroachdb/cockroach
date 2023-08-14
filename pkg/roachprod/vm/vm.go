@@ -406,6 +406,9 @@ type Provider interface {
 	FindActiveAccount(l *logger.Logger) (string, error)
 	List(l *logger.Logger, opts ListOptions) (List, error)
 	// The name of the Provider, which will also surface in the top-level Providers map.
+
+	AddLabels(l *logger.Logger, vms List, labels map[string]string) error
+	RemoveLabels(l *logger.Logger, vms List, labels []string) error
 	Name() string
 
 	// Active returns true if the provider is properly installed and capable of
@@ -642,4 +645,21 @@ func DNSSafeAccount(account string) string {
 		}
 	}
 	return strings.Map(safe, account)
+}
+
+// SanitizeLabel returns a version of the string that can be used as a label.
+func SanitizeLabel(label string) string {
+	// Replace any non-alphanumeric characters with hyphens
+	re := regexp.MustCompile("[^a-zA-Z0-9]+")
+	label = re.ReplaceAllString(label, "-")
+
+	// Remove any leading or trailing hyphens
+	label = strings.Trim(label, "-")
+
+	// Truncate the label to 63 characters (the maximum allowed by GCP)
+	if len(label) > 63 {
+		label = label[:63]
+	}
+
+	return label
 }
