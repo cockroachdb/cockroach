@@ -604,7 +604,7 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 	const numNodes = 3
 	const testQuery = "SELECT * FROM foo"
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			UseDatabase: "test",
@@ -834,7 +834,7 @@ func TestSetupFlowRPCError(t *testing.T) {
 		queries[1]: 3, // error on n3
 		queries[2]: 0, // no error
 	}
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
@@ -1009,7 +1009,7 @@ func TestDistributedQueryErrorIsRetriedLocally(t *testing.T) {
 		queries[1]: 3, // error on n3
 		queries[2]: 0, // no error
 	}
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{

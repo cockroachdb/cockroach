@@ -11,16 +11,22 @@
 import { all, call, put, takeEvery } from "redux-saga/effects";
 
 import { actions } from "./databaseDetails.reducer";
-import { ErrorWithKey, getDatabaseDetails } from "src/api";
+import {
+  DatabaseDetailsReqParams,
+  ErrorWithKey,
+  getDatabaseDetails,
+} from "src/api";
 import moment from "moment";
 import { PayloadAction } from "@reduxjs/toolkit";
 
-export function* refreshDatabaseDetailsSaga(action: PayloadAction<string>) {
+export function* refreshDatabaseDetailsSaga(
+  action: PayloadAction<DatabaseDetailsReqParams>,
+) {
   yield put(actions.request(action.payload));
 }
 
 export function* requestDatabaseDetailsSaga(
-  action: PayloadAction<string>,
+  action: PayloadAction<DatabaseDetailsReqParams>,
 ): any {
   try {
     const result = yield call(
@@ -30,14 +36,14 @@ export function* requestDatabaseDetailsSaga(
     );
     yield put(
       actions.received({
-        key: action.payload,
+        key: action.payload.database,
         databaseDetailsResponse: result,
       }),
     );
   } catch (e) {
     const err: ErrorWithKey = {
       err: e,
-      key: action.payload,
+      key: action.payload.database,
     };
     yield put(actions.failed(err));
   }

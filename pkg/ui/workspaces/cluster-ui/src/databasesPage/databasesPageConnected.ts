@@ -39,6 +39,7 @@ import { Filters } from "../queryFilter";
 import { actions as analyticsActions } from "../store/analytics";
 import {
   selectAutomaticStatsCollectionEnabled,
+  selectDropUnusedIndexDuration,
   selectIndexRecommendationsEnabled,
 } from "../store/clusterSettings/clusterSettings.selectors";
 import { deriveDatabaseDetailsMemoized } from "../databases";
@@ -67,6 +68,7 @@ const mapStateToProps = (state: AppState): DatabasesPageData => {
     // Do not show node/regions columns for serverless.
     indexRecommendationsEnabled: selectIndexRecommendationsEnabled(state),
     showNodeRegionsColumn: Object.keys(nodeRegions).length > 1 && !isTenant,
+    csIndexUnusedDuration: selectDropUnusedIndexDuration(state),
   };
 };
 
@@ -74,8 +76,10 @@ const mapDispatchToProps = (dispatch: Dispatch): DatabasesPageActions => ({
   refreshDatabases: () => {
     dispatch(databasesListActions.refresh());
   },
-  refreshDatabaseDetails: (database: string) => {
-    dispatch(databaseDetailsActions.refresh(database));
+  refreshDatabaseDetails: (database: string, csIndexUnusedDuration: string) => {
+    dispatch(
+      databaseDetailsActions.refresh({ database, csIndexUnusedDuration }),
+    );
   },
   refreshSettings: () => {
     dispatch(clusterSettingsActions.refresh());

@@ -35,7 +35,7 @@ func TestTenantGRPCServices(t *testing.T) {
 
 	ctx := context.Background()
 
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		},

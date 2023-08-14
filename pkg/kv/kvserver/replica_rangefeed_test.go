@@ -1285,7 +1285,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 			},
 		},
 	}
-	tci := serverutils.StartNewTestCluster(t, 2, cargs)
+	tci := serverutils.StartCluster(t, 2, cargs)
 	tc := tci.(*testcluster.TestCluster)
 	defer tc.Stopper().Stop(ctx)
 
@@ -1476,7 +1476,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 			},
 		},
 	}
-	tci := serverutils.StartNewTestCluster(t, 2, cargs)
+	tci := serverutils.StartCluster(t, 2, cargs)
 	tc := tci.(*testcluster.TestCluster)
 	defer tc.Stopper().Stop(ctx)
 

@@ -33,6 +33,11 @@ const { ZoneConfigurationLevel } = cockroach.server.serverpb;
 type ZoneConfigType = cockroach.config.zonepb.ZoneConfig;
 type ZoneConfigLevelType = cockroach.server.serverpb.ZoneConfigurationLevel;
 
+export type DatabaseDetailsReqParams = {
+  database: string;
+  csIndexUnusedDuration: string;
+};
+
 export type DatabaseDetailsResponse = {
   idResp: SqlApiQueryResponse<DatabaseIdRow>;
   grantsResp: SqlApiQueryResponse<DatabaseGrantsResponse>;
@@ -387,24 +392,18 @@ type DatabaseIndexUsageStatsResponse = {
 };
 
 const getDatabaseIndexUsageStats: DatabaseDetailsQuery<IndexUsageStatistic> = {
-  createStmt: dbName => {
+  createStmt: (dbName: string, csIndexUnusedDuration: string) => {
     return {
       sql: Format(
-        `WITH cs AS (
-          SELECT value 
-              FROM crdb_internal.cluster_settings 
-          WHERE variable = 'sql.index_recommendation.drop_unused_duration'
-          )
-          SELECT * FROM (SELECT
+        `SELECT * FROM (SELECT
                   ti.created_at,
                   us.last_read,
                   us.total_reads,
-                  cs.value as unused_threshold,
-                  cs.value::interval as interval_threshold,
+                  '${csIndexUnusedDuration}' as unused_threshold,
+                  '${csIndexUnusedDuration}'::interval as interval_threshold,
                   now() - COALESCE(us.last_read AT TIME ZONE 'UTC', COALESCE(ti.created_at, '0001-01-01')) as unused_interval
                   FROM %1.crdb_internal.index_usage_statistics AS us
                   JOIN %1.crdb_internal.table_indexes AS ti ON (us.index_id = ti.index_id AND us.table_id = ti.descriptor_id)
-                  CROSS JOIN cs
                  WHERE $1 != 'system' AND ti.is_unique IS false)
                WHERE unused_interval > interval_threshold
                ORDER BY total_reads DESC;`,
@@ -442,7 +441,7 @@ export type DatabaseDetailsRow =
   | IndexUsageStatistic;
 
 type DatabaseDetailsQuery<RowType> = {
-  createStmt: (dbName: string) => SqlStatement;
+  createStmt: (dbName: string, csIndexUnusedDuration: string) => SqlStatement;
   addToDatabaseDetail: (
     response: SqlTxnResult<RowType>,
     dbDetail: DatabaseDetailsResponse,
@@ -464,25 +463,29 @@ const databaseDetailQueries: DatabaseDetailsQuery<DatabaseDetailsRow>[] = [
   getDatabaseSpanStats,
 ];
 
-export function createDatabaseDetailsReq(dbName: string): SqlExecutionRequest {
+export function createDatabaseDetailsReq(
+  params: DatabaseDetailsReqParams,
+): SqlExecutionRequest {
   return createSqlExecutionRequest(
-    dbName,
-    databaseDetailQueries.map(query => query.createStmt(dbName)),
+    params.database,
+    databaseDetailQueries.map(query =>
+      query.createStmt(params.database, params.csIndexUnusedDuration),
+    ),
   );
 }
 
 export async function getDatabaseDetails(
-  databaseName: string,
+  params: DatabaseDetailsReqParams,
   timeout?: moment.Duration,
 ): Promise<SqlApiResponse<DatabaseDetailsResponse>> {
-  return withTimeout(fetchDatabaseDetails(databaseName), timeout);
+  return withTimeout(fetchDatabaseDetails(params), timeout);
 }
 
 async function fetchDatabaseDetails(
-  databaseName: string,
+  params: DatabaseDetailsReqParams,
 ): Promise<SqlApiResponse<DatabaseDetailsResponse>> {
   const detailsResponse: DatabaseDetailsResponse = newDatabaseDetailsResponse();
-  const req: SqlExecutionRequest = createDatabaseDetailsReq(databaseName);
+  const req: SqlExecutionRequest = createDatabaseDetailsReq(params);
   const resp = await executeInternalSql<DatabaseDetailsRow>(req);
   resp.execution.txn_results.forEach(txn_result => {
     if (txn_result.rows) {
@@ -493,7 +496,7 @@ async function fetchDatabaseDetails(
   });
   if (resp.error) {
     if (resp.error.message.includes("max result size exceeded")) {
-      return fetchSeparatelyDatabaseDetails(databaseName);
+      return fetchSeparatelyDatabaseDetails(params);
     }
     detailsResponse.error = resp.error;
   }
@@ -505,12 +508,15 @@ async function fetchDatabaseDetails(
 }
 
 async function fetchSeparatelyDatabaseDetails(
-  databaseName: string,
+  params: DatabaseDetailsReqParams,
 ): Promise<SqlApiResponse<DatabaseDetailsResponse>> {
   const detailsResponse: DatabaseDetailsResponse = newDatabaseDetailsResponse();
   for (const databaseDetailQuery of databaseDetailQueries) {
-    const req = createSqlExecutionRequest(databaseName, [
-      databaseDetailQuery.createStmt(databaseName),
+    const req = createSqlExecutionRequest(params.database, [
+      databaseDetailQuery.createStmt(
+        params.database,
+        params.csIndexUnusedDuration,
+      ),
     ]);
     const resp = await executeInternalSql<DatabaseDetailsRow>(req);
     const txn_result = resp.execution.txn_results[0];
@@ -520,7 +526,7 @@ async function fetchSeparatelyDatabaseDetails(
 
     if (resp.error) {
       const handleFailure = await databaseDetailQuery.handleMaxSizeError(
-        databaseName,
+        params.database,
         txn_result,
         detailsResponse,
       );

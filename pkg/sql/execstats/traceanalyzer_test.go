@@ -53,7 +53,7 @@ func TestTraceAnalyzer(t *testing.T) {
 
 	ctx := context.Background()
 	analyzerChan := make(chan *execstats.TraceAnalyzer, 1)
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			UseDatabase: "test",

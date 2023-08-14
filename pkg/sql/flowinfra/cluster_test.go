@@ -259,7 +259,7 @@ func TestClusterFlow(t *testing.T) {
 	const numNodes = 3
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
-	tc := serverutils.StartNewTestCluster(t, numNodes, args)
+	tc := serverutils.StartCluster(t, numNodes, args)
 	defer tc.Stopper().Stop(context.Background())
 
 	servers := make([]serverutils.ApplicationLayerInterface, numNodes)
@@ -285,7 +285,7 @@ func TestTenantClusterFlow(t *testing.T) {
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
 	args.ServerArgs.DefaultTestTenant = base.TestControlsTenantsExplicitly
-	tc := serverutils.StartNewTestCluster(t, 1, args)
+	tc := serverutils.StartCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 
 	pods := make([]serverutils.ApplicationLayerInterface, numPods)
@@ -317,7 +317,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	// Set up the following network - a simplification of the one described in
@@ -517,7 +517,7 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 	var expectedGateway roachpb.NodeID
 
 	var tableID atomic.Value
-	tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
+	tc := serverutils.StartCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -583,7 +583,7 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := serverutils.StartNewTestCluster(t, 2, /* numNodes */
+	tc := serverutils.StartCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -640,7 +640,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
-	tc := serverutils.StartNewTestCluster(b, 3, args)
+	tc := serverutils.StartCluster(b, 3, args)
 	defer tc.Stopper().Stop(context.Background())
 
 	for _, numNodes := range []int{1, 3} {

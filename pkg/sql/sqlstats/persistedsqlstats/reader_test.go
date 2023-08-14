@@ -164,7 +164,7 @@ func createCluster(t *testing.T) (serverutils.TestClusterInterface, context.Cont
 
 	knobs := sqlstats.CreateTestingKnobs()
 	knobs.StubTimeNow = fakeTime.Now
-	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: knobs,
@@ -191,7 +191,7 @@ func TestSQLStatsWithMultipleIdxRec(t *testing.T) {
 
 	knobs := sqlstats.CreateTestingKnobs()
 	knobs.StubTimeNow = fakeTime.Now
-	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: knobs,

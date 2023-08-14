@@ -30,7 +30,10 @@ import {
   nodeRegionsByIDSelector,
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
-import { selectIndexRecommendationsEnabled } from "src/redux/clusterSettings";
+import {
+  selectDropUnusedIndexDuration,
+  selectIndexRecommendationsEnabled,
+} from "src/redux/clusterSettings";
 
 const sortSettingTablesLocalSetting = new LocalSetting(
   "sortSetting/DatabasesDetailsTablesPage",
@@ -100,15 +103,26 @@ export const mapStateToProps = (
       isTenant,
     }),
     showIndexRecommendations: selectIndexRecommendationsEnabled(state),
+    csIndexUnusedDuration: selectDropUnusedIndexDuration(state),
   };
 };
 
 export const mapDispatchToProps = {
-  refreshDatabaseDetails,
-  refreshTableDetails: (database: string, table: string) => {
+  refreshDatabaseDetails: (database: string, csIndexUnusedDuration: string) => {
+    return refreshDatabaseDetails({
+      database,
+      csIndexUnusedDuration,
+    });
+  },
+  refreshTableDetails: (
+    database: string,
+    table: string,
+    csIndexUnusedDuration: string,
+  ) => {
     return refreshTableDetails({
       database,
       table,
+      csIndexUnusedDuration,
     });
   },
   onViewModeChange: (viewMode: ViewMode) => viewModeLocalSetting.set(viewMode),

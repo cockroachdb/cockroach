@@ -8235,7 +8235,7 @@ func TestMVCCStatsGCCommutesWithWrites(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	key := tc.ScratchRange(t)
 	store, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
@@ -8467,7 +8467,7 @@ func TestGCThresholdRacesWithRead(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "followerRead", func(t *testing.T, followerRead bool) {
 		testutils.RunTrueAndFalse(t, "thresholdFirst", func(t *testing.T, thresholdFirst bool) {
 			ctx := context.Background()
-			tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+			tc := serverutils.StartCluster(t, 2, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
@@ -13933,7 +13933,7 @@ func TestRangeSplitRacesWithRead(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "followerRead", func(t *testing.T, followerRead bool) {
 		ctx := context.Background()
-		tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+		tc := serverutils.StartCluster(t, 2, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
 		defer tc.Stopper().Stop(ctx)
@@ -14063,7 +14063,7 @@ func TestRangeSplitAndRHSRemovalRacesWithFollowerRead(t *testing.T) {
 	startSplit := make(chan struct{})
 	unblockRead := make(chan struct{})
 	scratchRangeID := roachpb.RangeID(-1)
-	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			1: {

@@ -38,7 +38,10 @@ import {
   selectDatabaseDetailsViewModeSetting,
 } from "../store/databaseDetails/databaseDetails.selectors";
 import { combineLoadingErrors, deriveTableDetailsMemoized } from "../databases";
-import { selectIndexRecommendationsEnabled } from "../store/clusterSettings/clusterSettings.selectors";
+import {
+  selectDropUnusedIndexDuration,
+  selectIndexRecommendationsEnabled,
+} from "../store/clusterSettings/clusterSettings.selectors";
 
 const mapStateToProps = (
   state: AppState,
@@ -75,17 +78,26 @@ const mapStateToProps = (
       isTenant,
     }),
     showIndexRecommendations: selectIndexRecommendationsEnabled(state),
+    csIndexUnusedDuration: selectDropUnusedIndexDuration(state),
   };
 };
 
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): DatabaseDetailsPageActions => ({
-  refreshDatabaseDetails: (database: string) => {
-    dispatch(databaseDetailsActions.refresh(database));
+  refreshDatabaseDetails: (database: string, csIndexUnusedDuration: string) => {
+    dispatch(
+      databaseDetailsActions.refresh({ database, csIndexUnusedDuration }),
+    );
   },
-  refreshTableDetails: (database: string, table: string) => {
-    dispatch(tableDetailsActions.refresh({ database, table }));
+  refreshTableDetails: (
+    database: string,
+    table: string,
+    csIndexUnusedDuration: string,
+  ) => {
+    dispatch(
+      tableDetailsActions.refresh({ database, table, csIndexUnusedDuration }),
+    );
   },
   onViewModeChange: (viewMode: ViewMode) => {
     dispatch(

@@ -1242,7 +1242,7 @@ SET CLUSTER SETTING kv.allocator.load_based_rebalancing = 'off';
 func setupTestClusterWithDummyRange(
 	t *testing.T, clusterArgs base.TestClusterArgs, dbName, tableName string, numNodes int,
 ) (serverutils.TestClusterInterface, roachpb.RangeDescriptor) {
-	tc := serverutils.StartNewTestCluster(t, numNodes, clusterArgs)
+	tc := serverutils.StartCluster(t, numNodes, clusterArgs)
 	db0 := tc.ServerConn(0)
 
 	if _, err := db0.Exec(fmt.Sprintf(`

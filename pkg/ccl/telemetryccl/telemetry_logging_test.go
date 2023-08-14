@@ -172,7 +172,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				EventLog: &sql.EventLogTestingKnobs{

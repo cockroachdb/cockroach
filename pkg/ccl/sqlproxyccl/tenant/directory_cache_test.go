@@ -654,7 +654,7 @@ func newTestDirectoryCache(
 	directoryCache tenant.DirectoryCache,
 	tds *tenantdirsvr.TestDirectoryServer,
 ) {
-	tc = serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+	tc = serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// We need to start the cluster insecure in order to not
 			// care about TLS settings for the RPC client connection.
