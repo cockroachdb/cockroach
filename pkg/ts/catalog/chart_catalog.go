@@ -2291,6 +2291,10 @@ var charts = []sectionDescription{
 				},
 				AxisLabel: "Schema Change Executions",
 			},
+			{
+				Title:   "Invalid Objects",
+				Metrics: []string{"sql.schema.invalid_objects"},
+			},
 		},
 	},
 	{
