@@ -1282,10 +1282,32 @@ func (p *Pebble) async(fn func()) {
 	}()
 }
 
+// writePreventStartupFile creates a file that will prevent nodes from automatically restarting after
+// experiencing sstable corruption.
+func (p *Pebble) writePreventStartupFile(ctx context.Context, corruptionError error) {
+	auxDir := p.GetAuxiliaryDir()
+	path := base.PreventedStartupFile(auxDir)
+
+	preventStartupMsg := fmt.Sprintf(`ATTENTION:
+
+  this node is terminating because of sstable corruption. 
+	Corruption may be a consequence of a hardware error. 
+
+	Error: %s 
+
+  A file preventing this node from restarting was placed at: 
+  %s`, corruptionError.Error(), path)
+
+	if err := fs.WriteFile(p.unencryptedFS, path, []byte(preventStartupMsg)); err != nil {
+		log.Warningf(ctx, "%v", err)
+	}
+}
+
 func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventListener {
 	return pebble.EventListener{
 		BackgroundError: func(err error) {
 			if errors.Is(err, pebble.ErrCorruption) {
+				p.writePreventStartupFile(ctx, err)
 				log.Fatalf(ctx, "local corruption detected: %v", err)
 			}
 		},
@@ -2446,8 +2468,8 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	}
 	if iter.inuse {
 		return newPebbleIteratorByCloning(CloneContext{
-			rawIter:       p.iter,
-			statsReporter: p.parent,
+			rawIter: p.iter,
+			engine:  p.parent,
 		}, opts, p.durability)
 	}
 
@@ -2479,8 +2501,8 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 	}
 	if iter.inuse {
 		return newPebbleIteratorByCloning(CloneContext{
-			rawIter:       p.iter,
-			statsReporter: p.parent,
+			rawIter: p.iter,
+			engine:  p.parent,
 		}, opts, p.durability)
 	}
 

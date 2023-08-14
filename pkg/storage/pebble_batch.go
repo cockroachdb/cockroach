@@ -57,7 +57,7 @@ type pebbleBatch struct {
 	// scratch space for wrappedIntentWriter.
 	scratch []byte
 
-	iterStatsReporter                iterStatsReporter
+	parent                           *Pebble
 	batchStatsReporter               batchStatsReporter
 	settings                         *cluster.Settings
 	mayWriteSizedDeletes             bool
@@ -83,7 +83,7 @@ func newPebbleBatch(
 	batch *pebble.Batch,
 	writeOnly bool,
 	settings *cluster.Settings,
-	iterStatsReporter iterStatsReporter,
+	parent *Pebble,
 	batchStatsReporter batchStatsReporter,
 ) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
@@ -112,7 +112,7 @@ func newPebbleBatch(
 			reusable:      true,
 		},
 		writeOnly:          writeOnly,
-		iterStatsReporter:  iterStatsReporter,
+		parent:             parent,
 		batchStatsReporter: batchStatsReporter,
 		settings:           settings,
 		// NB: We do not use settings.Version.IsActive because we do not
@@ -202,15 +202,15 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	}
 	if iter.inuse {
 		return newPebbleIteratorByCloning(CloneContext{
-			rawIter:       p.iter,
-			statsReporter: p.iterStatsReporter,
+			rawIter: p.iter,
+			engine:  p.parent,
 		}, opts, StandardDurability)
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, StandardDurability)
 	} else {
-		iter.initReuseOrCreate(handle, p.iter, p.iterUsed, opts, StandardDurability, p.iterStatsReporter)
+		iter.initReuseOrCreate(handle, p.iter, p.iterUsed, opts, StandardDurability, p.parent)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -238,15 +238,15 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	}
 	if iter.inuse {
 		return newPebbleIteratorByCloning(CloneContext{
-			rawIter:       p.iter,
-			statsReporter: p.iterStatsReporter,
+			rawIter: p.iter,
+			engine:  p.parent,
 		}, opts, StandardDurability)
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, StandardDurability)
 	} else {
-		iter.initReuseOrCreate(handle, p.iter, p.iterUsed, opts, StandardDurability, p.iterStatsReporter)
+		iter.initReuseOrCreate(handle, p.iter, p.iterUsed, opts, StandardDurability, p.parent)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
