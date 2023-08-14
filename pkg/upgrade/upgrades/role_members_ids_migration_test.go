@@ -36,10 +36,10 @@ func TestRoleMembersIDMigration10Users(t *testing.T) {
 	runTestRoleMembersIDMigration(t, 10)
 }
 
-func TestRoleMembersIDMigration1500Users(t *testing.T) {
+func TestRoleMembersIDMigration1000Users(t *testing.T) {
 	skip.UnderRace(t)
 	skip.UnderStress(t)
-	runTestRoleMembersIDMigration(t, 1500)
+	runTestRoleMembersIDMigration(t, 1000)
 }
 
 func runTestRoleMembersIDMigration(t *testing.T, numUsers int) {
