@@ -30,6 +30,7 @@ cockroachdb/sql-foundations:
   label: T-sql-foundations
 cockroachdb/sql-queries:
   aliases:
+    cockroachdb/sql-queries-prs: other
     cockroachdb/sql-optimizer: other
     cockroachdb/sql-opt-prs: other
   # SQL Queries team uses GH projects v2, which doesn't have a REST API, so
