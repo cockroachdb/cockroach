@@ -224,6 +224,12 @@ func TestTableAndDatabaseDetailsAndStats(t *testing.T) {
 
 	require.Equal(t, dbResp.TableNames[0], "public.test")
 
+	var dbDetailsResp serverpb.DatabaseDetailsResponse
+	err = getAdminJSONProto(st, "databases/defaultdb?include_stats=true", &dbDetailsResp)
+	require.NoError(t, err)
+
+	require.Greater(t, dbDetailsResp.Stats.RangeCount, int64(0))
+
 	// TableStats
 	tableStatsResp := &serverpb.TableStatsResponse{}
 	err = getAdminJSONProto(st, "databases/defaultdb/tables/public.test/stats", tableStatsResp)

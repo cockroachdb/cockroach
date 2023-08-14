@@ -615,6 +615,11 @@ func (r *clusterRegistry) registerCluster(c *clusterImpl) error {
 		return fmt.Errorf("cluster named %q already exists in registry", c.name)
 	}
 	r.mu.clusters[c.name] = c
+	if err := c.addLabels(map[string]string{
+		VmLabelTestRunID: runID,
+	}); err != nil && c.l != nil {
+		c.l.Printf("failed to add %s label to cluster: %s", VmLabelTestRunID, err)
+	}
 	return nil
 }
 
@@ -625,6 +630,9 @@ func (r *clusterRegistry) unregisterCluster(c *clusterImpl) bool {
 		// If the cluster is not registered, no-op. This allows the
 		// method to be called defensively.
 		return false
+	}
+	if err := c.removeLabels([]string{VmLabelTestRunID}); err != nil && c.l != nil {
+		c.l.Printf("failed to remove %s label from cluster: %s", VmLabelTestRunID, err)
 	}
 	delete(r.mu.clusters, c.name)
 	if c.tag != "" {
@@ -1868,6 +1876,14 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 	close(ch)
 	c.destroyState.mu.Unlock()
 	return ch
+}
+
+func (c *clusterImpl) addLabels(labels map[string]string) error {
+	return roachprod.AddLabels(c.l, c.name, labels)
+}
+
+func (c *clusterImpl) removeLabels(labels []string) error {
+	return roachprod.RemoveLabels(c.l, c.name, labels)
 }
 
 func (c *clusterImpl) ListSnapshots(
