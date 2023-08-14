@@ -125,13 +125,9 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 
 	getStoreAndReplica := func() (*kvserver.Store, *kvserver.Replica) {
 		startKey := getTableStartKey()
-		// Okay great now we have a key and can go find replicas and stores and what not.
-		r := tc.LookupRangeOrFatal(t, startKey)
-		l, _, err := tc.FindRangeLease(r, nil)
-		require.NoError(t, err)
-
-		lhServer := tc.Server(int(l.Replica.NodeID) - 1)
-		return getFirstStoreReplica(t, lhServer, startKey)
+		// There's only one server, so there's no point searching for which server
+		// the leaseholder is on, it could only be on s0.
+		return getFirstStoreReplica(t, s0, startKey)
 	}
 
 	waitForRangeMaxBytes := func(maxBytes int64) {
