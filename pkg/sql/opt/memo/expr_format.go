@@ -105,6 +105,13 @@ const (
 	// info regardless of whether we are actually scanning an invisible index.
 	ExprFmtHideNotVisibleIndexInfo
 
+	// ExprFmtHideFastPathChecks hides information about insert fast path unique
+	// check expressions. These expressions are not executed, but used to find
+	// constrained index scans which may be used to perform the check as a
+	// fast path check. Most of the time these expressions should not be displayed
+	// due to the fact that they are not actually executed.
+	ExprFmtHideFastPathChecks
+
 	// ExprFmtHideAll shows only the basic structure of the expression.
 	// Note: this flag should be used judiciously, as its meaning changes whenever
 	// we add more flags.
@@ -973,7 +980,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 	switch scalar.Op() {
 	case opt.ProjectionsOp, opt.AggregationsOp, opt.UniqueChecksOp, opt.FKChecksOp, opt.KVOptionsOp, opt.FastPathUniqueChecksOp:
 		// Omit empty lists (except filters) and special-purpose fast path check expressions.
-		if scalar.ChildCount() == 0 || scalar.Op() == opt.FastPathUniqueChecksOp {
+		if scalar.ChildCount() == 0 || (scalar.Op() == opt.FastPathUniqueChecksOp && f.HasFlags(ExprFmtHideFastPathChecks)) {
 			return
 		}
 
