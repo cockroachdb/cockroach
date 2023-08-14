@@ -2386,6 +2386,12 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 
 	now := s.cfg.Clock.NowAsClockTimestamp()
 
+	// The replicate queue has a relatively more expensive queue check
+	// (shouldQueue), because it scales with the number of stores, and
+	// performs more checks.
+	enqueueToReplicateQueueEnabled := EnqueueToReplicateQueueOnSpanConfigUpdateEnabled.Get(
+		&s.GetStoreConfig().Settings.SV)
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if err := s.mu.replicasByKey.VisitKeyRange(ctx, sp.Key, sp.EndKey, AscendingKeyOrder,
@@ -2444,9 +2450,12 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 			s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
-			s.replicateQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
+
+			if enqueueToReplicateQueueEnabled {
+				s.replicateQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+					h.MaybeAdd(ctx, repl, now)
+				})
+			}
 			return nil // more
 		},
 	); err != nil {
