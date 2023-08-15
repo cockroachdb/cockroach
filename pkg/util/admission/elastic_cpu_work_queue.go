@@ -12,6 +12,7 @@ package admission
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -27,6 +28,20 @@ const (
 	// when seeking admission.
 	MaxElasticCPUDuration = 100 * time.Millisecond
 )
+
+// ValidateElasticCPUDuration is a validation function for the {minimum,maximum}
+// on-CPU time elastic requests can ask for when seeking admission.
+func ValidateElasticCPUDuration(duration time.Duration) error {
+	if duration < MinElasticCPUDuration {
+		return fmt.Errorf("minimum CPU duration allowed is %s, got %s",
+			MinElasticCPUDuration, duration)
+	}
+	if duration > MaxElasticCPUDuration {
+		return fmt.Errorf("maximum CPU duration allowed is %s, got %s",
+			MaxElasticCPUDuration, duration)
+	}
+	return nil
+}
 
 var (
 	elasticCPUControlEnabled = settings.RegisterBoolSetting(
