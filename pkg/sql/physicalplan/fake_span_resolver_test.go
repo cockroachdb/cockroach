@@ -34,7 +34,11 @@ func TestFakeSpanResolver(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(108763),
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	sqlutils.CreateTable(
