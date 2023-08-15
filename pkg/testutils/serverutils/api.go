@@ -56,7 +56,17 @@ type TestServerInterface interface {
 	//
 	// For convenience, the caller can assume that Stop() has been called
 	// already if Start() fails with an error.
+	//
+	// Start is an alias for PreStart() followed by Activate(). This
+	// distinction exists mainly for the benefit of the TestCluster
+	// boostrap logic.
 	Start(context.Context) error
+
+	// PreStart is the bootstrap/init phase of Start().
+	PreStart(context.Context) error
+
+	// Activate is the service activation phase of Start().
+	Activate(context.Context) error
 
 	// Stop stops the server. This must be called at the end of a test
 	// to avoid leaking resources.
