@@ -868,6 +868,16 @@ func (ex *connExecutor) execStmtInOpenState(
 			)
 			return makeErrEvent(err)
 		}
+		if _, ok := s.Statement.(*tree.ExplainAnalyze); ok {
+			// Prohibit the explicit PREPARE ... AS EXPLAIN ANALYZE since we
+			// won't be able to execute the prepared statement. This is also in
+			// line with Postgres.
+			err := pgerror.Newf(
+				pgcode.Syntax,
+				"EXPLAIN ANALYZE can only be used as a top-level statement",
+			)
+			return makeErrEvent(err)
+		}
 		var typeHints tree.PlaceholderTypes
 		// We take max(len(s.Types), stmt.NumPlaceHolders) as the length of types.
 		numParams := len(s.Types)
