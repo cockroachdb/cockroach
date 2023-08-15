@@ -55,13 +55,14 @@ export type SchemaInsightsViewStateProps = {
   filters: SchemaInsightEventFilters;
   sortSetting: SortSetting;
   hasAdminRole: boolean;
+  csIndexUnusedDuration: string;
   maxSizeApiReached?: boolean;
 };
 
 export type SchemaInsightsViewDispatchProps = {
   onFiltersChange: (filters: SchemaInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshSchemaInsights: () => void;
+  refreshSchemaInsights: (csIndexUnusedDuration: string) => void;
   refreshUserSQLRoles: () => void;
 };
 
@@ -83,6 +84,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
   onFiltersChange,
   onSortChange,
   maxSizeApiReached,
+  csIndexUnusedDuration,
 }: SchemaInsightsViewProps) => {
   const isCockroachCloud = useContext(CockroachCloudContext);
   const [pagination, setPagination] = useState<ISortedTablePagination>({
@@ -95,13 +97,17 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
   );
 
   useEffect(() => {
+    const refreshSchema = (): void => {
+      refreshSchemaInsights(csIndexUnusedDuration);
+    };
+
     // Refresh every 1 minute.
-    refreshSchemaInsights();
-    const interval = setInterval(refreshSchemaInsights, 60 * 1000);
+    refreshSchema();
+    const interval = setInterval(refreshSchema, 60 * 1000);
     return () => {
       clearInterval(interval);
     };
-  }, [refreshSchemaInsights]);
+  }, [refreshSchemaInsights, csIndexUnusedDuration]);
 
   useEffect(() => {
     // Refresh every 5 minutes.

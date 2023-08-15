@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { indexUnusedDuration } from "src/util/constants";
 import { SchemaInsightsViewProps } from "./schemaInsightsView";
 
 export const SchemaInsightsPropsFixture: SchemaInsightsViewProps = {
@@ -71,6 +72,7 @@ export const SchemaInsightsPropsFixture: SchemaInsightsViewProps = {
     schemaInsightType: "",
   },
   hasAdminRole: true,
+  csIndexUnusedDuration: indexUnusedDuration,
   refreshSchemaInsights: () => {},
   onSortChange: () => {},
   onFiltersChange: () => {},

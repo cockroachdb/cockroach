@@ -26,7 +26,7 @@ import { Format, Identifier, QualifiedIdentifier } from "./safesql";
 import moment from "moment-timezone";
 import { fromHexString, withTimeout } from "./util";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { getLogger } from "../util";
+import { getLogger, indexUnusedDuration } from "../util";
 
 const { ZoneConfig } = cockroach.config.zonepb;
 const { ZoneConfigurationLevel } = cockroach.server.serverpb;
@@ -393,6 +393,7 @@ type DatabaseIndexUsageStatsResponse = {
 
 const getDatabaseIndexUsageStats: DatabaseDetailsQuery<IndexUsageStatistic> = {
   createStmt: (dbName: string, csIndexUnusedDuration: string) => {
+    csIndexUnusedDuration = csIndexUnusedDuration ?? indexUnusedDuration;
     return {
       sql: Format(
         `SELECT * FROM (SELECT

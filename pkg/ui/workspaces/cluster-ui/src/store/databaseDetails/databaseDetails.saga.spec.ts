@@ -34,10 +34,11 @@ import {
   KeyedDatabaseDetailsState,
   reducer,
 } from "./databaseDetails.reducer";
+import { indexUnusedDuration } from "src/util/constants";
 
 describe("DatabaseDetails sagas", () => {
   const database = "test_db";
-  const csIndexUnusedDuration = "168h";
+  const csIndexUnusedDuration = indexUnusedDuration;
   const requestAction: PayloadAction<DatabaseDetailsReqParams> = {
     payload: { database, csIndexUnusedDuration },
     type: "request",
