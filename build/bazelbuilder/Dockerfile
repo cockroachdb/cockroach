@@ -27,6 +27,7 @@ RUN apt-get update \
     python3 \
     python3.8-venv \
     unzip \
+    zip \
  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10 \
  && apt-get clean
