@@ -84,7 +84,7 @@ func StubTableStats(
 }
 
 // createStatsNode is a planNode implemented in terms of a function. The
-// startJob function starts a Job during Start, and the remainder of the
+// runJob function starts a Job during Start, and the remainder of the
 // CREATE STATISTICS planning and execution is performed within the jobs
 // framework.
 type createStatsNode struct {
@@ -97,49 +97,23 @@ type createStatsNode struct {
 	// If it is false, the flow for create statistics is planned directly; this
 	// is used when the statement is under EXPLAIN or EXPLAIN ANALYZE.
 	runAsJob bool
-
-	run createStatsRun
-}
-
-// createStatsRun contains the run-time state of createStatsNode during local
-// execution.
-type createStatsRun struct {
-	resultsCh chan tree.Datums
-	errCh     chan error
 }
 
 func (n *createStatsNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("stats"))
-	n.run.resultsCh = make(chan tree.Datums)
-	n.run.errCh = make(chan error)
-	go func() {
-		err := n.startJob(params.ctx, n.run.resultsCh)
-		select {
-		case <-params.ctx.Done():
-		case n.run.errCh <- err:
-		}
-		close(n.run.errCh)
-		close(n.run.resultsCh)
-	}()
-	return nil
+	return n.runJob(params.ctx)
 }
 
 func (n *createStatsNode) Next(params runParams) (bool, error) {
-	select {
-	case <-params.ctx.Done():
-		return false, params.ctx.Err()
-	case err := <-n.run.errCh:
-		return false, err
-	case <-n.run.resultsCh:
-		return true, nil
-	}
+	return false, nil
 }
 
 func (*createStatsNode) Close(context.Context) {}
 func (*createStatsNode) Values() tree.Datums   { return nil }
 
-// startJob starts a CreateStats job to plan and execute statistics creation.
-func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Datums) error {
+// runJob starts a CreateStats job synchronously to plan and execute
+// statistics creation and then waits for the job to complete.
+func (n *createStatsNode) runJob(ctx context.Context) error {
 	record, err := n.makeJobRecord(ctx)
 	if err != nil {
 		return err
@@ -172,8 +146,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 	if err := job.Start(ctx); err != nil {
 		return err
 	}
-
-	if err := job.AwaitCompletion(ctx); err != nil {
+	if err = job.AwaitCompletion(ctx); err != nil {
 		if errors.Is(err, stats.ConcurrentCreateStatsError) {
 			// Delete the job so users don't see it and get confused by the error.
 			const stmt = `DELETE FROM system.jobs WHERE id = $1`
@@ -183,9 +156,8 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 				log.Warningf(ctx, "failed to delete job: %v", delErr)
 			}
 		}
-		return err
 	}
-	return nil
+	return err
 }
 
 // makeJobRecord creates a CreateStats job record which can be used to plan and
