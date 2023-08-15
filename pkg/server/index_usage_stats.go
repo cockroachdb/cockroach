@@ -100,6 +100,7 @@ func (s *statusServer) IndexUsageStatistics(
 	// yields an incorrect result.
 	if err := s.iterateNodes(ctx,
 		"requesting index usage stats",
+		noTimeout,
 		dialFn, fetchIndexUsageStats, aggFn, errFn); err != nil {
 		return nil, err
 	}
@@ -196,6 +197,7 @@ func (s *statusServer) ResetIndexUsageStats(
 
 	if err := s.iterateNodes(ctx,
 		"Resetting index usage stats",
+		noTimeout,
 		dialFn, resetIndexUsageStats, aggFn, errFn); err != nil {
 		return nil, err
 	}
