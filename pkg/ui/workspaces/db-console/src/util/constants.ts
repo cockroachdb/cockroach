@@ -36,4 +36,5 @@ export const {
   viewAttr,
   REMOTE_DEBUGGING_ERROR_TEXT,
   idAttr,
+  indexUnusedDuration,
 } = util;
