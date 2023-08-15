@@ -279,7 +279,7 @@ sql.stats.histogram_collection.enabled	boolean	true	histogram collection mode	te
 sql.stats.histogram_samples.count	integer	10000	number of rows sampled for histogram construction during table statistics collection	tenant-rw
 sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics collection mode	tenant-rw
 sql.stats.non_default_columns.min_retention_period	duration	24h0m0s	minimum retention period for table statistics collected on non-default columns	tenant-rw
-sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement and transaction statistics that will be persisted in the system tables	tenant-rw
+sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement and transaction statistics that will be persisted in the system tables before compaction begins	tenant-rw
 sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every CREATE STATISTICS job	tenant-rw
 sql.stats.response.max	integer	20000	the maximum number of statements and transaction stats returned in a CombinedStatements request	tenant-rw
 sql.stats.response.show_internal.enabled	boolean	false	controls if statistics for internal executions should be returned by the CombinedStatements and if internal sessions should be returned by the ListSessions endpoints. These endpoints are used to display statistics on the SQL Activity pages	tenant-rw

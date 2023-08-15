@@ -88,8 +88,8 @@ var SQLStatsFlushJitter = settings.RegisterFloatSetting(
 var SQLStatsMaxPersistedRows = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"sql.stats.persisted_rows.max",
-	"maximum number of rows of statement and transaction"+
-		" statistics that will be persisted in the system tables",
+	"maximum number of rows of statement and transaction statistics that "+
+		"will be persisted in the system tables before compaction begins",
 	1000000, /* defaultValue */
 ).WithPublic()
 
@@ -128,4 +128,15 @@ var CompactionJobRowsToDeletePerTxn = settings.RegisterIntSetting(
 	"number of rows the compaction job deletes from system table per iteration",
 	10000,
 	settings.NonNegativeInt,
+)
+
+// sqlStatsLimitTableSizeEnabled is the cluster setting that enables the
+// sql stats system tables to grow past the number of rows set by
+// sql.stats.persisted_row.max.
+var sqlStatsLimitTableSizeEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.stats.limit_table_size.enabled",
+	"controls whether we allow statement and transaction statistics tables "+
+		"to grow past sql.stats.persisted_rows.max",
+	true,
 )
