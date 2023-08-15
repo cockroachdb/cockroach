@@ -400,7 +400,11 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 		return errors.Wrapf(err, "%s: failed to lookup span config", r)
 	}
 
-	r.SetSpanConfig(conf)
+	changed := r.SetSpanConfig(conf)
+	if changed {
+		r.MaybeQueue(ctx, r.store.cfg.Clock.NowAsClockTimestamp())
+	}
+
 	return nil
 }
 
