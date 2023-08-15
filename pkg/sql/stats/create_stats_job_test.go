@@ -13,6 +13,7 @@ package stats_test
 import (
 	"context"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -120,6 +121,59 @@ func TestCreateStatsControlJob(t *testing.T) {
 				{"s2", "{x}", "1000"},
 			})
 	})
+}
+
+func TestCreateStatisticsCanBeCancelled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var allowRequest chan struct{}
+
+	var serverArgs base.TestServerArgs
+	filter, setTableID := createStatsRequestFilter(&allowRequest)
+	params := base.TestClusterArgs{ServerArgs: serverArgs}
+	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: filter,
+	}
+
+	ctx := context.Background()
+	const nodes = 1
+	tc := testcluster.StartTestCluster(t, nodes, params)
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
+	var tID descpb.ID
+	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int`).Scan(&tID)
+	setTableID(tID)
+
+	// Start a CREATE STATISTICS run and wait until it's done one scan.
+	allowRequest = make(chan struct{})
+	errCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS s1 FROM d.t`)
+		errCh <- err
+	}()
+	testutils.SucceedsSoon(t, func() error {
+		str := sqlDB.QueryStr(t, "SELECT * FROM [SHOW CLUSTER STATEMENTS] ")
+		fmt.Printf("%s\n", str)
+		row := conn.QueryRow("select query_id from [SHOW CLUSTER STATEMENTS] WHERE query like 'CREATE STATISTICS%';")
+		var queryID string
+		if err := row.Scan(&queryID); err != nil {
+			return err
+		}
+		_, err := conn.Exec("CANCEL QUERY (select query_id from [SHOW STATEMENTS] WHERE query like 'CREATE STATISTICS%');")
+		return err
+	})
+	allowRequest <- struct{}{}
+	err := <-errCh
+	allowRequest <- struct{}{}
+
+	require.ErrorContains(t, err, "pq: query execution canceled")
 }
 
 func TestAtMostOneRunningCreateStats(t *testing.T) {
