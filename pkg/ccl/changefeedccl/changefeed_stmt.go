@@ -1363,6 +1363,12 @@ func reconcileJobStateWithLocalState(
 			`job should be retried later`, jobID, reloadErr)
 		return reloadErr
 	}
+	knobs, _ := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
+	if knobs != nil && knobs.LoadJobErr != nil {
+		if err := knobs.LoadJobErr(); err != nil {
+			return err
+		}
+	}
 
 	localState.progress = reloadedJob.Progress()
 
