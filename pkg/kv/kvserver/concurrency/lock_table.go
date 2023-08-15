@@ -1423,14 +1423,7 @@ func (l *lockState) collectLockStateInfo(
 
 	// Filter out locks without waiting readers/writers unless explicitly
 	// requested.
-	//
-	// TODO(arul): This should consider the active/inactive status of all queued
-	// writers. If all waiting writers are inactive (and there are no waiting
-	// readers either), we should consider the lock to be uncontended.
-	// See https://github.com/cockroachdb/cockroach/issues/103894.
-	if !includeUncontended && l.waitingReaders.Len() == 0 &&
-		(l.queuedWriters.Len() == 0 ||
-			(l.queuedWriters.Len() == 1 && !l.queuedWriters.Front().Value.(*queuedGuard).active)) {
+	if !includeUncontended && !l.isContented() {
 		return false, roachpb.LockStateInfo{}
 	}
 
@@ -3182,6 +3175,19 @@ func (l *lockState) maybeReleaseFirstTransactionalWriter() {
 
 	// Tell the active waiters who they are waiting for.
 	l.informActiveWaiters()
+}
+
+// isContented returns true if the lock is contented.
+func (l *lockState) isContented() bool {
+	if l.waitingReaders.Len() != 0 {
+		return true
+	}
+	for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
+		if e.Value.(*queuedGuard).active {
+			return true
+		}
+	}
+	return false
 }
 
 // Delete removes the specified lock from the tree.
