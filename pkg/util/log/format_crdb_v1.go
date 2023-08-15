@@ -336,6 +336,30 @@ func writeCrdbHeader(
 	buf.Write(tmp[:n])
 }
 
+// checkTenantLabel returns true if the entry has a tenant label
+// and a size estimate for the printout of the label.
+func checkTenantLabel(tenantID string, tenantName string) (hasLabel bool, length int) {
+	const tenantDetailsTagPrefixLen = len(string(tenantIDLogTagKey) + string(tenantNameLogTagKey) + ",,")
+	return tenantID != "", len(tenantID) + tenantDetailsTagPrefixLen + len(tenantName)
+}
+
+// writeTenantLabel is a representation of the tenant (ID,name) pair
+// specific to the CRDB logging format, and that can also be parsed
+// back.
+func writeTenantLabel(buf *buffer, tenantID string, tenantName string) {
+	if tenantID != "" {
+		buf.WriteByte(tenantIDLogTagKey)
+		buf.WriteString(tenantID)
+		if tenantName != "" {
+			buf.WriteByte(',')
+		}
+	}
+	if tenantName != "" {
+		buf.WriteByte(tenantNameLogTagKey)
+		buf.WriteString(tenantName)
+	}
+}
+
 // formatEntryInternalV1 renders a log entry.
 // Log lines are colorized depending on severity.
 // It uses a newly allocated *buffer. The caller is responsible
@@ -355,23 +379,25 @@ func formatLogEntryInternalV1(
 	}
 	writeCrdbHeader(buf, cp, entry.Severity, ch, entry.File, int(entry.Line), entry.Time, loc, gid, entry.Redactable)
 
+	hasTenantLabel, tenantLabelLength := checkTenantLabel(entry.TenantID, entry.TenantName)
+	hasTags := len(entry.Tags) > 0
+
 	// The remainder is variable-length and could exceed
 	// the static size of tmp. But we do have an upper bound.
-	buf.Grow(len(entry.Tags) + 14 + len(entry.Message))
+	buf.Grow(len(entry.Tags)*2 + tenantLabelLength + 14 + len(entry.Message))
 
 	// We must always tag with tenant ID if present.
 	buf.Write(cp[ttycolor.Blue])
-	if entry.TenantID != "" || len(entry.Tags) != 0 {
+	if hasTenantLabel || hasTags {
 		buf.WriteByte('[')
-		if entry.TenantID != "" {
-			buf.WriteByte(TenantIDLogTagKey)
-			buf.WriteString(entry.TenantID)
-			if len(entry.Tags) != 0 {
+		if hasTenantLabel {
+			writeTenantLabel(buf, entry.TenantID, entry.TenantName)
+			if hasTags {
 				buf.WriteByte(',')
 			}
 		}
 		// Display the tags if set.
-		if len(entry.Tags) != 0 {
+		if hasTags {
 			buf.WriteString(entry.Tags)
 		}
 		buf.WriteString("] ")
@@ -489,18 +515,7 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 		// Look for a tenant ID tag. Default to system otherwise.
 		entry.TenantID = serverident.SystemTenantID
 		tagsToProcess := m[7]
-		if len(tagsToProcess) != 0 && bytes.HasPrefix(tagsToProcess, tenantIDLogTagBytePrefix) {
-			commaIndex := bytes.IndexByte(tagsToProcess, ',')
-			if commaIndex >= 0 {
-				// More tags exist than just the tenant ID tag.
-				entry.TenantID = string(tagsToProcess[1:commaIndex])
-				tagsToProcess = tagsToProcess[commaIndex+1:]
-			} else {
-				// We only have a tenant ID tag.
-				entry.TenantID = string(tagsToProcess[1:])
-				tagsToProcess = []byte{}
-			}
-		}
+		entry.TenantID, entry.TenantName, tagsToProcess = maybeReadTenantDetails(tagsToProcess)
 
 		// Process any remaining tags.
 		if len(tagsToProcess) != 0 {
@@ -556,6 +571,40 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 
 		return nil
 	}
+}
+
+// maybeReadTenantDetails reads the tenant ID and name. If neither the
+// ID nor the name are present, the system tenant ID is returned.
+func maybeReadTenantDetails(
+	tagsToProcess []byte,
+) (tenantID string, tenantName string, remainingTagsToProcess []byte) {
+	var hasTenantID bool
+	hasTenantID, tenantID, tagsToProcess = maybeReadOneTag(tagsToProcess, tenantIDLogTagBytePrefix)
+	if !hasTenantID {
+		return serverident.SystemTenantID, "", tagsToProcess
+	}
+	_, tenantName, tagsToProcess = maybeReadOneTag(tagsToProcess, tenantNameLogTagBytePrefix)
+	return tenantID, tenantName, tagsToProcess
+}
+
+// maybeReadOneTag reads a single tag from the byte array if it
+// starts with the given prefix.
+func maybeReadOneTag(
+	tagsToProcess []byte, prefix []byte,
+) (foundValue bool, tagValue string, remainingTagsToProcess []byte) {
+	if !bytes.HasPrefix(tagsToProcess, prefix) {
+		return false, "", tagsToProcess
+	}
+	commaIndex := bytes.IndexByte(tagsToProcess, ',')
+	if commaIndex < 0 {
+		commaIndex = len(tagsToProcess)
+	}
+	retVal := string(tagsToProcess[1:commaIndex])
+	tagsToProcess = tagsToProcess[commaIndex:]
+	if len(tagsToProcess) > 0 && tagsToProcess[0] == ',' {
+		tagsToProcess = tagsToProcess[1:]
+	}
+	return true, retVal, tagsToProcess
 }
 
 // split function for the crdb-v1 entry decoder scanner.
