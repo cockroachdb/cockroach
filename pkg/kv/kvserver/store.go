@@ -2456,12 +2456,6 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 
 	now := s.cfg.Clock.NowAsClockTimestamp()
 
-	// The replicate queue has a relatively more expensive queue check
-	// (shouldQueue), because it scales with the number of stores, and
-	// performs more checks.
-	enqueueToReplicateQueueEnabled := EnqueueInReplicateQueueOnSpanConfigUpdateEnabled.Get(
-		&s.GetStoreConfig().Settings.SV)
-
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if err := s.mu.replicasByKey.VisitKeyRange(ctx, sp.Key, sp.EndKey, AscendingKeyOrder,
@@ -2473,6 +2467,7 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 
 			replCtx := repl.AnnotateCtx(ctx)
 			startKey := repl.Desc().StartKey
+			changed := true
 			if sp.ContainsKey(startKey) {
 				// It's possible that the update we're receiving here implies a split.
 				// If the update corresponds to what would be the config for the
@@ -2488,43 +2483,15 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 				// adjacent table. This results in a single update, corresponding to the
 				// new table's span, which forms the right-hand side post split.
 
-				// TODO(irfansharif): It's possible for a config to be applied over an
-				// entire range when it only pertains to the first half of the range.
-				// This will be corrected shortly -- we enqueue the range for a split
-				// below where we then apply the right config on each half. But still,
-				// it's surprising behavior and gets in the way of a desirable
-				// consistency guarantee: a key's config at any point in time is one
-				// that was explicitly declared over it, or the default config.
-				//
-				// We can do better, we can skip applying the config entirely and
-				// enqueue the split, then relying on the split trigger to install
-				// the right configs on each half. The current structure is as it is
-				// to maintain parity with the system config span variant.
-
 				conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, startKey)
 				if err != nil {
-					log.Errorf(ctx, "skipped applying update, unexpected error reading from subscriber: %v", err)
+					log.Errorf(replCtx, "skipped applying update, unexpected error reading from subscriber: %v", err)
 					return err
 				}
-				repl.SetSpanConfig(conf)
+				changed = repl.SetSpanConfig(conf)
 			}
-
-			// TODO(irfansharif): For symmetry with the system config span variant,
-			// we queue blindly; we could instead only queue it if we knew the
-			// range's keyspans has a split in there somewhere, or was now part of a
-			// larger range and eligible for a merge, or the span config implied a
-			// need for {up,down}replication.
-			s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
-			s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
-
-			if enqueueToReplicateQueueEnabled {
-				s.replicateQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-					h.MaybeAdd(ctx, repl, now)
-				})
+			if changed {
+				repl.MaybeQueue(ctx, now)
 			}
 			return nil // more
 		},
@@ -2547,13 +2514,10 @@ func (s *Store) applyAllFromSpanConfigStore(ctx context.Context) {
 			return true // more
 		}
 
-		repl.SetSpanConfig(conf)
-		s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-			h.MaybeAdd(ctx, repl, now)
-		})
-		s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-			h.MaybeAdd(ctx, repl, now)
-		})
+		changed := repl.SetSpanConfig(conf)
+		if changed {
+			repl.MaybeQueue(replCtx, now)
+		}
 		return true // more
 	})
 }
