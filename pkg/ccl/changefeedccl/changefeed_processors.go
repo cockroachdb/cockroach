@@ -679,6 +679,10 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		return err
 	}
 
+	if advanced {
+		ca.sliMetrics.AggregatorProgress.Update(ca.frontier.Frontier().WallTime)
+	}
+
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
 	checkpointFrontier := advanced &&
@@ -1326,6 +1330,7 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 			cf.metrics.mu.resolved[cf.metricsID] = newResolved
 		}
 		cf.metrics.mu.Unlock()
+		cf.sliMetrics.CheckpointProgress.Update(newResolved.WallTime)
 
 		return cf.maybeEmitResolved(newResolved)
 	}
