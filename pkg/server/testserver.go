@@ -65,7 +65,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	addrutil "github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -584,18 +583,6 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	// it here.
 	if ts.params.DefaultTestTenant.TestTenantAlwaysDisabled() {
 		return nil
-	}
-
-	clusterID := ts.sqlServer.execCfg.NodeInfo.LogicalClusterID
-	if err := base.CheckEnterpriseEnabled(ts.st, clusterID(), "SQL servers"); err != nil {
-		log.Shoutf(ctx, severity.WARNING, "test tenant requested by configuration, but code organization prevents start!\n%v", err)
-		// If not enterprise enabled, we won't be able to use SQL Servers so eat
-		// the error and return without creating/starting a SQL server.
-		//
-		// TODO(knz/yahor): Remove this - as we discussed this ought to work
-		// now even when not enterprise enabled.
-		ts.params.DefaultTestTenant = base.TODOTestTenantDisabled
-		return nil // nolint:returnerrcheck
 	}
 
 	tempStorageConfig := base.DefaultTestTempStorageConfig(cluster.MakeTestingClusterSettings())
@@ -1378,7 +1365,7 @@ func (ts *testServer) StartTenant(
 
 	st.ExternalIODir = params.ExternalIODir
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
-	sqlCfg.TenantKVAddrs = []string{ts.AdvRPCAddr()}
+	sqlCfg.TenantLoopbackAddr = ts.AdvRPCAddr()
 	sqlCfg.ExternalIODirConfig = params.ExternalIODirConfig
 	if params.MemoryPoolSize != 0 {
 		sqlCfg.MemoryPoolSize = params.MemoryPoolSize

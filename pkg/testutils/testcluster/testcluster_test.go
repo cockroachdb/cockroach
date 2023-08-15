@@ -71,10 +71,11 @@ func TestManualReplication(t *testing.T) {
 	s2.ExecRowsAffected(t, 3, `DELETE FROM test`)
 
 	// Split the table to a new range.
-	kvDB := tc.Servers[0].DB()
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	ts := tc.Server(0).ApplicationLayer()
+	kvDB := ts.DB()
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, ts.Codec(), "t", "test")
 
-	tableStartKey := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.GetID()))
+	tableStartKey := ts.Codec().TablePrefix(uint32(tableDesc.GetID()))
 	leftRangeDesc, tableRangeDesc, err := tc.SplitRange(tableStartKey)
 	if err != nil {
 		t.Fatal(err)
