@@ -1048,16 +1048,7 @@ func (s *idProvider) ServerIdentityString(key serverident.ServerIdentificationKe
 		return cs
 
 	case serverident.IdentifyTenantID:
-		t := s.tenantStr.Load()
-		ts, ok := t.(string)
-		if !ok {
-			tid := s.tenantID
-			if tid.IsSet() {
-				ts = strconv.FormatUint(tid.ToUint64(), 10)
-				s.tenantStr.Store(ts)
-			}
-		}
-		return ts
+		return s.maybeMemoizeTenantID()
 
 	case serverident.IdentifyInstanceID:
 		// If tenantID is not set, this is a KV node and it has no SQL
@@ -1108,4 +1099,19 @@ func (s *idProvider) maybeMemoizeServerID() string {
 		}
 	}
 	return sis
+}
+
+// maybeMemoizeTenantID saves the representation of tenantID to
+// tenantStr if the former is initialized.
+func (s *idProvider) maybeMemoizeTenantID() string {
+	t := s.tenantStr.Load()
+	ts, ok := t.(string)
+	if !ok {
+		tid := s.tenantID
+		if tid.IsSet() {
+			ts = strconv.FormatUint(tid.ToUint64(), 10)
+			s.tenantStr.Store(ts)
+		}
+	}
+	return ts
 }
