@@ -779,6 +779,7 @@ func BenchmarkLogEntry_String(b *testing.B) {
 			ClusterID:     "fooo",
 			NodeID:        "10",
 			TenantID:      "12",
+			TenantName:    "vc42",
 			SQLInstanceID: "9",
 		},
 		ts:         timeutil.Now().UnixNano(),

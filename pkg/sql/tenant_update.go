@@ -264,6 +264,10 @@ func (p *planner) renameTenant(
 	}
 
 	if info.ServiceMode != mtinfopb.ServiceModeNone {
+		// No name changes while there is a service mode.
+		//
+		// If this is ever allowed, the logic to update the tenant name in
+		// logging output for tenant servers must be updated as well.
 		return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"cannot rename tenant in service mode %v", info.ServiceMode),
 			"Use ALTER VIRTUAL CLUSTER STOP SERVICE before renaming a tenant.")

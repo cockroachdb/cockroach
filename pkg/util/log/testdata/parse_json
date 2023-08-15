@@ -3,37 +3,37 @@ subtest json_fluent
 log format=json-fluent
 {"tag":"logtest.unknown","header":1,"timestamp":"1136214245.654321000","version":"v999.0.0","goroutine":11,"file":"util/log/format_json_test.go","line":123,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-fluent
 {"tag":"logtest.dev","channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-fluent
 {"tag":"logtest.dev","channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","cluster_id":"abc","node_id":123,"severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-fluent
 {"tag":"logtest.dev","channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","tenant_id":456,"instance_id":123,"severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"456"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"456", TenantName:""}
 
 log format=json-fluent
 {"tag":"logtest.dev","channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","version":"v999.0.0","severity_numeric":1,"severity":"INFO","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"event":{"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹hello›","NewDatabaseName":"‹world›"}}
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"{\"DatabaseName\":\"‹hello›\",\"EventType\":\"rename_database\",\"NewDatabaseName\":\"‹world›\",\"Timestamp\":123}", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x6c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"{\"DatabaseName\":\"‹hello›\",\"EventType\":\"rename_database\",\"NewDatabaseName\":\"‹world›\",\"Timestamp\":123}", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x6c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-fluent
 {"tag":"logtest.ops","channel_numeric":1,"channel":"OPS","timestamp":"1136214245.654321000","version":"v999.0.0","severity_numeric":2,"severity":"WARNING","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":0,"tags":{"noval":"","s":"1","long":"2"},"message":"hello world"}
 ----
-logpb.Entry{Severity:2, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"‹hello world›", Tags:"‹long=2,noval,s1›", Counter:0x0, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:2, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"‹hello world›", Tags:"‹long=2,noval,s1›", Counter:0x0, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-fluent
 {"tag":"logtest.health","channel_numeric":2,"channel":"HEALTH","timestamp":"1136214245.654321000","version":"v999.0.0","severity_numeric":3,"severity":"ERROR","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
 ----
-logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 subtest end
 
@@ -42,37 +42,42 @@ subtest json
 log format=json
 {"header":1,"timestamp":"1136214245.654321000","version":"v999.0.0","goroutine":11,"file":"util/log/format_json_test.go","line":123,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json
 {"channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json
 {"channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","cluster_id":"abc","node_id":123,"severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json
 {"channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","tenant_id":456,"instance_id":123,"severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"456"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"456", TenantName:""}
+
+log format=json
+{"channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","tenant_id":456,"tenant_name":"abc","instance_id":123,"severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
+----
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"456", TenantName:"abc"}
 
 log format=json
 {"channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","version":"v999.0.0","severity_numeric":1,"severity":"INFO","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"event":{"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹hello›","NewDatabaseName":"‹world›"}}
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"{\"DatabaseName\":\"‹hello›\",\"EventType\":\"rename_database\",\"NewDatabaseName\":\"‹world›\",\"Timestamp\":123}", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x6c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"{\"DatabaseName\":\"‹hello›\",\"EventType\":\"rename_database\",\"NewDatabaseName\":\"‹world›\",\"Timestamp\":123}", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x6c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json
 {"channel_numeric":1,"channel":"OPS","timestamp":"1136214245.654321000","version":"v999.0.0","severity_numeric":2,"severity":"WARNING","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":0,"tags":{"noval":"","s":"1","long":"2"},"message":"hello world"}
 ----
-logpb.Entry{Severity:2, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"‹hello world›", Tags:"‹long=2,noval,s1›", Counter:0x0, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:2, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"‹hello world›", Tags:"‹long=2,noval,s1›", Counter:0x0, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json
 {"channel_numeric":2,"channel":"HEALTH","timestamp":"1136214245.654321000","version":"v999.0.0","severity_numeric":3,"severity":"ERROR","goroutine":11,"file":"util/log/format_json_test.go","line":123,"entry_counter":0,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
 ----
-logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 subtest end
 
@@ -82,37 +87,42 @@ subtest json_fluent_compact
 log format=json-fluent-compact
 {"tag":"logtest.unknown","header":1,"t":"1136214245.654321000","v":"v999.0.0","g":11,"f":"util/log/format_json_test.go","l":123,"r":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-fluent-compact
 {"tag":"logtest.dev","c":0,"t":"1136214245.654321000","s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-fluent-compact
 {"tag":"logtest.dev","c":0,"t":"1136214245.654321000","x":"abc","N":123,"s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-fluent-compact
 {"tag":"logtest.dev","c":0,"t":"1136214245.654321000","T":456,"q":123,"s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"456"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"456", TenantName:""}
+
+log format=json-fluent-compact
+{"tag":"logtest.dev","c":0,"t":"1136214245.654321000","T":456,"V":"abc","q":123,"s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
+----
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"456", TenantName:"abc"}
 
 log format=json-fluent-compact
 {"tag":"logtest.dev","c":0,"t":"1136214245.654321000","v":"v999.0.0","s":1,"sev":"I","g":11,"f":"util/log/format_json_test.go","l":123,"n":0,"r":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"event":{"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹hello›","NewDatabaseName":"‹world›"}}
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"{\"DatabaseName\":\"‹hello›\",\"EventType\":\"rename_database\",\"NewDatabaseName\":\"‹world›\",\"Timestamp\":123}", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x6c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"{\"DatabaseName\":\"‹hello›\",\"EventType\":\"rename_database\",\"NewDatabaseName\":\"‹world›\",\"Timestamp\":123}", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x6c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-fluent-compact
 {"tag":"logtest.ops","c":1,"t":"1136214245.654321000","v":"v999.0.0","s":2,"sev":"W","g":11,"f":"util/log/format_json_test.go","l":123,"n":0,"r":0,"tags":{"noval":"","s":"1","long":"2"},"message":"hello world"}
 ----
-logpb.Entry{Severity:2, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"‹hello world›", Tags:"‹long=2,noval,s1›", Counter:0x0, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:2, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"‹hello world›", Tags:"‹long=2,noval,s1›", Counter:0x0, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-fluent-compact
 {"tag":"logtest.health","c":2,"t":"1136214245.654321000","v":"v999.0.0","s":3,"sev":"E","g":11,"f":"util/log/format_json_test.go","l":123,"n":0,"r":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
 ----
-logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 subtest end
 
@@ -121,36 +131,36 @@ subtest json_compact
 log format=json-fluent-compact
 {"header":1,"t":"1136214245.654321000","v":"v999.0.0","g":11,"f":"util/log/format_json_test.go","l":123,"r":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-compact
 {"c":0,"t":"1136214245.654321000","s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-compact
 {"c":0,"t":"1136214245.654321000","x":"abc","N":123,"s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-compact
 {"c":0,"t":"1136214245.654321000","T":456,"q":123,"s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
 ----
-logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"456"}
+logpb.Entry{Severity:0, Time:1136214245654321000, Goroutine:11, File:"", Line:123, Message:"‹›", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"456", TenantName:""}
 
 log format=json-compact
 {"c":0,"t":"1136214245.654321000","v":"v999.0.0","s":1,"sev":"I","g":11,"f":"util/log/format_json_test.go","l":123,"n":0,"r":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"event":{"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹hello›","NewDatabaseName":"‹world›"}}
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"{\"DatabaseName\":\"‹hello›\",\"EventType\":\"rename_database\",\"NewDatabaseName\":\"‹world›\",\"Timestamp\":123}", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x6c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"{\"DatabaseName\":\"‹hello›\",\"EventType\":\"rename_database\",\"NewDatabaseName\":\"‹world›\",\"Timestamp\":123}", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x6c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-compact
 {"c":1,"t":"1136214245.654321000","v":"v999.0.0","s":2,"sev":"W","g":11,"f":"util/log/format_json_test.go","l":123,"n":0,"r":0,"tags":{"noval":"","s":"1","long":"2"},"message":"hello world"}
 ----
-logpb.Entry{Severity:2, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"‹hello world›", Tags:"‹long=2,noval,s1›", Counter:0x0, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:2, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"‹hello world›", Tags:"‹long=2,noval,s1›", Counter:0x0, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log format=json-compact
 {"c":2,"t":"1136214245.654321000","v":"v999.0.0","s":3,"sev":"E","g":11,"f":"util/log/format_json_test.go","l":123,"n":0,"r":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
 ----
-logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_json_test.go", Line:123, Message:"hello ‹world›", Tags:"long=‹2›,noval,s‹1›", Counter:0x0, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 subtest end

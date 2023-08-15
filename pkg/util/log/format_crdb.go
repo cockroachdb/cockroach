@@ -19,9 +19,13 @@ import (
 	"github.com/cockroachdb/ttycolor"
 )
 
-// TenantIDLogTagKey is the log tag key used when tagging
+// tenantIDLogTagKey is the log tag key used when tagging
 // log entries with a tenant ID.
-const TenantIDLogTagKey = 'T'
+const tenantIDLogTagKey = 'T'
+
+// tenantNameLogTagKey is the log tag key used when tagging
+// log entries with a tenant name.
+const tenantNameLogTagKey = 'V'
 
 const severityChar = "IWEF"
 
