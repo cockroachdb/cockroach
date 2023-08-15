@@ -1791,14 +1791,16 @@ func (l *lockState) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.
 	}
 	for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
 		qg := e.Value.(*queuedGuard)
-		g := qg.guard
-		g.mu.Lock()
-		waitDuration := now.Sub(g.mu.curLockWaitStart)
-		totalWaitDuration += waitDuration
-		if waitDuration > maxWaitDuration {
-			maxWaitDuration = waitDuration
+		if qg.active {
+			g := qg.guard
+			g.mu.Lock()
+			waitDuration := now.Sub(g.mu.curLockWaitStart)
+			totalWaitDuration += waitDuration
+			if waitDuration > maxWaitDuration {
+				maxWaitDuration = waitDuration
+			}
+			g.mu.Unlock()
 		}
-		g.mu.Unlock()
 	}
 	return totalWaitDuration, maxWaitDuration
 }
