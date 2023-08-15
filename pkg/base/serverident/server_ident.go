@@ -69,7 +69,7 @@ type IDPayload struct {
 	// the correlation of panic reports with self-reported log files.
 	ClusterID string
 	// the node ID is reported like the cluster ID, for the same reasons.
-	// We avoid using roahcpb.NodeID to avoid a circular reference.
+	// We avoid using roachpb.NodeID to avoid a circular reference.
 	NodeID string
 	// ditto for the tenant ID.
 	TenantID string
