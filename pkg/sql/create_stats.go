@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -97,43 +98,29 @@ type createStatsNode struct {
 	// If it is false, the flow for create statistics is planned directly; this
 	// is used when the statement is under EXPLAIN or EXPLAIN ANALYZE.
 	runAsJob bool
-
-	run createStatsRun
 }
 
 // createStatsRun contains the run-time state of createStatsNode during local
 // execution.
 type createStatsRun struct {
-	errCh chan error
+	ctxGroup ctxgroup.Group
 }
 
 func (n *createStatsNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("stats"))
-	n.run.errCh = make(chan error)
-	go func() {
-		err := n.startJob(params.ctx)
-		select {
-		case <-params.ctx.Done():
-		case n.run.errCh <- err:
-		}
-		close(n.run.errCh)
-	}()
 	return nil
 }
 
 func (n *createStatsNode) Next(params runParams) (bool, error) {
-	select {
-	case <-params.ctx.Done():
-		return false, params.ctx.Err()
-	case err := <-n.run.errCh:
-		return false, err
-	}
+	return false, n.startJob(params.ctx)
 }
 
 func (*createStatsNode) Close(context.Context) {}
 func (*createStatsNode) Values() tree.Datums   { return nil }
 
-// startJob starts a CreateStats job to plan and execute statistics creation.
+// startJob starts a CreateStats job synchronously to plan and execute
+// statistics creation, and a go routine is started via ctx group,
+// which the caller must wait for afterwards (within createStatsNode).
 func (n *createStatsNode) startJob(ctx context.Context) error {
 	record, err := n.makeJobRecord(ctx)
 	if err != nil {
@@ -167,8 +154,7 @@ func (n *createStatsNode) startJob(ctx context.Context) error {
 	if err := job.Start(ctx); err != nil {
 		return err
 	}
-
-	if err := job.AwaitCompletion(ctx); err != nil {
+	if err = job.AwaitCompletion(ctx); err != nil {
 		if errors.Is(err, stats.ConcurrentCreateStatsError) {
 			// Delete the job so users don't see it and get confused by the error.
 			const stmt = `DELETE FROM system.jobs WHERE id = $1`
@@ -178,9 +164,8 @@ func (n *createStatsNode) startJob(ctx context.Context) error {
 				log.Warningf(ctx, "failed to delete job: %v", delErr)
 			}
 		}
-		return err
 	}
-	return nil
+	return err
 }
 
 // makeJobRecord creates a CreateStats job record which can be used to plan and
