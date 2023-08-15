@@ -867,9 +867,25 @@ func (t *testTenant) DistSenderI() interface{} {
 	return t.sql.execCfg.DistSender
 }
 
+// NodeDescStoreI is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) NodeDescStoreI() interface{} {
+	return t.sql.execCfg.DistSQLPlanner.NodeDescStore()
+}
+
 // InternalDB is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) InternalDB() interface{} {
 	return t.sql.internalDB
+}
+
+// Locality is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) Locality() roachpb.Locality {
+	return t.Cfg.Locality
+}
+
+// DistSQLPlanningNodeID is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) DistSQLPlanningNodeID() roachpb.NodeID {
+	// See comments on replicaoracle.Config.
+	return 0
 }
 
 // LeaseManager is part of the serverutils.ApplicationLayerInterface.
@@ -1670,9 +1686,19 @@ func (ts *testServer) MustGetSQLNetworkCounter(name string) int64 {
 	return mustGetSQLCounterForRegistry(reg, name)
 }
 
-// Locality is part of the serverutils.StorageLayerInterface.
-func (ts *testServer) Locality() *roachpb.Locality {
+// LocalityRef is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) LocalityRef() *roachpb.Locality {
 	return &ts.cfg.Locality
+}
+
+// Locality is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) Locality() roachpb.Locality {
+	return ts.cfg.Locality
+}
+
+// DistSQLPlanningNodeID is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) DistSQLPlanningNodeID() roachpb.NodeID {
+	return ts.NodeID()
 }
 
 // LeaseManager is part of the serverutils.ApplicationLayerInterface.
@@ -1698,6 +1724,11 @@ func (ts *testServer) GetNode() *Node {
 // DistSenderI is part of DistSenderInterface.
 func (ts *testServer) DistSenderI() interface{} {
 	return ts.distSender
+}
+
+// NodeDescStoreI is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) NodeDescStoreI() interface{} {
+	return ts.sqlServer.execCfg.DistSQLPlanner.NodeDescStore()
 }
 
 // MigrationServer is part of the serverutils.ApplicationLayerInterface.
