@@ -418,6 +418,120 @@ func TestToJSONAsChangefeed(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
+func TestChangefeedProgressMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Verify the aggmetric functional gauges work correctly
+	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
+		defaultSLI, err := metrics.getSLIMetrics(defaultSLIScope)
+		require.NoError(t, err)
+		sliA, err := metrics.getSLIMetrics("scope_a")
+		require.NoError(t, err)
+		sliB, err := metrics.getSLIMetrics("scope_b")
+		require.NoError(t, err)
+
+		defaultSLI.mu.checkpoint[5] = hlc.Timestamp{WallTime: 1}
+
+		sliA.mu.checkpoint[1] = hlc.Timestamp{WallTime: 2}
+		sliA.mu.checkpoint[2] = hlc.Timestamp{WallTime: 5}
+
+		sliB.mu.checkpoint[1] = hlc.Timestamp{WallTime: 4}
+		sliB.mu.checkpoint[2] = hlc.Timestamp{WallTime: 9}
+
+		// Ensure each scope gets the correct value
+		require.Equal(t, int64(1), defaultSLI.CheckpointProgress.Value())
+		require.Equal(t, int64(2), sliA.CheckpointProgress.Value())
+		require.Equal(t, int64(4), sliB.CheckpointProgress.Value())
+
+		// Ensure the value progresses upon changefeed progress
+		defaultSLI.mu.checkpoint[5] = hlc.Timestamp{WallTime: 20}
+		require.Equal(t, int64(20), defaultSLI.CheckpointProgress.Value())
+
+		// Ensure the value updates correctly upon changefeeds completing
+		delete(sliB.mu.checkpoint, 1)
+		require.Equal(t, int64(9), sliB.CheckpointProgress.Value())
+		delete(sliB.mu.checkpoint, 2)
+		require.Equal(t, int64(0), sliB.CheckpointProgress.Value())
+
+		// Ensure the aggregate value is correct after progress / completion
+		require.Equal(t, int64(2), metrics.AggMetrics.CheckpointProgress.Value())
+		sliA.mu.checkpoint[1] = hlc.Timestamp{WallTime: 30}
+		require.Equal(t, int64(5), metrics.AggMetrics.CheckpointProgress.Value())
+		delete(sliA.mu.checkpoint, 2)
+		require.Equal(t, int64(20), metrics.AggMetrics.CheckpointProgress.Value())
+		delete(defaultSLI.mu.checkpoint, 5)
+		require.Equal(t, int64(30), metrics.AggMetrics.CheckpointProgress.Value())
+		delete(sliA.mu.checkpoint, 1)
+		require.Equal(t, int64(0), metrics.AggMetrics.CheckpointProgress.Value())
+	})
+
+	// Verify that a changefeed updates the timestamps as it progresses
+	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		fooA := feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='label_a', resolved='100ms'`)
+
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
+		sliA, err := metrics.getSLIMetrics("label_a")
+		require.NoError(t, err)
+
+		// Verify that aggregator_progress has recurring updates
+		var lastTimestamp int64 = 0
+		for i := 0; i < 3; i++ {
+			testutils.SucceedsSoon(t, func() error {
+				progress := sliA.AggregatorProgress.Value()
+				if progress > lastTimestamp {
+					lastTimestamp = progress
+					return nil
+				}
+				return errors.Newf("waiting for aggregator_progress to advance from %d (value=%d)", lastTimestamp, progress)
+			})
+		}
+
+		// Verify that checkpoint_progress has recurring updates
+		for i := 0; i < 3; i++ {
+			testutils.SucceedsSoon(t, func() error {
+				progress := sliA.CheckpointProgress.Value()
+				if progress > lastTimestamp {
+					lastTimestamp = progress
+					return nil
+				}
+				return errors.Newf("waiting for checkpoint_progress to advance from %d (value=%d)", lastTimestamp, progress)
+			})
+		}
+
+		sliB, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics("label_b")
+		require.Equal(t, int64(0), sliB.AggregatorProgress.Value())
+		fooB := feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='label_b', resolved='100ms'`)
+		defer closeFeed(t, fooB)
+		require.NoError(t, err)
+		// Verify that aggregator_progress has recurring updates
+		testutils.SucceedsSoon(t, func() error {
+			progress := sliB.AggregatorProgress.Value()
+			if progress > 0 {
+				return nil
+			}
+			return errors.Newf("waiting for second aggregator_progress to advance (value=%d)", progress)
+		})
+
+		closeFeed(t, fooA)
+		testutils.SucceedsSoon(t, func() error {
+			aggregatorProgress := sliA.AggregatorProgress.Value()
+			checkpointProgress := sliA.CheckpointProgress.Value()
+			if aggregatorProgress == 0 && checkpointProgress == 0 {
+				return nil
+			}
+			return errors.Newf("waiting for progress metrics to be 0 (ap=%d, cp=%d)", aggregatorProgress, checkpointProgress)
+		})
+
+	})
+}
+
 func TestChangefeedIdleness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

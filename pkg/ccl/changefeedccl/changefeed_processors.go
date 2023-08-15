@@ -98,6 +98,7 @@ type changeAggregator struct {
 
 	metrics                *Metrics
 	sliMetrics             *sliMetrics
+	sliMetricsID           int
 	closeTelemetryRecorder func()
 	knobs                  TestingKnobs
 }
@@ -271,6 +272,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
+	ca.sliMetricsID = ca.sliMetrics.claimId()
 
 	// TODO(jayant): add support for sinkless changefeeds using UUID
 	recorder := metricsRecorder(ca.sliMetrics)
@@ -520,6 +522,9 @@ func (ca *changeAggregator) close() {
 		// Best effort: context is often cancel by now, so we expect to see an error
 		_ = ca.sink.Close()
 	}
+
+	ca.closeMetrics()
+
 	ca.memAcc.Close(ca.Ctx())
 	if ca.kvFeedMemMon != nil {
 		ca.kvFeedMemMon.Stop(ca.Ctx())
@@ -679,6 +684,11 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		return err
 	}
 
+	// The resolved sliMetric data backs the aggregator_progress metric
+	if advanced && ca.sliMetricsID != -1 {
+		ca.sliMetrics.setResolved(ca.sliMetricsID, ca.frontier.Frontier())
+	}
+
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
 	checkpointFrontier := advanced &&
@@ -760,6 +770,13 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 	return nil
 }
 
+// closeMetrics de-registers the aggregator from the sliMetrics registry so that
+// it's no longer considered by the aggregator_progress gauge
+func (ca *changeAggregator) closeMetrics() {
+	ca.sliMetrics.clearId(ca.sliMetricsID)
+	ca.sliMetricsID = -1
+}
+
 // ConsumerClosed is part of the RowSource interface.
 func (ca *changeAggregator) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
@@ -831,9 +848,12 @@ type changeFrontier struct {
 	// metrics are monitoring counters shared between all changefeeds.
 	metrics    *Metrics
 	sliMetrics *sliMetrics
-	// metricsID is used as the unique id of this changefeed in the
-	// metrics.MaxBehindNanos map.
-	metricsID int
+
+	// sliMetricsID and metricsID uniquely identify the changefeed in the metrics's
+	// map (a shared struct across all changefeeds on the node) and the sliMetrics's
+	// map (shared structure between all feeds within the same scope on the node).
+	metricsID    int
+	sliMetricsID int
 
 	knobs TestingKnobs
 }
@@ -1144,6 +1164,9 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	cf.metrics.mu.id++
 	sli.RunningCount.Inc(1)
 	cf.metrics.mu.Unlock()
+
+	cf.sliMetricsID = cf.sliMetrics.claimId()
+
 	// TODO(dan): It's very important that we de-register from the metric because
 	// if we orphan an entry in there, our monitoring will lie (say the changefeed
 	// is behind when it may not be). We call this in `close` but that doesn't
@@ -1183,6 +1206,9 @@ func (cf *changeFrontier) closeMetrics() {
 	delete(cf.metrics.mu.resolved, cf.metricsID)
 	cf.metricsID = -1
 	cf.metrics.mu.Unlock()
+
+	cf.sliMetrics.clearId(cf.sliMetricsID)
+	cf.sliMetricsID = -1
 }
 
 // Next is part of the RowSource interface.
@@ -1321,6 +1347,15 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 		// Keeping this after the checkpointJobProgress call will avoid
 		// some duplicates if a restart happens.
 		newResolved := cf.frontier.Frontier()
+
+		// The feed's checkpoint is tracked in a map which is used to inform the
+		// checkpoint_progress metric which will return the lowest timestamp across
+		// all feeds in the scope.
+		if cf.sliMetricsID != -1 {
+			cf.sliMetrics.setCheckpoint(cf.sliMetricsID, newResolved)
+		}
+
+		// This backs max_behind_nanos which is deprecated in favor of checkpoint_progress
 		cf.metrics.mu.Lock()
 		if cf.metricsID != -1 {
 			cf.metrics.mu.resolved[cf.metricsID] = newResolved
