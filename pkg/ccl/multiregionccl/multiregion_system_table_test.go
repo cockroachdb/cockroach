@@ -55,7 +55,7 @@ func TestMrSystemDatabase(t *testing.T) {
 	tenantArgs := base.TestTenantArgs{
 		Settings: cs,
 		TenantID: id,
-		Locality: *cluster.Servers[0].Locality(),
+		Locality: cluster.Servers[0].Locality(),
 	}
 	_, tenantSQL := serverutils.StartTenant(t, cluster.Servers[0], tenantArgs)
 
