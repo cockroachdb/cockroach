@@ -90,7 +90,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 		s3.DistSenderI().(*kvcoord.DistSender),
 		s3.GossipI().(*gossip.Gossip),
 		s3.NodeID(),
-		*s3.Locality(),
+		s3.Locality(),
 		s3.Clock(),
 		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)
@@ -202,7 +202,7 @@ func TestSpanResolver(t *testing.T) {
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.GossipI().(*gossip.Gossip),
 		s.NodeID(),
-		*s.Locality(),
+		s.Locality(),
 		s.Clock(),
 		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)
@@ -301,7 +301,7 @@ func TestMixedDirections(t *testing.T) {
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.GossipI().(*gossip.Gossip),
 		s.NodeID(),
-		*s.Locality(),
+		s.Locality(),
 		s.Clock(),
 		nil, // rpcCtx
 		replicaoracle.BinPackingChoice)

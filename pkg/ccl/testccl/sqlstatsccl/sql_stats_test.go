@@ -120,7 +120,7 @@ func TestSQLStatsRegions(t *testing.T) {
 		_, tenantDb := serverutils.StartTenant(t, server, base.TestTenantArgs{
 			Settings: st,
 			TenantID: roachpb.MustMakeTenantID(11),
-			Locality: *server.Locality(),
+			Locality: server.Locality(),
 		})
 		tenantDbs = append(tenantDbs, tenantDb)
 	}
