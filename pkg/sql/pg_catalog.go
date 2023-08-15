@@ -3604,7 +3604,17 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 			h.writeUInt64(uint64(statisticsID))
 			statisticsOID := h.getOid()
 
-			tbl, err := p.Descriptors().ByIDWithLeased(p.Txn()).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
+			tbl, err := p.Descriptors().ByIDWithLeased(p.Txn()).Get().Table(ctx, descpb.ID(tableID))
+			if err != nil {
+				return err
+			}
+			canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, tbl, db, false /* allowAdding */)
+			if err != nil {
+				return err
+			}
+			if !canSeeDescriptor {
+				continue
+			}
 			if err != nil {
 				return err
 			}
