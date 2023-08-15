@@ -1032,11 +1032,6 @@ type idProvider struct {
 
 var _ serverident.ServerIdentificationPayload = (*idProvider)(nil)
 
-// TenantID is part of the serverident.ServerIdentificationPayload interface.
-func (s *idProvider) TenantID() interface{} {
-	return s.tenantID
-}
-
 // ServerIdentityString implements the serverident.ServerIdentificationPayload interface.
 func (s *idProvider) ServerIdentityString(key serverident.ServerIdentificationKey) string {
 	switch key {
