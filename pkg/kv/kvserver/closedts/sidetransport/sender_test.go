@@ -334,6 +334,7 @@ var _ ctpb.SideTransportServer = &mockReceiver{}
 func (s *mockReceiver) PushUpdates(stream ctpb.SideTransport_PushUpdatesServer) error {
 	s.mu.Lock()
 	s.mu.called = true
+	// nolint:deferunlock
 	s.mu.Unlock()
 	// Block the RPC until close() is called.
 	<-s.stop

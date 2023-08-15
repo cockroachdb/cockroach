@@ -3064,6 +3064,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
+	// nolint:deferunlock
 	ex.state.mu.RUnlock()
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionTransactionStarted, txnStart)

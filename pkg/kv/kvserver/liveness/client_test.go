@@ -271,6 +271,7 @@ func TestNodeLivenessDecommissionedCallback(t *testing.T) {
 						cb.m = map[roachpb.NodeID]bool{}
 					}
 					cb.m[id] = true
+					// nolint:deferunlock
 					cb.Unlock()
 				},
 			},
@@ -304,6 +305,7 @@ func TestNodeLivenessDecommissionedCallback(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			cb.Lock()
 			sl := pretty.Diff(map[roachpb.NodeID]bool{2: true}, cb.m)
+			// nolint:deferunlock
 			cb.Unlock()
 			if len(sl) > 0 {
 				return errors.Errorf("diff(exp,act) = %s", strings.Join(sl, "\n"))

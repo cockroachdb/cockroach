@@ -472,6 +472,7 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 	// Destroy the proposer. All producers and consumers should notice.
 	p.Lock()
 	p.ds.Set(dsErr, destroyReasonRemoved)
+	// nolint:deferunlock
 	p.Unlock()
 
 	require.Nil(t, g.Wait())

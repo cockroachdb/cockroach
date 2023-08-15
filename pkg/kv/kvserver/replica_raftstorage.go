@@ -237,6 +237,7 @@ func (r *Replica) GetSnapshot(
 	// the corresponding Raft command not applied yet).
 	r.raftMu.Lock()
 	snap := r.store.TODOEngine().NewSnapshot()
+	// nolint:deferunlock
 	r.raftMu.Unlock()
 
 	defer func() {
@@ -559,7 +560,9 @@ func (r *Replica) applySnapshot(
 		sr.mu.destroyStatus.Set(
 			kvpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
 			destroyReasonRemoved)
+		// nolint:deferunlock
 		sr.mu.Unlock()
+		// nolint:deferunlock
 		sr.readOnlyCmdMu.Unlock()
 
 		subsumedDescs = append(subsumedDescs, sr.Desc())
@@ -665,9 +668,11 @@ func (r *Replica) applySnapshot(
 	if isInitialSnap {
 		// NB: this will also call setDescLockedRaftMuLocked.
 		if err := r.initFromSnapshotLockedRaftMuLocked(ctx, desc); err != nil {
+			// nolint:deferunlock
 			r.mu.Unlock()
 			log.Fatalf(ctx, "unable to initialize replica while applying snapshot: %+v", err)
 		} else if err := r.store.markReplicaInitializedLockedReplLocked(ctx, r); err != nil {
+			// nolint:deferunlock
 			r.mu.Unlock()
 			log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
 		}
@@ -732,6 +737,7 @@ func (r *Replica) applySnapshot(
 	// across both Replica.mu critical sections.
 	r.mu.RLock()
 	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.TODOEngine())
+	// nolint:deferunlock
 	r.mu.RUnlock()
 
 	// The rangefeed processor is listening for the logical ops attached to

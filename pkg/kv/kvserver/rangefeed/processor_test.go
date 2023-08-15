@@ -1346,6 +1346,7 @@ func requireBudgetDrainedSoon(t *testing.T, p Processor, stream *consumer) {
 	testutils.SucceedsSoon(t, func() error {
 		processor.MemBudget.mu.Lock()
 		used := processor.MemBudget.mu.memBudget.Used()
+		// nolint:deferunlock
 		processor.MemBudget.mu.Unlock()
 		fmt.Printf("Budget used: %d bytes, %d events processed\n",
 			used, stream.Consumed())

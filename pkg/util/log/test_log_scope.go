@@ -112,15 +112,18 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 
 	logging.allSinkInfos.mu.Lock()
 	sc.previous.allSinkInfos = logging.allSinkInfos.mu.sinkInfos
+	// nolint:deferunlock
 	logging.allSinkInfos.mu.Unlock()
 	logging.allLoggers.mu.Lock()
 	sc.previous.allLoggers = logging.allLoggers.mu.loggers
+	// nolint:deferunlock
 	logging.allLoggers.mu.Unlock()
 
 	sc.previous.stderrSinkInfoTemplate = logging.stderrSinkInfoTemplate
 	logging.rmu.RLock()
 	sc.previous.stderrSinkInfo = logging.rmu.currentStderrSinkInfo
 	sc.previous.channels = logging.rmu.channels
+	// nolint:deferunlock
 	logging.rmu.RUnlock()
 	sc.previous.debugLog = debugLog
 	sc.previous.testingFd2CaptureLogger = logging.testingFd2CaptureLogger
@@ -139,6 +142,7 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 	logging.mu.Lock()
 	sc.previous.exitOverrideFn = logging.mu.exitOverride.f
 	sc.previous.exitOverrideHideStack = logging.mu.exitOverride.hideStack
+	// nolint:deferunlock
 	logging.mu.Unlock()
 
 	err := func() error {
@@ -445,13 +449,16 @@ func (l *TestLogScope) Close(t tShim) {
 	logging.mu.Lock()
 	logging.mu.exitOverride.f = l.previous.exitOverrideFn
 	logging.mu.exitOverride.hideStack = l.previous.exitOverrideHideStack
+	// nolint:deferunlock
 	logging.mu.Unlock()
 
 	logging.allSinkInfos.mu.Lock()
 	logging.allSinkInfos.mu.sinkInfos = l.previous.allSinkInfos
+	// nolint:deferunlock
 	logging.allSinkInfos.mu.Unlock()
 	logging.allLoggers.mu.Lock()
 	logging.allLoggers.mu.loggers = l.previous.allLoggers
+	// nolint:deferunlock
 	logging.allLoggers.mu.Unlock()
 
 	// Sanity check: if the restore logic is complete, the applied

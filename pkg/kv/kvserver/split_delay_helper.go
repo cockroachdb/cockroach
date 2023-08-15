@@ -44,6 +44,7 @@ func (sdh *splitDelayHelper) RaftStatus(ctx context.Context) (roachpb.RangeID, *
 			},
 		)
 	}
+	// nolint:deferunlock
 	r.mu.RUnlock()
 	return r.RangeID, raftStatus
 }

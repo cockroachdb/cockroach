@@ -71,6 +71,7 @@ func (r *Replica) Metrics(
 ) ReplicaMetrics {
 	r.store.unquiescedReplicas.Lock()
 	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
+	// nolint:deferunlock
 	r.store.unquiescedReplicas.Unlock()
 
 	latchMetrics := r.concMgr.LatchMetrics()

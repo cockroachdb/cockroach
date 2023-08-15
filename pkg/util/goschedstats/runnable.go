@@ -165,6 +165,7 @@ func init() {
 			t := <-ticker.C
 			callbackInfo.mu.Lock()
 			cbs := callbackInfo.cbs
+			// nolint:deferunlock
 			callbackInfo.mu.Unlock()
 			sst.getStatsOnTick(t, cbs, ticker)
 		}

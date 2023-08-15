@@ -150,6 +150,7 @@ func (b *blockingBuffer) pop() (e Event, ok bool, err error) {
 func (b *blockingBuffer) notifyOutOfQuota(canFlush bool) {
 	b.mu.Lock()
 	b.mu.canFlush = canFlush
+	// nolint:deferunlock
 	b.mu.Unlock()
 
 	if canFlush {
@@ -165,6 +166,7 @@ func (b *blockingBuffer) notifyOutOfQuota(canFlush bool) {
 func (b *blockingBuffer) producerBlocked() {
 	b.mu.Lock()
 	b.mu.numBlocked++
+	// nolint:deferunlock
 	b.mu.Unlock()
 }
 
@@ -183,6 +185,7 @@ func (b *blockingBuffer) quotaAcquiredAfterWait() {
 		// Clear out canFlush since we know that producers no longer blocked.
 		b.mu.canFlush = false
 	}
+	// nolint:deferunlock
 	b.mu.Unlock()
 }
 

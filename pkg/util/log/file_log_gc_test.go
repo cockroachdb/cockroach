@@ -92,6 +92,7 @@ func testLogGC(t *testing.T, fileSink *fileSink, logFn func(ctx context.Context,
 		logging.mu.Lock()
 		ret := logging.mu.disableDaemons
 		logging.mu.disableDaemons = val
+		// nolint:deferunlock
 		logging.mu.Unlock()
 		return ret
 	}

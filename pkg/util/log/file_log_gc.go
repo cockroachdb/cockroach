@@ -30,6 +30,7 @@ func (l *fileSink) gcDaemon(ctx context.Context) {
 
 		logging.mu.Lock()
 		doGC := !logging.mu.disableDaemons
+		// nolint:deferunlock
 		logging.mu.Unlock()
 
 		if doGC {

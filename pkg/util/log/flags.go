@@ -482,6 +482,7 @@ func (l *sinkInfo) describeAppliedConfig() (c logconfig.CommonSinkConfig) {
 		bufferedSink.mu.Lock()
 		maxBufferSize := logconfig.ByteSize(bufferedSink.mu.buf.maxSizeBytes)
 		c.Buffering.MaxBufferSize = &maxBufferSize
+		// nolint:deferunlock
 		bufferedSink.mu.Unlock()
 	}
 	return c
@@ -507,6 +508,7 @@ func DescribeAppliedConfig() string {
 		fs := logging.testingFd2CaptureLogger.sinkInfos[0].sink.(*fileSink)
 		fs.mu.Lock()
 		dir := fs.mu.logDir
+		// nolint:deferunlock
 		fs.mu.Unlock()
 		config.CaptureFd2.Dir = &dir
 		m := logconfig.ByteSize(fs.logFilesCombinedMaxSize)
@@ -532,6 +534,7 @@ func DescribeAppliedConfig() string {
 	logging.rmu.RLock()
 	chans := logging.rmu.channels
 	stderrSinkInfo := logging.rmu.currentStderrSinkInfo
+	// nolint:deferunlock
 	logging.rmu.RUnlock()
 	for ch, logger := range chans {
 		describeConnections(logger, ch,
@@ -558,6 +561,7 @@ func DescribeAppliedConfig() string {
 		fc.MaxGroupSize = &mg
 		fileSink.mu.Lock()
 		dir := fileSink.mu.logDir
+		// nolint:deferunlock
 		fileSink.mu.Unlock()
 		fc.Dir = &dir
 		fc.BufferedWrites = &fileSink.bufferedWrites

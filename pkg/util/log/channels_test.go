@@ -99,6 +99,7 @@ func TestRepro81025(t *testing.T) {
 	// our blocking sink.
 	logging.rmu.Lock()
 	logging.rmu.currentStderrSinkInfo.sink = s
+	// nolint:deferunlock
 	logging.rmu.Unlock()
 
 	// Hijack the exit func to ensure we don't exit during the test when seeing a
@@ -109,6 +110,7 @@ func TestRepro81025(t *testing.T) {
 		defer exitCode.mu.Unlock()
 		exitCode.mu.observedExitCode = &code
 	}
+	// nolint:deferunlock
 	logging.mu.Unlock()
 
 	// Force the first log file into existence so that we can wrap its buffer in
@@ -123,6 +125,7 @@ func TestRepro81025(t *testing.T) {
 		doneC:         make(chan struct{}),
 	}
 	s.mu.file = sb
+	// nolint:deferunlock
 	s.mu.Unlock()
 
 	listFiles := func() ([]string, error) {
@@ -198,6 +201,7 @@ func TestRepro81025(t *testing.T) {
 	// The fatal error eventually came through after the rotation was unblocked.
 	exitCode.mu.Lock()
 	require.Equal(t, exit.FatalError(), *exitCode.mu.observedExitCode)
+	// nolint:deferunlock
 	exitCode.mu.Unlock()
 
 	// Three files now, as the first one was rotated.

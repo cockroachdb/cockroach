@@ -131,6 +131,7 @@ func ListLogFiles() (logFiles []logpb.FileInfo, err error) {
 	err = logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
 		l.mu.Lock()
 		thisLogDir := l.mu.logDir
+		// nolint:deferunlock
 		l.mu.Unlock()
 		if !l.enabled.Get() || thisLogDir == "" {
 			// This file sink is detached from file storage.
@@ -155,6 +156,7 @@ func (l *fileSink) listLogFiles() (string, []logpb.FileInfo, error) {
 	var results []logpb.FileInfo
 	l.mu.Lock()
 	dir := l.mu.logDir
+	// nolint:deferunlock
 	l.mu.Unlock()
 	if dir == "" {
 		// No log directory configured: simply indicate that there are no

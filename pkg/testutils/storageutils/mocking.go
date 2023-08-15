@@ -73,6 +73,7 @@ func (c *ReplayProtectionFilterWrapper) run(args kvserverbase.FilterArgs) *kvpb.
 
 	c.Lock()
 	if pErr, ok := c.processedCommands[mapKey]; ok {
+		// nolint:deferunlock
 		c.Unlock()
 		return shallowCloneErrorWithTxn(pErr)
 	}

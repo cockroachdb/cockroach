@@ -111,6 +111,7 @@ func (bic *batchInfoCollector) Init(ctx context.Context) {
 	// If we got here, then Init above succeeded, so the wrapped operator has
 	// been properly initialized.
 	bic.mu.initialized = true
+	// nolint:deferunlock
 	bic.mu.Unlock()
 }
 
@@ -132,6 +133,7 @@ func (bic *batchInfoCollector) Next() coldata.Batch {
 		bic.mu.Lock()
 		bic.mu.numBatches++
 		bic.mu.numTuples += uint64(bic.batch.Length())
+		// nolint:deferunlock
 		bic.mu.Unlock()
 	}
 	return bic.batch

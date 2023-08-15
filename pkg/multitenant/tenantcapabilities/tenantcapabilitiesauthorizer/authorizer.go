@@ -369,6 +369,7 @@ func (a *Authorizer) getMode(
 	if selectedMode == authorizerModeOn {
 		a.Lock()
 		reader := a.capabilitiesReader
+		// nolint:deferunlock
 		a.Unlock()
 		if reader == nil {
 			// The server has started but the reader hasn't started/bound

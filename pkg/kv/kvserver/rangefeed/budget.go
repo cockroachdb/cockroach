@@ -212,12 +212,14 @@ func (f *FeedBudget) WaitAndGet(
 func (f *FeedBudget) returnAllocation(ctx context.Context, amount int64) {
 	f.mu.Lock()
 	if f.mu.closed {
+		// nolint:deferunlock
 		f.mu.Unlock()
 		return
 	}
 	if amount > 0 {
 		f.mu.memBudget.Shrink(ctx, amount)
 	}
+	// nolint:deferunlock
 	f.mu.Unlock()
 	select {
 	case f.replenishC <- struct{}{}:
@@ -236,6 +238,7 @@ func (f *FeedBudget) Close(ctx context.Context) {
 		f.mu.closed = true
 		f.mu.memBudget.Close(ctx)
 		close(f.stopC)
+		// nolint:deferunlock
 		f.mu.Unlock()
 	})
 }

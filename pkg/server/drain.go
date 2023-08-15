@@ -292,6 +292,7 @@ func (s *drainServer) runDrain(
 		if howMany > 0 {
 			mu.Lock()
 			reports[what] += howMany
+			// nolint:deferunlock
 			mu.Unlock()
 		}
 	}

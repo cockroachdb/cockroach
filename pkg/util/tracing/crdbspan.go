@@ -590,6 +590,7 @@ func (s *crdbSpan) finish() bool {
 			// Already finished (or at least in the process of finish()ing). This
 			// check ensures that only one caller performs cleanup for this span. We
 			// don't want the span to be re-allocated while finish() is running.
+			// nolint:deferunlock
 			s.mu.Unlock()
 			return false
 		}
@@ -984,6 +985,7 @@ func (s *crdbSpan) notifyEventListeners(item Structured) {
 	var unlocked bool
 	defer func() {
 		if !unlocked {
+			// nolint:deferunlock
 			s.mu.Unlock()
 		}
 	}()
@@ -1098,6 +1100,7 @@ func (s *crdbSpan) appendStructuredEventsRecursivelyLocked(
 			sp := c.span()
 			sp.mu.Lock()
 			buffer = sp.appendStructuredEventsRecursivelyLocked(buffer, includeDetachedChildren)
+			// nolint:deferunlock
 			sp.mu.Unlock()
 		}
 	}
@@ -1137,6 +1140,7 @@ func (s *crdbSpan) getChildrenMetadataRecursivelyLocked(
 			sp.mu.Lock()
 			sp.getChildrenMetadataRecursivelyLocked(childrenMetadata,
 				true /*includeRootMetadata */, includeDetachedChildren)
+			// nolint:deferunlock
 			sp.mu.Unlock()
 		}
 	}

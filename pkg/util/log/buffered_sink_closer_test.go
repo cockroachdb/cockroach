@@ -72,12 +72,14 @@ func TestBufferSinkDone(t *testing.T) {
 
 		closer.mu.Lock()
 		assert.Len(t, closer.mu.sinkRegistry, 1, "expected sink registry to include registered bufferedSink")
+		// nolint:deferunlock
 		closer.mu.Unlock()
 
 		closer.bufferedSinkDone(bs)
 
 		closer.mu.Lock()
 		assert.Empty(t, closer.mu.sinkRegistry, "expected sink registry to be empty")
+		// nolint:deferunlock
 		closer.mu.Unlock()
 
 		require.NoError(t, closer.Close(time.Second /* timeout */), "bufferedSinkCloser timed out unexpectedly")
@@ -94,6 +96,7 @@ func TestBufferSinkDone(t *testing.T) {
 		_, ok := closer.mu.sinkRegistry[bs1]
 		assert.Len(t, closer.mu.sinkRegistry, 1, "length of bufferSink registry larger than expected")
 		assert.True(t, ok, "expected bufferSink to be in registry")
+		// nolint:deferunlock
 		closer.mu.Unlock()
 
 		require.Panics(t, func() {

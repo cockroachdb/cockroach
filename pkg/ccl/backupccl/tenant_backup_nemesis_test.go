@@ -428,6 +428,7 @@ func (r *randomBackupNemesis) Stop() {
 func (r *randomBackupNemesis) TablesToCheck() []string {
 	r.mu.Lock()
 	ret := append([]string(nil), r.mu.tablesToCheck...)
+	// nolint:deferunlock
 	r.mu.Unlock()
 	return ret
 }
@@ -435,6 +436,7 @@ func (r *randomBackupNemesis) TablesToCheck() []string {
 func (r *randomBackupNemesis) addTable(name string) {
 	r.mu.Lock()
 	r.mu.tablesToCheck = append(r.mu.tablesToCheck, name)
+	// nolint:deferunlock
 	r.mu.Unlock()
 }
 

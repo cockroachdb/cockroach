@@ -311,6 +311,7 @@ func New(
 	// Add ourselves as a node descriptor watcher.
 	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeDescPrefix), g.updateNodeAddress)
 	g.mu.is.registerCallback(MakePrefixPattern(KeyStoreDescPrefix), g.updateStoreMap)
+	// nolint:deferunlock
 	g.mu.Unlock()
 
 	return g
@@ -551,6 +552,7 @@ func (g *Gossip) LogStatus() {
 	if g.mu.is.getInfo(KeySentinel) == nil {
 		status = redact.SafeString("stalled")
 	}
+	// nolint:deferunlock
 	g.mu.RUnlock()
 
 	ctx := g.AnnotateCtx(context.TODO())
@@ -945,6 +947,7 @@ func (g *Gossip) GetClusterID() (uuid.UUID, error) {
 func (g *Gossip) GetInfo(key string) ([]byte, error) {
 	g.mu.RLock()
 	i := g.mu.is.getInfo(key)
+	// nolint:deferunlock
 	g.mu.RUnlock()
 
 	if i != nil {
@@ -1009,6 +1012,7 @@ func (g *Gossip) tryClearInfoWithTTL(key string, ttl time.Duration) (bool, error
 func (g *Gossip) InfoOriginatedHere(key string) bool {
 	g.mu.RLock()
 	info := g.mu.is.getInfo(key)
+	// nolint:deferunlock
 	g.mu.RUnlock()
 	return info != nil && info.NodeID == g.NodeID.Get()
 }
@@ -1072,10 +1076,12 @@ var Redundant redundantCallbacks
 func (g *Gossip) RegisterCallback(pattern string, method Callback, opts ...CallbackOption) func() {
 	g.mu.Lock()
 	unregister := g.mu.is.registerCallback(pattern, method, opts...)
+	// nolint:deferunlock
 	g.mu.Unlock()
 	return func() {
 		g.mu.Lock()
 		unregister()
+		// nolint:deferunlock
 		g.mu.Unlock()
 	}
 }
@@ -1316,6 +1322,7 @@ func (g *Gossip) manage(rpcContext *rpc.Context) {
 							if log.V(1) {
 								g.clientsMu.Lock()
 								log.Dev.Infof(ctx, "couldn't find least useful client among %+v", g.clientsMu.clients)
+								// nolint:deferunlock
 								g.clientsMu.Unlock()
 							}
 						}
@@ -1328,6 +1335,7 @@ func (g *Gossip) manage(rpcContext *rpc.Context) {
 
 				g.mu.Lock()
 				g.maybeSignalStatusChangeLocked()
+				// nolint:deferunlock
 				g.mu.Unlock()
 			}
 		}

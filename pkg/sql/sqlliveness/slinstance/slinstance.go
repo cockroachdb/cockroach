@@ -176,6 +176,7 @@ func (l *Instance) setSession(s *session) {
 	// Notify all calls to Session that a non-nil session is available.
 	close(l.mu.blockCh)
 	l.mu.blockCh = nil
+	// nolint:deferunlock
 	l.mu.Unlock()
 }
 
@@ -353,6 +354,7 @@ func (l *Instance) heartbeatLoopInner(ctx context.Context) error {
 			var s *session
 			l.mu.Lock()
 			s = l.mu.s
+			// nolint:deferunlock
 			l.mu.Unlock()
 
 			// If we don't currently have a session, create one.

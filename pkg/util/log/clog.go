@@ -304,6 +304,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 			}
 			exitFunc = logging.mu.exitOverride.f
 		}
+		// nolint:deferunlock
 		logging.mu.Unlock()
 		exitCalled := make(chan struct{})
 

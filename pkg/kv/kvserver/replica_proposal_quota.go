@@ -39,6 +39,7 @@ func (r *Replica) maybeAcquireProposalQuota(
 	r.mu.RLock()
 	quotaPool := r.mu.proposalQuota
 	desc := *r.mu.state.Desc
+	// nolint:deferunlock
 	r.mu.RUnlock()
 
 	// Quota acquisition only takes place on the leader replica,

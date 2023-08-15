@@ -112,6 +112,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		KeyBytes: 2,
 		ValBytes: 4,
 	}
+	// nolint:deferunlock
 	replica.mu.Unlock()
 	replica.loadStats = load.NewReplicaLoad(clock, nil)
 	for _, store := range stores {

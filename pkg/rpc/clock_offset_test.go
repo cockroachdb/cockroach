@@ -50,6 +50,7 @@ func TestUpdateOffset(t *testing.T) {
 	} else if o != offset1 {
 		t.Errorf("expected offset %v, instead %v", offset1, o)
 	}
+	// nolint:deferunlock
 	monitor.mu.Unlock()
 
 	// Case 2: The old offset for addr is stale.
@@ -65,6 +66,7 @@ func TestUpdateOffset(t *testing.T) {
 	} else if o != offset2 {
 		t.Errorf("expected offset %v, instead %v", offset2, o)
 	}
+	// nolint:deferunlock
 	monitor.mu.Unlock()
 
 	// Case 3: The new offset's error is smaller.
@@ -80,6 +82,7 @@ func TestUpdateOffset(t *testing.T) {
 	} else if o != offset3 {
 		t.Errorf("expected offset %v, instead %v", offset3, o)
 	}
+	// nolint:deferunlock
 	monitor.mu.Unlock()
 
 	// Larger error and offset3 is not stale, so no update.
@@ -90,6 +93,7 @@ func TestUpdateOffset(t *testing.T) {
 	} else if o != offset3 {
 		t.Errorf("expected offset %v, instead %v", offset3, o)
 	}
+	// nolint:deferunlock
 	monitor.mu.Unlock()
 }
 

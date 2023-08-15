@@ -107,6 +107,7 @@ func (c *vmoduleConfig) vDepth(l Level, depth int) bool {
 		if !ok {
 			v = c.setV(pcs)
 		}
+		// nolint:deferunlock
 		c.mu.Unlock()
 		c.pcsPool.Put(poolObj)
 		return v >= l

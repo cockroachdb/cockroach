@@ -203,9 +203,11 @@ func (c *Cache) Clear(id roachpb.RangeID, hi kvpb.RaftIndex) {
 	c.mu.Lock()
 	p := c.getPartLocked(id, false /* create */, false /* recordUse */)
 	if p == nil {
+		// nolint:deferunlock
 		c.mu.Unlock()
 		return
 	}
+	// nolint:deferunlock
 	c.mu.Unlock()
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -219,6 +221,7 @@ func (c *Cache) Get(id roachpb.RangeID, idx kvpb.RaftIndex) (e raftpb.Entry, ok 
 	c.metrics.Accesses.Inc(1)
 	c.mu.Lock()
 	p := c.getPartLocked(id, false /* create */, true /* recordUse */)
+	// nolint:deferunlock
 	c.mu.Unlock()
 	if p == nil {
 		return e, false
@@ -245,6 +248,7 @@ func (c *Cache) Scan(
 	c.metrics.Accesses.Inc(1)
 	c.mu.Lock()
 	p := c.getPartLocked(id, false /* create */, true /* recordUse */)
+	// nolint:deferunlock
 	c.mu.Unlock()
 	if p == nil {
 		return ents, 0, lo, false

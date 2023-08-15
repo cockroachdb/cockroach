@@ -176,6 +176,7 @@ func (s *TestDirectoryServer) WatchPods(
 	c := make(chan *tenant.WatchPodsResponse, 10)
 	s.mu.Lock()
 	elem := s.mu.eventListeners.PushBack(c)
+	// nolint:deferunlock
 	s.mu.Unlock()
 	err := s.stopper.RunTask(context.Background(), "watch-pods-server",
 		func(ctx context.Context) {
@@ -190,6 +191,7 @@ func (s *TestDirectoryServer) WatchPods(
 						s.mu.Lock()
 						s.mu.eventListeners.Remove(elem)
 						close(c)
+						// nolint:deferunlock
 						s.mu.Unlock()
 						break out
 					}
@@ -197,6 +199,7 @@ func (s *TestDirectoryServer) WatchPods(
 					s.mu.Lock()
 					s.mu.eventListeners.Remove(elem)
 					close(c)
+					// nolint:deferunlock
 					s.mu.Unlock()
 					break out
 				}

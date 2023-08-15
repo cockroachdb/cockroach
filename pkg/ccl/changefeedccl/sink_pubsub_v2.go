@@ -142,9 +142,11 @@ func (sc *pubsubSinkClient) maybeCreateTopic(topic string) error {
 	sc.mu.RLock()
 	_, ok := sc.mu.topicCache[topic]
 	if ok {
+		// nolint:deferunlock
 		sc.mu.RUnlock()
 		return nil
 	}
+	// nolint:deferunlock
 	sc.mu.RUnlock()
 	sc.mu.Lock()
 	defer sc.mu.Unlock()

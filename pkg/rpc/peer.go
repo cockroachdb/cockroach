@@ -232,6 +232,7 @@ func (p *peer) launch(ctx context.Context, report func(error), done func()) {
 	// to not hold the lock.
 	p.mu.Lock()
 	_ = 0 // bypass empty crit section lint
+	// nolint:deferunlock
 	p.mu.Unlock()
 
 	taskName := fmt.Sprintf("conn to n%d@%s/%s", p.k.NodeID, p.k.TargetAddr, p.k.Class)
@@ -302,6 +303,7 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 
 		p.mu.Lock()
 		p.mu.c = newConnectionToNodeID(p.k, p.mu.c.breakerSignalFn)
+		// nolint:deferunlock
 		p.mu.Unlock()
 
 		if p.snap().deleteAfter != 0 {
@@ -812,6 +814,7 @@ func touchOldPeers(peers *peerMap, now time.Time) {
 			sigs = append(sigs, p.b.Signal())
 		}
 	}
+	// nolint:deferunlock
 	peers.mu.RUnlock()
 
 	// Now, outside of the lock, query all of the collected Signals which will tip

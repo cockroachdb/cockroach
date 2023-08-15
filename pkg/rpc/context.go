@@ -537,6 +537,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 
 	rpcCtx.dialbackMu.Lock()
 	rpcCtx.dialbackMu.m = map[roachpb.NodeID]*Connection{}
+	// nolint:deferunlock
 	rpcCtx.dialbackMu.Unlock()
 
 	if !opts.TenantID.IsSet() {

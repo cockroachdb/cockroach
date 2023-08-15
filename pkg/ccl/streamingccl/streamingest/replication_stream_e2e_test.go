@@ -142,6 +142,7 @@ func TestTenantStreamingJobRetryReset(t *testing.T) {
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 	mu.Lock()
 	mu.initialScanComplete = true
+	// nolint:deferunlock
 	mu.Unlock()
 
 	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
@@ -1093,6 +1094,7 @@ func TestTenantStreamingRetryLoadJob(t *testing.T) {
 	// Inject an error to fail the resumer.
 	mu.Lock()
 	knobLoadErr = errors.Newf("test error")
+	// nolint:deferunlock
 	mu.Unlock()
 
 	// Resume ingestion.

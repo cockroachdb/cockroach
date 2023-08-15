@@ -1085,6 +1085,7 @@ func (nl *NodeLiveness) Metrics() Metrics {
 func (nl *NodeLiveness) RegisterCallback(cb IsLiveCallback) {
 	nl.onIsLiveMu.Lock()
 	nl.onIsLiveMu.callbacks = append(nl.onIsLiveMu.callbacks, cb)
+	// nolint:deferunlock
 	nl.onIsLiveMu.Unlock()
 
 	nl.notifyIsAliveCallbacks([]IsLiveCallback{cb})

@@ -159,6 +159,7 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 		} else {
 			log.Infof(ctx, "%s adder closing; ingested nothing", b.name)
 		}
+		// nolint:deferunlock
 		b.sink.mu.Unlock()
 	}
 	b.sink.Close(ctx)
@@ -270,6 +271,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 		before.Combine(&b.sink.mu.totalStats)
 		before.Combine(&b.sink.currentStats)
 		beforeSize = b.sink.mu.totalBulkOpSummary.DataSize
+		// nolint:deferunlock
 		b.sink.mu.Unlock()
 	}
 
@@ -325,6 +327,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 		afterStats := b.sink.mu.totalStats.Identity().(*bulkpb.IngestionPerformanceStats)
 		afterStats.Combine(&b.sink.mu.totalStats)
 		afterStats.Combine(&b.sink.currentStats)
+		// nolint:deferunlock
 		b.sink.mu.Unlock()
 
 		files := afterStats.Batches - before.Batches
@@ -351,12 +354,14 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 		if log.V(3) {
 			b.sink.mu.totalStats.LogPerStoreTimings(ctx, b.name)
 		}
+		// nolint:deferunlock
 		b.sink.mu.Unlock()
 	}
 
 	if log.V(3) {
 		b.sink.mu.Lock()
 		b.sink.mu.totalStats.LogFlushes(ctx, b.name, "flushed", b.memAcc.Used(), b.sink.span)
+		// nolint:deferunlock
 		b.sink.mu.Unlock()
 	}
 

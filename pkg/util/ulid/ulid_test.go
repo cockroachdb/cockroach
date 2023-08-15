@@ -659,6 +659,7 @@ type safeMonotonicReader struct {
 func (r *safeMonotonicReader) MonotonicRead(ms uint64, p []byte) (err error) {
 	r.mtx.Lock()
 	err = r.MonotonicReader.MonotonicRead(ms, p)
+	// nolint:deferunlock
 	r.mtx.Unlock()
 	return err
 }

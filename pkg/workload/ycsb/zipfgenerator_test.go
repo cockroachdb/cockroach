@@ -121,6 +121,7 @@ func runZipfGenerators(t *testing.T, withIncrements bool) {
 		z.zipfGenMu.mu.Lock()
 		if x[i] < int(z.iMin) || x[i] > int(z.zipfGenMu.iMax) {
 			t.Fatalf("zipf(%d,%d,%f) rolled %d at index %d", z.iMin, z.zipfGenMu.iMax, z.theta, x[i], i)
+			// nolint:deferunlock
 			z.zipfGenMu.mu.Unlock()
 			if withIncrements {
 				if err := z.IncrementIMax(1); err != nil {
@@ -128,6 +129,7 @@ func runZipfGenerators(t *testing.T, withIncrements bool) {
 				}
 			}
 		}
+		// nolint:deferunlock
 		z.zipfGenMu.mu.Unlock()
 	}
 

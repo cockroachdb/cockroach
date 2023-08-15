@@ -46,6 +46,7 @@ func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) 
 		r.mu.laggingFollowersOnQuiesce = lagging
 		r.store.unquiescedReplicas.Lock()
 		delete(r.store.unquiescedReplicas.m, r.RangeID)
+		// nolint:deferunlock
 		r.store.unquiescedReplicas.Unlock()
 	} else if log.V(4) {
 		log.Infof(ctx, "r%d already quiesced", r.RangeID)
@@ -89,6 +90,7 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 	r.mu.laggingFollowersOnQuiesce = nil
 	r.store.unquiescedReplicas.Lock()
 	r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
+	// nolint:deferunlock
 	r.store.unquiescedReplicas.Unlock()
 
 	st := r.raftSparseStatusRLocked()

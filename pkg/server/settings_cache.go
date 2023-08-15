@@ -70,11 +70,13 @@ func (s *settingsCacheWriter) queueSnapshot(kvs []roachpb.KeyValue) (shouldRun b
 	s.mu.Lock() // held into the async task
 	if s.mu.currentlyWriting {
 		s.mu.queuedToWrite = kvs
+		// nolint:deferunlock
 		s.mu.Unlock()
 		return false
 	}
 	s.mu.currentlyWriting = true
 	s.mu.queuedToWrite = kvs
+	// nolint:deferunlock
 	s.mu.Unlock()
 	return true
 }

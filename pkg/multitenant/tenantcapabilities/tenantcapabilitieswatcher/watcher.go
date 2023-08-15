@@ -112,6 +112,7 @@ func New(
 func (w *Watcher) getInternal(tenantID roachpb.TenantID) *watcherEntry {
 	w.mu.RLock()
 	cp, found := w.mu.store[tenantID]
+	// nolint:deferunlock
 	w.mu.RUnlock()
 	if found {
 		return cp

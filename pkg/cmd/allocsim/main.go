@@ -289,6 +289,7 @@ func (a *allocSim) rangeStats(d time.Duration) {
 		stats := a.rangeInfo()
 		a.ranges.Lock()
 		a.ranges.stats = stats
+		// nolint:deferunlock
 		a.ranges.Unlock()
 
 		time.Sleep(d)
@@ -342,6 +343,7 @@ func (a *allocSim) monitor(d time.Duration) {
 
 		a.ranges.Lock()
 		rangeStats := a.ranges.stats
+		// nolint:deferunlock
 		a.ranges.Unlock()
 
 		if ticks%20 == 0 || numReplicas != len(rangeStats.replicas) {

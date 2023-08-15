@@ -167,6 +167,7 @@ func (l *fileSink) attachHints(stacks []byte) []byte {
 	l.mu.Lock()
 	stacks = append(stacks, []byte(fmt.Sprintf(
 		"\nFor more context, check log files in: %s\n", l.mu.logDir))...)
+	// nolint:deferunlock
 	l.mu.Unlock()
 	return stacks
 }

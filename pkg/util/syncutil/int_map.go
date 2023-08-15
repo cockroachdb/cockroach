@@ -289,6 +289,7 @@ func (m *IntMap) Delete(key int64) {
 		if !ok && read.amended {
 			delete(m.dirty, key)
 		}
+		// nolint:deferunlock
 		m.mu.Unlock()
 	}
 	if ok {

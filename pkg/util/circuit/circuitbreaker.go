@@ -141,6 +141,7 @@ func (b *Breaker) Report(err error) {
 	// We get to write the error since we have exclusive access via b.mu.
 	b.mu.errAndCh.err = storeErr
 	close(b.mu.errAndCh.ch)
+	// nolint:deferunlock
 	b.mu.Unlock()
 
 	opts := b.Opts()
@@ -233,6 +234,7 @@ func TestingSetTripped(b *Breaker, err error) (undo func()) {
 func (b *Breaker) maybeTriggerProbe(force bool) {
 	b.mu.Lock()
 	if b.mu.probing || (!force && b.mu.errAndCh.err == nil) {
+		// nolint:deferunlock
 		b.mu.Unlock()
 		// A probe is already running or the breaker is not currently tripped. The
 		// latter case can occur since maybeTriggerProbe is invoked from
