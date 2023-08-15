@@ -56,9 +56,11 @@ func ReuseOrGenerate(tb testing.TB, name string, generate func(dir string)) (dir
 		ch, ok := mu.inProgress[name]
 		if !ok {
 			mu.inProgress[name] = make(chan struct{})
+			// nolint:deferunlock
 			mu.Unlock()
 			break
 		}
+		// nolint:deferunlock
 		mu.Unlock()
 		if first {
 			tb.Logf("waiting for fixture %q", name)

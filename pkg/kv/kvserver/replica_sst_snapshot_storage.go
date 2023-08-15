@@ -62,6 +62,7 @@ func (s *SSTSnapshotStorage) NewScratchSpace(
 ) *SSTSnapshotStorageScratch {
 	s.mu.Lock()
 	s.mu.rangeRefCount[rangeID]++
+	// nolint:deferunlock
 	s.mu.Unlock()
 	snapDir := filepath.Join(s.dir, strconv.Itoa(int(rangeID)), snapUUID.String())
 	return &SSTSnapshotStorageScratch{

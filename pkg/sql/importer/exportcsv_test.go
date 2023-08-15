@@ -582,6 +582,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 		// already been blocked.
 		blockedRead.shouldUnblock = true
 		blockedRead.unblockCond.Signal()
+		// nolint:deferunlock
 		blockedRead.Unlock()
 	}
 
@@ -590,6 +591,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 		for !blockedRead.shouldUnblock {
 			blockedRead.unblockCond.Wait()
 		}
+		// nolint:deferunlock
 		blockedRead.Unlock()
 	}
 

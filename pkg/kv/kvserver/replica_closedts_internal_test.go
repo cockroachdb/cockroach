@@ -413,12 +413,14 @@ func TestSideTransportClosedMonotonic(t *testing.T) {
 				truth.lai++
 			}
 			cur := truth.closedTimestamp
+			// nolint:deferunlock
 			truth.Unlock()
 
 			// Optionally update receiver.
 			if rand.Intn(2) == 0 {
 				r.Lock()
 				r.closedTimestamp = cur
+				// nolint:deferunlock
 				r.Unlock()
 			}
 
@@ -428,6 +430,7 @@ func TestSideTransportClosedMonotonic(t *testing.T) {
 				r.Lock()
 				s.forward(ctx, r.ts, r.lai, knownApplied)
 				r.closedTimestamp = closedTimestamp{}
+				// nolint:deferunlock
 				r.Unlock()
 			}
 		}
@@ -454,6 +457,7 @@ func TestSideTransportClosedMonotonic(t *testing.T) {
 				case 2:
 					truth.Lock()
 					lai = truth.lai
+					// nolint:deferunlock
 					truth.Unlock()
 				}
 
@@ -682,6 +686,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 			// Inject a closed timestamp.
 			tc.repl.mu.Lock()
 			tc.repl.mu.state.RaftClosedTimestamp = test.closedTS
+			// nolint:deferunlock
 			tc.repl.mu.Unlock()
 
 			// Issue a QueryResolvedTimestamp request.
@@ -746,6 +751,7 @@ func TestQueryResolvedTimestampResolvesAbandonedIntents(t *testing.T) {
 	tc.manualClock.AdvanceTo(ts20.GoTime())
 	tc.repl.mu.Lock()
 	tc.repl.mu.state.RaftClosedTimestamp = ts20
+	// nolint:deferunlock
 	tc.repl.mu.Unlock()
 
 	// Issue a QueryResolvedTimestamp request. Should return resolved timestamp
@@ -985,6 +991,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				// Inject a closed timestamp.
 				tc.repl.mu.Lock()
 				tc.repl.mu.state.RaftClosedTimestamp = closedTS
+				// nolint:deferunlock
 				tc.repl.mu.Unlock()
 
 				// Construct and issue the request.
@@ -1079,6 +1086,7 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 		// Inject a closed timestamp.
 		tc.repl.mu.Lock()
 		tc.repl.mu.state.RaftClosedTimestamp = makeTS(30)
+		// nolint:deferunlock
 		tc.repl.mu.Unlock()
 
 		// Return the timestamp of the earliest intent.

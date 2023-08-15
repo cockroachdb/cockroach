@@ -146,6 +146,7 @@ func (cc *Collector) GetBeforeStage(
 			cc.mu.Lock()
 			cc.corpusEntries = append(cc.corpusEntries, entry)
 			cc.corpusPrefixes[corpusPrefix] = struct{}{}
+			// nolint:deferunlock
 			cc.mu.Unlock()
 		}
 		return nil

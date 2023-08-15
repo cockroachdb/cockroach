@@ -415,6 +415,7 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 	}
 	functions.Lock()
 	fns := functions.fns[class][typ.Oid()]
+	// nolint:deferunlock
 	functions.Unlock()
 	if len(fns) == 0 {
 		return nil, false

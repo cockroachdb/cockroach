@@ -109,6 +109,7 @@ func (w *worker) run(wg *sync.WaitGroup) {
 		if err := w.latency.Current.RecordValue(elapsed.Nanoseconds()); err != nil {
 			log.Fatalf(ctx, "%v", err)
 		}
+		// nolint:deferunlock
 		w.latency.Unlock()
 	}
 }
@@ -188,6 +189,7 @@ func Run(opts Options) error {
 				w.latency.Lock()
 				m := w.latency.Merge()
 				w.latency.Rotate()
+				// nolint:deferunlock
 				w.latency.Unlock()
 				if h == nil {
 					h = m

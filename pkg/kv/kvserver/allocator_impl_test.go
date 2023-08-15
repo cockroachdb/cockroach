@@ -301,6 +301,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 
 	repl.mu.Lock()
 	repl.mu.state.Stats = &enginepb.MVCCStats{}
+	// nolint:deferunlock
 	repl.mu.Unlock()
 
 	repl.loadStats = load.NewReplicaLoad(clock, nil)
@@ -420,6 +421,7 @@ func TestAllocatorThrottled(t *testing.T) {
 		t.Fatalf("store:%d was not found in the store pool", singleStore[0].StoreID)
 	}
 	storeDetail.ThrottledUntil = hlc.Timestamp{WallTime: timeutil.Now().Add(24 * time.Hour).UnixNano()}
+	// nolint:deferunlock
 	sp.DetailsMu.Unlock()
 	_, _, err = a.AllocateVoter(ctx, sp, simpleSpanConfig, []roachpb.ReplicaDescriptor{}, nil, nil, allocatorimpl.Dead)
 	if _, ok := IsPurgatoryError(err); ok {

@@ -576,6 +576,7 @@ func (g *lockTableGuardImpl) CurState() waitingState {
 	// Not actively waiting anywhere so no one else can set
 	// mustComputeWaitingState to true while this method executes.
 	g.mu.mustComputeWaitingState = false
+	// nolint:deferunlock
 	g.mu.Unlock()
 	g.resumeScan(false /* notify */)
 	g.mu.Lock() // Unlock deferred
@@ -1761,6 +1762,7 @@ func (kl *keyLocks) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 			Strength:     lock.None,
 			WaitDuration: now.Sub(readerGuard.mu.curLockWaitStart),
 		})
+		// nolint:deferunlock
 		readerGuard.mu.Unlock()
 	}
 
@@ -1880,6 +1882,7 @@ func (kl *keyLocks) informActiveWaiters() {
 		// If the state has indeed changed, it must perform a different action -- so
 		// we pass notify = true here to nudge it to do so.
 		g.maybeUpdateWaitingStateLocked(state, true /* notify */)
+		// nolint:deferunlock
 		g.mu.Unlock()
 	}
 	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
@@ -1909,6 +1912,7 @@ func (kl *keyLocks) informActiveWaiters() {
 		// If the state has indeed changed, it must perform a different action -- so
 		// we pass notify = true here to nudge it to do so.
 		g.maybeUpdateWaitingStateLocked(state, true /* notify */)
+		// nolint:deferunlock
 		g.mu.Unlock()
 	}
 }
@@ -2003,6 +2007,7 @@ func (kl *keyLocks) tryMakeNewDistinguished() {
 		g.mu.state.kind = waitForDistinguished
 		// The rest of g.state is already up-to-date.
 		g.notify()
+		// nolint:deferunlock
 		g.mu.Unlock()
 	}
 }
@@ -2099,6 +2104,7 @@ func (kl *keyLocks) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.
 		if waitDuration > maxWaitDuration {
 			maxWaitDuration = waitDuration
 		}
+		// nolint:deferunlock
 		g.mu.Unlock()
 	}
 	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
@@ -2110,6 +2116,7 @@ func (kl *keyLocks) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.
 		if waitDuration > maxWaitDuration {
 			maxWaitDuration = waitDuration
 		}
+		// nolint:deferunlock
 		g.mu.Unlock()
 	}
 	return totalWaitDuration, maxWaitDuration
@@ -2864,6 +2871,7 @@ func (kl *keyLocks) discoveredLock(
 			// Since g will place itself in queue as inactive waiter below.
 			g.mu.locks[kl] = struct{}{}
 		}
+		// nolint:deferunlock
 		g.mu.Unlock()
 
 		if !presentHere {
@@ -3159,6 +3167,7 @@ func (kl *keyLocks) removeReader(e *list.Element[*lockTableGuardImpl]) bool {
 	g.mu.Lock()
 	delete(g.mu.locks, kl)
 	g.doneActivelyWaitingAtLock()
+	// nolint:deferunlock
 	g.mu.Unlock()
 	if g == kl.distinguishedWaiter {
 		kl.distinguishedWaiter = nil
@@ -3447,6 +3456,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 		g.mu.startWait = false
 		g.mu.state = waitingState{}
 		g.mu.mustComputeWaitingState = false
+		// nolint:deferunlock
 		g.mu.Unlock()
 		g.toResolve = g.toResolve[:0]
 	}
@@ -3493,6 +3503,7 @@ func (t *lockTableImpl) doSnapshotForGuard(g *lockTableGuardImpl) {
 	t.locks.mu.RLock()
 	g.tableSnapshot.Reset()
 	g.tableSnapshot = t.locks.Clone()
+	// nolint:deferunlock
 	t.locks.mu.RUnlock()
 }
 
@@ -3513,6 +3524,7 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 	for l := range g.mu.locks {
 		candidateLocks = append(candidateLocks, l)
 	}
+	// nolint:deferunlock
 	g.mu.Unlock()
 	var locksToGC []*keyLocks
 	for _, l := range candidateLocks {
@@ -3797,6 +3809,7 @@ func (t *lockTableImpl) tryGCLocks(tree *treeMu, locks []*keyLocks) {
 		l = iter.Cur()
 		l.mu.Lock()
 		empty := l.isEmptyLock()
+		// nolint:deferunlock
 		l.mu.Unlock()
 		if empty {
 			tree.Delete(l)
@@ -3839,6 +3852,7 @@ func (t *lockTableImpl) updateLockInternal(up *roachpb.LockUpdate) (heldByTxn bo
 			break
 		}
 	}
+	// nolint:deferunlock
 	t.locks.mu.RUnlock()
 
 	t.tryGCLocks(&t.locks, locksToGC)
@@ -3887,6 +3901,7 @@ func (t *lockTableImpl) Enable(seq roachpb.LeaseSequence) {
 	// NOTE: This may be a premature optimization, but it can't hurt.
 	t.enabledMu.RLock()
 	enabled, enabledSeq := t.enabled, t.enabledSeq
+	// nolint:deferunlock
 	t.enabledMu.RUnlock()
 	if enabled && enabledSeq == seq {
 		return
@@ -3894,6 +3909,7 @@ func (t *lockTableImpl) Enable(seq roachpb.LeaseSequence) {
 	t.enabledMu.Lock()
 	t.enabled = true
 	t.enabledSeq = seq
+	// nolint:deferunlock
 	t.enabledMu.Unlock()
 }
 
@@ -3928,6 +3944,7 @@ func (t *lockTableImpl) QueryLockTableState(
 	// Grab tree snapshot to avoid holding read lock during iteration.
 	t.locks.mu.RLock()
 	snap := t.locks.Clone()
+	// nolint:deferunlock
 	t.locks.mu.RUnlock()
 	// Reset snapshot to free resources.
 	defer snap.Reset()
@@ -3984,6 +4001,7 @@ func (t *lockTableImpl) Metrics() LockTableMetrics {
 	// Grab tree snapshot to avoid holding read lock during iteration.
 	t.locks.mu.RLock()
 	snap := t.locks.Clone()
+	// nolint:deferunlock
 	t.locks.mu.RUnlock()
 	// Reset snapshot to free resources.
 	defer snap.Reset()
@@ -4007,8 +4025,10 @@ func (t *lockTableImpl) String() string {
 		l := iter.Cur()
 		l.mu.Lock()
 		l.safeFormat(&sb, &t.txnStatusCache)
+		// nolint:deferunlock
 		l.mu.Unlock()
 	}
+	// nolint:deferunlock
 	t.locks.mu.RUnlock()
 	return sb.String()
 }

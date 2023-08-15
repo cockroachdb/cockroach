@@ -32,6 +32,7 @@ var makeProcessUnavailableFunc struct {
 func MakeProcessUnavailable() {
 	makeProcessUnavailableFunc.Lock()
 	fn := makeProcessUnavailableFunc.fn
+	// nolint:deferunlock
 	makeProcessUnavailableFunc.Unlock()
 	if fn != nil {
 		fn()
@@ -43,6 +44,7 @@ func MakeProcessUnavailable() {
 func SetMakeProcessUnavailableFunc(fn func()) {
 	makeProcessUnavailableFunc.Lock()
 	makeProcessUnavailableFunc.fn = fn
+	// nolint:deferunlock
 	makeProcessUnavailableFunc.Unlock()
 }
 
@@ -90,6 +92,7 @@ func (l *loggerT) exitLocked(err error, code exit.Code) {
 
 	logging.mu.Lock()
 	f := logging.mu.exitOverride.f
+	// nolint:deferunlock
 	logging.mu.Unlock()
 	if f != nil {
 		f(code, err)

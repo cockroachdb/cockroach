@@ -148,6 +148,7 @@ func (g *Group) Do(
 	if c, ok := g.m[key]; ok {
 		c.dups++
 		c.maybeStartRecording(tracing.SpanFromContext(ctx).RecordingType())
+		// nolint:deferunlock
 		g.mu.Unlock()
 		log.Eventf(ctx, "waiting on singleflight %s:%s owned by another leader. Starting to record the leader's flight.", g.opName, key)
 
@@ -263,6 +264,7 @@ func (c *call) result(ctx context.Context, leader bool) Result {
 					// possibiltity as unlikely, making this best-effort.
 					c.mu.Lock()
 					rec := c.mu.sp.GetTraceRecording(sp.RecordingType())
+					// nolint:deferunlock
 					c.mu.Unlock()
 					sp.ImportTrace(rec)
 				}
@@ -335,6 +337,7 @@ func (g *Group) DoChan(
 		c.dups++
 		c.maybeStartRecording(tracing.SpanFromContext(ctx).RecordingType())
 
+		// nolint:deferunlock
 		g.mu.Unlock()
 		log.Eventf(ctx, "joining singleflight %s:%s owned by another leader", g.opName, key)
 		return makeFuture(c, false /* leader */), false
@@ -375,6 +378,7 @@ func (g *Group) doCall(
 		ctx = logtags.AddTags(context.Background(), logtags.FromContext(ctx))
 		c.mu.Lock()
 		sp := c.mu.sp
+		// nolint:deferunlock
 		c.mu.Unlock()
 		ctx = tracing.ContextWithSpan(ctx, sp)
 	}
@@ -400,6 +404,7 @@ func (g *Group) doCall(
 		// Prevent other flyers from observing a finished span.
 		c.mu.sp = nil
 		c.rec = sp.FinishAndGetTraceRecording(sp.RecordingType())
+		// nolint:deferunlock
 		c.mu.Unlock()
 	}
 	// Publish the results to all waiters.
@@ -415,6 +420,7 @@ var _ = (*Group).Forget
 func (g *Group) Forget(key string) {
 	g.mu.Lock()
 	delete(g.m, key)
+	// nolint:deferunlock
 	g.mu.Unlock()
 }
 

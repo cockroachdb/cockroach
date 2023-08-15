@@ -315,6 +315,7 @@ func (r *Replica) RaftLock() {
 }
 
 func (r *Replica) RaftUnlock() {
+	// nolint:deferunlock
 	r.raftMu.Unlock()
 }
 

@@ -492,6 +492,7 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 					ctx := t.AnnotateCtx(context.Background())
 					t.kvflowControl.mu.Lock()
 					t.kvflowControl.mu.connectionTracker.markStoresDisconnected(storeIDs)
+					// nolint:deferunlock
 					t.kvflowControl.mu.Unlock()
 					t.kvflowControl.disconnectListener.OnRaftTransportDisconnected(ctx, storeIDs...)
 					if fn := t.knobs.OnServerStreamDisconnected; fn != nil {
@@ -513,6 +514,7 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 					}
 					t.kvflowControl.mu.Lock()
 					t.kvflowControl.mu.connectionTracker.markStoresConnected(storeIDs)
+					// nolint:deferunlock
 					t.kvflowControl.mu.Unlock()
 					if len(batch.Requests) == 0 {
 						continue
@@ -701,6 +703,7 @@ func (t *RaftTransport) processQueue(
 			t.kvflowControl.mu.RLock()
 			batch.StoreIDs = nil
 			batch.StoreIDs = append(batch.StoreIDs, t.kvflowControl.mu.localStoreIDs...)
+			// nolint:deferunlock
 			t.kvflowControl.mu.RUnlock()
 			// Unconditionally set sentInitialStoreIDs, since we always have
 			// the initial store IDs before the additional ones.
@@ -866,6 +869,7 @@ func (t *RaftTransport) getQueue(
 		}
 		value, ok = queuesMap.LoadOrStore(int64(nodeID), unsafe.Pointer(&q))
 		t.kvflowControl.mu.connectionTracker.markNodeConnected(nodeID, class)
+		// nolint:deferunlock
 		t.kvflowControl.mu.Unlock()
 	}
 	return (*raftSendQueue)(value), ok
@@ -974,6 +978,7 @@ func (t *RaftTransport) startProcessNewQueue(
 			t.kvflowControl.mu.Lock()
 			t.queues[class].Delete(int64(toNodeID))
 			t.kvflowControl.mu.connectionTracker.markNodeDisconnected(toNodeID, class)
+			// nolint:deferunlock
 			t.kvflowControl.mu.Unlock()
 		}()
 		conn, err := t.dialer.Dial(ctx, toNodeID, class)
@@ -1004,6 +1009,7 @@ func (t *RaftTransport) startProcessNewQueue(
 		t.kvflowControl.mu.Lock()
 		t.queues[class].Delete(int64(toNodeID))
 		t.kvflowControl.mu.connectionTracker.markNodeDisconnected(toNodeID, class)
+		// nolint:deferunlock
 		t.kvflowControl.mu.Unlock()
 		return false
 	}

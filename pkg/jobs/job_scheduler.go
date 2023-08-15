@@ -365,6 +365,7 @@ func newCancelWhenDisabled(sv *settings.Values) *syncCancelFunc {
 			if sf.CancelFunc != nil {
 				sf.CancelFunc()
 			}
+			// nolint:deferunlock
 			sf.Unlock()
 		}
 	})

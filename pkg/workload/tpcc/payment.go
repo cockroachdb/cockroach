@@ -176,6 +176,7 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 		}
 		p.config.auditor.Lock()
 		p.config.auditor.paymentRemoteWarehouseFreq[d.cWID]++
+		// nolint:deferunlock
 		p.config.auditor.Unlock()
 		d.cDID = rng.Intn(10) + 1
 	}

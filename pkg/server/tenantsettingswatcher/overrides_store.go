@@ -105,6 +105,7 @@ func (s *overridesStore) SetAll(allOverrides map[roachpb.TenantID][]kvpb.TenantS
 func (s *overridesStore) GetTenantOverrides(tenantID roachpb.TenantID) *tenantOverrides {
 	s.mu.RLock()
 	res, ok := s.mu.tenants[tenantID]
+	// nolint:deferunlock
 	s.mu.RUnlock()
 	if ok {
 		return res

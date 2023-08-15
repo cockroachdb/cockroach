@@ -357,6 +357,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	for k, v := range s.leaseholdersMu.leaseholders {
 		leaseholders[k] = v
 	}
+	// nolint:deferunlock
 	s.leaseholdersMu.Unlock()
 
 	// We'll accumulate all the nodes we need to connect to in order to check if
@@ -746,6 +747,7 @@ func (r *rpcConn) cleanupStream(err error) {
 	r.mu.state.connected = false
 	r.mu.state.lastDisconnect = err
 	r.mu.state.lastDisconnectTime = timeutil.Now()
+	// nolint:deferunlock
 	r.mu.Unlock()
 }
 
@@ -869,6 +871,7 @@ func (r *rpcConn) recordConnect() {
 	r.mu.Lock()
 	r.mu.state.connected = true
 	r.mu.state.connectedTime = timeutil.Now()
+	// nolint:deferunlock
 	r.mu.Unlock()
 }
 

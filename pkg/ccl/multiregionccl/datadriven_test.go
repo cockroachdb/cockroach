@@ -239,10 +239,12 @@ SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false
 					// Setup tracing for the input.
 					mu.Lock()
 					traceStmt = d.Input
+					// nolint:deferunlock
 					mu.Unlock()
 					defer func() {
 						mu.Lock()
 						traceStmt = ""
+						// nolint:deferunlock
 						mu.Unlock()
 					}()
 

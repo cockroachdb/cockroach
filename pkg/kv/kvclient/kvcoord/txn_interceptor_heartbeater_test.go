@@ -169,6 +169,7 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 		th.mu.Lock()
 		require.False(t, th.mu.loopStarted)
 		require.False(t, th.heartbeatLoopRunningLocked())
+		// nolint:deferunlock
 		th.mu.Unlock()
 
 		// The heartbeat loop is started on the first locking request.
@@ -186,6 +187,7 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 		th.mu.Lock()
 		require.True(t, th.mu.loopStarted)
 		require.True(t, th.heartbeatLoopRunningLocked())
+		// nolint:deferunlock
 		th.mu.Unlock()
 
 		// The interceptor indicates whether the heartbeat loop is
@@ -209,6 +211,7 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 		// Closing the interceptor stops the heartbeat loop.
 		th.mu.Lock()
 		th.closeLocked()
+		// nolint:deferunlock
 		th.mu.Unlock()
 		waitForHeartbeatLoopToStop(t, &th)
 		require.True(t, th.mu.loopStarted) // still set
@@ -311,6 +314,7 @@ func TestTxnHeartbeaterLoopStartsBeforeExpiry(t *testing.T) {
 			th.mu.Lock()
 			require.False(t, th.mu.loopStarted)
 			require.False(t, th.heartbeatLoopRunningLocked())
+			// nolint:deferunlock
 			th.mu.Unlock()
 
 			count := 0
@@ -360,6 +364,7 @@ func TestTxnHeartbeaterLoopStartsBeforeExpiry(t *testing.T) {
 				// push delay).
 				require.Positivef(t, count, "expected heartbeat before starting loop")
 			}
+			// nolint:deferunlock
 			th.mu.Unlock()
 
 			if test.loopStarts == StartBeforeInterval {
@@ -428,6 +433,7 @@ func TestTxnHeartbeaterLoopStartedFor1PC(t *testing.T) {
 	require.True(t, th.mu.loopStarted)
 	require.True(t, th.heartbeatLoopRunningLocked())
 	th.closeLocked()
+	// nolint:deferunlock
 	th.mu.Unlock()
 }
 
@@ -757,6 +763,7 @@ func TestTxnHeartbeaterAsyncAbortCollapsesRequests(t *testing.T) {
 
 	th.mu.Lock() // manually lock, there's no TxnCoordSender
 	br, pErr := th.SendLocked(ctx, ba)
+	// nolint:deferunlock
 	th.mu.Unlock()
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
@@ -779,6 +786,7 @@ func TestTxnHeartbeaterAsyncAbortCollapsesRequests(t *testing.T) {
 
 	th.mu.Lock() // manually lock, there's no TxnCoordSender
 	br, pErr = th.SendLocked(ctx, ba)
+	// nolint:deferunlock
 	th.mu.Unlock()
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
@@ -831,6 +839,7 @@ func TestTxnHeartbeaterEndTxnLoopHandling(t *testing.T) {
 
 			th.mu.Lock()
 			br, pErr = th.SendLocked(ctx, ba2)
+			// nolint:deferunlock
 			th.mu.Unlock()
 
 			require.Nil(t, pErr)

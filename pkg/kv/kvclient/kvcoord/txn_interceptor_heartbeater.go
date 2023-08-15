@@ -364,6 +364,7 @@ func (h *txnHeartbeater) heartbeatLoop(ctx context.Context) {
 	defer func() {
 		h.mu.Lock()
 		h.cancelHeartbeatLoopLocked()
+		// nolint:deferunlock
 		h.mu.Unlock()
 	}()
 

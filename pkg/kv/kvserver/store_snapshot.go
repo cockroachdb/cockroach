@@ -1200,6 +1200,7 @@ func (s *Store) canAcceptSnapshotLocked(
 	existingDesc := existingRepl.mu.state.Desc
 	existingIsInitialized := existingDesc.IsInitialized()
 	existingDestroyStatus := existingRepl.mu.destroyStatus
+	// nolint:deferunlock
 	existingRepl.mu.RUnlock()
 
 	if existingIsInitialized {

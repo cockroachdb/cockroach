@@ -349,6 +349,7 @@ func (fr *FlowRegistry) cancelPendingStreams(
 		// FlowRegistry mutex.
 		inboundStreams = entry.inboundStreams
 	}
+	// nolint:deferunlock
 	fr.Unlock()
 	if inboundStreams == nil {
 		return 0
@@ -458,6 +459,7 @@ func (fr *FlowRegistry) Drain(
 		fr.Lock()
 		fr.draining = true
 		if len(fr.flows) > 0 {
+			// nolint:deferunlock
 			fr.Unlock()
 			time.Sleep(expectedConnectionTime)
 			fr.Lock()
@@ -476,11 +478,13 @@ func (fr *FlowRegistry) Drain(
 
 	fr.Lock()
 	if len(fr.flows) == 0 {
+		// nolint:deferunlock
 		fr.Unlock()
 		sleep(minFlowDrainWait)
 		fr.Lock()
 		// No flows were registered, return.
 		if len(fr.flows) == 0 {
+			// nolint:deferunlock
 			fr.Unlock()
 			return
 		}
@@ -496,6 +500,7 @@ func (fr *FlowRegistry) Drain(
 			fr.Lock()
 			stopWaiting = true
 			fr.flowDone.Signal()
+			// nolint:deferunlock
 			fr.Unlock()
 		case <-allFlowsDone:
 		}
@@ -516,6 +521,7 @@ func (fr *FlowRegistry) Drain(
 		for !(stopWaiting || len(fr.flows) == 0) {
 			fr.flowDone.Wait()
 		}
+		// nolint:deferunlock
 		fr.Unlock()
 	}
 
@@ -526,6 +532,7 @@ func (fr *FlowRegistry) Drain(
 func (fr *FlowRegistry) undrain() {
 	fr.Lock()
 	fr.draining = false
+	// nolint:deferunlock
 	fr.Unlock()
 }
 
@@ -560,6 +567,7 @@ func (fr *FlowRegistry) ConnectInboundStream(
 	// below one; in all other cases we want to make sure to delete the entry
 	// from the registry if we're holding the only reference.
 	entry.refCount++
+	// nolint:deferunlock
 	fr.Unlock()
 	defer func() {
 		fr.Lock()

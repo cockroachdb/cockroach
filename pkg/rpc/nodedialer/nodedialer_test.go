@@ -353,6 +353,7 @@ func (il *interceptingListener) Accept() (c net.Conn, err error) {
 		if err == nil {
 			il.mu.Lock()
 			il.mu.conns = append(il.mu.conns, c)
+			// nolint:deferunlock
 			il.mu.Unlock()
 		}
 	}()

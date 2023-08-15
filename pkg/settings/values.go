@@ -144,6 +144,7 @@ func (sv *Values) Opaque() interface{} {
 func (sv *Values) settingChanged(ctx context.Context, slot slotIdx) {
 	sv.changeMu.Lock()
 	funcs := sv.changeMu.onChange[slot]
+	// nolint:deferunlock
 	sv.changeMu.Unlock()
 	for _, fn := range funcs {
 		fn(ctx)
@@ -202,5 +203,6 @@ func (sv *Values) getGeneric(slot slotIdx) interface{} {
 func (sv *Values) setOnChange(slot slotIdx, fn func(ctx context.Context)) {
 	sv.changeMu.Lock()
 	sv.changeMu.onChange[slot] = append(sv.changeMu.onChange[slot], fn)
+	// nolint:deferunlock
 	sv.changeMu.Unlock()
 }

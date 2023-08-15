@@ -64,6 +64,7 @@ func logfDepthInternal(
 		if logging.mu.exitOverride.f != nil {
 			exitFunc = logging.mu.exitOverride.f
 		}
+		// nolint:deferunlock
 		logging.mu.Unlock()
 
 		// Fatal error handling later already tries to exit even if I/O should

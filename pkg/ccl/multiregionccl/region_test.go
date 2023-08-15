@@ -199,11 +199,13 @@ func TestConcurrentAddDropRegions(t *testing.T) {
 						if firstOp {
 							firstOp = false
 							close(firstOpStarted)
+							// nolint:deferunlock
 							mu.Unlock()
 							// Don't promote any members before the second operation reaches
 							// the schema changer as well.
 							<-secondOpFinished
 						} else {
+							// nolint:deferunlock
 							mu.Unlock()
 						}
 						return nil

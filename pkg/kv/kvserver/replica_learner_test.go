@@ -563,6 +563,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		// Always use node 3 (index 2) as the only delegate.
 		senders.mu.Lock()
 		senders.desc = append(senders.desc, roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3})
+		// nolint:deferunlock
 		senders.mu.Unlock()
 
 		// Now stop accepting traffic to node 3 (index 2).
@@ -596,6 +597,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		senders.mu.Lock()
 		senders.desc = append(senders.desc, roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3})
 		senders.desc = append(senders.desc, roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1})
+		// nolint:deferunlock
 		senders.mu.Unlock()
 
 		// Now stop accepting traffic to node 3 (index 2).
@@ -641,6 +643,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		senders.mu.Lock()
 		senders.desc = append(senders.desc, roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3})
 		senders.desc = append(senders.desc, roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1})
+		// nolint:deferunlock
 		senders.mu.Unlock()
 
 		block.Store(2)
@@ -668,6 +671,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		senders.mu.Lock()
 		senders.desc = append(senders.desc, roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4})
 		senders.desc = append(senders.desc, roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1})
+		// nolint:deferunlock
 		senders.mu.Unlock()
 
 		_, err := tc.Servers[0].DB().AdminChangeReplicas(
@@ -700,6 +704,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		// Choose the store which we are about to block.
 		senders.mu.Lock()
 		senders.desc = append(senders.desc, roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4})
+		// nolint:deferunlock
 		senders.mu.Unlock()
 
 		// Don't allow store 4 to see the new descriptor through Raft.
@@ -748,6 +753,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		senders.mu.Lock()
 		senders.desc = append(senders.desc, roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4})
 		senders.desc = append(senders.desc, roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1})
+		// nolint:deferunlock
 		senders.mu.Unlock()
 		// First try to use node 3 (index 2) as the delegate, but fall back to the leaseholder on failure.
 

@@ -303,6 +303,7 @@ func traceProposals(r *Replica, ids []kvserverbase.CmdIDKey, event string) {
 			ctxs = append(ctxs, prop.ctx)
 		}
 	}
+	// nolint:deferunlock
 	r.mu.RUnlock()
 	for _, ctx := range ctxs {
 		log.Eventf(ctx, "%v", event)

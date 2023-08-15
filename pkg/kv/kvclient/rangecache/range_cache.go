@@ -763,6 +763,7 @@ func (rc *RangeCache) tryLookup(
 ) (EvictionToken, error) {
 	rc.rangeCache.RLock()
 	if entry, _ := rc.getCachedRLocked(ctx, key, useReverseScan); entry != nil {
+		// nolint:deferunlock
 		rc.rangeCache.RUnlock()
 		returnToken := rc.makeEvictionToken(entry, nil /* nextDesc */)
 		return returnToken, nil
