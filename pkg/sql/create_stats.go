@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -104,30 +105,17 @@ type createStatsNode struct {
 // createStatsRun contains the run-time state of createStatsNode during local
 // execution.
 type createStatsRun struct {
-	errCh chan error
+	ctxGroup ctxgroup.Group
 }
 
 func (n *createStatsNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("stats"))
-	n.run.errCh = make(chan error)
-	go func() {
-		err := n.startJob(params.ctx)
-		select {
-		case <-params.ctx.Done():
-		case n.run.errCh <- err:
-		}
-		close(n.run.errCh)
-	}()
-	return nil
+	err := n.startJob(params.ctx)
+	return err
 }
 
 func (n *createStatsNode) Next(params runParams) (bool, error) {
-	select {
-	case <-params.ctx.Done():
-		return false, params.ctx.Err()
-	case err := <-n.run.errCh:
-		return false, err
-	}
+	return false, n.run.ctxGroup.Wait()
 }
 
 func (*createStatsNode) Close(context.Context) {}
@@ -167,19 +155,22 @@ func (n *createStatsNode) startJob(ctx context.Context) error {
 	if err := job.Start(ctx); err != nil {
 		return err
 	}
-
-	if err := job.AwaitCompletion(ctx); err != nil {
-		if errors.Is(err, stats.ConcurrentCreateStatsError) {
-			// Delete the job so users don't see it and get confused by the error.
-			const stmt = `DELETE FROM system.jobs WHERE id = $1`
-			if _ /* cols */, delErr := n.p.ExecCfg().InternalDB.Executor().Exec(
-				ctx, "delete-job", nil /* txn */, stmt, jobID,
-			); delErr != nil {
-				log.Warningf(ctx, "failed to delete job: %v", delErr)
+	n.run.ctxGroup = ctxgroup.WithContext(ctx)
+	n.run.ctxGroup.GoCtx(func(ctx context.Context) error {
+		var err error
+		if err = job.AwaitCompletion(ctx); err != nil {
+			if errors.Is(err, stats.ConcurrentCreateStatsError) {
+				// Delete the job so users don't see it and get confused by the error.
+				const stmt = `DELETE FROM system.jobs WHERE id = $1`
+				if _ /* cols */, delErr := n.p.ExecCfg().InternalDB.Executor().Exec(
+					ctx, "delete-job", nil /* txn */, stmt, jobID,
+				); delErr != nil {
+					log.Warningf(ctx, "failed to delete job: %v", delErr)
+				}
 			}
 		}
 		return err
-	}
+	})
 	return nil
 }
 
