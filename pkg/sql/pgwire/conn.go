@@ -857,7 +857,7 @@ func cookTag(
 		tag = strconv.AppendInt(tag, int64(rowsAffected), 10)
 
 	case tree.Rows:
-		if tagStr != "SHOW" {
+		if tagStr != "SHOW" && tagStr != "EXPLAIN" {
 			tag = append(tag, ' ')
 			tag = strconv.AppendUint(tag, uint64(rowsAffected), 10)
 		}
