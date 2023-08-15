@@ -58,6 +58,44 @@ var elasticCPUDurationPerExportRequest = settings.RegisterDurationSetting(
 	},
 )
 
+// elasticCPUDurationPerTTLRead controls how many CPU tokens are allotted
+// for each ttl read request.
+var elasticCPUDurationPerTTLRead = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kvadmission.elastic_cpu.duration_per_ttl_read",
+	"controls how many CPU tokens are allotted for each ttl read request",
+	10*time.Millisecond,
+	func(duration time.Duration) error {
+		if duration < admission.MinElasticCPUDuration {
+			return fmt.Errorf("minimum CPU duration allowed per ttl read request is %s, got %s",
+				admission.MinElasticCPUDuration, duration)
+		}
+		if duration > admission.MaxElasticCPUDuration {
+			return fmt.Errorf("maximum CPU duration allowed per ttl read request is %s, got %s",
+				admission.MaxElasticCPUDuration, duration)
+		}
+		return nil
+	},
+)
+
+// ttlReadElasticControlEnabled determines whether ttl reads integrate with
+// elastic CPU control.
+var ttlReadElasticControlEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kvadmission.ttl_read_elastic_control.enabled",
+	"determines whether the kv portion of row-level ttl reads integrate with elastic CPU control",
+	true,
+)
+
+// exportRequestElasticControlEnabled determines whether export requests
+// integrate with elastic CPU control.
+var exportRequestElasticControlEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kvadmission.export_request_elastic_control.enabled",
+	"determines whether the export requests integrate with elastic CPU control",
+	true,
+)
+
 // elasticCPUDurationPerRangefeedScanUnit controls how many CPU tokens are
 // allotted for each unit of work during rangefeed catchup scans. Only takes
 // effect if kvadmission.rangefeed_catchup_scan_elastic_control.enabled is set.
@@ -342,21 +380,35 @@ func (n *controllerImpl) AdmitKVWork(
 		}
 	}
 	if admissionEnabled {
-		if ba.IsSingleExportRequest() {
-			// Backups generate batches with single export requests, which we
-			// admit through the elastic CPU work queue. We grant this
-			// CPU-intensive work a set amount of CPU time and expect it to
-			// terminate (cooperatively) once it exceeds its grant. The amount
-			// disbursed is 100ms, which we've experimentally found to be long
-			// enough to do enough useful work per-request while not causing too
-			// much in the way of scheduling delays on individual cores. Within
-			// admission control we have machinery that observes scheduling
-			// latencies periodically and reduces the total amount of CPU time
-			// handed out through this mechanism, as a way to provide latency
-			// isolation to non-elastic ("latency sensitive") work running on
-			// the same machine.
+		// - Backups generate batches with single export requests, which we
+		//   admit through the elastic CPU work queue. We grant this
+		//   CPU-intensive work a set amount of CPU time and expect it to
+		//   terminate (cooperatively) once it exceeds its grant. The amount
+		//   disbursed is 100ms, which we've experimentally found to be long
+		//   enough to do enough useful work per-request while not causing too
+		//   much in the way of scheduling delays on individual cores. Within
+		//   admission control we have machinery that observes scheduling
+		//   latencies periodically and reduces the total amount of CPU time
+		//   handed out through this mechanism, as a way to provide latency
+		//   isolation to non-elastic ("latency sensitive") work running on the
+		//   same machine.
+		// - We do the same for KV work done on the behalf of row-level TTL
+		//   reads.
+		isTTLRead := ba.IsReadOnly() && admissionInfo.Priority == admissionpb.TTLLowPri
+		shouldUseElasticCPU :=
+			(exportRequestElasticControlEnabled.Get(&n.settings.SV) && ba.IsSingleExportRequest()) ||
+				(ttlReadElasticControlEnabled.Get(&n.settings.SV) && isTTLRead)
+
+		if shouldUseElasticCPU {
+			var admitDuration time.Duration
+			if ba.IsSingleExportRequest() {
+				admitDuration = elasticCPUDurationPerExportRequest.Get(&n.settings.SV)
+			} else if isTTLRead {
+				admitDuration = elasticCPUDurationPerTTLRead.Get(&n.settings.SV)
+			}
+
 			elasticWorkHandle, err := n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.Admit(
-				ctx, elasticCPUDurationPerExportRequest.Get(&n.settings.SV), admissionInfo,
+				ctx, admitDuration, admissionInfo,
 			)
 			if err != nil {
 				return Handle{}, err
@@ -369,6 +421,7 @@ func (n *controllerImpl) AdmitKVWork(
 				}
 			}()
 		} else {
+			// Use the slots-based mechanism for everything else.
 			callAdmittedWorkDoneOnKVAdmissionQ, err := n.kvAdmissionQ.Admit(ctx, admissionInfo)
 			if err != nil {
 				return Handle{}, err

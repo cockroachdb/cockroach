@@ -448,8 +448,10 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 		}
 		if args.Txn != nil {
 			fetcherArgs.sendFn = makeTxnKVFetcherDefaultSendFunc(args.Txn, &batchRequestsIssued)
-			fetcherArgs.requestAdmissionHeader = args.Txn.AdmissionHeader()
-			fetcherArgs.responseAdmissionQ = args.Txn.DB().SQLKVResponseAdmissionQ
+			fetcherArgs.admission.requestHeader = args.Txn.AdmissionHeader()
+			fetcherArgs.admission.responseQ = args.Txn.DB().SQLKVResponseAdmissionQ
+			fetcherArgs.admission.pacerFactory = args.Txn.DB().AdmissionPacerFactory
+			fetcherArgs.admission.settingsValues = args.Txn.DB().SettingsValues
 		}
 		rf.kvFetcher = newKVFetcher(newTxnKVFetcherInternal(fetcherArgs))
 	}

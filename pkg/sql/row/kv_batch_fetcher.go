@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
@@ -56,6 +58,37 @@ var defaultKVBatchSize = rowinfra.KeyLimit(util.ConstantWithMetamorphicTestValue
 	int(rowinfra.ProductionKVBatchSize), /* defaultValue */
 	1,                                   /* metamorphicValue */
 ))
+
+var logAdmissionPacerErr = log.Every(100 * time.Millisecond)
+
+// elasticCPUDurationPerTTLRead controls how many CPU tokens are allotted
+// each time we seek admission for response handling during row-level TTL reads.
+var elasticCPUDurationPerTTLReadResponse = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"sqladmission.elastic_cpu.duration_per_ttl_read_response",
+	"controls how many CPU tokens are allotted for handling responses for ttl reads",
+	100*time.Millisecond,
+	func(duration time.Duration) error {
+		if duration < admission.MinElasticCPUDuration {
+			return fmt.Errorf("minimum CPU duration allowed per ttl read response is %s, got %s",
+				admission.MinElasticCPUDuration, duration)
+		}
+		if duration > admission.MaxElasticCPUDuration {
+			return fmt.Errorf("maximum CPU duration allowed per ttl read response is %s, got %s",
+				admission.MaxElasticCPUDuration, duration)
+		}
+		return nil
+	},
+)
+
+// ttlReadElasticControlEnabled determines whether the sql portion of row-level
+// TTL reads integrate with elastic CPU control.
+var ttlReadElasticControlEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"sqladmission.ttl_read_response_elastic_control.enabled",
+	"determines whether the sql portion of row-level ttl reads integrate with elastic CPU control",
+	true,
+)
 
 // sendFunc is the function used to execute a KV batch; normally
 // wraps (*kv.Txn).Send.
@@ -186,6 +219,7 @@ type txnKVFetcher struct {
 	// For request and response admission control.
 	requestAdmissionHeader kvpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
+	admissionPacer         *admission.Pacer
 }
 
 var _ KVBatchFetcher = &txnKVFetcher{}
@@ -264,8 +298,13 @@ type newTxnKVFetcherArgs struct {
 	forceProductionKVBatchSize bool
 	kvPairsRead                *int64
 	batchRequestsIssued        *int64
-	requestAdmissionHeader     kvpb.AdmissionHeader
-	responseAdmissionQ         *admission.WorkQueue
+
+	admission struct { // groups AC-related fields
+		requestHeader  kvpb.AdmissionHeader
+		responseQ      *admission.WorkQueue
+		pacerFactory   admission.PacerFactory
+		settingsValues *settings.Values
+	}
 }
 
 // newTxnKVFetcherInternal initializes a txnKVFetcher.
@@ -284,8 +323,27 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		lockTimeout:                args.lockTimeout,
 		acc:                        args.acc,
 		forceProductionKVBatchSize: args.forceProductionKVBatchSize,
-		requestAdmissionHeader:     args.requestAdmissionHeader,
-		responseAdmissionQ:         args.responseAdmissionQ,
+		requestAdmissionHeader:     args.admission.requestHeader,
+		responseAdmissionQ:         args.admission.responseQ,
+	}
+
+	admissionPri := admissionpb.WorkPriority(args.admission.requestHeader.Priority)
+	if ttlReadElasticControlEnabled.Get(args.admission.settingsValues) &&
+		admissionPri == admissionpb.TTLLowPri &&
+		args.admission.pacerFactory != nil {
+
+		f.admissionPacer = args.admission.pacerFactory.NewPacer(
+			elasticCPUDurationPerTTLReadResponse.Get(args.admission.settingsValues),
+			admission.WorkInfo{
+				// NB: This is either code that runs in physically isolated SQL
+				// pods for secondary tenants, or for the system tenant, in
+				// nodes running colocated SQL+KV code where all SQL code is run
+				// on behalf of the one tenant. So from an AC perspective, the
+				// tenant ID we pass through here is irrelevant.
+				TenantID:   roachpb.SystemTenantID,
+				Priority:   admissionPri,
+				CreateTime: args.admission.requestHeader.CreateTime,
+			})
 	}
 	f.kvBatchFetcherHelper.init(f.nextBatch, args.kvPairsRead, args.batchRequestsIssued)
 	return f
@@ -297,6 +355,25 @@ func (f *txnKVFetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc) {
 	f.sendFn = sendFn
 	f.requestAdmissionHeader = txn.AdmissionHeader()
 	f.responseAdmissionQ = txn.DB().SQLKVResponseAdmissionQ
+
+	if f.admissionPacer != nil {
+		f.admissionPacer.Close()
+	}
+	admissionPri := admissionpb.WorkPriority(txn.AdmissionHeader().Priority)
+	if ttlReadElasticControlEnabled.Get(txn.DB().SettingsValues) &&
+		admissionPri == admissionpb.TTLLowPri &&
+		txn.DB().AdmissionPacerFactory != nil {
+
+		f.admissionPacer = txn.DB().AdmissionPacerFactory.NewPacer(
+			elasticCPUDurationPerTTLReadResponse.Get(txn.DB().SettingsValues),
+			admission.WorkInfo{
+				// NB: See comment above in newTxnKVFetcherInternal for why
+				// blindly passing in the system tenant ID is ok.
+				TenantID:   roachpb.SystemTenantID,
+				Priority:   admissionPri,
+				CreateTime: txn.AdmissionHeader().CreateTime,
+			})
+	}
 }
 
 // SetupNextFetch sets up the Fetcher for the next set of spans.
@@ -540,14 +617,26 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		f.batchResponseAccountedFor = returnedBytes
 	}
 	// Do admission control after we've accounted for the response bytes.
-	if br != nil && f.responseAdmissionQ != nil {
-		responseAdmission := admission.WorkInfo{
-			TenantID:   roachpb.SystemTenantID,
-			Priority:   admissionpb.WorkPriority(f.requestAdmissionHeader.Priority),
-			CreateTime: f.requestAdmissionHeader.CreateTime,
-		}
-		if _, err := f.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
-			return err
+
+	if br != nil {
+		if f.admissionPacer != nil {
+			if err := f.admissionPacer.Pace(ctx); err != nil {
+				// We're unable to pace things automatically -- shout loudly
+				// semi-infrequently but don't fail the kv fetcher itself. At
+				// worst we'd be over-admitting.
+				if logAdmissionPacerErr.ShouldLog() {
+					log.Errorf(ctx, "automatic pacing: %v", err)
+				}
+			}
+		} else if f.responseAdmissionQ != nil {
+			responseAdmission := admission.WorkInfo{
+				TenantID:   roachpb.SystemTenantID,
+				Priority:   admissionpb.WorkPriority(f.requestAdmissionHeader.Priority),
+				CreateTime: f.requestAdmissionHeader.CreateTime,
+			}
+			if _, err := f.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -754,6 +843,7 @@ func (f *txnKVFetcher) reset(ctx context.Context) {
 // Close releases the resources of this txnKVFetcher.
 func (f *txnKVFetcher) Close(ctx context.Context) {
 	f.reset(ctx)
+	f.admissionPacer.Close()
 }
 
 const requestUnionOverhead = int64(unsafe.Sizeof(kvpb.RequestUnion{}))

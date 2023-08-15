@@ -103,8 +103,10 @@ func newTxnKVFetcher(
 		// In most cases, the txn is non-nil; however, in some code paths (e.g.
 		// when executing EXPLAIN (VEC)) it might be nil, so we need to have
 		// this check.
-		fetcherArgs.requestAdmissionHeader = txn.AdmissionHeader()
-		fetcherArgs.responseAdmissionQ = txn.DB().SQLKVResponseAdmissionQ
+		fetcherArgs.admission.requestHeader = txn.AdmissionHeader()
+		fetcherArgs.admission.responseQ = txn.DB().SQLKVResponseAdmissionQ
+		fetcherArgs.admission.pacerFactory = txn.DB().AdmissionPacerFactory
+		fetcherArgs.admission.settingsValues = txn.DB().SettingsValues
 	}
 	return newTxnKVFetcherInternal(fetcherArgs)
 }
