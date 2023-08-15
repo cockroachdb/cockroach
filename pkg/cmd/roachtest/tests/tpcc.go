@@ -217,7 +217,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 
 	var ep *tpccChaosEventProcessor
 	var promCfg *prometheus.Config
-	if !opts.DisablePrometheus {
+	if !opts.DisablePrometheus && !t.SkipInit() {
 		// TODO(irfansharif): Move this after the import step. The statistics
 		// during import itself is uninteresting and pollutes actual workload
 		// data.
