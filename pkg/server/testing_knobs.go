@@ -11,6 +11,7 @@
 package server
 
 import (
+	"context"
 	"net"
 	"time"
 
@@ -147,6 +148,15 @@ type TestingKnobs struct {
 	// system.tenants table. This is useful for tests that want to verify that
 	// the tenant connector can't start when the record doesn't exist.
 	ShutdownTenantConnectorEarlyIfNoRecordPresent bool
+
+	// IterateNodesDialCallback is used to mock dial errors in a cluster
+	// fan-out. It is invoked by the dialFn argument of server.iterateNodes.
+	IterateNodesDialCallback func(nodeID roachpb.NodeID) error
+
+	// IterateNodesNodeCallback is used to mock errors of the rpc invoked
+	// on a remote node in a cluster fan-out. It is invoked by the nodeFn argument
+	// of server.iterateNodes.
+	IterateNodesNodeCallback func(ctx context.Context, nodeID roachpb.NodeID) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
