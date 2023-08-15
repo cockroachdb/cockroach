@@ -19,8 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -33,6 +36,16 @@ const (
 	// OpTxnCoordSender represents a txn coordinator send operation.
 	OpTxnCoordSender = "txn coordinator send"
 )
+
+// DisableCommitSanityCheck allows opting out of a fatal assertion error that was observed in the wild
+// and for which a root cause is not yet available.
+//
+// See: https://github.com/cockroachdb/cockroach/pull/73512.
+var DisableCommitSanityCheck = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_COMMIT_SANITY_CHECK", false)
+
+// forceTxnRetries enables random transaction retries for test builds
+// even if they aren't enabled via testing knobs.
+var forceTxnRetries = envutil.EnvOrDefaultBool("COCKROACH_FORCE_RANDOM_TXN_RETRIES", false)
 
 // txnState represents states relating to whether an EndTxn request needs
 // to be sent.
@@ -1370,9 +1383,9 @@ func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
 func (tc *TxnCoordSender) Step(ctx context.Context) error {
 	// TODO(nvanbenschoten): it should be possible to make this assertion, but
 	// the API is currently misused by the connExecutor. See #86162.
-	//if tc.typ != kv.RootTxn {
+	// if tc.typ != kv.RootTxn {
 	//	return errors.AssertionFailedf("cannot step in non-root txn")
-	//}
+	// }
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	if tc.shouldStepReadTimestampLocked() {
@@ -1529,6 +1542,18 @@ func (tc *TxnCoordSender) HasPerformedWrites() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.hasPerformedWritesLocked()
+}
+
+var randRetryRngSource, _ = randutil.NewLockedPseudoRand()
+
+func (tc *TxnCoordSender) TestingShouldRetry(txn *kv.Txn) bool {
+	if filter := tc.testingKnobs.TransactionRetryFilter; filter != nil && filter(txn) {
+		return true
+	}
+	if forceTxnRetries && buildutil.CrdbTestBuild {
+		return randRetryRngSource.Float64() < kv.RandomTxnRetryProbability
+	}
+	return false
 }
 
 func (tc *TxnCoordSender) hasPerformedReadsLocked() bool {

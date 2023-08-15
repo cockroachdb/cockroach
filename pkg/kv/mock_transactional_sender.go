@@ -251,6 +251,11 @@ func (m *MockTransactionalSender) HasPerformedWrites() bool {
 	panic("unimplemented")
 }
 
+// TestingShouldRetry is part of TxnSenderFactory.
+func (m *MockTransactionalSender) TestingShouldRetry(*Txn) bool {
+	return false
+}
+
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, *kvpb.BatchRequest) (

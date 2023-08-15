@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -142,6 +143,7 @@ type clusterCfg struct {
 	beforeVersion     string
 	testingKnobCfg    string
 	defaultTestTenant base.DefaultTestTenantOptions
+	randomTxnRetries  bool
 }
 
 func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
@@ -149,12 +151,19 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	params.ServerArgs.ExternalIODirConfig = cfg.ioConf
 
 	params.ServerArgs.DefaultTestTenant = cfg.defaultTestTenant
+	var transactionRetryFilter func(*kv.Txn) bool
+	if cfg.randomTxnRetries {
+		transactionRetryFilter = kvclientutils.RandomTransactionRetryFilter()
+	}
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		TenantTestingKnobs: &sql.TenantTestingKnobs{
 			// The tests in this package are particular about the tenant IDs
 			// they get in CREATE TENANT.
 			EnableTenantIDReuse: true,
+		},
+		KVClient: &kvcoord.ClientTestingKnobs{
+			TransactionRetryFilter: transactionRetryFilter,
 		},
 	}
 
@@ -513,6 +522,9 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				defaultTestTenant = base.TODOTestTenantDisabled
 			}
 
+			// TODO(ssd): Once TestServer starts up reliably enough:
+			// randomTxnRetries := !d.HasArg("disable-txn-retries")
+			randomTxnRetries := false
 			lastCreatedCluster = name
 			cfg := clusterCfg{
 				name:              name,
@@ -524,6 +536,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				beforeVersion:     beforeVersion,
 				testingKnobCfg:    testingKnobCfg,
 				defaultTestTenant: defaultTestTenant,
+				randomTxnRetries:  randomTxnRetries,
 			}
 			err := ds.addCluster(t, cfg)
 			if err != nil {
