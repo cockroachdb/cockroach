@@ -2387,8 +2387,9 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 	now := s.cfg.Clock.NowAsClockTimestamp()
 
 	// The replicate queue has a relatively more expensive queue check
-	// (shouldQueue), because it scales with the number of stores, and
-	// performs more checks.
+	// (shouldQueue), because it scales with the number of stores, and performs
+	// more checks. #108795 tracks selectively enqueuing on changes which affect
+	// replication, in order to reduce overhead.
 	enqueueToReplicateQueueEnabled := EnqueueInReplicateQueueOnSpanConfigUpdateEnabled.Get(
 		&s.GetStoreConfig().Settings.SV)
 
