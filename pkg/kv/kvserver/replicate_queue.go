@@ -110,7 +110,7 @@ var EnqueueInReplicateQueueOnSpanConfigUpdateEnabled = settings.RegisterBoolSett
 	"kv.enqueue_in_replicate_queue_on_span_config_update.enabled",
 	"controls whether replicas are enqueued into the replicate queue for "+
 		"processing, when a span config update occurs, which affects the replica",
-	false,
+	true,
 )
 
 var (
