@@ -82,7 +82,6 @@ Execute {"Portal": "p"}
 Sync
 ----
 
-
 until
 ErrorResponse
 ReadyForQuery
@@ -92,13 +91,31 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
-Parse {"Query": "EXPLAIN ANALYZE SELECT 1;"}
+Parse {"Name": "e", "Query": "EXPLAIN SELECT generate_series(1,10);"}
+Bind {"DestinationPortal": "pe", "PreparedStatement": "e"}
+Execute {"Portal": "pe"}
 Sync
 ----
 
-until crdb_only keepErrMessage
-ErrorResponse
+until ignore=DataRow
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"42601","Message":"EXPLAIN ANALYZE can only be used as a top-level statement"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"EXPLAIN"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "ea", "Query": "EXPLAIN ANALYZE SELECT generate_series(1,10);"}
+Bind {"DestinationPortal": "pea", "PreparedStatement": "ea"}
+Execute {"Portal": "pea"}
+Sync
+----
+
+until ignore=DataRow
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"EXPLAIN"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
