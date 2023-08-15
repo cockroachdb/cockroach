@@ -1410,6 +1410,16 @@ func (s *SQLServer) preStart(
 		if err := s.tenantConnect.Start(ctx); err != nil {
 			return err
 		}
+		// Propagate the tenant name to the logging context, so the name
+		// appears in logging output.
+		//
+		// TODO(#77336): Instead of initializing a tenant server from the ID,
+		// and only then receiving the name from KV, prefer starting from the name,
+		// configuring that early on in the context bits, then look up the ID
+		// from KV (or elsewhere).
+		if entry, _ := s.tenantConnect.TenantInfo(); entry.Name != "" {
+			s.cfg.idProvider.SetTenantName(entry.Name)
+		}
 		if err := s.startCheckService(ctx, stopper); err != nil {
 			return err
 		}

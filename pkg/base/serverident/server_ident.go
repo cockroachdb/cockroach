@@ -62,6 +62,8 @@ const (
 	IdentifyInstanceID
 	// IdentifyTenantID retrieves the tenant ID of the server.
 	IdentifyTenantID
+	// IdentifyTenantLabel retrieves the tenant name of the server.
+	IdentifyTenantName
 )
 
 type IDPayload struct {
@@ -73,6 +75,8 @@ type IDPayload struct {
 	NodeID string
 	// ditto for the tenant ID.
 	TenantID string
+	// ditto for tenant name.
+	TenantName string
 	// ditto for the SQL instance ID.
 	SQLInstanceID string
 }
@@ -87,6 +91,7 @@ func GetIdentificationPayload(ctx context.Context) IDPayload {
 		NodeID:        si.ServerIdentityString(IdentifyKVNodeID),
 		SQLInstanceID: si.ServerIdentityString(IdentifyInstanceID),
 		TenantID:      si.ServerIdentityString(IdentifyTenantID),
+		TenantName:    si.ServerIdentityString(IdentifyTenantName),
 	}
 }
 

@@ -30,13 +30,16 @@ import (
 )
 
 type testIDPayload struct {
-	tenantID string
+	tenantID   string
+	tenantName string
 }
 
 func (t testIDPayload) ServerIdentityString(key serverident.ServerIdentificationKey) string {
 	switch key {
 	case serverident.IdentifyTenantID:
 		return t.tenantID
+	case serverident.IdentifyTenantName:
+		return t.tenantName
 	default:
 		return ""
 	}
@@ -74,6 +77,10 @@ func TestFormatCrdbV2(t *testing.T) {
 	tenantCtx = logtags.AddTag(tenantCtx, "noval", nil)
 	tenantCtx = logtags.AddTag(tenantCtx, "p", "3")
 	tenantCtx = logtags.AddTag(tenantCtx, "longKey", "456")
+
+	namedTenantIDPayload := tenantIDPayload
+	namedTenantIDPayload.tenantName = "abc"
+	namedTenantCtx := context.WithValue(tenantCtx, serverident.ServerIdentificationContextKey{}, namedTenantIDPayload)
 
 	defer func(prev int) { crdbV2LongLineLen.set(prev) }(int(crdbV2LongLineLen))
 	crdbV2LongLineLen.set(1024)
@@ -148,9 +155,11 @@ func TestFormatCrdbV2(t *testing.T) {
 		}),
 		// Unstructured with long stack trace.
 		withBigStack(makeUnstructuredEntry(sysCtx, severity.ERROR, channel.HEALTH, 0, true, "hello %s", "stack")),
-		// Secondary tenant entries
+		// Secondary tenant entries.
 		makeStructuredEntry(tenantCtx, severity.INFO, channel.DEV, 0, ev),
 		makeUnstructuredEntry(tenantCtx, severity.WARNING, channel.OPS, 0, false, "hello %s", "world"),
+		makeStructuredEntry(namedTenantCtx, severity.INFO, channel.DEV, 0, ev),
+		makeUnstructuredEntry(namedTenantCtx, severity.WARNING, channel.OPS, 0, false, "hello %s", "world"),
 		// Entries with empty ctx
 		makeStructuredEntry(emptyCtx, severity.INFO, channel.DEV, 0, ev),
 		makeUnstructuredEntry(emptyCtx, severity.WARNING, channel.OPS, 0, false, "hello %s", "world"),
