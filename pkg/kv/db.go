@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -263,8 +264,12 @@ type DB struct {
 	// SQLKVResponseAdmissionQ is for use by SQL clients of the DB, and is
 	// placed here simply for plumbing convenience, as there is a diversity of
 	// SQL code that all uses kv.DB.
-	// TODO(sumeer): find a home for this in the SQL layer.
+	//
+	// TODO(sumeer,irfansharif): Find a home for these in the SQL layer.
+	// Especially SettingsValue.
 	SQLKVResponseAdmissionQ *admission.WorkQueue
+	AdmissionPacerFactory   admission.PacerFactory
+	SettingsValues          *settings.Values
 }
 
 // NonTransactionalSender returns a Sender that can be used for sending
