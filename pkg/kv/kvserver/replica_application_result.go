@@ -288,20 +288,6 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 	// goal is that the old proposal remains a local proposal (switching it to
 	// non-local now invites logic bugs) but not bound to the caller.
 
-	// NB: quotaAlloc is always nil here, because we already
-	// released the quota unconditionally in retrieveLocalProposals.
-	// So the below is a no-op.
-	//
-	// TODO(tbg): if we shifted the release of proposal quota to *after*
-	// successful application, we could move the quota over
-	// prematurely releasing it here.
-	newQuotaAlloc := origP.quotaAlloc
-	defer func() {
-		if success {
-			origP.quotaAlloc = nil
-		}
-	}()
-
 	newCommand := kvserverpb.RaftCommand{
 		ProposerLeaseSequence: origP.command.ProposerLeaseSequence,
 		ReplicatedEvalResult:  origP.command.ReplicatedEvalResult,
@@ -316,25 +302,10 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		AdmissionOriginNode: 0,   // assigned on flush
 	}
 
-	// Now we construct the remainder of the ProposalData. First, the pieces
-	// that actively "move over", i.e. those that have to do with the latches
-	// held and the caller waiting to be signaled.
-
-	// `ec` (latches, etc) transfers to the new proposal.
-	newEC := origP.ec
-	defer func() {
-		if success {
-			origP.ec = makeEmptyEndCmds()
-		}
-	}()
-
-	// Ditto doneCh (signal to proposer).
-	newDoneCh := origP.doneCh
-	defer func() {
-		if success {
-			origP.doneCh = nil
-		}
-	}()
+	// Now we construct the remainder of the ProposalData. The pieces that
+	// actively "move over", are removed from the original proposal in the
+	// deferred func below. For example, those fields that have to do with the
+	// latches held and the caller waiting to be signaled.
 
 	// TODO(tbg): work on the lifecycle of ProposalData. This struct (and the
 	// surrounding replicatedCmd) are populated in an overly ad-hoc manner.
@@ -354,10 +325,16 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		proposedAtTicks: 0, // set in registerProposalLocked
 		createdAtTicks:  0, // set in registerProposalLocked
 		command:         &newCommand,
-		quotaAlloc:      newQuotaAlloc,
-		ec:              newEC,
-		applied:         false,
-		doneCh:          newDoneCh,
+		// NB: quotaAlloc is always nil here, because we already released the quota
+		// unconditionally in retrieveLocalProposals. So the below is a no-op.
+		//
+		// TODO(tbg): if we shifted the release of proposal quota to *after*
+		// successful application, we could move the quota over prematurely
+		// releasing it here.
+		quotaAlloc: origP.quotaAlloc,
+		ec:         origP.ec,
+		applied:    false,
+		doneCh:     origP.doneCh,
 		// Local is copied over. It won't be used on the old proposal (since that
 		// proposal got rejected), but since it's still "local" we don't want to put
 		// it into  an undefined state by removing its response. The same goes for
@@ -372,23 +349,23 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 
 		seedProposal: seedP,
 	}
-	// If the original proposal had an explicit span, it's an async consensus
-	// proposal and the span would be finished momentarily (when we return to
-	// the caller) if we didn't unlink it here, but we want it to continue
-	// tracking newProposal. We leave it in `origP.ctx` though, since that
-	// context will become unused once the application of this (soft-failed)
-	// proposal concludes, i.e. soon after this method returns, in case there
-	// is anything left to log into it.
-	defer func() {
-		if success {
-			origP.sp = nil
-		}
-	}()
 
 	defer func() {
 		if !success {
 			return
 		}
+		// If the original proposal had an explicit span, it's an async consensus
+		// proposal and the span would be finished momentarily (when we return to
+		// the caller) if we didn't unlink it here, but we want it to continue
+		// tracking newProposal. We leave it in `origP.ctx` though, since that
+		// context will become unused once the application of this (soft-failed)
+		// proposal concludes, i.e. soon after this method returns, in case there is
+		// anything left to log into it.
+		origP.sp = nil
+		origP.quotaAlloc = nil
+		origP.ec = makeEmptyEndCmds()
+		origP.doneCh = nil
+
 		// If the proposal is synchronous, the client is waiting on the seed
 		// proposal. By the time it has to act on the result, a bunch of reproposals
 		// can have happened, and some may still be running and using the
