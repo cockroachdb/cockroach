@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -115,8 +115,13 @@ func TestScatterResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	ts, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(context.Background())
+
+	s := ts.ApplicationLayer()
+
+	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	sql.SecondaryTenantScatterEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	sqlutils.CreateTable(
 		t, sqlDB, "t",
@@ -124,7 +129,7 @@ func TestScatterResponse(t *testing.T) {
 		1000,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(10)),
 	)
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 
 	r := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -153,10 +158,10 @@ func TestScatterResponse(t *testing.T) {
 		}
 		var expectedKey roachpb.Key
 		if i == 0 {
-			expectedKey = keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.GetID()))
+			expectedKey = s.Codec().TablePrefix(uint32(tableDesc.GetID()))
 		} else {
 			var err error
-			expectedKey, err = randgen.TestingMakePrimaryIndexKey(tableDesc, i*10)
+			expectedKey, err = randgen.TestingMakePrimaryIndexKeyForTenant(tableDesc, s.Codec(), i*10)
 			if err != nil {
 				t.Fatal(err)
 			}

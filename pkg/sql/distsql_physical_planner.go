@@ -4768,3 +4768,7 @@ func (dsp *DistSQLPlanner) createPlanForInsert(
 		execinfrapb.Ordering{})
 	return plan, nil
 }
+
+func (dsp *DistSQLPlanner) NodeDescStore() kvcoord.NodeDescStore {
+	return dsp.nodeDescs
+}

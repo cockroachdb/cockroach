@@ -39,7 +39,7 @@ overrides:
   '@cockroachlabs/cluster-ui>antd': 3.26.20
   analytics-node>axios-retry: 3.1.9
 
-packageExtensionsChecksum: c8401d95bcfa63cade05749ae746f3fe
+packageExtensionsChecksum: 8b8b370d73a39eaff506edcfedb27e22
 
 patchedDependencies:
   topojson@3.0.2:
@@ -6178,6 +6178,8 @@ packages:
 
   /@protobufjs/inquire@1.1.0:
     resolution: {integrity: sha512-kdSefcPdruJiFMVSbn801t4vFK7KB/5gd2fYvrxhuJYg8ILrmn9SKSX2tZdV6V+ksulWqS7aXjBcRXl3wHoD9Q==}
+    dependencies:
+      long: 4.0.0
 
   /@protobufjs/path@1.1.2:
     resolution: {integrity: sha512-6JOcJ5Tm08dOHAbdR3GrvP+yUUfkjG5ePsHYczMFLq3ZmMkAD98cDgcT2iA1lJ9NVwFd4tH/iSSoe44YWkltEA==}

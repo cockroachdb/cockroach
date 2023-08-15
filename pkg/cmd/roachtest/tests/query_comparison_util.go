@@ -158,15 +158,23 @@ func runOneRoundQueryComparison(
 		t.L().Printf("\n\n")
 	}
 
-	failureLogPath := filepath.Join(
-		t.ArtifactsDir(), fmt.Sprintf("%s%03d.failure.log", qct.name, iter),
-	)
-	failureLog, err := os.Create(failureLogPath)
-	if err != nil {
-		t.Fatalf("could not create %s%03d.failure.log: %v", qct.name, iter, err)
-	}
-	defer failureLog.Close()
+	// We will create the failure log file on demand.
+	var failureLog *os.File
+	defer func() {
+		if failureLog != nil {
+			_ = failureLog.Close()
+		}
+	}()
 	logFailure := func(stmt string, rows [][]string) {
+		if failureLog == nil {
+			failureLogName := fmt.Sprintf("%s%03d.failure.log", qct.name, iter)
+			failureLogPath := filepath.Join(t.ArtifactsDir(), failureLogName)
+			var err error
+			failureLog, err = os.Create(failureLogPath)
+			if err != nil {
+				t.Fatalf("could not create %s: %v", failureLogName, err)
+			}
+		}
 		fmt.Fprint(failureLog, stmt)
 		fmt.Fprint(failureLog, "\n----\n")
 		fmt.Fprint(failureLog, sqlutils.MatrixToStr(rows))
