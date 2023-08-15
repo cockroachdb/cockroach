@@ -208,8 +208,15 @@ message StreamIngestionPartitionSpec {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
 }
 
+// StreamIngestionPartitionSpecs contains all the partition specs that are part
+// of the DistSQL plan.
 message StreamIngestionPartitionSpecs {
   repeated StreamIngestionPartitionSpec specs = 3;
+}
+
+// FrontierEntries is a snapshot of a span frontier.
+message FrontierEntries {
+  repeated jobs.jobspb.ResolvedSpan resolved_spans = 1 [(gogoproto.nullable) = false];
 }
 
 message StreamIngestionDataSpec {
