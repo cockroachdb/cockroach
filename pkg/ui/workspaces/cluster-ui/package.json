@@ -17,7 +17,7 @@
     "build:bundle": "NODE_ENV=production webpack --display-error-details --mode=production",
     "build:typescript": "tsc",
     "build:watch": "webpack --watch --mode=development --env.WEBPACK_WATCH",
-    "tsc:watch": "node build/typescript/watchWithMultipleDests.js",
+    "tsc:watch": "node build/typescript/watchWithMultipleDests.js --no-interactive",
     "ci": "jest --ci -i",
     "clean": "rm -rf  ./dist/*",
     "lint": "eslint './src/**/*.{tsx,ts,js}' --format=codeframe",
