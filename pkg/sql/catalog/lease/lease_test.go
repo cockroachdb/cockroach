@@ -622,6 +622,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// dropped; it will be left in a "deleted" state.
 	mu.Lock()
 	clearSchemaChangers = true
+	// nolint:deferunlock
 	mu.Unlock()
 
 	// DROP the table
@@ -728,6 +729,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	mu.Lock()
 	clearSchemaChangers = true
 	waitTableID = tableDesc.GetID()
+	// nolint:deferunlock
 	mu.Unlock()
 
 	// DROP the table
@@ -2827,6 +2829,7 @@ func TestOfflineLeaseRefresh(t *testing.T) {
 		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
 			mu.RLock()
 			checkRequest := req.Txn != nil && req.Txn.ID.Equal(txnID)
+			// nolint:deferunlock
 			mu.RUnlock()
 			if _, ok := req.GetArg(kvpb.EndTxn); checkRequest && ok {
 				notify := make(chan struct{})
@@ -2881,6 +2884,7 @@ CREATE TABLE d1.t2 (name int);
 			mu.Lock()
 			waitForRqstFilter = make(chan chan struct{})
 			txnID = txn.KV().ID()
+			// nolint:deferunlock
 			mu.Unlock()
 
 			// Online the descriptor by making it public
@@ -2916,6 +2920,7 @@ CREATE TABLE d1.t2 (name int);
 		close(notify)
 		mu.RLock()
 		rqstFilterChannel := waitForRqstFilter
+		// nolint:deferunlock
 		mu.RUnlock()
 		for notify2 := range rqstFilterChannel {
 			// Push the query trying to online the table out by
@@ -2956,6 +2961,7 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 			// Wait for a commit with the txnID, and only allows
 			// it to resume when the channel gets unblocked.
 			if req.Txn != nil && req.Txn.ID.String() == txnID {
+				// nolint:deferunlock
 				filterMu.Unlock()
 				// There will only be a single EndTxn request in
 				// flight due to the transaction ID filter and
@@ -3008,6 +3014,7 @@ SELECT * FROM t1;
 			filterMu.Lock()
 			err = txnIDResult.Scan(&txnID)
 			blockedOnce = false
+			// nolint:deferunlock
 			filterMu.Unlock()
 			if err != nil {
 				waitChan <- err
@@ -3070,6 +3077,7 @@ SELECT * FROM t1;
 			filterMu.Lock()
 			err = txnIDResult.Scan(&txnID)
 			blockedOnce = false
+			// nolint:deferunlock
 			filterMu.Unlock()
 			if err != nil {
 				waitChan <- err
@@ -3147,6 +3155,7 @@ func TestLeaseBulkInsertWithImplicitTxn(t *testing.T) {
 			beforeExecute.Lock()
 			if stmt == beforeExecuteStmt {
 				tableID := descpb.ID(atomic.LoadUint64(&leaseTableID))
+				// nolint:deferunlock
 				beforeExecute.Unlock()
 				waitChan := make(chan struct{})
 				select {
@@ -3172,12 +3181,14 @@ func TestLeaseBulkInsertWithImplicitTxn(t *testing.T) {
 		AfterExecute: func(ctx context.Context, stmt string, err error) {
 			beforeExecute.Lock()
 			if stmt == beforeExecuteResumeStmt {
+				// nolint:deferunlock
 				beforeExecute.Unlock()
 				resumeChan, ok := <-beforeExecuteWait
 				if ok {
 					close(resumeChan)
 				}
 			} else {
+				// nolint:deferunlock
 				beforeExecute.Unlock()
 			}
 		},
@@ -3222,6 +3233,7 @@ INSERT INTO t1 select a from generate_series(1, 100) g(a);
 			const bulkUpdateQuery = "UPDATE t1 SET val = 2"
 			beforeExecute.Lock()
 			beforeExecuteStmt = bulkUpdateQuery
+			// nolint:deferunlock
 			beforeExecute.Unlock()
 			// Execute a bulk UPDATE, which will get its
 			// timestamp pushed by a read operation.
@@ -3237,6 +3249,7 @@ INSERT INTO t1 select a from generate_series(1, 100) g(a);
 		)
 		beforeExecute.Lock()
 		beforeExecuteResumeStmt = selectStmt
+		// nolint:deferunlock
 		beforeExecute.Unlock()
 		// While the update hasn't completed executing, repeatedly
 		// execute selects to push out the update operation. We will
@@ -3253,6 +3266,7 @@ INSERT INTO t1 select a from generate_series(1, 100) g(a);
 		// like normal after being pushed a limited number of times.
 		beforeExecute.Lock()
 		beforeExecuteStmt, beforeExecuteResumeStmt = "", ""
+		// nolint:deferunlock
 		beforeExecute.Unlock()
 		resumeChan, channelReadOk := <-beforeExecuteWait
 		if channelReadOk {
@@ -3424,6 +3438,7 @@ func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(t *tes
 	mu.Lock()
 	typeDescID = typeDesc.GetID()
 	typeDescName = typeDesc.GetName()
+	// nolint:deferunlock
 	mu.Unlock()
 
 	// Wait until the testing knob drops `typ`

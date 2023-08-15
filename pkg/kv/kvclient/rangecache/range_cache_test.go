@@ -1346,6 +1346,7 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			cache.rangeCache.RLock()
 			targetRange, _ := cache.getCachedRLocked(ctx, test.queryKey, true /* inverted */)
+			// nolint:deferunlock
 			cache.rangeCache.RUnlock()
 
 			if test.rng == nil {

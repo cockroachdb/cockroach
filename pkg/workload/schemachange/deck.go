@@ -63,6 +63,7 @@ func (d *deck) Int() int {
 	}
 	result := d.mu.vals[d.mu.index]
 	d.mu.index++
+	// nolint:deferunlock
 	d.mu.Unlock()
 	return result
 }

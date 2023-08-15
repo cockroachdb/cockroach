@@ -386,6 +386,7 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 
 	f.tempStorage.Lock()
 	created := f.tempStorage.path != ""
+	// nolint:deferunlock
 	f.tempStorage.Unlock()
 	if created {
 		if err := f.Cfg.TempFS.RemoveAll(f.GetPath(ctx)); err != nil {

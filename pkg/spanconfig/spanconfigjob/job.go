@@ -172,6 +172,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 
 			persistCheckpointsMu.Lock()
 			shouldPersistCheckpoint := persistCheckpointsMu.ShouldProcess(timeutil.Now())
+			// nolint:deferunlock
 			persistCheckpointsMu.Unlock()
 			if !shouldPersistCheckpoint {
 				return nil

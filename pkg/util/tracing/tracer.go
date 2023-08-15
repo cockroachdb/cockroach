@@ -459,6 +459,7 @@ func (r *SpanRegistry) VisitRoots(visitor func(span RegistrySpan) error) error {
 		// We'll keep the spans alive while we're visiting them below.
 		spans = append(spans, makeSpanRef(sp.sp))
 	}
+	// nolint:deferunlock
 	r.mu.Unlock()
 
 	defer func() {
@@ -495,6 +496,7 @@ func (r *SpanRegistry) VisitSpans(visitor func(span RegistrySpan)) {
 		// We'll keep the spans alive while we're visiting them below.
 		spans = append(spans, makeSpanRef(sp.sp))
 	}
+	// nolint:deferunlock
 	r.mu.Unlock()
 
 	defer func() {
@@ -1045,6 +1047,7 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 	c.mu.lazyTags = nil
 	c.mu.recording.logs.Discard()
 	c.mu.recording.structured.Discard()
+	// nolint:deferunlock
 	c.mu.Unlock()
 
 	// Zero out the spanAllocHelper buffers to make the elements inside the

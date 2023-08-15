@@ -485,6 +485,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 									for !blockedRead.shouldUnblock {
 										blockedRead.unblockCond.Wait()
 									}
+									// nolint:deferunlock
 									blockedRead.Unlock()
 									return kvpb.NewError(
 										kvpb.NewReadWithinUncertaintyIntervalError(
@@ -540,6 +541,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 			// Reset the blocking condition.
 			blockedRead.Lock()
 			blockedRead.shouldUnblock = false
+			// nolint:deferunlock
 			blockedRead.Unlock()
 			// Force DistSQL to distribute the query. Otherwise, as of Nov 2018, it's hard
 			// to convince it to distribute a query that uses an index.
@@ -586,6 +588,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 					// already been blocked.
 					blockedRead.shouldUnblock = true
 					blockedRead.unblockCond.Signal()
+					// nolint:deferunlock
 					blockedRead.Unlock()
 				}
 			}
@@ -652,6 +655,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 							filters[node].Lock()
 							enabled := filters[node].enabled
 							keyPrefix := filters[node].keyPrefix
+							// nolint:deferunlock
 							filters[node].Unlock()
 							if !enabled {
 								return nil
@@ -785,6 +789,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 						filters[nodeIdx].Lock()
 						filters[nodeIdx].enabled = true
 						filters[nodeIdx].keyPrefix = keys.SystemSQLCodec.TablePrefix(uint32(tableID))
+						// nolint:deferunlock
 						filters[nodeIdx].Unlock()
 					}
 					// Reset all filters for the next test case.
@@ -793,6 +798,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 							filters[i].Lock()
 							filters[i].enabled = false
 							filters[i].keyPrefix = nil
+							// nolint:deferunlock
 							filters[i].Unlock()
 						}
 					}()

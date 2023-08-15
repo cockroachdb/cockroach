@@ -68,6 +68,7 @@ func newTestBuffer(sizeLimit int64) *testAsyncBuffer {
 				p := t.writerBuffer[idx]
 				t.validation.readMap[p.k] = p.v
 			}
+			// nolint:deferunlock
 			t.validation.Unlock()
 
 			// Resets t.writerBuffer.

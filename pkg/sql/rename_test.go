@@ -139,6 +139,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	mu.Lock()
 	waitTableID = tableDesc.GetID()
+	// nolint:deferunlock
 	mu.Unlock()
 
 	txn, err := db.Begin()

@@ -1527,6 +1527,7 @@ func (r *Replica) maybeSwitchLeaseType(ctx context.Context, st kvserverpb.LeaseS
 	if !r.hasCorrectLeaseTypeRLocked(st.Lease) {
 		llHandle = r.requestLeaseLocked(ctx, st, nil /* limiter */)
 	}
+	// nolint:deferunlock
 	r.mu.Unlock()
 
 	if llHandle != nil {

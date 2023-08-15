@@ -74,6 +74,7 @@ func (rs *testRangeSet) Visit(visitor func(*Replica) bool) {
 	rs.visited = 0
 	rs.replicasByKey.Ascend(func(i btree.Item) bool {
 		rs.visited++
+		// nolint:deferunlock
 		rs.Unlock()
 		defer rs.Lock()
 		return visitor((*Replica)(i.(*btreeReplica)))
@@ -123,6 +124,7 @@ func (tq *testQueue) Start(stopper *stop.Stopper) {
 	done := func() {
 		tq.Lock()
 		tq.done = true
+		// nolint:deferunlock
 		tq.Unlock()
 	}
 
@@ -135,6 +137,7 @@ func (tq *testQueue) Start(stopper *stop.Stopper) {
 					tq.ranges = tq.ranges[1:]
 					tq.processed++
 				}
+				// nolint:deferunlock
 				tq.Unlock()
 			case <-stopper.ShouldQuiesce():
 				done()

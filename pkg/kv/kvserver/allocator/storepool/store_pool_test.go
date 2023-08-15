@@ -65,6 +65,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	if _, ok := sp.DetailsMu.StoreDetails[2]; ok {
 		t.Fatalf("store 2 is already in the pool's store list")
 	}
+	// nolint:deferunlock
 	sp.DetailsMu.RUnlock()
 
 	sg.GossipStores(uniqueStore, t)
@@ -73,6 +74,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	if _, ok := sp.DetailsMu.StoreDetails[2]; !ok {
 		t.Fatalf("store 2 isn't in the pool's store list")
 	}
+	// nolint:deferunlock
 	sp.DetailsMu.RUnlock()
 }
 
@@ -209,6 +211,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	sp.DetailsMu.StoreDetails[declinedStore.StoreID].ThrottledUntil = sp.clock.Now().AddDuration(time.Hour)
 	// Set suspectedStore as suspected.
 	sp.DetailsMu.StoreDetails[suspectedStore.StoreID].LastUnavailable = sp.clock.Now()
+	// nolint:deferunlock
 	sp.DetailsMu.Unlock()
 
 	// No filter or limited set of store IDs.
@@ -594,6 +597,7 @@ func TestStorePoolThrottle(t *testing.T) {
 
 	sp.DetailsMu.Lock()
 	detail := sp.GetStoreDetailLocked(1)
+	// nolint:deferunlock
 	sp.DetailsMu.Unlock()
 	if detail.ThrottledUntil.WallTime != expected.WallTime {
 		t.Errorf("expected store to have been throttled to %v, found %v",

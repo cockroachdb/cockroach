@@ -36,6 +36,7 @@ func (s *Receiver) HTML() string {
 	for _, c := range s.mu.conns {
 		conns = append(conns, c)
 	}
+	// nolint:deferunlock
 	s.mu.RUnlock()
 	// Sort by node id.
 	sort.Slice(conns, func(i, j int) bool {
@@ -51,6 +52,7 @@ func (s *Receiver) HTML() string {
 	for _, c := range s.historyMu.lastClosed {
 		closed = append(closed, c)
 	}
+	// nolint:deferunlock
 	s.historyMu.Unlock()
 	// Sort by disconnection time, descending.
 	sort.Slice(closed, func(i, j int) bool {
@@ -104,6 +106,7 @@ func (s *Sender) HTML() string {
 	header("Closed timestamps sender state")
 	s.leaseholdersMu.Lock()
 	fmt.Fprintf(sb, "leaseholders: %d\n", len(s.leaseholdersMu.leaseholders))
+	// nolint:deferunlock
 	s.leaseholdersMu.Unlock()
 
 	s.trackedMu.Lock()

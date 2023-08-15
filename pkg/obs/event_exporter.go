@@ -337,6 +337,7 @@ func (s *EventsExporter) Start(ctx context.Context, stopper *stop.Stopper) error
 				_, err := s.otelClient.Export(ctx, req, grpc.WaitForReady(true))
 				s.buf.mu.Lock()
 				s.buf.mu.memAccount.Shrink(ctx, int64(msgSize))
+				// nolint:deferunlock
 				s.buf.mu.Unlock()
 				if err != nil {
 					log.Warningf(ctx, "failed to export events: %s", err)

@@ -272,6 +272,7 @@ func makeMVCCGCQueueScore(
 ) mvccGCQueueScore {
 	repl.mu.Lock()
 	ms := *repl.mu.state.Stats
+	// nolint:deferunlock
 	repl.mu.Unlock()
 
 	if repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {

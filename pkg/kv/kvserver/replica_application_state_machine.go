@@ -128,6 +128,7 @@ func (sm *replicaStateMachine) NewEphemeralBatch() apply.EphemeralBatch {
 	mb.r = r
 	r.mu.RLock()
 	mb.state = r.mu.state
+	// nolint:deferunlock
 	r.mu.RUnlock()
 	return mb
 }
@@ -144,6 +145,7 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	b.state.Stats = &sm.stats
 	*b.state.Stats = *r.mu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
+	// nolint:deferunlock
 	r.mu.RUnlock()
 	b.start = timeutil.Now()
 	return b
@@ -200,6 +202,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			// TODO(sep-raft-log): either check only statemachine invariants or
 			// pass both engines in.
 			sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
+			// nolint:deferunlock
 			sm.r.mu.RUnlock()
 			sm.applyStats.stateAssertions++
 		}
@@ -245,6 +248,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		if higherReproposalsExist {
 			sm.r.mu.Lock()
 			delete(sm.r.mu.proposals, cmd.ID)
+			// nolint:deferunlock
 			sm.r.mu.Unlock()
 		}
 		cmd.proposal.applied = true

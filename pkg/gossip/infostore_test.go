@@ -202,6 +202,7 @@ func TestCombineInfosRatchetMonotonic(t *testing.T) {
 			// Reset the monotonic clock.
 			monoTime.Lock()
 			monoTime.last = 0
+			// nolint:deferunlock
 			monoTime.Unlock()
 
 			fresh, err := is.combine(map[string]*Info{"hello": info}, 2)
@@ -216,6 +217,7 @@ func TestCombineInfosRatchetMonotonic(t *testing.T) {
 			// locally.
 			monoTime.Lock()
 			last := monoTime.last
+			// nolint:deferunlock
 			monoTime.Unlock()
 			var expectedLast int64
 			if local {

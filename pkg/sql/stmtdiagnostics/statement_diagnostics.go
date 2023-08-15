@@ -668,6 +668,7 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 	for {
 		r.mu.Lock()
 		epoch := r.mu.epoch
+		// nolint:deferunlock
 		r.mu.Unlock()
 
 		var extraColumns string
@@ -697,6 +698,7 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		// manually while the query was running. In that case, if we were to process
 		// the query results normally, we might remove that manually-added request.
 		if r.mu.epoch != epoch {
+			// nolint:deferunlock
 			r.mu.Unlock()
 			continue
 		}

@@ -496,6 +496,7 @@ func (m *RandomStreamClient) Subscribe(
 	rng, _ := randutil.NewPseudoRand()
 	m.mu.Lock()
 	reg, err := newRandomEventGenerator(rng, partitionURL, config, m.mu.sstMaker)
+	// nolint:deferunlock
 	m.mu.Unlock()
 	if err != nil {
 		return nil, err

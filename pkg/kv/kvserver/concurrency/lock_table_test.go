@@ -1391,6 +1391,7 @@ L:
 					}
 					e.mu.Lock()
 					e.transactions[txnID] = tstate
+					// nolint:deferunlock
 					e.mu.Unlock()
 				}
 				e.transactions[txnID].ongoingRequests[&work] = struct{}{}

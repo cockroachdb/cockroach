@@ -187,6 +187,7 @@ func TestReplicaProbeRequest(t *testing.T) {
 	injErr := kvpb.NewErrorf("bang")
 	seen.Lock()
 	seen.injectedErr = injErr
+	// nolint:deferunlock
 	seen.Unlock()
 	for _, srv := range tc.Servers {
 		repl, _, err := srv.GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, desc.RangeID)

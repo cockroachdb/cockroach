@@ -229,6 +229,7 @@ func prepareRightReplicaForSplit(
 	r.mu.RLock()
 	minLeaseProposedTS := r.mu.minLeaseProposedTS
 	minValidObservedTS := r.mu.minValidObservedTimestamp
+	// nolint:deferunlock
 	r.mu.RUnlock()
 
 	// If the RHS replica of the split is not removed, then it has been obtained

@@ -163,6 +163,7 @@ func gossipSucceedsSoon(
 			g := gossip[client]
 			g.mu.Lock()
 			client.startLocked(g, disconnected, rpcContext, stopper)
+			// nolint:deferunlock
 			g.mu.Unlock()
 		default:
 		}
@@ -320,6 +321,7 @@ func TestClientNodeID(t *testing.T) {
 			// The client hasn't been started or failed to start, loop and try again.
 			local.mu.Lock()
 			c.startLocked(local, disconnected, rpcContext, stopper)
+			// nolint:deferunlock
 			local.mu.Unlock()
 		}
 	}
@@ -343,6 +345,7 @@ func TestClientDisconnectLoopback(t *testing.T) {
 	local.mu.Lock()
 	lAddr := local.mu.is.NodeAddr
 	local.startClientLocked(lAddr, localCtx)
+	// nolint:deferunlock
 	local.mu.Unlock()
 	local.manage(localCtx)
 	testutils.SucceedsSoon(t, func() error {
@@ -372,7 +375,9 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	remote.mu.Lock()
 	rAddr := remote.mu.is.NodeAddr
 	lAddr := local.mu.is.NodeAddr
+	// nolint:deferunlock
 	local.mu.Unlock()
+	// nolint:deferunlock
 	remote.mu.Unlock()
 	local.manage(localCtx)
 	remote.manage(remoteCtx)
@@ -389,6 +394,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 			// a heartbeat time.
 			local.mu.Lock()
 			local.startClientLocked(rAddr, localCtx)
+			// nolint:deferunlock
 			local.mu.Unlock()
 			return fmt.Errorf("unable to find local to remote client")
 		}
@@ -400,6 +406,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	// redundant as there is already a connection between the two nodes.
 	remote.mu.Lock()
 	remote.startClientLocked(lAddr, remoteCtx)
+	// nolint:deferunlock
 	remote.mu.Unlock()
 
 	testutils.SucceedsSoon(t, func() error {
@@ -436,7 +443,9 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 	// connections.
 	local.startClientLocked(rAddr, localCtx)
 	local.startClientLocked(rAddr, localCtx)
+	// nolint:deferunlock
 	local.mu.Unlock()
+	// nolint:deferunlock
 	remote.mu.Unlock()
 	local.manage(localCtx)
 	remote.manage(remoteCtx)
@@ -448,7 +457,9 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 		remote.mu.Lock()
 		outgoing := local.outgoing.len()
 		incoming := remote.mu.incoming.len()
+		// nolint:deferunlock
 		local.mu.Unlock()
+		// nolint:deferunlock
 		remote.mu.Unlock()
 		if outgoing == 1 && incoming == 1 && verifyServerMaps(local, 0) && verifyServerMaps(remote, 1) {
 			return nil
@@ -531,6 +542,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 	}
 	local.mu.Lock()
 	local.outgoing.addPlaceholder() // so that the resolvePlaceholder in handleResponse doesn't fail
+	// nolint:deferunlock
 	local.mu.Unlock()
 	if err := client.handleResponse(
 		context.Background(), local, reply,

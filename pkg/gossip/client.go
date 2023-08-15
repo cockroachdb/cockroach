@@ -130,6 +130,7 @@ func (c *client) startLocked(
 				} else {
 					log.Infof(ctx, "closing client to %s: %s", c.addr, err)
 				}
+				// nolint:deferunlock
 				g.mu.RUnlock()
 			}
 		}
@@ -158,6 +159,7 @@ func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 		HighWaterStamps: g.mu.is.getHighWaterStamps(),
 		ClusterID:       g.clusterID.Get(),
 	}
+	// nolint:deferunlock
 	g.mu.RUnlock()
 
 	bytesSent := int64(args.Size())

@@ -385,6 +385,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 				// clear the abortTxn function before returning.
 				mu.Lock()
 				mu.abortTxn = nil
+				// nolint:deferunlock
 				mu.Unlock()
 			}()
 		}

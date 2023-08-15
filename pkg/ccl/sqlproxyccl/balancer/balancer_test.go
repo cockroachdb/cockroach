@@ -774,6 +774,7 @@ func TestBalancer_RebalanceTenant_WithRebalancingDisabled(t *testing.T) {
 	// Queue should be empty, and no additional connections should be moved.
 	b.queue.mu.Lock()
 	queueLen := b.queue.queue.Len()
+	// nolint:deferunlock
 	b.queue.mu.Unlock()
 	require.Equal(t, 0, queueLen)
 	assertZeroTransfers()
@@ -786,6 +787,7 @@ func TestBalancer_RebalanceTenant_WithRebalancingDisabled(t *testing.T) {
 	// Queue should be empty, and no additional connections should be moved.
 	b.queue.mu.Lock()
 	queueLen = b.queue.queue.Len()
+	// nolint:deferunlock
 	b.queue.mu.Unlock()
 	require.Equal(t, 0, queueLen)
 	assertZeroTransfers()
@@ -877,6 +879,7 @@ func TestBalancer_RebalanceTenant_WithDefaultDelay(t *testing.T) {
 	// Queue should be empty, and no additional connections should be moved.
 	b.queue.mu.Lock()
 	queueLen := b.queue.queue.Len()
+	// nolint:deferunlock
 	b.queue.mu.Unlock()
 	require.Equal(t, 0, queueLen)
 	waitFor(50)
