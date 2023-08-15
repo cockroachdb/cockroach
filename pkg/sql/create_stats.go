@@ -104,26 +104,25 @@ type createStatsNode struct {
 // createStatsRun contains the run-time state of createStatsNode during local
 // execution.
 type createStatsRun struct {
-	errCh chan error
+	cancelFn context.CancelFunc
+	errCh    chan error
 }
 
 func (n *createStatsNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("stats"))
 	n.run.errCh = make(chan error)
-	go func() {
-		err := n.startJob(params.ctx)
-		select {
-		case <-params.ctx.Done():
-		case n.run.errCh <- err:
-		}
-		close(n.run.errCh)
-	}()
-	return nil
+	cancelFn, err := n.startJob(params.ctx)
+	n.run.cancelFn = cancelFn
+	return err
 }
 
 func (n *createStatsNode) Next(params runParams) (bool, error) {
+	defer n.run.cancelFn()
 	select {
 	case <-params.ctx.Done():
+		// Wait for the job wait to cancel, before
+		// the context can be cleaned up.
+		<-n.run.errCh
 		return false, params.ctx.Err()
 	case err := <-n.run.errCh:
 		return false, err
@@ -134,10 +133,10 @@ func (*createStatsNode) Close(context.Context) {}
 func (*createStatsNode) Values() tree.Datums   { return nil }
 
 // startJob starts a CreateStats job to plan and execute statistics creation.
-func (n *createStatsNode) startJob(ctx context.Context) error {
+func (n *createStatsNode) startJob(ctx context.Context) (context.CancelFunc, error) {
 	record, err := n.makeJobRecord(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if n.Name == jobspb.AutoStatsName {
@@ -146,7 +145,7 @@ func (n *createStatsNode) startJob(ctx context.Context) error {
 		// but this check is used to prevent creating a large number of jobs that
 		// immediately fail).
 		if err := checkRunningJobs(ctx, nil /* job */, n.p); err != nil {
-			return err
+			return nil, err
 		}
 	} else {
 		telemetry.Inc(sqltelemetry.CreateStatisticsUseCounter)
@@ -162,25 +161,33 @@ func (n *createStatsNode) startJob(ctx context.Context) error {
 				log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 			}
 		}
-		return err
+		return nil, err
 	}
 	if err := job.Start(ctx); err != nil {
-		return err
+		return nil, err
 	}
-
-	if err := job.AwaitCompletion(ctx); err != nil {
-		if errors.Is(err, stats.ConcurrentCreateStatsError) {
-			// Delete the job so users don't see it and get confused by the error.
-			const stmt = `DELETE FROM system.jobs WHERE id = $1`
-			if _ /* cols */, delErr := n.p.ExecCfg().InternalDB.Executor().Exec(
-				ctx, "delete-job", nil /* txn */, stmt, jobID,
-			); delErr != nil {
-				log.Warningf(ctx, "failed to delete job: %v", delErr)
+	ctx, cancelFn := context.WithCancel(ctx)
+	go func() {
+		var err error
+		if err = job.AwaitCompletion(ctx); err != nil {
+			if errors.Is(err, stats.ConcurrentCreateStatsError) {
+				// Delete the job so users don't see it and get confused by the error.
+				const stmt = `DELETE FROM system.jobs WHERE id = $1`
+				if _ /* cols */, delErr := n.p.ExecCfg().InternalDB.Executor().Exec(
+					ctx, "delete-job", nil /* txn */, stmt, jobID,
+				); delErr != nil {
+					log.Warningf(ctx, "failed to delete job: %v", delErr)
+				}
 			}
 		}
-		return err
-	}
-	return nil
+		select {
+		case <-ctx.Done():
+		case n.run.errCh <- err:
+		}
+		close(n.run.errCh)
+
+	}()
+	return cancelFn, nil
 }
 
 // makeJobRecord creates a CreateStats job record which can be used to plan and
