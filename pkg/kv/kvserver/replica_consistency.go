@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -42,22 +41,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
-
-// fatalOnStatsMismatch, if true, turns stats mismatches into fatal errors. A
-// stats mismatch is the event in which
-//   - the consistency checker finds that all replicas are consistent
-//     (i.e. byte-by-byte identical)
-//   - the (identical) stats tracked in them do not correspond to a recomputation
-//     via the data, i.e. the stats were incorrect
-//   - ContainsEstimates==false, i.e. the stats claimed they were correct.
-//
-// Before issuing the fatal error, the cluster bootstrap version is verified.
-// Note that on clusters that originally got bootstrapped on older releases
-// (definitely 19.1, and likely also more recent ones) we know of the existence
-// of stats bugs, so it has to be expected to see the assertion fire there.
-//
-// This env var is intended solely for use in Cockroach Labs testing.
-var fatalOnStatsMismatch = envutil.EnvOrDefaultBool("COCKROACH_ENFORCE_CONSISTENT_STATS", false)
 
 // replicaChecksum contains progress on a replica checksum computation.
 type replicaChecksum struct {
@@ -218,11 +201,6 @@ func (r *Replica) checkConsistencyImpl(
 		// If there's no delta, there's nothing else to do.
 		if !haveDelta {
 			return resp, nil
-		}
-		if delta.ContainsEstimates <= 0 && fatalOnStatsMismatch {
-			// We just found out that the recomputation doesn't match the persisted stats,
-			// so ContainsEstimates should have been strictly positive.
-			log.Fatalf(ctx, "found a delta of %+v", redact.Safe(delta))
 		}
 
 		// We've found that there's something to correct; send an RecomputeStatsRequest. Note that this
