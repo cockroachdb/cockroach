@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -142,6 +143,7 @@ type clusterCfg struct {
 	beforeVersion     string
 	testingKnobCfg    string
 	defaultTestTenant base.DefaultTestTenantOptions
+	randomTxnRetries  bool
 }
 
 func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
@@ -155,6 +157,9 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 			// The tests in this package are particular about the tenant IDs
 			// they get in CREATE TENANT.
 			EnableTenantIDReuse: true,
+		},
+		KVClient: &kvcoord.ClientTestingKnobs{
+			EnableRandomTransactionRetryErrors: cfg.randomTxnRetries,
 		},
 	}
 
@@ -513,6 +518,11 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				defaultTestTenant = base.TODOTestTenantDisabled
 			}
 
+			randomTxnRetries := !d.HasArg("disable-txn-retries")
+			if util.RaceEnabled {
+				randomTxnRetries = false
+			}
+
 			lastCreatedCluster = name
 			cfg := clusterCfg{
 				name:              name,
@@ -524,6 +534,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				beforeVersion:     beforeVersion,
 				testingKnobCfg:    testingKnobCfg,
 				defaultTestTenant: defaultTestTenant,
+				randomTxnRetries:  randomTxnRetries,
 			}
 			err := ds.addCluster(t, cfg)
 			if err != nil {
@@ -819,11 +830,9 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			}
 			codec := execCfg.Codec
 			dummyTable := systemschema.SettingsTable
-			err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				id, err := execCfg.DescIDGenerator.GenerateUniqueDescID(ctx)
-				if err != nil {
-					return err
-				}
+			id, err := execCfg.DescIDGenerator.GenerateUniqueDescID(ctx)
+			require.NoError(t, err)
+			err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				mut := dummyTable.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
 				mut.ID = id
 				mut.Name = fmt.Sprintf("%s_%d", "crdb_internal_copy", id)
