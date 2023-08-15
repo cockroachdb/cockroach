@@ -72,6 +72,9 @@ func TestProtectedTimestamps(t *testing.T) {
 	_, err = conn.Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
 	require.NoError(t, err)
 
+	_, err = conn.Exec("SET CLUSTER SETTING kv.enqueue_in_replicate_queue_on_span_config_update.enabled = true") // speeds up the test
+	require.NoError(t, err)
+
 	const tableRangeMaxBytes = 64 << 20
 	_, err = conn.Exec("ALTER TABLE foo CONFIGURE ZONE USING "+
 		"gc.ttlseconds = 1, range_max_bytes = $1, range_min_bytes = 1<<10;", tableRangeMaxBytes)
@@ -125,13 +128,9 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 
 	getStoreAndReplica := func() (*kvserver.Store, *kvserver.Replica) {
 		startKey := getTableStartKey()
-		// Okay great now we have a key and can go find replicas and stores and what not.
-		r := tc.LookupRangeOrFatal(t, startKey)
-		l, _, err := tc.FindRangeLease(r, nil)
-		require.NoError(t, err)
-
-		lhServer := tc.Server(int(l.Replica.NodeID) - 1)
-		return getFirstStoreReplica(t, lhServer, startKey)
+		// There's only one server, so there's no point searching for which server
+		// the leaseholder is on, it could only be on s0.
+		return getFirstStoreReplica(t, s0, startKey)
 	}
 
 	waitForRangeMaxBytes := func(maxBytes int64) {
