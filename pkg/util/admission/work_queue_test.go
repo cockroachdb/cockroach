@@ -415,6 +415,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 	q.close()
 	mu.Lock()
 	t.Logf("total: %d, err: %d", totalCount, errCount)
+	// nolint:deferunlock
 	mu.Unlock()
 }
 

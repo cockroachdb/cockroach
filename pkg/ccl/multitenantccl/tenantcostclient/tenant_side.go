@@ -450,6 +450,7 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 	c.mu.consumption.PGWireEgressBytes += deltaPGWireEgressBytes
 	c.mu.consumption.RU += float64(ru)
 	newConsumption := c.mu.consumption
+	// nolint:deferunlock
 	c.mu.Unlock()
 
 	// Update the average RUs consumed per second, based on the latest stats.
@@ -886,6 +887,7 @@ func (c *tenantSideCostController) onExternalIO(
 	if c.shouldAccountForExternalIORUs() {
 		c.mu.consumption.RU += float64(totalRU)
 	}
+	// nolint:deferunlock
 	c.mu.Unlock()
 
 	return nil

@@ -1358,6 +1358,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	sp.GetStoreDetailLocked(6).Desc.Capacity = ranges(0)
 	sp.GetStoreDetailLocked(7).Desc.Capacity = ranges(100)
 	sp.GetStoreDetailLocked(8).Desc.Capacity = ranges(100)
+	// nolint:deferunlock
 	sp.DetailsMu.Unlock()
 
 	// Each test case should describe a repair situation which has a lower

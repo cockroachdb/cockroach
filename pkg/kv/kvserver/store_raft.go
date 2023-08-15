@@ -560,6 +560,7 @@ func (s *Store) HandleRaftResponse(
 					!repl.mu.destroyStatus.IsAlive() ||
 					// Ignore if we want to test the replicaGC queue.
 					s.TestingKnobs().DisableEagerReplicaRemoval {
+					// nolint:deferunlock
 					repl.mu.Unlock()
 					return nil
 				}
@@ -746,6 +747,7 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 		r.mu.RLock()
 		quiescent := r.mu.quiescent
 		lagging := r.mu.laggingFollowersOnQuiesce
+		// nolint:deferunlock
 		r.mu.RUnlock()
 		if quiescent && lagging.MemberStale(l) {
 			r.maybeUnquiesce(false /* wakeLeader */, false /* mayCampaign */) // already leader
@@ -782,6 +784,7 @@ func (s *Store) processRaft(ctx context.Context) {
 					makeProposalResultErr(
 						kvpb.NewAmbiguousResultErrorf("store is stopping")))
 			}
+			// nolint:deferunlock
 			r.mu.Unlock()
 			return true
 		})
@@ -811,6 +814,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			for rangeID := range s.unquiescedReplicas.m {
 				batch.Add(rangeID)
 			}
+			// nolint:deferunlock
 			s.unquiescedReplicas.Unlock()
 
 			s.scheduler.EnqueueRaftTicks(batch)
@@ -944,6 +948,7 @@ func (s *Store) sendQueuedHeartbeats(ctx context.Context) {
 	heartbeatResponses := s.coalescedMu.heartbeatResponses
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
 	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
+	// nolint:deferunlock
 	s.coalescedMu.Unlock()
 
 	var beatsSent int

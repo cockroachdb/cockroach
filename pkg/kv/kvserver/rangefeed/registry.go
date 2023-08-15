@@ -337,6 +337,7 @@ func (r *registration) outputLoop(ctx context.Context) error {
 			overflowed = r.mu.overflowed
 			r.mu.caughtUp = true
 		}
+		// nolint:deferunlock
 		r.mu.Unlock()
 		if overflowed {
 			return newErrBufferCapacityExceeded().GoError()
@@ -362,10 +363,12 @@ func (r *registration) runOutputLoop(ctx context.Context, _forStacks roachpb.Ran
 	r.mu.Lock()
 	if r.mu.disconnected {
 		// The registration has already been disconnected.
+		// nolint:deferunlock
 		r.mu.Unlock()
 		return
 	}
 	ctx, r.mu.outputLoopCancelFn = context.WithCancel(ctx)
+	// nolint:deferunlock
 	r.mu.Unlock()
 	err := r.outputLoop(ctx)
 	r.disconnect(kvpb.NewError(err))
@@ -580,6 +583,7 @@ func (r *registration) waitForCaughtUp() error {
 	for re := retry.Start(opts); re.Next(); {
 		r.mu.Lock()
 		caughtUp := len(r.buf) == 0 && r.mu.caughtUp
+		// nolint:deferunlock
 		r.mu.Unlock()
 		if caughtUp {
 			return nil

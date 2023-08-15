@@ -30,6 +30,7 @@ func (rd *replicaMsgAppDropper) Args() (initialized bool, age time.Duration) {
 	r.mu.RLock()
 	initialized = r.IsInitialized()
 	creationTime := r.creationTime
+	// nolint:deferunlock
 	r.mu.RUnlock()
 	age = timeutil.Since(creationTime)
 	return initialized, age

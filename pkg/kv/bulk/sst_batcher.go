@@ -829,6 +829,7 @@ func (b *SSTBatcher) addSSTable(
 					if b.writeAtBatchTS {
 						b.mu.maxWriteTS.Forward(br.Timestamp)
 					}
+					// nolint:deferunlock
 					b.mu.Unlock()
 					// If this was sent async then, by the time the reply gets back, it
 					// might not be the last range anymore. We can just discard the last

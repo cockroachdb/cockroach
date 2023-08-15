@@ -247,6 +247,7 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 	require.NoError(t, db.Put(ctx, mkKey("c"), 1))
 	mu.Lock()
 	secondWriteFinished = true
+	// nolint:deferunlock
 	mu.Unlock()
 
 	v = <-rows
@@ -315,6 +316,7 @@ func TestWithOnCheckpoint(t *testing.T) {
 				case c := <-checkpoints:
 					mu.RLock()
 					writeTSUnset := afterWriteTS.IsEmpty()
+					// nolint:deferunlock
 					mu.RUnlock()
 					if writeTSUnset {
 						return errors.New("write to key hasn't gone through yet")
@@ -351,6 +353,7 @@ func TestWithOnCheckpoint(t *testing.T) {
 	require.NoError(t, db.Put(ctx, mkKey("a"), 1))
 	mu.Lock()
 	afterWriteTS = db.Clock().Now()
+	// nolint:deferunlock
 	mu.Unlock()
 	{
 		v := <-rows

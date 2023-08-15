@@ -122,7 +122,9 @@ func TestInOrderResultsBuffer(t *testing.T) {
 				addOrder = addOrder[1:]
 			}
 			b.doneAddingLocked(ctx)
+			// nolint:deferunlock
 			b.Unlock()
+			// nolint:deferunlock
 			budget.mu.Unlock()
 
 			// With 50% probability, try spilling some of the buffered results

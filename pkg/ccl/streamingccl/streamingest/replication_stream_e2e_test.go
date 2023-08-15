@@ -142,6 +142,7 @@ func TestTenantStreamingJobRetryReset(t *testing.T) {
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 	mu.Lock()
 	mu.initialScanComplete = true
+	// nolint:deferunlock
 	mu.Unlock()
 
 	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))

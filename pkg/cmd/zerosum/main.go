@@ -206,6 +206,7 @@ func (z *zeroSum) worker() {
 			z.accounts.Lock()
 			z.accounts.m[from] = struct{}{}
 			z.accounts.m[to] = struct{}{}
+			// nolint:deferunlock
 			z.accounts.Unlock()
 		}
 	}
@@ -359,6 +360,7 @@ func (z *zeroSum) rangeStats(d time.Duration) {
 		count, replicas := z.rangeInfo()
 		z.ranges.Lock()
 		z.ranges.count, z.ranges.replicas = count, replicas
+		// nolint:deferunlock
 		z.ranges.Unlock()
 
 		time.Sleep(d)
@@ -397,6 +399,7 @@ func (z *zeroSum) monitor(d time.Duration) {
 
 		z.ranges.Lock()
 		ranges, replicas := z.ranges.count, z.ranges.replicas
+		// nolint:deferunlock
 		z.ranges.Unlock()
 
 		fmt.Printf("%8s %9d %11d %8.1f %8d %8d %8d %8d %20s\n",

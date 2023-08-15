@@ -53,6 +53,7 @@ type zoneCacheEntry struct {
 func (z *zoneCache) LoadLocation(zone string) (*time.Location, error) {
 	z.mu.Lock()
 	entry, ok := z.mu.named[zone]
+	// nolint:deferunlock
 	z.mu.Unlock()
 
 	if !ok {
@@ -61,6 +62,7 @@ func (z *zoneCache) LoadLocation(zone string) (*time.Location, error) {
 		entry = &zoneCacheEntry{loc: loc, err: err}
 		z.mu.Lock()
 		z.mu.named[zone] = entry
+		// nolint:deferunlock
 		z.mu.Unlock()
 	}
 	return entry.loc, entry.err
@@ -71,6 +73,7 @@ func (z *zoneCache) FixedZone(hours, minutes, seconds int) *time.Location {
 	offset := (hours*60+minutes)*60 + seconds
 	z.mu.Lock()
 	ret, ok := z.mu.fixed[offset]
+	// nolint:deferunlock
 	z.mu.Unlock()
 
 	if !ok {
@@ -85,6 +88,7 @@ func (z *zoneCache) FixedZone(hours, minutes, seconds int) *time.Location {
 		ret = time.FixedZone(fmt.Sprintf("%+03d%02d%02d", hours, minutes, seconds), offset)
 		z.mu.Lock()
 		z.mu.fixed[offset] = ret
+		// nolint:deferunlock
 		z.mu.Unlock()
 	}
 

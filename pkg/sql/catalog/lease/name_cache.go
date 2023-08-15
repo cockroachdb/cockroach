@@ -52,6 +52,7 @@ func (c *nameCache) get(
 	desc, ok := c.descriptors.GetByName(
 		parentID, parentSchemaID, name,
 	).(*descriptorVersionState)
+	// nolint:deferunlock
 	c.mu.RUnlock()
 	if !ok {
 		return nil
@@ -59,6 +60,7 @@ func (c *nameCache) get(
 	expensiveLogEnabled := log.ExpensiveLogEnabled(ctx, 2)
 	desc.mu.Lock()
 	if desc.mu.lease == nil {
+		// nolint:deferunlock
 		desc.mu.Unlock()
 		// This get() raced with a release operation. Remove this cache
 		// entry if needed.

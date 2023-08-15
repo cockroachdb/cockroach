@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+
 	// Import builtins so they are reflected in tree.FunDefs.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -115,6 +116,7 @@ func (s *Smither) getRandTableIndex(
 ) (*tree.TableIndexName, *tree.CreateIndex, colRefs, bool) {
 	s.lock.RLock()
 	indexes := s.indexes[table]
+	// nolint:deferunlock
 	s.lock.RUnlock()
 	if len(indexes) == 0 {
 		return nil, nil, nil, false

@@ -319,6 +319,7 @@ func (rs *replicaScanner) scanLoop() {
 func (rs *replicaScanner) waitEnabled() bool {
 	rs.mu.Lock()
 	rs.mu.waitEnabledCount++
+	// nolint:deferunlock
 	rs.mu.Unlock()
 	for {
 		if !rs.GetDisabled() {

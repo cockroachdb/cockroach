@@ -79,6 +79,7 @@ func flushDaemon() {
 		// Is flushing disabled?
 		logging.mu.Lock()
 		disableDaemons := logging.mu.disableDaemons
+		// nolint:deferunlock
 		logging.mu.Unlock()
 
 		if !disableDaemons {

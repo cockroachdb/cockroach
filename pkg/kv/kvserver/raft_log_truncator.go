@@ -348,6 +348,7 @@ func (t *raftLogTruncator) addPendingTruncation(
 	pendingTruncs.mu.Lock()
 	// Install the new pending truncation.
 	pendingTruncs.mu.truncs[pos] = pendingTrunc
+	// nolint:deferunlock
 	pendingTruncs.mu.Unlock()
 
 	if pos == 0 {
@@ -392,6 +393,7 @@ func (t *raftLogTruncator) durabilityAdvancedCallback() {
 	if !runTruncation && len(t.mu.addRanges) > 0 {
 		t.mu.queuedDurabilityCB = true
 	}
+	// nolint:deferunlock
 	t.mu.Unlock()
 	if !runTruncation {
 		return
@@ -408,6 +410,7 @@ func (t *raftLogTruncator) durabilityAdvancedCallback() {
 					t.mu.runningTruncation = false
 					shouldReturn = true
 				}
+				// nolint:deferunlock
 				t.mu.Unlock()
 				if shouldReturn {
 					return
@@ -606,6 +609,7 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	for i := 0; i <= enactIndex; i++ {
 		pendingTruncs.popLocked()
 	}
+	// nolint:deferunlock
 	pendingTruncs.mu.Unlock()
 	if !pendingTruncs.isEmptyLocked() {
 		t.enqueueRange(rangeID)
@@ -615,5 +619,6 @@ func (t *raftLogTruncator) tryEnactTruncations(
 func (t *raftLogTruncator) enqueueRange(rangeID roachpb.RangeID) {
 	t.mu.Lock()
 	t.mu.addRanges[rangeID] = struct{}{}
+	// nolint:deferunlock
 	t.mu.Unlock()
 }

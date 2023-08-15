@@ -697,6 +697,7 @@ func TestReplicasByKey(t *testing.T) {
 	desc := *rep.mu.state.Desc // shallow copy to replace desc wholesale
 	desc.EndKey = roachpb.RKey("e")
 	rep.mu.state.Desc = &desc
+	// nolint:deferunlock
 	rep.mu.Unlock()
 
 	// Ensure that this shrinkage is recognized by future additions to replicasByKey.
@@ -767,6 +768,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 
 	repl1.mu.RLock()
 	expErr := repl1.mu.destroyStatus.err
+	// nolint:deferunlock
 	repl1.mu.RUnlock()
 
 	if expErr == nil {
@@ -2779,6 +2781,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		repl.mu.Lock()
 		gcThreshold := *repl.mu.state.GCThreshold
 		pgcThreshold, err := repl.mu.stateLoader.LoadGCThreshold(context.Background(), store.TODOEngine())
+		// nolint:deferunlock
 		repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -2855,6 +2858,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 
 	s.mu.Lock()
 	numPlaceholders := len(s.mu.replicaPlaceholders)
+	// nolint:deferunlock
 	s.mu.Unlock()
 
 	if numPlaceholders != 0 {
@@ -3040,6 +3044,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	{
 		s.mu.Lock()
 		err := s.addPlaceholderLocked(placeholder)
+		// nolint:deferunlock
 		s.mu.Unlock()
 		require.NoError(t, err)
 	}
@@ -3056,6 +3061,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		s.mu.Lock()
 		numPlaceholders := len(s.mu.replicaPlaceholders)
+		// nolint:deferunlock
 		s.mu.Unlock()
 
 		if numPlaceholders != 0 {
@@ -3375,6 +3381,7 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 
 	s.cfg.StorePool.DetailsMu.Lock()
 	s.cfg.StorePool.GetStoreDetailLocked(desc.StoreID).Desc = desc
+	// nolint:deferunlock
 	s.cfg.StorePool.DetailsMu.Unlock()
 
 	if n := s.ReservationCount(); n != 0 {
@@ -3399,6 +3406,7 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	desc.Capacity.Used = desc.Capacity.Capacity - desc.Capacity.Available
 	s.cfg.StorePool.DetailsMu.Lock()
 	s.cfg.StorePool.GetStoreDetailLocked(desc.StoreID).Desc = desc
+	// nolint:deferunlock
 	s.cfg.StorePool.DetailsMu.Unlock()
 
 	if n := s.ReservationCount(); n != 0 {

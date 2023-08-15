@@ -109,6 +109,7 @@ func ratchetMonotonic(v int64) {
 	if monoTime.last < v {
 		monoTime.last = v
 	}
+	// nolint:deferunlock
 	monoTime.Unlock()
 }
 
@@ -179,6 +180,7 @@ func newInfoStore(
 				is.callbackWorkMu.Lock()
 				work := is.callbackWork
 				is.callbackWork = nil
+				// nolint:deferunlock
 				is.callbackWorkMu.Unlock()
 
 				if len(work) == 0 {
@@ -342,6 +344,7 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 	}
 	is.callbackWorkMu.Lock()
 	is.callbackWork = append(is.callbackWork, f)
+	// nolint:deferunlock
 	is.callbackWorkMu.Unlock()
 
 	// Signal the callback goroutine. Callbacks run in a goroutine to avoid mutex

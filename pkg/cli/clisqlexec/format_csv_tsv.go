@@ -48,6 +48,7 @@ func makeCSVReporter(w io.Writer, format TableDisplayFormat) (*csvReporter, func
 			case <-ticker.C:
 				r.mu.Lock()
 				r.mu.csvWriter.Flush()
+				// nolint:deferunlock
 				r.mu.Unlock()
 			case <-r.stop:
 				return
@@ -67,6 +68,7 @@ func (p *csvReporter) describe(w io.Writer, cols []string) error {
 	} else {
 		_ = p.mu.csvWriter.Write(cols)
 	}
+	// nolint:deferunlock
 	p.mu.Unlock()
 	return nil
 }
@@ -78,6 +80,7 @@ func (p *csvReporter) iter(_, _ io.Writer, _ int, row []string) error {
 	} else {
 		_ = p.mu.csvWriter.Write(row)
 	}
+	// nolint:deferunlock
 	p.mu.Unlock()
 	return nil
 }
@@ -88,6 +91,7 @@ func (p *csvReporter) doneNoRows(_ io.Writer) error                   { return n
 func (p *csvReporter) doneRows(w io.Writer, seenRows int) error {
 	p.mu.Lock()
 	p.mu.csvWriter.Flush()
+	// nolint:deferunlock
 	p.mu.Unlock()
 	return nil
 }

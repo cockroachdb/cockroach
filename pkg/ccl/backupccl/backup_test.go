@@ -2781,9 +2781,11 @@ func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
 										if numTypeChangesStarted == len(tc.queries) {
 											close(typeChangesStarted)
 										}
+										// nolint:deferunlock
 										mu.Unlock()
 										<-waitForBackup
 									} else {
+										// nolint:deferunlock
 										mu.Unlock()
 									}
 									return nil
@@ -2812,6 +2814,7 @@ CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 						if numTypeChangesFinished == totalQueries {
 							close(typeChangesFinished)
 						}
+						// nolint:deferunlock
 						mu.Unlock()
 					}(query, len(tc.queries))
 				}
@@ -6392,6 +6395,7 @@ func TestRestoreErrorPropagates(t *testing.T) {
 
 	jobsTableKey.Lock()
 	jobsTableKey.key = tc.ApplicationLayer(0).Codec().TablePrefix(uint32(systemschema.JobsTable.GetID()))
+	// nolint:deferunlock
 	jobsTableKey.Unlock()
 
 	runner.Exec(t, `SET CLUSTER SETTING jobs.metrics.interval.poll = '30s'`)
@@ -6574,6 +6578,7 @@ INSERT INTO foo.bar VALUES (110), (210), (310), (410), (510)`)
 	startingSpan := mkSpan(id1, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2")
 	mu.Lock()
 	require.Equal(t, []string{startingSpan.String()}, mu.exportRequestSpans)
+	// nolint:deferunlock
 	mu.Unlock()
 	resetStateVars()
 
@@ -6584,6 +6589,7 @@ INSERT INTO foo.bar VALUES (110), (210), (310), (410), (510)`)
 	resumeSpan := mkSpan(id1, "/Tenant/10/Table/:id/1/510/0", "/Tenant/10/Table/:id/2")
 	mu.Lock()
 	require.Equal(t, []string{startingSpan.String(), resumeSpan.String()}, mu.exportRequestSpans)
+	// nolint:deferunlock
 	mu.Unlock()
 	resetStateVars()
 
@@ -6602,6 +6608,7 @@ INSERT INTO foo.bar VALUES (110), (210), (310), (410), (510)`)
 	}
 	mu.Lock()
 	require.Equal(t, expected, mu.exportRequestSpans)
+	// nolint:deferunlock
 	mu.Unlock()
 	resetStateVars()
 
@@ -6635,6 +6642,7 @@ INSERT INTO baz.bar VALUES (110, 'a'), (210, 'b'), (310, 'c'), (410, 'd'), (510,
 	}
 	mu.Lock()
 	require.Equal(t, expected, mu.exportRequestSpans)
+	// nolint:deferunlock
 	mu.Unlock()
 	resetStateVars()
 

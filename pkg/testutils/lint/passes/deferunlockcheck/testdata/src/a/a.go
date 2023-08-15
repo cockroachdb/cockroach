@@ -53,6 +53,5 @@ func init() {
 	rwmut.RUnlock() // want `Mutex RUnlock not deferred`
 
 	// Test the no lint rule.
-	// nolint:deferunlock
 	testUnlock.mu.Unlock()
 }

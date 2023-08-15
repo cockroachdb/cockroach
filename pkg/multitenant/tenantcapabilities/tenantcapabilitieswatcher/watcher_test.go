@@ -130,6 +130,7 @@ func TestDataDriven(t *testing.T) {
 						PreExit: func() {
 							mu.Lock()
 							mu.rangeFeedRunning = false
+							// nolint:deferunlock
 							mu.Unlock()
 							// Block until the test directives indicate otherwise.
 							<-restartAfterErrCh
@@ -183,6 +184,7 @@ func TestDataDriven(t *testing.T) {
 				receivedUpdates := mu.receivedUpdates
 				mu.receivedUpdates = mu.receivedUpdates[:0] // clear out buffer
 				updateType := mu.receivedUpdateType
+				// nolint:deferunlock
 				mu.Unlock()
 
 				// De-duplicate updates. We want a stable sort here because the

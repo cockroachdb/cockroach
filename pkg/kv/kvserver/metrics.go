@@ -2698,6 +2698,7 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantM
 	}
 	ref._stack.Lock()
 	ref._stack.string = string(debug.Stack())
+	// nolint:deferunlock
 	ref._stack.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -3345,6 +3346,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.l0SublevelsTracker.Lock()
 	sm.l0SublevelsTracker.swag.Record(timeutil.Now(), float64(m.Levels[0].Sublevels))
 	curMax, _ := sm.l0SublevelsTracker.swag.Query(timeutil.Now())
+	// nolint:deferunlock
 	sm.l0SublevelsTracker.Unlock()
 	syncutil.StoreFloat64(&sm.l0SublevelsWindowedMax, curMax)
 

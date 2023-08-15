@@ -346,6 +346,7 @@ func MakeServer(
 
 	server.mu.Lock()
 	server.mu.connCancelMap = make(cancelChanMap)
+	// nolint:deferunlock
 	server.mu.Unlock()
 
 	connAuthConf.SetOnChange(&st.SV, func(ctx context.Context) {
@@ -491,6 +492,7 @@ func (s *Server) WaitForSQLConnsToClose(
 
 	s.mu.Lock()
 	s.setRejectNewConnectionsLocked(true)
+	// nolint:deferunlock
 	s.mu.Unlock()
 
 	if connectionWait == 0 {
@@ -1373,6 +1375,7 @@ func (s *Server) registerConn(
 			close(done)
 			s.mu.Lock()
 			delete(s.mu.connCancelMap, done)
+			// nolint:deferunlock
 			s.mu.Unlock()
 		}
 	}

@@ -132,6 +132,7 @@ func distImport(
 	}{}
 	accumulatedBulkSummary.Lock()
 	accumulatedBulkSummary.BulkOpSummary = getLastImportSummary(job)
+	// nolint:deferunlock
 	accumulatedBulkSummary.Unlock()
 
 	importDetails := job.Progress().Details.(*jobspb.Progress_Import).Import
@@ -178,6 +179,7 @@ func distImport(
 			accumulatedBulkSummary.Lock()
 			prog.Summary.Add(accumulatedBulkSummary.BulkOpSummary)
 			accumulatedBulkSummary.Reset()
+			// nolint:deferunlock
 			accumulatedBulkSummary.Unlock()
 			return overall / float32(len(from))
 		},
@@ -195,6 +197,7 @@ func distImport(
 
 			accumulatedBulkSummary.Lock()
 			accumulatedBulkSummary.Add(meta.BulkProcessorProgress.BulkSummary)
+			// nolint:deferunlock
 			accumulatedBulkSummary.Unlock()
 
 			if testingKnobs.alwaysFlushJobProgress {

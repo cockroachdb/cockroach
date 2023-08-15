@@ -744,6 +744,7 @@ func (s *Streamer) Close(ctx context.Context) {
 		s.coordinatorCtxCancel()
 		s.mu.Lock()
 		s.mu.done = true
+		// nolint:deferunlock
 		s.mu.Unlock()
 		s.requestsToServe.close()
 		// Unblock the coordinator in case it is waiting for the budget.
@@ -832,6 +833,7 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			// with less urgency when necessary to free up the budget.
 			spillingPriority = w.s.requestsToServe.nextLocked().priority()
 		}
+		// nolint:deferunlock
 		w.s.requestsToServe.Unlock()
 
 		avgResponseSize, shouldExit := w.getAvgResponseSize()
@@ -901,6 +903,7 @@ func (w *workerCoordinator) waitForRequests(ctx context.Context) error {
 		}
 		w.s.mu.Lock()
 		shouldExit := w.s.results.error() != nil || w.s.mu.done
+		// nolint:deferunlock
 		w.s.mu.Unlock()
 		if shouldExit {
 			return nil

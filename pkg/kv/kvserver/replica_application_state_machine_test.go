@@ -188,6 +188,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		// Overwrite to be trusted, since we want to check if transitions to false
 		// or not.
 		r.mu.raftLogSizeTrusted = true
+		// nolint:deferunlock
 		r.mu.Unlock()
 
 		expectedFirstIndex := truncatedIndex + 1
@@ -301,6 +302,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			// Overwrite to be trusted, since we want to check if transitions to false
 			// or not.
 			r.mu.raftLogSizeTrusted = true
+			// nolint:deferunlock
 			r.mu.Unlock()
 			expectedFirstIndex := truncatedIndex + 1
 			if !accurate {
@@ -424,6 +426,7 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 
 	r.mu.Lock()
 	raftAppliedIndex := r.mu.state.RaftAppliedIndex
+	// nolint:deferunlock
 	r.mu.Unlock()
 
 	descWriteRepr := func(v string) (kvpb.Request, []byte) {

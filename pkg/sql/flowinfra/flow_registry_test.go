@@ -40,6 +40,7 @@ func lookupFlow(fr *FlowRegistry, fid execinfrapb.FlowID, timeout time.Duration)
 	fr.Lock()
 	entry := fr.getEntryLocked(fid)
 	flow := entry.flow
+	// nolint:deferunlock
 	fr.Unlock()
 	if flow == nil {
 		flow = fr.waitForFlow(context.Background(), fid, timeout)
@@ -55,6 +56,7 @@ func lookupStreamInfo(
 	fr.Lock()
 	entry := fr.getEntryLocked(fid)
 	flowFound := entry.flow != nil
+	// nolint:deferunlock
 	fr.Unlock()
 	if !flowFound {
 		return nil, errors.Errorf("missing flow entry: %s", fid)

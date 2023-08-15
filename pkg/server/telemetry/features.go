@@ -79,6 +79,7 @@ func Read(c Counter) int32 {
 func GetCounterOnce(feature string) Counter {
 	counters.RLock()
 	_, ok := counters.m[feature]
+	// nolint:deferunlock
 	counters.RUnlock()
 	if ok {
 		panic("counter already exists: " + feature)
@@ -90,6 +91,7 @@ func GetCounterOnce(feature string) Counter {
 func GetCounter(feature string) Counter {
 	counters.RLock()
 	i, ok := counters.m[feature]
+	// nolint:deferunlock
 	counters.RUnlock()
 	if ok {
 		return i

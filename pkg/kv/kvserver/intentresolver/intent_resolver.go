@@ -393,6 +393,7 @@ func (ir *IntentResolver) MaybePushTransactions(
 				delete(ir.mu.inFlightPushes, txnID)
 			}
 		}
+		// nolint:deferunlock
 		ir.mu.Unlock()
 	}
 	ir.mu.Unlock()
@@ -640,6 +641,7 @@ func (ir *IntentResolver) lockInFlightTxnCleanup(
 	return true, func() {
 		ir.mu.Lock()
 		delete(ir.mu.inFlightTxnCleanups, txnID)
+		// nolint:deferunlock
 		ir.mu.Unlock()
 	}
 }

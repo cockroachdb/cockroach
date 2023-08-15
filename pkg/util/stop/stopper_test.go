@@ -418,10 +418,12 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 		if concurrency > peakConcurrency {
 			peakConcurrency = concurrency
 		}
+		// nolint:deferunlock
 		mu.Unlock()
 		<-taskSignal
 		mu.Lock()
 		concurrency--
+		// nolint:deferunlock
 		mu.Unlock()
 		wg.Done()
 	}
@@ -430,6 +432,7 @@ func TestStopperRunLimitedAsyncTask(t *testing.T) {
 		for {
 			mu.Lock()
 			c := concurrency
+			// nolint:deferunlock
 			mu.Unlock()
 			if c >= maxConcurrency {
 				break

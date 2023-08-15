@@ -335,6 +335,7 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	raftLogSize := r.mu.raftLogSize
+	// nolint:deferunlock
 	r.mu.Unlock()
 	actualRaftLogSize, err := ComputeRaftLogSize(context.Background(), r.RangeID, r.store.TODOEngine(), r.SideloadedRaftMuLocked())
 	if err != nil {
@@ -738,6 +739,7 @@ func TestTruncateLog(t *testing.T) {
 		// We can still get what remains of the log.
 		tc.repl.mu.Lock()
 		entries, err := tc.repl.raftEntriesLocked(indexes[5], indexes[9], math.MaxUint64)
+		// nolint:deferunlock
 		tc.repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -749,6 +751,7 @@ func TestTruncateLog(t *testing.T) {
 		// But any range that includes the truncated entries returns an error.
 		tc.repl.mu.Lock()
 		_, err = tc.repl.raftEntriesLocked(indexes[4], indexes[9], math.MaxUint64)
+		// nolint:deferunlock
 		tc.repl.mu.Unlock()
 		if !errors.Is(err, raft.ErrCompacted) {
 			t.Errorf("expected ErrCompacted, got %s", err)
@@ -757,6 +760,7 @@ func TestTruncateLog(t *testing.T) {
 		// The term of the last truncated entry is still available.
 		tc.repl.mu.Lock()
 		term, err := tc.repl.raftTermLocked(indexes[4])
+		// nolint:deferunlock
 		tc.repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -768,6 +772,7 @@ func TestTruncateLog(t *testing.T) {
 		// The terms of older entries are gone.
 		tc.repl.mu.Lock()
 		_, err = tc.repl.raftTermLocked(indexes[3])
+		// nolint:deferunlock
 		tc.repl.mu.Unlock()
 		if !errors.Is(err, raft.ErrCompacted) {
 			t.Errorf("expected ErrCompacted, got %s", err)
@@ -790,6 +795,7 @@ func TestTruncateLog(t *testing.T) {
 		tc.repl.mu.Lock()
 		// The term of the last truncated entry is still available.
 		term, err = tc.repl.raftTermLocked(indexes[4])
+		// nolint:deferunlock
 		tc.repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -893,6 +899,7 @@ func TestTruncateLogRecompute(t *testing.T) {
 	repl.mu.raftLogSizeTrusted = false
 	repl.mu.raftLogSize += 12          // garbage
 	repl.mu.raftLogLastCheckSize += 12 // garbage
+	// nolint:deferunlock
 	repl.mu.Unlock()
 
 	// Force a raft log queue run. The result should be a nonzero Raft log of

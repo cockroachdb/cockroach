@@ -144,6 +144,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 
 	n.config.auditor.Lock()
 	n.config.auditor.orderLinesFreq[d.oOlCnt]++
+	// nolint:deferunlock
 	n.config.auditor.Unlock()
 	n.config.auditor.totalOrderLines.Add(uint64(d.oOlCnt))
 
@@ -197,6 +198,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 			}
 			n.config.auditor.Lock()
 			n.config.auditor.orderLineRemoteWarehouseFreq[item.olSupplyWID]++
+			// nolint:deferunlock
 			n.config.auditor.Unlock()
 		} else {
 			item.olSupplyWID = wID

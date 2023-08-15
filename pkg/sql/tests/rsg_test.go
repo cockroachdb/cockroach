@@ -94,6 +94,7 @@ func (db *verifyFormatDB) Incr(sql string) func() {
 		db.mu.active = make(map[string]int)
 	}
 	db.mu.active[sql]++
+	// nolint:deferunlock
 	db.mu.Unlock()
 
 	return func() {
@@ -103,6 +104,7 @@ func (db *verifyFormatDB) Incr(sql string) func() {
 		if db.mu.active[sql] == 0 {
 			delete(db.mu.active, sql)
 		}
+		// nolint:deferunlock
 		db.mu.Unlock()
 	}
 }
@@ -847,6 +849,7 @@ func testRandomSyntax(
 				countsMu.total,
 				countsMu.success,
 			)
+			// nolint:deferunlock
 			countsMu.Unlock()
 		}
 	}(ctx)

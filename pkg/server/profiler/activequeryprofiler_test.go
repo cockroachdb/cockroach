@@ -188,6 +188,7 @@ func TestShouldDump(t *testing.T) {
 
 			profiler.mu.Lock()
 			profiler.mu.prevMemUsage = test.prevUsage
+			// nolint:deferunlock
 			profiler.mu.Unlock()
 
 			memUsageFn = test.memUsageFn
