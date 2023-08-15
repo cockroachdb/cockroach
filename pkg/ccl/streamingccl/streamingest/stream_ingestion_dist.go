@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -266,6 +267,31 @@ func (p *replicationFlowPlanner) getSrcTenantID() (roachpb.TenantID, error) {
 	return p.srcTenantID, nil
 }
 
+func persistStreamIngestionPartitionSpecs(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	ingestionJobID jobspb.JobID,
+	streamIngestionSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+) error {
+	replicationPartitionInfoKey := "~replication-partition-specs.binpb"
+	err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		jobInfoStorage := jobs.InfoStorageForJob(txn, ingestionJobID)
+		specs := make([]*execinfrapb.StreamIngestionPartitionSpec, 0)
+		partitionSpecs := execinfrapb.StreamIngestionPartitionSpecs{Specs: specs}
+		for _, d := range streamIngestionSpecs {
+			for _, partitionSpec := range d.PartitionSpecs {
+				partitionSpecs.Specs = append(partitionSpecs.Specs, &partitionSpec)
+			}
+		}
+		specBytes, err := protoutil.Marshal(&partitionSpecs)
+		if err != nil {
+			return err
+		}
+		return jobInfoStorage.Write(ctx, replicationPartitionInfoKey, specBytes)
+	})
+	return err
+}
+
 func (p *replicationFlowPlanner) constructPlanGenerator(
 	execCtx sql.JobExecContext,
 	ingestionJobID jobspb.JobID,
@@ -315,6 +341,9 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 		}
 		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.AfterReplicationFlowPlan != nil {
 			knobs.AfterReplicationFlowPlan(streamIngestionSpecs, streamIngestionFrontierSpec)
+		}
+		if err := persistStreamIngestionPartitionSpecs(ctx, execCtx, ingestionJobID, streamIngestionSpecs); err != nil {
+			return nil, nil, err
 		}
 
 		// Setup a one-stage plan with one proc per input spec.
@@ -565,6 +594,8 @@ func constructStreamIngestionPlanSpecs(
 			SubscriptionToken: string(partition.SubscriptionToken),
 			Address:           string(partition.SrcAddr),
 			Spans:             partition.Spans,
+			SrcInstanceID:     base.SQLInstanceID(partition.SrcInstanceID),
+			DestInstanceID:    destID,
 		}
 		streamIngestionSpecs[destID].PartitionSpecs[partition.ID] = partSpec
 		trackedSpans = append(trackedSpans, partition.Spans...)
