@@ -36,6 +36,7 @@ func TestAssertHeld(t *testing.T) {
 		// The normal, successful case.
 		c.m.Lock()
 		c.m.AssertHeld()
+		// nolint:deferunlock
 		c.m.Unlock()
 
 		// The unsuccessful case.
@@ -49,18 +50,22 @@ func TestAssertRHeld(t *testing.T) {
 	// The normal, successful case.
 	m.RLock()
 	m.AssertRHeld()
+	// nolint:deferunlock
 	m.RUnlock()
 
 	// The normal case with two readers.
 	m.RLock()
 	m.RLock()
 	m.AssertRHeld()
+	// nolint:deferunlock
 	m.RUnlock()
+	// nolint:deferunlock
 	m.RUnlock()
 
 	// The case where a write lock is held.
 	m.Lock()
 	m.AssertRHeld()
+	// nolint:deferunlock
 	m.Unlock()
 
 	// The unsuccessful case with no readers.

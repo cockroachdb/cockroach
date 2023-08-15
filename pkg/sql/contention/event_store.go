@@ -269,6 +269,7 @@ func (s *eventStore) ForEachEvent(
 	s.mu.store.Do(func(entry *cache.Entry) {
 		keys = append(keys, entry.Key.(uint64))
 	})
+	// nolint:deferunlock
 	s.mu.RUnlock()
 
 	for i := range keys {

@@ -112,7 +112,9 @@ func (s *Store) tryGetReplica(
 
 	// The current replica is removed, go back around.
 	if repl.mu.destroyStatus.Removed() {
+		// nolint:deferunlock
 		repl.mu.RUnlock()
+		// nolint:deferunlock
 		repl.raftMu.Unlock()
 		return nil, errRetry
 	}
@@ -183,14 +185,17 @@ func (s *Store) tryGetOrCreateReplica(
 	if _, ok := s.mu.creatingReplicas[rangeID]; ok {
 		// Lost the race - another goroutine is currently creating that replica. Let
 		// the caller retry so that they can eventually see it.
+		// nolint:deferunlock
 		s.mu.Unlock()
 		return nil, false, errRetry
 	}
 	s.mu.creatingReplicas[rangeID] = struct{}{}
+	// nolint:deferunlock
 	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
 		delete(s.mu.creatingReplicas, rangeID)
+		// nolint:deferunlock
 		s.mu.Unlock()
 	}()
 	// Now we are the only goroutine trying to create a replica for this rangeID.
@@ -230,7 +235,9 @@ func (s *Store) tryGetOrCreateReplica(
 	// snapshot is applied.
 	// TODO(pavelkalinnikov): make this branch error-less.
 	if err := s.addToReplicasByRangeIDLocked(repl); err != nil {
+		// nolint:deferunlock
 		s.mu.Unlock()
+		// nolint:deferunlock
 		repl.raftMu.Unlock()
 		return nil, false, err
 	}

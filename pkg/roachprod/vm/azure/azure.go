@@ -249,6 +249,7 @@ func (p *Provider) Create(
 
 			p.mu.Lock()
 			subnet, ok := p.mu.subnets[location]
+			// nolint:deferunlock
 			p.mu.Unlock()
 			if !ok {
 				return errors.Errorf("missing subnet for location %q", location)
@@ -738,6 +739,7 @@ func (p *Provider) createNIC(
 
 	p.mu.Lock()
 	sg := p.mu.securityGroups[p.getVnetNetworkSecurityGroupName(*group.Location)]
+	// nolint:deferunlock
 	p.mu.Unlock()
 
 	future, err := client.CreateOrUpdate(ctx, *group.Name, *ip.Name, network.Interface{
@@ -777,6 +779,7 @@ func (p *Provider) getOrCreateNetworkSecurityGroup(
 ) (network.SecurityGroup, error) {
 	p.mu.Lock()
 	group, ok := p.mu.securityGroups[name]
+	// nolint:deferunlock
 	p.mu.Unlock()
 	if ok {
 		return group, nil
@@ -797,6 +800,7 @@ func (p *Provider) getOrCreateNetworkSecurityGroup(
 	cacheAndReturn := func(group network.SecurityGroup) (network.SecurityGroup, error) {
 		p.mu.Lock()
 		p.mu.securityGroups[name] = group
+		// nolint:deferunlock
 		p.mu.Unlock()
 		return group, nil
 	}
@@ -1021,6 +1025,7 @@ func (p *Provider) createVNets(
 	for _, location := range providerOpts.Locations {
 		p.mu.Lock()
 		group := p.mu.resourceGroups[vnetResourceGroupName(location)]
+		// nolint:deferunlock
 		p.mu.Unlock()
 		// Prefix already exists for the resource group.
 		if prefixString := group.Tags[tagSubnet]; prefixString != nil {
@@ -1038,6 +1043,7 @@ func (p *Provider) createVNets(
 			prefixesByLocation[location] = prefix
 			p.mu.Lock()
 			group := p.mu.resourceGroups[vnetResourceGroupName(location)]
+			// nolint:deferunlock
 			p.mu.Unlock()
 			group, err = setVNetSubnetPrefix(group, prefix)
 			if err != nil {
@@ -1047,6 +1053,7 @@ func (p *Provider) createVNets(
 			// the cached entry to reflect that.
 			p.mu.Lock()
 			p.mu.resourceGroups[vnetResourceGroupName(location)] = group
+			// nolint:deferunlock
 			p.mu.Unlock()
 		}
 	}
@@ -1061,6 +1068,7 @@ func (p *Provider) createVNets(
 		p.mu.Lock()
 		resourceGroup := p.mu.resourceGroups[vnetResourceGroupName(location)]
 		networkSecurityGroup := p.mu.securityGroups[p.getVnetNetworkSecurityGroupName(location)]
+		// nolint:deferunlock
 		p.mu.Unlock()
 		if vnet, _, err := p.createVNet(l, ctx, resourceGroup, networkSecurityGroup, prefix, providerOpts); err == nil {
 			ret[location] = vnet
@@ -1133,6 +1141,7 @@ func (p *Provider) createVNet(
 	subnet = (*vnet.Subnets)[0]
 	p.mu.Lock()
 	p.mu.subnets[*resourceGroup.Location] = subnet
+	// nolint:deferunlock
 	p.mu.Unlock()
 	l.Printf("created Azure VNet %q in %q with prefix %d", vnetName, *resourceGroup.Name, prefix)
 	return
@@ -1307,6 +1316,7 @@ func (p *Provider) getOrCreateResourceGroup(
 	// First, check the local provider cache.
 	p.mu.Lock()
 	group, ok := p.mu.resourceGroups[name]
+	// nolint:deferunlock
 	p.mu.Unlock()
 	if ok {
 		return group, nil
@@ -1315,6 +1325,7 @@ func (p *Provider) getOrCreateResourceGroup(
 	cacheAndReturn := func(group resources.Group) (resources.Group, error) {
 		p.mu.Lock()
 		p.mu.resourceGroups[name] = group
+		// nolint:deferunlock
 		p.mu.Unlock()
 		return group, nil
 	}
@@ -1406,6 +1417,7 @@ func (p *Provider) getSubscription(
 ) (sub subscriptions.Subscription, err error) {
 	p.mu.Lock()
 	sub = p.mu.subscription
+	// nolint:deferunlock
 	p.mu.Unlock()
 
 	if sub.SubscriptionID != nil {
@@ -1427,6 +1439,7 @@ func (p *Provider) getSubscription(
 
 		p.mu.Lock()
 		p.mu.subscription = page.Values()[0]
+		// nolint:deferunlock
 		p.mu.Unlock()
 	}
 	return

@@ -217,6 +217,7 @@ func (w *Watcher) addAccessController(
 	w.mu.Lock()
 	index := len(w.controllers)
 	w.controllers = append(w.controllers, controller)
+	// nolint:deferunlock
 	w.mu.Unlock()
 
 	if next != nil {
@@ -239,6 +240,7 @@ func (w *Watcher) updateAccessController(
 	copy := w.listeners.Clone()
 	w.controllers[index] = controller
 	controllers := append([]AccessController(nil), w.controllers...)
+	// nolint:deferunlock
 	w.mu.Unlock()
 
 	checkListeners(ctx, copy, controllers)

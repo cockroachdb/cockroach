@@ -323,6 +323,7 @@ func (s *Server) GetAuthenticationConfiguration() (*hba.Conf, *identmap.Conf) {
 	s.auth.RLock()
 	auth := s.auth.conf
 	idMap := s.auth.identityMap
+	// nolint:deferunlock
 	s.auth.RUnlock()
 
 	if auth == nil {

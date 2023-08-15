@@ -460,6 +460,7 @@ func (q *WorkQueue) startClosingEpochs() {
 			q.mu.Lock()
 			q.sampleEpochLIFOSettingsLocked()
 			nextCloseTime := q.nextEpochCloseTimeLocked()
+			// nolint:deferunlock
 			q.mu.Unlock()
 			timeNow := q.timeNow()
 			timerDur := nextCloseTime.Sub(timeNow)
@@ -837,6 +838,7 @@ func (q *WorkQueue) AdmittedWorkDone(tenantID roachpb.TenantID) {
 	if isInTenantHeap(tenant) {
 		q.mu.tenantHeap.fix(tenant)
 	}
+	// nolint:deferunlock
 	q.mu.Unlock()
 	q.granter.returnGrant(1)
 }
@@ -852,10 +854,12 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	now := q.timeNow()
 	q.mu.Lock()
 	if len(q.mu.tenantHeap) == 0 {
+		// nolint:deferunlock
 		q.mu.Unlock()
 		return 0
 	}
 	if fn := q.knobs.DisableWorkQueueGranting; fn != nil && fn() {
+		// nolint:deferunlock
 		q.mu.Unlock()
 		return 0
 	}
@@ -1873,6 +1877,7 @@ func (q *StoreWorkQueue) Admit(
 		//      from StoreWorkQueue.Admit().
 		q.mu.RLock()
 		info.RequestedCount = q.mu.estimates.writeTokens
+		// nolint:deferunlock
 		q.mu.RUnlock()
 	}
 	if info.ReplicatedWorkInfo.Enabled {
@@ -1989,6 +1994,7 @@ func (q *StoreWorkQueue) admittedReplicatedWork(
 	}
 	additionalTokensNeeded := q.granters[wc].storeReplicatedWorkAdmittedLocked(originalTokens, replicatedWorkAdmittedInfo)
 	if !coordMuLocked {
+		// nolint:deferunlock
 		q.coordMu.Unlock()
 	}
 	q.q[wc].adjustTenantTokens(tenantID, additionalTokensNeeded)
@@ -2056,6 +2062,7 @@ func (q *StoreWorkQueue) StatsToIgnore(ingestStats pebble.IngestOperationStats) 
 	q.mu.Lock()
 	q.mu.stats.statsToIgnore.Bytes += ingestStats.Bytes
 	q.mu.stats.statsToIgnore.ApproxIngestedIntoL0Bytes += ingestStats.ApproxIngestedIntoL0Bytes
+	// nolint:deferunlock
 	q.mu.Unlock()
 }
 
@@ -2071,6 +2078,7 @@ func (q *StoreWorkQueue) updateStoreStatsAfterWorkDone(
 		q.mu.stats.aux.writeBypassedAccountedBytes += uint64(doneInfo.WriteBytes)
 		q.mu.stats.aux.ingestedBypassedAccountedBytes += uint64(doneInfo.IngestedBytes)
 	}
+	// nolint:deferunlock
 	q.mu.Unlock()
 }
 
@@ -2106,6 +2114,7 @@ func (q *StoreWorkQueue) getStoreAdmissionStats() storeAdmissionStats {
 func (q *StoreWorkQueue) setStoreRequestEstimates(estimates storeRequestEstimates) {
 	q.mu.Lock()
 	q.mu.estimates = estimates
+	// nolint:deferunlock
 	q.mu.Unlock()
 }
 
@@ -2182,6 +2191,7 @@ func (q *StoreWorkQueue) sequenceReplicatedWork(createTime int64, info Replicate
 		seq = &sequencer{}
 		q.sequencersMu.s[info.RangeID] = seq
 	}
+	// nolint:deferunlock
 	q.sequencersMu.Unlock()
 	// We're assuming sequenceReplicatedWork is never invoked concurrently for a
 	// given RangeID.

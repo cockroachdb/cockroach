@@ -1366,6 +1366,7 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 			}
 			p.mu.Lock()
 			cb := p.mu.flushCompletedCallback
+			// nolint:deferunlock
 			p.mu.Unlock()
 			if cb != nil {
 				cb()
@@ -1458,6 +1459,7 @@ func (p *Pebble) aggregateBatchCommitStats(stats BatchCommitStats) {
 	p.batchCommitStats.L0ReadAmpWriteStallDuration += stats.L0ReadAmpWriteStallDuration
 	p.batchCommitStats.WALRotationDuration += stats.WALRotationDuration
 	p.batchCommitStats.CommitWaitDuration += stats.CommitWaitDuration
+	// nolint:deferunlock
 	p.batchCommitStats.Unlock()
 }
 
@@ -1920,9 +1922,11 @@ func (p *Pebble) GetMetrics() Metrics {
 	}
 	p.iterStats.Lock()
 	m.Iterator = p.iterStats.AggregatedIteratorStats
+	// nolint:deferunlock
 	p.iterStats.Unlock()
 	p.batchCommitStats.Lock()
 	m.BatchCommitStats = p.batchCommitStats.AggregatedBatchCommitStats
+	// nolint:deferunlock
 	p.batchCommitStats.Unlock()
 	return m
 }
@@ -2198,6 +2202,7 @@ func (p *Pebble) CompactRange(start, end roachpb.Key) error {
 func (p *Pebble) RegisterFlushCompletedCallback(cb func()) {
 	p.mu.Lock()
 	p.mu.flushCompletedCallback = cb
+	// nolint:deferunlock
 	p.mu.Unlock()
 }
 

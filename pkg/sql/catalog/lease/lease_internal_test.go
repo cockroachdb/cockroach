@@ -216,6 +216,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	correctLease := ts.mu.active.data[0].GetID() == tables[5].GetID() &&
 		ts.mu.active.data[0].GetVersion() == tables[5].GetVersion()
 	correctExpiration := ts.mu.active.data[0].getExpiration() == expiration
+	// nolint:deferunlock
 	ts.mu.Unlock()
 	if !correctLease {
 		t.Fatalf("wrong lease survived purge")
@@ -232,6 +233,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 	tableVersion.mu.expiration = tables[5].GetModificationTime()
 	ts.mu.active.insert(tableVersion)
+	// nolint:deferunlock
 	ts.mu.Unlock()
 	if numLeases := getNumVersions(ts); numLeases != 2 {
 		t.Fatalf("found %d versions instead of 2", numLeases)
@@ -348,6 +350,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	ts.mu.Lock()
 	correctLease := ts.mu.active.data[0].GetID() == latestDesc.GetID() &&
 		ts.mu.active.data[0].GetVersion() == latestDesc.GetVersion()
+	// nolint:deferunlock
 	ts.mu.Unlock()
 	if !correctLease {
 		t.Fatalf("wrong lease survived purge")
@@ -1129,6 +1132,7 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 			} else {
 				addedDescVState.mu.expiration = hlc.MaxTimestamp
 			}
+			// nolint:deferunlock
 			addedDescVState.mu.Unlock()
 			descStates[tableID].mu.active.insert(addedDescVState)
 		}

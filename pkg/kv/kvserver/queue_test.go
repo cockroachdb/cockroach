@@ -1306,6 +1306,7 @@ func TestQueueDisable(t *testing.T) {
 		}
 		testCase.queue.mu.Lock()
 		disabled := testCase.queue.mu.disabled
+		// nolint:deferunlock
 		testCase.queue.mu.Unlock()
 		if disabled != true {
 			t.Errorf("%s should be disabled", testCase.name)
@@ -1429,6 +1430,7 @@ func TestBaseQueueChangeReplicaID(t *testing.T) {
 		}
 		return r, nil
 	}
+	// nolint:deferunlock
 	bq.mu.Unlock()
 	require.Equal(t, 0, testQueue.getProcessed())
 	bq.maybeAdd(ctx, r, tc.store.Clock().NowAsClockTimestamp())

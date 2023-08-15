@@ -533,6 +533,7 @@ func (bq *baseQueue) PurgatoryLength() int {
 func (bq *baseQueue) SetDisabled(disabled bool) {
 	bq.mu.Lock()
 	bq.mu.disabled = disabled
+	// nolint:deferunlock
 	bq.mu.Unlock()
 }
 
@@ -659,6 +660,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 
 	bq.mu.Lock()
 	stopped := bq.mu.stopped || bq.mu.disabled
+	// nolint:deferunlock
 	bq.mu.Unlock()
 
 	if stopped {
@@ -838,6 +840,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 	done := func() {
 		bq.mu.Lock()
 		bq.mu.stopped = true
+		// nolint:deferunlock
 		bq.mu.Unlock()
 	}
 	if err := stopper.RunAsyncTaskEx(ctx,
@@ -1100,6 +1103,7 @@ func (bq *baseQueue) finishProcessingReplica(
 	item.callbacks = nil
 	bq.removeFromReplicaSetLocked(repl.GetRangeID())
 	item = nil // prevent accidental use below
+	// nolint:deferunlock
 	bq.mu.Unlock()
 
 	if !processing {
@@ -1128,6 +1132,7 @@ func (bq *baseQueue) finishProcessingReplica(
 		if purgErr, ok := IsPurgatoryError(err); ok {
 			bq.mu.Lock()
 			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr)
+			// nolint:deferunlock
 			bq.mu.Unlock()
 			return
 		}
@@ -1210,6 +1215,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 				for _, err := range bq.mu.purgatory {
 					errMap[err.Error()]++
 				}
+				// nolint:deferunlock
 				bq.mu.Unlock()
 				for errStr, count := range errMap {
 					log.Errorf(ctx, "%d replicas failing with %q", count, errStr)
@@ -1268,9 +1274,11 @@ func (bq *baseQueue) processReplicasInPurgatory(
 	if len(bq.mu.purgatory) == 0 {
 		log.Infof(ctx, "purgatory is now empty")
 		bq.mu.purgatory = nil
+		// nolint:deferunlock
 		bq.mu.Unlock()
 		return true /* purgatoryCleared */
 	}
+	// nolint:deferunlock
 	bq.mu.Unlock()
 	return false /* purgatoryCleared */
 }
@@ -1283,6 +1291,7 @@ func (bq *baseQueue) pop() (replicaInQueue, float64) {
 	bq.mu.Lock()
 	for {
 		if bq.mu.priorityQ.Len() == 0 {
+			// nolint:deferunlock
 			bq.mu.Unlock()
 			return nil, 0
 		}

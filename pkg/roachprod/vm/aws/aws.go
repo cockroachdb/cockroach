@@ -749,6 +749,7 @@ func (p *Provider) listRegions(
 			}
 			mux.Lock()
 			ret = append(ret, vms...)
+			// nolint:deferunlock
 			mux.Unlock()
 			return nil
 		})

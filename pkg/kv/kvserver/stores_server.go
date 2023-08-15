@@ -91,6 +91,7 @@ func (is Server) WaitForApplication(
 			}
 			repl.mu.RLock()
 			leaseAppliedIndex := repl.mu.state.LeaseAppliedIndex
+			// nolint:deferunlock
 			repl.mu.RUnlock()
 			if leaseAppliedIndex >= req.LeaseIndex {
 				// For performance reasons, we don't sync to disk when

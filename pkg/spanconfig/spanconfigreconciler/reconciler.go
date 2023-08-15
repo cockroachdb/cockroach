@@ -168,6 +168,7 @@ func (r *Reconciler) Reconcile(
 
 	r.mu.Lock()
 	r.mu.lastCheckpoint = reconciledUpUntil
+	// nolint:deferunlock
 	r.mu.Unlock()
 
 	if err := onCheckpoint(); err != nil {
@@ -188,6 +189,7 @@ func (r *Reconciler) Reconcile(
 	return incremental.reconcile(ctx, incrementalStartTS, func(reconciledUpUntil hlc.Timestamp) error {
 		r.mu.Lock()
 		r.mu.lastCheckpoint = reconciledUpUntil
+		// nolint:deferunlock
 		r.mu.Unlock()
 
 		return onCheckpoint()

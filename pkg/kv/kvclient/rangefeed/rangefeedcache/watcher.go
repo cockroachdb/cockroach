@@ -258,6 +258,7 @@ func (s *Watcher) Run(ctx context.Context) error {
 	defer func() {
 		mu.Lock()
 		s.lastFrontierTS.Forward(mu.frontierTS)
+		// nolint:deferunlock
 		mu.Unlock()
 	}()
 
@@ -297,6 +298,7 @@ func (s *Watcher) Run(ctx context.Context) error {
 		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, frontierTS hlc.Timestamp) {
 			mu.Lock()
 			mu.frontierTS = frontierTS
+			// nolint:deferunlock
 			mu.Unlock()
 
 			select {
@@ -346,6 +348,7 @@ func (s *Watcher) Run(ctx context.Context) error {
 		case <-frontierBumpedCh:
 			mu.Lock()
 			frontierTS := mu.frontierTS
+			// nolint:deferunlock
 			mu.Unlock()
 			s.handleUpdate(ctx, buffer, frontierTS, IncrementalUpdate)
 

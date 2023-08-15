@@ -50,6 +50,7 @@ func (s *nodeTombstoneStorage) IsDecommissioned(
 ) (time.Time, error) {
 	s.mu.RLock()
 	ts, ok := s.mu.cache[nodeID]
+	// nolint:deferunlock
 	s.mu.RUnlock()
 	if ok {
 		// Cache hit.

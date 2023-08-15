@@ -448,6 +448,7 @@ func (c *trackerChecker) run(ctx context.Context) error {
 		minEvalTS := int64(math.MaxInt64)
 		for _, req := range c.mu.requests.all() {
 			if req.wtsNanos < lbNanos {
+				// nolint:deferunlock
 				c.mu.Unlock()
 				return fmt.Errorf("bad lower bound %d > req: %d", lbNanos, req.wtsNanos)
 			}
@@ -549,6 +550,7 @@ func benchmarkTracker(ctx context.Context, b *testing.B, t Tracker) {
 			mu.RLock()
 			tok := t.Track(ctx, i)
 			toks[myid] = append(toks[myid], tok)
+			// nolint:deferunlock
 			mu.RUnlock()
 		}
 	})

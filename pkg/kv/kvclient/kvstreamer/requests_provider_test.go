@@ -46,6 +46,7 @@ func TestInOrderRequestsProvider(t *testing.T) {
 		p.Lock()
 		next := p.nextLocked()
 		p.removeNextLocked()
+		// nolint:deferunlock
 		p.Unlock()
 		require.Equal(t, priorities[0], next.priority())
 		priorities = priorities[1:]

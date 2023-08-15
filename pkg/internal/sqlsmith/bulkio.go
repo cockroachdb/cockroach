@@ -104,6 +104,7 @@ func makeBackup(s *Smither) (tree.Statement, bool) {
 	}
 	s.lock.Lock()
 	s.bulkBackups[name] = targets
+	// nolint:deferunlock
 	s.lock.Unlock()
 
 	coinD := tree.DBoolFalse
@@ -128,6 +129,7 @@ func makeRestore(s *Smither) (tree.Statement, bool) {
 	}
 	// Only restore each backup once.
 	delete(s.bulkBackups, name)
+	// nolint:deferunlock
 	s.lock.Unlock()
 
 	if name == "" {
@@ -192,6 +194,7 @@ func makeExport(s *Smither) (tree.Statement, bool) {
 	s.lock.Lock()
 	s.bulkFiles[fmt.Sprintf("/%s%s", exp, exportSchema)] = []byte(schema)
 	s.bulkExports = append(s.bulkExports, string(exp))
+	// nolint:deferunlock
 	s.lock.Unlock()
 
 	return &tree.Export{
@@ -210,6 +213,7 @@ func makeImport(s *Smither) (tree.Statement, bool) {
 
 	s.lock.Lock()
 	if len(s.bulkExports) == 0 {
+		// nolint:deferunlock
 		s.lock.Unlock()
 		return nil, false
 	}
@@ -237,6 +241,7 @@ func makeImport(s *Smither) (tree.Statement, bool) {
 		s.bulkFiles[schema],
 		[]byte(fmt.Sprintf("CREATE TABLE %s (", tab)),
 	)
+	// nolint:deferunlock
 	s.lock.Unlock()
 
 	// Create the table to be imported into.

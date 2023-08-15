@@ -52,6 +52,7 @@ func (l *maybeLocker) Lock() {
 }
 func (l *maybeLocker) Unlock() {
 	if l.locked {
+		// nolint:deferunlock
 		l.wrapped.Unlock()
 		l.locked = false
 	}
@@ -421,6 +422,7 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 	if !immediateFlush {
 		s.mu.flushCh = flushCh
 	}
+	// nolint:deferunlock
 	s.mu.Unlock()
 
 	if immediateFlush {
@@ -437,6 +439,7 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 		s.mu.Lock()
 		flushErr := s.mu.flushErr
 		s.mu.flushErr = nil
+		// nolint:deferunlock
 		s.mu.Unlock()
 		return flushErr
 	}

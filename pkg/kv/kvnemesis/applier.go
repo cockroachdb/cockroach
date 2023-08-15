@@ -74,6 +74,7 @@ func (a *Applier) getNextDBRoundRobin() (*kv.DB, int32) {
 	a.mu.Lock()
 	dbIdx := a.mu.dbIdx
 	a.mu.dbIdx = (a.mu.dbIdx + 1) % len(a.dbs)
+	// nolint:deferunlock
 	a.mu.Unlock()
 	return a.dbs[dbIdx], int32(dbIdx)
 }

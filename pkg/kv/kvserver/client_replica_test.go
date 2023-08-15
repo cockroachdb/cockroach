@@ -1407,6 +1407,7 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 	testingEvalFilter := func(args kvserverbase.FilterArgs) *kvpb.Error {
 		l.filterMu.Lock()
 		filterCopy := l.evalFilter
+		// nolint:deferunlock
 		l.filterMu.Unlock()
 		if filterCopy != nil {
 			return filterCopy(args)
@@ -1417,6 +1418,7 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 	testingProposalFilter := func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
 		l.filterMu.Lock()
 		filterCopy := l.propFilter
+		// nolint:deferunlock
 		l.filterMu.Unlock()
 		if filterCopy != nil {
 			return filterCopy(args)
@@ -1534,6 +1536,7 @@ func (l *leaseTransferTest) setFilter(setTo bool, extensionSem chan struct{}) {
 			// the signal to proceed.
 			l.filterMu.Lock()
 			l.evalFilter = nil
+			// nolint:deferunlock
 			l.filterMu.Unlock()
 			extensionSem <- struct{}{}
 			log.Infof(filterArgs.Ctx, "filter blocking request: %s", llReq)
@@ -4320,6 +4323,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 			isBlocked.Set(true)
 			<-blockKVSubscriberCh
 		}
+		// nolint:deferunlock
 		mu.Unlock()
 
 		// Ensure that the KVSubscriber has been blocked.
@@ -4365,6 +4369,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 			isBlocked.Set(true)
 			<-blockKVSubscriberCh
 		}
+		// nolint:deferunlock
 		mu.Unlock()
 
 		// Ensure that the KVSubscriber has been blocked.

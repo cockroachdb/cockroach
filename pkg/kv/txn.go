@@ -333,6 +333,7 @@ func (txn *Txn) TestingSetPriority(priority enginepb.TxnPriority) {
 	if err := txn.mu.sender.SetUserPriority(txn.mu.userPriority); err != nil {
 		log.Fatalf(context.TODO(), "%+v", err)
 	}
+	// nolint:deferunlock
 	txn.mu.Unlock()
 }
 
@@ -1100,6 +1101,7 @@ func (txn *Txn) Send(
 	txn.mu.Lock()
 	requestTxnID := txn.mu.ID
 	sender := txn.mu.sender
+	// nolint:deferunlock
 	txn.mu.Unlock()
 	br, pErr := txn.db.sendUsingSender(ctx, ba, sender)
 

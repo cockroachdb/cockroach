@@ -1104,6 +1104,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 		def:      tree.NewFunctionDefinition(name.String(), &tree.FunctionProperties{}, nil /* def */),
 		overload: ov,
 	})
+	// nolint:deferunlock
 	functions.Unlock()
 	return stmt, true
 }

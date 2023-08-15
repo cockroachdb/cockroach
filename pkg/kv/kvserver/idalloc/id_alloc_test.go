@@ -162,6 +162,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	// Make Allocator invalid.
 	mu.Lock()
 	mu.err = errors.New("boom")
+	// nolint:deferunlock
 	mu.Unlock()
 
 	// Should be able to get the allocated IDs, and there will be one
@@ -210,6 +211,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	// Make the IDAllocator valid again.
 	mu.Lock()
 	mu.err = nil
+	// nolint:deferunlock
 	mu.Unlock()
 
 	// Check if the blocked allocations return expected ID.
@@ -288,6 +290,7 @@ func TestLostWriteAssertion(t *testing.T) {
 	// Mess with the counter.
 	mu.Lock()
 	mu.counter--
+	// nolint:deferunlock
 	mu.Unlock()
 
 	for i := 0; ; i++ {
@@ -295,6 +298,7 @@ func TestLostWriteAssertion(t *testing.T) {
 		if err != nil {
 			mu.Lock()
 			msg := mu.fatal
+			// nolint:deferunlock
 			mu.Unlock()
 			require.Contains(t, msg, "counter corrupt")
 			break

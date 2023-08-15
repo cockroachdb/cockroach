@@ -78,10 +78,12 @@ func capture() func() {
 	fileSink.mu.Lock()
 	oldFile := fileSink.mu.file
 	fileSink.mu.file = new(flushBuffer)
+	// nolint:deferunlock
 	fileSink.mu.Unlock()
 	return func() {
 		fileSink.mu.Lock()
 		fileSink.mu.file = oldFile
+		// nolint:deferunlock
 		fileSink.mu.Unlock()
 	}
 }
@@ -696,6 +698,7 @@ func TestExitOnFullDisk(t *testing.T) {
 
 	l.outputMu.Lock()
 	l.exitLocked(fmt.Errorf("out of space"), exit.UnspecifiedError())
+	// nolint:deferunlock
 	l.outputMu.Unlock()
 
 	exited.Wait()

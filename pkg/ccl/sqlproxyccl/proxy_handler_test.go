@@ -1661,6 +1661,7 @@ func TestCancelQuery(t *testing.T) {
 		})
 		origCancelInfo.mu.RLock()
 		origKey := origCancelInfo.mu.origBackendKeyData.SecretKey
+		// nolint:deferunlock
 		origCancelInfo.mu.RUnlock()
 		// Advance the time so that rebalancing will occur.
 		timeSource.Advance(2 * time.Minute)
@@ -1672,6 +1673,7 @@ func TestCancelQuery(t *testing.T) {
 			}
 			newCancelInfo.mu.RLock()
 			newKey := newCancelInfo.mu.origBackendKeyData.SecretKey
+			// nolint:deferunlock
 			newCancelInfo.mu.RUnlock()
 			if origKey == newKey {
 				return errors.Newf("expected %d to differ", origKey)

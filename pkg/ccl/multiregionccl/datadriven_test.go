@@ -237,10 +237,12 @@ SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s'
 					// Setup tracing for the input.
 					mu.Lock()
 					traceStmt = d.Input
+					// nolint:deferunlock
 					mu.Unlock()
 					defer func() {
 						mu.Lock()
 						traceStmt = ""
+						// nolint:deferunlock
 						mu.Unlock()
 					}()
 

@@ -214,6 +214,7 @@ func (bs *bufferedSink) output(b []byte, opts sinkOutputOptions) error {
 	bs.mu.Lock()
 	// Append the message to the buffer.
 	if err := bs.mu.buf.appendMsg(msg, errC); err != nil {
+		// nolint:deferunlock
 		bs.mu.Unlock()
 		return err
 	}
@@ -231,10 +232,12 @@ func (bs *bufferedSink) output(b []byte, opts sinkOutputOptions) error {
 			bs.mu.timer = time.AfterFunc(bs.maxStaleness, func() {
 				bs.mu.Lock()
 				bs.flushAsyncLocked()
+				// nolint:deferunlock
 				bs.mu.Unlock()
 			})
 		}
 	}
+	// nolint:deferunlock
 	bs.mu.Unlock()
 
 	// If this is a synchronous flush, wait for its completion.
@@ -287,6 +290,7 @@ func (bs *bufferedSink) runFlusher(stopC <-chan struct{}) {
 		}
 		bs.mu.Lock()
 		msg, errC := buf.flush(bs.format.prefix, bs.format.suffix, bs.format.delimiter)
+		// nolint:deferunlock
 		bs.mu.Unlock()
 		if msg == nil {
 			// Nothing to flush.
@@ -307,6 +311,7 @@ func (bs *bufferedSink) runFlusher(stopC <-chan struct{}) {
 			if bs.crashOnAsyncFlushFailure {
 				logging.mu.Lock()
 				f := logging.mu.exitOverride.f
+				// nolint:deferunlock
 				logging.mu.Unlock()
 				code := bs.exitCode()
 				if f != nil {

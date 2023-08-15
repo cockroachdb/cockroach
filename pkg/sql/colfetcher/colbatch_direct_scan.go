@@ -99,6 +99,7 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 			}
 			s.mu.Lock()
 			s.mu.rowsRead += int64(res.ColBatch.Length())
+			// nolint:deferunlock
 			s.mu.Unlock()
 			// Note that this batch has already been accounted for by the
 			// KVBatchFetcher, so we don't need to do that.
@@ -121,6 +122,7 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 	batch := s.deserializer.Deserialize(res.BatchResponse)
 	s.mu.Lock()
 	s.mu.rowsRead += int64(batch.Length())
+	// nolint:deferunlock
 	s.mu.Unlock()
 	return batch
 }

@@ -304,7 +304,9 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.RLock()
 	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.engine)
+	// nolint:deferunlock
 	tc.repl.mu.RUnlock()
+	// nolint:deferunlock
 	tc.repl.raftMu.Unlock()
 	return newReplica, nil
 }
@@ -711,10 +713,12 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 		tc.repl.mu.Lock()
 		repDesc, err := tc.repl.getReplicaDescriptorRLocked()
 		if err != nil {
+			// nolint:deferunlock
 			tc.repl.mu.Unlock()
 			t.Fatal(err)
 		}
 		pending := tc.repl.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID)
+		// nolint:deferunlock
 		tc.repl.mu.Unlock()
 		if !pending {
 			t.Fatalf("expected transfer to be in progress, and it wasn't")
@@ -862,6 +866,7 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 		&tc.repl.mu.state,
 	)
 	pErr := fr.ForcedError
+	// nolint:deferunlock
 	tc.repl.mu.Unlock()
 	if _, isErr := pErr.GetDetail().(*kvpb.LeaseRejectedError); !isErr {
 		t.Fatal(pErr)
@@ -1901,6 +1906,7 @@ func TestAcquireLease(t *testing.T) {
 				} else {
 					expStart = tc.repl.mu.minLeaseProposedTS
 				}
+				// nolint:deferunlock
 				tc.repl.mu.Unlock()
 
 				tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
@@ -1999,6 +2005,7 @@ func TestLeaseConcurrent(t *testing.T) {
 				tc.repl.mu.Lock()
 				status := tc.repl.leaseStatusAtRLocked(ctx, now)
 				llHandle := tc.repl.requestLeaseLocked(ctx, status, nil)
+				// nolint:deferunlock
 				tc.repl.mu.Unlock()
 				wg.Done()
 				pErr := <-llHandle.C()
@@ -2097,6 +2104,7 @@ func TestLeaseCallerCancelled(t *testing.T) {
 		tc.repl.mu.Lock()
 		status := tc.repl.leaseStatusAtRLocked(ctx, now)
 		llHandles = append(llHandles, tc.repl.requestLeaseLocked(ctx, status, nil))
+		// nolint:deferunlock
 		tc.repl.mu.Unlock()
 	}
 	for _, llHandle := range llHandles {
@@ -2136,6 +2144,7 @@ func TestRequestLeaseLimit(t *testing.T) {
 		tc.repl.mu.Lock()
 		status := tc.repl.leaseStatusAtRLocked(ctx, now)
 		llHandle := tc.repl.requestLeaseLocked(ctx, status, limiter)
+		// nolint:deferunlock
 		tc.repl.mu.Unlock()
 		pErr := <-llHandle.C()
 		return pErr.GoError()
@@ -6659,6 +6668,7 @@ func TestAppliedIndex(t *testing.T) {
 
 		tc.repl.mu.Lock()
 		newAppliedIndex := tc.repl.mu.state.RaftAppliedIndex
+		// nolint:deferunlock
 		tc.repl.mu.Unlock()
 		if newAppliedIndex <= appliedIndex {
 			t.Errorf("appliedIndex did not advance. Was %d, now %d", appliedIndex, newAppliedIndex)
@@ -7411,6 +7421,7 @@ func TestEntries(t *testing.T) {
 			}
 			repl.mu.Lock()
 			ents, err := repl.raftEntriesLocked(tc.lo, tc.hi, tc.maxBytes)
+			// nolint:deferunlock
 			repl.mu.Unlock()
 			if tc.expError == nil && err != nil {
 				t.Errorf("%d: expected no error, got %s", i, err)
@@ -7434,6 +7445,7 @@ func TestEntries(t *testing.T) {
 		if _, err := repl.raftEntriesLocked(indexes[9], indexes[5], math.MaxUint64); err == nil {
 			t.Errorf("23: error expected, got none")
 		}
+		// nolint:deferunlock
 		repl.mu.Unlock()
 	})
 }
@@ -7683,6 +7695,7 @@ func TestReplicaAbandonProposal(t *testing.T) {
 		}
 		return false, nil
 	}
+	// nolint:deferunlock
 	tc.repl.mu.Unlock()
 
 	ba := &kvpb.BatchRequest{}
@@ -7755,6 +7768,7 @@ func TestSyncSnapshot(t *testing.T) {
 	// first try.
 	tc.repl.mu.Lock()
 	snap, err := tc.repl.raftSnapshotLocked()
+	// nolint:deferunlock
 	tc.repl.mu.Unlock()
 
 	if err != nil {
@@ -7791,6 +7805,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 		}
 		return 0
 	}
+	// nolint:deferunlock
 	tc.repl.mu.Unlock()
 
 	pArg := putArgs(roachpb.Key("a"), []byte("asd"))
@@ -7810,6 +7825,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	if wrongLeaseIndex < 1 {
 		t.Fatal("committed a few batches, but still at lease index zero")
 	}
+	// nolint:deferunlock
 	tc.repl.mu.RUnlock()
 
 	log.Infof(ctx, "test begins")
@@ -7894,6 +7910,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 		}
 		return false, nil
 	}
+	// nolint:deferunlock
 	tc.repl.mu.Unlock()
 
 	var chs []chan proposalResult
@@ -7919,6 +7936,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 		} else {
 			chs = append(chs, ch)
 		}
+		// nolint:deferunlock
 		repl.mu.Unlock()
 	}
 
@@ -7966,6 +7984,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		}
 		return false, nil
 	}
+	// nolint:deferunlock
 	tc.repl.mu.Unlock()
 
 	const num = 10
@@ -8007,7 +8026,9 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
+	// nolint:deferunlock
 	tc.repl.mu.Unlock()
+	// nolint:deferunlock
 	tc.repl.raftMu.Unlock()
 
 	for _, ch := range chs {
@@ -8060,6 +8081,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		// starting with a value of 0 modulo reproposalTicks.
 		r.mu.Lock()
 		ticks := r.mu.ticks
+		// nolint:deferunlock
 		r.mu.Unlock()
 		for ; (ticks % reproposalTicks) != 0; ticks++ {
 			if _, err := r.tick(ctx, nil, nil); err != nil {
@@ -8081,6 +8103,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		_, ok := dropProposals.m[p]
 		return ok, nil
 	}
+	// nolint:deferunlock
 	r.mu.Unlock()
 
 	// We tick the replica 3*RaftReproposalTimeoutTicks.
@@ -8098,6 +8121,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 
 		dropProposals.Lock()
 		dropProposals.m[cmd] = struct{}{} // silently drop proposals
+		// nolint:deferunlock
 		dropProposals.Unlock()
 
 		cmd.command.ProposerLeaseSequence = st.Lease.Sequence
@@ -8109,6 +8133,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		if err := tc.repl.mu.proposalBuf.flushLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
+		// nolint:deferunlock
 		r.mu.Unlock()
 
 		// Tick raft.
@@ -8119,6 +8144,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 
 		r.mu.Lock()
 		ticks := r.mu.ticks
+		// nolint:deferunlock
 		r.mu.Unlock()
 
 		var reproposed []*ProposalData
@@ -8132,6 +8158,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 				reproposed = append(reproposed, p)
 			}
 		}
+		// nolint:deferunlock
 		dropProposals.Unlock()
 		r.mu.Unlock()
 
@@ -9201,6 +9228,7 @@ func TestCancelPendingCommands(t *testing.T) {
 	}
 	tc.repl.raftMu.Lock()
 	tc.repl.disconnectReplicationRaftMuLocked(ctx)
+	// nolint:deferunlock
 	tc.repl.raftMu.Unlock()
 	pErr := <-errChan
 	if _, ok := pErr.GetDetail().(*kvpb.AmbiguousResultError); !ok {
@@ -9466,6 +9494,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 					}
 					return nil
 				}
+				// nolint:deferunlock
 			repl.mu.Unlock()
 
 			ba := &kvpb.BatchRequest{}
@@ -10291,7 +10320,9 @@ func TestReplicaRecomputeStats(t *testing.T) {
 	ms.Add(*disturbMS)
 	err := repl.raftMu.stateLoader.SetMVCCStats(ctx, tc.engine, ms)
 	repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.engine)
+	// nolint:deferunlock
 	repl.mu.Unlock()
+	// nolint:deferunlock
 	repl.raftMu.Unlock()
 
 	if err != nil {
@@ -13452,6 +13483,7 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 	errBoom := errors.New("boom")
 	tc.repl.mu.Lock()
 	tc.repl.mu.destroyStatus.Set(errBoom, destroyReasonMergePending)
+	// nolint:deferunlock
 	tc.repl.mu.Unlock()
 
 	requeue, err := tc.store.replicateQueue.processOneChange(
@@ -13688,6 +13720,7 @@ func TestRangeInfoReturned(t *testing.T) {
 		tc.repl.mu.Lock()
 		st := tc.repl.leaseStatusAtRLocked(ctx, tc.Clock().NowAsClockTimestamp())
 		ll := tc.repl.requestLeaseLocked(ctx, st, nil /* limiter */)
+		// nolint:deferunlock
 		tc.repl.mu.Unlock()
 		select {
 		case pErr := <-ll.C():

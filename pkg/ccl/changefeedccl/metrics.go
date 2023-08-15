@@ -748,6 +748,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 				maxBehind = behind
 			}
 		}
+		// nolint:deferunlock
 		m.mu.Unlock()
 		return maxBehind.Nanoseconds()
 	})
