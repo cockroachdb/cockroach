@@ -2573,18 +2573,21 @@ func TestReplicateQueueLeasePreferencePurgatoryError(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tc.WaitForFullReplication())
 
-	store := tc.GetFirstStoreFromServer(t, 0)
 	// Set a preference on the initial node, then wait until all the leases for
 	// the test table are on that node.
 	setLeasePreferences(initialPreferredNode)
 	testutils.SucceedsSoon(t, func() error {
-		require.NoError(t, store.ForceReplicationScanAndProcess())
+		for serverIdx := 0; serverIdx < numNodes; serverIdx++ {
+			require.NoError(t, tc.GetFirstStoreFromServer(t, serverIdx).
+				ForceReplicationScanAndProcess())
+		}
 		return checkLeaseCount(initialPreferredNode, numRanges)
 	})
 
 	// Block returning transfer targets from the allocator, then update the
 	// preferred node. We expect that every range for the test table will end up
 	// in purgatory on the initially preferred node.
+	store := tc.GetFirstStoreFromServer(t, 0)
 	blockTransferTarget.Store(true)
 	setLeasePreferences(nextPreferredNode)
 	testutils.SucceedsSoon(t, func() error {
