@@ -293,6 +293,8 @@ func (sc *SchemaChanger) refreshMaterializedView(
 	return sc.backfillQueryIntoTable(ctx, tableToRefresh, table.GetViewQuery(), refresh.AsOf(), "refreshView")
 }
 
+const schemaChangerBackfillTxnDebugName = "schemaChangerBackfill"
+
 func (sc *SchemaChanger) backfillQueryIntoTable(
 	ctx context.Context, table catalog.TableDescriptor, query string, ts hlc.Timestamp, desc string,
 ) error {
@@ -302,7 +304,12 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		}
 	}
 
+	isTxnRetry := false
 	return sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		defer func() {
+			isTxnRetry = true
+		}()
+		txn.KV().SetDebugName(schemaChangerBackfillTxnDebugName)
 		if err := txn.KV().SetFixedTimestamp(ctx, ts); err != nil {
 			return err
 		}
@@ -322,6 +329,23 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 
 		defer cleanup()
 		localPlanner := p.(*planner)
+
+		// Delete existing span before ingestion to prevent key collisions.
+		// BulkRowWriter adds SSTables non-transactionally so the writes are not
+		// rolled back.
+		if isTxnRetry {
+			request := kvpb.BatchRequest{
+				Header: kvpb.Header{
+					Timestamp: ts,
+				},
+			}
+			tableSpan := table.TableSpan(localPlanner.EvalContext().Codec)
+			request.Add(kvpb.NewDeleteRange(tableSpan.Key, tableSpan.EndKey, false))
+			if _, err := localPlanner.execCfg.DB.NonTransactionalSender().Send(ctx, &request); err != nil {
+				return err.GoError()
+			}
+		}
+
 		stmt, err := parser.ParseOne(query)
 		if err != nil {
 			return err

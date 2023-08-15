@@ -361,10 +361,10 @@ func (txn *Txn) SetDebugName(name string) {
 func (txn *Txn) DebugName() string {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	return txn.debugNameLocked()
+	return txn.DebugNameLocked()
 }
 
-func (txn *Txn) debugNameLocked() string {
+func (txn *Txn) DebugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
 }
 
@@ -1035,7 +1035,7 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) error {
 			retryErr, "PrepareForRetry() called on leaf txn"), ctx)
 	}
 	log.VEventf(ctx, 2, "retrying transaction: %s because of a retryable error: %s",
-		txn.debugNameLocked(), retryErr)
+		txn.DebugNameLocked(), retryErr)
 	txn.resetDeadlineLocked()
 
 	if txn.mu.ID != retryErr.TxnID {
@@ -1428,6 +1428,21 @@ func (txn *Txn) GenerateForcedRetryableErr(ctx context.Context, msg redact.Redac
 	defer txn.mu.Unlock()
 	now := txn.db.clock.NowAsClockTimestamp()
 	return txn.mu.sender.GenerateForcedRetryableErr(ctx, now.ToTimestamp(), msg)
+}
+
+const RandomTxnRetryProbability = 0.1
+
+// TestingShouldRetry returns true if we should generate a
+// random, retriable error for this transaction.
+func (txn *Txn) TestingShouldRetry() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+
+	if txn.mu.sender.ClientFinalized() {
+		return false
+	}
+
+	return txn.mu.sender.TestingShouldRetry(txn)
 }
 
 // IsSerializablePushAndRefreshNotPossible returns true if the transaction is
