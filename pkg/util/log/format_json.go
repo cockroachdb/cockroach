@@ -372,11 +372,11 @@ func (f formatJSONFull) formatEntry(entry logEntry) *buffer {
 		buf.WriteString(`":`)
 		buf.WriteString(entry.NodeID)
 	}
-	if entry.TenantID() != "" {
+	if entry.TenantID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['T'].tags[f.tags])
 		buf.WriteString(`":`)
-		buf.WriteString(entry.TenantID())
+		buf.WriteString(entry.TenantID)
 	}
 	if entry.SQLInstanceID != "" {
 		buf.WriteString(`,"`)

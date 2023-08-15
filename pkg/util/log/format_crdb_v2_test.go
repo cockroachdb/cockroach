@@ -42,10 +42,6 @@ func (t testIDPayload) ServerIdentityString(key serverident.ServerIdentification
 	}
 }
 
-func (t testIDPayload) TenantID() interface{} {
-	return nil
-}
-
 var _ serverident.ServerIdentificationPayload = (*testIDPayload)(nil)
 
 func TestFormatCrdbV2(t *testing.T) {
@@ -207,7 +203,7 @@ func TestFormatCrdbV2LongLineBreaks(t *testing.T) {
 
 		entry := logEntry{
 			IDPayload: serverident.IDPayload{
-				TenantIDInternal: "1",
+				TenantID: "1",
 			},
 			payload: entryPayload{
 				redactable: redactable,

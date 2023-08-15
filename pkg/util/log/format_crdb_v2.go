@@ -263,11 +263,11 @@ func (f formatCrdbV2) formatEntry(entry logEntry) *buffer {
 	// Display the tags if set.
 	buf.Write(cp[ttycolor.Blue])
 	// We must always tag with tenant ID if present.
-	tID := entry.TenantID()
+	tID := entry.TenantID
 	if tID != "" || entry.payload.tags != nil {
 		buf.WriteByte('[')
 		if tID != "" {
-			writeTagToBuffer(buf, tenantIDLogTagBytePrefix, []byte(entry.TenantID()))
+			writeTagToBuffer(buf, tenantIDLogTagBytePrefix, []byte(entry.TenantID))
 			if entry.payload.tags != nil {
 				buf.WriteByte(',')
 			}

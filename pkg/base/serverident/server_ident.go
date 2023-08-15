@@ -72,10 +72,7 @@ type IDPayload struct {
 	// We avoid using roahcpb.NodeID to avoid a circular reference.
 	NodeID string
 	// ditto for the tenant ID.
-	//
-	// NB: Use TenantID() to access/read this value to take advantage
-	// of default behaviors.
-	TenantIDInternal string
+	TenantID string
 	// ditto for the SQL instance ID.
 	SQLInstanceID string
 }
@@ -86,16 +83,11 @@ func GetIdentificationPayload(ctx context.Context) IDPayload {
 		return IDPayload{}
 	}
 	return IDPayload{
-		ClusterID:        si.ServerIdentityString(IdentifyClusterID),
-		NodeID:           si.ServerIdentityString(IdentifyKVNodeID),
-		SQLInstanceID:    si.ServerIdentityString(IdentifyInstanceID),
-		TenantIDInternal: si.ServerIdentityString(IdentifyTenantID),
+		ClusterID:     si.ServerIdentityString(IdentifyClusterID),
+		NodeID:        si.ServerIdentityString(IdentifyKVNodeID),
+		SQLInstanceID: si.ServerIdentityString(IdentifyInstanceID),
+		TenantID:      si.ServerIdentityString(IdentifyTenantID),
 	}
-}
-
-// TenantID returns the tenant ID associated with this idPayload.
-func (ip IDPayload) TenantID() string {
-	return ip.TenantIDInternal
 }
 
 // SetSystemTenantID is used to set the string representation of
