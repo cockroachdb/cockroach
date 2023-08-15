@@ -378,10 +378,11 @@ func NewTestCluster(
 // in a separate thread and with ParallelStart enabled (otherwise it'll block
 // on waiting for init for the first server).
 func (tc *TestCluster) Start(t serverutils.TestFataler) {
+	ctx := context.Background()
 	defer func() {
 		if r := recover(); r != nil {
 			// Avoid a stopper leak.
-			tc.Stopper().Stop(context.Background())
+			tc.Stopper().Stop(ctx)
 			panic(r)
 		}
 	}()
@@ -401,11 +402,11 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 
 		if tc.clusterArgs.ParallelStart {
 			go func(i int) {
-				errCh <- tc.startServer(i, tc.serverArgs[i])
+				errCh <- tc.Servers[i].PreStart(ctx)
 			}(i)
 		} else {
-			if err := tc.startServer(i, tc.serverArgs[i]); err != nil {
-				tc.Stopper().Stop(context.Background())
+			if err := tc.Servers[i].PreStart(ctx); err != nil {
+				tc.Stopper().Stop(ctx)
 				t.Fatal(err)
 			}
 			// We want to wait for stores for each server in order to have predictable
@@ -423,25 +424,11 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 			}
 		}
 		if cerr != nil {
-			tc.Stopper().Stop(context.Background())
+			tc.Stopper().Stop(ctx)
 			t.Fatal(cerr)
 		}
 
 		tc.WaitForNStores(t, tc.NumServers(), tc.Servers[0].GossipI().(*gossip.Gossip))
-	}
-
-	// Now that we have started all the servers on the bootstrap version, let us
-	// run the migrations up to the overridden BinaryVersion.
-	s := tc.Servers[0]
-	if v := s.BinaryVersionOverride(); v != (roachpb.Version{}) {
-		for _, layer := range []serverutils.ApplicationLayerInterface{s.SystemLayer(), s.ApplicationLayer()} {
-			ie := layer.InternalExecutor().(isql.Executor)
-			if _, err := ie.Exec(context.Background(), "set-cluster-version", nil, /* txn */
-				`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
-				tc.Stopper().Stop(context.Background())
-				t.Fatal(err)
-			}
-		}
 	}
 
 	if tc.clusterArgs.ReplicationMode == base.ReplicationManual {
@@ -451,21 +438,21 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 		//
 		// TODO(benesch): this won't be necessary once we have sticky bits for
 		// splits.
-		if _, err := s.SystemLayer().
+		if _, err := tc.Servers[0].SystemLayer().
 			InternalExecutor().(isql.Executor).
-			Exec(context.Background(), "enable-merge-queue", nil, /* txn */
+			Exec(ctx, "enable-merge-queue", nil, /* txn */
 				`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
-			tc.Stopper().Stop(context.Background())
+			tc.Stopper().Stop(ctx)
 			t.Fatal(err)
 		}
 	}
 
 	if disableLBS {
-		if _, err := s.SystemLayer().
+		if _, err := tc.Servers[0].SystemLayer().
 			InternalExecutor().(isql.Executor).
-			Exec(context.Background(), "enable-split-by-load", nil, /*txn */
+			Exec(ctx, "enable-split-by-load", nil, /*txn */
 				`SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
-			tc.Stopper().Stop(context.Background())
+			tc.Stopper().Stop(ctx)
 			t.Fatal(err)
 		}
 	}
@@ -476,7 +463,7 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 
 	if tc.clusterArgs.ReplicationMode == base.ReplicationAuto {
 		if err := tc.WaitForFullReplication(); err != nil {
-			tc.Stopper().Stop(context.Background())
+			tc.Stopper().Stop(ctx)
 			t.Fatal(err)
 		}
 	}
@@ -497,6 +484,20 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 		}
 		return err
 	})
+
+	// Activate the SQL service and secondary tenants on every server.
+	for idx, s := range tc.Servers {
+		if err := s.Activate(ctx); err != nil {
+			tc.Stopper().Stop(ctx)
+			t.Fatal(err)
+		}
+		dbConn, err := s.ApplicationLayer().SQLConnE(tc.serverArgs[idx].UseDatabase)
+		if err != nil {
+			tc.Stopper().Stop(ctx)
+			t.Fatal(err)
+		}
+		tc.Conns = append(tc.Conns, dbConn)
+	}
 }
 
 type checkType bool
