@@ -107,11 +107,14 @@ func ShouldStartDefaultTestTenant(
 		return base.InternalNonDefaultDecision
 	}
 
+	// FIXME - temporary for testing
+	const alwaysTrue = true
+
 	// Note: we ask the metamorphic framework for a "disable" value, instead
 	// of an "enable" value, because it probabilistically returns its default value
 	// more often than not and that is what we want.
 	enabled := !util.ConstantWithMetamorphicTestBoolWithoutLogging("disable-test-tenant", false)
-	if enabled && t != nil {
+	if (alwaysTrue || enabled) && t != nil {
 		t.Log(defaultTestTenantMessage)
 	}
 	if enabled {
