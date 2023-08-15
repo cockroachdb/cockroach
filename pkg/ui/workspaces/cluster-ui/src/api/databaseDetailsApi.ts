@@ -393,6 +393,7 @@ type DatabaseIndexUsageStatsResponse = {
 
 const getDatabaseIndexUsageStats: DatabaseDetailsQuery<IndexUsageStatistic> = {
   createStmt: (dbName: string, csIndexUnusedDuration: string) => {
+    csIndexUnusedDuration = csIndexUnusedDuration ?? "168h";
     return {
       sql: Format(
         `SELECT * FROM (SELECT

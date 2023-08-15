@@ -481,6 +481,7 @@ const getTableIndexUsageStats: TableDetailsQuery<IndexUsageStatistic> = {
       [new Identifier(dbName), new SQL(tableName)],
       new SQL("."),
     );
+    csIndexUnusedDuration = csIndexUnusedDuration ?? "168h";
     return {
       sql: Format(
         `WITH tableId AS (SELECT $1::regclass::int as table_id)

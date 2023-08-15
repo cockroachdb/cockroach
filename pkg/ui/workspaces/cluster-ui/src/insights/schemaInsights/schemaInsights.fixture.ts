@@ -71,6 +71,7 @@ export const SchemaInsightsPropsFixture: SchemaInsightsViewProps = {
     schemaInsightType: "",
   },
   hasAdminRole: true,
+  csIndexUnusedDuration: "168h",
   refreshSchemaInsights: () => {},
   onSortChange: () => {},
   onFiltersChange: () => {},
