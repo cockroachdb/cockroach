@@ -10,6 +10,7 @@
 
 import { databaseRequestPayloadToID, tableRequestToID } from "./apiReducers";
 import { api as clusterUiApi, util } from "@cockroachlabs/cluster-ui";
+import { indexUnusedDuration } from "../util/constants";
 
 describe("table id generator", function () {
   it("generates encoded db/table id", function () {
@@ -30,19 +31,20 @@ describe("table id generator", function () {
 describe("request to string functions", function () {
   it("correctly generates a string from a database details request", function () {
     const database = "testDatabase";
-    const csIndexUnusedDuration = "168h";
     expect(
-      databaseRequestPayloadToID({ database, csIndexUnusedDuration }),
+      databaseRequestPayloadToID({
+        database,
+        csIndexUnusedDuration: indexUnusedDuration,
+      }),
     ).toEqual(database);
   });
   it("correctly generates a string from a table details request", function () {
     const database = "testDatabase";
     const table = "testTable";
-    const csIndexUnusedDuration = "168h";
     const tableRequest: clusterUiApi.TableDetailsReqParams = {
       database,
       table,
-      csIndexUnusedDuration,
+      csIndexUnusedDuration: indexUnusedDuration,
     };
     expect(tableRequestToID(tableRequest)).toEqual(
       util.generateTableID(database, table),

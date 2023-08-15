@@ -22,7 +22,7 @@ import {
 } from "@cockroachlabs/cluster-ui";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
-import { databaseNameAttr } from "src/util/constants";
+import { databaseNameAttr, indexUnusedDuration } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 import moment from "moment-timezone";
@@ -108,11 +108,18 @@ class TestDriver {
   }
 
   async refreshDatabaseDetails() {
-    return this.actions.refreshDatabaseDetails(this.database, "168h");
+    return this.actions.refreshDatabaseDetails(
+      this.database,
+      indexUnusedDuration,
+    );
   }
 
   async refreshTableDetails(table: string) {
-    return this.actions.refreshTableDetails(this.database, table, "168h");
+    return this.actions.refreshTableDetails(
+      this.database,
+      table,
+      indexUnusedDuration,
+    );
   }
 
   private findTable(name: string) {
@@ -150,7 +157,7 @@ describe("Database Details Page", function () {
       sortSettingGrants: { ascending: true, columnTitle: "name" },
       tables: [],
       showIndexRecommendations: false,
-      csIndexUnusedDuration: "168h",
+      csIndexUnusedDuration: indexUnusedDuration,
     });
   });
 
@@ -158,7 +165,7 @@ describe("Database Details Page", function () {
     fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
       clusterUiApi.createDatabaseDetailsReq({
         database: "things",
-        csIndexUnusedDuration: "168h",
+        csIndexUnusedDuration: indexUnusedDuration,
       }),
       [
         // Id
@@ -187,7 +194,7 @@ describe("Database Details Page", function () {
       isTenant: false,
       showNodeRegionsColumn: false,
       showIndexRecommendations: false,
-      csIndexUnusedDuration: "168h",
+      csIndexUnusedDuration: indexUnusedDuration,
       viewMode: ViewMode.Tables,
       sortSettingTables: { ascending: true, columnTitle: "name" },
       sortSettingGrants: { ascending: true, columnTitle: "name" },
@@ -244,7 +251,7 @@ describe("Database Details Page", function () {
     fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
       clusterUiApi.createDatabaseDetailsReq({
         database: "things",
-        csIndexUnusedDuration: "168h",
+        csIndexUnusedDuration: indexUnusedDuration,
       }),
       [
         // Id
@@ -263,7 +270,11 @@ describe("Database Details Page", function () {
     const mockStatsLastCreatedTimestamp = moment();
 
     fakeApi.stubSqlApiCall<clusterUiApi.TableDetailsRow>(
-      clusterUiApi.createTableDetailsReq("things", `"public"."foo"`, "168h"),
+      clusterUiApi.createTableDetailsReq(
+        "things",
+        `"public"."foo"`,
+        indexUnusedDuration,
+      ),
       [
         // Table ID query
         { rows: [{ table_id: "1" }] },
@@ -314,7 +325,11 @@ describe("Database Details Page", function () {
     );
 
     fakeApi.stubSqlApiCall<clusterUiApi.TableDetailsRow>(
-      clusterUiApi.createTableDetailsReq("things", `"public"."bar"`, "168h"),
+      clusterUiApi.createTableDetailsReq(
+        "things",
+        `"public"."bar"`,
+        indexUnusedDuration,
+      ),
       [
         // Table ID query
         { rows: [{ table_id: "2" }] },
@@ -414,7 +429,7 @@ describe("Database Details Page", function () {
     fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
       clusterUiApi.createDatabaseDetailsReq({
         database: "things",
-        csIndexUnusedDuration: "168h",
+        csIndexUnusedDuration: indexUnusedDuration,
       }),
       [
         // Id
@@ -429,7 +444,11 @@ describe("Database Details Page", function () {
     );
 
     fakeApi.stubSqlApiCall<clusterUiApi.TableDetailsRow>(
-      clusterUiApi.createTableDetailsReq("things", `"public"."foo"`, "168h"),
+      clusterUiApi.createTableDetailsReq(
+        "things",
+        `"public"."foo"`,
+        indexUnusedDuration,
+      ),
       [
         // Table ID query
         {},
@@ -464,7 +483,7 @@ describe("Database Details Page", function () {
     fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
       clusterUiApi.createDatabaseDetailsReq({
         database: "things",
-        csIndexUnusedDuration: "168h",
+        csIndexUnusedDuration: indexUnusedDuration,
       }),
       [
         // Id
@@ -479,7 +498,11 @@ describe("Database Details Page", function () {
     );
 
     fakeApi.stubSqlApiCall<clusterUiApi.TableDetailsRow>(
-      clusterUiApi.createTableDetailsReq("things", `"public"."foo"`, "168h"),
+      clusterUiApi.createTableDetailsReq(
+        "things",
+        `"public"."foo"`,
+        indexUnusedDuration,
+      ),
       [
         // Table ID query
         {},
