@@ -47,6 +47,17 @@ func (s *SpanConfig) IsEmpty() bool {
 	return s.Equal(emptySpanConfig)
 }
 
+// HasConfigurationChange is true if there is a change to this SpanConfig that
+// is initiated by the end user (directly or indirectly) rather than by a
+// background system process (like a PTS update).
+func (s *SpanConfig) HasConfigurationChange(other SpanConfig) bool {
+	this := *s
+	// Clear out the protection policies from both SpanConfigs.
+	this.GCPolicy.ProtectionPolicies = nil
+	other.GCPolicy.ProtectionPolicies = nil
+	return !this.Equal(other)
+}
+
 // TTL returns the implies TTL as a time.Duration.
 func (s *SpanConfig) TTL() time.Duration {
 	return time.Duration(s.GCPolicy.TTLSeconds) * time.Second
