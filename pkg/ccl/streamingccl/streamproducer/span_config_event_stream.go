@@ -10,6 +10,7 @@ package streamproducer
 
 import (
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
@@ -171,6 +172,7 @@ func (s *spanConfigEventStream) Close(ctx context.Context) {
 func (s *spanConfigEventStream) handleUpdate(ctx context.Context, update rangefeedcache.Update) {
 	select {
 	case <-ctx.Done():
+		s.errCh <- ctx.Err()
 	case s.updateCh <- update:
 		if update.Type == rangefeedcache.CompleteUpdate {
 			log.VInfof(ctx, 1, "completed initial scan")
@@ -198,8 +200,13 @@ func (s *spanConfigEventStream) flushEvent(ctx context.Context, event *streampb.
 // streamLoop is the main processing loop responsible for reading buffered rangefeed events,
 // accumulating them in a batch, and sending those events to the ValueGenerator.
 func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
+
+	// TODO(msbutler): We may not need a pacer, given how little traffic will come from this
+	// stream. That being said, we'd still want to buffer updates to ensure we
+	// don't clog up the rangefeed. Consider using async flushing.
 	pacer := makeCheckpointPacer(s.spec.Config.MinCheckpointFrequency)
-	batch := streampb.StreamEvent_Batch{}
+	bufferedEvents := make([]streampb.StreamedSpanConfigEntry, 0)
+	batcher := makeStreamEventBatcher()
 
 	for {
 		select {
@@ -218,6 +225,7 @@ func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
 				if !tenantID.Equal(s.spec.Config.SpanConfigForTenant) {
 					continue
 				}
+
 				streamedSpanCfgEntry := streampb.StreamedSpanConfigEntry{
 					SpanConfig: roachpb.SpanConfigEntry{
 						Target: target,
@@ -225,14 +233,15 @@ func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
 					},
 					Timestamp: spcfgEvent.Timestamp(),
 				}
-
-				batch.SpanConfigs = append(batch.SpanConfigs, streamedSpanCfgEntry)
+				bufferedEvents = append(bufferedEvents, streamedSpanCfgEntry)
 			}
+			batcher.addSpanConfigs(bufferedEvents)
+			bufferedEvents = bufferedEvents[:0]
 			if pacer.shouldCheckpoint(update.Timestamp, true) {
-				if err := s.flushEvent(ctx, &streampb.StreamEvent{Batch: &batch}); err != nil {
+				if err := s.flushEvent(ctx, &streampb.StreamEvent{Batch: &batcher.batch}); err != nil {
 					return err
 				}
-				batch.SpanConfigs = batch.SpanConfigs[:0]
+				batcher.reset()
 			}
 		}
 	}

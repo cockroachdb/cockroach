@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "encoding.go",
         "replication_helpers.go",
+        "span_config_helpers.go",
         "testutils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils",
@@ -24,6 +25,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",

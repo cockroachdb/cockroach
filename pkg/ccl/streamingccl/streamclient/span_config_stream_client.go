@@ -28,15 +28,22 @@ type spanConfigStreamClient struct {
 	subscription spanConfigStreamSubscription
 }
 
+// TODO(msbutler): once the span config stream is hooked up on the ingestion
+// side, consider implementing a different interface for the spanConfig client.
 var _ Client = &spanConfigStreamClient{}
 
-func NewSpanConfigStreamClient(remote *url.URL) (Client, error) {
+func NewSpanConfigStreamClient(ctx context.Context, remote *url.URL) (Client, error) {
 	config, err := setupPGXConfig(remote)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := pgx.ConnectConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}
 	return &spanConfigStreamClient{
 		pgxConfig: config,
+		srcConn:   conn,
 	}, nil
 }
 
@@ -111,7 +118,6 @@ func (p *spanConfigStreamSubscription) Subscribe(ctx context.Context) error {
 	defer sp.Finish()
 
 	defer close(p.eventsChan)
-	// Each subscription has its own pgx connection.
 	srcConn, err := pgx.ConnectConfig(ctx, p.srcConnConfig)
 	if err != nil {
 		return err

@@ -855,34 +855,8 @@ USE d;`)
 		streamSpanConfigsQuery, tenantName)
 	defer feed.Close(ctx)
 
-	// Add a few more use cases:
-	// -  update a subset of the tenant key space
-
-	// makes a dummy span config record with the given ttl. If the ttl is 0,  no span config is added,
-	// and the record is treated as a delete record.
 	makeRecord := func(targetSpan roachpb.Span, ttl int) spanconfig.Record {
-		target := spanconfig.MakeTargetFromSpan(targetSpan)
-		var spanConfig roachpb.SpanConfig
-		if ttl > 0 {
-			spanConfig = roachpb.SpanConfig{
-				GCPolicy: roachpb.GCPolicy{
-					TTLSeconds: int32(ttl),
-				},
-			}
-		}
-		// check that all orderedUpdates are observed.
-		record, err := spanconfig.MakeRecord(target, spanConfig)
-		require.NoError(t, err)
-		return record
-	}
-
-	recordToEntry := func(record spanconfig.Record) roachpb.SpanConfigEntry {
-		t := record.GetTarget().ToProto()
-		c := record.GetConfig()
-		return roachpb.SpanConfigEntry{
-			Target: t,
-			Config: c,
-		}
+		return replicationtestutils.MakeSpanConfigRecord(t, targetSpan, ttl)
 	}
 
 	makeTableSpan := func(highTableID uint32) roachpb.Span {
@@ -891,64 +865,74 @@ USE d;`)
 	}
 
 	irrelevantTenant := keys.MakeSQLCodec(roachpb.MustMakeTenantID(231))
-	relevantSpan := tenantCodec.TenantSpan()
 	t1Span, t2Span, t3Span := makeTableSpan(1001), makeTableSpan(1002), makeTableSpan(1003)
 	t123Span := roachpb.Span{Key: t1Span.Key, EndKey: t3Span.EndKey}
 	expectedSpanConfigs := makeSpanConfigUpdateRecorder()
 
-	expectedUpdateCount := 0
 	for ts, toApply := range []struct {
-		updates []spanconfig.Record
-		deletes []spanconfig.Target
+		updates  []spanconfig.Record
+		deletes  []spanconfig.Target
+		expected []spanconfig.Record
 	}{
 		{
 			// This irrelevant span should not surface.
-			updates: []spanconfig.Record{makeRecord(irrelevantTenant.TenantSpan(), 3)},
+			updates:  []spanconfig.Record{makeRecord(irrelevantTenant.TenantSpan(), 3)},
+			expected: []spanconfig.Record{},
 		},
 		{
-			updates: []spanconfig.Record{makeRecord(t1Span, 2)},
+			updates:  []spanconfig.Record{makeRecord(t1Span, 2)},
+			expected: []spanconfig.Record{makeRecord(t1Span, 2)},
 		},
 		{
 			// Update the Span.
-			updates: []spanconfig.Record{makeRecord(t1Span, 3)},
+			updates:  []spanconfig.Record{makeRecord(t1Span, 3)},
+			expected: []spanconfig.Record{makeRecord(t1Span, 3)},
 		},
 		{
 			// Add Two new records at the same time
-			updates: []spanconfig.Record{makeRecord(t2Span, 2), makeRecord(t3Span, 5)},
+			updates:  []spanconfig.Record{makeRecord(t2Span, 2), makeRecord(t3Span, 5)},
+			expected: []spanconfig.Record{makeRecord(t2Span, 2), makeRecord(t3Span, 5)},
 		},
 		{
 			// Merge these Records
-			//
-			// TODO(msbutler): confirm this is the conventional merge request pattern: upsert the first
-			// record, delete the latter records. Adding a delete request for t2Span seems to noop and doesn't replicate.
-			deletes: []spanconfig.Target{spanconfig.MakeTargetFromSpan(t2Span), spanconfig.MakeTargetFromSpan(t3Span)},
-			updates: []spanconfig.Record{makeRecord(t123Span, 10)},
+			deletes:  []spanconfig.Target{spanconfig.MakeTargetFromSpan(t2Span), spanconfig.MakeTargetFromSpan(t3Span)},
+			updates:  []spanconfig.Record{makeRecord(t123Span, 10)},
+			expected: []spanconfig.Record{makeRecord(t2Span, 0), makeRecord(t3Span, 0), makeRecord(t123Span, 10)},
 		},
 		{
 			// Split the records
-			//
-			// TODO (msbutler): confirm this is the conventional split request pattern: no need to delete the big span, as the delete noops and doesn't replicate.
-			updates: []spanconfig.Record{makeRecord(t1Span, 1), makeRecord(t2Span, 2), makeRecord(t3Span, 3)},
+			updates:  []spanconfig.Record{makeRecord(t1Span, 1), makeRecord(t2Span, 2), makeRecord(t3Span, 3)},
+			expected: []spanconfig.Record{makeRecord(t1Span, 1), makeRecord(t2Span, 2), makeRecord(t3Span, 3)},
+		},
+		{
+			// Merge these Records again, but include a delete of the t1Span. The
+			// delete of the t1Span does not get replicated because the t123span
+			// update is the latest operation on that span config row in the
+			// accessor.UpdateSpanConfigRecords transaction.
+			deletes: []spanconfig.Target{
+				spanconfig.MakeTargetFromSpan(t1Span),
+				spanconfig.MakeTargetFromSpan(t2Span),
+				spanconfig.MakeTargetFromSpan(t3Span)},
+			updates:  []spanconfig.Record{makeRecord(t123Span, 10)},
+			expected: []spanconfig.Record{makeRecord(t2Span, 0), makeRecord(t3Span, 0), makeRecord(t123Span, 10)},
+		},
+		{
+			// Split the records, but include a delete of the t123 span. The delete
+			// does not get replicated because the t1 update is the latest operation
+			// on that row in the accessor.UpdateSpaConfigRecords
+			// transaction.
+			deletes:  []spanconfig.Target{spanconfig.MakeTargetFromSpan(t123Span)},
+			updates:  []spanconfig.Record{makeRecord(t1Span, 1), makeRecord(t2Span, 2), makeRecord(t3Span, 3)},
+			expected: []spanconfig.Record{makeRecord(t1Span, 1), makeRecord(t2Span, 2), makeRecord(t3Span, 3)},
 		},
 	} {
 		toApply := toApply
 		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toApply.deletes, toApply.updates,
 			hlc.MinTimestamp,
 			hlc.MaxTimestamp), "failed on update %d (index starts at 0)", ts)
-		for _, toDelete := range toApply.deletes {
-			deleteSpan := toDelete.GetSpan()
-			if relevantSpan.Contains(deleteSpan) {
-				deletedRecord := makeRecord(deleteSpan, 0)
-				require.True(t, expectedSpanConfigs.maybeAddNewRecord(recordToEntry(deletedRecord), int64(ts)))
-			}
+		for _, record := range toApply.expected {
+			require.True(t, expectedSpanConfigs.maybeAddNewRecord(replicationtestutils.RecordToEntry(record), int64(ts)))
 		}
-		for _, record := range toApply.updates {
-			if relevantSpan.Contains(record.GetTarget().GetSpan()) {
-				require.True(t, expectedSpanConfigs.maybeAddNewRecord(recordToEntry(record), int64(ts)))
-				expectedUpdateCount++
-			}
-		}
-
 	}
 	receivedSpanConfigs := makeSpanConfigUpdateRecorder()
 	codec := source.mu.codec.(*partitionStreamDecoder)
@@ -965,7 +949,7 @@ USE d;`)
 			}
 		}
 		source.mu.Unlock()
-		if updateCount >= expectedUpdateCount {
+		if updateCount == len(expectedSpanConfigs.allUpdates) {
 			break
 		}
 	}
@@ -982,7 +966,6 @@ func (s *spanConfigUpdateRecorder) maybeAddNewRecord(
 	record roachpb.SpanConfigEntry, ts int64,
 ) bool {
 	stringedUpdate := record.String() + fmt.Sprintf(" ts:%d", ts)
-	// TODO (msbutler): given that a batch can have repeat records, understand how to properly write those on the ingestion side.
 	if _, ok := s.allUpdates[stringedUpdate]; !ok {
 		s.allUpdates[stringedUpdate] = struct{}{}
 	} else {

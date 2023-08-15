@@ -148,7 +148,7 @@ type Subscription interface {
 
 // NewStreamClient creates a new stream client based on the stream address.
 func NewStreamClient(
-	ctx context.Context, streamAddress streamingccl.StreamAddress, db isql.DB, forSpanConfigs bool,
+	ctx context.Context, streamAddress streamingccl.StreamAddress, db isql.DB,
 ) (Client, error) {
 	var streamClient Client
 	streamURL, err := streamAddress.URL()
@@ -160,9 +160,6 @@ func NewStreamClient(
 	case "postgres", "postgresql":
 		// The canonical PostgreSQL URL scheme is "postgresql", however our
 		// own client commands also accept "postgres".
-		if forSpanConfigs {
-			return NewSpanConfigStreamClient(streamURL)
-		}
 		return NewPartitionedStreamClient(ctx, streamURL)
 	case "external":
 		if db == nil {
@@ -172,7 +169,7 @@ func NewStreamClient(
 		if err != nil {
 			return nil, err
 		}
-		return NewStreamClient(ctx, addr, db, forSpanConfigs)
+		return NewStreamClient(ctx, addr, db)
 	case RandomGenScheme:
 		streamClient, err = newRandomStreamClient(streamURL)
 		if err != nil {
@@ -209,7 +206,7 @@ func GetFirstActiveClient(ctx context.Context, streamAddresses []string) (Client
 	var combinedError error = nil
 	for _, address := range streamAddresses {
 		streamAddress := streamingccl.StreamAddress(address)
-		client, err := NewStreamClient(ctx, streamAddress, nil, false)
+		client, err := NewStreamClient(ctx, streamAddress, nil)
 		if err == nil {
 			err = client.Dial(ctx)
 			if err == nil {

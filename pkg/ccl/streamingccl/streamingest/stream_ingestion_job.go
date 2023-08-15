@@ -123,7 +123,7 @@ func connectToActiveClient(
 	// Without a list of addresses from existing progress we use the stream
 	// address from the creation statement
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
-	client, err := streamclient.NewStreamClient(ctx, streamAddress, db, false)
+	client, err := streamclient.NewStreamClient(ctx, streamAddress, db)
 
 	return client, errors.Wrapf(err, "ingestion job %d failed to connect to stream address or existing topology for planning", ingestionJob.ID())
 }

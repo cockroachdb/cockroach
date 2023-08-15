@@ -49,6 +49,7 @@ go_test(
         "client_test.go",
         "main_test.go",
         "partitioned_stream_client_test.go",
+        "span_config_stream_client_test.go",
     ],
     args = ["-test.timeout=55s"],
     embed = [":streamclient"],
