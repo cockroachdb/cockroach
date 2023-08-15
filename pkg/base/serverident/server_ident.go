@@ -47,16 +47,6 @@ type ServerIdentificationPayload interface {
 	// given retrieval key. If there is no value known for a given key,
 	// the method can return the empty string.
 	ServerIdentityString(key ServerIdentificationKey) string
-
-	// TenantID returns the roachpb.TenantID identifying the server. It's returned
-	// as an interface{} because the log pkg cannot depend on roachpb (and the log pkg
-	// is the one putting the ServerIdentificationPayload into the ctx, so it makes
-	// sense for this interface to live in log).
-	//
-	// Note that this tenant ID should not be confused with the one put in the
-	// context by roachpb.ContextWithClientTenant(): that one is used by a server
-	// handling an RPC call, referring to the tenant that's the client of the RPC.
-	TenantID() interface{}
 }
 
 // ServerIdentificationKey represents a possible parameter to the
