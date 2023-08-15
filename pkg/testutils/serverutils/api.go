@@ -404,6 +404,16 @@ type ApplicationLayerInterface interface {
 	// server. The concrete return value is of type
 	// privchecker.SQLPrivilegeChecker (interface).
 	PrivilegeChecker() interface{}
+
+	// NodeDescStoreI returns the node descriptor lookup interface.
+	// The concrete return type is compatible with interface kvcoord.NodeDescStore.
+	NodeDescStoreI() interface{}
+
+	// Locality returns the locality used by the server.
+	Locality() roachpb.Locality
+
+	// DistSQLPlanningNodeID returns the NodeID to use by the DistSQL span resolver.
+	DistSQLPlanningNodeID() roachpb.NodeID
 }
 
 // TenantControlInterface defines the API of a test server that can
@@ -606,14 +616,6 @@ type StorageLayerInterface interface {
 
 	// TsDB returns the ts.DB instance used by the TestServer.
 	TsDB() interface{}
-
-	// Locality returns a pointer to the locality used by the server.
-	//
-	// TODO(test-eng): investigate if this should really be a pointer.
-	//
-	// TODO(test-eng): Investigate if this method should be on
-	// ApplicationLayerInterface instead.
-	Locality() *roachpb.Locality
 
 	// DefaultSystemZoneConfig returns the internal system zone config
 	// for the server.
