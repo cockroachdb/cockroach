@@ -147,6 +147,8 @@ type peerMetrics struct {
 	// must be reset before removing, and there must not be any chance that
 	// they're set again because even if they're unlinked from the parent, they
 	// will continue to add to the parent!
+	//
+	// See TestMetricsRelease.
 
 	// 1 on first heartbeat success (via reportHealthy), reset after
 	// runHeartbeatUntilFailure returns.
@@ -216,6 +218,7 @@ func (pm *peerMetrics) release() {
 
 	pm.ConnectionHealthy.Unlink()
 	pm.ConnectionUnhealthy.Unlink()
+	pm.ConnectionInactive.Unlink()
 	pm.ConnectionHealthyFor.Unlink()
 	pm.ConnectionUnhealthyFor.Unlink()
 	pm.ConnectionHeartbeats.Unlink()
