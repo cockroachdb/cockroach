@@ -100,6 +100,11 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+		// Skip the test if it is a .txt file. This is to allow us to have non-test
+		// testdata in the same directory as the test files.
+		if strings.HasSuffix(path, ".txt") {
+			return
+		}
 		ds := newDatadrivenTestState()
 		defer ds.cleanup(t)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {

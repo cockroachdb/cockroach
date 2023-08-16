@@ -61,6 +61,10 @@ var DumpFrontierEntries = settings.RegisterDurationSetting(
 
 const streamIngestionFrontierProcName = `ingestfntr`
 
+// frontierEntriesFilename is the name of the file at which the stream ingestion
+// frontier periodically dumps its state.
+const frontierEntriesFilename = "~replication-frontier-entries.binpb"
+
 type streamIngestionFrontier struct {
 	execinfra.ProcessorBase
 
@@ -515,12 +519,11 @@ func (sf *streamIngestionFrontier) updateLagMetric() {
 // we always persist the entries to the same info key and so we never have more
 // than one row describing the state of the frontier at a given point in time.
 func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
-	ctx := sf.Ctx()
-	log.Info(ctx, "updating the frontier entries")
-	dumpFreq := DumpFrontierEntries.Get(&sf.flowCtx.Cfg.Settings.SV)
+	dumpFreq := DumpFrontierEntries.Get(&sf.FlowCtx.Cfg.Settings.SV)
 	if dumpFreq == 0 || timeutil.Since(sf.lastFrontierDump) < dumpFreq {
 		return nil
 	}
+	ctx := sf.Ctx()
 	f := sf.frontier
 	jobID := jobspb.JobID(sf.spec.JobID)
 
@@ -530,18 +533,14 @@ func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
 		return span.ContinueMatch
 	})
 
-	log.Infof(ctx, "updating the frontier with %v", frontierEntries)
 	frontierBytes, err := protoutil.Marshal(frontierEntries)
 	if err != nil {
 		return err
 	}
 
-	err = sf.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		infoStorage := jobs.InfoStorageForJob(txn, jobID)
-		frontierEntriesInfoKey := "~replication-frontier-entries.binpb"
-		return infoStorage.Write(ctx, frontierEntriesInfoKey, frontierBytes)
-	})
-	if err != nil {
+	if err = sf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return jobs.WriteChunkedFileToJobInfo(ctx, frontierEntriesFilename, frontierBytes, txn, jobID)
+	}); err != nil {
 		return err
 	}
 

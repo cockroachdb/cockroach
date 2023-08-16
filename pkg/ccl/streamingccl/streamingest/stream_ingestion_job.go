@@ -536,8 +536,18 @@ func (s *streamIngestionResumer) CollectProfile(ctx context.Context, execCtx int
 		defer s.mu.Unlock()
 		aggStatsCopy = s.mu.perNodeAggregatorStats.DeepCopy()
 	}()
-	return bulkutil.FlushTracingAggregatorStats(ctx, s.job.ID(),
-		p.ExecCfg().InternalDB, aggStatsCopy)
+
+	var combinedErr error
+	if err := bulkutil.FlushTracingAggregatorStats(ctx, s.job.ID(),
+		p.ExecCfg().InternalDB, aggStatsCopy); err != nil {
+		combinedErr = errors.CombineErrors(combinedErr, errors.Wrap(err, "failed to flush aggregator stats"))
+	}
+	if err := generateSpanFrontierExecutionDetailFile(ctx, p.ExecCfg(),
+		s.job.ID(), false /* skipBehindBy */); err != nil {
+		combinedErr = errors.CombineErrors(combinedErr, errors.Wrap(err, "failed to generate span frontier execution details"))
+	}
+
+	return combinedErr
 }
 
 func closeAndLog(ctx context.Context, d streamclient.Dialer) {
