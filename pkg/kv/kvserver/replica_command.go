@@ -3138,6 +3138,12 @@ func (r *Replica) followerSendSnapshot(
 	// explicitly for snapshots going out to followers.
 	snap.State.DeprecatedUsingAppliedStateKey = true
 
+	// Use shared replication if shared storage is enabled and we're sending
+	// a snapshot for a non-system range. This allows us to send metadata of
+	// sstables in shared storage as opposed to streaming their contents. Keys
+	// in higher levels of the LSM are still streamed in the snapshot.
+	sharedReplicate := r.store.cfg.SharedStorageEnabled && snap.State.Desc.StartKey.AsRawKey().Compare(keys.TableDataMin) >= 0
+
 	// Create new snapshot request header using the delegate snapshot request.
 	header := kvserverpb.SnapshotRequest_Header{
 		State:                                snap.State,
@@ -3160,6 +3166,7 @@ func (r *Replica) followerSendSnapshot(
 		SenderQueuePriority: req.SenderQueuePriority,
 		Strategy:            kvserverpb.SnapshotRequest_KV_BATCH,
 		Type:                req.Type,
+		SharedReplicate:     sharedReplicate,
 	}
 	newBatchFn := func() storage.WriteBatch {
 		return r.store.TODOEngine().NewWriteBatch()
