@@ -32,17 +32,14 @@ import (
 func TestFakeSpanResolver(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
 
-	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(108763),
-		},
-	})
+	ctx := context.Background()
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
+	ts := tc.ApplicationLayer(0)
 
 	sqlutils.CreateTable(
-		t, tc.ServerConn(0), "t",
+		t, ts.SQLConn(t, ""), "t",
 		"k INT PRIMARY KEY, v INT",
 		100,
 		func(row int) []tree.Datum {
@@ -55,15 +52,13 @@ func TestFakeSpanResolver(t *testing.T) {
 
 	resolver := physicalplanutils.FakeResolverForTestCluster(tc)
 
-	db := tc.Server(0).DB()
-
-	txn := kv.NewTxn(ctx, db, tc.Server(0).NodeID())
+	txn := kv.NewTxn(ctx, ts.DB(), ts.DistSQLPlanningNodeID())
 	it := resolver.NewSpanResolverIterator(txn, nil)
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(db, keys.SystemSQLCodec, "test", "t")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(ts.DB(), ts.Codec(), "test", "t")
 	primIdxValDirs := catalogkeys.IndexKeyValDirs(tableDesc.GetPrimaryIndex())
 
-	span := tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+	span := tableDesc.PrimaryIndexSpan(ts.Codec())
 
 	// Make sure we see all the nodes. It will not always happen (due to
 	// randomness) but it should happen most of the time.
