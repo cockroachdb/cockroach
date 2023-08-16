@@ -1,0 +1,14 @@
+echo
+----
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.SetIsoLevel(isolation.Serializable)
+  txn.Put(ctx, tk(5), sv(0)) // @<ts> <nil>
+  txn.CreateSavepoint(ctx, 1) // <nil>
+  txn.Put(ctx, tk(5), sv(2)) // @<ts> <nil>
+  txn.CreateSavepoint(ctx, 3) // <nil>
+  txn.Get(ctx, tk(5)) // @<ts> (v2, <nil>)
+  txn.ReleaseSavepoint(ctx, 1) // <nil>
+  txn.Get(ctx, tk(5)) // @<ts> (v2, <nil>)
+  return nil
+}) // @<ts> <nil>
+// ^-- txnpb:<txn>

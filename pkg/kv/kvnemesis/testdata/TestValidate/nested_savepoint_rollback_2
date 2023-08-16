@@ -1,0 +1,17 @@
+echo
+----
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.SetIsoLevel(isolation.Serializable)
+  txn.Put(ctx, tk(1), sv(1)) // <nil>
+  txn.CreateSavepoint(ctx, 2) // <nil>
+  txn.Put(ctx, tk(1), sv(2)) // <nil>
+  txn.Get(ctx, tk(1)) // (v2, <nil>)
+  txn.CreateSavepoint(ctx, 5) // <nil>
+  txn.Put(ctx, tk(1), sv(3)) // <nil>
+  txn.Get(ctx, tk(1)) // (v3, <nil>)
+  txn.RollbackSavepoint(ctx, 5) // <nil>
+  txn.RollbackSavepoint(ctx, 2) // <nil>
+  txn.Get(ctx, tk(1)) // (v1, <nil>)
+  return nil
+}) // @0.000000001,0 <nil>
+/Table/100/"0000000000000001"/0.000000001,0 @ s1 v1
