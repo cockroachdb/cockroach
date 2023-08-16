@@ -147,7 +147,8 @@ type peerMetrics struct {
 	// must be reset before removing, and there must not be any chance that
 	// they're set again because even if they're unlinked from the parent, they
 	// will continue to add to the parent!
-	// TODO(pavelkalinnikov): unit-test that release() unlinks all metrics.
+	//
+	// See TestMetricsRelease.
 
 	// 1 on first heartbeat success (via reportHealthy), reset after
 	// runHeartbeatUntilFailure returns.
