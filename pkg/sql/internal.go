@@ -1655,6 +1655,9 @@ func (ief *InternalDB) Executor(opts ...isql.ExecutorOption) isql.Executor {
 	if sd := cfg.GetSessionData(); sd != nil {
 		ie.SetSessionData(sd)
 	}
+	if sd := cfg.GetSyntheticDescriptors(); sd != nil {
+		ie.syntheticDescriptors = sd
+	}
 	return &ie
 }
 
