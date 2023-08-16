@@ -518,19 +518,21 @@ func testErrorWaitPush(
 			}
 			g.notify()
 
-			// If the lock is not held or expPushTS is empty, expect an error
-			// immediately. The one exception to this is waitElsewhere, which
-			// expects no error.
-			if !lockHeld || expPushTS == dontExpectPush {
+			// If expPushTS is empty, expect an error immediately.
+			if expPushTS == dontExpectPush {
 				err := w.WaitOn(ctx, req, g)
-				if k == waitElsewhere {
-					require.Nil(t, err)
-				} else {
-					require.NotNil(t, err)
-					lcErr := new(kvpb.LockConflictError)
-					require.True(t, errors.As(err.GoError(), &lcErr))
-					require.Equal(t, errReason, lcErr.Reason)
-				}
+				require.NotNil(t, err)
+				lcErr := new(kvpb.LockConflictError)
+				require.True(t, errors.As(err.GoError(), &lcErr))
+				require.Equal(t, errReason, lcErr.Reason)
+				return
+			}
+
+			// waitElsewhere does not cause a push if the lock is not held.
+			// It returns immediately.
+			if k == waitElsewhere && !lockHeld {
+				err := w.WaitOn(ctx, req, g)
+				require.Nil(t, err)
 				return
 			}
 
@@ -694,17 +696,6 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 					return
 				}
 
-				// If the lock is not held and the request hits its lock timeout
-				// before a deadlock push, an error is returned immediately.
-				if !lockHeld && timeoutBeforePush {
-					err := w.WaitOn(ctx, req, g)
-					require.NotNil(t, err)
-					lcErr := new(kvpb.LockConflictError)
-					require.True(t, errors.As(err.GoError(), &lcErr))
-					require.Equal(t, reasonLockTimeout, lcErr.Reason)
-					return
-				}
-
 				expBlockingPush := !timeoutBeforePush
 				sawBlockingPush := false
 				sawNonBlockingPush := false
@@ -733,6 +724,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 					_, hasDeadline := ctx.Deadline()
 					require.False(t, hasDeadline)
 					sawNonBlockingPush = true
+					require.Equal(t, lock.WaitPolicy_Error, h.WaitPolicy)
 
 					resp := &roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.PENDING}
 					if pusheeActive {
@@ -772,7 +764,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 					require.Nil(t, err)
 				}
 				require.Equal(t, !timeoutBeforePush, sawBlockingPush)
-				require.Equal(t, lockHeld, sawNonBlockingPush)
+				require.True(t, sawNonBlockingPush)
 			})
 		})
 	})

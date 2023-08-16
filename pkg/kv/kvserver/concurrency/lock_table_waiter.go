@@ -165,25 +165,6 @@ func (w *lockTableWaiterImpl) WaitOn(
 			tracer.notify(ctx, state)
 			switch state.kind {
 			case waitFor, waitForDistinguished:
-				if req.WaitPolicy == lock.WaitPolicy_Error {
-					// If the waiter has an Error wait policy, resolve the conflict
-					// immediately without waiting. If the conflict is a lock then
-					// push the lock holder's transaction using a PUSH_TOUCH to
-					// determine whether the lock is abandoned or whether its holder
-					// is still active. If the conflict is a concurrent transaction that
-					// is being sequence through the lock table that has claimed the lock,
-					// raise an error immediately -- we know the request is active.
-					if state.held {
-						err = w.pushLockTxn(ctx, req, state)
-					} else {
-						err = newLockConflictErr(req, state, reasonWaitPolicy)
-					}
-					if err != nil {
-						return err
-					}
-					continue
-				}
-
 				// waitFor indicates that the request is waiting on another
 				// transaction. This transaction may be the lock holder of a
 				// conflicting lock or the head of a lock-wait queue that the
@@ -202,6 +183,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// *each* of that transaction's previously written intents.
 				livenessPush := state.kind == waitForDistinguished
 				deadlockPush := true
+				waitPolicyPush := req.WaitPolicy == lock.WaitPolicy_Error
 
 				// If the conflict is a claimant transaction that hasn't acquired the
 				// lock yet there's no need to perform a liveness push - the request
@@ -231,7 +213,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 
 				// If the request doesn't want to perform a delayed push for any
 				// reason, continue waiting without a timer.
-				if !(livenessPush || deadlockPush || timeoutPush || priorityPush) {
+				if !(livenessPush || deadlockPush || timeoutPush || priorityPush || waitPolicyPush) {
 					log.VEventf(ctx, 3, "not pushing")
 					continue
 				}
@@ -259,7 +241,9 @@ func (w *lockTableWaiterImpl) WaitOn(
 					}
 					delay = minDuration(delay, w.timeUntilDeadline(lockDeadline))
 				}
-				if priorityPush {
+				// If the waiter has priority or an Error wait policy, resolve the
+				// conflict immediately without waiting.
+				if priorityPush || waitPolicyPush {
 					delay = 0
 				}
 
@@ -404,21 +388,17 @@ func (w *lockTableWaiterImpl) WaitOn(
 
 			// push without the option to wait on the conflict if active.
 			pushNoWait := func(ctx context.Context) *Error {
-				// Resolve the conflict without waiting. If the conflict is a lock
-				// then push the lock holder's transaction using a PUSH_TOUCH to
-				// determine whether the lock is abandoned or whether its holder is
-				// still active. If the conflict is a claimant transaction, raise an
-				// error immediately, we know the transaction that has claimed (but not
-				// yet acquired) the lock active.
-				if timerWaitingState.held {
-					return w.pushLockTxnAfterTimeout(ctx, req, timerWaitingState)
-				}
-				return newLockConflictErr(req, timerWaitingState, reasonLockTimeout)
+				// Resolve the conflict without waiting by pushing the lock holder's
+				// transaction.
+				return w.pushLockTxnAfterTimeout(ctx, req, timerWaitingState)
 			}
 
 			// We push with or without the option to wait on the conflict,
-			// depending on the state of the lock timeout, if one exists.
-			if !lockDeadline.IsZero() {
+			// depending on the state of the lock timeout, if one exists,
+			// and depending on the wait policy.
+			if req.WaitPolicy == lock.WaitPolicy_Error {
+				err = w.pushLockTxn(ctx, req, timerWaitingState)
+			} else if !lockDeadline.IsZero() {
 				untilDeadline := w.timeUntilDeadline(lockDeadline)
 				if untilDeadline == 0 {
 					// Deadline already exceeded.
@@ -761,6 +741,7 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) kvpb.Header {
 	h := kvpb.Header{
 		Timestamp:    req.Timestamp,
 		UserPriority: req.NonTxnPriority,
+		WaitPolicy:   req.WaitPolicy,
 	}
 	if req.Txn != nil {
 		// We are going to hand the header (and thus the transaction proto) to
