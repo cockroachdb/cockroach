@@ -45,6 +45,8 @@ func (s *systemStatusServer) spanStatsFanOut(
 		res.SpanToStats[sp.String()] = &roachpb.SpanStats{}
 	}
 
+	responses := make(map[string]struct{})
+
 	spansPerNode, err := s.getSpansPerNode(ctx, req)
 	if err != nil {
 		return nil, err
@@ -101,13 +103,24 @@ func (s *systemStatusServer) spanStatsFanOut(
 
 		nodeResponse := resp.(*roachpb.SpanStatsResponse)
 
+		// Values of ApproximateDiskBytes, RemoteFileBytes, and ExternalFileBytes should be physical values, but
+		// TotalStats (MVCC stats) should be the logical, pre-replicated value.
+		// Note: This implementation can return arbitrarily stale values, because instead of getting
+		// MVCC stats from the leaseholder, MVCC stats are taken from the node that responded first.
+		// See #108779.
 		for spanStr, spanStats := range nodeResponse.SpanToStats {
-			// We are not counting replicas, so only consider range count
-			// if it has not been set.
-			if res.SpanToStats[spanStr].RangeCount == 0 {
+			// Accumulate physical values across all replicas:
+			res.SpanToStats[spanStr].ApproximateDiskBytes += spanStats.ApproximateDiskBytes
+			res.SpanToStats[spanStr].RemoteFileBytes += spanStats.RemoteFileBytes
+			res.SpanToStats[spanStr].ExternalFileBytes += spanStats.ExternalFileBytes
+
+			// Logical values: take the values from the node that responded first.
+			// TODO: This should really be read from the leaseholder.
+			if _, ok := responses[spanStr]; !ok {
+				res.SpanToStats[spanStr].TotalStats = spanStats.TotalStats
 				res.SpanToStats[spanStr].RangeCount = spanStats.RangeCount
+				responses[spanStr] = struct{}{}
 			}
-			res.SpanToStats[spanStr].Add(spanStats)
 		}
 	}
 
