@@ -633,9 +633,12 @@ SELECT extract(hours from '2016-02-10 19:46:33.306157519-04'::timestamptz)
 ----
 23
 
+statement error pgcode 22009 pq: date_trunc\(\): negative year value is not valid
+SELECT date_trunc('hours', '2016-02-10 19:46:33.306157519 BC'::timestamp);
+
 query ITTBT
 SELECT k, element, input, date_trunc(element, input::timestamp) = date_trunc_result, date_trunc(element, input::timestamp)::string
-FROM ex WHERE date_trunc_result IS NOT NULL ORDER BY k
+FROM ex WHERE date_trunc_result IS NOT NULL AND input::string NOT LIKE '%BC%' ORDER BY k
 ----
 1   year          2001-04-10 12:04:59 +0000 UTC          true  2001-01-01 00:00:00
 2   year          2016-02-10 19:46:33.306158 +0000 UTC   true  2016-01-01 00:00:00
@@ -671,15 +674,15 @@ FROM ex WHERE date_trunc_result IS NOT NULL ORDER BY k
 39  microsecond   2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-10 19:46:33.306158
 40  microseconds  2016-02-10 19:46:33.306158 +0000 UTC   true  2016-02-10 19:46:33.306158
 45  decade        2001-04-10 12:04:59 +0000 UTC          true  2000-01-01 00:00:00
-46  decade        -2015-02-10 19:46:33.306158 +0000 UTC  true  2021-01-01 00:00:00 BC
 47  century       2016-02-10 19:46:33.306158 +0000 UTC   true  2001-01-01 00:00:00
-48  century       -0003-02-10 19:46:33.306158 +0000 UTC  true  0100-01-01 00:00:00 BC
 49  millennium    2016-02-10 19:46:33.306158 +0000 UTC   true  2001-01-01 00:00:00
-50  millennium    -1003-02-10 19:46:33.306158 +0000 UTC  true  2000-01-01 00:00:00 BC
+
+statement error pgcode 22009 pq: date_trunc\(\): negative year value is not valid
+SELECT date_trunc('hours', '2016-02-10 19:46:33.306157519 BC'::timestamptz);
 
 query IBT
 SELECT k, date_trunc(element, input::timestamptz) = date_trunc_result, date_trunc(element, input::timestamptz)::string
-FROM ex WHERE date_trunc_result IS NOT NULL ORDER BY k
+FROM ex WHERE date_trunc_result IS NOT NULL AND input::string NOT LIKE '%BC%' ORDER BY k
 ----
 1   true  2001-01-01 00:00:00+00
 2   true  2016-01-01 00:00:00+00
@@ -715,11 +718,8 @@ FROM ex WHERE date_trunc_result IS NOT NULL ORDER BY k
 39  true  2016-02-10 19:46:33.306158+00
 40  true  2016-02-10 19:46:33.306158+00
 45  true  2000-01-01 00:00:00+00
-46  true  2021-01-01 00:00:00+00 BC
 47  true  2001-01-01 00:00:00+00
-48  true  0100-01-01 00:00:00+00 BC
 49  true  2001-01-01 00:00:00+00
-50  true  2000-01-01 00:00:00+00 BC
 
 query T
 SELECT date_trunc('millennia', '2000-02-10 19:46:33.306157519-04'::timestamptz)::string
@@ -746,9 +746,12 @@ SELECT date_trunc('hours', '2016-02-10 19:46:33.306157519-04'::timestamptz)::str
 ----
 2016-02-10 23:00:00+00
 
+statement error pgcode 22009 pq: date_trunc\(\): negative year value is not valid
+SELECT date_trunc('hours', '2016-02-10 19:46:33.306157519 BC'::date);
+
 query IBT
 SELECT k, date_trunc(element, input::date) = date_trunc_result::date, date_trunc(element, input::date)::string
-FROM ex WHERE date_trunc_result IS NOT NULL ORDER BY k
+FROM ex WHERE date_trunc_result IS NOT NULL AND input::string NOT LIKE '%BC%' ORDER BY k
 ----
 1   true  2001-01-01 00:00:00+00
 2   true  2016-01-01 00:00:00+00
@@ -784,11 +787,8 @@ FROM ex WHERE date_trunc_result IS NOT NULL ORDER BY k
 39  true  2016-02-10 00:00:00+00
 40  true  2016-02-10 00:00:00+00
 45  true  2000-01-01 00:00:00+00
-46  true  2021-01-01 00:00:00+00 BC
 47  true  2001-01-01 00:00:00+00
-48  true  0100-01-01 00:00:00+00 BC
 49  true  2001-01-01 00:00:00+00
-50  true  2000-01-01 00:00:00+00 BC
 
 query T
 SELECT (timestamp '2016-02-10 19:46:33.306157519')::string
@@ -2014,3 +2014,102 @@ SELECT * FROM ex WHERE ROW('1970-01-02 00:00:01.000001-04'::TIMESTAMPTZ) < '1970
 query TTTTT
 SELECT * FROM ex WHERE ROW('1970-01-03 00:00:01.000001-04'::TIMESTAMPTZ) < ROW('1970-01-02 00:00:01.000001-04');
 ----
+
+subtest make_date
+
+query T colnames,rowsort
+SELECT make_date(2013, 7, 15)::string
+----
+make_date
+2013-07-15
+
+query T colnames,rowsort
+SELECT make_date(-2013, 7, 15)
+----
+make_date
+-2013-07-15 00:00:00 +0000 +0000
+
+statement error pgcode 22008 pq: make_date\(\): year value of 0 is not valid
+SELECT make_date(0, 11, 11)
+
+subtest end
+
+subtest make_timestamp
+
+query T colnames,rowsort
+SELECT make_timestamp(2013, 7, 15, 8, 15, 23.5)::string
+----
+make_timestamp
+2013-07-15 08:15:23.5
+
+query T colnames,rowsort
+SELECT make_timestamp(-2013, 7, 15, 8, 15, 23.5)
+----
+make_timestamp
+-2013-07-15 08:15:23.5 +0000 +0000
+
+query T colnames,rowsort
+SELECT make_timestamp(2013, 7, 15, 8, 15, 23.5231231244234)::string
+----
+make_timestamp
+2013-07-15 08:15:23.523123
+
+statement error pgcode 22008 pq: make_timestamp\(\): year value of 0 is not valid
+SELECT make_timestamp(0, 7, 15, 8, 15, 23.5);
+
+subtest end
+
+subtest make_timestamptz
+
+statement ok
+SET TIME ZONE 'EST';
+
+query T colnames,rowsort
+SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5)
+----
+make_timestamptz
+2013-07-15 08:15:23.5 -0500 EST
+
+query T colnames,rowsort
+SELECT make_timestamptz(-2013, 7, 15, 8, 15, 23.5)
+----
+make_timestamptz
+-2013-07-15 08:15:23.5 -0500 EST
+
+query T colnames,rowsort
+SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5231231244234)
+----
+make_timestamptz
+2013-07-15 08:15:23.523123 -0500 EST
+
+query T colnames,rowsort
+SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5, 'America/New_York')
+----
+make_timestamptz
+2013-07-15 07:15:23.5 -0500 EST
+
+statement error pgcode 22008 pq: make_timestamptz\(\): year value of 0 is not valid
+SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5);
+
+statement error pgcode 22008 pq: make_timestamptz\(\): year value of 0 is not valid
+SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5, 'America/New_York');
+
+statement error pgcode 22023 pq: make_timestamptz\(\): could not parse "No" as time zone
+SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5, 'No');
+
+subtest end
+
+subtest date_trunc_withtz
+
+query T
+SELECT date_trunc('day', '2001-02-16 20:38:40+00'::timestamptz, 'Australia/Sydney')
+----
+2001-02-16 08:00:00 -0500 EST
+
+statement error pgcode 22008 pq: date_trunc\(\): parsing as type timestamp: field month value 0 is out of range
+SELECT date_trunc('day', '0-02-16 20:38:40+00'::timestamptz, 'Australia/Sydney');
+
+statement error pgcode 22023 pq: date_trunc\(\): could not parse "No" as time zone
+SELECT date_trunc('day', '4-02-16 20:38:40+00'::timestamptz, 'No');
+
+subtest end
