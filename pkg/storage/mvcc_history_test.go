@@ -967,7 +967,10 @@ func cmdCheckIntent(e *evalCtx) error {
 
 	return e.withReader(func(r storage.Reader) error {
 		var meta enginepb.MVCCMetadata
-		iter := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
+		iter, err := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
+		if err != nil {
+			return err
+		}
 		defer iter.Close()
 		iter.SeekGE(storage.MVCCKey{Key: key})
 		ok, err := iter.Valid()
@@ -1713,7 +1716,10 @@ func cmdIterNew(e *evalCtx) error {
 	}
 
 	r := e.newReader()
-	iter := r.NewMVCCIterator(kind, opts)
+	iter, err := r.NewMVCCIterator(kind, opts)
+	if err != nil {
+		return err
+	}
 	iter = newMetamorphicIterator(e.t, e.metamorphicIterSeed(), iter).(storage.MVCCIterator)
 	if opts.Prefix != iter.IsPrefix() {
 		return errors.Errorf("prefix iterator returned IsPrefix=false")
@@ -1806,7 +1812,11 @@ func cmdIterNewReadAsOf(e *evalCtx) error {
 		opts.UpperBound = keys.MaxKey
 	}
 	r := e.newReader()
-	innerIter := newMetamorphicIterator(e.t, e.metamorphicIterSeed(), r.NewMVCCIterator(storage.MVCCKeyIterKind, opts))
+	mvccIter, err := r.NewMVCCIterator(storage.MVCCKeyIterKind, opts)
+	if err != nil {
+		return err
+	}
+	innerIter := newMetamorphicIterator(e.t, e.metamorphicIterSeed(), mvccIter)
 	iter := &iterWithCloser{innerIter, r.Close}
 	e.iter = storage.NewReadAsOfIterator(iter, asOf)
 	e.iterRangeKeys.Clear()

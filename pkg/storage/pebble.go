@@ -1484,21 +1484,27 @@ func (p *Pebble) MVCCIterate(
 }
 
 // NewMVCCIterator implements the Engine interface.
-func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
+func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) (MVCCIterator, error) {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		iter := r.NewMVCCIterator(iterKind, opts)
+		iter, err := r.NewMVCCIterator(iterKind, opts)
 		r.Free()
-		return maybeWrapInUnsafeIter(iter)
+		if err != nil {
+			return nil, err
+		}
+		return maybeWrapInUnsafeIter(iter), nil
 	}
 
-	iter := newPebbleIterator(p.db, opts, StandardDurability, p)
-	return maybeWrapInUnsafeIter(iter)
+	iter, err := newPebbleIterator(p.db, opts, StandardDurability, p)
+	if err != nil {
+		return nil, err
+	}
+	return maybeWrapInUnsafeIter(iter), nil
 }
 
 // NewEngineIterator implements the Engine interface.
-func (p *Pebble) NewEngineIterator(opts IterOptions) EngineIterator {
+func (p *Pebble) NewEngineIterator(opts IterOptions) (EngineIterator, error) {
 	return newPebbleIterator(p.db, opts, StandardDurability, p)
 }
 
@@ -2449,7 +2455,9 @@ func (p *pebbleReadOnly) MVCCIterate(
 }
 
 // NewMVCCIterator implements the Engine interface.
-func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
+func (p *pebbleReadOnly) NewMVCCIterator(
+	iterKind MVCCIterKind, opts IterOptions,
+) (MVCCIterator, error) {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
@@ -2457,9 +2465,12 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		iter := r.NewMVCCIterator(iterKind, opts)
+		iter, err := r.NewMVCCIterator(iterKind, opts)
 		r.Free()
-		return maybeWrapInUnsafeIter(iter)
+		if err != nil {
+			return nil, err
+		}
+		return maybeWrapInUnsafeIter(iter), nil
 	}
 
 	iter := &p.normalIter
@@ -2470,13 +2481,15 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		return newPebbleIteratorByCloning(CloneContext{
 			rawIter: p.iter,
 			engine:  p.parent,
-		}, opts, p.durability)
+		}, opts, p.durability), nil
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, p.durability)
 	} else {
-		iter.initReuseOrCreate(p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.parent)
+		if err := iter.initReuseOrCreate(p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.parent); err != nil {
+			return nil, err
+		}
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -2486,11 +2499,11 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	}
 
 	iter.inuse = true
-	return maybeWrapInUnsafeIter(iter)
+	return maybeWrapInUnsafeIter(iter), nil
 }
 
 // NewEngineIterator implements the Engine interface.
-func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
+func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) (EngineIterator, error) {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
@@ -2503,13 +2516,16 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 		return newPebbleIteratorByCloning(CloneContext{
 			rawIter: p.iter,
 			engine:  p.parent,
-		}, opts, p.durability)
+		}, opts, p.durability), nil
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, p.durability)
 	} else {
-		iter.initReuseOrCreate(p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.parent)
+		err := iter.initReuseOrCreate(p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.parent)
+		if err != nil {
+			return nil, err
+		}
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -2519,7 +2535,7 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 	}
 
 	iter.inuse = true
-	return iter
+	return iter, nil
 }
 
 // ConsistentIterators implements the Engine interface.
@@ -2534,7 +2550,11 @@ func (p *pebbleReadOnly) PinEngineStateForIterators() error {
 		if p.durability == GuaranteedDurability {
 			o = &pebble.IterOptions{OnlyReadGuaranteedDurable: true}
 		}
-		p.iter = pebbleiter.MaybeWrap(p.parent.db.NewIter(o))
+		iter, err := p.parent.db.NewIter(o)
+		if err != nil {
+			return err
+		}
+		p.iter = pebbleiter.MaybeWrap(iter)
 		// NB: p.iterUsed == false avoids cloning this in NewMVCCIterator(), since
 		// we've just created it.
 	}
@@ -2702,21 +2722,29 @@ func (p *pebbleSnapshot) MVCCIterate(
 }
 
 // NewMVCCIterator implements the Reader interface.
-func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
+func (p *pebbleSnapshot) NewMVCCIterator(
+	iterKind MVCCIterKind, opts IterOptions,
+) (MVCCIterator, error) {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		iter := r.NewMVCCIterator(iterKind, opts)
+		iter, err := r.NewMVCCIterator(iterKind, opts)
 		r.Free()
-		return maybeWrapInUnsafeIter(iter)
+		if err != nil {
+			return nil, err
+		}
+		return maybeWrapInUnsafeIter(iter), nil
 	}
 
-	iter := MVCCIterator(newPebbleIterator(p.snapshot, opts, StandardDurability, p.parent))
-	return maybeWrapInUnsafeIter(iter)
+	iter, err := newPebbleIterator(p.snapshot, opts, StandardDurability, p.parent)
+	if err != nil {
+		return nil, err
+	}
+	return maybeWrapInUnsafeIter(MVCCIterator(iter)), nil
 }
 
 // NewEngineIterator implements the Reader interface.
-func (p pebbleSnapshot) NewEngineIterator(opts IterOptions) EngineIterator {
+func (p pebbleSnapshot) NewEngineIterator(opts IterOptions) (EngineIterator, error) {
 	return newPebbleIterator(p.snapshot, opts, StandardDurability, p.parent)
 }
 

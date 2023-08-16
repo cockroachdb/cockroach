@@ -191,16 +191,22 @@ func NewMVCCIncrementalIterator(
 	}
 
 	var iter MVCCIterator
+	var err error
 	var timeBoundIter MVCCIterator
 	if useTBI {
 		// An iterator without the timestamp hints is created to ensure that the
 		// iterator visits every required version of every key that has changed.
-		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		//
+		// TODO(bilal): Thread this error up the stack instead of a panic.
+		iter, err = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:             opts.KeyTypes,
 			LowerBound:           opts.StartKey,
 			UpperBound:           opts.EndKey,
 			RangeKeyMaskingBelow: opts.RangeKeyMaskingBelow,
 		})
+		if err != nil {
+			panic(err)
+		}
 		// The timeBoundIter is only required to see versioned keys, since the
 		// intents will be found by iter. It can also always enable range key
 		// masking at the start time, since we never care about point keys below it
@@ -210,7 +216,7 @@ func NewMVCCIncrementalIterator(
 		if tbiRangeKeyMasking.LessEq(opts.StartTime) && opts.KeyTypes == IterKeyTypePointsAndRanges {
 			tbiRangeKeyMasking = opts.StartTime.Next()
 		}
-		timeBoundIter = reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		timeBoundIter, err = reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 			KeyTypes:   opts.KeyTypes,
 			LowerBound: opts.StartKey,
 			UpperBound: opts.EndKey,
@@ -220,13 +226,19 @@ func NewMVCCIncrementalIterator(
 			MaxTimestampHint:     opts.EndTime,
 			RangeKeyMaskingBelow: tbiRangeKeyMasking,
 		})
+		if err != nil {
+			panic(err)
+		}
 	} else {
-		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		iter, err = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:             opts.KeyTypes,
 			LowerBound:           opts.StartKey,
 			UpperBound:           opts.EndKey,
 			RangeKeyMaskingBelow: opts.RangeKeyMaskingBelow,
 		})
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	return &MVCCIncrementalIterator{

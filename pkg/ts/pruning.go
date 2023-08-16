@@ -64,7 +64,10 @@ func (tsdb *DB) findTimeSeries(
 	thresholds := tsdb.computeThresholds(now.WallTime)
 
 	// NB: timeseries don't have intents.
-	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: endKey.AsRawKey()})
+	iter, err := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: endKey.AsRawKey()})
+	if err != nil {
+		return nil, err
+	}
 	defer iter.Close()
 
 	for iter.SeekGE(next); ; iter.SeekGE(next) {

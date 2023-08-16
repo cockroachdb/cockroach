@@ -405,10 +405,13 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 		lowerBound, _ := keys.LockTableSingleKey(desc.StartKey.AsRawKey(), nil)
 		upperBound, _ := keys.LockTableSingleKey(desc.EndKey.AsRawKey(), nil)
-		iter := r.store.TODOEngine().NewEngineIterator(storage.IterOptions{
+		iter, err := r.store.TODOEngine().NewEngineIterator(storage.IterOptions{
 			LowerBound: lowerBound,
 			UpperBound: upperBound,
 		})
+		if err != nil {
+			return nil
+		}
 		return rangefeed.NewSeparatedIntentScanner(iter)
 	}
 

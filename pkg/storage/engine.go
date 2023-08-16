@@ -593,12 +593,12 @@ type Reader interface {
 	//
 	// 4. Iterators on indexed batches see all batch writes as of their creation
 	//    time, but they satisfy ConsistentIterators for engine writes.
-	NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator
+	NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) (MVCCIterator, error)
 	// NewEngineIterator returns a new instance of an EngineIterator over this
 	// engine. The caller must invoke EngineIterator.Close() when finished
 	// with the iterator to free resources. The caller can change IterOptions
 	// after this function returns.
-	NewEngineIterator(opts IterOptions) EngineIterator
+	NewEngineIterator(opts IterOptions) (EngineIterator, error)
 	// ScanInternal allows a caller to inspect the underlying engine's InternalKeys
 	// using a visitor pattern, while also allowing for keys in shared files to be
 	// skipped if a visitor is provided for visitSharedFiles. Useful for
@@ -1380,7 +1380,10 @@ func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
 	// used for queries.
 	lbKey, _ := keys.LockTableSingleKey(key, nil)
 
-	iter := reader.NewEngineIterator(IterOptions{Prefix: true, LowerBound: lbKey})
+	iter, err := reader.NewEngineIterator(IterOptions{Prefix: true, LowerBound: lbKey})
+	if err != nil {
+		return nil, err
+	}
 	defer iter.Close()
 
 	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: lbKey})
@@ -1467,13 +1470,15 @@ func ScanIntents(
 
 	ltStart, _ := keys.LockTableSingleKey(start, nil)
 	ltEnd, _ := keys.LockTableSingleKey(end, nil)
-	iter := reader.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
+	iter, err := reader.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
+	if err != nil {
+		return nil, err
+	}
 	defer iter.Close()
 
 	var meta enginepb.MVCCMetadata
 	var intentBytes int64
 	var ok bool
-	var err error
 	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -1544,17 +1549,19 @@ func ClearRangeWithHeuristic(
 	r Reader, w Writer, start, end roachpb.Key, pointKeyThreshold, rangeKeyThreshold int,
 ) error {
 	clearPointKeys := func(r Reader, w Writer, start, end roachpb.Key, threshold int) error {
-		iter := r.NewEngineIterator(IterOptions{
+		iter, err := r.NewEngineIterator(IterOptions{
 			KeyTypes:   IterKeyTypePointsOnly,
 			LowerBound: start,
 			UpperBound: end,
 		})
+		if err != nil {
+			return err
+		}
 		defer iter.Close()
 
 		// Scan, and drop a RANGEDEL if we reach the threshold. We tighten the span
 		// to the first encountered key, since we can cheaply do so.
 		var ok bool
-		var err error
 		var count int
 		var firstKey roachpb.Key
 		for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: start}); ok; ok, err = iter.NextEngineKey() {
@@ -1590,16 +1597,18 @@ func ClearRangeWithHeuristic(
 	}
 
 	clearRangeKeys := func(r Reader, w Writer, start, end roachpb.Key, threshold int) error {
-		iter := r.NewEngineIterator(IterOptions{
+		iter, err := r.NewEngineIterator(IterOptions{
 			KeyTypes:   IterKeyTypeRangesOnly,
 			LowerBound: start,
 			UpperBound: end,
 		})
+		if err != nil {
+			return err
+		}
 		defer iter.Close()
 
 		// Scan, and drop a RANGEKEYDEL if we reach the threshold.
 		var ok bool
-		var err error
 		var count int
 		var firstKey roachpb.Key
 		for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: start}); ok; ok, err = iter.NextEngineKey() {
@@ -1736,11 +1745,14 @@ func iterateOnReader(
 		return nil
 	}
 
-	it := reader.NewMVCCIterator(iterKind, IterOptions{
+	it, err := reader.NewMVCCIterator(iterKind, IterOptions{
 		KeyTypes:   keyTypes,
 		LowerBound: start,
 		UpperBound: end,
 	})
+	if err != nil {
+		return err
+	}
 	defer it.Close()
 
 	var rangeKeys MVCCRangeKeyStack // cached during iteration
@@ -1991,7 +2003,10 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		ltEnd, _ := keys.LockTableSingleKey(end, nil)
 		opts.UpperBound = ltEnd
 	}
-	iter := reader.NewEngineIterator(opts)
+	iter, err := reader.NewEngineIterator(opts)
+	if err != nil {
+		return false, err
+	}
 	defer iter.Close()
 
 	var meta enginepb.MVCCMetadata
