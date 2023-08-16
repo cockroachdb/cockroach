@@ -11,6 +11,7 @@
 package isql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 )
@@ -50,6 +51,12 @@ func WithSessionData(sd *sessiondata.SessionData) Option {
 	return (*sessionDataOption)(sd)
 }
 
+// WithSyntheticDescriptors allows the user to override descriptors with
+// synthetic ones.
+func WithSyntheticDescriptors(sd catalog.Descriptors) ExecutorOption {
+	return (syntheticDescriptorOptions)(sd)
+}
+
 // TxnConfig is the config to be set for txn.
 type TxnConfig struct {
 	ExecutorConfig
@@ -79,11 +86,16 @@ func (tc *TxnConfig) Init(opts ...TxnOption) {
 // ExecutorConfig is the configuration used by the implementation of DB to
 // set up the Executor.
 type ExecutorConfig struct {
-	sessionData *sessiondata.SessionData
+	sessionData          *sessiondata.SessionData
+	syntheticDescriptors []catalog.Descriptor
 }
 
 func (ec *ExecutorConfig) GetSessionData() *sessiondata.SessionData {
 	return ec.sessionData
+}
+
+func (ec *ExecutorConfig) GetSyntheticDescriptors() []catalog.Descriptor {
+	return ec.syntheticDescriptors
 }
 
 // Init is used to initialize an ExecutorConfig.
@@ -100,6 +112,12 @@ func (o *sessionDataOption) applyEx(cfg *ExecutorConfig) {
 }
 func (o *sessionDataOption) applyTxn(cfg *TxnConfig) {
 	cfg.sessionData = (*sessiondata.SessionData)(o)
+}
+
+type syntheticDescriptorOptions []catalog.Descriptor
+
+func (o syntheticDescriptorOptions) applyEx(cfg *ExecutorConfig) {
+	cfg.syntheticDescriptors = o
 }
 
 type steppingEnabled bool
