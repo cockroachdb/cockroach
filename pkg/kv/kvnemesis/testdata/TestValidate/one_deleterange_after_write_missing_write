@@ -7,4 +7,4 @@ db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   return nil
 }) // @0.000000001,0 <nil>
 /Table/100/"0000000000000001"/0.000000001,0 @ s1 v1
-committed serializable txn missing write at seq s2: [dr.d]/Table/100/"0000000000000001":missing-><nil>@s2 [dr.s]/Table/100/"000000000000000{1"-3"}:{gap:[<min>, 0.000000001,0)}->[]
+committed serializable txn missing write at seq s2: [dr.d]/Table/100/"0000000000000001":missing-><nil>@s2 [dr.s]/Table/100/"000000000000000{1"-3"}:{gap:[<min>, 0.000000001,0),[0.000000001,0, <max>)}->[]
