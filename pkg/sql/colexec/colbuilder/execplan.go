@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -533,7 +534,7 @@ func (r opResult) createAndWrapRowSource(
 	causeToWrap error,
 ) error {
 	if args.ProcessorConstructor == nil {
-		return errors.New("processorConstructor is nil")
+		return errors.Wrap(causeToWrap, "processorConstructor is nil")
 	}
 	log.VEventf(ctx, 1, "planning a row-execution processor in the vectorized flow: %v", causeToWrap)
 	if err := canWrap(flowCtx.EvalCtx.SessionData().VectorizeMode, core); err != nil {
@@ -2457,6 +2458,9 @@ func planProjectionOperators(
 		}
 		return planProjectionOperators(ctx, evalCtx, caseExpr, columnTypes, input, acc, factory, releasables)
 	case *tree.ComparisonExpr:
+		if err = checkSupportedComparisonExpr(t.TypedLeft(), t.TypedRight()); err != nil {
+			return op, resultIdx, typs, err
+		}
 		return planProjectionExpr(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
 			columnTypes, input, acc, factory, nil /* binFn */, t, releasables, t.Op.CalledOnNullInput,
@@ -2581,38 +2585,92 @@ func planProjectionOperators(
 	}
 }
 
-var errMixedTypeUnsupported = errors.New("dates and timestamp(tz) not supported in mixed-type expressions in the vectorized engine")
-
-func checkSupportedProjectionExpr(left, right tree.TypedExpr) error {
-	leftTyp := left.ResolvedType()
-	rightTyp := right.ResolvedType()
-	if leftTyp.Equivalent(rightTyp) || leftTyp.Family() == types.UnknownFamily || rightTyp.Family() == types.UnknownFamily {
+// safeTypesForBinOrCmpExpr returns true if the given type pair is definitely
+// safe for Binary or Comparison expressions (in other words, this type pair
+// will definitely not result in problematic mixed-type expressions that we want
+// to avoid (see a few errors below for examples)).
+func safeTypesForBinOrCmpExpr(leftTyp, rightTyp *types.T) bool {
+	if leftTyp.Equivalent(rightTyp) {
+		// All same type expressions are safe.
+		return true
+	}
+	if leftTyp.Family() == types.UnknownFamily || rightTyp.Family() == types.UnknownFamily {
 		// If either type is of an Unknown family, then the corresponding vector
 		// will only contain NULL values, so we won't run into the mixed-type
 		// issues.
-		return nil
+		//
+		// Note that in the general case the optimizer should constant-fold such
+		// expressions, but we are constructing some expressions manually during
+		// the vectorized planning (e.g. handling of COALESCE expression
+		// involves the creation of IS DISTINCT FROM comparison expression)
+		// which don't go through the optimizer, so we have this check.
+		return true
 	}
-
-	// The types are not equivalent. Check if either is a type we'd like to
-	// avoid.
-	for _, t := range []*types.T{leftTyp, rightTyp} {
-		switch t.Family() {
-		case types.DateFamily, types.TimestampFamily, types.TimestampTZFamily:
-			return errMixedTypeUnsupported
-		}
-	}
-	return nil
+	return false
 }
 
-var errBinaryExprWithDatums = errors.New("datum-backed arguments on both sides and not datum-backed output of a binary expression is currently not supported")
+var errBinaryExprWithDatums = unimplemented.NewWithIssue(
+	49780, "datum-backed arguments on both sides and not datum-backed "+
+		"output of a binary expression is currently not supported",
+)
+var errMixedTypeBinaryUnsupported = unimplemented.NewWithIssue(
+	46198, "dates and timestamptz not supported in mixed-type binary "+
+		"expressions in the vectorized engine",
+)
 
 func checkSupportedBinaryExpr(left, right tree.TypedExpr, outputType *types.T) error {
-	leftDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(left.ResolvedType().Family()) == typeconv.DatumVecCanonicalTypeFamily
-	rightDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(right.ResolvedType().Family()) == typeconv.DatumVecCanonicalTypeFamily
+	leftTyp := left.ResolvedType()
+	rightTyp := right.ResolvedType()
+
+	leftDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(leftTyp.Family()) == typeconv.DatumVecCanonicalTypeFamily
+	rightDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(rightTyp.Family()) == typeconv.DatumVecCanonicalTypeFamily
 	outputDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(outputType.Family()) == typeconv.DatumVecCanonicalTypeFamily
 	if (leftDatumBacked && rightDatumBacked) && !outputDatumBacked {
 		return errBinaryExprWithDatums
 	}
+
+	if safeTypesForBinOrCmpExpr(leftTyp, rightTyp) {
+		return nil
+	}
+
+	// Check whether we have a mixed type expression with one of the types we
+	// want to avoid.
+	for _, t := range []*types.T{leftTyp, rightTyp} {
+		switch t.Family() {
+		case types.DateFamily, types.TimestampTZFamily:
+			// Note that the Timestamp type is ok because the current
+			// implementation of binary expressions that use TimestampTZ
+			// canonical type family on one side hard-codes the choice of
+			// Timestamp (as opposed to TimestampTZ).
+			return errMixedTypeBinaryUnsupported
+		}
+	}
+
+	return nil
+}
+
+var errMixedTypeComparisonUnsupported = unimplemented.NewWithIssue(
+	44770, "dates and timestamp(tz) not supported in mixed-type "+
+		"comparison expressions in the vectorized engine",
+)
+
+func checkSupportedComparisonExpr(left, right tree.TypedExpr) error {
+	leftTyp := left.ResolvedType()
+	rightTyp := right.ResolvedType()
+
+	if safeTypesForBinOrCmpExpr(leftTyp, rightTyp) {
+		return nil
+	}
+
+	// Check whether we have a mixed type expression with one of the types we
+	// want to avoid.
+	for _, t := range []*types.T{leftTyp, rightTyp} {
+		switch t.Family() {
+		case types.DateFamily, types.TimestampFamily, types.TimestampTZFamily:
+			return errMixedTypeComparisonUnsupported
+		}
+	}
+
 	return nil
 }
 
@@ -2631,9 +2689,6 @@ func planProjectionExpr(
 	releasables *[]execreleasable.Releasable,
 	calledOnNullInput bool,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
-	if err := checkSupportedProjectionExpr(left, right); err != nil {
-		return nil, resultIdx, typs, err
-	}
 	allocator := colmem.NewAllocator(ctx, acc, factory)
 	resultIdx = -1
 
