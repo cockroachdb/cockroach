@@ -61,11 +61,11 @@ var (
 // Any errors stop the current test.
 func runTestFlow(
 	t *testing.T,
-	srv serverutils.TestServerInterface,
+	ts serverutils.ApplicationLayerInterface,
 	txn *kv.Txn,
 	procs ...execinfrapb.ProcessorSpec,
 ) (rowenc.EncDatumRows, error) {
-	distSQLSrv := srv.DistSQLServer().(*distsql.ServerImpl)
+	distSQLSrv := ts.DistSQLServer().(*distsql.ServerImpl)
 
 	leafInputState, err := txn.GetLeafTxnInputState(context.Background())
 	if err != nil {
@@ -124,7 +124,7 @@ func runTestFlow(
 func checkDistAggregationInfo(
 	ctx context.Context,
 	t *testing.T,
-	srv serverutils.TestServerInterface,
+	ts serverutils.ApplicationLayerInterface,
 	tableDesc catalog.TableDescriptor,
 	colIndexes []int,
 	numRows int,
@@ -146,17 +146,17 @@ func checkDistAggregationInfo(
 			Spans: make([]roachpb.Span, 1),
 		}
 		if err := rowenc.InitIndexFetchSpec(
-			&tr.FetchSpec, srv.Codec(), tableDesc, tableDesc.GetPrimaryIndex(), columnIDs,
+			&tr.FetchSpec, ts.Codec(), tableDesc, tableDesc.GetPrimaryIndex(), columnIDs,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		var err error
-		tr.Spans[0].Key, err = randgen.TestingMakePrimaryIndexKeyForTenant(tableDesc, srv.Codec(), startPK)
+		tr.Spans[0].Key, err = randgen.TestingMakePrimaryIndexKeyForTenant(tableDesc, ts.Codec(), startPK)
 		if err != nil {
 			t.Fatal(err)
 		}
-		tr.Spans[0].EndKey, err = randgen.TestingMakePrimaryIndexKeyForTenant(tableDesc, srv.Codec(), endPK)
+		tr.Spans[0].EndKey, err = randgen.TestingMakePrimaryIndexKeyForTenant(tableDesc, ts.Codec(), endPK)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -217,7 +217,7 @@ func checkDistAggregationInfo(
 		varIdxs[i] = i
 	}
 
-	txn := kv.NewTxn(ctx, srv.DB(), srv.NodeID())
+	txn := kv.NewTxn(ctx, ts.DB(), ts.DistSQLPlanningNodeID())
 
 	// First run a flow that aggregates all the rows without any local stages.
 	nonDistFinalOutputTypes := finalOutputTypes
@@ -236,7 +236,7 @@ func checkDistAggregationInfo(
 	}
 
 	rowsNonDist, nonDistErr := runTestFlow(
-		t, srv, txn,
+		t, ts, txn,
 		makeTableReader(1, numRows+1, 0),
 		execinfrapb.ProcessorSpec{
 			Input: []execinfrapb.InputSyncSpec{{
@@ -341,7 +341,7 @@ func checkDistAggregationInfo(
 	}
 
 	procs = append(procs, finalProc)
-	rowsDist, distErr := runTestFlow(t, srv, txn, procs...)
+	rowsDist, distErr := runTestFlow(t, ts, txn, procs...)
 
 	if distErr != nil || nonDistErr != nil {
 		pgCodeDistErr := pgerror.GetPGCode(distErr)
@@ -527,9 +527,7 @@ func TestSingleArgumentDistAggregateFunctions(t *testing.T) {
 				name := fmt.Sprintf("%s/%s/%d", fn, col.GetName(), numRows)
 				t.Run(name, func(t *testing.T) {
 					checkDistAggregationInfo(
-						// TODO(#76378): pass ts, not srv, here.
-						context.Background(), t, srv, desc, []int{col.Ordinal()},
-						numRows, fn, info,
+						context.Background(), t, ts, desc, []int{col.Ordinal()}, numRows, fn, info,
 					)
 				})
 			}
@@ -550,9 +548,7 @@ func TestTwoArgumentRegressionAggregateFunctions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	const numRows = 100
 
-	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(108763),
-	})
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 	ts := srv.ApplicationLayer()
 
@@ -600,8 +596,7 @@ func TestTwoArgumentRegressionAggregateFunctions(t *testing.T) {
 					name := fmt.Sprintf("%s/%s-%s/%d", fn, cols[i].GetName(), cols[j].GetName(), numRows)
 					t.Run(name, func(t *testing.T) {
 						checkDistAggregationInfo(
-							// TODO(#76378): pass ts, not srv, here.
-							context.Background(), t, srv, desc, []int{i, j}, numRows,
+							context.Background(), t, ts, desc, []int{i, j}, numRows,
 							fn, info,
 						)
 					})
