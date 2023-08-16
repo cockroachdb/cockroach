@@ -1654,6 +1654,7 @@ type virtualPTSTableRow struct {
 	decodedTargets []byte
 	internalMeta   []byte
 	numRanges      int
+	lastUpdated    string
 }
 
 func protect(
@@ -1682,7 +1683,7 @@ func scanRecord(
 	virtualRow.Scan(&virtualRowData.id, &virtualRowData.ts, &virtualRowData.metaType, &virtualRowData.meta,
 		&virtualRowData.numSpans, &virtualRowData.spans, &virtualRowData.verified, &virtualRowData.target,
 		&virtualRowData.decodedMeta, &virtualRowData.decodedTargets, &virtualRowData.internalMeta,
-		&virtualRowData.numRanges)
+		&virtualRowData.numRanges, &virtualRowData.lastUpdated)
 
 	require.Equal(t, systemRowData.id, virtualRowData.id)
 	require.Equal(t, systemRowData.ts, virtualRowData.ts)
@@ -1774,7 +1775,7 @@ func TestVirtualPTSTable(t *testing.T) {
 			" crdb_internal.kv_protected_ts_records as well")
 	require.Equal(t, internalCols, []string{
 		"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified", "target", "decoded_meta", "decoded_target",
-		"internal_meta", "num_ranges",
+		"internal_meta", "num_ranges", "last_updated",
 	})
 
 	// Assert the job metadata that is extracted when the PTS record meta type is jobsprotectedts.Jobs.
@@ -1889,5 +1890,24 @@ func TestVirtualPTSTable(t *testing.T) {
 		require.Equal(t, []byte(nil), virtualRow.internalMeta)
 		require.Equal(t, []byte(fmt.Sprintf(`{"schemaObjects": {"ids": [%d, %d]}}`, tableID1, tableID2)), virtualRow.decodedTargets)
 		require.Equal(t, 302, virtualRow.numRanges)
+	})
+
+	// Assert that the `last_updated` column shows the right timestamp.
+	t.Run("last-updated", func(t *testing.T) {
+		rec := ptpb.Record{
+			ID:        uuid.MakeV4().GetBytes(),
+			Timestamp: tc.Server(0).Clock().Now(),
+			Mode:      ptpb.PROTECT_AFTER,
+			MetaType:  "foo",
+			Meta:      []byte("bar"),
+			Target:    tableTargets(),
+		}
+		protect(t, ctx2, internalDB, ptm, &rec)
+
+		var ts string
+		sqlDB.QueryRow(t, `SELECT crdb_internal_mvcc_timestamp FROM system.protected_ts_records`+
+			` WHERE id = $1`, rec.ID.String()).Scan(&ts)
+		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
+		require.Equal(t, ts, virtualRow.lastUpdated)
 	})
 }
