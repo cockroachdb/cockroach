@@ -253,8 +253,23 @@ func TestRandStep(t *testing.T) {
 			case *BatchOperation:
 				batch.Batch++
 				countClientOps(&batch.Ops, nil, o.Ops...)
+			case *SavepointCreateOperation, *SavepointRollbackOperation, *SavepointReleaseOperation:
+				// We'll count these separately.
 			default:
 				t.Fatalf("%T", o)
+			}
+		}
+	}
+
+	countSavepointOps := func(savepoint *SavepointConfig, ops ...Operation) {
+		for _, op := range ops {
+			switch op.GetValue().(type) {
+			case *SavepointCreateOperation:
+				savepoint.SavepointCreate++
+			case *SavepointReleaseOperation:
+				savepoint.SavepointRelease++
+			case *SavepointRollbackOperation:
+				savepoint.SavepointRollback++
 			}
 		}
 	}
@@ -274,6 +289,7 @@ func TestRandStep(t *testing.T) {
 			countClientOps(&counts.DB, &counts.Batch, step.Op)
 		case *ClosureTxnOperation:
 			countClientOps(&counts.ClosureTxn.TxnClientOps, &counts.ClosureTxn.TxnBatchOps, o.Ops...)
+			countSavepointOps(&counts.ClosureTxn.SavepointOps, o.Ops...)
 			if o.CommitInBatch != nil {
 				switch o.IsoLevel {
 				case isolation.Serializable:
@@ -481,4 +497,91 @@ func TestRandDelRangeUsingTombstone(t *testing.T) {
 	fmt.Fprintf(&buf, "------------------\ntotal         %.3f", fracSingleRange+fracPoint+fracCrossRange)
 
 	echotest.Require(t, buf.String(), datapathutils.TestDataPath(t, t.Name()+".txt"))
+}
+
+func TestUpdateSavepoints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		name        string
+		savepoints  []int
+		prevOp      Operation
+		expectedSp  []int
+		expectedErr string
+	}{
+		{
+			name:       "no savepoints (nil)",
+			savepoints: nil,
+			prevOp:     get(k1),
+			expectedSp: nil,
+		},
+		{
+			name:       "no savepoints (empty)",
+			savepoints: []int{},
+			prevOp:     get(k1),
+			expectedSp: []int{},
+		},
+		{
+			name:       "prevOp is not a savepoint",
+			savepoints: []int{0},
+			prevOp:     get(k1),
+			expectedSp: []int{0},
+		},
+		{
+			name:       "prevOp is a savepoint create",
+			savepoints: nil,
+			prevOp:     createSavepoint(2),
+			expectedSp: []int{2},
+		},
+		{
+			name:       "prevOp is a savepoint release",
+			savepoints: []int{1},
+			prevOp:     releaseSavepoint(1),
+			expectedSp: []int{},
+		},
+		{
+			name:       "prevOp is a savepoint rollback",
+			savepoints: []int{1},
+			prevOp:     rollbackSavepoint(1),
+			expectedSp: []int{},
+		},
+		{
+			name:       "nested rollbacks",
+			savepoints: []int{1, 2, 3, 4},
+			prevOp:     rollbackSavepoint(2),
+			expectedSp: []int{1},
+		},
+		{
+			name:       "nested releases",
+			savepoints: []int{1, 2, 3, 4},
+			prevOp:     releaseSavepoint(2),
+			expectedSp: []int{1},
+		},
+		{
+			name:        "re-create existing savepoint",
+			savepoints:  []int{1, 2, 3, 4},
+			prevOp:      createSavepoint(1),
+			expectedErr: "generating a savepoint create op: ID 1 already exists",
+		},
+		{
+			name:        "release non-existent savepoint",
+			savepoints:  []int{1, 2, 3, 4},
+			prevOp:      releaseSavepoint(5),
+			expectedErr: "generating a savepoint release op: ID 5 does not exist",
+		},
+		{
+			name:        "roll back non-existent savepoint",
+			savepoints:  []int{1, 2, 3, 4},
+			prevOp:      rollbackSavepoint(5),
+			expectedErr: "generating a savepoint rollback op: ID 5 does not exist",
+		},
+	}
+	for _, test := range tests {
+		if test.expectedErr != "" {
+			require.PanicsWithError(t, test.expectedErr, func() { maybeUpdateSavepoints(&test.savepoints, test.prevOp) })
+		} else {
+			maybeUpdateSavepoints(&test.savepoints, test.prevOp)
+			require.Equal(t, test.expectedSp, test.savepoints)
+		}
+	}
 }

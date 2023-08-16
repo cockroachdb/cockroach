@@ -1,0 +1,13 @@
+echo
+----
+···db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+···  txn.SetIsoLevel(isolation.Serializable)
+···  txn.CreateSavepoint(ctx, 0)
+···  txn.Put(ctx, tk(9), sv(3))
+···  txn.ReleaseSavepoint(ctx, 0)
+···  txn.Get(ctx, tk(8))
+···  txn.CreateSavepoint(ctx, 4)
+···  txn.Del(ctx, tk(9) /* @s1 */)
+···  txn.RollbackSavepoint(ctx, 4)
+···  return nil
+···})
