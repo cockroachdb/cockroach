@@ -1012,8 +1012,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmtCtx = ctx
 	}
 
-	var rollbackSP *tree.RollbackToSavepoint
-	var r *tree.ReleaseSavepoint
+	var rollbackHomeRegionSavepoint *tree.RollbackToSavepoint
+	var releaseHomeRegionSavepoint *tree.ReleaseSavepoint
 	enforceHomeRegion := p.EnforceHomeRegion()
 	_, isSelectStmt := stmt.AST.(*tree.Select)
 	// TODO(sql-sessions): ensure this is not broken for pausable portals.
@@ -1024,14 +1024,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		// historical timestamp (so that the locality-optimized ops used for error
 		// reporting can run locally and not incur latency). This is currently only
 		// supported for SELECT statements.
-		var b strings.Builder
-		b.WriteString("enforce_home_region_sp")
 		// Add some unprintable ASCII characters to the name of the savepoint to
 		// decrease the likelihood of collision with a user-created savepoint.
-		b.WriteRune(rune(0x11))
-		b.WriteRune(rune(0x12))
-		b.WriteRune(rune(0x13))
-		enforceHomeRegionSavepointName := tree.Name(b.String())
+		const enforceHomeRegionSavepointName = "enforce_home_region_sp\x11\x12\x13"
 		s := &tree.Savepoint{Name: enforceHomeRegionSavepointName}
 		var event fsm.Event
 		var eventPayload fsm.EventPayload
@@ -1039,13 +1034,13 @@ func (ex *connExecutor) execStmtInOpenState(
 			return event, eventPayload, err
 		}
 
-		r = &tree.ReleaseSavepoint{Savepoint: enforceHomeRegionSavepointName}
-		rollbackSP = &tree.RollbackToSavepoint{Savepoint: enforceHomeRegionSavepointName}
+		releaseHomeRegionSavepoint = &tree.ReleaseSavepoint{Savepoint: enforceHomeRegionSavepointName}
+		rollbackHomeRegionSavepoint = &tree.RollbackToSavepoint{Savepoint: enforceHomeRegionSavepointName}
 		defer func() {
 			// The default case is to roll back the internally-generated savepoint
 			// after every request. We only need it if a retryable "query has no home
 			// region" error occurs.
-			ex.execRelease(ctx, r, res)
+			ex.execRelease(ctx, releaseHomeRegionSavepoint, res)
 		}()
 	}
 
@@ -1082,14 +1077,14 @@ func (ex *connExecutor) execStmtInOpenState(
 			p.EvalContext().Locality = p.EvalContext().OriginalLocality
 		}
 		if execinfra.IsDynamicQueryHasNoHomeRegionError(err) {
-			if rollbackSP != nil {
+			if rollbackHomeRegionSavepoint != nil {
 				// A retryable "query has no home region" error has occurred.
 				// Roll back to the internal savepoint in preparation for the next
 				// planning and execution of this query with a different gateway region
 				// (as considered by the optimizer).
 				p.StmtNoConstantsWithHomeRegionEnforced = p.stmt.StmtNoConstants
 				event, eventPayload := ex.execRollbackToSavepointInOpenState(
-					ctx, rollbackSP, res,
+					ctx, rollbackHomeRegionSavepoint, res,
 				)
 				_, isTxnRestart := event.(eventTxnRestart)
 				rollbackToSavepointFailed := !isTxnRestart || eventPayload != nil
@@ -1310,12 +1305,11 @@ func (ex *connExecutor) commitSQLTransaction(
 	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().
 		GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 	if ex.sessionData().InjectRetryErrorsOnCommitEnabled && ast.StatementTag() == "COMMIT" {
-		if ex.planner.Txn().Epoch() < ex.state.lastEpoch+numTxnRetryErrors {
+		if ex.state.injectedTxnRetryCounter < numTxnRetryErrors {
 			retryErr := ex.state.mu.txn.GenerateForcedRetryableErr(
 				ctx, "injected by `inject_retry_errors_on_commit_enabled` session variable")
+			ex.state.injectedTxnRetryCounter++
 			return ex.makeErrEvent(retryErr, ast)
-		} else {
-			ex.state.lastEpoch = ex.planner.Txn().Epoch()
 		}
 	}
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionCommit, timeutil.Now())
@@ -1745,12 +1739,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		isSetOrShow := stmt.AST.StatementTag() == "SET" || stmt.AST.StatementTag() == "SHOW"
 		if ex.sessionData().InjectRetryErrorsEnabled && !isSetOrShow &&
 			planner.Txn().Sender().TxnStatus() == roachpb.PENDING {
-			if planner.Txn().Epoch() < ex.state.lastEpoch+numTxnRetryErrors {
+			if ex.state.injectedTxnRetryCounter < numTxnRetryErrors {
 				retryErr := planner.Txn().GenerateForcedRetryableErr(
 					ctx, "injected by `inject_retry_errors_enabled` session variable")
 				res.SetError(retryErr)
-			} else {
-				ex.state.lastEpoch = planner.Txn().Epoch()
+				ex.state.injectedTxnRetryCounter++
 			}
 		}
 	}

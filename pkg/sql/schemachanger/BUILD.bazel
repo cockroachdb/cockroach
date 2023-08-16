@@ -33,6 +33,7 @@ go_test(
         "//conditions:default": ["-test.timeout=3595s"],
     }),
     data = glob(["testdata/**"]),
+    exec_properties = {"Pool": "large"},
     shard_count = 16,
     deps = [
         "//pkg/base",
