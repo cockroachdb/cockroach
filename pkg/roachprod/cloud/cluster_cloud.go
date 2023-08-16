@@ -176,6 +176,11 @@ func namesFromVM(v vm.VM) (userName string, clusterName string, _ error) {
 	return parts[0], strings.Join(parts[:len(parts)-1], "-"), nil
 }
 
+// IsEmptyCluster returns true if a cluster has no resources.
+func (c *Cluster) IsEmptyCluster() bool {
+	return c.VMs[0].EmptyCluster
+}
+
 // ListCloud returns information about all instances (across all available
 // providers).
 func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
@@ -210,8 +215,9 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 			}
 
 			// Anything with an error gets tossed into the BadInstances slice, and we'll correct
-			// the problem later on.
-			if len(v.Errors) > 0 {
+			// the problem later on. Ignore empty clusters since BadInstances will be destroyed on
+			// the VM level. GC will destroy them instead.
+			if len(v.Errors) > 0 && !v.EmptyCluster {
 				cloud.BadInstances = append(cloud.BadInstances, v)
 				continue
 			}
@@ -239,7 +245,11 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 	}
 
 	// Sort VMs for each cluster. We want to make sure we always have the same order.
+	// Also assert that no cluster can be empty.
 	for _, c := range cloud.Clusters {
+		if len(c.VMs) == 0 {
+			return nil, errors.Errorf("found no VMs in cluster %s", c.Name)
+		}
 		sort.Sort(c.VMs)
 	}
 

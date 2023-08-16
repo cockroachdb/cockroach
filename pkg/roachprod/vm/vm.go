@@ -109,6 +109,11 @@ type VM struct {
 
 	// NonBootAttachedVolumes are the non-bootable volumes attached to the VM.
 	NonBootAttachedVolumes []Volume `json:"non_bootable_volumes"`
+
+	// EmptyCluster indicates that the VM does not exist. Azure allows for empty
+	// clusters, but roachprod does not allow VM-less clusters except when deleting them.
+	// A fake VM will be used in this scenario.
+	EmptyCluster bool
 }
 
 // Name generates the name for the i'th node in a cluster.
@@ -290,7 +295,8 @@ type VolumeCreateOpts struct {
 }
 
 type ListOptions struct {
-	IncludeVolumes bool
+	IncludeVolumes       bool
+	IncludeEmptyClusters bool
 }
 
 // A Provider is a source of virtual machines running on some hosting platform.
