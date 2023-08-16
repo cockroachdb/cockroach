@@ -7317,6 +7317,32 @@ table's zone configuration this will return NULL.`,
 		},
 	),
 
+	"crdb_internal.update_row_level_ttl_for_obs_tables": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "interval", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					return nil, errInsufficientPriv
+				}
+				interval := tree.MustBeDString(args[0])
+				if err := evalCtx.Planner.UpdateRowLevelTTLForObsTables(ctx, interval.String()); err != nil {
+					return nil, err
+				}
+				return tree.DVoidDatum, nil
+			},
+			Info:       `Updates row level TTL for system tables that store SQL statement statistics.`,
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"crdb_internal.check_password_hash_format": makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategorySystemInfo,

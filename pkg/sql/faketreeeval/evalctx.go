@@ -317,6 +317,11 @@ func (*DummyEvalPlanner) RepairTTLScheduledJobForTable(ctx context.Context, tabl
 	return errors.WithStack(errEvalPlanner)
 }
 
+// UpdateRowLevelTTLForObsTables is part of the Planner interface.
+func (*DummyEvalPlanner) UpdateRowLevelTTLForObsTables(ctx context.Context, interval string) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 // Mon is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) Mon() *mon.BytesMonitor {
 	return ep.Monitor
