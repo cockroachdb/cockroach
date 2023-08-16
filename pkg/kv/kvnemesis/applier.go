@@ -134,7 +134,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		*DeleteRangeOperation,
 		*DeleteRangeUsingTombstoneOperation,
 		*AddSSTableOperation:
-		applyClientOp(ctx, db, op, false)
+		applyClientOp(ctx, db, op, false /* inTxn */, nil /* spIDToToken */)
 	case *SplitOperation:
 		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp)
 		o.Result = resultInit(ctx, err)
@@ -169,6 +169,9 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 				retryOnAbort.Next()
 			}
 			savedTxn = txn
+			// A map of a savepoint id to the corresponding savepoint token that was
+			// created after applying the savepoint op.
+			spIDToToken := make(map[int]kv.SavepointToken)
 			// First error. Because we need to mark everything that
 			// we didn't "reach" due to a prior error with errOmitted,
 			// we *don't* return eagerly on this but save it to the end.
@@ -191,7 +194,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 						continue
 					}
 
-					applyClientOp(ctx, txn, op, true)
+					applyClientOp(ctx, txn, op, true /* inTxn */, &spIDToToken)
 					// The KV api disallows use of a txn after an operation on it errors.
 					if r := op.Result(); r.Type == ResultType_Error {
 						err = errors.DecodeError(ctx, *r.Err)
@@ -234,6 +237,8 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 			o.Txn = savedTxn.TestingCloneTxn()
 			o.Result.OptionalTimestamp = o.Txn.WriteTimestamp
 		}
+	case *SavepointCreateOperation, *SavepointReleaseOperation, *SavepointRollbackOperation:
+		panic(errors.AssertionFailedf(`can't apply a savepoint operation %v outside of a ClosureTxnOperation`, o))
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, o, o))
 	}
@@ -286,7 +291,13 @@ func batchRun(
 	return ts, nil
 }
 
-func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
+func applyClientOp(
+	ctx context.Context,
+	db clientI,
+	op *Operation,
+	inTxn bool,
+	spIDToToken *map[int]kv.SavepointToken,
+) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation:
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
@@ -438,6 +449,49 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 	case *BatchOperation:
 		b := &kv.Batch{}
 		applyBatchOp(ctx, b, db.Run, o)
+	case *SavepointCreateOperation:
+		txn, ok := db.(*kv.Txn) // savepoints are only allowed with transactions
+		if !ok {
+			panic(errors.AssertionFailedf(`non-txn interface attempted to create a savepoint %v`, o))
+		}
+		spt, err := txn.CreateSavepoint(ctx)
+		o.Result = resultInit(ctx, err)
+		if err != nil {
+			return
+		}
+		// Map the savepoint id to the newly created savepoint token.
+		if _, ok := (*spIDToToken)[int(o.ID)]; ok {
+			panic(errors.AssertionFailedf("applying a savepoint create op: ID %d already exists", o.ID))
+		}
+		(*spIDToToken)[int(o.ID)] = spt
+	case *SavepointReleaseOperation:
+		txn, ok := db.(*kv.Txn) // savepoints are only allowed with transactions
+		if !ok {
+			panic(errors.AssertionFailedf(`non-txn interface attempted to release a savepoint %v`, o))
+		}
+		spt, ok := (*spIDToToken)[int(o.ID)]
+		if !ok {
+			panic(errors.AssertionFailedf("applying a savepoint release op: ID %d does not exist", o.ID))
+		}
+		err := txn.ReleaseSavepoint(ctx, spt)
+		o.Result = resultInit(ctx, err)
+		if err != nil {
+			return
+		}
+	case *SavepointRollbackOperation:
+		txn, ok := db.(*kv.Txn) // savepoints are only allowed with transactions
+		if !ok {
+			panic(errors.AssertionFailedf(`non-txn interface attempted to rollback a savepoint %v`, o))
+		}
+		spt, ok := (*spIDToToken)[int(o.ID)]
+		if !ok {
+			panic(errors.AssertionFailedf("applying a savepoint rollback op: ID %d does not exist", o.ID))
+		}
+		err := txn.RollbackToSavepoint(ctx, spt)
+		o.Result = resultInit(ctx, err)
+		if err != nil {
+			return
+		}
 	default:
 		panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, o, o))
 	}
