@@ -657,7 +657,7 @@ func (p *Provider) stsGetCallerIdentity() (string, error) {
 }
 
 // List is part of the vm.Provider interface.
-func (p *Provider) List(l *logger.Logger) (vm.List, error) {
+func (p *Provider) List(l *logger.Logger, opt vm.ListOptions) (vm.List, error) {
 	regions, err := p.allRegions(p.Config.availabilityZoneNames())
 	if err != nil {
 		return nil, err

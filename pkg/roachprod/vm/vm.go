@@ -110,6 +110,11 @@ type VM struct {
 
 	// LocalClusterName is only set for VMs in a local cluster.
 	LocalClusterName string `json:"local_cluster_name,omitempty"`
+
+	// EmptyCluster indicates that the VM does not exist. Azure allows for empty
+	// clusters, but roachprod does not allow VM-less clusters except when deleting them.
+	// A fake VM will be used in this scenario.
+	EmptyCluster bool
 }
 
 // Name generates the name for the i'th node in a cluster.
@@ -256,6 +261,10 @@ type ProviderOpts interface {
 	ConfigureClusterFlags(*pflag.FlagSet, MultipleProjectsOption)
 }
 
+type ListOptions struct {
+	IncludeEmptyClusters bool
+}
+
 // A Provider is a source of virtual machines running on some hosting platform.
 type Provider interface {
 	CreateProviderOpts() ProviderOpts
@@ -270,7 +279,7 @@ type Provider interface {
 	Extend(vms List, lifetime time.Duration) error
 	// Return the account name associated with the provider
 	FindActiveAccount() (string, error)
-	List(l *logger.Logger) (List, error)
+	List(l *logger.Logger, opts ListOptions) (List, error)
 	// The name of the Provider, which will also surface in the top-level Providers map.
 	Name() string
 
