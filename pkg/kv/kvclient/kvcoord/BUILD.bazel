@@ -78,7 +78,6 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/pprofutil",
         "//pkg/util/quotapool",
-        "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/shuffle",
         "//pkg/util/startup",

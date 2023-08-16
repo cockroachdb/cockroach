@@ -12,8 +12,8 @@ package kvcoord
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // ClientTestingKnobs contains testing options that dictate the behavior
@@ -61,7 +61,7 @@ type ClientTestingKnobs struct {
 
 	// TransactionRetryFilter allows transaction retry loops to inject retriable
 	// errors.
-	TransactionRetryFilter func(*kv.Txn) bool
+	TransactionRetryFilter func(*roachpb.Transaction) bool
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}

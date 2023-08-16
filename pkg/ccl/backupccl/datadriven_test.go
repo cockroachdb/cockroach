@@ -151,7 +151,7 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	params.ServerArgs.ExternalIODirConfig = cfg.ioConf
 
 	params.ServerArgs.DefaultTestTenant = cfg.defaultTestTenant
-	var transactionRetryFilter func(*kv.Txn) bool
+	var transactionRetryFilter func(*roachpb.Transaction) bool
 	if cfg.randomTxnRetries {
 		transactionRetryFilter = kvclientutils.RandomTransactionRetryFilter()
 	}

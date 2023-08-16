@@ -361,10 +361,10 @@ func (txn *Txn) SetDebugName(name string) {
 func (txn *Txn) DebugName() string {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	return txn.DebugNameLocked()
+	return txn.debugNameLocked()
 }
 
-func (txn *Txn) DebugNameLocked() string {
+func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
 }
 
@@ -958,6 +958,11 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		}
 		err = fn(ctx, txn)
 
+		// Optionally inject retryable errors for testing.
+		if err == nil && txn.TestingShouldRetry() {
+			err = txn.GenerateForcedRetryableErr(ctx, "injected retriable error")
+		}
+
 		// Commit on success, unless the txn has already been committed or rolled
 		// back by the closure. We allow that, as the closure might want to run 1PC
 		// transactions or might want to rollback on certain conditions.
@@ -1035,7 +1040,7 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) error {
 			retryErr, "PrepareForRetry() called on leaf txn"), ctx)
 	}
 	log.VEventf(ctx, 2, "retrying transaction: %s because of a retryable error: %s",
-		txn.DebugNameLocked(), retryErr)
+		txn.debugNameLocked(), retryErr)
 	txn.resetDeadlineLocked()
 
 	if txn.mu.ID != retryErr.TxnID {
@@ -1430,19 +1435,18 @@ func (txn *Txn) GenerateForcedRetryableErr(ctx context.Context, msg redact.Redac
 	return txn.mu.sender.GenerateForcedRetryableErr(ctx, now.ToTimestamp(), msg)
 }
 
+// RandomTxnRetryProbability is the probability that a transaction will inject a
+// retryable error when either the RandomTransactionRetryFilter testing filter
+// is installed or the COCKROACH_FORCE_RANDOM_TXN_RETRIES environment variable
+// is set.
 const RandomTxnRetryProbability = 0.1
 
-// TestingShouldRetry returns true if we should generate a
-// random, retriable error for this transaction.
+// TestingShouldRetry returns true if we should generate a random, retryable
+// error for this transaction.
 func (txn *Txn) TestingShouldRetry() bool {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-
-	if txn.mu.sender.ClientFinalized() {
-		return false
-	}
-
-	return txn.mu.sender.TestingShouldRetry(txn)
+	return txn.mu.sender.TestingShouldRetry()
 }
 
 // IsSerializablePushAndRefreshNotPossible returns true if the transaction is

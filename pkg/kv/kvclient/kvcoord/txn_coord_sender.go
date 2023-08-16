@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"context"
+	"math/rand"
 	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -36,12 +36,6 @@ const (
 	// OpTxnCoordSender represents a txn coordinator send operation.
 	OpTxnCoordSender = "txn coordinator send"
 )
-
-// DisableCommitSanityCheck allows opting out of a fatal assertion error that was observed in the wild
-// and for which a root cause is not yet available.
-//
-// See: https://github.com/cockroachdb/cockroach/pull/73512.
-var DisableCommitSanityCheck = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_COMMIT_SANITY_CHECK", false)
 
 // forceTxnRetries enables random transaction retries for test builds
 // even if they aren't enabled via testing knobs.
@@ -1544,14 +1538,18 @@ func (tc *TxnCoordSender) HasPerformedWrites() bool {
 	return tc.hasPerformedWritesLocked()
 }
 
-var randRetryRngSource, _ = randutil.NewLockedPseudoRand()
-
-func (tc *TxnCoordSender) TestingShouldRetry(txn *kv.Txn) bool {
-	if filter := tc.testingKnobs.TransactionRetryFilter; filter != nil && filter(txn) {
+// TestingShouldRetry is part of the TxnSender interface.
+func (tc *TxnCoordSender) TestingShouldRetry() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState == txnFinalized {
+		return false
+	}
+	if filter := tc.testingKnobs.TransactionRetryFilter; filter != nil && filter(tc.mu.txn.Clone()) {
 		return true
 	}
 	if forceTxnRetries && buildutil.CrdbTestBuild {
-		return randRetryRngSource.Float64() < kv.RandomTxnRetryProbability
+		return rand.Float64() < kv.RandomTxnRetryProbability
 	}
 	return false
 }

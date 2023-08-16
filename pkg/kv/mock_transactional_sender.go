@@ -252,7 +252,7 @@ func (m *MockTransactionalSender) HasPerformedWrites() bool {
 }
 
 // TestingShouldRetry is part of TxnSenderFactory.
-func (m *MockTransactionalSender) TestingShouldRetry(*Txn) bool {
+func (m *MockTransactionalSender) TestingShouldRetry() bool {
 	return false
 }
 

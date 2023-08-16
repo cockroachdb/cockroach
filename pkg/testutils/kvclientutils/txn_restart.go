@@ -11,25 +11,24 @@
 package kvclientutils
 
 import (
+	"math/rand"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-var randRetryRngSource, _ = randutil.NewLockedPseudoRand()
-
-func RandomTransactionRetryFilter() func(*kv.Txn) bool {
-	return func(*kv.Txn) bool {
-		return randRetryRngSource.Float64() < kv.RandomTxnRetryProbability
+func RandomTransactionRetryFilter() func(*roachpb.Transaction) bool {
+	return func(*roachpb.Transaction) bool {
+		return rand.Float64() < kv.RandomTxnRetryProbability
 	}
 }
 
 func PrefixTransactionRetryFilter(
 	t testutils.TestErrorer, prefix string, maxCount int,
-) (func(*kv.Txn) bool, func()) {
+) (func(*roachpb.Transaction) bool, func()) {
 	var count int
 	var mu syncutil.Mutex
 	verifyFunc := func() {
@@ -39,9 +38,8 @@ func PrefixTransactionRetryFilter(
 			t.Errorf("expected at least 1 transaction to match prefix %q", prefix)
 		}
 	}
-	filterFunc := func(txn *kv.Txn) bool {
-		// Use DebugNameLocked because txn is locked by the caller.
-		if !strings.HasPrefix(txn.DebugNameLocked(), prefix) {
+	filterFunc := func(txn *roachpb.Transaction) bool {
+		if !strings.HasPrefix(txn.Name, prefix) {
 			return false
 		}
 
