@@ -40,7 +40,16 @@ type status struct {
 
 func (s *status) add(c *Cluster, now time.Time) {
 	exp := c.ExpiresAt()
-	if exp.After(now) {
+	// Clusters without VMs shouldn't exist and are likely dangling resources.
+	if c.IsEmptyCluster() {
+		// Give a one-hour grace period to avoid any race conditions where a cluster
+		// was created but the VMs are still initializing.
+		if now.After(c.CreatedAt.Add(time.Hour)) {
+			s.destroy = append(s.destroy, c)
+		} else {
+			s.good = append(s.good, c)
+		}
+	} else if exp.After(now) {
 		if exp.Before(now.Add(2 * time.Hour)) {
 			s.warn = append(s.warn, c)
 		} else {
@@ -300,12 +309,27 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 		u.add(c, now)
 	}
 
-	// Compile list of "bad vms" and destroy them.
+	// Compile list of "bad vms" and "bad empty clusters" and destroy them.
 	var badVMs vm.List
+	badClusters := make(Clusters)
 	for _, vm := range cloud.BadInstances {
 		// We only delete "bad vms" if they were created more than 1h ago.
 		if now.Sub(vm.CreatedAt) >= time.Hour {
-			badVMs = append(badVMs, vm)
+			// For empty clusters, we can't delete the VM as one doesn't exist.
+			// Instead, we have to destroy the entire cluster itself.
+			if vm.EmptyCluster {
+				clusterName, _ := vm.ClusterName()
+				userName, _ := vm.UserName()
+				c := &Cluster{
+					Name: clusterName,
+					User: userName,
+					VMs:  nil,
+				}
+				c.VMs = append(c.VMs, vm)
+				badClusters[clusterName] = c
+			} else {
+				badVMs = append(badVMs, vm)
+			}
 		}
 	}
 
@@ -330,6 +354,12 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 			err := vm.FanOut(badVMs, func(p vm.Provider, vms vm.List) error {
 				return p.Delete(l, vms)
 			})
+			if err != nil {
+				postError(l, client, channel, err)
+			}
+		}
+		for _, badCluster := range badClusters {
+			err := DestroyCluster(l, badCluster)
 			if err != nil {
 				postError(l, client, channel, err)
 			}
