@@ -62,7 +62,10 @@ func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 			Suffix: storage.EncodeMVCCTimestampSuffix(ts),
 		},
 	}
-	iter := e.kvs.NewIter(&opts)
+	iter, err := e.kvs.NewIter(&opts)
+	if err != nil {
+		panic(err)
+	}
 	defer func() { _ = iter.Close() }()
 	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: key, Timestamp: ts}))
 	for iter.Valid() {
@@ -126,7 +129,11 @@ func (e *Engine) DeleteRange(from, to roachpb.Key, ts hlc.Timestamp, val []byte)
 func (e *Engine) Iterate(
 	fn func(key, endKey roachpb.Key, ts hlc.Timestamp, value []byte, err error),
 ) {
-	iter := e.kvs.NewIter(&pebble.IterOptions{KeyTypes: pebble.IterKeyTypePointsAndRanges})
+	iter, err := e.kvs.NewIter(&pebble.IterOptions{KeyTypes: pebble.IterKeyTypePointsAndRanges})
+	if err != nil {
+		fn(nil, nil, hlc.Timestamp{}, nil, err)
+		return
+	}
 	defer func() { _ = iter.Close() }()
 	for iter.First(); iter.Valid(); iter.Next() {
 		hasPoint, _ := iter.HasPointAndRange()

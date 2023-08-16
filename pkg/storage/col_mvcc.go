@@ -401,13 +401,16 @@ func MVCCScanToCols(
 	opts MVCCScanOptions,
 	st *cluster.Settings,
 ) (MVCCScanResult, error) {
-	iter := newMVCCIterator(
+	iter, err := newMVCCIterator(
 		reader, timestamp, !opts.Tombstones, opts.DontInterleaveIntents, IterOptions{
 			KeyTypes:   IterKeyTypePointsAndRanges,
 			LowerBound: key,
 			UpperBound: endKey,
 		},
 	)
+	if err != nil {
+		return MVCCScanResult{}, err
+	}
 	defer iter.Close()
 	return mvccScanToCols(ctx, iter, indexFetchSpec, key, endKey, timestamp, opts, st)
 }

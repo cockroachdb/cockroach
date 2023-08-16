@@ -1410,11 +1410,14 @@ func computeSplitRangeKeyStatsDelta(
 		splitKey.Prevish(roachpb.PrevishKeyLength), splitKey.Next(),
 		lhs.StartKey.AsRawKey(), rhs.EndKey.AsRawKey())
 
-	iter := r.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	iter, err := r.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypeRangesOnly,
 		LowerBound: leftPeekBound,
 		UpperBound: rightPeekBound,
 	})
+	if err != nil {
+		return ms, err
+	}
 	defer iter.Close()
 
 	if cmp, rangeKeys, err := storage.PeekRangeKeysRight(iter, splitKey); err != nil {

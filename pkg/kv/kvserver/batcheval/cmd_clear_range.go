@@ -213,11 +213,14 @@ func computeStatsDelta(
 		if !entireRange {
 			leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 				from, to, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
-			rkIter := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+			rkIter, err := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypeRangesOnly,
 				LowerBound: leftPeekBound,
 				UpperBound: rightPeekBound,
 			})
+			if err != nil {
+				return enginepb.MVCCStats{}, err
+			}
 			defer rkIter.Close()
 
 			if cmp, lhs, err := storage.PeekRangeKeysLeft(rkIter, from); err != nil {

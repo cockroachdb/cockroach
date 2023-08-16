@@ -2698,7 +2698,10 @@ func (r *Replica) printRaftTail(
 	end := keys.RaftLogPrefix(r.RangeID).PrefixEnd()
 
 	// NB: raft log does not have intents.
-	it := r.store.TODOEngine().NewEngineIterator(storage.IterOptions{LowerBound: start, UpperBound: end})
+	it, err := r.store.TODOEngine().NewEngineIterator(storage.IterOptions{LowerBound: start, UpperBound: end})
+	if err != nil {
+		return "", err
+	}
 	valid, err := it.SeekEngineKeyLT(storage.EngineKey{Key: end})
 	if err != nil {
 		return "", err

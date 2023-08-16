@@ -1475,11 +1475,14 @@ var mvccStatsTests = []struct {
 	{
 		name: "ComputeStatsForIter",
 		fn: func(r Reader, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
-			iter := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+			iter, err := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 				KeyTypes:   IterKeyTypePointsAndRanges,
 				LowerBound: start,
 				UpperBound: end,
 			})
+			if err != nil {
+				return enginepb.MVCCStats{}, err
+			}
 			defer iter.Close()
 			iter.SeekGE(MVCCKey{Key: start})
 			return ComputeStatsForIter(iter, nowNanos)
