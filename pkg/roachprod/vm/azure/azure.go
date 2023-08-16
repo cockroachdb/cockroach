@@ -452,6 +452,11 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 		return nil, err
 	}
 
+	// Keep track of which clusters we find through listing VMs.
+	// If later we need to list resource groups to find empty clusters,
+	// we want to make sure we don't add anything twice.
+	foundClusters := make(map[string]bool)
+
 	var ret vm.List
 	for it.NotDone() {
 		found := it.Value()
@@ -507,12 +512,88 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 			return nil, err
 		}
 
+		parts := strings.Split(m.Name, "-")
+		clusterName := strings.Join(parts[:len(parts)-1], "-")
+		foundClusters[clusterName] = true
 		ret = append(ret, m)
 
 		if err := it.NextWithContext(ctx); err != nil {
 			return nil, err
 		}
+	}
 
+	// Azure allows for clusters to exist even if the attached VM no longer exists.
+	// Such a cluster won't be found by listing all azure VMs like above.
+	// Normally we don't want to access these clusters except for deleting them.
+	if opts.IncludeEmptyClusters {
+		groupsClient := resources.NewGroupsClient(*sub.SubscriptionID)
+		if groupsClient.Authorizer, err = p.getAuthorizer(); err != nil {
+			return nil, err
+		}
+
+		// List all resource groups for clusters under the subscription.
+		filter := fmt.Sprintf("tagName eq '%s'", vm.TagCluster)
+		it, err := groupsClient.ListComplete(ctx, filter, nil /* limit */)
+		if err != nil {
+			return nil, err
+		}
+
+		for it.NotDone() {
+			resourceGroup := it.Value()
+			if _, ok := resourceGroup.Tags[vm.TagRoachprod]; !ok {
+				if err := it.NextWithContext(ctx); err != nil {
+					return nil, err
+				}
+				continue
+			}
+
+			// Resource Groups have the name format "user-<clusterid>-<region>",
+			// while clusters have the name format "user-<clusterid>".
+			parts := strings.Split(*resourceGroup.Name, "-")
+			clusterName := strings.Join(parts[:len(parts)-1], "-")
+			if foundClusters[clusterName] {
+				if err := it.NextWithContext(ctx); err != nil {
+					return nil, err
+				}
+				continue
+			}
+
+			// The cluster does not have a VM, but roachprod assumes that this is not
+			// possible and implements providers on the VM level. A VM-less cluster will
+			// not have access to provider info or methods. To still allow this cluster to
+			// be deleted, we must create a fake VM, indicated by EmptyCluster.
+			m := vm.VM{
+				Name:       *resourceGroup.Name,
+				Provider:   ProviderName,
+				RemoteUser: remoteUser,
+				VPC:        "global",
+				// We add a fake availability-zone suffix since other roachprod
+				// code assumes particular formats. For example, "eastus2z".
+				Zone:         *resourceGroup.Location + "z",
+				EmptyCluster: true,
+			}
+
+			// We ignore any parsing errors here as roachprod tries to destroy "bad VMs".
+			// We don't want that since this is a fake VM, we need to destroy the resource
+			// group instead. This will be done by GC when it sees that no m.CreatedAt exists.
+			createdPtr := resourceGroup.Tags[vm.TagCreated]
+			if createdPtr != nil {
+				parsed, _ := time.Parse(time.RFC3339, *createdPtr)
+				m.CreatedAt = parsed
+			}
+
+			lifetimePtr := resourceGroup.Tags[vm.TagLifetime]
+			if lifetimePtr != nil {
+				parsed, _ := time.ParseDuration(*lifetimePtr)
+				m.Lifetime = parsed
+			}
+
+			ret = append(ret, m)
+
+			if err := it.NextWithContext(ctx); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return ret, nil
