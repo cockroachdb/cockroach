@@ -51,6 +51,7 @@ public  statement_bundle_chunks          table     node  NULL
 public  statement_diagnostics            table     node  NULL
 public  statement_diagnostics_requests   table     node  NULL
 public  statement_statistics             table     node  NULL
+public  stmt_exec_insights               table     node  NULL
 public  table_statistics                 table     node  NULL
 public  task_payloads                    table     node  NULL
 public  tenant_id_seq                    sequence  node  NULL
@@ -60,6 +61,7 @@ public  tenant_usage                     table     node  NULL
 public  tenants                          table     node  NULL
 public  transaction_activity             table     node  NULL
 public  transaction_statistics           table     node  NULL
+public  txn_exec_insights                table     node  NULL
 public  ui                               table     node  NULL
 public  users                            table     node  NULL
 public  web_sessions                     table     node  NULL
@@ -107,9 +109,11 @@ public  statement_bundle_chunks          table     node  NULL
 public  statement_diagnostics            table     node  NULL
 public  statement_diagnostics_requests   table     node  NULL
 public  statement_statistics             table     node  NULL
+public  stmt_exec_insights               table     node  NULL
 public  table_statistics                 table     node  NULL
 public  transaction_activity             table     node  NULL
 public  transaction_statistics           table     node  NULL
+public  txn_exec_insights                table     node  NULL
 public  ui                               table     node  NULL
 public  users                            table     node  NULL
 public  web_sessions                     table     node  NULL
@@ -175,6 +179,8 @@ SELECT id FROM system.descriptor ORDER BY 1
 60
 61
 62
+63
+64
 100
 101
 102
@@ -232,6 +238,8 @@ SELECT id FROM system.descriptor ORDER BY 1
 57
 58
 59
+60
+61
 100
 101
 102
@@ -658,6 +666,14 @@ system  public  statement_diagnostics_requests   root    SELECT  true
 system  public  statement_diagnostics_requests   root    UPDATE  true
 system  public  statement_statistics             admin   SELECT  true
 system  public  statement_statistics             root    SELECT  true
+system  public  stmt_exec_insights               admin   DELETE  true
+system  public  stmt_exec_insights               admin   INSERT  true
+system  public  stmt_exec_insights               admin   SELECT  true
+system  public  stmt_exec_insights               admin   UPDATE  true
+system  public  stmt_exec_insights               root    DELETE  true
+system  public  stmt_exec_insights               root    INSERT  true
+system  public  stmt_exec_insights               root    SELECT  true
+system  public  stmt_exec_insights               root    UPDATE  true
 system  public  table_statistics                 admin   DELETE  true
 system  public  table_statistics                 admin   INSERT  true
 system  public  table_statistics                 admin   SELECT  true
@@ -706,6 +722,14 @@ system  public  transaction_activity             admin   SELECT  true
 system  public  transaction_activity             root    SELECT  true
 system  public  transaction_statistics           admin   SELECT  true
 system  public  transaction_statistics           root    SELECT  true
+system  public  txn_exec_insights                admin   DELETE  true
+system  public  txn_exec_insights                admin   INSERT  true
+system  public  txn_exec_insights                admin   SELECT  true
+system  public  txn_exec_insights                admin   UPDATE  true
+system  public  txn_exec_insights                root    DELETE  true
+system  public  txn_exec_insights                root    INSERT  true
+system  public  txn_exec_insights                root    SELECT  true
+system  public  txn_exec_insights                root    UPDATE  true
 system  public  ui                               admin   DELETE  true
 system  public  ui                               admin   INSERT  true
 system  public  ui                               admin   SELECT  true
@@ -1004,6 +1028,14 @@ system  public  statement_diagnostics_requests   root    SELECT  true
 system  public  statement_diagnostics_requests   root    UPDATE  true
 system  public  statement_statistics             admin   SELECT  true
 system  public  statement_statistics             root    SELECT  true
+system  public  stmt_exec_insights               admin   DELETE  true
+system  public  stmt_exec_insights               admin   INSERT  true
+system  public  stmt_exec_insights               admin   SELECT  true
+system  public  stmt_exec_insights               admin   UPDATE  true
+system  public  stmt_exec_insights               root    DELETE  true
+system  public  stmt_exec_insights               root    INSERT  true
+system  public  stmt_exec_insights               root    SELECT  true
+system  public  stmt_exec_insights               root    UPDATE  true
 system  public  table_statistics                 admin   DELETE  true
 system  public  table_statistics                 admin   INSERT  true
 system  public  table_statistics                 admin   SELECT  true
@@ -1016,6 +1048,14 @@ system  public  transaction_activity             admin   SELECT  true
 system  public  transaction_activity             root    SELECT  true
 system  public  transaction_statistics           admin   SELECT  true
 system  public  transaction_statistics           root    SELECT  true
+system  public  txn_exec_insights                admin   DELETE  true
+system  public  txn_exec_insights                admin   INSERT  true
+system  public  txn_exec_insights                admin   SELECT  true
+system  public  txn_exec_insights                admin   UPDATE  true
+system  public  txn_exec_insights                root    DELETE  true
+system  public  txn_exec_insights                root    INSERT  true
+system  public  txn_exec_insights                root    SELECT  true
+system  public  txn_exec_insights                root    UPDATE  true
 system  public  ui                               admin   DELETE  true
 system  public  ui                               admin   INSERT  true
 system  public  ui                               admin   SELECT  true
