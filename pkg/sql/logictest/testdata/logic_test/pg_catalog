@@ -1113,6 +1113,16 @@ FROM pg_catalog.pg_index
 ORDER BY indexrelid
 ----
 indexrelid  indrelid  indnatts  indisunique  indnullsnotdistinct  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey            indcollation               indclass     indoption    indexprs  indpred                                                                                                                       indnkeyatts
+51576692    64        1         false        false                false         false           false         false           true        false         false       true       false           23                3403232968                 0            2            NULL      NULL                                                                                                                          1
+51576693    64        1         false        false                false         false           false         false           true        false         false       true       false           21                0                          0            2            NULL      NULL                                                                                                                          1
+51576695    64        1         false        false                false         false           false         false           true        false         false       true       false           12                0                          0            2            NULL      NULL                                                                                                                          1
+51576696    64        2         false        false                false         false           false         false           true        false         false       true       false           10 11             0 0                        0 0          1 1          NULL      NULL                                                                                                                          2
+51576697    64        1         false        false                false         false           false         false           true        false         false       true       false           5                 0                          0            2            NULL      NULL                                                                                                                          1
+51576698    64        1         false        false                false         false           false         false           true        false         false       true       false           6                 3403232968                 0            2            NULL      NULL                                                                                                                          1
+51576699    64        1         false        false                false         false           false         false           true        false         false       true       false           7                 3403232968                 0            2            NULL      NULL                                                                                                                          1
+51576700    64        2         true         false                true          false           true          false           true        false         false       true       false           4 2               3403232968 0               0 0          2 2          NULL      NULL                                                                                                                          2
+51576702    64        1         false        false                false         false           false         false           true        false         false       true       false           3                 0                          0            2            NULL      NULL                                                                                                                          1
+51576703    64        1         false        false                false         false           false         false           true        false         false       true       false           2                 0                          0            2            NULL      NULL                                                                                                                          1
 144368028   32        1         true         false                true          false           true          false           true        false         false       true       false           1                 0                          0            2            NULL      NULL                                                                                                                          1
 190763692   48        1         false        false                true          false           false         false           true        false         false       true       false           1                 0                          0            2            NULL      NULL                                                                                                                          1
 404104296   39        2         true         false                true          false           true          false           true        false         false       true       false           3 1               0 0                        0 0          2 2          NULL      NULL                                                                                                                          2
@@ -1178,6 +1188,15 @@ indexrelid  indrelid  indnatts  indisunique  indnullsnotdistinct  indisprimary  
 2361445175  8         1         true         false                false         false           true          false           true        false         false       true       false           4                 3403232968                 0            2            NULL      NULL                                                                                                                          1
 2407840836  24        3         true         false                true          false           true          false           true        false         false       true       false           1 2 3             0 0 0                      0 0 0        2 2 2        NULL      NULL                                                                                                                          3
 2528390115  47        1         true         false                true          false           true          false           true        false         false       true       false           1                 0                          0            2            NULL      NULL                                                                                                                          1
+2574785776  63        1         false        false                false         false           false         false           true        false         false       true       false           2                 0                          0            2            NULL      NULL                                                                                                                          1
+2574785777  63        2         false        false                false         false           false         false           true        false         false       true       false           5 6               0 0                        0 0          1 1          NULL      NULL                                                                                                                          2
+2574785779  63        1         true         false                true          false           true          false           true        false         false       true       false           1                 0                          0            2            NULL      NULL                                                                                                                          1
+2574785780  63        1         false        false                false         false           false         false           true        false         false       true       false           15                3403232968                 0            2            NULL      NULL                                                                                                                          1
+2574785781  63        1         false        false                false         false           false         false           true        false         false       true       false           16                3403232968                 0            2            NULL      NULL                                                                                                                          1
+2574785782  63        1         false        false                false         false           false         false           true        false         false       true       false           7                 3403232968                 0            2            NULL      NULL                                                                                                                          1
+2574785783  63        1         false        false                false         false           false         false           true        false         false       true       false           8                 3403232968                 0            2            NULL      NULL                                                                                                                          1
+2574785786  63        1         false        false                false         false           false         false           true        false         false       true       false           17                3403232968                 0            2            NULL      NULL                                                                                                                          1
+2574785787  63        1         false        false                false         false           false         false           true        false         false       true       false           20                3403232968                 0            2            NULL      NULL                                                                                                                          1
 2621181440  15        2         false        false                false         false           false         false           true        false         false       true       false           2 3               3403232968 0               0 0          2 2          NULL      NULL                                                                                                                          2
 2621181441  15        3         false        false                false         false           false         false           true        false         false       true       false           6 7 2             3403232968 0               0 0          2 2          NULL      NULL                                                                                                                          2
 2621181443  15        1         true         false                true          false           true          false           true        false         false       true       false           1                 0                          0            2            NULL      NULL                                                                                                                          1
@@ -1229,6 +1248,18 @@ FROM pg_index
 ORDER BY indexrelid, operator_argument_position
 ----
 indexrelid  operator_argument_type_oid  operator_argument_position
+51576692    0                           1
+51576693    0                           1
+51576695    0                           1
+51576696    0                           1
+51576696    0                           2
+51576697    0                           1
+51576698    0                           1
+51576699    0                           1
+51576700    0                           1
+51576700    0                           2
+51576702    0                           1
+51576703    0                           1
 144368028   0                           1
 190763692   0                           1
 404104296   0                           1
@@ -1346,6 +1377,16 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 2407840836  0                           2
 2407840836  0                           3
 2528390115  0                           1
+2574785776  0                           1
+2574785777  0                           1
+2574785777  0                           2
+2574785779  0                           1
+2574785780  0                           1
+2574785781  0                           1
+2574785782  0                           1
+2574785783  0                           1
+2574785786  0                           1
+2574785787  0                           1
 2621181440  0                           1
 2621181440  0                           2
 2621181441  0                           1
