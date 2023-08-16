@@ -169,136 +169,6 @@ type kvBatchSnapshotStrategy struct {
 	st      *cluster.Settings
 }
 
-// multiSSTWriter is a wrapper around an SSTWriter and SSTSnapshotStorageScratch
-// that handles chunking SSTs and persisting them to disk.
-type multiSSTWriter struct {
-	st       *cluster.Settings
-	scratch  *SSTSnapshotStorageScratch
-	currSST  storage.SSTWriter
-	keySpans []roachpb.Span
-	currSpan int
-	// The approximate size of the SST chunk to buffer in memory on the receiver
-	// before flushing to disk.
-	sstChunkSize int64
-	// The total size of SST data. Updated on SST finalization.
-	dataSize int64
-}
-
-func newMultiSSTWriter(
-	ctx context.Context,
-	st *cluster.Settings,
-	scratch *SSTSnapshotStorageScratch,
-	keySpans []roachpb.Span,
-	sstChunkSize int64,
-) (multiSSTWriter, error) {
-	msstw := multiSSTWriter{
-		st:           st,
-		scratch:      scratch,
-		keySpans:     keySpans,
-		sstChunkSize: sstChunkSize,
-	}
-	if err := msstw.initSST(ctx); err != nil {
-		return msstw, err
-	}
-	return msstw, nil
-}
-
-func (msstw *multiSSTWriter) initSST(ctx context.Context) error {
-	newSSTFile, err := msstw.scratch.NewFile(ctx, msstw.sstChunkSize)
-	if err != nil {
-		return errors.Wrap(err, "failed to create new sst file")
-	}
-	newSST := storage.MakeIngestionSSTWriter(ctx, msstw.st, newSSTFile)
-	msstw.currSST = newSST
-	if err := msstw.currSST.ClearRawRange(
-		msstw.keySpans[msstw.currSpan].Key, msstw.keySpans[msstw.currSpan].EndKey,
-		true /* pointKeys */, true, /* rangeKeys */
-	); err != nil {
-		msstw.currSST.Close()
-		return errors.Wrap(err, "failed to clear range on sst file writer")
-	}
-	return nil
-}
-
-func (msstw *multiSSTWriter) finalizeSST(ctx context.Context) error {
-	err := msstw.currSST.Finish()
-	if err != nil {
-		return errors.Wrap(err, "failed to finish sst")
-	}
-	msstw.dataSize += msstw.currSST.DataSize
-	msstw.currSpan++
-	msstw.currSST.Close()
-	return nil
-}
-
-func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, value []byte) error {
-	for msstw.keySpans[msstw.currSpan].EndKey.Compare(key.Key) <= 0 {
-		// Finish the current SST, write to the file, and move to the next key
-		// range.
-		if err := msstw.finalizeSST(ctx); err != nil {
-			return err
-		}
-		if err := msstw.initSST(ctx); err != nil {
-			return err
-		}
-	}
-	if msstw.keySpans[msstw.currSpan].Key.Compare(key.Key) > 0 {
-		return errors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.keySpans)
-	}
-	if err := msstw.currSST.PutEngineKey(key, value); err != nil {
-		return errors.Wrap(err, "failed to put in sst")
-	}
-	return nil
-}
-
-func (msstw *multiSSTWriter) PutRangeKey(
-	ctx context.Context, start, end roachpb.Key, suffix []byte, value []byte,
-) error {
-	if start.Compare(end) >= 0 {
-		return errors.AssertionFailedf("start key %s must be before end key %s", end, start)
-	}
-	for msstw.keySpans[msstw.currSpan].EndKey.Compare(start) <= 0 {
-		// Finish the current SST, write to the file, and move to the next key
-		// range.
-		if err := msstw.finalizeSST(ctx); err != nil {
-			return err
-		}
-		if err := msstw.initSST(ctx); err != nil {
-			return err
-		}
-	}
-	if msstw.keySpans[msstw.currSpan].Key.Compare(start) > 0 ||
-		msstw.keySpans[msstw.currSpan].EndKey.Compare(end) < 0 {
-		return errors.AssertionFailedf("client error: expected %s to fall in one of %s",
-			roachpb.Span{Key: start, EndKey: end}, msstw.keySpans)
-	}
-	if err := msstw.currSST.PutEngineRangeKey(start, end, suffix, value); err != nil {
-		return errors.Wrap(err, "failed to put range key in sst")
-	}
-	return nil
-}
-
-func (msstw *multiSSTWriter) Finish(ctx context.Context) (int64, error) {
-	if msstw.currSpan < len(msstw.keySpans) {
-		for {
-			if err := msstw.finalizeSST(ctx); err != nil {
-				return 0, err
-			}
-			if msstw.currSpan >= len(msstw.keySpans) {
-				break
-			}
-			if err := msstw.initSST(ctx); err != nil {
-				return 0, err
-			}
-		}
-	}
-	return msstw.dataSize, nil
-}
-
-func (msstw *multiSSTWriter) Close() {
-	msstw.currSST.Close()
-}
-
 // snapshotTimingTag represents a lazy tracing span tag containing information
 // on how long individual parts of a snapshot take. Individual stopwatches can
 // be added to a snapshotTimingTag.
@@ -358,6 +228,18 @@ func (tag *snapshotTimingTag) Render() []attribute.KeyValue {
 	return tags
 }
 
+// CreateNewSSTWriter creates a new SSTWriter to be used by storage.MultiSSTWriter.
+func (kvSS *kvBatchSnapshotStrategy) CreateNewSSTWriter(
+	ctx context.Context,
+) (storage.SSTWriter, error) {
+	newSSTFile, err := kvSS.scratch.NewFile(ctx, kvSS.sstChunkSize)
+	if err != nil {
+		return storage.SSTWriter{}, err
+	}
+	writer := storage.MakeIngestionSSTWriter(ctx, kvSS.st, newSSTFile)
+	return writer, nil
+}
+
 // Receive implements the snapshotStrategy interface.
 //
 // NOTE: This function assumes that the point and range (e.g. MVCC range
@@ -410,11 +292,22 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// At the moment we'll write at most five SSTs.
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeySpans(header.State.Desc)
-	msstw, err := newMultiSSTWriter(ctx, kvSS.st, kvSS.scratch, keyRanges, kvSS.sstChunkSize)
+
+	clearSpan := func(ctx context.Context, span roachpb.Span, w *storage.MultiSSTWriter) error {
+		// Clear all existing replica state, including both point keys and range keys.
+		if err := w.PutRangeDel(ctx, span.Key, span.EndKey); err != nil {
+			return err
+		}
+		if err := w.PutRangeKeyDel(ctx, span.Key, span.EndKey); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	msstw, err := storage.NewMultiSSTWriter(ctx, kvSS.CreateNewSSTWriter, clearSpan, keyRanges, 128<<20)
 	if err != nil {
 		return noSnap, err
 	}
-	defer msstw.Close()
 
 	log.Event(ctx, "waiting for snapshot batches to begin")
 
@@ -486,7 +379,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			if err != nil {
 				return noSnap, errors.Wrapf(err, "finishing sst for raft snapshot")
 			}
-			msstw.Close()
 			timingTag.stop("sst")
 			log.Eventf(ctx, "all data received from snapshot and all SSTs were finalized")
 

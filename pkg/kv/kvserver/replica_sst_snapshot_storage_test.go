@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	io "io"
 	"path/filepath"
 	"strconv"
@@ -251,6 +252,128 @@ func TestSSTSnapshotStorageContextCancellation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
+func TestMultiSSTWriterBuffer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	testRangeID := roachpb.RangeID(1)
+	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
+	testLimiter := rate.NewLimiter(rate.Inf, 0)
+
+	cleanup, eng := newOnDiskEngine(ctx, t)
+	defer cleanup()
+	defer eng.Close()
+
+	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
+	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
+
+	snapStrategy := kvBatchSnapshotStrategy{
+		scratch: scratch,
+		st:      cluster.MakeTestingClusterSettings(),
+	}
+
+	clearSpan := func(ctx context.Context, span roachpb.Span, w *storage.MultiSSTWriter) error {
+		// Clear all existing replica state, including both point keys and range keys.
+		if err := w.PutRangeDel(ctx, span.Key, span.EndKey); err != nil {
+			return err
+		}
+		if err := w.PutRangeKeyDel(ctx, span.Key, span.EndKey); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	keySpans := []roachpb.Span{
+		{Key: []byte("a"), EndKey: []byte("c")},
+		{Key: []byte("d"), EndKey: []byte("e")},
+		//{Key: []byte("f"), EndKey: []byte("h")},
+	}
+	msstw, err := storage.NewMultiSSTWriter(ctx, snapStrategy.CreateNewSSTWriter, clearSpan, keySpans, 128<<20)
+	require.NoError(t, err)
+	_, err = msstw.Finish(ctx)
+	require.NoError(t, err)
+
+	for i, m := range msstw.TableMetadata() {
+		fmt.Printf("Table %d\n", i+1)
+		fmt.Printf("Smallest Point Key: %d\n", m.SmallestPoint)
+		fmt.Printf("Largest Point Key: %d\n", m.LargestPoint)
+		fmt.Printf("Point keys: %d\n", m.Properties.NumEntries-1)
+		fmt.Printf("Smallest Range Key: %d\n", m.SmallestRangeKey)
+		fmt.Printf("Largest Range Key: %d\n", m.LargestRangeKey)
+		fmt.Printf("Range key sets: %d\n", m.Properties.NumRangeKeySets)
+		fmt.Printf("Range deletes: %d\n", m.Properties.NumRangeDeletions)
+	}
+
+	//var err error
+
+	//datadriven.RunTest(t, "testdata/multi_sst_writer", func(t *testing.T, td *datadriven.TestData) string {
+	//	switch td.Cmd {
+	//	case "init":
+	//		keySpans = []roachpb.Span{}
+	//		for _, line := range strings.Split(td.Input, "\n") {
+	//			parts := strings.Fields(line)
+	//			keySpans = append(keySpans, roachpb.Span{Key: []byte(parts[0]), EndKey: []byte(parts[1])})
+	//		}
+	//		msstw, err = storage.NewMultiSSTWriter(ctx, snapStrategy.CreateNewSSTWriter, clearSpan, keySpans, 128<<20)
+	//		require.NoError(t, err)
+	//		return fmt.Sprintf("Initialized writer with %d keyspans.", len(keySpans))
+	//	case "finish":
+	//		showRange := len(td.CmdArgs) > 0 && td.CmdArgs[0].Key == "show-range-sets"
+	//		_, err := msstw.Finish(ctx)
+	//		require.NoError(t, err)
+	//		var b strings.Builder
+	//		for i, m := range msstw.TableMetadata() {
+	//			fmt.Fprintf(&b, "Table %d\n", i+1)
+	//			fmt.Fprintf(&b, "Smallest Point Key: %d\n", m.SmallestPoint)
+	//			fmt.Fprintf(&b, "Largest Point Key: %d\n", m.LargestPoint)
+	//			fmt.Fprintf(&b, "Point keys: %d\n", m.Properties.NumEntries-1)
+	//			if showRange {
+	//				fmt.Fprintf(&b, "Smallest Range Key: %d\n", m.SmallestRangeKey)
+	//				fmt.Fprintf(&b, "Largest Range Key: %d\n", m.LargestRangeKey)
+	//				fmt.Fprintf(&b, "Range key sets: %d\n", m.Properties.NumRangeKeySets)
+	//				fmt.Fprintf(&b, "Range key deletes: %d\n", m.Properties.NumRangeKeyDels)
+	//				fmt.Fprintf(&b, "Range deletes: %d\n", m.Properties.NumRangeDeletions)
+	//			}
+	//		}
+	//		return b.String()
+	//	case "write":
+	//		for _, line := range strings.Split(td.Input, "\n") {
+	//			parts := strings.Fields(line)
+	//			if len(parts) == 0 {
+	//				continue
+	//			}
+	//			if len(parts) == 1 {
+	//				// point key
+	//				key := storage.EngineKey{Key: []byte(parts[0])}
+	//				err := msstw.Put(ctx, key, []byte{})
+	//				require.NoError(t, err)
+	//			} else {
+	//				// range key
+	//				start := []byte(parts[0])
+	//				end := []byte(parts[1])
+	//				suffix := storage.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: time})
+	//				value, err := storage.EncodeMVCCValue(storage.MVCCValue{
+	//					MVCCValueHeader: enginepb.MVCCValueHeader{
+	//						LocalTimestamp: hlc.ClockTimestamp{WallTime: time},
+	//					},
+	//				})
+	//				time++
+	//				require.NoError(t, err)
+	//				err = msstw.PutRangeKey(ctx, start, end, suffix, value)
+	//				require.NoError(t, err)
+	//			}
+	//		}
+	//		return ""
+	//	case "close":
+	//		msstw.Close()
+	//	default:
+	//		return "unknown command"
+	//	}
+	//	return ""
+	//})
+}
+
 // TestMultiSSTWriterInitSST tests that multiSSTWriter initializes each of the
 // SST files associated with the replicated key ranges by writing a range
 // deletion tombstone that spans the entire range of each respectively.
@@ -275,15 +398,29 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	}
 	keySpans := rditer.MakeReplicatedKeySpans(&desc)
 
-	msstw, err := newMultiSSTWriter(
-		ctx, cluster.MakeTestingClusterSettings(), scratch, keySpans, 0,
-	)
+	snapStrategy := kvBatchSnapshotStrategy{
+		scratch: scratch,
+		st:      cluster.MakeTestingClusterSettings(),
+	}
+
+	clearSpan := func(ctx context.Context, span roachpb.Span, w *storage.MultiSSTWriter) error {
+		// Clear all existing replica state, including both point keys and range keys.
+		if err := w.PutRangeDel(ctx, span.Key, span.EndKey); err != nil {
+			return err
+		}
+		if err := w.PutRangeKeyDel(ctx, span.Key, span.EndKey); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	msstw, err := storage.NewMultiSSTWriter(ctx, snapStrategy.CreateNewSSTWriter, clearSpan, keySpans, 128<<20)
 	require.NoError(t, err)
 	_, err = msstw.Finish(ctx)
 	require.NoError(t, err)
 
 	var actualSSTs [][]byte
-	fileNames := msstw.scratch.SSTs()
+	fileNames := snapStrategy.scratch.SSTs()
 	for _, file := range fileNames {
 		sst, err := fs.ReadFile(eng, file)
 		require.NoError(t, err)
