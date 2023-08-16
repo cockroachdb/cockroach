@@ -1452,6 +1452,7 @@ system         public              statement_activity                      BASE 
 system         public              statement_bundle_chunks                 BASE TABLE   YES                 1
 system         public              statement_diagnostics                   BASE TABLE   YES                 1
 system         public              statement_diagnostics_requests          BASE TABLE   YES                 1
+system         public              statement_execution_insights            BASE TABLE   YES                 1
 system         crdb_internal       statement_statistics                    SYSTEM VIEW  NO                  1
 system         public              statement_statistics                    BASE TABLE   YES                 1
 system         crdb_internal       statement_statistics_persisted          SYSTEM VIEW  NO                  1
@@ -1481,6 +1482,7 @@ system         public              tenants                                 BASE 
 system         crdb_internal       transaction_activity                    SYSTEM VIEW  NO                  1
 system         public              transaction_activity                    BASE TABLE   YES                 1
 system         crdb_internal       transaction_contention_events           SYSTEM VIEW  NO                  1
+system         public              transaction_execution_insights          BASE TABLE   YES                 1
 system         crdb_internal       transaction_statistics                  SYSTEM VIEW  NO                  1
 system         public              transaction_statistics                  BASE TABLE   YES                 1
 system         crdb_internal       transaction_statistics_persisted        SYSTEM VIEW  NO                  1
@@ -1766,6 +1768,13 @@ system              public             29_35_3_not_null                         
 system              public             29_35_5_not_null                                                                                                system         public        statement_diagnostics_requests   CHECK            NO             NO
 system              public             check_sampling_probability                                                                                      system         public        statement_diagnostics_requests   CHECK            NO             NO
 system              public             primary                                                                                                         system         public        statement_diagnostics_requests   PRIMARY KEY      NO             NO
+system              public             29_64_1_not_null                                                                                                system         public        statement_execution_insights     CHECK            NO             NO
+system              public             29_64_2_not_null                                                                                                system         public        statement_execution_insights     CHECK            NO             NO
+system              public             29_64_32_not_null                                                                                               system         public        statement_execution_insights     CHECK            NO             NO
+system              public             29_64_3_not_null                                                                                                system         public        statement_execution_insights     CHECK            NO             NO
+system              public             29_64_4_not_null                                                                                                system         public        statement_execution_insights     CHECK            NO             NO
+system              public             29_64_5_not_null                                                                                                system         public        statement_execution_insights     CHECK            NO             NO
+system              public             primary                                                                                                         system         public        statement_execution_insights     PRIMARY KEY      NO             NO
 system              public             29_42_10_not_null                                                                                               system         public        statement_statistics             CHECK            NO             NO
 system              public             29_42_11_not_null                                                                                               system         public        statement_statistics             CHECK            NO             NO
 system              public             29_42_12_not_null                                                                                               system         public        statement_statistics             CHECK            NO             NO
@@ -1837,6 +1846,11 @@ system              public             29_61_7_not_null                         
 system              public             29_61_8_not_null                                                                                                system         public        transaction_activity             CHECK            NO             NO
 system              public             29_61_9_not_null                                                                                                system         public        transaction_activity             CHECK            NO             NO
 system              public             primary                                                                                                         system         public        transaction_activity             PRIMARY KEY      NO             NO
+system              public             29_63_1_not_null                                                                                                system         public        transaction_execution_insights   CHECK            NO             NO
+system              public             29_63_22_not_null                                                                                               system         public        transaction_execution_insights   CHECK            NO             NO
+system              public             29_63_2_not_null                                                                                                system         public        transaction_execution_insights   CHECK            NO             NO
+system              public             29_63_5_not_null                                                                                                system         public        transaction_execution_insights   CHECK            NO             NO
+system              public             primary                                                                                                         system         public        transaction_execution_insights   PRIMARY KEY      NO             NO
 system              public             29_43_1_not_null                                                                                                system         public        transaction_statistics           CHECK            NO             NO
 system              public             29_43_2_not_null                                                                                                system         public        transaction_statistics           CHECK            NO             NO
 system              public             29_43_3_not_null                                                                                                system         public        transaction_statistics           CHECK            NO             NO
@@ -2109,6 +2123,16 @@ system              public             29_61_7_not_null                         
 system              public             29_61_8_not_null                                                                                                execution_count IS NOT NULL
 system              public             29_61_9_not_null                                                                                                execution_total_seconds IS NOT NULL
 system              public             29_62_1_not_null                                                                                                value IS NOT NULL
+system              public             29_63_1_not_null                                                                                                transaction_id IS NOT NULL
+system              public             29_63_22_not_null                                                                                               created IS NOT NULL
+system              public             29_63_2_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
+system              public             29_63_5_not_null                                                                                                session_id IS NOT NULL
+system              public             29_64_1_not_null                                                                                                session_id IS NOT NULL
+system              public             29_64_2_not_null                                                                                                transaction_id IS NOT NULL
+system              public             29_64_32_not_null                                                                                               created IS NOT NULL
+system              public             29_64_3_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
+system              public             29_64_4_not_null                                                                                                statement_id IS NOT NULL
+system              public             29_64_5_not_null                                                                                                statement_fingerprint_id IS NOT NULL
 system              public             29_6_1_not_null                                                                                                 name IS NOT NULL
 system              public             29_6_2_not_null                                                                                                 value IS NOT NULL
 system              public             29_6_3_not_null                                                                                                 lastUpdated IS NOT NULL
@@ -2212,6 +2236,8 @@ system         public        statement_bundle_chunks          id                
 system         public        statement_diagnostics            id                                                                                                        system              public             primary
 system         public        statement_diagnostics_requests   id                                                                                                        system              public             primary
 system         public        statement_diagnostics_requests   sampling_probability                                                                                      system              public             check_sampling_probability
+system         public        statement_execution_insights     statement_id                                                                                              system              public             primary
+system         public        statement_execution_insights     transaction_id                                                                                            system              public             primary
 system         public        statement_statistics             aggregated_ts                                                                                             system              public             primary
 system         public        statement_statistics             app_name                                                                                                  system              public             primary
 system         public        statement_statistics             crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8  system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8
@@ -2236,6 +2262,7 @@ system         public        tenants                          name              
 system         public        transaction_activity             aggregated_ts                                                                                             system              public             primary
 system         public        transaction_activity             app_name                                                                                                  system              public             primary
 system         public        transaction_activity             fingerprint_id                                                                                            system              public             primary
+system         public        transaction_execution_insights   transaction_id                                                                                            system              public             primary
 system         public        transaction_statistics           aggregated_ts                                                                                             system              public             primary
 system         public        transaction_statistics           app_name                                                                                                  system              public             primary
 system         public        transaction_statistics           crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8                                       system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8
@@ -2557,6 +2584,38 @@ system         public        statement_diagnostics_requests   requested_at      
 system         public        statement_diagnostics_requests   sampling_probability                                                                                      8
 system         public        statement_diagnostics_requests   statement_diagnostics_id                                                                                  4
 system         public        statement_diagnostics_requests   statement_fingerprint                                                                                     3
+system         public        statement_execution_insights     app_name                                                                                                  14
+system         public        statement_execution_insights     causes                                                                                                    7
+system         public        statement_execution_insights     commit_lat_seconds                                                                                        27
+system         public        statement_execution_insights     contention_events                                                                                         30
+system         public        statement_execution_insights     contention_time                                                                                           29
+system         public        statement_execution_insights     cpu_sql_nanos                                                                                             23
+system         public        statement_execution_insights     created                                                                                                   32
+system         public        statement_execution_insights     database_name                                                                                             16
+system         public        statement_execution_insights     details                                                                                                   31
+system         public        statement_execution_insights     end_time                                                                                                  11
+system         public        statement_execution_insights     error_code                                                                                                24
+system         public        statement_execution_insights     execution_node_ids                                                                                        20
+system         public        statement_execution_insights     full_scan                                                                                                 12
+system         public        statement_execution_insights     idle_lat_seconds                                                                                          28
+system         public        statement_execution_insights     implicit_txn                                                                                              22
+system         public        statement_execution_insights     index_recommendations                                                                                     21
+system         public        statement_execution_insights     last_retry_reason                                                                                         19
+system         public        statement_execution_insights     plan_gist                                                                                                 17
+system         public        statement_execution_insights     problem                                                                                                   6
+system         public        statement_execution_insights     query                                                                                                     8
+system         public        statement_execution_insights     retries                                                                                                   18
+system         public        statement_execution_insights     retry_lat_seconds                                                                                         26
+system         public        statement_execution_insights     service_lat_seconds                                                                                       25
+system         public        statement_execution_insights     session_id                                                                                                1
+system         public        statement_execution_insights     start_time                                                                                                10
+system         public        statement_execution_insights     statement_fingerprint_id                                                                                  5
+system         public        statement_execution_insights     statement_id                                                                                              4
+system         public        statement_execution_insights     status                                                                                                    9
+system         public        statement_execution_insights     transaction_fingerprint_id                                                                                3
+system         public        statement_execution_insights     transaction_id                                                                                            2
+system         public        statement_execution_insights     user_name                                                                                                 13
+system         public        statement_execution_insights     user_priority                                                                                             15
 system         public        statement_statistics             agg_interval                                                                                              7
 system         public        statement_statistics             aggregated_ts                                                                                             1
 system         public        statement_statistics             app_name                                                                                                  5
@@ -2642,6 +2701,28 @@ system         public        transaction_activity             query             
 system         public        transaction_activity             service_latency_avg_seconds                                                                               13
 system         public        transaction_activity             service_latency_p99_seconds                                                                               14
 system         public        transaction_activity             statistics                                                                                                6
+system         public        transaction_execution_insights   app_name                                                                                                  9
+system         public        transaction_execution_insights   causes                                                                                                    14
+system         public        transaction_execution_insights   contention_events                                                                                         20
+system         public        transaction_execution_insights   contention_time                                                                                           19
+system         public        transaction_execution_insights   cpu_sql_nanos                                                                                             16
+system         public        transaction_execution_insights   created                                                                                                   22
+system         public        transaction_execution_insights   details                                                                                                   21
+system         public        transaction_execution_insights   end_time                                                                                                  7
+system         public        transaction_execution_insights   implicit_txn                                                                                              4
+system         public        transaction_execution_insights   last_error_code                                                                                           17
+system         public        transaction_execution_insights   last_retry_reason                                                                                         12
+system         public        transaction_execution_insights   problems                                                                                                  13
+system         public        transaction_execution_insights   query_excerpt                                                                                             3
+system         public        transaction_execution_insights   retries                                                                                                   11
+system         public        transaction_execution_insights   session_id                                                                                                5
+system         public        transaction_execution_insights   start_time                                                                                                6
+system         public        transaction_execution_insights   status                                                                                                    18
+system         public        transaction_execution_insights   stmt_execution_ids                                                                                        15
+system         public        transaction_execution_insights   transaction_fingerprint_id                                                                                2
+system         public        transaction_execution_insights   transaction_id                                                                                            1
+system         public        transaction_execution_insights   user_name                                                                                                 8
+system         public        transaction_execution_insights   user_priority                                                                                             10
 system         public        transaction_statistics           agg_interval                                                                                              5
 system         public        transaction_statistics           aggregated_ts                                                                                             1
 system         public        transaction_statistics           app_name                                                                                                  3
@@ -3729,6 +3810,14 @@ NULL     root     system         public              statement_diagnostics_reque
 NULL     root     system         public              statement_diagnostics_requests          INSERT          YES           NO
 NULL     root     system         public              statement_diagnostics_requests          SELECT          YES           YES
 NULL     root     system         public              statement_diagnostics_requests          UPDATE          YES           NO
+NULL     admin    system         public              statement_execution_insights            DELETE          YES           NO
+NULL     admin    system         public              statement_execution_insights            INSERT          YES           NO
+NULL     admin    system         public              statement_execution_insights            SELECT          YES           YES
+NULL     admin    system         public              statement_execution_insights            UPDATE          YES           NO
+NULL     root     system         public              statement_execution_insights            DELETE          YES           NO
+NULL     root     system         public              statement_execution_insights            INSERT          YES           NO
+NULL     root     system         public              statement_execution_insights            SELECT          YES           YES
+NULL     root     system         public              statement_execution_insights            UPDATE          YES           NO
 NULL     admin    system         public              statement_statistics                    SELECT          YES           YES
 NULL     root     system         public              statement_statistics                    SELECT          YES           YES
 NULL     admin    system         public              table_statistics                        DELETE          YES           NO
@@ -3777,6 +3866,14 @@ NULL     admin    system         public              tenants                    
 NULL     root     system         public              tenants                                 SELECT          YES           YES
 NULL     admin    system         public              transaction_activity                    SELECT          YES           YES
 NULL     root     system         public              transaction_activity                    SELECT          YES           YES
+NULL     admin    system         public              transaction_execution_insights          DELETE          YES           NO
+NULL     admin    system         public              transaction_execution_insights          INSERT          YES           NO
+NULL     admin    system         public              transaction_execution_insights          SELECT          YES           YES
+NULL     admin    system         public              transaction_execution_insights          UPDATE          YES           NO
+NULL     root     system         public              transaction_execution_insights          DELETE          YES           NO
+NULL     root     system         public              transaction_execution_insights          INSERT          YES           NO
+NULL     root     system         public              transaction_execution_insights          SELECT          YES           YES
+NULL     root     system         public              transaction_execution_insights          UPDATE          YES           NO
 NULL     admin    system         public              transaction_statistics                  SELECT          YES           YES
 NULL     root     system         public              transaction_statistics                  SELECT          YES           YES
 NULL     admin    system         public              ui                                      DELETE          YES           NO
@@ -4482,6 +4579,22 @@ NULL     admin    system         public              transaction_activity       
 NULL     root     system         public              transaction_activity                    SELECT          YES           YES
 NULL     admin    system         public              tenant_id_seq                           SELECT          YES           YES
 NULL     root     system         public              tenant_id_seq                           SELECT          YES           YES
+NULL     admin    system         public              transaction_execution_insights          DELETE          YES           NO
+NULL     admin    system         public              transaction_execution_insights          INSERT          YES           NO
+NULL     admin    system         public              transaction_execution_insights          SELECT          YES           YES
+NULL     admin    system         public              transaction_execution_insights          UPDATE          YES           NO
+NULL     root     system         public              transaction_execution_insights          DELETE          YES           NO
+NULL     root     system         public              transaction_execution_insights          INSERT          YES           NO
+NULL     root     system         public              transaction_execution_insights          SELECT          YES           YES
+NULL     root     system         public              transaction_execution_insights          UPDATE          YES           NO
+NULL     admin    system         public              statement_execution_insights            DELETE          YES           NO
+NULL     admin    system         public              statement_execution_insights            INSERT          YES           NO
+NULL     admin    system         public              statement_execution_insights            SELECT          YES           YES
+NULL     admin    system         public              statement_execution_insights            UPDATE          YES           NO
+NULL     root     system         public              statement_execution_insights            DELETE          YES           NO
+NULL     root     system         public              statement_execution_insights            INSERT          YES           NO
+NULL     root     system         public              statement_execution_insights            SELECT          YES           YES
+NULL     root     system         public              statement_execution_insights            UPDATE          YES           NO
 
 statement ok
 USE other_db;
