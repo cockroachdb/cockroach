@@ -11,6 +11,7 @@
 package kvstreamer
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 
@@ -144,6 +145,16 @@ func (r singleRangeBatch) subPriority() int32 {
 	return r.subRequestIdx[0]
 }
 
+// String implements fmt.Stringer.
+func (r singleRangeBatch) String() string {
+	return fmt.Sprintf(
+		"{reqs:%s keys:%v pos:%v subIdx:%v start:%v gets:%v reserved:%v overhead:%v minTarget:%v}",
+		kvpb.TruncatedRequestsString(r.reqs, 1024), r.reqsKeys, r.positions,
+		r.subRequestIdx, r.isScanStarted, r.numGetsInReqs, r.reqsReservedBytes, r.overheadAccountedFor,
+		r.minTargetBytes,
+	)
+}
+
 // requestsProvider encapsulates the logic of supplying the requests to serve in
 // the Streamer. The implementations are concurrency safe and have its own
 // mutex, separate from the Streamer's and the budget's ones, so the ordering of
@@ -192,6 +203,9 @@ type requestsProvider interface {
 	// emptyLocked returns true if there are no requests to serve at the moment.
 	// The lock of the provider must be already held.
 	emptyLocked() bool
+	// lengthLocked returns the number of requests that have yet to be served at
+	// the moment. The lock of the provider must be already held.
+	lengthLocked() int
 	// nextLocked returns the next request to serve. In OutOfOrder mode, the
 	// request is arbitrary, in InOrder mode, the request is the current
 	// head-of-the-line. The lock of the provider must be already held. Panics
@@ -234,6 +248,11 @@ func (b *requestsProviderBase) waitLocked() {
 func (b *requestsProviderBase) emptyLocked() bool {
 	b.Mutex.AssertHeld()
 	return len(b.requests) == 0
+}
+
+func (b *requestsProviderBase) lengthLocked() int {
+	b.Mutex.AssertHeld()
+	return len(b.requests)
 }
 
 func (b *requestsProviderBase) close() {
