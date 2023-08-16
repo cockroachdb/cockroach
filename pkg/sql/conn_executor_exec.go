@@ -1559,7 +1559,7 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 			// retry the statement.
 			res.SetError(errors.Wrapf(
 				maybeRetriableErr,
-				"cannot retry since some results were already sent to the client",
+				"cannot automatically retry since some results were already sent to the client",
 			))
 			break
 		}

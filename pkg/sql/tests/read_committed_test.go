@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -44,6 +45,8 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 	var finishedExternalTxn sync.WaitGroup
 	finishedExternalTxn.Add(1)
 	var sawWriteTooOldError atomic.Bool
+	var codec keys.SQLCodec
+	var kvTableId uint32
 
 	filterFunc := func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 		if ba.Txn == nil || ba.Txn.IsoLevel != isolation.ReadCommitted {
@@ -51,6 +54,12 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 		}
 		for _, arg := range ba.Requests {
 			if req := arg.GetInner(); req.Method() == kvpb.Put {
+				put := req.(*kvpb.PutRequest)
+				// Only count writes to the kv table.
+				_, tableID, err := codec.DecodeTablePrefix(put.Key)
+				if err != nil || tableID != kvTableId {
+					return nil
+				}
 				// Because of the queries the test executes below, we know that before
 				// the second read committed write begins, the read committed scans
 				// will have finished.
@@ -75,6 +84,7 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
+	codec = s.ApplicationLayer().Codec()
 
 	// Create a table with three rows. Note that k is not the primary key,
 	// so locking won't be pushed into the initial scan of the UPDATEs below.
@@ -85,6 +95,8 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 	_, err = sqlDB.Exec(`INSERT INTO kv VALUES ('b', 2);`)
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`INSERT INTO kv VALUES ('c', 3);`)
+	require.NoError(t, err)
+	err = sqlDB.QueryRow("SELECT 'foo'::regclass::oid").Scan(&kvTableId)
 	require.NoError(t, err)
 
 	g := ctxgroup.WithContext(ctx)
