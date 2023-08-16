@@ -36,7 +36,9 @@ func TestChangefeedNemeses(t *testing.T) {
 		// TODO(dan): Ugly hack to disable `eventPause` in sinkless feeds. See comment in
 		// `RunNemesis` for details.
 		isSinkless := strings.Contains(t.Name(), "sinkless")
-		v, err := cdctest.RunNemesis(f, s.DB, isSinkless, withLegacySchemaChanger, rng)
+		isCloudstorage := strings.Contains(t.Name(), "cloudstorage")
+
+		v, err := cdctest.RunNemesis(f, s.DB, isSinkless, isCloudstorage, withLegacySchemaChanger, rng)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
