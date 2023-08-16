@@ -861,7 +861,7 @@ func (p *Provider) FindActiveAccount() (string, error) {
 }
 
 // List queries gcloud to produce a list of VM info objects.
-func (p *Provider) List(l *logger.Logger) (vm.List, error) {
+func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
 	var vms vm.List
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "instances", "list", "--project", prj, "--format", "json"}
