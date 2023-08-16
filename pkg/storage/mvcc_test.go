@@ -834,7 +834,10 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 
 			{
 				// Seek the iter to a valid position.
-				iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
+				iter, err := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
+				if err != nil {
+					t.Fatal(err)
+				}
 				iter.SeekGE(MakeMVCCMetadataKey(key))
 				iter.Close()
 			}
@@ -848,9 +851,15 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 			case "findSplitKey":
 				_, err = MVCCFindSplitKey(ctx, batch, roachpb.RKeyMin, roachpb.RKeyMax, 64<<20)
 			case "computeStatsForIter":
-				iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
+				iter, err := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
+				if err != nil {
+					t.Fatal(err)
+				}
 				iter.SeekGE(MVCCKey{Key: iterOptions.LowerBound})
 				_, err = ComputeStatsForIter(iter, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
 				iter.Close()
 			}
 			if err != nil {
@@ -858,7 +867,10 @@ func TestMVCCInvalidateIterator(t *testing.T) {
 			}
 
 			// Verify that the iter is invalid.
-			iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
+			iter, err := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, iterOptions)
+			if err != nil {
+				t.Fatal(err)
+			}
 			defer iter.Close()
 			if ok, _ := iter.Valid(); ok {
 				t.Fatalf("iterator should not be valid")
@@ -3726,8 +3738,11 @@ func checkEngineEquality(
 		log.Infof(ctx, "checkEngineEquality")
 	}
 	makeIter := func(eng Engine) MVCCIterator {
-		iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
+		iter, err := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
 			IterOptions{LowerBound: span.Key, UpperBound: span.EndKey})
+		if err != nil {
+			t.Fatal(err)
+		}
 		iter.SeekGE(MVCCKey{Key: span.Key})
 		return iter
 	}
@@ -3990,8 +4005,11 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	_, _, _, _, err = MVCCResolveWriteIntentRange(ctx, eng, nil, lu, MVCCResolveWriteIntentRangeOptions{})
 	require.NoError(t, err)
 	{
-		iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
+		iter, err := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
 			IterOptions{LowerBound: lu.Span.Key, UpperBound: lu.Span.EndKey})
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer iter.Close()
 		iter.SeekGE(MVCCKey{Key: lu.Span.Key})
 		valid, err := iter.Valid()
@@ -4024,8 +4042,11 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	// Compact the engine so that SINGLEDEL consumes the SETWITHDEL, becoming a
 	// DEL.
 	require.NoError(t, eng.Compact())
-	iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
+	iter, err := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
 		IterOptions{LowerBound: lu.Span.Key, UpperBound: lu.Span.EndKey})
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer iter.Close()
 	iter.SeekGE(MVCCKey{Key: lu.Span.Key})
 	if lu.Status == roachpb.COMMITTED {
@@ -4996,9 +5017,10 @@ type readWriterReturningSeekLTTrackingIterator struct {
 // NewMVCCIterator injects a seekLTTrackingIterator over the engine's real iterator.
 func (rw *readWriterReturningSeekLTTrackingIterator) NewMVCCIterator(
 	iterKind MVCCIterKind, opts IterOptions,
-) MVCCIterator {
-	rw.it.MVCCIterator = rw.ReadWriter.NewMVCCIterator(iterKind, opts)
-	return &rw.it
+) (MVCCIterator, error) {
+	var err error
+	rw.it.MVCCIterator, err = rw.ReadWriter.NewMVCCIterator(iterKind, opts)
+	return &rw.it, err
 }
 
 // seekLTTrackingIterator is used to determine the number of times seekLT is
@@ -5688,11 +5710,14 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 			require.NoError(t, MVCCGarbageCollectRangeKeys(ctx, engine, &ms, rangeKeys),
 				"failed to run mvcc range tombstone garbage collect")
 
-			it := engine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+			it, err := engine.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 				KeyTypes:   IterKeyTypeRangesOnly,
 				LowerBound: d.rangeStart,
 				UpperBound: d.rangeEnd,
 			})
+			if err != nil {
+				t.Fatal(err)
+			}
 			defer it.Close()
 			it.SeekGE(MVCCKey{Key: d.rangeStart})
 			expectIndex := 0
@@ -5914,11 +5939,14 @@ func TestMVCCGarbageCollectClearRange(t *testing.T) {
 	require.Empty(t, ks)
 
 	ms.AgeTo(tsMax.WallTime)
-	it := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+	it, err := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		LowerBound: rangeStart,
 		UpperBound: rangeEnd,
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer it.Close()
 	expMs, err := ComputeStatsForIter(it, tsMax.WallTime)
 	require.NoError(t, err, "failed to compute stats for range")
@@ -7104,7 +7132,10 @@ func mvccGetRaw(t *testing.T, r Reader, key MVCCKey) []byte {
 }
 
 func mvccGetRawWithError(t *testing.T, r Reader, key MVCCKey) ([]byte, error) {
-	iter := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
+	iter, err := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer iter.Close()
 	iter.SeekGE(key)
 	if ok, err := iter.Valid(); err != nil || !ok {

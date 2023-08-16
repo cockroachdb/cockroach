@@ -1828,7 +1828,9 @@ func TestOptimizePuts(t *testing.T) {
 		// Save the original slice, allowing us to assert that it doesn't
 		// change when it is passed to optimizePuts.
 		oldRequests := batch.Requests
-		batch.Requests = optimizePuts(tc.engine, batch.Requests, false)
+		var err error
+		batch.Requests, err = optimizePuts(tc.engine, batch.Requests, false)
+		require.NoError(t, err)
 		if !reflect.DeepEqual(goldenRequests, oldRequests) {
 			t.Fatalf("%d: optimizePuts mutated the original request slice: %s",
 				i, pretty.Diff(goldenRequests, oldRequests),
@@ -3117,7 +3119,10 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 				if _, pErr := tc.SendWrappedWith(kvpb.Header{Txn: txnOld}, &pArgs); pErr != nil {
 					t.Fatal(pErr)
 				}
-				iter := tc.engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
+				iter, err := tc.engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
+				if err != nil {
+					t.Fatal(err)
+				}
 				defer iter.Close()
 				mvccKey := storage.MakeMVCCMetadataKey(key)
 				iter.SeekGE(mvccKey)

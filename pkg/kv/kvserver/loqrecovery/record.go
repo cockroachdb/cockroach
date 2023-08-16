@@ -75,11 +75,14 @@ func RegisterOfflineRecoveryEvents(
 	successCount := 0
 	var processingErrors error
 
-	iter := readWriter.NewMVCCIterator(
+	iter, err := readWriter.NewMVCCIterator(
 		storage.MVCCKeyIterKind, storage.IterOptions{
 			LowerBound: keys.LocalStoreUnsafeReplicaRecoveryKeyMin,
 			UpperBound: keys.LocalStoreUnsafeReplicaRecoveryKeyMax,
 		})
+	if err != nil {
+		return 0, err
+	}
 	defer iter.Close()
 
 	iter.SeekGE(storage.MVCCKey{Key: keys.LocalStoreUnsafeReplicaRecoveryKeyMin})
