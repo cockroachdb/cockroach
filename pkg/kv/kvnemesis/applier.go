@@ -120,7 +120,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		*DeleteRangeOperation,
 		*DeleteRangeUsingTombstoneOperation,
 		*AddSSTableOperation:
-		applyClientOp(ctx, db, op, false)
+		applyClientOp(ctx, db, op, false, nil)
 	case *SplitOperation:
 		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp)
 		o.Result = resultInit(ctx, err)
@@ -155,6 +155,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 				retryOnAbort.Next()
 			}
 			savedTxn = txn
+			savepoints := make(map[int]kv.SavepointToken)
 			// First error. Because we need to mark everything that
 			// we didn't "reach" due to a prior error with errOmitted,
 			// we *don't* return eagerly on this but save it to the end.
@@ -177,7 +178,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 						continue
 					}
 
-					applyClientOp(ctx, txn, op, true)
+					applyClientOp(ctx, txn, op, true, &savepoints)
 					// The KV api disallows use of a txn after an operation on it errors.
 					if r := op.Result(); r.Type == ResultType_Error {
 						err = errors.DecodeError(ctx, *r.Err)
@@ -269,7 +270,9 @@ func batchRun(
 	return ts, nil
 }
 
-func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
+func applyClientOp(
+	ctx context.Context, db clientI, op *Operation, inTxn bool, savepoints *map[int]kv.SavepointToken,
+) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation:
 		fn := (*kv.Batch).Get
@@ -403,6 +406,48 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 	case *BatchOperation:
 		b := &kv.Batch{}
 		applyBatchOp(ctx, b, db.Run, o)
+	case *SavepointOperation:
+		// db is a Txn because savepoints are allowed only within transactions.
+		txn, ok := db.(*kv.Txn)
+		if !ok {
+			panic(errors.AssertionFailedf(`non-txn interface attempted to create a savepoint %v`, o))
+		}
+		spt, err := txn.CreateSavepoint(ctx)
+		o.Result = resultInit(ctx, err)
+		if err != nil {
+			return
+		}
+		(*savepoints)[int(o.SeqNum)] = spt
+	case *SavepointReleaseOperation:
+		// db is a Txn because savepoints are allowed only within transactions.
+		txn, ok := db.(*kv.Txn)
+		if !ok {
+			panic(errors.AssertionFailedf(`non-txn interface attempted to release a savepoint %v`, o))
+		}
+		spt, ok := (*savepoints)[int(o.SeqNum)]
+		if !ok {
+			panic(errors.AssertionFailedf("savepoint sequence number %d does not exist", o.SeqNum))
+		}
+		err := txn.ReleaseSavepoint(ctx, spt)
+		o.Result = resultInit(ctx, err)
+		if err != nil {
+			return
+		}
+	case *SavepointRollbackOperation:
+		// db is a Txn because savepoints are allowed only within transactions.
+		txn, ok := db.(*kv.Txn)
+		if !ok {
+			panic(errors.AssertionFailedf(`non-txn interface attempted to rollback a savepoint %v`, o))
+		}
+		spt, ok := (*savepoints)[int(o.SeqNum)]
+		if !ok {
+			panic(errors.AssertionFailedf("savepoint sequence number %d does not exist", o.SeqNum))
+		}
+		err := txn.RollbackToSavepoint(ctx, spt)
+		o.Result = resultInit(ctx, err)
+		if err != nil {
+			return
+		}
 	default:
 		panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, o, o))
 	}

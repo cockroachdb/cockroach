@@ -87,6 +87,15 @@ func TestOperationsFormat(t *testing.T) {
 		{
 			step: step(addSSTable(sstFile.Data(), sstSpan, sstTS, sstValueHeader.KVNemesisSeq.Get(), true)),
 		},
+		{
+			step: step(
+				closureTxn(ClosureTxnType_Commit,
+					isolation.Serializable,
+					createSavepoint(0), put(k9, 3), releaseSavepoint(0),
+					get(k8),
+					createSavepoint(4), del(k9, 1), rollbackSavepoint(4),
+				)),
+		},
 	}
 
 	w := echotest.NewWalker(t, datapathutils.TestDataPath(t, t.Name()))
