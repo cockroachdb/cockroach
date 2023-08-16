@@ -282,6 +282,29 @@ func Keys(forSystemTenant bool) (res []string) {
 	return res
 }
 
+// ConsoleKeys return an array with all cluster settings keys
+// used by the UI Console.
+// This list should only contain settings that have no sensitive
+// information, because it will be returned on `settings` endpoint for
+// users without VIEWCLUSTERSETTING or MODIFYCLUSTERSETTING permission,
+// but that have VIEWACTIVITY or VIEWACTIVITYREDACTED permissions.
+func ConsoleKeys() (res []string) {
+	return []string{
+		"cross_cluster_replication.enabled",
+		"keyvisualizer.enabled",
+		"keyvisualizer.sample_interval",
+		"sql.index_recommendation.drop_unused_duration",
+		"sql.insights.anomaly_detection.latency_threshold",
+		"sql.insights.high_retry_count.threshold",
+		"sql.insights.latency_threshold",
+		"sql.stats.automatic_collection.enabled",
+		"timeseries.storage.resolution_10s.ttl",
+		"timeseries.storage.resolution_30m.ttl",
+		"ui.display_timezone",
+		"version",
+	}
+}
+
 // LookupForLocalAccess returns a NonMaskedSetting by name. Used when a setting
 // is being retrieved for local processing within the cluster and not for
 // reporting; sensitive values are accessible.

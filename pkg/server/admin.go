@@ -81,6 +81,7 @@ import (
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	gwutil "github.com/grpc-ecosystem/grpc-gateway/utilities"
+	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -2020,17 +2021,15 @@ func (s *adminServer) Settings(
 ) (*serverpb.SettingsResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	keys := req.Keys
-	if len(keys) == 0 {
-		keys = settings.Keys(settings.ForSystemTenant)
-	}
-
 	_, isAdmin, err := s.getUserAndRole(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
 
 	redactValues := true
+	// Only returns non-sensitive settings that are required
+	// for features on DB Console.
+	consoleSettingsOnly := false
 	if isAdmin {
 		// Root accesses can customize the purpose.
 		// This is used by the UI to see all values (local access)
@@ -2039,9 +2038,37 @@ func (s *adminServer) Settings(
 			redactValues = false
 		}
 	} else {
-		// Non-root access cannot see the values in any case.
+		// Non-root access cannot see the values.
+		// Exception: users with VIEWACTIVITY and VIEWACTIVITYREDACTED can see cluster
+		// settings used by the UI Console.
 		if err := s.adminPrivilegeChecker.requireViewClusterSettingOrModifyClusterSettingPermission(ctx); err != nil {
-			return nil, err
+			if err2 := s.adminPrivilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err2 != nil {
+				// The check for VIEWACTIVITY or VIEWATIVITYREDACTED is a special case so cluster settings from
+				// the console can be returned, but if the user doesn't have them (i.e. err2 != nil), we don't want
+				// to share this error message, so only return `err`.
+				return nil, err
+			}
+			consoleSettingsOnly = true
+		}
+	}
+
+	var settingsKeys []string
+	if !consoleSettingsOnly {
+		settingsKeys = req.Keys
+		if len(settingsKeys) == 0 {
+			settingsKeys = settings.Keys(settings.ForSystemTenant)
+		}
+	} else {
+
+		if len(req.Keys) == 0 {
+			settingsKeys = settings.ConsoleKeys()
+		} else {
+			settingsKeys = []string{}
+			for _, k := range req.Keys {
+				if slices.Contains(settings.ConsoleKeys(), k) {
+					settingsKeys = append(settingsKeys, k)
+				}
+			}
 		}
 	}
 
@@ -2071,7 +2098,7 @@ func (s *adminServer) Settings(
 	}
 
 	resp := serverpb.SettingsResponse{KeyValues: make(map[string]serverpb.SettingsResponse_Value)}
-	for _, k := range keys {
+	for _, k := range settingsKeys {
 		var v settings.Setting
 		var ok bool
 		if redactValues {
