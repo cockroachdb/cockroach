@@ -1272,10 +1272,13 @@ func runDebugIntentCount(cmd *cobra.Command, args []string) error {
 		}
 	})
 
-	iter := db.NewEngineIterator(storage.IterOptions{
+	iter, err := db.NewEngineIterator(storage.IterOptions{
 		LowerBound: keys.LockTableSingleKeyStart,
 		UpperBound: keys.LockTableSingleKeyEnd,
 	})
+	if err != nil {
+		return err
+	}
 	defer iter.Close()
 	seekKey := storage.EngineKey{Key: keys.LockTableSingleKeyStart}
 

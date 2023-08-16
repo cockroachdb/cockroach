@@ -297,14 +297,16 @@ func assertExactlyEqualKVs(
 ) hlc.Timestamp {
 	// Iterate over the store.
 	store := tc.GetFirstStoreFromServer(t, 0)
-	it := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	it, err := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound: tenantPrefix,
 		UpperBound: tenantPrefix.PrefixEnd(),
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer it.Close()
 	var prevKey roachpb.Key
 	var valueTimestampTuples []roachpb.KeyValue
-	var err error
 	var maxKVTimestampSeen hlc.Timestamp
 	var matchingKVs int
 	for it.SeekGE(storage.MVCCKey{}); ; it.Next() {

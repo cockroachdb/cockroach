@@ -5934,11 +5934,14 @@ func TestRaftSnapshotsWithMVCCRangeKeysEverywhere(t *testing.T) {
 			for _, span := range rditer.MakeReplicatedKeySpans(&desc) {
 				prefix := append(span.Key.Clone(), ':')
 
-				iter := e.NewEngineIterator(storage.IterOptions{
+				iter, err := e.NewEngineIterator(storage.IterOptions{
 					KeyTypes:   storage.IterKeyTypeRangesOnly,
 					LowerBound: span.Key,
 					UpperBound: span.EndKey,
 				})
+				if err != nil {
+					t.Fatal(err)
+				}
 				defer iter.Close()
 
 				ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: span.Key})

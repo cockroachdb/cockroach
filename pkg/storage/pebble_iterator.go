@@ -87,12 +87,16 @@ var pebbleIterPool = sync.Pool{
 // newPebbleIterator creates a new Pebble iterator for the given Pebble reader.
 func newPebbleIterator(
 	handle pebble.Reader, opts IterOptions, durability DurabilityRequirement, parent *Pebble,
-) *pebbleIterator {
+) (*pebbleIterator, error) {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
 	p.init(nil, opts, durability, parent)
-	p.iter = pebbleiter.MaybeWrap(handle.NewIter(&p.options))
-	return p
+	iter, err := handle.NewIter(&p.options)
+	if err != nil {
+		return nil, err
+	}
+	p.iter = pebbleiter.MaybeWrap(iter)
+	return p, nil
 }
 
 // newPebbleIteratorByCloning creates a new Pebble iterator by cloning the given
@@ -173,15 +177,19 @@ func (p *pebbleIterator) initReuseOrCreate(
 	opts IterOptions,
 	durability DurabilityRequirement,
 	statsReporter *Pebble,
-) {
+) error {
 	if iter != nil && !clone {
 		p.init(iter, opts, durability, statsReporter)
-		return
+		return nil
 	}
 
 	p.init(nil, opts, durability, statsReporter)
 	if iter == nil {
-		p.iter = pebbleiter.MaybeWrap(handle.NewIter(&p.options))
+		innerIter, err := handle.NewIter(&p.options)
+		if err != nil {
+			return err
+		}
+		p.iter = pebbleiter.MaybeWrap(innerIter)
 	} else if clone {
 		var err error
 		p.iter, err = iter.Clone(pebble.CloneOptions{
@@ -190,9 +198,10 @@ func (p *pebbleIterator) initReuseOrCreate(
 		})
 		if err != nil {
 			p.Close()
-			panic(err)
+			return err
 		}
 	}
+	return nil
 }
 
 // setOptions updates the options for a pebbleIterator. If p.iter is non-nil, it

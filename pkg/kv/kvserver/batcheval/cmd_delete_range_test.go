@@ -308,11 +308,14 @@ func TestDeleteRangeTombstone(t *testing.T) {
 // operated on. The command should not have written an actual rangekey!
 func checkPredicateDeleteRange(t *testing.T, engine storage.Reader, rKeyInfo storage.MVCCRangeKey) {
 
-	iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	iter, err := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: rKeyInfo.StartKey,
 		UpperBound: rKeyInfo.EndKey,
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer iter.Close()
 
 	for iter.SeekGE(storage.MVCCKey{Key: rKeyInfo.StartKey}); ; iter.NextKey() {
@@ -345,11 +348,14 @@ func checkDeleteRangeTombstone(
 	written bool,
 	now hlc.ClockTimestamp,
 ) {
-	iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	iter, err := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypeRangesOnly,
 		LowerBound: rangeKey.StartKey,
 		UpperBound: rangeKey.EndKey,
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer iter.Close()
 	iter.SeekGE(storage.MVCCKey{Key: rangeKey.StartKey})
 

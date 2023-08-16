@@ -175,7 +175,7 @@ type MVCCIncrementalIterOptions struct {
 // specified reader and options. The timestamp hint range should not be more
 // restrictive than the start and end time range.
 func NewMVCCIncrementalIterator(
-	reader Reader, opts MVCCIncrementalIterOptions,
+	reader ReaderWithMustIterators, opts MVCCIncrementalIterOptions,
 ) *MVCCIncrementalIterator {
 	// Default to MaxTimestamp for EndTime, since the code assumes it is set.
 	if opts.EndTime.IsEmpty() {
@@ -195,7 +195,7 @@ func NewMVCCIncrementalIterator(
 	if useTBI {
 		// An iterator without the timestamp hints is created to ensure that the
 		// iterator visits every required version of every key that has changed.
-		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		iter = reader.MustMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:             opts.KeyTypes,
 			LowerBound:           opts.StartKey,
 			UpperBound:           opts.EndKey,
@@ -210,7 +210,7 @@ func NewMVCCIncrementalIterator(
 		if tbiRangeKeyMasking.LessEq(opts.StartTime) && opts.KeyTypes == IterKeyTypePointsAndRanges {
 			tbiRangeKeyMasking = opts.StartTime.Next()
 		}
-		timeBoundIter = reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		timeBoundIter = reader.MustMVCCIterator(MVCCKeyIterKind, IterOptions{
 			KeyTypes:   opts.KeyTypes,
 			LowerBound: opts.StartKey,
 			UpperBound: opts.EndKey,
@@ -221,7 +221,7 @@ func NewMVCCIncrementalIterator(
 			RangeKeyMaskingBelow: tbiRangeKeyMasking,
 		})
 	} else {
-		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		iter = reader.MustMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:             opts.KeyTypes,
 			LowerBound:           opts.StartKey,
 			UpperBound:           opts.EndKey,

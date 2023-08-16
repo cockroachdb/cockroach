@@ -183,13 +183,18 @@ func (ri *ReplicaMVCCDataIterator) tryCloseAndCreateIter() {
 		if ri.curIndex < 0 || ri.curIndex >= len(ri.spans) {
 			return
 		}
-		ri.it = ri.reader.NewMVCCIterator(
+		var err error
+		ri.it, err = ri.reader.NewMVCCIterator(
 			ri.IterKind,
 			storage.IterOptions{
 				LowerBound: ri.spans[ri.curIndex].Key,
 				UpperBound: ri.spans[ri.curIndex].EndKey,
 				KeyTypes:   ri.KeyTypes,
 			})
+		if err != nil {
+			ri.err = err
+			return
+		}
 		if ri.Reverse {
 			ri.it.SeekLT(storage.MakeMVCCMetadataKey(ri.spans[ri.curIndex].EndKey))
 		} else {
@@ -344,11 +349,14 @@ func IterateReplicaKeySpans(
 	for _, span := range spans {
 		for _, keyType := range keyTypes {
 			err := func() error {
-				iter := reader.NewEngineIterator(storage.IterOptions{
+				iter, err := reader.NewEngineIterator(storage.IterOptions{
 					KeyTypes:   keyType,
 					LowerBound: span.Key,
 					UpperBound: span.EndKey,
 				})
+				if err != nil {
+					return err
+				}
 				defer iter.Close()
 				ok, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: span.Key})
 				if err == nil && ok {
@@ -432,11 +440,14 @@ func IterateMVCCReplicaKeySpans(
 	for _, span := range spans {
 		for _, keyType := range keyTypes {
 			err := func() error {
-				iter := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+				iter, err := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 					LowerBound: span.Key,
 					UpperBound: span.EndKey,
 					KeyTypes:   keyType,
 				})
+				if err != nil {
+					return err
+				}
 				defer iter.Close()
 				if options.Reverse {
 					iter.SeekLT(storage.MakeMVCCMetadataKey(span.EndKey))

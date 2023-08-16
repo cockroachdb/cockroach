@@ -324,9 +324,12 @@ func TestInitResolvedTSScan(t *testing.T) {
 		"legacy intent scanner": {
 			intentScanner: func() (IntentScanner, func()) {
 				engine := makeEngine()
-				iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+				iter, err := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 					UpperBound: endKey.AsRawKey(),
 				})
+				if err != nil {
+					t.Fatal(err)
+				}
 				return NewLegacyIntentScanner(iter), func() { engine.Close() }
 			},
 		},
@@ -335,10 +338,13 @@ func TestInitResolvedTSScan(t *testing.T) {
 				engine := makeEngine()
 				lowerBound, _ := keys.LockTableSingleKey(startKey.AsRawKey(), nil)
 				upperBound, _ := keys.LockTableSingleKey(endKey.AsRawKey(), nil)
-				iter := engine.NewEngineIterator(storage.IterOptions{
+				iter, err := engine.NewEngineIterator(storage.IterOptions{
 					LowerBound: lowerBound,
 					UpperBound: upperBound,
 				})
+				if err != nil {
+					t.Fatal(err)
+				}
 				return NewSeparatedIntentScanner(iter), func() { engine.Close() }
 			},
 		},

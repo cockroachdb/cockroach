@@ -1142,21 +1142,23 @@ func requireEqualReaders(
 ) {
 	// First compare only points. We assert points and ranges separately for
 	// simplicity.
-	itExp := exected.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	itExp, err := exected.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound:           desc.StartKey.AsRawKey(),
 		UpperBound:           desc.EndKey.AsRawKey(),
 		KeyTypes:             storage.IterKeyTypePointsOnly,
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
+	require.NoError(t, err)
 	defer itExp.Close()
 	itExp.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 
-	itActual := actual.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	itActual, err := actual.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound:           desc.StartKey.AsRawKey(),
 		UpperBound:           desc.EndKey.AsRawKey(),
 		KeyTypes:             storage.IterKeyTypePointsOnly,
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
+	require.NoError(t, err)
 	defer itActual.Close()
 	itActual.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 
@@ -1190,21 +1192,23 @@ func requireEqualReaders(
 	}
 
 	// Compare only ranges.
-	itExpRanges := exected.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	itExpRanges, err := exected.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound:           desc.StartKey.AsRawKey(),
 		UpperBound:           desc.EndKey.AsRawKey(),
 		KeyTypes:             storage.IterKeyTypeRangesOnly,
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
+	require.NoError(t, err)
 	defer itExpRanges.Close()
 	itExpRanges.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 
-	itActualRanges := actual.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	itActualRanges, err := actual.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound:           desc.StartKey.AsRawKey(),
 		UpperBound:           desc.EndKey.AsRawKey(),
 		KeyTypes:             storage.IterKeyTypeRangesOnly,
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
+	require.NoError(t, err)
 	defer itActualRanges.Close()
 	itActualRanges.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 
@@ -1430,12 +1434,13 @@ func (d tableData) liveDistribution() dataDistribution {
 func engineData(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) []tableCell {
 	var result []tableCell
 
-	rangeIt := r.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	rangeIt, err := r.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound:           desc.StartKey.AsRawKey(),
 		UpperBound:           desc.EndKey.AsRawKey(),
 		KeyTypes:             storage.IterKeyTypeRangesOnly,
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
+	require.NoError(t, err)
 	defer rangeIt.Close()
 	rangeIt.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 	makeRangeCells := func(rks []storage.MVCCRangeKey) (tc []tableCell) {
@@ -1505,12 +1510,13 @@ func engineData(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) []
 	}
 	result = append(result, makeRangeCells(partialRangeKeys)...)
 
-	it := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	it, err := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound:           desc.StartKey.AsRawKey(),
 		UpperBound:           desc.EndKey.AsRawKey(),
 		KeyTypes:             storage.IterKeyTypePointsOnly,
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
+	require.NoError(t, err)
 	defer it.Close()
 	it.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 	prefix := ""
