@@ -2452,6 +2452,11 @@ var builtinOidsArray = []string{
 	2481: `bitmask_xor(a: string, b: string) -> varbit`,
 	2482: `bitmask_xor(a: varbit, b: string) -> varbit`,
 	2483: `bitmask_xor(a: string, b: varbit) -> varbit`,
+	2484: `make_date(year: int, month: int, day: int) -> date`,
+	2485: `make_timestamp(year: int, month: int, day: int, hour: int, min: int, sec: float) -> timestamp`,
+	2486: `make_timestamptz(year: int, month: int, day: int, hour: int, min: int, sec: float) -> timestamptz`,
+	2487: `make_timestamptz(year: int, month: int, day: int, hour: int, min: int, sec: float, timezone: string) -> timestamptz`,
+	2488: `date_trunc(element: string, input: timestamptz, timezone: string) -> timestamptz`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
