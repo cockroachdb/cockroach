@@ -325,9 +325,20 @@ func (r *Replica) evalAndPropose(
 		defer r.raftMu.Unlock()
 		r.mu.Lock()
 		defer r.mu.Unlock()
+		// When the caller abandons the request, it Finishes its trace. By that
+		// time, multiple reproposals can have occurred, and still running and
+		// attempting to post tracing updates through the context. This can cause a
+		// "use after Finish" race in the span. All the (re-)proposal contexts have
+		// been unbound except for the latest one. Unbind it to eliminate the race.
+		//
+		// See https://github.com/cockroachdb/cockroach/issues/107521
+		last := proposal
+		if p := proposal.lastReproposal; p != nil {
+			last = p
+		}
 		// TODO(radu): Should this context be created via tracer.ForkSpan?
 		// We'd need to make sure the span is finished eventually.
-		proposal.ctx = r.AnnotateCtx(context.TODO())
+		last.ctx = r.AnnotateCtx(context.TODO())
 	}
 	return proposalCh, abandon, idKey, writeBytes, nil
 }

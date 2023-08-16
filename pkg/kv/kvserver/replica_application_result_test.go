@@ -63,6 +63,8 @@ func TestProposalDataAndRaftCommandAreConsideredWhenAddingFields(t *testing.T) {
 		tok:                     TrackedRequestToken{done: true},
 		raftAdmissionMeta:       &kvflowcontrolpb.RaftAdmissionMeta{},
 		v2SeenDuringApplication: true,
+		seedProposal:            nil,
+		lastReproposal:          nil,
 	}
 
 	// If you are adding a field to ProposalData or RaftCommand, please consider the
@@ -74,5 +76,5 @@ func TestProposalDataAndRaftCommandAreConsideredWhenAddingFields(t *testing.T) {
 	// here, and second, we don't want to check for recursively populated structs (but
 	// only for the top level fields).
 	require.Equal(t, 10, reflect.TypeOf(*raftCommand).NumField())
-	require.Equal(t, 17, reflect.TypeOf(*prop).NumField())
+	require.Equal(t, 19, reflect.TypeOf(*prop).NumField())
 }
