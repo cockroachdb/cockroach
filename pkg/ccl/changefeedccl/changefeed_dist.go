@@ -129,6 +129,11 @@ func distChangefeedFlow(
 		checkpoint = *cf.Checkpoint
 	}
 
+	if knobs, ok := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+		if knobs != nil && knobs.StartDistChangefeedInitialHighwater != nil {
+			knobs.StartDistChangefeedInitialHighwater(ctx, initialHighWater)
+		}
+	}
 	return startDistChangefeed(
 		ctx, execCtx, jobID, schemaTS, details, initialHighWater, checkpoint, resultsCh)
 }
