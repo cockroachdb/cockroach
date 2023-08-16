@@ -2014,3 +2014,102 @@ SELECT * FROM ex WHERE ROW('1970-01-02 00:00:01.000001-04'::TIMESTAMPTZ) < '1970
 query TTTTT
 SELECT * FROM ex WHERE ROW('1970-01-03 00:00:01.000001-04'::TIMESTAMPTZ) < ROW('1970-01-02 00:00:01.000001-04');
 ----
+
+subtest make_date
+
+query T colnames,rowsort
+SELECT make_date(2013, 7, 15)::string
+----
+make_date
+2013-07-15
+
+query T colnames,rowsort
+SELECT make_date(-2013, 7, 15)
+----
+make_date
+-2013-07-15 00:00:00 +0000 +0000
+
+statement error pgcode 22008 pq: make_date\(\): year value of 0 is not valid
+SELECT make_date(0, 11, 11)
+
+subtest end
+
+subtest make_timestamp
+
+query T colnames,rowsort
+SELECT make_timestamp(2013, 7, 15, 8, 15, 23.5)::string
+----
+make_timestamp
+2013-07-15 08:15:23.5
+
+query T colnames,rowsort
+SELECT make_timestamp(-2013, 7, 15, 8, 15, 23.5)
+----
+make_timestamp
+-2013-07-15 08:15:23.5 +0000 +0000
+
+query T colnames,rowsort
+SELECT make_timestamp(2013, 7, 15, 8, 15, 23.5231231244234)::string
+----
+make_timestamp
+2013-07-15 08:15:23.523123
+
+statement error pgcode 22008 pq: make_timestamp\(\): year value of 0 is not valid
+SELECT make_timestamp(0, 7, 15, 8, 15, 23.5);
+
+subtest end
+
+subtest make_timestamptz
+
+statement ok
+SET TIME ZONE 'EST';
+
+query T colnames,rowsort
+SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5)
+----
+make_timestamptz
+2013-07-15 08:15:23.5 -0500 EST
+
+query T colnames,rowsort
+SELECT make_timestamptz(-2013, 7, 15, 8, 15, 23.5)
+----
+make_timestamptz
+-2013-07-15 08:15:23.5 -0500 EST
+
+query T colnames,rowsort
+SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5231231244234)
+----
+make_timestamptz
+2013-07-15 08:15:23.523123 -0500 EST
+
+query T colnames,rowsort
+SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5, 'America/New_York')
+----
+make_timestamptz
+2013-07-15 07:15:23.5 -0500 EST
+
+statement error pgcode 22008 pq: make_timestamptz\(\): year value of 0 is not valid
+SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5);
+
+statement error pgcode 22008 pq: make_timestamptz\(\): year value of 0 is not valid
+SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5, 'America/New_York');
+
+statement error pgcode 22023 pq: make_timestamptz\(\): could not parse "No" as time zone
+SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5, 'No');
+
+subtest end
+
+subtest date_trunc_withtz
+
+query T
+SELECT date_trunc('day', '2001-02-16 20:38:40+00'::timestamptz, 'Australia/Sydney')
+----
+2001-02-16 08:00:00 -0500 EST
+
+statement error pgcode 22008 pq: date_trunc\(\): parsing as type timestamp: field month value 0 is out of range
+SELECT date_trunc('day', '0-02-16 20:38:40+00'::timestamptz, 'Australia/Sydney');
+
+statement error pgcode 22023 pq: date_trunc\(\): could not parse "No" as time zone
+SELECT date_trunc('day', '4-02-16 20:38:40+00'::timestamptz, 'No');
+
+subtest end
