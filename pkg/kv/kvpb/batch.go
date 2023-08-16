@@ -395,14 +395,7 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 		}
 	}
 	// Unreachable.
-	var sb strings.Builder
-	for i, args := range ba.Requests {
-		if i > 0 {
-			sb.WriteString(",")
-		}
-		sb.WriteString(args.String())
-	}
-	panic(fmt.Sprintf("unreachable. Batch requests: %s", sb.String()))
+	panic(fmt.Sprintf("unreachable. Batch requests: %s", TruncatedRequestsString(ba.Requests, 1024)))
 }
 
 // hasFlag returns true iff one of the requests within the batch contains the
