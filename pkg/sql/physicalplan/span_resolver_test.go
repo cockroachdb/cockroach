@@ -39,20 +39,21 @@ import (
 func TestSpanResolverUsesCaches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 4,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(108763),
-				UseDatabase:       "t",
 			},
 		})
-	defer tc.Stopper().Stop(context.Background())
+	defer tc.Stopper().Stop(ctx)
 
 	rowRanges, _ := setupRanges(
-		tc.ServerConn(0),
-		tc.Server(0).ApplicationLayer(),
-		tc.Server(0).StorageLayer(),
+		tc.ApplicationLayer(0).SQLConn(t, "t"),
+		tc.ApplicationLayer(0),
+		tc.StorageLayer(0),
 		t)
 
 	// Replicate the row ranges on all of the first 3 nodes. Save the 4th node in
@@ -85,7 +86,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	}
 
 	// Create a SpanResolver using the 4th node, with empty caches.
-	s3 := tc.Server(3).ApplicationLayer()
+	s3 := tc.ApplicationLayer(3)
 
 	lr := physicalplan.NewSpanResolver(
 		s3.ClusterSettings(),
@@ -112,16 +113,15 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 
 	// Resolve the spans. Since the range descriptor cache doesn't have any
 	// leases, all the ranges should be grouped and "assigned" to replica 0.
-	replicas, err := resolveSpans(context.Background(), lr.NewSpanResolverIterator(nil, nil), spans...)
+	replicas, err := resolveSpans(ctx, lr.NewSpanResolverIterator(nil, nil), spans...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(replicas) != 3 {
 		t.Fatalf("expected replies for 3 spans, got %d", len(replicas))
 	}
-	si := tc.Servers[0]
 
-	storeID := si.GetFirstStoreID()
+	storeID := tc.Servers[0].GetFirstStoreID()
 	for i := 0; i < 3; i++ {
 		if len(replicas[i]) != 1 {
 			t.Fatalf("expected 1 range for span %s, got %d",
@@ -134,12 +134,19 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 		}
 	}
 
-	// Now populate the cached on node 4 and query again. This time, we expect to see
-	// each span on its own range.
-	if err := populateCache(tc.Conns[3], 3 /* expectedNumRows */); err != nil {
+	// Now populate the cache on node 4 and query again. Note that this way of
+	// populating the range cache is the reason for why this test is disabled
+	// with the default test tenant (#108763).
+	numExpectedRows := len(rowRanges)
+	var numRows int
+	err = s3.SQLConn(t, "t").QueryRow(`SELECT count(1) FROM test`).Scan(&numRows)
+	if err != nil {
 		t.Fatal(err)
 	}
-	replicas, err = resolveSpans(context.Background(), lr.NewSpanResolverIterator(nil, nil), spans...)
+	if numRows != numExpectedRows {
+		t.Fatal(errors.Errorf("expected %d rows, got %d", numExpectedRows, numRows))
+	}
+	replicas, err = resolveSpans(ctx, lr.NewSpanResolverIterator(nil, nil), spans...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,20 +158,6 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	if err = expectResolved(replicas, expected...); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// populateCache runs a scan over a whole table to populate the range cache and
-// the lease holder cache of the server to which db is connected.
-func populateCache(db *gosql.DB, expectedNumRows int) error {
-	var numRows int
-	err := db.QueryRow(`SELECT count(1) FROM test`).Scan(&numRows)
-	if err != nil {
-		return err
-	}
-	if numRows != expectedNumRows {
-		return errors.Errorf("expected %d rows, got %d", expectedNumRows, numRows)
-	}
-	return nil
 }
 
 // splitRangeAtVal splits the range for a table with schema
