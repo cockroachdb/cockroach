@@ -231,7 +231,11 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 	}
 
 	// Sort VMs for each cluster. We want to make sure we always have the same order.
+	// Also assert that no cluster can be empty.
 	for _, c := range cloud.Clusters {
+		if len(c.VMs) == 0 {
+			return nil, errors.Errorf("found no VMs in Cluster %s", c.Name)
+		}
 		sort.Sort(c.VMs)
 	}
 

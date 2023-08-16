@@ -40,7 +40,16 @@ type status struct {
 
 func (s *status) add(c *Cluster, now time.Time) {
 	exp := c.ExpiresAt()
-	if exp.After(now) {
+	// Clusters without VMs shouldn't exist and are likely dangling resources.
+	if c.VMs[0].EmptyCluster {
+		// Give a one-hour grace period to avoid any race conditions where a cluster
+		// was created but the VMs are still initializing.
+		if now.After(c.CreatedAt.Add(time.Hour)) {
+			s.destroy = append(s.destroy, c)
+		} else {
+			s.good = append(s.good, c)
+		}
+	} else if exp.After(now) {
 		if exp.Before(now.Add(2 * time.Hour)) {
 			s.warn = append(s.warn, c)
 		} else {

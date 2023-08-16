@@ -1200,7 +1200,7 @@ func Destroy(
 		if err != nil {
 			return err
 		}
-		cld, err = cloud.ListCloud(l, vm.ListOptions{})
+		cld, err = cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
 		if err != nil {
 			return err
 		}
@@ -1230,7 +1230,7 @@ func Destroy(
 			}
 			if cld == nil {
 				var err error
-				cld, err = cloud.ListCloud(l, vm.ListOptions{})
+				cld, err = cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
 				if err != nil {
 					return err
 				}
@@ -1248,7 +1248,12 @@ func destroyCluster(cld *cloud.Cloud, l *logger.Logger, clusterName string) erro
 	if !ok {
 		return fmt.Errorf("cluster %s does not exist", clusterName)
 	}
-	l.Printf("Destroying cluster %s with %d nodes", clusterName, len(c.VMs))
+	if c.VMs[0].EmptyCluster {
+		l.Printf("Destroying empty cluster %s with 0 nodes", clusterName)
+	} else {
+		l.Printf("Destroying cluster %s with %d nodes", clusterName, len(c.VMs))
+	}
+
 	return cloud.DestroyCluster(l, c)
 }
 
@@ -1277,7 +1282,7 @@ func (e *ClusterAlreadyExistsError) Error() string {
 }
 
 func cleanupFailedCreate(l *logger.Logger, clusterName string) error {
-	cld, err := cloud.ListCloud(l, vm.ListOptions{})
+	cld, err := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
 	if err != nil {
 		return err
 	}
@@ -1407,7 +1412,7 @@ func GC(l *logger.Logger, dryrun bool) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	cld, err := cloud.ListCloud(l, vm.ListOptions{})
+	cld, err := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
 	if err == nil {
 		// GCClusters depends on ListCloud so only call it if ListCloud runs without errors
 		err = cloud.GCClusters(l, cld, dryrun)
