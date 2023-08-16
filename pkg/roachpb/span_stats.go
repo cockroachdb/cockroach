@@ -60,10 +60,3 @@ var RangeDescPageSize = settings.RegisterIntSetting(
 	100,
 	settings.IntInRange(5, 25000),
 )
-
-func (m *SpanStats) Add(other *SpanStats) {
-	m.TotalStats.Add(other.TotalStats)
-	m.ApproximateDiskBytes += other.ApproximateDiskBytes
-	m.RemoteFileBytes += other.RemoteFileBytes
-	m.ExternalFileBytes += other.ExternalFileBytes
-}

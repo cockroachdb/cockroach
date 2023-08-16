@@ -143,12 +143,12 @@ func TestSpanStatsFanOut(t *testing.T) {
 	}
 
 	testCases := []testCase{
-		{spans[0], 4, int64(numNodes * 6)},
-		{spans[1], 1, int64(numNodes * 3)},
-		{spans[2], 2, int64(numNodes * 5)},
-		{spans[3], 2, int64(numNodes * 1)},
-		{spans[4], 2, int64(numNodes * 3)},
-		{spans[5], 1, int64(numNodes * 2)},
+		{spans[0], 4, int64(6)},
+		{spans[1], 1, int64(3)},
+		{spans[2], 2, int64(5)},
+		{spans[3], 2, int64(1)},
+		{spans[4], 2, int64(3)},
+		{spans[5], 1, int64(2)},
 	}
 
 	testutils.SucceedsSoon(t, func() error {
