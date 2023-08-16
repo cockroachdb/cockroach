@@ -348,6 +348,13 @@ type Planner interface {
 	// it is invalid.
 	RepairTTLScheduledJobForTable(ctx context.Context, tableID int64) error
 
+	// UpdateRowLevelTTLForObsTables updates row level TTL for a set of system
+	// tables that store statement stats and insights. It is a way to alter
+	// system tables schema without migrations.
+	// interval can be expressed as a string that complies to INTERVAL type
+	// (see: https://www.cockroachlabs.com/docs/stable/interval#syntax).
+	UpdateRowLevelTTLForObsTables(ctx context.Context, interval string) error
+
 	// QueryRowEx executes the supplied SQL statement and returns a single row, or
 	// nil if no row is found, or an error if more that one row is returned.
 	//

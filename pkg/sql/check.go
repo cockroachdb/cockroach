@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -813,6 +814,62 @@ func (p *planner) RepairTTLScheduledJobForTable(ctx context.Context, tableID int
 	return p.Descriptors().WriteDesc(
 		ctx, false /* kvTrace */, tableDesc, p.txn,
 	)
+}
+
+// UpdateRowLevelTTLForObsTables is part of the EvalPlanner interface.
+// UpdateRowLevelTTLForObsTables is aimed to update Row level TTL for system.stmt_exec_insights and system.txn_exec_insights
+// tables as a workaround because it is not possible to ALTER system tables.
+func (p *planner) UpdateRowLevelTTLForObsTables(ctx context.Context, interval string) error {
+	db, err := p.Descriptors().ByNameWithLeased(p.Txn()).Get().Database(ctx, catconstants.SystemDatabaseName)
+	if err != nil {
+		return err
+	}
+	schema, err := p.Descriptors().ByNameWithLeased(p.Txn()).Get().Schema(ctx, db, catconstants.PublicSchemaName)
+	if err != nil {
+		return err
+	}
+
+	tables := []string{string(catconstants.StmtExecInsightsTableName), string(catconstants.TxnExecInsightsTableName)}
+
+	for _, tblName := range tables {
+		table, err := p.Descriptors().ByNameWithLeased(p.Txn()).Get().Table(ctx, db, schema, tblName)
+		if err != nil {
+			return err
+		}
+		tableDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, table.GetID())
+		if err != nil {
+			return err
+		}
+		ttl := tableDesc.GetRowLevelTTL()
+		ttl.ExpirationExpr = catpb.Expression(fmt.Sprintf("'((created AT TIME ZONE) + INTERVAL '%s') AT TIME ZONE ''UTC'''", interval))
+		tableDesc.RowLevelTTL = ttl
+
+		// Enforce TTL job validation after updated TTL expressions.
+		validateErr := p.validateTTLScheduledJobInTable(ctx, tableDesc)
+		if validateErr == nil {
+			return nil
+		}
+		if !errors.HasType(validateErr, invalidTableTTLScheduledJobError) {
+			return errors.Wrap(validateErr, "error validating TTL on table")
+		}
+		sj, err := CreateRowLevelTTLScheduledJob(
+			ctx,
+			p.ExecCfg().JobsKnobs(),
+			jobs.ScheduledJobTxn(p.InternalSQLTxn()),
+			p.User(),
+			tableDesc,
+		)
+		if err != nil {
+			return err
+		}
+		tableDesc.RowLevelTTL.ScheduleID = sj.ScheduleID()
+		if err := p.Descriptors().WriteDesc(
+			ctx, false /* kvTrace */, tableDesc, p.txn,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func formatValues(colNames []string, values tree.Datums) string {
