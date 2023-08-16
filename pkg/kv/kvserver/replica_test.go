@@ -3117,7 +3117,10 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 				if _, pErr := tc.SendWrappedWith(kvpb.Header{Txn: txnOld}, &pArgs); pErr != nil {
 					t.Fatal(pErr)
 				}
-				iter := tc.engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
+				iter, err := tc.engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
+				if err != nil {
+					t.Fatal(err)
+				}
 				defer iter.Close()
 				mvccKey := storage.MakeMVCCMetadataKey(key)
 				iter.SeekGE(mvccKey)
