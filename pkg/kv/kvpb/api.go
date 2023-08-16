@@ -13,6 +13,7 @@ package kvpb
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	_ "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil" // see RequestHeader
@@ -711,6 +712,26 @@ func (sr *ReverseScanResponse) Verify(req Request) error {
 		}
 	}
 	return nil
+}
+
+// RequestsString formats a slice of RequestUnions for printing.
+// TODO(michae2): truncate this.
+func RequestsString(reqs []RequestUnion) string {
+	if reqs == nil {
+		return "<nil>"
+	}
+	if len(reqs) == 0 {
+		return "[]"
+	}
+	var b strings.Builder
+	b.WriteRune('[')
+	b.WriteString(reqs[0].String())
+	for i := 1; i < len(reqs); i++ {
+		b.WriteString(" ")
+		b.WriteString(reqs[i].String())
+	}
+	b.WriteRune(']')
+	return b.String()
 }
 
 // Method implements the Request interface.
