@@ -176,6 +176,8 @@ func (d Date) Format(buf *bytes.Buffer) {
 		year, month, day := t.Date()
 		bc := year <= 0
 		if bc {
+			// For the ISO 8601 standard, the conversion from a negative year to BC changes the year value (ex. -2013 == 2014 BC).
+			// https://en.wikipedia.org/wiki/ISO_8601#Years
 			year = -year + 1
 		}
 		fmt.Fprintf(buf, "%04d-%02d-%02d", year, month, day)
