@@ -9,9 +9,12 @@
 package streamingest
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"math"
 	"sort"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -31,9 +34,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -55,6 +61,18 @@ var replanFrequency = settings.RegisterDurationSetting(
 	10*time.Minute,
 	settings.PositiveDuration,
 )
+
+var persistExecutionDetailsFrequency = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"stream_replication.persist_execution_details_frequency",
+	"frequency at which the replication job aggregates and persists execution details",
+	10*time.Minute,
+	settings.PositiveDuration,
+)
+
+// replicationPartitionInfoKey is the info key at which the replication job
+// resumer writes its partition specs.
+const replicationPartitionInfoKey = "~replication-partition-specs.binpb"
 
 func startDistIngestion(
 	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
@@ -150,8 +168,35 @@ func startDistIngestion(
 		func() time.Duration { return replanFrequency.Get(execCtx.ExecCfg().SV()) },
 	)
 
+	// TODO(adityamaru): Replace this timer-based loop once we teach requesting
+	// execution details to reach out to the Resumer and trigger the generation of
+	// job specific execution details.
+	stopGeneratingExecutionDetails := make(chan struct{})
+	generateExecutionDetails := func(ctx context.Context) error {
+		execDetailsTimer := timeutil.NewTimer()
+		execDetailsTimer.Reset(persistExecutionDetailsFrequency.Get(&execCtx.ExecCfg().Settings.SV))
+		for {
+			select {
+			case <-stopGeneratingExecutionDetails:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-execDetailsTimer.C:
+				execDetailsTimer.Read = true
+				execDetailsTimer.Reset(persistExecutionDetailsFrequency.Get(&execCtx.ExecCfg().Settings.SV))
+				if err := generateSpanFrontierExecutionDetailFile(ctx, execCtx, ingestionJob.ID()); err != nil {
+					// We don't want to fail the ingestion job if we were unable to
+					// generate the frontier execution details.
+					log.Warningf(ctx, "failed to generate frontier execution details for job %d: %v",
+						ingestionJob.ID(), err)
+				}
+			}
+		}
+	}
+
 	execInitialPlan := func(ctx context.Context) error {
 		defer stopReplanner()
+		defer close(stopGeneratingExecutionDetails)
 		ctx = logtags.AddTag(ctx, "stream-ingest-distsql", nil)
 
 		rw := sql.NewRowResultWriter(nil /* rowContainer */)
@@ -175,7 +220,7 @@ func startDistIngestion(
 	}
 
 	updateRunningStatus(ctx, ingestionJob, jobspb.Replicating, "physical replication running")
-	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner)
+	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner, generateExecutionDetails)
 	if errors.Is(err, sql.ErrPlanChanged) {
 		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
 	}
@@ -191,13 +236,134 @@ func (p *replicationFlowPlanner) containsInitialStreamAddresses() bool {
 	return len(p.initialStreamAddresses) > 0
 }
 
+type frontierExecutionDetails struct {
+	srcInstanceID  base.SQLInstanceID
+	destInstanceID base.SQLInstanceID
+	span           string
+	frontierTS     string
+	behindBy       redact.SafeString
+}
+
+// constructSpanFrontierExecutionDetails constructs the frontierExecutionDetails
+// using the initial partition specs that map spans to the src and dest
+// instances, and a snapshot of the current state of the frontier.
+//
+// The shape of the spans tracked by the frontier can be different from the
+// initial partitioned set of spans. To account for this, for each span in the
+// initial partition set we want to output all the intersecting sub-spans in the
+// frontier along with their timestamps.
+func constructSpanFrontierExecutionDetails(
+	partitionSpecs execinfrapb.StreamIngestionPartitionSpecs,
+	frontierSpans execinfrapb.FrontierEntries,
+) ([]frontierExecutionDetails, error) {
+	f, err := span.MakeFrontier()
+	if err != nil {
+		return nil, err
+	}
+	for _, rs := range frontierSpans.ResolvedSpans {
+		if err := f.AddSpansAt(rs.Timestamp, rs.Span); err != nil {
+			return nil, err
+		}
+	}
+
+	now := timeutil.Now()
+	res := make([]frontierExecutionDetails, 0)
+	for _, spec := range partitionSpecs.Specs {
+		for _, sp := range spec.Spans {
+			f.SpanEntries(sp, func(r roachpb.Span, timestamp hlc.Timestamp) (done span.OpResult) {
+				res = append(res, frontierExecutionDetails{
+					srcInstanceID:  spec.SrcInstanceID,
+					destInstanceID: spec.DestInstanceID,
+					span:           r.String(),
+					frontierTS:     timestamp.GoTime().String(),
+					behindBy:       humanizeutil.Duration(now.Sub(timestamp.GoTime())),
+				})
+				return span.ContinueMatch
+			})
+		}
+	}
+
+	return res, nil
+}
+
+// generateSpanFrontierExecutionDetailFile generates and writes a file to the
+// job_info table that captures the mapping from:
+//
+// # Src Instance	| Dest Instance	| Span | Frontier Timestamp	| Behind By
+//
+// This information is computed from information persisted by the
+// stream ingestion resumer and frontier processor. Namely:
+//
+// - The StreamIngestionPartitionSpec of each partition providing a mapping from
+// span to src and dest SQLInstanceID.
+// - The snapshot of the frontier tracking how far each span has been replicated
+// up to.
+func generateSpanFrontierExecutionDetailFile(
+	ctx context.Context, execCtx sql.JobExecContext, ingestionJobID jobspb.JobID,
+) error {
+	var sb bytes.Buffer
+	w := tabwriter.NewWriter(&sb, 0, 0, 1, ' ', tabwriter.TabIndent)
+	var executionDetails []frontierExecutionDetails
+
+	err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		jobInfoStorage := jobs.InfoStorageForJob(txn, ingestionJobID)
+
+		// Read the StreamIngestionPartitionSpecs to get a mapping from spans to
+		// their source and destination SQL instance IDs.
+		specs, exists, err := jobInfoStorage.Get(ctx, replicationPartitionInfoKey)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return errors.Newf("no StreamIngestionPartitionSpecs found for job %d", ingestionJobID)
+		}
+
+		var partitionSpecs execinfrapb.StreamIngestionPartitionSpecs
+		if err := protoutil.Unmarshal(specs, &partitionSpecs); err != nil {
+			return err
+		}
+
+		// Now, read the latest snapshot of the frontier that tells us what
+		// timestamp each span has been replicated up to.
+		frontierEntries, exists, err := jobInfoStorage.Get(ctx, frontierEntriesInfoKey)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return errors.Newf("no frontier entries found for job %d", ingestionJobID)
+		}
+
+		var frontierSpans execinfrapb.FrontierEntries
+		if err := protoutil.Unmarshal(frontierEntries, &frontierSpans); err != nil {
+			return err
+		}
+		executionDetails, err = constructSpanFrontierExecutionDetails(partitionSpecs, frontierSpans)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	header := "Src Instance\tDest Instance\tSpan\tFrontier Timestamp\tBehind By"
+	fmt.Fprintln(w, header)
+	for _, ed := range executionDetails {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+			ed.srcInstanceID, ed.destInstanceID, ed.span, ed.frontierTS, ed.behindBy)
+	}
+
+	filename := fmt.Sprintf("replication-frontier.%s.txt", timeutil.Now().Format("20060102_150405.00"))
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	return jobs.WriteExecutionDetailFile(ctx, filename, sb.Bytes(), execCtx.ExecCfg().InternalDB, ingestionJobID)
+}
+
 func persistStreamIngestionPartitionSpecs(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	ingestionJobID jobspb.JobID,
 	streamIngestionSpecs []*execinfrapb.StreamIngestionDataSpec,
 ) error {
-	replicationPartitionInfoKey := "~replication-partition-specs.binpb"
 	err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		jobInfoStorage := jobs.InfoStorageForJob(txn, ingestionJobID)
 		specs := make([]*execinfrapb.StreamIngestionPartitionSpec, 0)

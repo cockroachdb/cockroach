@@ -61,6 +61,10 @@ var DumpFrontierEntries = settings.RegisterDurationSetting(
 
 const streamIngestionFrontierProcName = `ingestfntr`
 
+// frontierEntriesInfoKey is the info key at which the stream ingestion frontier
+// periodically dumps its state.
+const frontierEntriesInfoKey = "~replication-frontier-entries.binpb"
+
 type streamIngestionFrontier struct {
 	execinfra.ProcessorBase
 
@@ -513,7 +517,6 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 // than one row describing the state of the frontier at a given point in time.
 func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
 	ctx := sf.Ctx()
-	log.Info(ctx, "updating the frontier entries")
 	dumpFreq := DumpFrontierEntries.Get(&sf.flowCtx.Cfg.Settings.SV)
 	if dumpFreq == 0 || timeutil.Since(sf.lastFrontierDump) < dumpFreq {
 		return nil
@@ -527,7 +530,6 @@ func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
 		return span.ContinueMatch
 	})
 
-	log.Infof(ctx, "updating the frontier with %v", frontierEntries)
 	frontierBytes, err := protoutil.Marshal(frontierEntries)
 	if err != nil {
 		return err
@@ -535,7 +537,6 @@ func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
 
 	err = sf.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := jobs.InfoStorageForJob(txn, jobID)
-		frontierEntriesInfoKey := "~replication-frontier-entries.binpb"
 		return infoStorage.Write(ctx, frontierEntriesInfoKey, frontierBytes)
 	})
 	if err != nil {

@@ -316,3 +316,139 @@ func TestSourceDestMatching(t *testing.T) {
 		})
 	}
 }
+
+// TestFrontierExecutionDetailFile is a unit test for
+// constructSpanFrontierExecutionDetails. Refer to the method header for
+// details.
+func TestFrontierExecutionDetailFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	clearTimestamps := func(executionDetails []frontierExecutionDetails) []frontierExecutionDetails {
+		res := make([]frontierExecutionDetails, len(executionDetails))
+		for i, ed := range executionDetails {
+			ed.frontierTS = ""
+			ed.behindBy = ""
+			res[i] = ed
+		}
+		return res
+	}
+
+	for _, tc := range []struct {
+		name            string
+		partitionSpecs  execinfrapb.StreamIngestionPartitionSpecs
+		frontierEntries execinfrapb.FrontierEntries
+		expected        []frontierExecutionDetails
+	}{
+		{
+			name: "matching spans",
+			partitionSpecs: execinfrapb.StreamIngestionPartitionSpecs{
+				Specs: []*execinfrapb.StreamIngestionPartitionSpec{
+					{
+						SrcInstanceID:  1,
+						DestInstanceID: 2,
+						Spans: []roachpb.Span{
+							{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+						},
+					},
+				}},
+			frontierEntries: execinfrapb.FrontierEntries{ResolvedSpans: []jobspb.ResolvedSpan{
+				{
+					Span:      roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+			}},
+			expected: []frontierExecutionDetails{
+				{
+					srcInstanceID:  1,
+					destInstanceID: 2,
+					span:           "{a-b}",
+				}},
+		},
+		{
+			name: "multi-partition",
+			partitionSpecs: execinfrapb.StreamIngestionPartitionSpecs{
+				Specs: []*execinfrapb.StreamIngestionPartitionSpec{
+					{
+						SrcInstanceID:  1,
+						DestInstanceID: 2,
+						Spans: []roachpb.Span{
+							{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+						},
+					},
+					{
+						SrcInstanceID:  1,
+						DestInstanceID: 3,
+						Spans: []roachpb.Span{
+							{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+						},
+					},
+				}},
+			frontierEntries: execinfrapb.FrontierEntries{ResolvedSpans: []jobspb.ResolvedSpan{
+				{
+					Span:      roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("a'")},
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+				{
+					Span:      roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+					Timestamp: hlc.Timestamp{WallTime: 2},
+				},
+			}},
+			expected: []frontierExecutionDetails{
+				{
+					srcInstanceID:  1,
+					destInstanceID: 2,
+					span:           "a{-'}",
+				},
+				{
+					srcInstanceID:  1,
+					destInstanceID: 3,
+					span:           "{b-c}",
+				},
+			},
+		},
+		{
+			name: "merged frontier",
+			partitionSpecs: execinfrapb.StreamIngestionPartitionSpecs{
+				Specs: []*execinfrapb.StreamIngestionPartitionSpec{
+					{
+						SrcInstanceID:  1,
+						DestInstanceID: 2,
+						Spans: []roachpb.Span{
+							{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+						},
+					},
+					{
+						SrcInstanceID:  1,
+						DestInstanceID: 2,
+						Spans: []roachpb.Span{
+							{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")},
+						},
+					},
+				}},
+			frontierEntries: execinfrapb.FrontierEntries{ResolvedSpans: []jobspb.ResolvedSpan{
+				{
+					Span:      roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")},
+					Timestamp: hlc.Timestamp{WallTime: 1},
+				},
+			}},
+			expected: []frontierExecutionDetails{
+				{
+					srcInstanceID:  1,
+					destInstanceID: 2,
+					span:           "{a-b}",
+				},
+				{
+					srcInstanceID:  1,
+					destInstanceID: 2,
+					span:           "{b-d}",
+				}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			executionDetails, err := constructSpanFrontierExecutionDetails(tc.partitionSpecs, tc.frontierEntries)
+			require.NoError(t, err)
+			executionDetails = clearTimestamps(executionDetails)
+			require.Equal(t, tc.expected, executionDetails)
+		})
+	}
+}

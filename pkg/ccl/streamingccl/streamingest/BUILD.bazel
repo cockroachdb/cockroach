@@ -63,6 +63,7 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/protoutil",
