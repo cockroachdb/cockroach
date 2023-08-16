@@ -121,6 +121,11 @@ type VM struct {
 	// CostPerHour is the estimated cost per hour of this VM, in US dollars. 0 if
 	//there is no estimate available.
 	CostPerHour float64
+
+	// EmptyCluster indicates that the VM does not exist. Azure allows for empty
+	// clusters, but roachprod does not allow VM-less clusters except when deleting them.
+	// A fake VM will be used in this scenario.
+	EmptyCluster bool
 }
 
 // Name generates the name for the i'th node in a cluster.
@@ -387,6 +392,7 @@ type VolumeCreateOpts struct {
 
 type ListOptions struct {
 	IncludeVolumes       bool
+	IncludeEmptyClusters bool
 	ComputeEstimatedCost bool
 }
 
