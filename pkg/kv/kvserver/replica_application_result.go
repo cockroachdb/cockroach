@@ -271,6 +271,10 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 	// or release any latches.
 
 	origP := origCmd.proposal
+	seedP := origP.seedProposal
+	if seedP == nil {
+		seedP = origP
+	}
 
 	// We want to move a few items from origCmd to the new command, but only if we
 	// managed to propose the new command. For example, if we move the latches
@@ -365,6 +369,8 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		encodedCommand:          nil,
 		raftAdmissionMeta:       nil,
 		v2SeenDuringApplication: false,
+
+		seedProposal: seedP,
 	}
 	// If the original proposal had an explicit span, it's an async consensus
 	// proposal and the span would be finished momentarily (when we return to
@@ -377,6 +383,27 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		if success {
 			origP.sp = nil
 		}
+	}()
+
+	defer func() {
+		if !success {
+			return
+		}
+		// If the proposal is synchronous, the client is waiting on the seed
+		// proposal. By the time it has to act on the result, a bunch of reproposals
+		// can have happened, and some may still be running and using the
+		// context/tracing span.
+		//
+		// Unbind the latest reproposal's context so that it no longer posts updates
+		// to the tracing span (it won't apply anyway). Link to the new latest
+		// reproposal, so that the client can clear its context at post-processing.
+		//
+		// TODO(pavelkalinnikov): there should be a better way, after ProposalData
+		// lifecycle is reconsidered.
+		if last := seedP.lastReproposal; last != nil {
+			last.ctx = r.AnnotateCtx(context.TODO())
+		}
+		seedP.lastReproposal = newProposal
 	}()
 
 	// We need to track the request again in order to protect its timestamp until
