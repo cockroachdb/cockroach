@@ -68,6 +68,27 @@ func WaitForJobReverting(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobI
 	waitForJobToHaveStatus(t, db, jobID, jobs.StatusReverting)
 }
 
+func WaitForJobToSucceedOrFail(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) (status jobs.Status) {
+	t.Helper()
+	testutils.SucceedsWithin(t, func() error {
+		var statusStr string
+		var payloadBytes []byte
+		query := fmt.Sprintf("SELECT status, payload FROM (%s)", InternalSystemJobsBaseQuery)
+		if err := db.DB.QueryRowContext(context.Background(), query, jobID).Scan(&statusStr, &payloadBytes); err != nil {
+			if testutils.IsError(err, "sql: no rows in result set") {
+				return errors.Newf("job %d not found", jobID)
+			}
+			return err
+		}
+		status = jobs.Status(statusStr)
+		if status != jobs.StatusFailed && status != jobs.StatusSucceeded {
+			return errors.Errorf("expected success or failure but got %s", statusStr)
+		}
+		return nil
+	}, 2*time.Minute)
+	return status
+}
+
 // InternalSystemJobsBaseQuery runs the query against an empty database string.
 // Since crdb_internal.system_jobs is a virtual table, by default, the query
 // will take a lease on the current database the SQL session is connected to. If
