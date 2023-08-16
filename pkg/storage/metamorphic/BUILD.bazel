@@ -47,6 +47,7 @@ go_test(
     }),
     data = glob(["testdata/**"]),
     embed = [":metamorphic"],
+    exec_properties = {"Pool": "large"},
     shard_count = 8,
     deps = [
         "//pkg/settings/cluster",
