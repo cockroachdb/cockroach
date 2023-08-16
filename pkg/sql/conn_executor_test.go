@@ -1554,6 +1554,38 @@ func TestInjectRetryErrors(t *testing.T) {
 		require.NoError(t, tx.Rollback())
 		require.Equal(t, 2, readCommittedStmtRetries)
 	})
+
+	t.Run("read_committed_txn_already_sent_results", func(t *testing.T) {
+		readCommittedStmtRetries = 0
+
+		// Choose a small results_buffer_size and make sure the statement retry
+		// does not occur.
+		pgURL, cleanupFn := sqlutils.PGUrl(
+			t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+		defer cleanupFn()
+		q := pgURL.Query()
+		q.Add("results_buffer_size", "4")
+		pgURL.RawQuery = q.Encode()
+		smallBufferDB, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		defer smallBufferDB.Close()
+
+		_, err = smallBufferDB.Exec("SET inject_retry_errors_enabled = 'true'")
+		require.NoError(t, err)
+
+		tx, err := smallBufferDB.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
+		require.NoError(t, err)
+
+		var txRes int
+		err = tx.QueryRow("SELECT $1::int8", 3).Scan(&txRes)
+		require.Error(t, err)
+		pqErr := (*pq.Error)(nil)
+		require.ErrorAs(t, err, &pqErr)
+		require.Equal(t, "40001", string(pqErr.Code), "expected a transaction retry error code. got %v", pqErr)
+		require.ErrorContains(t, pqErr, "cannot automatically retry since some results were already sent to the client")
+		require.NoError(t, tx.Rollback())
+		require.Equal(t, 0, readCommittedStmtRetries)
+	})
 }
 
 func TestInjectRetryOnCommitErrors(t *testing.T) {
