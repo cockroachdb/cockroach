@@ -533,6 +533,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			// Internal meta may contain sensitive data such as usernames.
 			// "internal_meta",
 			"num_ranges",
+			"last_updated",
 		},
 	},
 	"crdb_internal.table_indexes": {

@@ -1411,7 +1411,8 @@ const crdbInternalKVProtectedTSTableQuery = `
 		    false /* emit defaults */,
 		    false /* include redaction marker */ 
 		          /* NB: redactions in the debug zip are handled elsewhere by marking columns as sensitive */
-		) as decoded_targets
+		) as decoded_targets,
+	    crdb_internal_mvcc_timestamp
 	FROM system.protected_ts_records
 `
 
@@ -1432,7 +1433,8 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
                                 -- This data can have different structures depending on the meta_type. 
    decoded_target 		JSON,   -- Decoded data from the target column above.
    internal_meta        JSON,   -- Additional metadata added by this virtual table (ex. job owner for job meta_type) 
-   num_ranges  			INT     -- Number of ranges protected by this PTS record.
+   num_ranges  			INT,     -- Number of ranges protected by this PTS record.
+   last_updated         DECIMAL -- crdb_internal_mvcc_timestamp of the row
 )`,
 	comment: `decoded protected timestamp metadata from system.protected_ts_records (KV scan). does not decode `,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
@@ -1475,7 +1477,7 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
 			return err
 		}
 
-		var id, ts, metaType, meta, numSpans, spans, verified, target, decodedTarget tree.Datum
+		var id, ts, metaType, meta, numSpans, spans, verified, target, decodedTarget, lastUpdated tree.Datum
 
 		for {
 			hasNext, err := it.Next(ctx)
@@ -1487,8 +1489,8 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
 			}
 
 			r := it.Cur()
-			id, ts, metaType, meta, numSpans, spans, verified, target, decodedTarget =
-				r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]
+			id, ts, metaType, meta, numSpans, spans, verified, target, decodedTarget, lastUpdated =
+				r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9]
 
 			metaTypeDatum, ok := metaType.(*tree.DString)
 			if !ok {
@@ -1577,7 +1579,7 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
 				}
 			}
 
-			if err := addRow(id, ts, metaType, meta, numSpans, spans, verified, target, decodedMeta, decodedTarget, internalMeta, numRanges); err != nil {
+			if err := addRow(id, ts, metaType, meta, numSpans, spans, verified, target, decodedMeta, decodedTarget, internalMeta, numRanges, lastUpdated); err != nil {
 				return err
 			}
 
