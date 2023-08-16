@@ -166,6 +166,8 @@ sequence req=reqTimeout2
 [6] sequence reqTimeout2: waiting in lock wait-queues
 [6] sequence reqTimeout2: lock wait-queue event: wait for (distinguished) txn 00000003 running request @ key ‹"k2"› (queuedWriters: 2, queuedReaders: 0)
 [6] sequence reqTimeout2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = true, priority enforcement = false
+[6] sequence reqTimeout2: pushing txn 00000003 to check if abandoned
+[6] sequence reqTimeout2: pushee not abandoned
 [6] sequence reqTimeout2: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k2"› for 0.000s
 [6] sequence reqTimeout2: sequencing complete, returned error: conflicting intents on ‹"k2"› [reason=lock_timeout]
 

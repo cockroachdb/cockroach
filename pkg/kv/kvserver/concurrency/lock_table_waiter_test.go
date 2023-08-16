@@ -518,19 +518,21 @@ func testErrorWaitPush(
 			}
 			g.notify()
 
-			// If the lock is not held or expPushTS is empty, expect an error
-			// immediately. The one exception to this is waitElsewhere, which
-			// expects no error.
-			if !lockHeld || expPushTS == dontExpectPush {
+			// If expPushTS is empty, expect an error immediately.
+			if expPushTS == dontExpectPush {
 				err := w.WaitOn(ctx, req, g)
-				if k == waitElsewhere {
-					require.Nil(t, err)
-				} else {
-					require.NotNil(t, err)
-					wiErr := new(kvpb.WriteIntentError)
-					require.True(t, errors.As(err.GoError(), &wiErr))
-					require.Equal(t, errReason, wiErr.Reason)
-				}
+				require.NotNil(t, err)
+				wiErr := new(kvpb.WriteIntentError)
+				require.True(t, errors.As(err.GoError(), &wiErr))
+				require.Equal(t, errReason, wiErr.Reason)
+				return
+			}
+
+			// waitElsewhere does not cause a push if the lock is not held.
+			// It returns immediately.
+			if k == waitElsewhere && !lockHeld {
+				err := w.WaitOn(ctx, req, g)
+				require.Nil(t, err)
 				return
 			}
 
@@ -694,17 +696,6 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 					return
 				}
 
-				// If the lock is not held and the request hits its lock timeout
-				// before a deadlock push, an error is returned immediately.
-				if !lockHeld && timeoutBeforePush {
-					err := w.WaitOn(ctx, req, g)
-					require.NotNil(t, err)
-					wiErr := new(kvpb.WriteIntentError)
-					require.True(t, errors.As(err.GoError(), &wiErr))
-					require.Equal(t, reasonLockTimeout, wiErr.Reason)
-					return
-				}
-
 				expBlockingPush := !timeoutBeforePush
 				sawBlockingPush := false
 				sawNonBlockingPush := false
@@ -772,7 +763,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 					require.Nil(t, err)
 				}
 				require.Equal(t, !timeoutBeforePush, sawBlockingPush)
-				require.Equal(t, lockHeld, sawNonBlockingPush)
+				require.True(t, sawNonBlockingPush)
 			})
 		})
 	})
