@@ -75,13 +75,13 @@ func TestErrPriority(t *testing.T) {
 	{
 		id1 := uuid.Must(uuid.NewV4())
 		require.Equal(t, ErrorScoreTxnRestart, ErrPriority(&TransactionRetryWithProtoRefreshError{
-			TxnID:       id1,
-			Transaction: roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: id1}},
+			PrevTxnID:       id1,
+			NextTransaction: roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: id1}},
 		}))
 		id2 := uuid.Nil
 		require.Equal(t, ErrorScoreTxnAbort, ErrPriority(&TransactionRetryWithProtoRefreshError{
-			TxnID:       id1,
-			Transaction: roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: id2}},
+			PrevTxnID:       id1,
+			NextTransaction: roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: id2}},
 		}))
 	}
 	require.Equal(t, ErrorScoreUnambiguousError, ErrPriority(&ConditionFailedError{}))
