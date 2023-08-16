@@ -67,13 +67,16 @@ func CheckKeyCountIncludingTombstonedE(
 	}
 
 	keyCount := 0
-	it := engines[0].NewMVCCIterator(
+	it, err := engines[0].NewMVCCIterator(
 		storage.MVCCKeyIterKind,
 		storage.IterOptions{
 			LowerBound: tableSpan.Key,
 			UpperBound: tableSpan.EndKey,
 		},
 	)
+	if err != nil {
+		return err
+	}
 
 	for it.SeekGE(storage.MVCCKey{Key: tableSpan.Key}); ; it.NextKey() {
 		ok, err := it.Valid()

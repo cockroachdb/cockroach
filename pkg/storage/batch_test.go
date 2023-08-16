@@ -186,13 +186,17 @@ func TestReadOnlyBasics(t *testing.T) {
 			_ = ro.MVCCIterate(a.Key, a.Key, MVCCKeyIterKind, IterKeyTypePointsOnly,
 				func(MVCCKeyValue, MVCCRangeKeyStack) error { return iterutil.StopIteration() })
 		},
-		func() { ro.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax}).Close() },
 		func() {
-			ro.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+			iter, _ := ro.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			iter.Close()
+		},
+		func() {
+			iter, _ := ro.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 				MinTimestampHint: hlc.MinTimestamp,
 				MaxTimestampHint: hlc.MaxTimestamp,
 				UpperBound:       roachpb.KeyMax,
-			}).Close()
+			})
+			iter.Close()
 		},
 	}
 	defer func() {
@@ -698,7 +702,10 @@ func TestUnindexedBatchThatSupportsReader(t *testing.T) {
 
 	// Verify that reads on the distinct batch go to the underlying engine, not
 	// to the unindexed batch.
-	iter := b.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+	iter, err := b.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+	if err != nil {
+		t.Fatal(err)
+	}
 	iter.SeekGE(mvccKey("a"))
 	if ok, err := iter.Valid(); !ok {
 		t.Fatalf("expected iterator to be valid, err=%v", err)
@@ -732,7 +739,7 @@ func TestWriteBatchPanicsAsReader(t *testing.T) {
 	b := mvccKey("b")
 	testCases := []func(){
 		func() { _ = r.MVCCIterate(a.Key, b.Key, MVCCKeyIterKind, IterKeyTypePointsOnly, nil) },
-		func() { _ = r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax}) },
+		func() { _, _ = r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax}) },
 	}
 	for i, f := range testCases {
 		func() {
@@ -775,7 +782,10 @@ func TestBatchIteration(t *testing.T) {
 	}
 
 	iterOpts := IterOptions{UpperBound: k3.Key}
-	iter := b.NewMVCCIterator(MVCCKeyIterKind, iterOpts)
+	iter, err := b.NewMVCCIterator(MVCCKeyIterKind, iterOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer iter.Close()
 
 	// Forward iteration,

@@ -368,10 +368,13 @@ func BenchmarkIntentScan(b *testing.B) {
 					setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false, /* resolveAll */
 						1, false /* resolveIntentForLatestVersionWhenNotLockUpdate */)
 					lower := makeKey(nil, 0)
-					iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+					iter, err := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 						LowerBound: lower,
 						UpperBound: makeKey(nil, numIntentKeys),
 					})
+					if err != nil {
+						b.Fatal(err)
+					}
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						valid, err := iter.Valid()
@@ -454,10 +457,13 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 							// practice, so we don't want it to happen in this Benchmark
 							// either.
 							b.StopTimer()
-							iter = eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+							iter, err = eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 								LowerBound: lower,
 								UpperBound: makeKey(nil, numIntentKeys),
 							})
+							if err != nil {
+								b.Fatal(err)
+							}
 							b.StartTimer()
 							iter.SeekGE(MVCCKey{Key: lower})
 						} else {
@@ -499,10 +505,13 @@ func BenchmarkScanOneAllIntentsResolved(b *testing.B) {
 					buf := append([]byte(nil), lower...)
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+						iter, err := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 							LowerBound: buf,
 							UpperBound: upper,
 						})
+						if err != nil {
+							b.Fatal(err)
+						}
 						iter.SeekGE(MVCCKey{Key: buf})
 						valid, err := iter.Valid()
 						if err != nil {
@@ -1951,13 +1960,16 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		ts := hlc.Timestamp{WallTime: int64(numVersions) + 5}
 		startKey := makeKey(nil, 0)
 		endKey := makeKey(nil, totalNumKeys+1)
-		iter := newMVCCIterator(
+		iter, err := newMVCCIterator(
 			rw, ts, false, false, IterOptions{
 				KeyTypes:   IterKeyTypePointsAndRanges,
 				LowerBound: startKey,
 				UpperBound: endKey,
 			},
 		)
+		if err != nil {
+			b.Fatal(err)
+		}
 		res, err := mvccScanToKvs(ctx, iter, startKey, endKey,
 			hlc.Timestamp{WallTime: int64(numVersions) + 5}, MVCCScanOptions{})
 		if err != nil {

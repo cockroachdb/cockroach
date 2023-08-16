@@ -168,7 +168,7 @@ func isLocal(k roachpb.Key) bool {
 	return k.Compare(keys.LocalMax) < 0
 }
 
-func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator {
+func newIntentInterleavingIterator(reader Reader, opts IterOptions) (MVCCIterator, error) {
 	if !opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty() {
 		panic("intentInterleavingIter must not be used with timestamp hints")
 	}
@@ -257,7 +257,11 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	//
 	// Note that we can reuse intentKeyBuf, intentLimitKeyBuf after
 	// NewEngineIterator returns.
-	intentIter := reader.NewEngineIterator(intentOpts).(*pebbleIterator)
+	intentEngineIter, err := reader.NewEngineIterator(intentOpts)
+	if err != nil {
+		return nil, err
+	}
+	intentIter := intentEngineIter.(*pebbleIterator)
 
 	// The creation of these iterators can race with concurrent mutations, which
 	// may make them inconsistent with each other. So we clone here, to ensure
@@ -265,7 +269,11 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	// and we use that when possible to save allocations).
 	var iter *pebbleIterator
 	if reader.ConsistentIterators() {
-		iter = maybeUnwrapUnsafeIter(reader.NewMVCCIterator(MVCCKeyIterKind, opts)).(*pebbleIterator)
+		mvccIter, err := reader.NewMVCCIterator(MVCCKeyIterKind, opts)
+		if err != nil {
+			return nil, err
+		}
+		iter = maybeUnwrapUnsafeIter(mvccIter).(*pebbleIterator)
 	} else {
 		iter = newPebbleIteratorByCloning(intentIter.CloneContext(), opts, StandardDurability)
 	}
@@ -279,7 +287,7 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 		intentKeyBuf:                         intentKeyBuf,
 		intentLimitKeyBuf:                    intentLimitKeyBuf,
 	}
-	return iiIter
+	return iiIter, nil
 }
 
 // TODO(sumeer): the limits generated below are tight for the current value of
