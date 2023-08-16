@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"strconv"
 	"testing"
 	"time"
 
@@ -499,12 +500,28 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	sqlConn.Exec(t, "SELECT 1, 2, 3, 4")
 	sqlConn.Exec(t, "SELECT 1, 2, 3, 4, 5")
 	sqlConn.Exec(t, "SELECT 1, 2, 3, 4, 6, 7")
-	pss.Flush(ctx)
-	stmtStatsCountFlush3, txnStatsCountFlush3 := countStats(t, sqlConn)
 
-	// 5. Assert that neither table has grown in length.
-	require.Equal(t, stmtStatsCountFlush3, stmtStatsCountFlush2)
-	require.Equal(t, txnStatsCountFlush3, txnStatsCountFlush2)
+	for _, enforceLimitEnabled := range []bool{true, false} {
+		boolStr := strconv.FormatBool(enforceLimitEnabled)
+		t.Run("enforce-limit-"+boolStr, func(t *testing.T) {
+
+			sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.limit_table_size.enabled = "+boolStr)
+
+			pss.Flush(ctx)
+
+			stmtStatsCountFlush3, txnStatsCountFlush3 := countStats(t, sqlConn)
+
+			if enforceLimitEnabled {
+				// Assert that neither table has grown in length.
+				require.Equal(t, stmtStatsCountFlush3, stmtStatsCountFlush2)
+				require.Equal(t, txnStatsCountFlush3, txnStatsCountFlush2)
+			} else {
+				// Assert that tables were allowed to grow.
+				require.Greater(t, stmtStatsCountFlush3, stmtStatsCountFlush2)
+				require.Greater(t, txnStatsCountFlush3, txnStatsCountFlush2)
+			}
+		})
+	}
 }
 
 func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
