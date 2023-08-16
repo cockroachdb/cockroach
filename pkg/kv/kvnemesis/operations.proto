@@ -126,6 +126,21 @@ message ChangeZoneOperation {
   Result result = 2 [(gogoproto.nullable) = false];
 }
 
+message SavepointCreateOperation {
+  int32 id = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message SavepointReleaseOperation {
+  int32 id = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message SavepointRollbackOperation {
+  int32 id = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
 message Operation {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.onlyone) = true;
@@ -150,6 +165,9 @@ message Operation {
   TransferLeaseOperation transfer_lease = 16;
   ChangeZoneOperation change_zone = 17;
   AddSSTableOperation add_sstable = 18 [(gogoproto.customname) = "AddSSTable"];
+  SavepointCreateOperation savepoint_create = 19;
+  SavepointReleaseOperation savepoint_release = 20;
+  SavepointRollbackOperation savepoint_rollback = 21;
 }
 
 enum ResultType {

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/slices"
 )
 
 // GeneratorConfig contains all the tunable knobs necessary to run a Generator.
@@ -95,6 +96,7 @@ type ClosureTxnConfig struct {
 	// When CommitInBatch is selected, CommitBatchOps controls the composition of
 	// the kv.Batch used.
 	CommitBatchOps ClientOperationConfig
+	SavepointOps   SavepointConfig
 }
 
 // ClientOperationConfig configures the relative probabilities of the
@@ -321,6 +323,15 @@ type ChangeZoneConfig struct {
 	ToggleGlobalReads int
 }
 
+type SavepointConfig struct {
+	// SavepointCreate is an operation that creates a new savepoint with a given id.
+	SavepointCreate int
+	// SavepointRelease is an operation that releases a savepoint with a given id.
+	SavepointRelease int
+	// SavepointRollback is an operation that rolls back a savepoint with a given id.
+	SavepointRollback int
+}
+
 // newAllOperationsConfig returns a GeneratorConfig that exercises *all*
 // options. You probably want NewDefaultConfig. Most of the time, these will be
 // the same, but having both allows us to merge code for operations that do not
@@ -378,6 +389,12 @@ func newAllOperationsConfig() GeneratorConfig {
 		Batch: 4,
 		Ops:   clientOpConfig,
 	}
+	// SavepointConfig is only relevant in ClosureTxnConfig.
+	savepointConfig := SavepointConfig{
+		SavepointCreate:   1,
+		SavepointRelease:  1,
+		SavepointRollback: 1,
+	}
 	return GeneratorConfig{Ops: OperationConfig{
 		DB:    clientOpConfig,
 		Batch: batchOpConfig,
@@ -394,6 +411,7 @@ func newAllOperationsConfig() GeneratorConfig {
 			TxnClientOps:               clientOpConfig,
 			TxnBatchOps:                batchOpConfig,
 			CommitBatchOps:             clientOpConfig,
+			SavepointOps:               savepointConfig,
 		},
 		Split: SplitConfig{
 			SplitNew:   1,
@@ -1351,23 +1369,23 @@ func (g *generator) registerClosureTxnOps(allowed *[]opGen, c *ClosureTxnConfig)
 	const Commit, Rollback = ClosureTxnType_Commit, ClosureTxnType_Rollback
 	const SSI, SI, RC = isolation.Serializable, isolation.Snapshot, isolation.ReadCommitted
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.CommitSerializable)
+		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.CommitSnapshot)
+		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSnapshot)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, RC, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.CommitReadCommitted)
+		makeClosureTxn(Commit, RC, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitReadCommitted)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.RollbackSerializable)
+		makeClosureTxn(Rollback, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.RollbackSnapshot)
+		makeClosureTxn(Rollback, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSnapshot)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, RC, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.RollbackReadCommitted)
+		makeClosureTxn(Rollback, RC, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackReadCommitted)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps), c.CommitSerializableInBatch)
+		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSerializableInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps), c.CommitSnapshotInBatch)
+		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSnapshotInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, RC, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps), c.CommitReadCommittedInBatch)
+		makeClosureTxn(Commit, RC, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitReadCommittedInBatch)
 }
 
 func makeClosureTxn(
@@ -1376,16 +1394,33 @@ func makeClosureTxn(
 	txnClientOps *ClientOperationConfig,
 	txnBatchOps *BatchOperationConfig,
 	commitInBatch *ClientOperationConfig,
+	savepointOps *SavepointConfig,
 ) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
+		// All allowed non-savepoint ops. These don't change as we iteratively
+		// select ops in the loop below.
 		var allowed []opGen
 		g.registerClientOps(&allowed, txnClientOps)
 		g.registerBatchOps(&allowed, txnBatchOps)
-		const maxOps = 5
+		const maxOps = 20
 		numOps := rng.Intn(maxOps + 1)
 		ops := make([]Operation, numOps)
+		// Stack of savepoint indexes/ids.
+		// The last element of the slice is the top of the stack.
+		var spIds []int
 		for i := range ops {
-			ops[i] = g.selectOp(rng, allowed)
+			// In each iteration, we start with the allowed non-savepoint ops,
+			// and we add the valid savepoint ops in registerSavepointOps.
+			allowedSp := allowed
+			// Savepoints are registered on each iteration of the loop (unlike other
+			// ops that are registered once at the start) because depending on what
+			// savepoint ops are randomly selected in selectOp below, the set of
+			// allowed savepoint ops changes. See registerSavepointOps.
+			g.registerSavepointOps(&allowedSp, savepointOps, spIds, i)
+			ops[i] = g.selectOp(rng, allowedSp)
+			// Now that a random op is selected, we may need to update the stack of
+			// existing savepoints. See updateSavepoints.
+			updateSavepoints(&spIds, ops[i])
 		}
 		op := closureTxn(txnType, iso, ops...)
 		if commitInBatch != nil {
@@ -1395,6 +1430,70 @@ func makeClosureTxn(
 			op.ClosureTxn.CommitInBatch = makeRandBatch(commitInBatch)(g, rng).Batch
 		}
 		return op
+	}
+}
+
+// registerSavepointOps assumes existingSp is the current stack of savepoints
+// and uses it to register only valid savepoint ops. I.e. releasing or rolling
+// back a savepoint that hasn't been created or has already been released or
+// rolled back is not allowed.
+func (g *generator) registerSavepointOps(
+	allowed *[]opGen, s *SavepointConfig, existingSp []int, idx int,
+) {
+	// A savepoint creation is always a valid. The index of the op in the txn is
+	// used as its id.
+	addOpGen(allowed, makeSavepointCreate(idx), s.SavepointCreate)
+	// For each existing savepoint, a rollback and a release op are valid.
+	for _, id := range existingSp {
+		addOpGen(allowed, makeSavepointRelease(id), s.SavepointRelease)
+		addOpGen(allowed, makeSavepointRollback(id), s.SavepointRollback)
+	}
+}
+
+func makeSavepointCreate(id int) opGenFunc {
+	return func(_ *generator, _ *rand.Rand) Operation {
+		return createSavepoint(id)
+	}
+}
+
+func makeSavepointRelease(id int) opGenFunc {
+	return func(_ *generator, _ *rand.Rand) Operation {
+		return releaseSavepoint(id)
+	}
+}
+
+func makeSavepointRollback(id int) opGenFunc {
+	return func(_ *generator, _ *rand.Rand) Operation {
+		return rollbackSavepoint(id)
+	}
+}
+
+// Based on the previously selected op, updateSavepoints modifies the slice of
+// existing savepoints to either: (1) add a new savepoint if the previous op was
+// SavepointCreateOperation, or (2) remove a suffix of savepoints if the
+// previous op was SavepointReleaseOperation or SavepointRollbackOperation.
+func updateSavepoints(existingSp *[]int, prevOp Operation) {
+	switch op := prevOp.GetValue().(type) {
+	case *SavepointCreateOperation:
+		// If the previous selected op was a savepoint creation, add it to the stack
+		// of existing savepoints.
+		*existingSp = append(*existingSp, int(op.Id))
+	case *SavepointReleaseOperation:
+		// If the previous selected op was a savepoint release, remove it from the
+		// stack of existing savepoints, together with all other savepoint above it
+		// on the stack. E.g. if the existing savepoints are [1, 2, 3], releasing
+		// savepoint 2 means savepoint 3 also needs to be released.
+		index := slices.Index(*existingSp, int(op.Id))
+		*existingSp = (*existingSp)[:index]
+	case *SavepointRollbackOperation:
+		// If the previous selected op was a savepoint rollback, remove it from the
+		// stack of existing savepoints, together with all other savepoint above it
+		// on the stack. E.g. if the existing savepoints are [1, 2, 3], rolling back
+		// savepoint 2 means savepoint 3 also needs to be rolled back.
+		index := slices.Index(*existingSp, int(op.Id))
+		*existingSp = (*existingSp)[:index]
+	default:
+		// prevOp is not a savepoint operation, no need to adjust existingSp.
 	}
 }
 
@@ -1730,4 +1829,16 @@ func addSSTable(
 		Seq:          seq,
 		AsWrites:     asWrites,
 	}}
+}
+
+func createSavepoint(id int) Operation {
+	return Operation{SavepointCreate: &SavepointCreateOperation{Id: int32(id)}}
+}
+
+func releaseSavepoint(id int) Operation {
+	return Operation{SavepointRelease: &SavepointReleaseOperation{Id: int32(id)}}
+}
+
+func rollbackSavepoint(id int) Operation {
+	return Operation{SavepointRollback: &SavepointRollbackOperation{Id: int32(id)}}
 }
