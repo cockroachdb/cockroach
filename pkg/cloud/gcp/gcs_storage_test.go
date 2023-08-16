@@ -44,6 +44,7 @@ func TestPutGoogleCloud(t *testing.T) {
 
 	user := username.RootUserName()
 	testSettings := cluster.MakeTestingClusterSettings()
+	testID := cloudtestutils.NewTestID()
 
 	testutils.RunTrueAndFalse(t, "auth-specified-with-auth-param", func(t *testing.T, specified bool) {
 		credentials := os.Getenv("GOOGLE_CREDENTIALS_JSON")
@@ -51,9 +52,10 @@ func TestPutGoogleCloud(t *testing.T) {
 			skip.IgnoreLint(t, "GOOGLE_CREDENTIALS_JSON env var must be set")
 		}
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
-		uri := fmt.Sprintf("gs://%s/%s?%s=%s",
+		uri := fmt.Sprintf("gs://%s/%s-%d?%s=%s",
 			bucket,
 			"backup-test-specified",
+			testID,
 			CredentialsParam,
 			url.QueryEscape(encoded),
 		)
@@ -70,9 +72,10 @@ func TestPutGoogleCloud(t *testing.T) {
 			nil, /* kvDB */
 			testSettings,
 		)
-		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
+		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
 			bucket,
 			"backup-test-specified",
+			testID,
 			"listing-test",
 			cloud.AuthParam,
 			cloud.AuthParamSpecified,
@@ -92,7 +95,7 @@ func TestPutGoogleCloud(t *testing.T) {
 
 		cloudtestutils.CheckExportStore(
 			t,
-			fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit",
+			fmt.Sprintf("gs://%s/%s-%d?%s=%s", bucket, "backup-test-implicit", testID,
 				cloud.AuthParam, cloud.AuthParamImplicit),
 			false,
 			user,
@@ -100,9 +103,10 @@ func TestPutGoogleCloud(t *testing.T) {
 			nil, /* ief */
 			nil, /* kvDB */
 			testSettings)
-		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s/%s?%s=%s",
+		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s",
 			bucket,
 			"backup-test-implicit",
+			testID,
 			"listing-test",
 			cloud.AuthParam,
 			cloud.AuthParamImplicit,
@@ -128,9 +132,10 @@ func TestPutGoogleCloud(t *testing.T) {
 		token, err := ts.Token()
 		require.NoError(t, err, "getting token")
 
-		uri := fmt.Sprintf("gs://%s/%s?%s=%s",
+		uri := fmt.Sprintf("gs://%s/%s-%d?%s=%s",
 			bucket,
 			"backup-test-specified",
+			testID,
 			BearerTokenParam,
 			token.AccessToken,
 		)
@@ -144,9 +149,10 @@ func TestPutGoogleCloud(t *testing.T) {
 			nil, /* ief */
 			nil, /* kvDB */
 			testSettings)
-		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
+		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
 			bucket,
 			"backup-test-specified",
+			testID,
 			"listing-test",
 			cloud.AuthParam,
 			cloud.AuthParamSpecified,
@@ -174,6 +180,8 @@ func TestGCSAssumeRole(t *testing.T) {
 		skip.IgnoreLint(t, "ASSUME_SERVICE_ACCOUNT env var must be set")
 	}
 
+	testID := cloudtestutils.NewTestID()
+
 	t.Run("specified", func(t *testing.T) {
 		credentials := os.Getenv("GOOGLE_CREDENTIALS_JSON")
 		if credentials == "" {
@@ -183,7 +191,7 @@ func TestGCSAssumeRole(t *testing.T) {
 
 		// Verify that specified permissions with the credentials do not give us
 		// access to the bucket.
-		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s?%s=%s", limitedBucket, "backup-test-assume-role",
+		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s-%d?%s=%s", limitedBucket, "backup-test-assume-role", testID,
 			CredentialsParam, url.QueryEscape(encoded)), user,
 			nil, /* ie */
 			nil, /* ief */
@@ -193,9 +201,10 @@ func TestGCSAssumeRole(t *testing.T) {
 
 		cloudtestutils.CheckExportStore(
 			t,
-			fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s&%s=%s",
+			fmt.Sprintf("gs://%s/%s-%d?%s=%s&%s=%s&%s=%s",
 				limitedBucket,
 				"backup-test-assume-role",
+				testID,
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
 				AssumeRoleParam,
@@ -207,9 +216,10 @@ func TestGCSAssumeRole(t *testing.T) {
 			nil, /* kvDB */
 			testSettings,
 		)
-		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s&%s=%s",
+		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s&%s=%s",
 			limitedBucket,
 			"backup-test-assume-role",
+			testID,
 			"listing-test",
 			cloud.AuthParam,
 			cloud.AuthParamSpecified,
@@ -232,7 +242,7 @@ func TestGCSAssumeRole(t *testing.T) {
 
 		// Verify that implicit permissions with the credentials do not give us
 		// access to the bucket.
-		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s?%s=%s", limitedBucket, "backup-test-assume-role",
+		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s-%d?%s=%s", limitedBucket, "backup-test-assume-role", testID,
 			cloud.AuthParam, cloud.AuthParamImplicit), user,
 			nil, /* ie */
 			nil, /* ief */
@@ -240,16 +250,17 @@ func TestGCSAssumeRole(t *testing.T) {
 			testSettings,
 		)
 
-		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role",
+		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s-%d?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role", testID,
 			cloud.AuthParam, cloud.AuthParamImplicit, AssumeRoleParam, assumedAccount), false, user,
 			nil, /* ie */
 			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
-		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
+		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
 			limitedBucket,
 			"backup-test-assume-role",
+			testID,
 			"listing-test",
 			cloud.AuthParam,
 			cloud.AuthParamImplicit,
@@ -293,9 +304,10 @@ func TestGCSAssumeRole(t *testing.T) {
 				// to access the storage.
 				for _, role := range roleChain {
 					q.Set(AssumeRoleParam, role)
-					roleURI := fmt.Sprintf("gs://%s/%s/%s?%s",
+					roleURI := fmt.Sprintf("gs://%s/%s-%d/%s?%s",
 						limitedBucket,
 						"backup-test-assume-role",
+						testID,
 						"listing-test",
 						q.Encode(),
 					)
@@ -309,9 +321,10 @@ func TestGCSAssumeRole(t *testing.T) {
 
 				// Finally, check that the chain of roles can be used to access the storage.
 				q.Set(AssumeRoleParam, roleChainStr)
-				uri := fmt.Sprintf("gs://%s/%s/%s?%s",
+				uri := fmt.Sprintf("gs://%s/%s-%d/%s?%s",
 					limitedBucket,
 					"backup-test-assume-role",
+					testID,
 					"listing-test",
 					q.Encode(),
 				)
