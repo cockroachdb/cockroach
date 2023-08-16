@@ -176,6 +176,9 @@ func (v *orderValidator) NoteResolved(partition string, resolved hlc.Timestamp) 
 	prev := v.resolved[partition]
 	if prev.Less(resolved) {
 		v.resolved[partition] = resolved
+	} else {
+		v.failures = append(v.failures, fmt.Sprintf("new resolved timestamp %s is lower than existing resolved timestamp %s for"+
+			" partition %s", resolved.String(), prev.String(), partition))
 	}
 	return nil
 }
