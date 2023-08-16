@@ -198,6 +198,11 @@ type ProposalData struct {
 	// application is). This flag makes sure that the proposal buffer won't
 	// accidentally reinsert a finished proposal into the map.
 	v2SeenDuringApplication bool
+
+	// reproposal is the proposal that superseded this one. Superseding proposals
+	// form a chain starting from the original proposal. See Replica.mu.proposals
+	// comment for details.
+	reproposal *ProposalData
 }
 
 // useReplicationAdmissionControl indicates whether this raft command should

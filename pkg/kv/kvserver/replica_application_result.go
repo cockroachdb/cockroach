@@ -379,6 +379,18 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		}
 	}()
 
+	// Link from from the old to the new proposal. If the proposal is synchronous,
+	// the client is waiting on the original proposal. By the time it has to act
+	// on the result, a bunch of reproposals can have happened. Link them all, so
+	// that the client can see all proposals for post-processing.
+	//
+	// TODO(pavelkalinnikov): prove and assert that origP.reproposal was nil.
+	defer func() {
+		if success {
+			origP.reproposal = newProposal
+		}
+	}()
+
 	// We need to track the request again in order to protect its timestamp until
 	// it gets reproposed.
 	// TODO(andrei): Only track if the request consults the ts cache. Some

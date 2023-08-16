@@ -74,5 +74,5 @@ func TestProposalDataAndRaftCommandAreConsideredWhenAddingFields(t *testing.T) {
 	// here, and second, we don't want to check for recursively populated structs (but
 	// only for the top level fields).
 	require.Equal(t, 10, reflect.TypeOf(*raftCommand).NumField())
-	require.Equal(t, 17, reflect.TypeOf(*prop).NumField())
+	require.Equal(t, 18, reflect.TypeOf(*prop).NumField())
 }

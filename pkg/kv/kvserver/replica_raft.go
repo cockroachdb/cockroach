@@ -327,7 +327,16 @@ func (r *Replica) evalAndPropose(
 		defer r.mu.Unlock()
 		// TODO(radu): Should this context be created via tracer.ForkSpan?
 		// We'd need to make sure the span is finished eventually.
-		proposal.ctx = r.AnnotateCtx(context.TODO())
+		ctx := r.AnnotateCtx(context.TODO())
+		// When the caller abandons the request and returns, it Finishes the request
+		// trace. By that time, multiple reproposals can have occurred, and some may
+		// be still running. Unbind context for all reproposals, so that they no
+		// longer post tracing updates through this context to a Finished span.
+		//
+		// See https://github.com/cockroachdb/cockroach/issues/107521
+		for p := proposal; p != nil; p = p.reproposal {
+			p.ctx = ctx
+		}
 	}
 	return proposalCh, abandon, idKey, writeBytes, nil
 }
