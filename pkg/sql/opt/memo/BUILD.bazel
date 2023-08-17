@@ -35,6 +35,7 @@ go_library(
         "//pkg/sql/opt/invertedexpr",  # keep
         "//pkg/sql/opt/props",
         "//pkg/sql/opt/props/physical",
+        "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/cast",

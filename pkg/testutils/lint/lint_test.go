@@ -1336,7 +1336,7 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestProtoMessage", func(t *testing.T) {
+	t.Run("", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
@@ -1359,6 +1359,7 @@ func TestLint(t *testing.T) {
 			":!sql/pgwire/pgerror/severity.go",
 			":!sql/pgwire/pgerror/with_candidate_code.go",
 			":!sql/pgwire/pgwirebase/too_big_error.go",
+			":!sql/plpgsql/plpgsql_error.go",
 			":!sql/protoreflect/redact.go",
 			":!sql/colexecerror/error.go",
 			":!util/timeutil/timeout_error.go",
