@@ -126,24 +126,24 @@ func TestAzure(t *testing.T) {
 	)
 
 	// Client Secret auth
-	cloudtestutils.CheckExportStore(t, cfg.filePathClientAuth("backup-test"),
+	cloudtestutils.CheckExportStore(t, cfg.filePathClientAuth(testPath),
 		false, username.RootUserName(),
 		nil, /* db */
 		testSettings,
 	)
-	cloudtestutils.CheckListFiles(t, cfg.filePathClientAuth("listing-test"),
+	cloudtestutils.CheckListFiles(t, cfg.filePathClientAuth(testListPath),
 		username.RootUserName(),
 		nil, /* db */
 		testSettings,
 	)
 
 	// Implicit auth
-	cloudtestutils.CheckExportStore(t, cfg.filePathImplicitAuth("backup-test"),
+	cloudtestutils.CheckExportStore(t, cfg.filePathImplicitAuth(testPath),
 		false, username.RootUserName(),
 		nil, /* db */
 		testSettings,
 	)
-	cloudtestutils.CheckListFiles(t, cfg.filePathImplicitAuth("listing-test"),
+	cloudtestutils.CheckListFiles(t, cfg.filePathImplicitAuth(testListPath),
 		username.RootUserName(),
 		nil, /* db */
 		testSettings,
