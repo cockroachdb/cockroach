@@ -112,13 +112,14 @@ func lookupNumRunningJobs(
 	scheduleID int64,
 	env scheduledjobs.JobSchedulerEnv,
 	ie sqlutil.InternalExecutor,
+	txn *kv.Txn,
 ) (int64, error) {
 	lookupStmt := fmt.Sprintf(
 		"SELECT count(*) FROM %s WHERE created_by_type = '%s' AND created_by_id = %d AND status IN %s",
 		env.SystemJobsTableName(), CreatedByScheduledJobs, scheduleID, NonTerminalStatusTupleString)
 	row, err := ie.QueryRowEx(
 		ctx, "lookup-num-running",
-		/*txn=*/ nil,
+		txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		lookupStmt)
 	if err != nil {
@@ -254,7 +255,7 @@ func (s *jobScheduler) executeCandidateSchedule(
 		return nil
 	}
 
-	numRunning, err := lookupNumRunningJobs(ctx, schedule.ScheduleID(), s.env, s.InternalExecutor)
+	numRunning, err := lookupNumRunningJobs(ctx, schedule.ScheduleID(), s.env, s.InternalExecutor, txn)
 	if err != nil {
 		return err
 	}
