@@ -66,7 +66,7 @@ type Settings struct {
 // TODO(radu): move this functionality into settings.Values, provide a way to
 // obtain it along with the current value consistently.
 type OverridesInformer interface {
-	IsOverridden(settingName string) bool
+	IsOverridden(settingKey settings.InternalKey) bool
 }
 
 // TelemetryOptOut controls whether to opt out of telemetry (including Sentry) or not.

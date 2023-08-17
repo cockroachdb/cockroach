@@ -2312,7 +2312,7 @@ func (n *Node) getVersionSettingWithUpdateCh(
 	defer n.versionUpdateMu.Unlock()
 
 	setting := kvpb.TenantSetting{
-		Name: clusterversion.KeyVersionSetting,
+		InternalKey: clusterversion.KeyVersionSetting,
 		Value: settings.EncodedValue{
 			Type:  settings.VersionSettingValueType,
 			Value: n.versionUpdateMu.encodedVersion,

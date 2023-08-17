@@ -2016,30 +2016,39 @@ func (s *adminServer) Settings(
 		}
 	}
 
-	var settingsKeys []string
+	// settingsKeys is the list of setting keys to retrieve.
+	settingsKeys := make([]settings.InternalKey, 0, len(req.Keys))
+	for _, desiredSetting := range req.Keys {
+		// The API client can pass either names or internal keys through the API.
+		key, ok := settings.NameToKey(settings.SettingName(desiredSetting))
+		if ok {
+			settingsKeys = append(settingsKeys, key)
+		} else {
+			settingsKeys = append(settingsKeys, settings.InternalKey(desiredSetting))
+		}
+	}
 	if !consoleSettingsOnly {
-		settingsKeys = req.Keys
 		if len(settingsKeys) == 0 {
 			settingsKeys = settings.Keys(settings.ForSystemTenant)
 		}
 	} else {
-
-		if len(req.Keys) == 0 {
+		if len(settingsKeys) == 0 {
 			settingsKeys = settings.ConsoleKeys()
 		} else {
-			settingsKeys = []string{}
-			for _, k := range req.Keys {
+			newSettingsKeys := make([]settings.InternalKey, 0, len(settings.ConsoleKeys()))
+			for _, k := range settingsKeys {
 				if slices.Contains(settings.ConsoleKeys(), k) {
-					settingsKeys = append(settingsKeys, k)
+					newSettingsKeys = append(settingsKeys, k)
 				}
 			}
+			settingsKeys = newSettingsKeys
 		}
 	}
 
 	// Read the system.settings table to determine the settings for which we have
 	// explicitly set values -- the in-memory SV has the set and default values
 	// flattened for quick reads, but we'd only need the non-defaults for comparison.
-	alteredSettings := make(map[string]*time.Time)
+	alteredSettings := make(map[settings.InternalKey]*time.Time)
 	if it, err := s.internalExecutor.QueryIteratorEx(
 		ctx, "read-setting", nil, /* txn */
 		sessiondata.RootUserSessionDataOverride,
@@ -2050,9 +2059,9 @@ func (s *adminServer) Settings(
 		var ok bool
 		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 			row := it.Cur()
-			name := string(tree.MustBeDString(row[0]))
+			key := settings.InternalKey(tree.MustBeDString(row[0]))
 			lastUpdated := row[1].(*tree.DTimestamp)
-			alteredSettings[name] = &lastUpdated.Time
+			alteredSettings[key] = &lastUpdated.Time
 		}
 		if err != nil {
 			// No need to clear AlteredSettings map since we only make best
@@ -2066,9 +2075,9 @@ func (s *adminServer) Settings(
 		var v settings.Setting
 		var ok bool
 		if redactValues {
-			v, ok = settings.LookupForReporting(k, settings.ForSystemTenant)
+			v, ok = settings.LookupForReportingByKey(k, settings.ForSystemTenant)
 		} else {
-			v, ok = settings.LookupForLocalAccess(k, settings.ForSystemTenant)
+			v, ok = settings.LookupForLocalAccessByKey(k, settings.ForSystemTenant)
 		}
 		if !ok {
 			continue
@@ -2077,8 +2086,9 @@ func (s *adminServer) Settings(
 		if val, ok := alteredSettings[k]; ok {
 			altered = val
 		}
-		resp.KeyValues[k] = serverpb.SettingsResponse_Value{
+		resp.KeyValues[string(k)] = serverpb.SettingsResponse_Value{
 			Type: v.Typ(),
+			Name: string(v.Name()),
 			// Note: v.String() redacts the values if the purpose is not "LocalAccess".
 			Value:       v.String(&s.st.SV),
 			Description: v.Description(),

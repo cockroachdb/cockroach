@@ -1569,10 +1569,9 @@ func (t *logicTest) newCluster(
 	// implicitly) set any necessary cluster settings to override blocked
 	// behavior.
 	if cfg.UseSecondaryTenant == logictestbase.Always || t.cluster.StartedDefaultTestTenant() {
-
 		conn := t.cluster.SystemLayer(0).SQLConn(t.rootT, "")
 		clusterSettings := toa.clusterSettings
-		_, ok := clusterSettings[sql.SecondaryTenantZoneConfigsEnabled.Key()]
+		_, ok := clusterSettings[string(sql.SecondaryTenantZoneConfigsEnabled.Name())]
 		if ok {
 			// We reduce the closed timestamp duration on the host tenant so that the
 			// setting override can propagate to the tenant faster.
@@ -1589,8 +1588,8 @@ func (t *logicTest) newCluster(
 		}
 
 		tenantID := serverutils.TestTenantID()
-		for name, value := range clusterSettings {
-			query := fmt.Sprintf("ALTER TENANT [$1] SET CLUSTER SETTING %s = $2", name)
+		for settingName, value := range clusterSettings {
+			query := fmt.Sprintf("ALTER TENANT [$1] SET CLUSTER SETTING %s = $2", settingName)
 			if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
 				t.Fatal(err)
 			}
@@ -1752,9 +1751,9 @@ func (t *logicTest) newCluster(
 		})
 	}
 
-	for name, value := range toa.clusterSettings {
+	for settingName, value := range toa.clusterSettings {
 		t.waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
-			name, value, params.ServerArgs.Insecure,
+			settingName, value, params.ServerArgs.Insecure,
 		)
 	}
 

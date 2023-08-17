@@ -1459,7 +1459,7 @@ func TestRUSettingsChanged(t *testing.T) {
 		tenantcostmodel.ExternalIOIngressCostPerMiB,
 	}
 	for _, setting := range settings {
-		sysDB.Exec(t, fmt.Sprintf("ALTER TENANT ALL SET CLUSTER SETTING %s = $1", setting.Key()), setting.Default()*100)
+		sysDB.Exec(t, fmt.Sprintf("ALTER TENANT ALL SET CLUSTER SETTING %s = $1", setting.InternalKey()), setting.Default()*100)
 	}
 
 	// Check to make sure the cost of the query increased. Use SucceedsSoon

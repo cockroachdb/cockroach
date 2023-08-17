@@ -6057,7 +6057,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 
 	conn := tc.ServerConn(0)
 	systemTenantRunner := sqlutils.MakeSQLRunner(conn)
-	setAndWaitForTenantReadOnlyClusterSetting(t, sql.SecondaryTenantZoneConfigsEnabled.Key(),
+	setAndWaitForTenantReadOnlyClusterSetting(t, sql.SecondaryTenantZoneConfigsEnabled.Name(),
 		systemTenantRunner, ttSQLDB, tenantID, "true")
 
 	// Run the test as the system tenant, and as the secondary tenant.

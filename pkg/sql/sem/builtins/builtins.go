@@ -4791,7 +4791,7 @@ value if you rely on the HLC for accuracy.`,
 				if !ok {
 					return nil, errors.AssertionFailedf("expected string value, got %T", args[0])
 				}
-				name := strings.ToLower(string(s))
+				name := settings.SettingName(strings.ToLower(string(s)))
 				setting, ok := settings.LookupForLocalAccess(name, evalCtx.Codec.ForSystemTenant())
 				if !ok {
 					return nil, errors.Newf("unknown cluster setting '%s'", name)
@@ -4821,7 +4821,7 @@ value if you rely on the HLC for accuracy.`,
 				if !ok {
 					return nil, errors.AssertionFailedf("expected string value, got %T", args[1])
 				}
-				name := strings.ToLower(string(s))
+				name := settings.SettingName(strings.ToLower(string(s)))
 				setting, ok := settings.LookupForLocalAccess(name, evalCtx.Codec.ForSystemTenant())
 				if !ok {
 					return nil, errors.Newf("unknown cluster setting '%s'", name)

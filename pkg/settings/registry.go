@@ -26,7 +26,7 @@ import (
 //
 // registry should never be mutated after creation (except in tests), as it is
 // read concurrently by different callers.
-var registry = make(map[string]internalSetting)
+var registry = make(map[InternalKey]internalSetting)
 
 // slotTable stores the same settings as the registry, but accessible by the
 // slot index.
@@ -35,7 +35,7 @@ var slotTable [MaxSettings]internalSetting
 // TestingSaveRegistry can be used in tests to save/restore the current
 // contents of the registry.
 func TestingSaveRegistry() func() {
-	var origRegistry = make(map[string]internalSetting)
+	var origRegistry = make(map[InternalKey]internalSetting)
 	for k, v := range registry {
 		origRegistry[k] = v
 	}
@@ -46,7 +46,7 @@ func TestingSaveRegistry() func() {
 
 // When a setting is removed, it should be added to this list so that we cannot
 // accidentally reuse its name, potentially mis-handling older values.
-var retiredSettings = map[string]struct{}{
+var retiredSettings = map[InternalKey]struct{}{
 	// removed as of 2.0.
 	"kv.gc.batch_size":                     {},
 	"kv.transaction.max_intents":           {},
@@ -180,7 +180,7 @@ var retiredSettings = map[string]struct{}{
 // cluster settings. In 22.2 and later, new session settings do not need an
 // associated sql.defaults cluster setting. Instead they can have their default
 // changed with ALTER ROLE ... SET.
-var sqlDefaultSettings = map[string]struct{}{
+var sqlDefaultSettings = map[InternalKey]struct{}{
 	// PLEASE DO NOT ADD NEW SETTINGS TO THIS MAP. THANK YOU.
 	"sql.defaults.cost_scans_with_default_col_size.enabled":                     {},
 	"sql.defaults.datestyle":                                                    {},
@@ -233,14 +233,14 @@ var sqlDefaultSettings = map[string]struct{}{
 }
 
 // register adds a setting to the registry.
-func register(class Class, key, desc string, s internalSetting) {
+func register(class Class, key InternalKey, desc string, s internalSetting) {
 	if _, ok := retiredSettings[key]; ok {
 		panic(fmt.Sprintf("cannot reuse previously defined setting name: %s", key))
 	}
 	if _, ok := registry[key]; ok {
 		panic(fmt.Sprintf("setting already defined: %s", key))
 	}
-	if strings.Contains(key, "sql.defaults") {
+	if strings.Contains(string(key), "sql.defaults") {
 		if _, ok := sqlDefaultSettings[key]; !ok {
 			panic(fmt.Sprintf(
 				"new sql.defaults cluster settings: %s is not needed now that `ALTER ROLE ... SET` syntax "+
@@ -275,8 +275,8 @@ func register(class Class, key, desc string, s internalSetting) {
 func NumRegisteredSettings() int { return len(registry) }
 
 // Keys returns a sorted string array with all the known keys.
-func Keys(forSystemTenant bool) (res []string) {
-	res = make([]string, 0, len(registry))
+func Keys(forSystemTenant bool) (res []InternalKey) {
+	res = make([]InternalKey, 0, len(registry))
 	for k, v := range registry {
 		if v.isRetired() {
 			continue
@@ -286,7 +286,7 @@ func Keys(forSystemTenant bool) (res []string) {
 		}
 		res = append(res, k)
 	}
-	sort.Strings(res)
+	sort.Slice(res, func(i, j int) bool { return res[i] < res[j] })
 	return res
 }
 
@@ -296,28 +296,46 @@ func Keys(forSystemTenant bool) (res []string) {
 // information, because it will be returned on `settings` endpoint for
 // users without VIEWCLUSTERSETTING or MODIFYCLUSTERSETTING permission,
 // but that have VIEWACTIVITY or VIEWACTIVITYREDACTED permissions.
-func ConsoleKeys() (res []string) {
-	return []string{
-		"cross_cluster_replication.enabled",
-		"keyvisualizer.enabled",
-		"keyvisualizer.sample_interval",
-		"sql.index_recommendation.drop_unused_duration",
-		"sql.insights.anomaly_detection.latency_threshold",
-		"sql.insights.high_retry_count.threshold",
-		"sql.insights.latency_threshold",
-		"sql.stats.automatic_collection.enabled",
-		"timeseries.storage.resolution_10s.ttl",
-		"timeseries.storage.resolution_30m.ttl",
-		"ui.display_timezone",
-		"version",
-	}
+func ConsoleKeys() (res []InternalKey) {
+	return allConsoleKeys
+}
+
+var allConsoleKeys = []InternalKey{
+	"cross_cluster_replication.enabled",
+	"keyvisualizer.enabled",
+	"keyvisualizer.sample_interval",
+	"sql.index_recommendation.drop_unused_duration",
+	"sql.insights.anomaly_detection.latency_threshold",
+	"sql.insights.high_retry_count.threshold",
+	"sql.insights.latency_threshold",
+	"sql.stats.automatic_collection.enabled",
+	"timeseries.storage.resolution_10s.ttl",
+	"timeseries.storage.resolution_30m.ttl",
+	"ui.display_timezone",
+	"version",
+}
+
+// NameToKey returns the key associated with a setting name.
+func NameToKey(name SettingName) (InternalKey, bool) {
+	// TODO(...): improve this.
+	key := InternalKey(name)
+	return key, true
 }
 
 // LookupForLocalAccess returns a NonMaskedSetting by name. Used when a setting
 // is being retrieved for local processing within the cluster and not for
 // reporting; sensitive values are accessible.
-func LookupForLocalAccess(name string, forSystemTenant bool) (NonMaskedSetting, bool) {
-	s, ok := registry[name]
+func LookupForLocalAccess(name SettingName, forSystemTenant bool) (NonMaskedSetting, bool) {
+	// TODO(...): handle names different from keys.
+	key := InternalKey(name)
+	return LookupForLocalAccessByKey(key, forSystemTenant)
+}
+
+// LookupForLocalAccessByKey returns a NonMaskedSetting by key. Used when a
+// setting is being retrieved for local processing within the cluster and not
+// for reporting; sensitive values are accessible.
+func LookupForLocalAccessByKey(key InternalKey, forSystemTenant bool) (NonMaskedSetting, bool) {
+	s, ok := registry[key]
 	if !ok {
 		return nil, false
 	}
@@ -329,11 +347,21 @@ func LookupForLocalAccess(name string, forSystemTenant bool) (NonMaskedSetting, 
 
 // LookupForReporting returns a Setting by name. Used when a setting is being
 // retrieved for reporting.
+// For settings that are non-reportable, the returned Setting hides the current
+// value (see Setting.String).
+func LookupForReporting(name SettingName, forSystemTenant bool) (Setting, bool) {
+	// TODO(...): handle names different from keys.
+	key := InternalKey(name)
+	return LookupForReportingByKey(key, forSystemTenant)
+}
+
+// LookupForReportingByKey returns a Setting by key. Used when a setting is being
+// retrieved for reporting.
 //
 // For settings that are non-reportable, the returned Setting hides the current
 // value (see Setting.String).
-func LookupForReporting(name string, forSystemTenant bool) (Setting, bool) {
-	s, ok := registry[name]
+func LookupForReportingByKey(key InternalKey, forSystemTenant bool) (Setting, bool) {
+	s, ok := registry[key]
 	if !ok {
 		return nil, false
 	}
@@ -369,8 +397,8 @@ var ReadableTypes = map[string]string{
 //     is a string setting with an empty value);
 //   - "<redacted>" if the setting is not reportable;
 //   - "<unknown>" if there is no setting with this name.
-func RedactedValue(name string, values *Values, forSystemTenant bool) string {
-	if setting, ok := LookupForReporting(name, forSystemTenant); ok {
+func RedactedValue(key InternalKey, values *Values, forSystemTenant bool) string {
+	if setting, ok := LookupForReportingByKey(key, forSystemTenant); ok {
 		return setting.String(values)
 	}
 	return "<unknown>"

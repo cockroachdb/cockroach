@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 )
@@ -26,7 +27,7 @@ import (
 // SettingsDefaultOverrides documents the effect of several migrations that add
 // an explicit value for a setting, effectively changing the "default value"
 // from what was defined in code.
-var SettingsDefaultOverrides = map[string]string{
+var SettingsDefaultOverrides = map[settings.InternalKey]string{
 	"diagnostics.reporting.enabled": "true",
 	"cluster.secret":                "<random>",
 }

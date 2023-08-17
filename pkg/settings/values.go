@@ -95,7 +95,7 @@ func (c *valuesContainer) getGeneric(slot slotIdx) interface{} {
 func (c *valuesContainer) checkForbidden(slot slotIdx) bool {
 	if c.forbidden[slot] {
 		if buildutil.CrdbTestBuild {
-			panic(errors.AssertionFailedf("attempted to set forbidden setting %s", slotTable[slot].Key()))
+			panic(errors.AssertionFailedf("attempted to set forbidden setting %s", slotTable[slot].Name()))
 		}
 		return false
 	}
