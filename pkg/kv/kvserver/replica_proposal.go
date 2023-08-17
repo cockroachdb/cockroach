@@ -896,6 +896,11 @@ func (r *Replica) evaluateProposal(
 	// in the call stack as well.
 	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, g, st, ui)
 
+	optEvalErr := r.maybeCheckOptimisticEvalSuccess(g, pErr, ba, br, st)
+	if optEvalErr != nil {
+		pErr = optEvalErr
+	}
+
 	// Note: reusing the proposer's batch when applying the command on the
 	// proposer was explored as an optimization but resulted in no performance
 	// benefit.
