@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -146,7 +147,7 @@ func (t *descriptorState) upsertLeaseLocked(
 		if t.mu.active.findNewest() != nil {
 			log.Infof(ctx, "new lease: %s", desc)
 		}
-		descState := newDescriptorVersionState(t, desc, session, expiration, regionEnumPrefix, true /* isLease */)
+		descState := newDescriptorVersionState(ctx, t, desc, session, expiration, regionEnumPrefix, true /* isLease */)
 		t.mu.active.insert(descState)
 		return descState, nil, nil
 	}
@@ -179,12 +180,17 @@ func (t *descriptorState) upsertLeaseLocked(
 		expiration: storedLeaseExpiration(expiration),
 		sessionID:  []byte(session.ID()),
 	}
+	if !t.m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
+		s.mu.lease.sessionID = nil
+		s.mu.session = nil
+	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "replaced lease: %s with %s", toRelease, s.mu.lease)
 	}
 	// If the version never changed there is nothing to
 	// delete, if we are using session based leases.
-	if toRelease.version == s.mu.lease.version {
+	if toRelease.version == s.mu.lease.version &&
+		t.m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
 		toRelease = nil
 	}
 	return nil, toRelease, nil
@@ -193,6 +199,7 @@ func (t *descriptorState) upsertLeaseLocked(
 var _ redact.SafeFormatter = (*descriptorVersionState)(nil)
 
 func newDescriptorVersionState(
+	ctx context.Context,
 	t *descriptorState,
 	desc catalog.Descriptor,
 	session sqlliveness.Session,
@@ -204,6 +211,9 @@ func newDescriptorVersionState(
 		t:          t,
 		Descriptor: desc,
 	}
+	if !t.m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
+		session = nil
+	}
 	descState.mu.expiration = expiration
 	descState.mu.session = session
 	if isLease {
@@ -212,9 +222,12 @@ func newDescriptorVersionState(
 			prefix:     prefix,
 			version:    int(desc.GetVersion()),
 			expiration: storedLeaseExpiration(expiration),
-			sessionID:  []byte(session.ID()),
+		}
+		if session != nil {
+			descState.mu.lease.sessionID = []byte(session.ID())
 		}
 	}
+
 	return descState
 }
 

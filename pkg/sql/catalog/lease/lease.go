@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -81,11 +82,16 @@ func (m *Manager) WaitForNoVersion(
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
+		ie := m.storage.db.Executor()
+		stmt := `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND (crdb_internal.sql_liveness_is_alive("sessionID")))`
+		if !m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
+			stmt = `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND expiration > $1)`
+		}
 		now := m.storage.clock.Now()
-		stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND (crdb_internal.sql_liveness_is_alive("sessionID")))`,
+		stmt = fmt.Sprintf(stmt,
 			now.AsOfSystemTime(),
 			id)
-		values, err := m.storage.db.Executor().QueryRowEx(
+		values, err := ie.QueryRowEx(
 			ctx, "count-leases", nil, /* txn */
 			sessiondata.RootUserSessionDataOverride,
 			stmt, now.GoTime(),
@@ -148,9 +154,10 @@ func (m *Manager) WaitForOneVersion(
 
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
+
 		now := m.storage.clock.Now()
 		descs := []IDVersion{NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion())}
-		count, err := CountLeases(ctx, m.storage.db.Executor(), descs, now)
+		count, err := CountLeases(ctx, m.storage.settings.Version, m.storage.db.Executor(), descs, now)
 		if err != nil {
 			return nil, err
 		}
@@ -464,7 +471,9 @@ func (f staticSession) RegisterCallbackForSessionExpiry(func(context.Context)) {
 
 // Insert descriptor versions. The versions provided are not in
 // any particular order.
-func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []historicalDescriptor) {
+func (m *Manager) insertDescriptorVersions(
+	ctx context.Context, id descpb.ID, versions []historicalDescriptor,
+) {
 	t := m.findDescriptorState(id, false /* create */)
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -476,7 +485,7 @@ func (m *Manager) insertDescriptorVersions(id descpb.ID, versions []historicalDe
 		session := staticSession{versions[i].expiration}
 		if existingVersion == nil {
 			t.mu.active.insert(
-				newDescriptorVersionState(t, versions[i].desc, session, versions[i].expiration, nil, false))
+				newDescriptorVersionState(ctx, t, versions[i].desc, session, versions[i].expiration, nil, false))
 		}
 	}
 }
@@ -1108,7 +1117,7 @@ func (m *Manager) Acquire(
 			if errRead != nil {
 				return nil, errRead
 			}
-			m.insertDescriptorVersions(id, versions)
+			m.insertDescriptorVersions(ctx, id, versions)
 
 		default:
 			return nil, err
@@ -1342,12 +1351,15 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 				refreshTimer.Read = true
 				refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
 
-				// Clean up session based leases that have expired.
-				m.cleanupExpiredSessionLeases(ctx)
+				// Refresh leases if we are using the expiry based leasing model.
+				if !m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
+					m.refreshSomeLeases(ctx)
+				}
 
-				// We would previously refresh leases on a timer, but this
-				// isn't necessary for session based leases, since they
-				// are tied to the sqlliveness that heartbeats on its own.
+				// Clean up session based leases that have expired.
+				if m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
+					m.cleanupExpiredSessionLeases(ctx)
+				}
 			}
 		}
 	})
@@ -1391,7 +1403,6 @@ func (m *Manager) cleanupExpiredSessionLeases(ctx context.Context) {
 				if leaseToDelete != nil {
 					m.storage.release(ctx, m.stopper, leaseToDelete)
 				}
-
 			}
 		}); err != nil {
 			log.Infof(ctx, "unable to delete leases from storage %s", err)

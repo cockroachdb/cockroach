@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -25,13 +26,23 @@ import (
 // CountLeases returns the number of unexpired leases for a number of descriptors
 // each at a particular version at a particular time.
 func CountLeases(
-	ctx context.Context, executor isql.Executor, versions []IDVersion, at hlc.Timestamp,
+	ctx context.Context,
+	activeVersion clusterversion.Handle,
+	executor isql.Executor,
+	versions []IDVersion,
+	at hlc.Timestamp,
 ) (int, error) {
+	usesExpiry := !activeVersion.IsActive(ctx, clusterversion.V23_2)
 	var whereClauses []string
 	for _, t := range versions {
+		clause := fmt.Sprintf(`("descID" = %d AND version = %d AND (crdb_internal.sql_liveness_is_alive("sessionID")))`,
+			t.ID, t.Version)
+		if usesExpiry {
+			clause = fmt.Sprintf(`("descID" = %d AND version = %d AND expiration > $1)`,
+				t.ID, t.Version)
+		}
 		whereClauses = append(whereClauses,
-			fmt.Sprintf(`("descID" = %d AND version = %d AND (crdb_internal.sql_liveness_is_alive("sessionID")))`,
-				t.ID, t.Version),
+			clause,
 		)
 	}
 
