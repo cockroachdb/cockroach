@@ -2280,6 +2280,7 @@ GO_TARGETS = [
     "//pkg/util/errorutil:errorutil",
     "//pkg/util/errorutil:errorutil_test",
     "//pkg/util/fileutil:fileutil",
+    "//pkg/util/filterstacks:filterstacks",
     "//pkg/util/flagutil:flagutil",
     "//pkg/util/flagutil:flagutil_test",
     "//pkg/util/fsm:fsm",
