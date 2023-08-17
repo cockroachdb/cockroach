@@ -888,14 +888,14 @@ func TestConnector_dialSQLServer(t *testing.T) {
 				require.Equal(t, c.StartupMsg, msg)
 				require.Equal(t, "127.0.0.2:4567", serverAddress)
 				require.Nil(t, tlsConfig)
-				return nil, withCode(errors.New("bar"), codeBackendDown)
+				return nil, withCode(errors.New("bar"), codeBackendDialFailed)
 			},
 		)()
 		sa := balancer.NewServerAssignment(tenantID, tracker, nil, "127.0.0.2:4567")
 		defer sa.Close()
 
 		conn, err := c.dialSQLServer(ctx, sa)
-		require.EqualError(t, err, "codeBackendDown: bar")
+		require.EqualError(t, err, "codeBackendDialFailed: bar")
 		require.True(t, isRetriableConnectorError(err))
 		require.Nil(t, conn)
 	})
