@@ -37,67 +37,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// applyCutoverTime modifies the consumer job record with a cutover time and
-// unpauses the job if necessary.
-func applyCutoverTime(
-	ctx context.Context,
-	jobRegistry *jobs.Registry,
-	txn isql.Txn,
-	ingestionJobID jobspb.JobID,
-	cutoverTimestamp hlc.Timestamp,
-) error {
-	log.Infof(ctx, "adding cutover time %s to job record", cutoverTimestamp)
-	if err := jobRegistry.UpdateJobWithTxn(ctx, ingestionJobID, txn, false,
-		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			progress := md.Progress.GetStreamIngest()
-			details := md.Payload.GetStreamIngestion()
-			if progress.ReplicationStatus == jobspb.ReplicationCuttingOver {
-				return errors.Newf("job %d already started cutting over to timestamp %s",
-					ingestionJobID, progress.CutoverTime)
-			}
-
-			progress.ReplicationStatus = jobspb.ReplicationPendingCutover
-			// Update the sentinel being polled by the stream ingestion job to
-			// check if a complete has been signaled.
-			progress.CutoverTime = cutoverTimestamp
-			progress.RemainingCutoverSpans = roachpb.Spans{details.Span}
-			ju.UpdateProgress(md.Progress)
-			return nil
-		}); err != nil {
-		return err
-	}
-	// Unpause the job if it is paused.
-	return jobRegistry.Unpause(ctx, txn, ingestionJobID)
-}
-
-func getReplicationStatsAndStatus(
-	ctx context.Context, jobRegistry *jobs.Registry, txn isql.Txn, ingestionJobID jobspb.JobID,
-) (*streampb.StreamIngestionStats, string, error) {
-	job, err := jobRegistry.LoadJobWithTxn(ctx, ingestionJobID, txn)
-	if err != nil {
-		return nil, jobspb.ReplicationError.String(), err
-	}
-	details, ok := job.Details().(jobspb.StreamIngestionDetails)
-	if !ok {
-		return nil, jobspb.ReplicationError.String(),
-			errors.Newf("job with id %d is not a stream ingestion job", job.ID())
-	}
-
-	details.StreamAddress, err = redactSourceURI(details.StreamAddress)
-	if err != nil {
-		return nil, jobspb.ReplicationError.String(), err
-	}
-
-	stats, err := replicationutils.GetStreamIngestionStatsNoHeartbeat(ctx, details, job.Progress())
-	if err != nil {
-		return nil, jobspb.ReplicationError.String(), err
-	}
-	if job.Status() == jobs.StatusPaused {
-		return stats, jobspb.ReplicationPaused.String(), nil
-	}
-	return stats, stats.IngestionProgress.ReplicationStatus.String(), nil
-}
-
 type streamIngestionResumer struct {
 	job *jobs.Job
 }
@@ -126,43 +65,6 @@ func connectToActiveClient(
 	client, err := streamclient.NewStreamClient(ctx, streamAddress, db)
 
 	return client, errors.Wrapf(err, "ingestion job %d failed to connect to stream address or existing topology for planning", ingestionJob.ID())
-}
-
-// Ping the producer job and waits until it is active/running, returns nil when
-// the job is active.
-func waitUntilProducerActive(
-	ctx context.Context,
-	client streamclient.Client,
-	streamID streampb.StreamID,
-	heartbeatTimestamp hlc.Timestamp,
-	ingestionJobID jobspb.JobID,
-) error {
-	ro := retry.Options{
-		InitialBackoff: 1 * time.Second,
-		Multiplier:     2,
-		MaxBackoff:     5 * time.Second,
-		MaxRetries:     4,
-	}
-	// Make sure the producer job is active before start the stream replication.
-	var status streampb.StreamReplicationStatus
-	var err error
-	for r := retry.Start(ro); r.Next(); {
-		status, err = client.Heartbeat(ctx, streamID, heartbeatTimestamp)
-		if err != nil {
-			return errors.Wrapf(err, "failed to resume ingestion job %d due to producer job %d error",
-				ingestionJobID, streamID)
-		}
-		if status.StreamStatus != streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
-			break
-		}
-		log.Warningf(ctx, "producer job %d has status %s, retrying", streamID, status.StreamStatus)
-	}
-	if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
-		return jobs.MarkAsPermanentJobError(errors.Errorf("failed to resume ingestion job %d "+
-			"as the producer job %d is not active and in status %s", ingestionJobID,
-			streamID, status.StreamStatus))
-	}
-	return nil
 }
 
 func updateRunningStatus(
