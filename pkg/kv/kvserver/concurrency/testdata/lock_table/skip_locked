@@ -14,6 +14,9 @@ new-txn txn=txn2 ts=9,1 epoch=0
 #  d: locked by txn1
 #  e: unlocked
 #  f: reservation by txn1
+#  g: locked by txn1 (shared)
+#  h: locked by txn2 (shared)
+#  i: locked by txn2 (shared), (exclusive) request from txn1 actively waiting
 
 new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@b,d
 ----
@@ -117,13 +120,7 @@ num=4
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
 
-# ---------------------------------------------------------------------------------
-# req4 will scan the lock table with a Skip wait policy. It will not need to wait.
-# Once it begins evaluating, it will probe into the lock table to determine which
-# keys to skip.
-# ---------------------------------------------------------------------------------
-
-new-request r=req4 txn=txn2 ts=9,1 spans=none@a,g skip-locked
+new-request r=req4 txn=txn1 ts=10,1 spans=shared@g
 ----
 
 scan r=req4
@@ -134,57 +131,9 @@ should-wait r=req4
 ----
 false
 
-is-key-locked-by-conflicting-txn r=req4 k=a strength=none
+acquire r=req4 k=g durability=u strength=shared
 ----
-locked: false
-
-is-key-locked-by-conflicting-txn r=req4 k=b strength=none
-----
-locked: false
-
-is-key-locked-by-conflicting-txn r=req4 k=c strength=none
-----
-locked: false
-
-is-key-locked-by-conflicting-txn r=req4 k=d strength=none
-----
-locked: false
-
-is-key-locked-by-conflicting-txn r=req4 k=e strength=none
-----
-locked: false
-
-is-key-locked-by-conflicting-txn r=req4 k=f strength=none
-----
-locked: false
-
-is-key-locked-by-conflicting-txn r=req4 k=a strength=exclusive
-----
-locked: false
-
-is-key-locked-by-conflicting-txn r=req4 k=b strength=exclusive
-----
-locked: true, holder: 00000000-0000-0000-0000-000000000001
-
-is-key-locked-by-conflicting-txn r=req4 k=c strength=exclusive
-----
-locked: false
-
-is-key-locked-by-conflicting-txn r=req4 k=d strength=exclusive
-----
-locked: true, holder: 00000000-0000-0000-0000-000000000001
-
-is-key-locked-by-conflicting-txn r=req4 k=e strength=exclusive
-----
-locked: false
-
-is-key-locked-by-conflicting-txn r=req4 k=f strength=exclusive
-----
-locked: true, holder: <nil>
-
-dequeue r=req4
-----
-num=4
+num=5
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
@@ -194,13 +143,10 @@ num=4
  lock: "f"
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
 
-# ---------------------------------------------------------------------------------
-# req5 is the same as req4, except is has a timestamp equal to txn1's to
-# exercise the strength=none cases again.
-# ---------------------------------------------------------------------------------
-
-new-request r=req5 txn=txn2 ts=10,1 spans=none@a,g skip-locked
+new-request r=req5 txn=txn2 ts=9,1 spans=shared@h
 ----
 
 scan r=req5
@@ -211,33 +157,9 @@ should-wait r=req5
 ----
 false
 
-is-key-locked-by-conflicting-txn r=req5 k=a strength=none
+acquire r=req5 k=h durability=u strength=shared
 ----
-locked: false
-
-is-key-locked-by-conflicting-txn r=req5 k=b strength=none
-----
-locked: true, holder: 00000000-0000-0000-0000-000000000001
-
-is-key-locked-by-conflicting-txn r=req5 k=c strength=none
-----
-locked: false
-
-is-key-locked-by-conflicting-txn r=req5 k=d strength=none
-----
-locked: true, holder: 00000000-0000-0000-0000-000000000001
-
-is-key-locked-by-conflicting-txn r=req5 k=e strength=none
-----
-locked: false
-
-is-key-locked-by-conflicting-txn r=req5 k=f strength=none
-----
-locked: false
-
-dequeue r=req5
-----
-num=4
+num=6
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
@@ -247,3 +169,291 @@ num=4
  lock: "f"
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+ lock: "h"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req6 txn=txn2 ts=9,1 spans=shared@i
+----
+
+scan r=req6
+----
+start-waiting: false
+
+should-wait r=req6
+----
+false
+
+acquire r=req6 k=i durability=u strength=shared
+----
+num=7
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+ lock: "h"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+ lock: "i"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req7 txn=txn1 ts=10,1 spans=exclusive@i
+----
+
+scan r=req7
+----
+start-waiting: true
+
+should-wait r=req7
+----
+true
+
+dequeue r=req6
+----
+num=7
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+ lock: "h"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+ lock: "i"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+   queued writers:
+    active: true req: 7, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 7
+
+# ---------------------------------------------------------------------------------
+# req8 will scan the lock table with a Skip wait policy. It will not need to wait.
+# Once it begins evaluating, it will probe into the lock table to determine which
+# keys to skip.
+# ---------------------------------------------------------------------------------
+
+new-request r=req8 txn=txn2 ts=9,1 spans=none@a,j skip-locked
+----
+
+scan r=req8
+----
+start-waiting: false
+
+should-wait r=req8
+----
+false
+
+is-key-locked-by-conflicting-txn r=req8 k=a strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=b strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=c strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=d strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=e strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=f strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=g strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=h strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=i strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=a strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=b strength=shared
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req8 k=c strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=d strength=shared
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req8 k=e strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=f strength=shared
+----
+locked: true, holder: <nil>
+
+is-key-locked-by-conflicting-txn r=req8 k=g strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=h strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=i strength=shared
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=a strength=exclusive
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=b strength=exclusive
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req8 k=c strength=exclusive
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=d strength=exclusive
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req8 k=e strength=exclusive
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=f strength=exclusive
+----
+locked: true, holder: <nil>
+
+is-key-locked-by-conflicting-txn r=req8 k=g strength=exclusive
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req8 k=h strength=exclusive
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req8 k=i strength=exclusive
+----
+locked: true, holder: <nil>
+
+dequeue r=req8
+----
+num=7
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+ lock: "h"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+ lock: "i"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+   queued writers:
+    active: true req: 7, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 7
+
+# ---------------------------------------------------------------------------------
+# req9 is the same as req8, except is has a timestamp equal to txn1's to
+# exercise the strength=none cases again.
+# ---------------------------------------------------------------------------------
+
+new-request r=req9 txn=txn2 ts=10,1 spans=none@a,j skip-locked
+----
+
+scan r=req9
+----
+start-waiting: false
+
+should-wait r=req9
+----
+false
+
+is-key-locked-by-conflicting-txn r=req9 k=a strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req9 k=b strength=none
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req9 k=c strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req9 k=d strength=none
+----
+locked: true, holder: 00000000-0000-0000-0000-000000000001
+
+is-key-locked-by-conflicting-txn r=req9 k=e strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req9 k=f strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req9 k=g strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req9 k=h strength=none
+----
+locked: false
+
+is-key-locked-by-conflicting-txn r=req9 k=i strength=none
+----
+locked: false
+
+dequeue r=req9
+----
+num=7
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "f"
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+ lock: "g"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+ lock: "h"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+ lock: "i"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+   queued writers:
+    active: true req: 7, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 7
