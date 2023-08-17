@@ -334,6 +334,95 @@ type geoFilterPlanner struct {
 
 var _ invertedFilterPlanner = &geoFilterPlanner{}
 
+// maybeDeriveUsefulInvertedFilterCondition identifies an expression of the
+// form: 'st_distance(a, b, bool) = 0', 'st_distance(...) <= x' or
+// 'st_maxdistance(...) <= x', and returns a function call to st_dwithin,
+// st_dwithinexclusive, st_dfullywithin, st_dfullywithinexclusive or
+// st_intersects which is almost equivalent to the original expression, except
+// for empty or null geography/geometry inputs (it may evaluate to true in more
+// cases). The derived expression may enable use of an inverted index scan. See
+// the MaybeMakeSTDWithin, MakeSTDFullyWithin or MakeIntersectionFunction method for
+// the specific function that is used to replace expressions with different
+// comparison operators (e.g. '<' vs '<='). Note that the `st_distance` or
+// `st_maxdistance` may be on the left or right of the comparison operation (LT,
+// GT, LE, GE).
+func (g *geoFilterPlanner) maybeDeriveUsefulInvertedFilterCondition(
+	expr opt.ScalarExpr,
+) (opt.ScalarExpr, bool) {
+	var left, right opt.ScalarExpr
+	var function *memo.FunctionExpr
+	leftIsFunction := false
+	rightIsFunction := false
+	c := g.factory.CustomFuncs()
+	switch t := expr.(type) {
+	case *memo.EqExpr:
+		left = t.Left
+		right = t.Right
+		function, leftIsFunction = left.(*memo.FunctionExpr)
+		if !leftIsFunction {
+			return expr, false
+		}
+		private := &function.FunctionPrivate
+		if private.Name != "st_distance" {
+			return expr, false
+		}
+		if c.STDistanceUseSpheroid(function.Args) {
+			return expr, false
+		}
+		constant, rightIsConstant := right.(*memo.ConstExpr)
+		if !rightIsConstant {
+			return expr, false
+		}
+		value := constant.Value
+		if !c.IsFloatDatum(value) {
+			return expr, false
+		}
+		if !c.DatumsEqual(value, tree.NewDInt(0)) {
+			return expr, false
+		}
+		return c.MakeIntersectionFunction(function.Args), true
+	case *memo.LtExpr, *memo.GtExpr, *memo.LeExpr, *memo.GeExpr:
+		left = t.Child(0).(opt.ScalarExpr)
+		right = t.Child(1).(opt.ScalarExpr)
+		function, leftIsFunction = left.(*memo.FunctionExpr)
+		if !leftIsFunction {
+			function, rightIsFunction = right.(*memo.FunctionExpr)
+			if !rightIsFunction {
+				return expr, false
+			}
+		}
+		// Combinations which result in a `NOT st_d*` function would not enable
+		// inverted index scan, so no need to derive filters for these cases.
+		if leftIsFunction && (t.Op() == opt.GtOp || t.Op() == opt.GeOp) {
+			return expr, false
+		} else if rightIsFunction && (t.Op() == opt.LtOp || t.Op() == opt.LeOp) {
+			return expr, false
+		}
+		// Main logic below to eliminate a code nesting level.
+	default:
+		return expr, false
+	}
+
+	if function == nil {
+		return expr, false
+	}
+	args := function.Args
+	private := &function.FunctionPrivate
+	if private.Name != "st_distance" && private.Name != "st_maxdistance" {
+		return expr, false
+	}
+	var boundExpr opt.ScalarExpr
+	if leftIsFunction {
+		boundExpr = right
+	} else {
+		boundExpr = left
+	}
+	if private.Name == "st_distance" {
+		return c.MaybeMakeSTDWithin(expr, args, boundExpr, leftIsFunction, false /* fullyWithin */)
+	}
+	return c.MaybeMakeSTDWithin(expr, args, boundExpr, leftIsFunction, true /* fullyWithin */)
+}
+
 // extractInvertedFilterConditionFromLeaf is part of the invertedFilterPlanner
 // interface.
 func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
@@ -344,6 +433,9 @@ func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	_ *invertedexpr.PreFiltererStateForInvertedFilterer,
 ) {
 	var args memo.ScalarListExpr
+	filterIsDerived := false
+	originalExpr := expr
+	expr, filterIsDerived = g.maybeDeriveUsefulInvertedFilterCondition(expr)
 	switch t := expr.(type) {
 	case *memo.FunctionExpr:
 		args = t.Args
@@ -382,8 +474,11 @@ func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
 			ctx, g.factory, expr, args, true /* commuteArgs */, g.tabID, g.index, g.getSpanExpr,
 		)
 	}
-	if !invertedExpr.IsTight() {
-		remainingFilters = expr
+	// A derived filter may not be semantically equivalent to the original, so we
+	// need to apply the original filter in that case, the same as when the
+	// inverted expression is not tight.
+	if !invertedExpr.IsTight() || filterIsDerived {
+		remainingFilters = originalExpr
 	}
 	return invertedExpr, remainingFilters, pfState
 }
