@@ -158,6 +158,13 @@ func TestDockerCLI_test_demo_node_cmds(t *testing.T) {
 	runTestDockerCLI(t, "test_demo_node_cmds", "../cli/interactive_tests/test_demo_node_cmds.tcl")
 }
 
+func TestDockerCLI_test_demo_partitioning(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_demo_partitioning", "../cli/interactive_tests/test_demo_partitioning.tcl")
+}
+
 func TestDockerCLI_test_demo_telemetry(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
