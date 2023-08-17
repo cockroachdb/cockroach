@@ -343,7 +343,7 @@ func TestCreateChangefeedScheduleIfNotExists(t *testing.T) {
 	th.sqlDB.Exec(t, "CREATE TABLE t1 (a INT)")
 
 	const scheduleLabel = "foo"
-	const createQuery = "CREATE SCHEDULE IF NOT EXISTS '%s' FOR CHANGEFEED TABLE t1 INTO 's3://bucket?AUTH=implicit' WITH initial_scan = 'only' RECURRING '@daily'"
+	const createQuery = "CREATE SCHEDULE IF NOT EXISTS '%s' FOR CHANGEFEED TABLE t1 INTO 'null://' WITH initial_scan = 'only' RECURRING '@daily'"
 
 	th.sqlDB.Exec(t, fmt.Sprintf(createQuery, scheduleLabel))
 
@@ -387,7 +387,7 @@ func TestCreateChangefeedScheduleInExplicitTxnRollback(t *testing.T) {
 	require.NoError(t, res.Err())
 
 	th.sqlDB.Exec(t, "BEGIN;")
-	th.sqlDB.Exec(t, "CREATE SCHEDULE FOR CHANGEFEED TABLE t1 INTO 's3://bucket?AUTH=implicit' WITH initial_scan = 'only' RECURRING '@daily';")
+	th.sqlDB.Exec(t, "CREATE SCHEDULE FOR CHANGEFEED TABLE t1 INTO 'null://' WITH initial_scan = 'only' RECURRING '@daily';")
 	th.sqlDB.Exec(t, "ROLLBACK;")
 
 	res = th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES FOR CHANGEFEED]")
