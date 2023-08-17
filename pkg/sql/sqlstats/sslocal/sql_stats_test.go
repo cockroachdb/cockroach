@@ -696,7 +696,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "enabled", func(t *testing.T, enabled bool) {
 		// Establish the cluster setting.
 		setting := sslocal.AssociateStmtWithTxnFingerprint
-		err := updater.Set(ctx, setting.Key(), settings.EncodedValue{
+		err := updater.Set(ctx, setting.InternalKey(), settings.EncodedValue{
 			Value: settings.EncodeBool(enabled),
 			Type:  setting.Typ(),
 		})

@@ -1124,8 +1124,8 @@ func (s *Store) throttleSnapshot(
 			}
 			return nil, errors.Wrapf(
 				queueCtx.Err(),
-				"giving up during snapshot reservation due to %q",
-				snapshotReservationQueueTimeoutFraction.Key(),
+				"giving up during snapshot reservation due to cluster setting %q",
+				snapshotReservationQueueTimeoutFraction.Name(),
 			)
 		case <-s.stopper.ShouldQuiesce():
 			return nil, errors.Errorf("stopped")

@@ -889,7 +889,7 @@ func (s *Server) IncrementConnectionCount(
 			pgerror.New(pgcode.TooManyConnections, "sorry, too many clients already"),
 			"the maximum number of allowed connections is %d and can be modified using the %s config key",
 			maxNumConnectionsValue,
-			maxNumNonAdminConnections.Key(),
+			maxNumNonAdminConnections.Name(),
 		)
 	}
 	return decrementConnectionCount, nil

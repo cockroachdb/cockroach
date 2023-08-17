@@ -597,7 +597,7 @@ message DecommissionStatusResponse {
 
 // SettingsRequest inquires what are the current settings in the cluster.
 message SettingsRequest {
-  // The array of setting names to retrieve.
+  // The array of setting keys or names to retrieve.
   // An empty keys array means "all".
   repeated string keys = 1;
 
@@ -612,11 +612,18 @@ message SettingsRequest {
 // SettingsResponse is the response to SettingsRequest.
 message SettingsResponse {
    message Value {
+      // The value of the setting.
       string value = 1;
+      // The type of the setting.
       string type = 2;
+      // An extended description text.
       string description = 3;
+      // Whether the setting is public or reserved.
       bool public = 4;
+      // When the setting was last updated.
       google.protobuf.Timestamp last_updated = 5 [(gogoproto.nullable) = true, (gogoproto.stdtime) = true];
+      // The setting name for display purposes.
+      string name = 6;
    }
    map<string, Value> key_values = 1 [(gogoproto.nullable) = false];
 }

@@ -26,5 +26,5 @@ type OverridesMonitor interface {
 	// map from setting key to EncodedValue. Any settings that are
 	// present must be set to the overridden value. It also returns a
 	// channel that will be closed when the overrides are updated.
-	Overrides() (map[string]settings.EncodedValue, <-chan struct{})
+	Overrides() (map[settings.InternalKey]settings.EncodedValue, <-chan struct{})
 }

@@ -52,6 +52,7 @@ go_library(
         "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/security/username",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
