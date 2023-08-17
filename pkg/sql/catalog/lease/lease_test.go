@@ -1704,10 +1704,8 @@ INSERT INTO t.kv VALUES ('a', 'b');
 func TestModificationTimeTxnOrdering(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 
-	skip.WithIssue(testingT, 22479)
-
 	// Decide how long we should run this.
-	maxTime := time.Duration(5) * time.Second
+	maxTime := time.Duration(20) * time.Second
 	if skip.NightlyStress() {
 		maxTime = time.Duration(2) * time.Minute
 	}
