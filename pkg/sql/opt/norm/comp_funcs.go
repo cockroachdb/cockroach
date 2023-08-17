@@ -177,61 +177,27 @@ func (c *CustomFuncs) MakeIntersectionFunction(args memo.ScalarListExpr) opt.Sca
 	)
 }
 
-// MakeSTDWithinLeft returns an ST_DWithin function that replaces an expression
-// of the following form: ST_Distance(a,b) <= x. Note that the ST_Distance
-// function is on the left side of the inequality.
-func (c *CustomFuncs) MakeSTDWithinLeft(
-	op opt.Operator, args memo.ScalarListExpr, bound opt.ScalarExpr,
-) opt.ScalarExpr {
-	const fnName = "st_dwithin"
-	const fnIsLeftArg = true
-	return c.makeSTDWithin(op, args, bound, fnName, fnIsLeftArg)
-}
-
-// MakeSTDWithinRight returns an ST_DWithin function that replaces an expression
-// of the following form: x <= ST_Distance(a,b). Note that the ST_Distance
-// function is on the right side of the inequality.
-func (c *CustomFuncs) MakeSTDWithinRight(
-	op opt.Operator, args memo.ScalarListExpr, bound opt.ScalarExpr,
-) opt.ScalarExpr {
-	const fnName = "st_dwithin"
-	const fnIsLeftArg = false
-	return c.makeSTDWithin(op, args, bound, fnName, fnIsLeftArg)
-}
-
-// MakeSTDFullyWithinLeft returns an ST_DFullyWithin function that replaces an
-// expression of the following form: ST_MaxDistance(a,b) <= x. Note that the
-// ST_MaxDistance function is on the left side of the inequality.
-func (c *CustomFuncs) MakeSTDFullyWithinLeft(
-	op opt.Operator, args memo.ScalarListExpr, bound opt.ScalarExpr,
-) opt.ScalarExpr {
-	const fnName = "st_dfullywithin"
-	const fnIsLeftArg = true
-	return c.makeSTDWithin(op, args, bound, fnName, fnIsLeftArg)
-}
-
-// MakeSTDFullyWithinRight returns an ST_DFullyWithin function that replaces an
-// expression of the following form: x <= ST_MaxDistance(a,b). Note that the
-// ST_MaxDistance function is on the right side of the inequality.
-func (c *CustomFuncs) MakeSTDFullyWithinRight(
-	op opt.Operator, args memo.ScalarListExpr, bound opt.ScalarExpr,
-) opt.ScalarExpr {
-	const fnName = "st_dfullywithin"
-	const fnIsLeftArg = false
-	return c.makeSTDWithin(op, args, bound, fnName, fnIsLeftArg)
-}
-
-// makeSTDWithin returns an ST_DWithin (or ST_DFullyWithin) function that
-// replaces an expression of the following form: ST_Distance(a,b) <= x. The
-// ST_Distance function can be on either side of the inequality, and the
-// inequality can be one of the following: '<', '<=', '>', '>='. This
-// replacement allows early-exit behavior, and may enable use of an inverted
-// index scan.
-func (c *CustomFuncs) makeSTDWithin(
-	op opt.Operator, args memo.ScalarListExpr, bound opt.ScalarExpr, fnName string, fnIsLeftArg bool,
-) opt.ScalarExpr {
+// MaybeMakeSTDWithin attempts to derive an ST_DWithin (or ST_DFullyWithin)
+// function that is similar to an expression of the following form:
+// ST_Distance(a,b) <= x. The ST_Distance function can be on either side of the
+// inequality, and the inequality can be one of the following: '<', '<=', '>',
+// '>='. This replacement allows early-exit behavior, and may enable use of an
+// inverted index scan. If the derived expression would need to be negated with
+// a NotExpr, so the derivation fails, and expr, ok=false is returned.
+func (c *CustomFuncs) MaybeMakeSTDWithin(
+	expr opt.ScalarExpr,
+	args memo.ScalarListExpr,
+	bound opt.ScalarExpr,
+	fnIsLeftArg bool,
+	fullyWithin bool,
+) (derivedExpr opt.ScalarExpr, ok bool) {
+	op := expr.Op()
 	var not bool
 	var name string
+	fnName := "st_dwithin"
+	if fullyWithin {
+		fnName = "st_dfullywithin"
+	}
 	incName := fnName
 	exName := fnName + "exclusive"
 	switch op {
@@ -279,7 +245,15 @@ func (c *CustomFuncs) makeSTDWithin(
 			name = incName
 		}
 	}
-
+	if not {
+		// ST_DWithin and ST_DWithinExclusive are equivalent to ST_Distance <= x and
+		// ST_Distance < x respectively. The comparison operator in the matched
+		// expression (if ST_Distance is normalized to be on the left) is either '>'
+		// or '>='. Therefore, we would have to take the opposite of within. This
+		// would not result in a useful expression for inverted index scan, so return
+		// ok=false.
+		return expr, false
+	}
 	newArgs := make(memo.ScalarListExpr, len(args)+1)
 	const distanceIdx, useSpheroidIdx = 2, 3
 	copy(newArgs, args[:distanceIdx])
@@ -302,12 +276,5 @@ func (c *CustomFuncs) makeSTDWithin(
 		Properties: props,
 		Overload:   overload,
 	})
-	if not {
-		// ST_DWithin and ST_DWithinExclusive are equivalent to ST_Distance <= x and
-		// ST_Distance < x respectively. The comparison operator in the matched
-		// expression (if ST_Distance is normalized to be on the left) is either '>'
-		// or '>='. Therefore, we have to take the opposite of within.
-		within = c.f.ConstructNot(within)
-	}
-	return within
+	return within, true
 }
