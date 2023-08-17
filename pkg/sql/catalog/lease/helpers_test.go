@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -165,6 +166,7 @@ func (m *Manager) PublishMultiple(
 		}
 
 		descs := make(map[descpb.ID]catalog.MutableDescriptor)
+		writeTimestamp := hlc.Timestamp{}
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
 		err := m.storage.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -227,14 +229,23 @@ func (m *Manager) PublishMultiple(
 			}
 			// More efficient batching can be used if no event log message
 			// is required.
-			return txn.CommitInBatch(ctx, b)
+			err := txn.CommitInBatch(ctx, b)
+			if err != nil {
+				return err
+			}
+			writeTimestamp = b.RawResponse().Txn.WriteTimestamp
+			return nil
 		})
 
 		switch {
 		case err == nil:
 			immutDescs := make(map[descpb.ID]catalog.Descriptor)
 			for id, desc := range descs {
-				immutDescs[id] = desc.ImmutableCopy()
+				mutDescWithTS, buildErr := descbuilder.BuildMutable(desc, desc.DescriptorProto(), writeTimestamp)
+				if buildErr != nil {
+					return nil, buildErr
+				}
+				immutDescs[id] = mutDescWithTS.ImmutableCopy()
 			}
 			return immutDescs, nil
 		case errors.Is(err, errLeaseVersionChanged):
