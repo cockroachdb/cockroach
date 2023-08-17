@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type streamIngestionResumer struct {
@@ -49,7 +50,7 @@ func connectToActiveClient(
 	streamAddresses := progress.GetStreamIngest().StreamAddresses
 
 	if len(streamAddresses) > 0 {
-		log.Infof(ctx, "ingestion job %d attempting to connect to existing stream addresses", ingestionJob.ID())
+		log.Infof(ctx, "attempting to connect to existing stream addresses")
 		client, err := streamclient.GetFirstActiveClient(ctx, streamAddresses)
 		if err == nil {
 			return client, err
@@ -71,14 +72,16 @@ func updateRunningStatus(
 	ctx context.Context,
 	ingestionJob *jobs.Job,
 	status jobspb.ReplicationStatus,
-	runningStatus string,
+	runningStatus redact.RedactableString,
 ) {
 	err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		updateRunningStatusInternal(md, ju, status, runningStatus)
+		updateRunningStatusInternal(md, ju, status, string(runningStatus.Redact()))
 		return nil
 	})
 	if err != nil {
 		log.Warningf(ctx, "error when updating job running status: %s", err)
+	} else if status == jobspb.ReplicationError {
+		log.Warningf(ctx, "%s", runningStatus)
 	} else {
 		log.Infof(ctx, "%s", runningStatus)
 	}
@@ -101,10 +104,9 @@ func completeIngestion(
 		return err
 	}
 
-	streamID := details.StreamID
-	log.Infof(ctx, "completing the producer job %d", streamID)
-	updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationCuttingOver,
-		"completing the producer job in the source cluster")
+	msg := redact.Sprintf("completing the producer job %d in the source cluster",
+		details.StreamID)
+	updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationCuttingOver, msg)
 	completeProducerJob(ctx, ingestionJob, execCtx.ExecCfg().InternalDB, true)
 
 	// Now that we have completed the cutover we can release the protected
@@ -138,12 +140,7 @@ func completeProducerJob(
 			if err != nil {
 				return err
 			}
-			defer func() {
-				if err := client.Close(ctx); err != nil {
-					log.Warningf(ctx, "error encountered when closing stream client: %s",
-						err.Error())
-				}
-			}()
+			defer closeAndLog(ctx, client)
 			return client.Complete(ctx, streampb.StreamID(streamID), successfulIngestion)
 		},
 	); err != nil {
@@ -209,10 +206,8 @@ func ingestWithRetries(
 		if jobs.IsPermanentJobError(err) || errors.Is(err, context.Canceled) {
 			break
 		}
-		const msgFmt = "waiting before retrying error: %s"
-		log.Warningf(ctx, msgFmt, err)
-		updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError,
-			fmt.Sprintf(msgFmt, err))
+		status := redact.Sprintf("waiting before retrying error: %s", err)
+		updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError, status)
 		newReplicatedTime := loadReplicatedTime(ctx, execCtx.ExecCfg().InternalDB, ingestionJob)
 		if lastReplicatedTime.Less(newReplicatedTime) {
 			r.Reset()
@@ -247,9 +242,8 @@ func loadReplicatedTime(ctx context.Context, db isql.DB, ingestionJob *jobs.Job)
 func (s *streamIngestionResumer) handleResumeError(
 	ctx context.Context, execCtx sql.JobExecContext, err error,
 ) error {
-	const errorFmt = "ingestion job failed (%s) but is being paused"
-	log.Warningf(ctx, errorFmt, err)
-	updateRunningStatus(ctx, s.job, jobspb.ReplicationError, fmt.Sprintf(errorFmt, err))
+	msg := redact.Sprintf("ingestion job failed (%s) but is being paused", err)
+	updateRunningStatus(ctx, s.job, jobspb.ReplicationError, msg)
 	// The ingestion job is paused but the producer job will keep
 	// running until it times out. Users can still resume ingestion before
 	// the producer job times out.
@@ -429,9 +423,7 @@ func maybeRevertToCutoverTimestamp(
 	if !shouldRevertToCutover {
 		return false, nil
 	}
-	log.Infof(ctx,
-		"reverting to cutover timestamp %s for stream ingestion job %d",
-		cutoverTimestamp, ingestionJob.ID())
+	log.Infof(ctx, "reverting to cutover timestamp %s", cutoverTimestamp)
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted != nil {
 		p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted()
 	}
@@ -521,6 +513,12 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 
 		return nil
 	})
+}
+
+func closeAndLog(ctx context.Context, c streamclient.Client) {
+	if err := c.Close(ctx); err != nil {
+		log.Warningf(ctx, "error closing stream client: %s", err.Error())
+	}
 }
 
 // cutoverProgressTracker updates the job progress and the given
