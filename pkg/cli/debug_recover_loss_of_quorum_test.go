@@ -332,6 +332,9 @@ func TestStageVersionCheck(t *testing.T) {
 	})
 	defer c.Cleanup()
 
+	listenerReg := listenerutil.NewListenerRegistry()
+	defer listenerReg.Close()
+
 	storeReg := server.NewStickyInMemEnginesRegistry()
 	defer storeReg.CloseAllStickyInMemEngines()
 	tc := testcluster.NewTestCluster(t, 4, base.TestClusterArgs{
@@ -348,6 +351,7 @@ func TestStageVersionCheck(t *testing.T) {
 				},
 			},
 		},
+		ReusableListenerReg: listenerReg,
 	})
 	tc.Start(t)
 	defer tc.Stopper().Stop(ctx)
