@@ -7421,6 +7421,783 @@ index-join t63180
            ├── key: (2)
            └── fd: (2)-->(5)
 
+exec-ddl
+CREATE TABLE geom_geog (
+  geom GEOMETRY,
+  geog GEOGRAPHY,
+  val FLOAT,
+  INVERTED INDEX(geom),
+  INVERTED INDEX(geog)
+)
+----
+
+# Tests for pre-existing normalization rules FoldEqZeroSTDistance,
+# FoldCmpSTDistanceLeft, FoldCmpSTDistanceRight, FoldCmpSTMaxDistanceLeft and
+# FoldCmpSTMaxDistanceRight have been moved here, and converted into tests
+# detecting whether GenerateInvertedIndexScans was fired due to derivation
+# of a new filter condition, used only internally when determining the
+# inverted index scan spans to use.
+
+
+# Tests related to old normalization rule FoldEqZeroSTDistance
+
+# Geometry case.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_distance(geom, 'POINT(0.0 0.0)') = 0
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── index-join geom_geog
+ │    ├── columns: geom:1 geog:2 val:3
+ │    └── inverted-filter
+ │         ├── columns: rowid:4!null
+ │         ├── inverted expression: /7
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │         ├── pre-filterer expression
+ │         │    └── st_intersects('010100000000000000000000000000000000000000', geom:1)
+ │         ├── key: (4)
+ │         └── scan geom_geog@geom_geog_geom_idx
+ │              ├── columns: rowid:4!null geom_inverted_key:7!null
+ │              ├── inverted constraint: /7/4
+ │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │              ├── key: (4)
+ │              └── fd: (4)-->(7)
+ └── filters
+      └── st_distance(geom:1, '010100000000000000000000000000000000000000') = 0.0 [outer=(1), immutable]
+
+# Geography case with use_spheroid=false.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_distance(geog, 'POINT(0.0 0.0)', false) = 0
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── index-join geom_geog
+ │    ├── columns: geom:1 geog:2 val:3
+ │    └── inverted-filter
+ │         ├── columns: rowid:4!null
+ │         ├── inverted expression: /8
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │         ├── pre-filterer expression
+ │         │    └── st_intersects('0101000020E610000000000000000000000000000000000000', geog:2)
+ │         ├── key: (4)
+ │         └── scan geom_geog@geom_geog_geog_idx
+ │              ├── columns: rowid:4!null geog_inverted_key:8!null
+ │              ├── inverted constraint: /8/4
+ │              │    └── spans: ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │              ├── key: (4)
+ │              └── fd: (4)-->(8)
+ └── filters
+      └── st_distance(geog:2, '0101000020E610000000000000000000000000000000000000', false) = 0.0 [outer=(2), immutable]
+
+# No-op case because the constant is nonzero.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_distance(geom, 'POINT(0.0 0.0)') = 1
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── st_distance(geom:1, '010100000000000000000000000000000000000000') = 1.0 [outer=(1), immutable]
+
+# No-op case because use_spheroid=true implicitly.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_distance(geog, 'POINT(0.0 0.0)') = 0
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── st_distance(geog:2, '0101000020E610000000000000000000000000000000000000') = 0.0 [outer=(2), immutable]
+
+# No-op case because use_spheroid=true.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_distance(geog, 'POINT(0.0 0.0)', true) = 0
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── st_distance(geog:2, '0101000020E610000000000000000000000000000000000000', true) = 0.0 [outer=(2), immutable]
+
+# Tests related to old normalization rule FoldCmpSTDistanceLeft
+
+# Geometry case with '<=' operator.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_distance(geom, 'point(0.0 0.0)') <= 5
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── index-join geom_geog
+ │    ├── columns: geom:1 geog:2 val:3
+ │    └── inverted-filter
+ │         ├── columns: rowid:4!null
+ │         ├── inverted expression: /7
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │         │         └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+ │         ├── pre-filterer expression
+ │         │    └── st_dwithin('010100000000000000000000000000000000000000', geom:1, 5.0)
+ │         ├── key: (4)
+ │         └── scan geom_geog@geom_geog_geom_idx
+ │              ├── columns: rowid:4!null geom_inverted_key:7!null
+ │              ├── inverted constraint: /7/4
+ │              │    └── spans
+ │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │              │         └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+ │              ├── key: (4)
+ │              └── fd: (4)-->(7)
+ └── filters
+      └── st_distance(geom:1, '010100000000000000000000000000000000000000') <= 5.0 [outer=(1), immutable]
+
+# Geometry case with '<' operator.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_distance('point(0.0 0.0)', geom) < 5
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── index-join geom_geog
+ │    ├── columns: geom:1 geog:2 val:3
+ │    └── inverted-filter
+ │         ├── columns: rowid:4!null
+ │         ├── inverted expression: /7
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │         │         └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+ │         ├── pre-filterer expression
+ │         │    └── st_dwithinexclusive('010100000000000000000000000000000000000000', geom:1, 5.0)
+ │         ├── key: (4)
+ │         └── scan geom_geog@geom_geog_geom_idx
+ │              ├── columns: rowid:4!null geom_inverted_key:7!null
+ │              ├── inverted constraint: /7/4
+ │              │    └── spans
+ │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │              │         └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+ │              ├── key: (4)
+ │              └── fd: (4)-->(7)
+ └── filters
+      └── st_distance('010100000000000000000000000000000000000000', geom:1) < 5.0 [outer=(1), immutable]
+
+# Geometry case with '>=' operator.
+# Inverted index scan not expected because derived expression is
+# NOT st_dwithinexclusive.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_distance(geom, 'point(0.0 0.0)') >= 5
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── st_distance(geom:1, '010100000000000000000000000000000000000000') >= 5.0 [outer=(1), immutable]
+
+# Geometry case with '>' operator.
+# Inverted index scan not expected because derived expression is NOT st_dwithin.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_distance(geom, 'point(0.0 0.0)') > 5
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── st_distance(geom:1, '010100000000000000000000000000000000000000') > 5.0 [outer=(1), immutable]
+
+# Geography case with '<=' operator.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_distance(geog, 'point(0.0 0.0)') <= 5
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── index-join geom_geog
+ │    ├── columns: geom:1 geog:2 val:3
+ │    └── inverted-filter
+ │         ├── columns: rowid:4!null
+ │         ├── inverted expression: /8
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
+ │         ├── pre-filterer expression
+ │         │    └── st_dwithin('0101000020E610000000000000000000000000000000000000', geog:2, 5.0)
+ │         ├── key: (4)
+ │         └── scan geom_geog@geom_geog_geog_idx
+ │              ├── columns: rowid:4!null geog_inverted_key:8!null
+ │              ├── inverted constraint: /8/4
+ │              │    └── spans
+ │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
+ │              ├── key: (4)
+ │              └── fd: (4)-->(8)
+ └── filters
+      └── st_distance(geog:2, '0101000020E610000000000000000000000000000000000000') <= 5.0 [outer=(2), immutable]
+
+# Geography case with '<' operator.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_distance(geog, 'point(0.0 0.0)') < 5
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── index-join geom_geog
+ │    ├── columns: geom:1 geog:2 val:3
+ │    └── inverted-filter
+ │         ├── columns: rowid:4!null
+ │         ├── inverted expression: /8
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
+ │         ├── pre-filterer expression
+ │         │    └── st_dwithin('0101000020E610000000000000000000000000000000000000', geog:2, 5.0)
+ │         ├── key: (4)
+ │         └── scan geom_geog@geom_geog_geog_idx
+ │              ├── columns: rowid:4!null geog_inverted_key:8!null
+ │              ├── inverted constraint: /8/4
+ │              │    └── spans
+ │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
+ │              ├── key: (4)
+ │              └── fd: (4)-->(8)
+ └── filters
+      └── st_distance(geog:2, '0101000020E610000000000000000000000000000000000000') < 5.0 [outer=(2), immutable]
+
+# Regression test for #54326. Ensure the distance param is cast to a float.
+opt expect=GenerateInvertedIndexScans format=(show-scalars,show-types)
+SELECT * FROM geom_geog WHERE st_distance(geog, 'point(0.0 0.0)') < 5::int
+----
+select
+ ├── columns: geom:1(geometry) geog:2(geography) val:3(float)
+ ├── immutable
+ ├── index-join geom_geog
+ │    ├── columns: geom:1(geometry) geog:2(geography) val:3(float)
+ │    └── inverted-filter
+ │         ├── columns: rowid:4(int!null)
+ │         ├── inverted expression: /8
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
+ │         ├── pre-filterer expression
+ │         │    └── function: st_dwithin [type=bool]
+ │         │         ├── const: '0101000020E610000000000000000000000000000000000000' [type=geography]
+ │         │         ├── variable: geog:2 [type=geography]
+ │         │         └── const: 5.0 [type=float]
+ │         ├── key: (4)
+ │         └── scan geom_geog@geom_geog_geog_idx
+ │              ├── columns: rowid:4(int!null) geog_inverted_key:8(encodedkey!null)
+ │              ├── inverted constraint: /8/4
+ │              │    └── spans
+ │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
+ │              ├── key: (4)
+ │              └── fd: (4)-->(8)
+ └── filters
+      └── lt [type=bool, outer=(2), immutable]
+           ├── function: st_distance [type=float]
+           │    ├── variable: geog:2 [type=geography]
+           │    └── const: '0101000020E610000000000000000000000000000000000000' [type=geography]
+           └── const: 5 [type=int]
+
+# Inverted index scan not expected because `st_distance` result compared
+# with column.
+opt expect-not=GenerateInvertedIndexScans format=(show-scalars,show-types)
+SELECT * FROM geom_geog WHERE st_distance(geog, 'point(0.0 0.0)') < val::int
+----
+select
+ ├── columns: geom:1(geometry) geog:2(geography) val:3(float)
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1(geometry) geog:2(geography) val:3(float)
+ └── filters
+      └── lt [type=bool, outer=(2,3), immutable]
+           ├── function: st_distance [type=float]
+           │    ├── variable: geog:2 [type=geography]
+           │    └── const: '0101000020E610000000000000000000000000000000000000' [type=geography]
+           └── cast: INT8 [type=int]
+                └── variable: val:3 [type=float]
+
+# Regression test for #55675. Handle use_spheroid param.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_distance(geog, 'point(0.0 0.0)', true) <= 5
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── index-join geom_geog
+ │    ├── columns: geom:1 geog:2 val:3
+ │    └── inverted-filter
+ │         ├── columns: rowid:4!null
+ │         ├── inverted expression: /8
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
+ │         │         ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
+ │         ├── pre-filterer expression
+ │         │    └── st_dwithin('0101000020E610000000000000000000000000000000000000', geog:2, 5.0, true)
+ │         ├── key: (4)
+ │         └── scan geom_geog@geom_geog_geog_idx
+ │              ├── columns: rowid:4!null geog_inverted_key:8!null
+ │              ├── inverted constraint: /8/4
+ │              │    └── spans
+ │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd \x00\x00\x00\x00\x00\x00\x01", "B\xfd\"\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\"\x00\x00\x00\x00\x00\x00\x01", "B\xfd$\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd$\x00\x00\x00\x00\x00\x00\x00", "B\xfd$\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd0\x00\x00\x00\x00\x00\x00\x00", "B\xfd0\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x00", "B\xfd<\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd<\x00\x00\x00\x00\x00\x00\x01", "B\xfd>\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd>\x00\x00\x00\x00\x00\x00\x01", "B\xfd@\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd@\x00\x00\x00\x00\x00\x00\x01", "B\xfdB\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdD\x00\x00\x00\x00\x00\x00\x00", "B\xfdD\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfdF\x00\x00\x00\x00\x00\x00\x01", "B\xfdH\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdH\x00\x00\x00\x00\x00\x00\x01", "B\xfdJ\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdJ\x00\x00\x00\x00\x00\x00\x01", "B\xfdL\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x8a\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x8c\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x8c\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x8e\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\x90\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x90\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x92\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x94\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x94\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x96\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb0\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xb4\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\xb4\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb6\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xb6\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xb8\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xb8\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xba\x00\x00\x00\x00\x00\x00\x00")
+ │              │         ├── ["B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00", "B\xfd\xbc\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
+ │              ├── key: (4)
+ │              └── fd: (4)-->(8)
+ └── filters
+      └── st_distance(geog:2, '0101000020E610000000000000000000000000000000000000', true) <= 5.0 [outer=(2), immutable]
+
+# Tests related to old normalization rule FoldCmpSTDistanceRight
+
+# Case with '<=' operator.
+# Inverted index scan not expected because `st_distance` result compared
+# with column.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE val <= st_distance(geom, 'point(0.0 0.0)')
+----
+select
+ ├── columns: geom:1 geog:2 val:3!null
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── val:3 <= st_distance(geom:1, '010100000000000000000000000000000000000000') [outer=(1,3), immutable, constraints=(/3: (/NULL - ])]
+
+# Case with '<' operator.
+# Inverted index scan not expected because `st_distance` result compared
+# with column.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE val < st_distance(geom, 'point(0.0 0.0)')
+----
+select
+ ├── columns: geom:1 geog:2 val:3!null
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── val:3 < st_distance(geom:1, '010100000000000000000000000000000000000000') [outer=(1,3), immutable, constraints=(/3: (/NULL - ])]
+
+# Case with '>=' operator.
+# Inverted index scan not expected because `st_distance` result compared
+# with column.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE val >= st_distance(geom, 'point(0.0 0.0)')
+----
+select
+ ├── columns: geom:1 geog:2 val:3!null
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── val:3 >= st_distance(geom:1, '010100000000000000000000000000000000000000') [outer=(1,3), immutable, constraints=(/3: (/NULL - ])]
+
+# Case with '>' operator.
+# Inverted index scan not expected because `st_distance` result compared
+# with column.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE val > st_distance(geom, 'point(0.0 0.0)')
+----
+select
+ ├── columns: geom:1 geog:2 val:3!null
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── val:3 > st_distance(geom:1, '010100000000000000000000000000000000000000') [outer=(1,3), immutable, constraints=(/3: (/NULL - ])]
+
+# Regression test for #55675. Handle use_spheroid param.
+# Inverted index scan not expected because `st_distance` result compared
+# with column.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE val > st_distance(geog, 'point(0.0 0.0)', false)
+----
+select
+ ├── columns: geom:1 geog:2 val:3!null
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── val:3 > st_distance(geog:2, '0101000020E610000000000000000000000000000000000000', false) [outer=(2,3), immutable, constraints=(/3: (/NULL - ])]
+
+# Tests related to old normalization rule FoldCmpSTMaxDistanceLeft
+
+# Case with '<=' operator.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_maxdistance(geom, 'point(0.0 0.0)') <= 5
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── index-join geom_geog
+ │    ├── columns: geom:1 geog:2 val:3
+ │    └── inverted-filter
+ │         ├── columns: rowid:4!null
+ │         ├── inverted expression: /7
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │         │         └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+ │         ├── pre-filterer expression
+ │         │    └── st_dfullywithin('010100000000000000000000000000000000000000', geom:1, 5.0)
+ │         ├── key: (4)
+ │         └── scan geom_geog@geom_geog_geom_idx
+ │              ├── columns: rowid:4!null geom_inverted_key:7!null
+ │              ├── inverted constraint: /7/4
+ │              │    └── spans
+ │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │              │         └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+ │              ├── key: (4)
+ │              └── fd: (4)-->(7)
+ └── filters
+      └── st_maxdistance(geom:1, '010100000000000000000000000000000000000000') <= 5.0 [outer=(1), immutable]
+
+# Case with '<' operator.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_maxdistance('point(0.0 0.0)', geom) < 5
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── index-join geom_geog
+ │    ├── columns: geom:1 geog:2 val:3
+ │    └── inverted-filter
+ │         ├── columns: rowid:4!null
+ │         ├── inverted expression: /7
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │         │         └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+ │         ├── pre-filterer expression
+ │         │    └── st_dfullywithinexclusive('010100000000000000000000000000000000000000', geom:1, 5.0)
+ │         ├── key: (4)
+ │         └── scan geom_geog@geom_geog_geom_idx
+ │              ├── columns: rowid:4!null geom_inverted_key:7!null
+ │              ├── inverted constraint: /7/4
+ │              │    └── spans
+ │              │         ├── ["B\x89", "B\xfd \x00\x00\x00\x00\x00\x00\x00")
+ │              │         └── ["B\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "B\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
+ │              ├── key: (4)
+ │              └── fd: (4)-->(7)
+ └── filters
+      └── st_maxdistance('010100000000000000000000000000000000000000', geom:1) < 5.0 [outer=(1), immutable]
+
+# Case with '>=' operator.
+# Inverted index scan not expected because derived expression is
+# NOT st_dwithinexclusive.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_maxdistance(geom, 'point(0.0 0.0)') >= 5
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── st_maxdistance(geom:1, '010100000000000000000000000000000000000000') >= 5.0 [outer=(1), immutable]
+
+# Case with '>' operator.
+# Inverted index scan not expected because derived expression is NOT st_within.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE st_maxdistance(geom, 'point(0.0 0.0)') > 5
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── st_maxdistance(geom:1, '010100000000000000000000000000000000000000') > 5.0 [outer=(1), immutable]
+
+# Tests related to old normalization rule FoldCmpSTMaxDistanceRight
+
+# Case with '<=' operator.
+# Inverted index scan not expected because `st_distance` result compared
+# with column.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE val <= st_maxdistance(geom, 'point(0.0 0.0)')
+----
+select
+ ├── columns: geom:1 geog:2 val:3!null
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── val:3 <= st_maxdistance(geom:1, '010100000000000000000000000000000000000000') [outer=(1,3), immutable, constraints=(/3: (/NULL - ])]
+
+# Case with '<' operator.
+# Inverted index scan not expected because `st_distance` result compared
+# with column.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE val < st_maxdistance(geom, 'point(0.0 0.0)')
+----
+select
+ ├── columns: geom:1 geog:2 val:3!null
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── val:3 < st_maxdistance(geom:1, '010100000000000000000000000000000000000000') [outer=(1,3), immutable, constraints=(/3: (/NULL - ])]
+
+# Case with '>=' operator.
+# Inverted index scan not expected because `st_distance` result compared
+# with column.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE val >= st_maxdistance(geom, 'point(0.0 0.0)')
+----
+select
+ ├── columns: geom:1 geog:2 val:3!null
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── val:3 >= st_maxdistance(geom:1, '010100000000000000000000000000000000000000') [outer=(1,3), immutable, constraints=(/3: (/NULL - ])]
+
+# Case with '>' operator.
+# Inverted index scan not expected because `st_distance` result compared
+# with column.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM geom_geog WHERE val > st_maxdistance(geom, 'point(0.0 0.0)')
+----
+select
+ ├── columns: geom:1 geog:2 val:3!null
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── val:3 > st_maxdistance(geom:1, '010100000000000000000000000000000000000000') [outer=(1,3), immutable, constraints=(/3: (/NULL - ])]
+
 # --------------------------------------------------
 # GenerateZigzagJoins
 # --------------------------------------------------
