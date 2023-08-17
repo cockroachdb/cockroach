@@ -10,7 +10,6 @@ package streamingest
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -33,8 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 var replanThreshold = settings.RegisterFloatSetting(
@@ -77,19 +78,14 @@ func startDistIngestion(
 		heartbeatTimestamp = initialScanTimestamp
 	}
 
-	msg := fmt.Sprintf("resuming stream (producer job %d) from %s",
-		streamID, heartbeatTimestamp)
+	msg := redact.Sprintf("resuming stream (producer job %d) from %s", streamID, heartbeatTimestamp)
 	updateRunningStatus(ctx, ingestionJob, jobspb.InitializingReplication, msg)
 
 	client, err := connectToActiveClient(ctx, ingestionJob, execCtx.ExecCfg().InternalDB)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := client.Close(ctx); err != nil {
-			log.Warningf(ctx, "stream ingestion client did not shut down properly: %s", err.Error())
-		}
-	}()
+	defer closeAndLog(ctx, client)
 	if err := waitUntilProducerActive(ctx, client, streamID, heartbeatTimestamp, ingestionJob.ID()); err != nil {
 		return err
 	}
@@ -154,8 +150,6 @@ func startDistIngestion(
 	)
 
 	execInitialPlan := func(ctx context.Context) error {
-		log.Infof(ctx, "starting to run DistSQL flow for stream ingestion job %d",
-			ingestionJob.ID())
 		defer stopReplanner()
 		ctx = logtags.AddTag(ctx, "stream-ingest-distsql", nil)
 
@@ -179,8 +173,7 @@ func startDistIngestion(
 		return rw.Err()
 	}
 
-	updateRunningStatus(ctx, ingestionJob, jobspb.Replicating,
-		"running the SQL flow for the stream ingestion job")
+	updateRunningStatus(ctx, ingestionJob, jobspb.Replicating, "physical replication running")
 	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner)
 	if errors.Is(err, sql.ErrPlanChanged) {
 		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
@@ -208,9 +201,7 @@ func (p *replicationFlowPlanner) makePlan(
 	gatewayID base.SQLInstanceID,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
-		log.Infof(ctx, "Generating DistSQL plan candidate for stream ingestion job %d",
-			ingestionJobID)
-
+		log.Infof(ctx, "generating DistSQL plan candidate")
 		streamID := streampb.StreamID(details.StreamID)
 		topology, err := client.Plan(ctx, streamID)
 		if err != nil {
@@ -515,4 +506,41 @@ func constructStreamIngestionPlanSpecs(
 	}
 
 	return streamIngestionSpecs, streamIngestionFrontierSpec, nil
+}
+
+// waitUntilProducerActive pings the producer job and waits until it
+// is active/running. It returns nil when the job is active.
+func waitUntilProducerActive(
+	ctx context.Context,
+	client streamclient.Client,
+	streamID streampb.StreamID,
+	heartbeatTimestamp hlc.Timestamp,
+	ingestionJobID jobspb.JobID,
+) error {
+	ro := retry.Options{
+		InitialBackoff: 1 * time.Second,
+		Multiplier:     2,
+		MaxBackoff:     5 * time.Second,
+		MaxRetries:     4,
+	}
+	// Make sure the producer job is active before start the stream replication.
+	var status streampb.StreamReplicationStatus
+	var err error
+	for r := retry.Start(ro); r.Next(); {
+		status, err = client.Heartbeat(ctx, streamID, heartbeatTimestamp)
+		if err != nil {
+			return errors.Wrapf(err, "failed to resume ingestion job %d due to producer job %d error",
+				ingestionJobID, streamID)
+		}
+		if status.StreamStatus != streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
+			break
+		}
+		log.Warningf(ctx, "producer job %d has status %s, retrying", streamID, status.StreamStatus)
+	}
+	if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
+		return jobs.MarkAsPermanentJobError(errors.Errorf("failed to resume ingestion job %d "+
+			"as the producer job %d is not active and in status %s", ingestionJobID,
+			streamID, status.StreamStatus))
+	}
+	return nil
 }
