@@ -27,7 +27,6 @@ import (
 	"math/bits"
 	"math/rand"
 	"net"
-	"regexp"
 	"regexp/syntax"
 	"strconv"
 	"strings"
@@ -8122,8 +8121,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				}
 				if codeString := argStrings[4]; codeString != "" {
 					var code string
-					if regexp.MustCompile(`[A-Z0-9]{5}`).MatchString(codeString) {
-						// The supplied argument is a valid PG code.
+					if pgcode.IsValidPGCode(codeString) {
 						code = codeString
 					} else {
 						// The supplied string may be a condition name.

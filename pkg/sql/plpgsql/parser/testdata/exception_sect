@@ -1,13 +1,23 @@
 parse
 DECLARE
 BEGIN
- x := 1;
+  x := 1;
+  RETURN x;
 EXCEPTION
   WHEN division_by_zero THEN
       ASSERT 0 == 0, 'error message';
+      RETURN 0;
 END;
 ----
-expected parse error: at or near "exception": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+x := 1;
+RETURN x;
+EXCEPTION
+WHEN division_by_zero THEN
+ASSERT
+RETURN 0;
+END
 
 
 
@@ -15,9 +25,115 @@ parse
 DECLARE
 BEGIN
   x := 10;
+  RETURN x;
 EXCEPTION
   WHEN SQLSTATE '22012' THEN
     x = 22012;
+    RETURN x;
 END;
 ----
-expected parse error: at or near "exception": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+x := 10;
+RETURN x;
+EXCEPTION
+WHEN SQLSTATE '22012' THEN
+x := 22012;
+RETURN x;
+END
+
+parse
+DECLARE
+BEGIN
+  x := 10;
+  RETURN x;
+EXCEPTION
+  WHEN SQLSTATE '22012' OR SQLSTATE '22005' THEN
+    x = 100;
+    RETURN x;
+END;
+----
+DECLARE
+BEGIN
+x := 10;
+RETURN x;
+EXCEPTION
+WHEN SQLSTATE '22012' OR SQLSTATE '22005' THEN
+x := 100;
+RETURN x;
+END
+
+parse
+DECLARE
+BEGIN
+  x := 10;
+  RETURN x;
+EXCEPTION
+  WHEN SQLSTATE '22012' OR SQLSTATE '22005' OR feature_not_supported THEN
+    x = 100;
+    RETURN x;
+END;
+----
+DECLARE
+BEGIN
+x := 10;
+RETURN x;
+EXCEPTION
+WHEN SQLSTATE '22012' OR SQLSTATE '22005' OR feature_not_supported THEN
+x := 100;
+RETURN x;
+END
+
+parse
+DECLARE
+BEGIN
+  x := 10;
+  RETURN x;
+EXCEPTION
+  WHEN SQLSTATE '22012' THEN
+    x = 22012;
+    RETURN x;
+  WHEN feature_not_supported THEN
+    x = 12345;
+    RETURN x;
+END;
+----
+DECLARE
+BEGIN
+x := 10;
+RETURN x;
+EXCEPTION
+WHEN SQLSTATE '22012' THEN
+x := 22012;
+RETURN x;
+WHEN feature_not_supported THEN
+x := 12345;
+RETURN x;
+END
+
+parse
+DECLARE
+BEGIN
+  x := 10;
+  RETURN x;
+EXCEPTION
+  WHEN SQLSTATE '22012' THEN
+    x = 22012;
+    RETURN x;
+  WHEN feature_not_supported OR SQLSTATE '22005' THEN
+    x = 12345;
+    RETURN x;
+END;
+----
+DECLARE
+BEGIN
+x := 10;
+RETURN x;
+EXCEPTION
+WHEN SQLSTATE '22012' THEN
+x := 22012;
+RETURN x;
+WHEN feature_not_supported OR SQLSTATE '22005' THEN
+x := 12345;
+RETURN x;
+END

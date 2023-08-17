@@ -1004,3 +1004,379 @@ SELECT f(-1, -1), f(-1, 0), f(-1, 1), f(-1, 10), f(0, -1), f(0, 0), f(0, 1), f(0
   f(1, -1), f(1, 0), f(1, 1), f(1, 10), f(10, -1), f(10, 0), f(10, 1), f(10, 10);
 ----
 15  14  13  12  11  10  9  8  7  6  5  4  3  2  1  0
+
+# Testing EXCEPTION blocks.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 100;
+    WHEN invalid_regular_expression THEN
+      RETURN 200;
+    WHEN SQLSTATE '2200C' THEN
+      RETURN 300;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+100
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN invalid_regular_expression THEN
+      RETURN 200;
+    WHEN division_by_zero THEN
+      RETURN 100;
+    WHEN SQLSTATE '2200C' THEN
+      RETURN 300;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+100
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN SQLSTATE '22012' THEN
+      RETURN 100;
+    WHEN invalid_regular_expression THEN
+      RETURN 200;
+    WHEN SQLSTATE '2200C' THEN
+      RETURN 300;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+100
+
+statement ok
+DROP FUNCTION f(INT);
+CREATE OR REPLACE FUNCTION f(i INT) RETURNS INT AS $$
+  BEGIN
+    IF i > 0 THEN
+      RETURN 1 // 0;
+    ELSE
+      RETURN sqrt(i::FLOAT)::INT;
+    END IF;
+  EXCEPTION
+    WHEN SQLSTATE '22012' OR invalid_argument_for_power_function THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query III
+SELECT f(-1), f(0), f(1);
+----
+100  0  100
+
+statement ok
+CREATE OR REPLACE FUNCTION f(i INT) RETURNS INT AS $$
+  BEGIN
+    IF i > 0 THEN
+      RETURN 1 // 0;
+    ELSE
+      RETURN sqrt(i::FLOAT)::INT;
+    END IF;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 100;
+    WHEN SQLSTATE '2201F' THEN
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query III
+SELECT f(-1), f(0), f(1);
+----
+-1  0  100
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE division_by_zero;
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+100
+
+statement ok
+CREATE OR REPLACE FUNCTION f(i INT) RETURNS INT AS $$
+  BEGIN
+    IF i = 0 THEN
+      RAISE division_by_zero;
+    END IF;
+    IF i = 1 THEN
+      RAISE invalid_text_representation;
+    END IF;
+    IF i = 2 THEN
+      RAISE SQLSTATE '22P03';
+    END IF;
+    RAISE SQLSTATE '22007';
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 101;
+    WHEN SQLSTATE '22P02' THEN
+      RETURN 102;
+    WHEN invalid_binary_representation THEN
+      RETURN 103;
+    WHEN SQLSTATE '22007' THEN
+      RETURN 104;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Raise with error name, catch with error name.
+query I
+SELECT f(0);
+----
+101
+
+# Raise with error name, catch with code.
+query I
+SELECT f(1);
+----
+102
+
+# Raise with code, catch with error name.
+query I
+SELECT f(2);
+----
+103
+
+# Raise with code, catch with code.
+query I
+SELECT f(3);
+----
+104
+
+# Uncaught exception.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE SQLSTATE '12345';
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 101;
+    WHEN SQLSTATE '22P02' THEN
+      RETURN 102;
+    WHEN invalid_binary_representation THEN
+      RETURN 103;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 12345 pq: 12345
+SELECT f();
+
+# No exception raised.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 101;
+    WHEN SQLSTATE '22P02' THEN
+      RETURN 102;
+    WHEN invalid_binary_representation THEN
+      RETURN 103;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+0
+
+# Have to drop the function here because otherwise it's seen as a
+# "parameter name change" error.
+statement ok
+DROP FUNCTION f(INT);
+
+# The exception block does not catch errors thrown during variable declaration.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := 100 // n;
+  BEGIN
+    RETURN i;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 101;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22012 pq: division by zero
+SELECT f(0);
+
+query II
+SELECT f(-1), f(1)
+----
+-100  100
+
+# When an error is thrown, any variable assignments that happened before the
+# error should be visible to the exception handler. Any variable assignments
+# during or after the error should not be visible.
+statement ok
+CREATE OR REPLACE FUNCTION f(i INT, j INT, k INT) RETURNS INT AS $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    x := 1 // i;
+    x := 2 // j;
+    x := 3 // k;
+    RETURN x;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIII
+SELECT f(0, 0, 0), f(1, 0, 0), f(1, 1, 0), f(1, 1, 1);
+----
+0  1  2  3
+
+# Have to drop the function here because otherwise it's seen as a
+# "parameter name change" error.
+statement ok
+DROP FUNCTION f(INT);
+
+statement ok
+CREATE OR REPLACE FUNCTION f(i INT) RETURNS INT AS $$
+  DECLARE
+    x INT;
+  BEGIN
+    IF i = 0 THEN
+      x := 100;
+      RAISE division_by_zero;
+    ELSE
+      x := 200;
+      RAISE division_by_zero;
+    END IF;
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN x;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II
+SELECT f(0), f(1);
+----
+100  200
+
+# Have to drop the function here because otherwise it's seen as a
+# "parameter name change" error.
+statement ok
+DROP FUNCTION f(INT, INT);
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT, a INT) RETURNS INT AS $$
+  DECLARE
+    x INT;
+    i INT := 0;
+  BEGIN
+    LOOP IF i >= n THEN EXIT; END IF;
+      x := 1 // (i - a);
+      i := i + 1;
+    END LOOP;
+    RETURN -1;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query IIIIIII
+SELECT f(5, -1), f(5, 0), f(5, 1), f(5, 2), f(5, 3), f(5, 4), f(5, 5);
+----
+-1  0  1  2  3  4  -1
+
+# Duplicate catch branches are allowed; postgres just takes the first.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN 100;
+    WHEN division_by_zero THEN
+      RETURN 200;
+    WHEN SQLSTATE '22012' THEN
+      RETURN 300;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query I
+SELECT f();
+----
+100
+
+statement error pgcode 42704 pq: unrecognized exception condition "this_error_does_not_exist"
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION
+    WHEN this_error_does_not_exist THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# SQLSTATE error code must be 5 digits and/or letters.
+statement error pgcode 42601 pq: invalid SQLSTATE code '123'
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION
+    WHEN SQLSTATE '123' THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 pq: invalid SQLSTATE code '123aB'
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION
+    WHEN SQLSTATE '123aB' THEN
+      RETURN 100;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# It is possible for the exception handler itself to result in an error; when
+# that happens, it does not attempt to catch its own error.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RAISE division_by_zero USING message = 'Oh no, division by zero!';
+      RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22012 pq: Oh no, division by zero!
+SELECT f();

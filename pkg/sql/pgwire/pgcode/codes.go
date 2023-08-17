@@ -10,6 +10,8 @@
 
 package pgcode
 
+import "regexp"
+
 // Code is a wrapper around a string to ensure that pgcodes are used in
 // different pgerror functions by avoiding accidental string input.
 type Code struct {
@@ -402,3 +404,15 @@ var (
 	// used without the session variable being enabled.
 	ExperimentalFeature = MakeCode("XCEXF")
 )
+
+var pgCodeRegexp = regexp.MustCompile(`[A-Z0-9]{5}`)
+
+// IsValidPGCode returns true if the given code is a valid error code. Note that
+// this does not check if the code is one of the pre-defined error codes like
+// "Syntax" or "InvalidName" - instead, it checks that the format of the code is
+// valid. This is because it is possible for users to throw and catch arbitrary
+// error codes in PLpgSQL routines.
+func IsValidPGCode(code string) bool {
+	// The code must consist of 5 digits and/or upper-case ASCII letters.
+	return pgCodeRegexp.MatchString(code)
+}
