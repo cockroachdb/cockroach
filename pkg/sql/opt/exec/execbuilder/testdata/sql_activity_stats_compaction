@@ -219,14 +219,11 @@ ALTER TABLE system.statement_statistics INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE)
 DELETE FROM system.statement_statistics
-WHERE (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id) IN (
-  SELECT aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
-  FROM system.statement_statistics
-  WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = 0
-    AND aggregated_ts < $current_agg_ts
-  ORDER BY aggregated_ts ASC
-  LIMIT 1024
-) RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
+WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = 0
+  AND aggregated_ts < $current_agg_ts
+ORDER BY aggregated_ts ASC
+LIMIT 1024
+RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
 ----
 distribution: local
 vectorized: true
@@ -236,7 +233,7 @@ vectorized: true
 │
 └── • delete
     │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
-    │ estimated row count: 0
+    │ estimated row count: 1,024
     │ from: statement_statistics
     │ auto commit
     │
@@ -261,25 +258,12 @@ vectorized: true
             │ render total_estimated_execution_time: total_estimated_execution_time
             │ render p99_latency: p99_latency
             │
-            └── • project
-                │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, statistics, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency)
-                │
-                └── • project
-                    │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, statistics, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
-                    │
-                    └── • lookup join (inner)
-                        │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, statistics, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency)
-                        │ estimated row count: 0
-                        │ table: statement_statistics@primary
-                        │ equality: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id) = (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,aggregated_ts,fingerprint_id,transaction_fingerprint_id,plan_hash,app_name,node_id)
-                        │ equality cols are key
-                        │
-                        └── • scan
-                              columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
-                              estimated row count: 1,024 (0.10% of the table; stats collected <hidden> ago)
-                              table: statement_statistics@primary
-                              spans: /0-/0/2022-05-04T15:59:59.999999001Z
-                              limit: 1024
+            └── • scan
+                  columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, statistics, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency)
+                  estimated row count: 1,024 (0.10% of the table; stats collected <hidden> ago)
+                  table: statement_statistics@primary
+                  spans: /0-/0/2022-05-04T15:59:59.999999001Z
+                  limit: 1024
 
 statement ok
 ALTER TABLE system.transaction_statistics INJECT STATISTICS '[
@@ -422,14 +406,11 @@ ALTER TABLE system.transaction_statistics INJECT STATISTICS '[
 query T
 EXPLAIN (VERBOSE)
 DELETE FROM system.transaction_statistics
-WHERE (aggregated_ts, fingerprint_id, app_name, node_id) IN (
-  SELECT aggregated_ts, fingerprint_id, app_name, node_id
-  FROM system.transaction_statistics
   WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = 0
     AND aggregated_ts < $current_agg_ts
   ORDER BY aggregated_ts ASC
   LIMIT 1024
-) RETURNING aggregated_ts, fingerprint_id, app_name, node_id
+ RETURNING aggregated_ts, fingerprint_id, app_name, node_id
 ----
 distribution: local
 vectorized: true
@@ -439,7 +420,7 @@ vectorized: true
 │
 └── • delete
     │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
-    │ estimated row count: 0
+    │ estimated row count: 1,024
     │ from: transaction_statistics
     │ auto commit
     │
@@ -461,32 +442,16 @@ vectorized: true
             │ render total_estimated_execution_time: total_estimated_execution_time
             │ render p99_latency: p99_latency
             │
-            └── • project
-                │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency)
-                │
-                └── • project
-                    │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, aggregated_ts, fingerprint_id, app_name, node_id)
-                    │
-                    └── • lookup join (inner)
-                        │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency)
-                        │ estimated row count: 0
-                        │ table: transaction_statistics@primary
-                        │ equality: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id) = (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8,aggregated_ts,fingerprint_id,app_name,node_id)
-                        │ equality cols are key
-                        │
-                        └── • scan
-                              columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
-                              estimated row count: 1,024 (0.10% of the table; stats collected <hidden> ago)
-                              table: transaction_statistics@primary
-                              spans: /0-/0/2022-05-04T15:59:59.999999001Z
-                              limit: 1024
+            └── • scan
+                  columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency)
+                  estimated row count: 1,024 (0.10% of the table; stats collected <hidden> ago)
+                  table: transaction_statistics@primary
+                  spans: /0-/0/2022-05-04T15:59:59.999999001Z
+                  limit: 1024
 
 query T
 EXPLAIN (VERBOSE)
 DELETE FROM system.statement_statistics
-WHERE (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id) IN (
-SELECT aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
-FROM system.statement_statistics
 WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = 0
 AND (
   (
@@ -501,7 +466,7 @@ AND (
     AND aggregated_ts < $current_agg_ts
   ORDER BY aggregated_ts ASC
   LIMIT 1024
-) RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
+ RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
 ----
 distribution: local
 vectorized: true
@@ -511,7 +476,7 @@ vectorized: true
 │
 └── • delete
     │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
-    │ estimated row count: 0
+    │ estimated row count: 1,024
     │ from: statement_statistics
     │ auto commit
     │
@@ -536,32 +501,16 @@ vectorized: true
             │ render total_estimated_execution_time: total_estimated_execution_time
             │ render p99_latency: p99_latency
             │
-            └── • project
-                │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, statistics, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency)
-                │
-                └── • project
-                    │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, statistics, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
-                    │
-                    └── • lookup join (inner)
-                        │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, statistics, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency)
-                        │ estimated row count: 0
-                        │ table: statement_statistics@primary
-                        │ equality: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id) = (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,aggregated_ts,fingerprint_id,transaction_fingerprint_id,plan_hash,app_name,node_id)
-                        │ equality cols are key
-                        │
-                        └── • scan
-                              columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8)
-                              estimated row count: 1,024 (0.10% of the table; stats collected <hidden> ago)
-                              table: statement_statistics@primary
-                              spans: /0/2022-05-04T14:00:00Z/"123"/"234"/"345"/"test"/1-/0/2022-05-04T15:59:59.999999001Z
-                              limit: 1024
+            └── • scan
+                  columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, statistics, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency)
+                  estimated row count: 1,024 (0.10% of the table; stats collected <hidden> ago)
+                  table: statement_statistics@primary
+                  spans: /0/2022-05-04T14:00:00Z/"123"/"234"/"345"/"test"/1-/0/2022-05-04T15:59:59.999999001Z
+                  limit: 1024
 
 query T
 EXPLAIN (VERBOSE)
 DELETE FROM system.transaction_statistics
-      WHERE (aggregated_ts, fingerprint_id, app_name, node_id) IN (
-      SELECT aggregated_ts, fingerprint_id, app_name, node_id
-      FROM system.transaction_statistics
       WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = 0
       AND (
         (
@@ -574,7 +523,7 @@ DELETE FROM system.transaction_statistics
         AND aggregated_ts < $current_agg_ts
       ORDER BY aggregated_ts ASC
       LIMIT 1024
-    ) RETURNING aggregated_ts, fingerprint_id, app_name, node_id
+     RETURNING aggregated_ts, fingerprint_id, app_name, node_id
 ----
 distribution: local
 vectorized: true
@@ -584,7 +533,7 @@ vectorized: true
 │
 └── • delete
     │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
-    │ estimated row count: 0
+    │ estimated row count: 1,024
     │ from: transaction_statistics
     │ auto commit
     │
@@ -606,25 +555,12 @@ vectorized: true
             │ render total_estimated_execution_time: total_estimated_execution_time
             │ render p99_latency: p99_latency
             │
-            └── • project
-                │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency)
-                │
-                └── • project
-                    │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency, aggregated_ts, fingerprint_id, app_name, node_id)
-                    │
-                    └── • lookup join (inner)
-                        │ columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency)
-                        │ estimated row count: 0
-                        │ table: transaction_statistics@primary
-                        │ equality: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id) = (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8,aggregated_ts,fingerprint_id,app_name,node_id)
-                        │ equality cols are key
-                        │
-                        └── • scan
-                              columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8)
-                              estimated row count: 1,024 (0.10% of the table; stats collected <hidden> ago)
-                              table: transaction_statistics@primary
-                              spans: /0/2022-05-04T14:00:00Z/"123"/"test"/2-/0/2022-05-04T15:59:59.999999001Z
-                              limit: 1024
+            └── • scan
+                  columns: (aggregated_ts, fingerprint_id, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency)
+                  estimated row count: 1,024 (0.10% of the table; stats collected <hidden> ago)
+                  table: transaction_statistics@primary
+                  spans: /0/2022-05-04T14:00:00Z/"123"/"test"/2-/0/2022-05-04T15:59:59.999999001Z
+                  limit: 1024
 
 statement ok
 RESET CLUSTER SETTING sql.stats.flush.interval
