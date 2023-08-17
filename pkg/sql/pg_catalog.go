@@ -369,12 +369,17 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 		addRow func(...tree.Datum) error,
 	) error {
 		for _, column := range table.PublicColumns() {
-			if !column.HasDefault() {
-				// pg_attrdef only expects rows for columns with default values.
+			if !column.HasDefault() && !column.IsComputed() {
+				// pg_attrdef only expects rows for columns with default values
+				// or computed expressions.
 				continue
 			}
+			expr := column.GetDefaultExpr()
+			if column.IsComputed() {
+				expr = column.GetComputeExpr()
+			}
 			displayExpr, err := schemaexpr.FormatExprForDisplay(
-				ctx, table, column.GetDefaultExpr(), &p.semaCtx, p.SessionData(), tree.FmtPGCatalog,
+				ctx, table, expr, &p.semaCtx, p.SessionData(), tree.FmtPGCatalog,
 			)
 			if err != nil {
 				return err
@@ -450,16 +455,17 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				tree.DNull, // attstorage
 				tree.DNull, // attalign
 				tree.MakeDBool(tree.DBool(!column.IsNullable())), // attnotnull
-				tree.MakeDBool(tree.DBool(column.HasDefault())),  // atthasdef
-				tree.NewDString(generatedAsIdentityType),         // attidentity
-				tree.NewDString(isColumnComputed),                // attgenerated
-				tree.DBoolFalse,                                  // attisdropped
-				tree.DBoolTrue,                                   // attislocal
-				zeroVal,                                          // attinhcount
-				typColl(colTyp, h),                               // attcollation
-				tree.DNull,                                       // attacl
-				tree.DNull,                                       // attoptions
-				tree.DNull,                                       // attfdwoptions
+				tree.MakeDBool(tree.DBool(column.HasDefault() ||
+					column.IsComputed())), // atthasdef
+				tree.NewDString(generatedAsIdentityType), // attidentity
+				tree.NewDString(isColumnComputed),        // attgenerated
+				tree.DBoolFalse,                          // attisdropped
+				tree.DBoolTrue,                           // attislocal
+				zeroVal,                                  // attinhcount
+				typColl(colTyp, h),                       // attcollation
+				tree.DNull,                               // attacl
+				tree.DNull,                               // attoptions
+				tree.DNull,                               // attfdwoptions
 				// These columns were automatically created by pg_catalog_test's missing column generator.
 				tree.DNull, // atthasmissing
 				// These columns were automatically created by pg_catalog_test's missing column generator.
