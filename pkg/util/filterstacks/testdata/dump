@@ -1,0 +1,197 @@
+spawn
+a b c d e
+a b
+c d
+e
+----
+
+dump
+filterstacks.e
+----
+----
+runtime.gopark
+  GOROOT/src/runtime/proc.go:363
+runtime.chanrecv
+  GOROOT/src/runtime/chan.go:583
+runtime.chanrecv1
+  GOROOT/src/runtime/chan.go:442
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:52
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.e
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:67
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.d
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:66
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.c
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:65
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.b
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:64
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.a
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:63
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.spawnTestGoroutines.func1
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:38
+
+runtime.gopark
+  GOROOT/src/runtime/proc.go:363
+runtime.chanrecv
+  GOROOT/src/runtime/chan.go:583
+runtime.chanrecv1
+  GOROOT/src/runtime/chan.go:442
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:52
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.e
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:67
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.spawnTestGoroutines.func1
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:38
+----
+----
+
+dump
+filterstacks.a
+filterstacks.b
+----
+----
+runtime.gopark
+  GOROOT/src/runtime/proc.go:363
+runtime.chanrecv
+  GOROOT/src/runtime/chan.go:583
+runtime.chanrecv1
+  GOROOT/src/runtime/chan.go:442
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:52
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.e
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:67
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.d
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:66
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.c
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:65
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.b
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:64
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.a
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:63
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.spawnTestGoroutines.func1
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:38
+
+runtime.gopark
+  GOROOT/src/runtime/proc.go:363
+runtime.chanrecv
+  GOROOT/src/runtime/chan.go:583
+runtime.chanrecv1
+  GOROOT/src/runtime/chan.go:442
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:52
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.b
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:64
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.a
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:63
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.spawnTestGoroutines.func1
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:38
+----
+----
+
+dump
+filterstacks.a
+filterstacks.b
+filterstacks.c
+filterstacks.d
+filterstacks.e
+----
+----
+runtime.gopark
+  GOROOT/src/runtime/proc.go:363
+runtime.chanrecv
+  GOROOT/src/runtime/chan.go:583
+runtime.chanrecv1
+  GOROOT/src/runtime/chan.go:442
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:52
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.e
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:67
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.d
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:66
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.c
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:65
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.b
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:64
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.a
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:63
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.spawnTestGoroutines.func1
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:38
+
+runtime.gopark
+  GOROOT/src/runtime/proc.go:363
+runtime.chanrecv
+  GOROOT/src/runtime/chan.go:583
+runtime.chanrecv1
+  GOROOT/src/runtime/chan.go:442
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:52
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.b
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:64
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.a
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:63
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.spawnTestGoroutines.func1
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:38
+
+runtime.gopark
+  GOROOT/src/runtime/proc.go:363
+runtime.chanrecv
+  GOROOT/src/runtime/chan.go:583
+runtime.chanrecv1
+  GOROOT/src/runtime/chan.go:442
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:52
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.d
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:66
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:56
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.c
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:65
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.spawnTestGoroutines.func1
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:38
+
+runtime.gopark
+  GOROOT/src/runtime/proc.go:363
+runtime.chanrecv
+  GOROOT/src/runtime/chan.go:583
+runtime.chanrecv1
+  GOROOT/src/runtime/chan.go:442
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.testFuncImpl
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:52
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.e
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:67
+github.com/cockroachdb/cockroach/pkg/util/filterstacks.spawnTestGoroutines.func1
+  github.com/cockroachdb/cockroach/pkg/util/filterstacks/filterstacks_test.go:38
+----
+----
+
+dump
+filterstacks.nonexistent
+----
