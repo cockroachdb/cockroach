@@ -1245,6 +1245,24 @@ func dStringForIndexDirection(dir catenumpb.IndexColumn_Direction) tree.Datum {
 	panic("unreachable")
 }
 
+func dStringForSequenceType(integerType string) string {
+	switch integerType {
+	case "INT2":
+		return "smallint"
+	default:
+		return "bigint"
+	}
+}
+
+func dIntForNumericPrecision(integerType string) tree.DInt {
+	switch integerType {
+	case "INT2":
+		return 16
+	default:
+		return 64
+	}
+}
+
 var informationSchemaSequences = virtualSchemaTable{
 	comment: `sequences
 ` + docs.URL("information-schema.html#sequences") + `
@@ -1260,10 +1278,10 @@ https://www.postgresql.org/docs/9.5/infoschema-sequences.html`,
 					tree.NewDString(db.GetName()),    // catalog
 					tree.NewDString(sc.GetName()),    // schema
 					tree.NewDString(table.GetName()), // name
-					tree.NewDString("bigint"),        // type
-					tree.NewDInt(64),                 // numeric precision
-					tree.NewDInt(2),                  // numeric precision radix
-					tree.NewDInt(0),                  // numeric scale
+					tree.NewDString(dStringForSequenceType(table.GetSequenceOpts().AsIntegerType)), // type
+					tree.NewDInt(dIntForNumericPrecision(table.GetSequenceOpts().AsIntegerType)),   // numeric precision
+					tree.NewDInt(2), // numeric precision radix
+					tree.NewDInt(0), // numeric scale
 					tree.NewDString(strconv.FormatInt(table.GetSequenceOpts().Start, 10)),     // start value
 					tree.NewDString(strconv.FormatInt(table.GetSequenceOpts().MinValue, 10)),  // min value
 					tree.NewDString(strconv.FormatInt(table.GetSequenceOpts().MaxValue, 10)),  // max value

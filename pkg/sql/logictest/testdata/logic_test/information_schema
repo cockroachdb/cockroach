@@ -4641,6 +4641,14 @@ CREATE SEQUENCE test_seq
 statement ok
 CREATE SEQUENCE test_seq_2 INCREMENT -1 MINVALUE 5 MAXVALUE 1000 START WITH 15
 
+statement ok
+CREATE SEQUENCE test_seq_3 AS smallint
+
+statement ok
+CREATE SEQUENCE test_seq_4 AS integer 
+
+statement ok
+CREATE SEQUENCE test_seq_5 AS bigint
 
 query TTTTIIITTTTT colnames,rowsort
 SELECT * FROM information_schema.sequences
@@ -4650,6 +4658,9 @@ test              public           generated_as_identity_b_seq  bigint     64   
 test              public           generated_as_identity_c_seq  bigint     64                 2                        0              1            1              9223372036854775807  1          NO
 test              public           test_seq                     bigint     64                 2                        0              1            1              9223372036854775807  1          NO
 test              public           test_seq_2                   bigint     64                 2                        0              15           5              1000                 -1         NO
+test              public           test_seq_3                   smallint   16                 2                        0              1            1              32767                1          NO
+test              public           test_seq_4                   bigint     64                 2                        0              1            1              9223372036854775807  1          NO
+test              public           test_seq_5                   bigint     64                 2                        0              1            1              9223372036854775807  1          NO
 
 statement ok
 CREATE DATABASE other_db
