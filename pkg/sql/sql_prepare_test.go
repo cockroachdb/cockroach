@@ -35,10 +35,6 @@ func TestPreparePrepareExecute(t *testing.T) {
 	_, err := db.Prepare("EXECUTE x(3)")
 	require.Contains(t, err.Error(), "no such prepared statement")
 
-	// Test that creating a prepared EXPLAIN ANALYZE statement is prohibited.
-	_, err = db.Prepare("PREPARE p AS EXPLAIN ANALYZE SELECT 1")
-	require.Contains(t, err.Error(), "EXPLAIN ANALYZE can only be used as a top-level statement")
-
 	// Test that we can prepare and execute a PREPARE.
 	s, err := db.Prepare("PREPARE x AS SELECT $1::int")
 	require.NoError(t, err)

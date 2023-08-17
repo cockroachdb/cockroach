@@ -1145,7 +1145,7 @@ func (*ExplainAnalyze) StatementReturnType() StatementReturnType { return Rows }
 func (*ExplainAnalyze) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ExplainAnalyze) StatementTag() string { return "EXPLAIN ANALYZE" }
+func (*ExplainAnalyze) StatementTag() string { return "EXPLAIN" }
 
 // StatementReturnType implements the Statement interface.
 func (*Export) StatementReturnType() StatementReturnType { return Rows }
