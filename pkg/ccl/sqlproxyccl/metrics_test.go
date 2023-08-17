@@ -35,10 +35,10 @@ func TestMetricsUpdateForError(t *testing.T) {
 
 		{codeExpiredClientConnection, []*metric.Counter{m.ExpiredClientConnCount}},
 
-		{codeProxyRefusedConnection, []*metric.Counter{m.RefusedConnCount, m.BackendDownCount}},
+		{codeProxyRefusedConnection, []*metric.Counter{m.RefusedConnCount}},
 
-		{codeParamsRoutingFailed, []*metric.Counter{m.RoutingErrCount, m.BackendDownCount}},
-		{codeUnavailable, []*metric.Counter{m.RoutingErrCount, m.BackendDownCount}},
+		{codeParamsRoutingFailed, []*metric.Counter{m.RoutingErrCount}},
+		{codeUnavailable, []*metric.Counter{m.RoutingErrCount}},
 
 		{codeBackendDown, []*metric.Counter{m.BackendDownCount}},
 

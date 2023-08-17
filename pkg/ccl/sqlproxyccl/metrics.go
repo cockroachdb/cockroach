@@ -292,10 +292,8 @@ func (metrics *metrics) updateForError(err error) {
 		metrics.ClientDisconnectCount.Inc(1)
 	case codeProxyRefusedConnection:
 		metrics.RefusedConnCount.Inc(1)
-		metrics.BackendDownCount.Inc(1)
 	case codeParamsRoutingFailed, codeUnavailable:
 		metrics.RoutingErrCount.Inc(1)
-		metrics.BackendDownCount.Inc(1)
 	case codeBackendDown:
 		metrics.BackendDownCount.Inc(1)
 	case codeAuthFailed:
