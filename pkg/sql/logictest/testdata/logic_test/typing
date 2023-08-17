@@ -313,3 +313,18 @@ SELECT (CASE WHEN t108360_1.t > t108360_2.c THEN t108360_1.t ELSE t108360_2.c EN
 FROM t108360_1, t108360_2
 WHERE t108360_1.t = (CASE WHEN t108360_1.t > t108360_2.c THEN t108360_1.t ELSE t108360_2.c END);
 ----
+
+# Static analysis types should never make it to execution.
+statement ok
+CREATE TABLE t83496 (
+  a STRING,
+  b STRING
+);
+CREATE TYPE typ83496 AS ENUM ('foo', 'bar');
+
+statement ok
+SELECT * FROM t83496
+WHERE (
+  (SELECT 'bar':::typ83496 FROM t83496 WHERE false)
+  IS NOT DISTINCT FROM CASE WHEN NULL THEN NULL ELSE NULL END
+);
