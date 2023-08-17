@@ -82,11 +82,17 @@ func (m *Manager) WaitForNoVersion(
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
+		// FIXME: Validate...
+		ie := m.storage.db.Executor()
+		stmt := `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND (crdb_internal.sql_liveness_is_alive("sessionID")))`
+		if !m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
+			stmt = `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND expiration > $1))`
+		}
 		now := m.storage.clock.Now()
-		stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND (crdb_internal.sql_liveness_is_alive("sessionID")))`,
+		stmt = fmt.Sprintf(stmt,
 			now.AsOfSystemTime(),
 			id)
-		values, err := m.storage.db.Executor().QueryRowEx(
+		values, err := ie.QueryRowEx(
 			ctx, "count-leases", nil, /* txn */
 			sessiondata.RootUserSessionDataOverride,
 			stmt, now.GoTime(),
@@ -149,6 +155,7 @@ func (m *Manager) WaitForOneVersion(
 
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
+
 		now := m.storage.clock.Now()
 		descs := []IDVersion{NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion())}
 		count, err := CountLeases(ctx, m.storage.db.Executor(), descs, now)
