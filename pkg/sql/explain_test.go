@@ -240,6 +240,7 @@ func TestPrepareExplain(t *testing.T) {
 		"EXPLAIN (TYPES) SELECT * FROM abc WHERE c=1",
 		"EXPLAIN (DISTSQL) SELECT * FROM abc WHERE c=1",
 		"EXPLAIN (VEC) SELECT * FROM abc WHERE c=1",
+		"EXPLAIN ANALYZE SELECT * FROM abc WHERE c=1",
 	}
 
 	for _, sql := range statements {
