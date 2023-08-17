@@ -777,12 +777,12 @@ t1                 c                         -1         NULL      NULL        NU
 t1                 d                         9          NULL      NULL        NULL      false       false      ·            ·
 t1                 e                         5          NULL      NULL        NULL      false       false      ·            ·
 t1                 f                         655371     NULL      NULL        NULL      false       false      ·            ·
-t1                 g                         -1         NULL      NULL        NULL      false       false      ·            s
+t1                 g                         -1         NULL      NULL        NULL      false       true       ·            s
 t1                 h                         16         NULL      NULL        NULL      false       false      ·            ·
 t1                 i                         24         NULL      NULL        NULL      false       false      ·            ·
 t1                 j                         -1         NULL      NULL        NULL      false       false      ·            ·
 t1                 k                         14         NULL      NULL        NULL      false       false      ·            ·
-t1                 l                         -1         NULL      NULL        NULL      false       false      ·            v
+t1                 l                         -1         NULL      NULL        NULL      false       true       ·            v
 t1                 m                         -1         NULL      NULL        NULL      true        true       a            ·
 t1                 n                         -1         NULL      NULL        NULL      true        true       d            ·
 t1_pkey            p                         -1         NULL      NULL        NULL      true        false      ·            ·
@@ -823,11 +823,11 @@ t6                 c                         -1         NULL      NULL        NU
 t6                 m                         -1         NULL      NULL        NULL      false       false      ·            ·
 t6                 rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 t6_pkey            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
-t6_expr_idx        crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       false      ·            v
-t6_expr_expr1_idx  crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       false      ·            v
-t6_expr_expr1_idx  crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       false      ·            v
-t6_expr_key        crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       false      ·            v
-t6_expr_idx1       crdb_internal_idx_expr_2  -1         NULL      NULL        NULL      false       false      ·            v
+t6_expr_idx        crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       true       ·            v
+t6_expr_expr1_idx  crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       true       ·            v
+t6_expr_expr1_idx  crdb_internal_idx_expr    -1         NULL      NULL        NULL      false       true       ·            v
+t6_expr_key        crdb_internal_idx_expr_1  -1         NULL      NULL        NULL      false       true       ·            v
+t6_expr_idx1       crdb_internal_idx_expr_2  -1         NULL      NULL        NULL      false       true       ·            v
 mv1                ?column?                  -1         NULL      NULL        NULL      false       false      ·            ·
 mv1                rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 mv1_pkey           rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
@@ -982,24 +982,29 @@ oid         amname    amstrategies  amsupport  amcanorder  amcanorderbyop  amcan
 
 ## pg_catalog.pg_attrdef
 
-query OTOITTT colnames,rowsort
+query OTOITTT colnames
 SELECT ad.oid, c.relname, adrelid, adnum, adbin, adsrc, pg_get_expr(ad.adbin, ad.adrelid)
 FROM pg_catalog.pg_attrdef ad
 JOIN pg_catalog.pg_class c ON ad.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'public' ORDER BY ad.oid DESC
 ----
-oid         relname  adrelid  adnum  adbin                                 adsrc                                 pg_get_expr
-2306804694  t1       110      4      12                                    12                                    12
-2306804700  t1       110      14     nextval('public.t1_m_seq'::REGCLASS)  nextval('public.t1_m_seq'::REGCLASS)  nextval('public.t1_m_seq'::REGCLASS)
-2306804701  t1       110      15     nextval('public.t1_n_seq'::REGCLASS)  nextval('public.t1_n_seq'::REGCLASS)  nextval('public.t1_n_seq'::REGCLASS)
-4171354239  t2       113      2      unique_rowid()                        unique_rowid()                        unique_rowid()
-1221463949  t3       114      3      'FOO'::STRING                         'FOO'::STRING                         'FOO'::STRING
-1221463946  t3       114      4      unique_rowid()                        unique_rowid()                        unique_rowid()
-1740936492  t4       116      4      unique_rowid()                        unique_rowid()                        unique_rowid()
-3086013501  t5       117      4      unique_rowid()                        unique_rowid()                        unique_rowid()
-655595746   t6       120      6      unique_rowid()                        unique_rowid()                        unique_rowid()
-2000672759  mv1      121      2      unique_rowid()                        unique_rowid()                        unique_rowid()
+oid         relname  adrelid  adnum  adbin                                   adsrc                                   pg_get_expr
+4171354239  t2       113      2      unique_rowid()                          unique_rowid()                          unique_rowid()
+3086013501  t5       117      4      unique_rowid()                          unique_rowid()                          unique_rowid()
+2306804703  t1       110      13     a * b                                   a * b                                   a * b
+2306804701  t1       110      15     nextval('public.t1_n_seq'::REGCLASS)    nextval('public.t1_n_seq'::REGCLASS)    nextval('public.t1_n_seq'::REGCLASS)
+2306804700  t1       110      14     nextval('public.t1_m_seq'::REGCLASS)    nextval('public.t1_m_seq'::REGCLASS)    nextval('public.t1_m_seq'::REGCLASS)
+2306804698  t1       110      8      a * b                                   a * b                                   a * b
+2306804694  t1       110      4      12                                      12                                      12
+2000672759  mv1      121      2      unique_rowid()                          unique_rowid()                          unique_rowid()
+1740936492  t4       116      4      unique_rowid()                          unique_rowid()                          unique_rowid()
+1221463949  t3       114      3      'FOO'::STRING                           'FOO'::STRING                           'FOO'::STRING
+1221463946  t3       114      4      unique_rowid()                          unique_rowid()                          unique_rowid()
+655595756   t6       120      8      m = 'foo'::constraint_db.public.mytype  m = 'foo'::constraint_db.public.mytype  m = 'foo'::constraint_db.public.mytype
+655595747   t6       120      7      lower(c)                                lower(c)                                lower(c)
+655595746   t6       120      6      unique_rowid()                          unique_rowid()                          unique_rowid()
+655595745   t6       120      5      a + b                                   a + b                                   a + b
 
 ## pg_catalog.pg_indexes
 
@@ -3200,24 +3205,29 @@ SELECT pg_catalog.pg_get_expr('1', 0, true)
 statement ok
 SET DATABASE = constraint_db
 
-query OTT rowsort
+query OTT
 SELECT def.oid, c.relname, pg_catalog.pg_get_expr(def.adbin, def.adrelid)
 FROM pg_catalog.pg_attrdef def
 JOIN pg_catalog.pg_class c ON def.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE n.nspname = 'public'
+WHERE n.nspname = 'public' ORDER BY def.oid DESC
 ----
-2306804694  t1         12
-2306804700  t1         nextval('public.t1_m_seq'::REGCLASS)
-2306804701  t1         nextval('public.t1_n_seq'::REGCLASS)
 4171354239  t2         unique_rowid()
+3086013501  t5         unique_rowid()
+2306804703  t1         a * b
+2306804701  t1         nextval('public.t1_n_seq'::REGCLASS)
+2306804700  t1         nextval('public.t1_m_seq'::REGCLASS)
+2306804698  t1         a * b
+2306804694  t1         12
+2000672759  mv1        unique_rowid()
+1740936492  t4         unique_rowid()
+1249221897  testtable  unique_rowid()
 1221463949  t3         'FOO'::STRING
 1221463946  t3         unique_rowid()
-1740936492  t4         unique_rowid()
-3086013501  t5         unique_rowid()
+655595756   t6         m = 'foo'::constraint_db.public.mytype
+655595747   t6         lower(c)
 655595746   t6         unique_rowid()
-2000672759  mv1        unique_rowid()
-1249221897  testtable  unique_rowid()
+655595745   t6         a + b
 
 # Verify that a set database shows tables from that database for a non-root
 # user, when that user has permissions.
