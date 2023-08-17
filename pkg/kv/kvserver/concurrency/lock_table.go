@@ -677,7 +677,7 @@ func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(
 }
 
 func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
-	key roachpb.Key, strength lock.Strength,
+	key roachpb.Key, str lock.Strength,
 ) (bool, *enginepb.TxnMeta) {
 	iter := g.tableSnapshot.MakeIter()
 	iter.SeekGE(&lockState{key: key})
@@ -692,31 +692,54 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 		// The lock is empty but has not yet been deleted.
 		return false, nil
 	}
-	conflictingTxn, held := l.claimantTxn()
-	assert(conflictingTxn != nil, "non-empty lockState with no claimant transaction")
-	if !held {
-		if strength == lock.None {
-			// Non-locking reads only care about locks that are held.
-			return false, nil
-		}
-		if g.isSameTxn(conflictingTxn) {
-			return false, nil
-		}
-		// If the key is claimed but the lock isn't held (yet), nil is returned.
-		return true, nil
-	}
-	// Key locked.
-	txn, ts := l.getLockHolder()
-	if strength == lock.None && g.ts.Less(ts) {
-		// Non-locking read below lock's timestamp.
+
+	if l.alreadyHoldsLockAndIsAllowedToProceed(g, str) {
+		// If another request from this transaction has already locked this key with
+		// sufficient locking strength then there's no conflict; we can proceed.
 		return false, nil
 	}
-	if g.isSameTxn(txn) {
-		// Already locked by this txn.
+
+	if l.isHeld() {
+		lockHolderTxn, _ := l.getLockHolder()
+		if !g.isSameTxn(lockHolderTxn) &&
+			lock.Conflicts(l.getLockMode(), makeLockMode(str, g.txn, g.ts), &g.lt.settings.SV) {
+			return true, l.holder.txn // they key is locked by some other transaction; return the holder
+		}
+		// We can be in either of 2 cases at this point:
+		// 1. All locks held on this key are at non-conflicting strengths (i.e,
+		// they're compatible with the supplied strength).
+		// 2. OR one of the locks held on this key is by the transaction itself, and
+		// that lock is held with a lower strength. Simply put, the request is
+		// trying to upgrade its lock.
+	}
+
+	// There's no conflict with the lock holder itself. However, there may be
+	// other locking requests that came before us that we may conflict with.
+	// Checking for conflicts with the list of queuedWriters ensures fairness by
+	// preventing a stream of locking[1] SKIP LOCKED requests from starving out
+	// regular locking requests.
+	if str == lock.None { // [1] we only need to do this checking for locking requests
 		return false, nil
 	}
-	// "If the key is locked, the lock holder is also returned."
-	return true, txn
+
+	for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
+		qqg := e.Value.(*queuedGuard)
+		if qqg.guard.seqNum > g.seqNum {
+			// We only need to check for conflicts with requests that came before us
+			// (read: have lower sequence numbers than us). Note that the list of
+			// queuedWriters is sorted in increasing order of sequence number.
+			break
+		}
+		if g.isSameTxn(qqg.guard.txnMeta()) {
+			panic(errors.AssertionFailedf(
+				"SKIP LOCKED request should not find another waiting request from the same transaction",
+			))
+		}
+		if lock.Conflicts(qqg.mode, makeLockMode(str, g.txn, g.ts), &g.lt.settings.SV) {
+			return true, nil // the conflict isn't with a lock holder, nil is returned
+		}
+	}
+	return false, nil // no conflict
 }
 
 func (g *lockTableGuardImpl) notify() {
@@ -1912,7 +1935,7 @@ func (l *lockState) scanAndMaybeEnqueue(g *lockTableGuardImpl, notify bool) (wai
 
 	// It is possible that the lock is already held by this request's
 	// transaction, and it is held with a lock strength good enough for it.
-	if l.alreadyHoldsLockAndIsAllowedToProceed(g) {
+	if l.alreadyHoldsLockAndIsAllowedToProceed(g, g.curStrength()) {
 		return false /* wait */
 	}
 
@@ -1994,11 +2017,13 @@ func (l *lockState) constructWaitingState(g *lockTableGuardImpl) waitingState {
 
 // alreadyHoldsLockAndIsAllowedToProceed returns true if the request, referenced
 // by the supplied lock table guard, is allowed to proceed because its
-// transaction already holds the lock with an equal or higher lock strength.
-// Otherwise, false is returned.
+// transaction already holds the lock with an equal or higher lock strength
+// compared to the one supplied. Otherwise, false is returned.
 //
 // REQUIRES: l.mu to be locked.
-func (l *lockState) alreadyHoldsLockAndIsAllowedToProceed(g *lockTableGuardImpl) bool {
+func (l *lockState) alreadyHoldsLockAndIsAllowedToProceed(
+	g *lockTableGuardImpl, str lock.Strength,
+) bool {
 	lockHolderTxn, _ := l.getLockHolder()
 	if lockHolderTxn == nil {
 		return false // no one holds the lock
@@ -2012,7 +2037,7 @@ func (l *lockState) alreadyHoldsLockAndIsAllowedToProceed(g *lockTableGuardImpl)
 	// is trying to promote a lock it previously acquired. In such cases, the
 	// existence of a lock with weaker strength doesn't do much for this request.
 	// It's no different than the case where its trying to acquire a fresh lock.
-	return g.curStrength() <= heldMode.Strength ||
+	return str <= heldMode.Strength ||
 		// TODO(arul): We want to allow requests that are writing to keys that they
 		// hold exclusive locks on to "jump ahead" of any potential waiters. This
 		// prevents deadlocks. The logic here is a bandaid until we implement a
@@ -2022,7 +2047,7 @@ func (l *lockState) alreadyHoldsLockAndIsAllowedToProceed(g *lockTableGuardImpl)
 		// storing them in the list of queuedWriters. Instead of sorting the list
 		// of queuedWriters just based on sequence numbers alone, we'll instead use
 		// (belongsToALockHolderTxn, sequence number) to construct the sort order.
-		(g.curStrength() == lock.Intent && heldMode.Strength == lock.Exclusive)
+		(str == lock.Intent && heldMode.Strength == lock.Exclusive)
 }
 
 // conflictsWithLockHolder returns true if the request, referenced by the
