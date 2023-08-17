@@ -590,7 +590,8 @@ func TestBackupRestoreAppend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "test is too large to run under stress race")
+	skip.UnderStress(t, "test is too large to run under stress")
+	skip.UnderRace(t, "test is too large to run under race")
 
 	const numAccounts = 1000
 	ctx := context.Background()
