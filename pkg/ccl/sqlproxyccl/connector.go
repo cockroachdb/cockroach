@@ -365,7 +365,7 @@ func (c *connector) dialSQLServer(
 
 	conn, err := BackendDial(c.StartupMsg, serverAssignment.Addr(), tlsConf)
 	if err != nil {
-		if getErrorCode(err) == codeBackendDown {
+		if getErrorCode(err) == codeBackendDialFailed {
 			return nil, markAsRetriableConnectorError(err)
 		}
 		return nil, err

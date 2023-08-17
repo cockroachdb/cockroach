@@ -38,7 +38,7 @@ var BackendDial = func(
 	if err != nil {
 		return nil, withCode(
 			errors.Wrap(err, "unable to reach backend SQL server"),
-			codeBackendDown)
+			codeBackendDialFailed)
 	}
 
 	// Ensure that conn is closed whenever BackendDial returns an error.
@@ -54,18 +54,18 @@ var BackendDial = func(
 		if err := binary.Write(conn, binary.BigEndian, pgSSLRequest); err != nil {
 			return nil, withCode(
 				errors.Wrap(err, "sending SSLRequest to target server"),
-				codeBackendDown)
+				codeBackendDialFailed)
 		}
 		response := make([]byte, 1)
 		if _, err = io.ReadFull(conn, response); err != nil {
 			return nil, withCode(
 				errors.New("reading response to SSLRequest"),
-				codeBackendDown)
+				codeBackendDialFailed)
 		}
 		if response[0] != pgAcceptSSLRequest {
 			return nil, withCode(
 				errors.New("target server refused TLS connection"),
-				codeBackendRefusedTLS)
+				codeBackendDialFailed)
 		}
 		conn = tls.Client(conn, tlsConfig.Clone())
 	}
@@ -74,7 +74,7 @@ var BackendDial = func(
 	if _, err := conn.Write(msg.Encode(nil)); err != nil {
 		return nil, withCode(
 			errors.Wrapf(err, "relaying StartupMessage to target server %v", serverAddress),
-			codeBackendDown)
+			codeBackendDialFailed)
 	}
 	return conn, nil
 }
