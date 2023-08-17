@@ -773,22 +773,20 @@ type lockTableGuard interface {
 	// that conflict.
 	CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool)
 
-	// IsKeyLockedByConflictingTxn returns whether the specified key is claimed
-	// (see claimantTxn()) by a conflicting transaction in the lockTableGuard's
-	// snapshot of the lock table, given the caller's own desired locking
-	// strength. If so, true is returned. If the key is locked, the lock holder is
-	// also returned. Otherwise, if the key was claimed by a concurrent request
-	// still sequencing through the lock table, but the lock isn't held (yet), nil
-	// is also returned.
+	// IsKeyLockedByConflictingTxn returns whether the specified key is locked by
+	// a conflicting transaction in the lock TableGuard's snapshot of the lock
+	// table, given the caller's own desired locking strength. If so, true is
+	// returned and so is the lock holder. If the lock is held by the transaction
+	// itself, there's no conflict to speak of, so false is returned.
 	//
-	// If the lock has been claimed (held or otherwise) by the transaction itself,
-	// there's no conflict to speak of, so false is returned. In cases where the
-	// lock isn't held, but the lock has been claimed by the transaction itself,
-	// we do not make a distinction about which request claimed the key -- it
-	// could either be the request itself, or a different concurrent request from
-	// the same transaction; The specifics do not affect the caller.
-	// This method is used by requests in conjunction with the SkipLocked wait
+	// This method is use by requests in conjunction with the SkipLocked wait
 	// policy to determine which keys they should skip over during evaluation.
+	//
+	// If the supplied lock strength is locking (!= lock.None), then any queued
+	// locking requests that came before the lockTableGuard will also be checked
+	// for conflicts. This helps prevent a stream of locking SKIP LOCKED requests
+	// from starving out regular locking requests. In such cases, true is
+	// returned, but so is nil.
 	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta)
 }
 
