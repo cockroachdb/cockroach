@@ -84,7 +84,7 @@ var cutoverSignalPollInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"bulkio.stream_ingestion.cutover_signal_poll_interval",
 	"the interval at which the stream ingestion job checks if it has been signaled to cutover",
-	30*time.Second,
+	10*time.Second,
 	settings.NonNegativeDuration,
 )
 
