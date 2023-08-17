@@ -1,0 +1,62 @@
+# Copyright 2023 The Cockroach Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+on:
+  schedule:
+     - cron: 0 0 * * *
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+
+name: Update pkg/testutils/release/cockroach_releases.yaml
+jobs:
+  update-crdb-releases-yaml:
+    strategy:
+      matrix:
+        branch: ["master", "release-23.1"]
+    name: Update pkg/testutils/release/cockroach_releases.yaml on ${{ matrix.branch }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: "${{ matrix.branch }}"
+      - name: Mount bazel cache
+        uses: actions/cache@v3
+        with:
+          path: "~/.cache/bazel"
+          key: bazel
+      - name: Check for updates
+        run: |
+          bazel build //pkg/cmd/release
+          $(bazel info bazel-bin)/pkg/cmd/release/release_/release update-releases-file
+          git diff
+      - name: Update pkg/testutils/release/cockroach_releases.yaml on ${{ matrix.branch }}
+        uses: peter-evans/create-pull-request@v5
+        with:
+          base: "${{ matrix.branch }}"
+          branch: 'crdb-releases-yaml-update-${{ matrix.branch }}'
+          title: "${{ matrix.branch }}: Update pkg/testutils/release/cockroach_releases.yaml"
+          body: |
+            Update pkg/testutils/release/cockroach_releases.yaml with recent values.
+
+            Epic: None
+            Release note: None
+          commit-message: |
+            ${{ matrix.branch }}: Update pkg/testutils/release/cockroach_releases.yaml
+
+            Update pkg/testutils/release/cockroach_releases.yaml with recent values.
+
+            Epic: None
+            Release note: None
+          delete-branch: true
