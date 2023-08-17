@@ -98,6 +98,7 @@ go_test(
     srcs = [
         "auth_test.go",
         "authpipe_test.go",
+        "command_result_test.go",
         "conn_test.go",
         "encoding_test.go",
         "helpers_test.go",
