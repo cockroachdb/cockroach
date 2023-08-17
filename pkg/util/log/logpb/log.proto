@@ -266,6 +266,11 @@ message Entry {
   // log entry was not found to contain any tenant ID, we default to the system
   // tenant ID.
   string tenant_id = 14 [(gogoproto.customname) = "TenantID"];
+
+  // TenantName is the tenant name that the log entry originated from. NB: if a
+  // log entry was not found to contain any tenant name, we default to the empty
+  // string.
+  string tenant_name = 15 [(gogoproto.customname) = "TenantName"];
 }
 
 // A FileDetails holds all of the particulars that can be parsed by the name of

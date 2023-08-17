@@ -776,10 +776,11 @@ func BenchmarkLogEntry_String(b *testing.B) {
 	ctxtags := logtags.AddTag(context.Background(), "foo", "bar")
 	entry := &logEntry{
 		IDPayload: serverident.IDPayload{
-			ClusterID:        "fooo",
-			NodeID:           "10",
-			TenantIDInternal: "12",
-			SQLInstanceID:    "9",
+			ClusterID:     "fooo",
+			NodeID:        "10",
+			TenantID:      "12",
+			TenantName:    "vc42",
+			SQLInstanceID: "9",
 		},
 		ts:         timeutil.Now().UnixNano(),
 		header:     false,

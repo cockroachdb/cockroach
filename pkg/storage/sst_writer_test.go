@@ -95,11 +95,24 @@ func TestMakeIngestionWriterOptions(t *testing.T) {
 		{
 			name: "with value blocks",
 			st: func() *cluster.Settings {
-				st := cluster.MakeTestingClusterSettings()
+				st := cluster.MakeTestingClusterSettingsWithVersions(
+					clusterversion.ByKey(clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks),
+					clusterversion.TestingBinaryMinSupportedVersion,
+					true,
+				)
 				ValueBlocksEnabled.Override(context.Background(), &st.SV, true)
 				return st
 			}(),
 			want: sstable.TableFormatPebblev3,
+		},
+		{
+			name: "with virtual sstables",
+			st: func() *cluster.Settings {
+				st := cluster.MakeTestingClusterSettings()
+				ValueBlocksEnabled.Override(context.Background(), &st.SV, true)
+				return st
+			}(),
+			want: sstable.TableFormatPebblev4,
 		},
 	}
 

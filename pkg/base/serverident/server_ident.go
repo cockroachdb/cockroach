@@ -47,16 +47,6 @@ type ServerIdentificationPayload interface {
 	// given retrieval key. If there is no value known for a given key,
 	// the method can return the empty string.
 	ServerIdentityString(key ServerIdentificationKey) string
-
-	// TenantID returns the roachpb.TenantID identifying the server. It's returned
-	// as an interface{} because the log pkg cannot depend on roachpb (and the log pkg
-	// is the one putting the ServerIdentificationPayload into the ctx, so it makes
-	// sense for this interface to live in log).
-	//
-	// Note that this tenant ID should not be confused with the one put in the
-	// context by roachpb.ContextWithClientTenant(): that one is used by a server
-	// handling an RPC call, referring to the tenant that's the client of the RPC.
-	TenantID() interface{}
 }
 
 // ServerIdentificationKey represents a possible parameter to the
@@ -72,6 +62,8 @@ const (
 	IdentifyInstanceID
 	// IdentifyTenantID retrieves the tenant ID of the server.
 	IdentifyTenantID
+	// IdentifyTenantLabel retrieves the tenant name of the server.
+	IdentifyTenantName
 )
 
 type IDPayload struct {
@@ -79,13 +71,12 @@ type IDPayload struct {
 	// the correlation of panic reports with self-reported log files.
 	ClusterID string
 	// the node ID is reported like the cluster ID, for the same reasons.
-	// We avoid using roahcpb.NodeID to avoid a circular reference.
+	// We avoid using roachpb.NodeID to avoid a circular reference.
 	NodeID string
 	// ditto for the tenant ID.
-	//
-	// NB: Use TenantID() to access/read this value to take advantage
-	// of default behaviors.
-	TenantIDInternal string
+	TenantID string
+	// ditto for tenant name.
+	TenantName string
 	// ditto for the SQL instance ID.
 	SQLInstanceID string
 }
@@ -96,16 +87,12 @@ func GetIdentificationPayload(ctx context.Context) IDPayload {
 		return IDPayload{}
 	}
 	return IDPayload{
-		ClusterID:        si.ServerIdentityString(IdentifyClusterID),
-		NodeID:           si.ServerIdentityString(IdentifyKVNodeID),
-		SQLInstanceID:    si.ServerIdentityString(IdentifyInstanceID),
-		TenantIDInternal: si.ServerIdentityString(IdentifyTenantID),
+		ClusterID:     si.ServerIdentityString(IdentifyClusterID),
+		NodeID:        si.ServerIdentityString(IdentifyKVNodeID),
+		SQLInstanceID: si.ServerIdentityString(IdentifyInstanceID),
+		TenantID:      si.ServerIdentityString(IdentifyTenantID),
+		TenantName:    si.ServerIdentityString(IdentifyTenantName),
 	}
-}
-
-// TenantID returns the tenant ID associated with this idPayload.
-func (ip IDPayload) TenantID() string {
-	return ip.TenantIDInternal
 }
 
 // SetSystemTenantID is used to set the string representation of

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCrdbV1EncodeDecode(t *testing.T) {
@@ -195,5 +196,33 @@ func TestCrdbV1EntryDecoderForVeryLargeEntries(t *testing.T) {
 	entries = readAllEntries("file header\n\n\n" + contents)
 	if !reflect.DeepEqual(expected, entries) {
 		t.Fatalf("%s\n", strings.Join(pretty.Diff(expected, entries), "\n"))
+	}
+}
+
+func TestReadTenantDetails(t *testing.T) {
+	tc := []struct {
+		in               string
+		expRemainderTags string
+		expTenantID      string
+		expTenantName    string
+	}{
+		{"", "", serverident.SystemTenantID, ""},
+		{"T123", "", "123", ""},
+		{"T123,Vabc", "", "123", "abc"},
+		{"unknown", "unknown", serverident.SystemTenantID, ""},
+		{"T123,unknown", "unknown", "123", ""},
+		{"T123,Vabc,unknown", "unknown", "123", "abc"},
+		{"unknown,T123", "unknown,T123", serverident.SystemTenantID, ""},
+		{"Vabc,unknown", "Vabc,unknown", serverident.SystemTenantID, ""},
+		{"T123,unknown,Vabc", "unknown,Vabc", "123", ""},
+	}
+
+	for _, test := range tc {
+		t.Run(test.in, func(t *testing.T) {
+			tid, tname, remainderTags := maybeReadTenantDetails([]byte(test.in))
+			assert.Equal(t, tid, test.expTenantID)
+			assert.Equal(t, tname, test.expTenantName)
+			assert.Equal(t, string(remainderTags), test.expRemainderTags)
+		})
 	}
 }

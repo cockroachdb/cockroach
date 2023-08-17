@@ -173,6 +173,7 @@ func (db *verifyFormatDB) execWithResettableTimeout(
 	}()
 	retry := true
 	targetDuration := duration
+	cancellationChannel := ctx.Done()
 	for retry {
 		retry = false
 		err := func() error {
@@ -200,7 +201,7 @@ func (db *verifyFormatDB) execWithResettableTimeout(
 					return &nonCrasher{sql: sql, err: err}
 				}
 				return nil
-			case <-ctx.Done():
+			case <-cancellationChannel:
 				// Sanity: The context is cancelled when the test is about to
 				// timeout. We will log whatever statement we're waiting on for
 				// debugging purposes. Sometimes queries won't respect
@@ -209,6 +210,7 @@ func (db *verifyFormatDB) execWithResettableTimeout(
 				// We will intentionally retry, which will us to wait for the
 				// go routine to complete above to avoid leaking it.
 				retry = true
+				cancellationChannel = nil
 				return nil
 			case <-time.After(targetDuration):
 				db.mu.Lock()
@@ -356,6 +358,10 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				switch lower {
 				case "pg_sleep":
 					continue
+				case "crdb_internal.create_sql_schema_telemetry_job":
+					// We can create a crazy number of telemtry jobs accidentally,
+					// within the test. Leading to terrible contention.
+					continue
 				case "crdb_internal.gen_rand_ident":
 					// Generates random identifiers, so a large number are dangerous and
 					// can take a long time.
@@ -435,6 +441,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		// involve schema changes like truncates. In general this should make
 		// this test more resilient as the timeouts are reset as long progress
 		// is made on *some* connection.
+		t.Logf("Running %q", s)
 		return db.execWithResettableTimeout(t, ctx, s, *flagRSGExecTimeout, *flagRSGGoRoutines)
 	})
 }

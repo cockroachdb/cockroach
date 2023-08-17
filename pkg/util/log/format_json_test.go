@@ -56,8 +56,8 @@ func TestJSONFormats(t *testing.T) {
 		}(),
 		// Normal (non-header) entries.
 		{},
-		{IDPayload: serverident.IDPayload{TenantIDInternal: "1", ClusterID: "abc", NodeID: "123"}},
-		{IDPayload: serverident.IDPayload{TenantIDInternal: "456", SQLInstanceID: "123"}},
+		{IDPayload: serverident.IDPayload{TenantID: "1", TenantName: "system", ClusterID: "abc", NodeID: "123"}},
+		{IDPayload: serverident.IDPayload{TenantID: "456", TenantName: "vc42", SQLInstanceID: "123"}},
 		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, &logpb.TestingStructuredLogEvent{
 			CommonEventDetails: logpb.CommonEventDetails{
 				Timestamp: 123,

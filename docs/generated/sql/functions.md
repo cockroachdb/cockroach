@@ -2685,6 +2685,30 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="bit_length"></a><code>bit_length(val: varbit) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits used to represent <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_and"></a><code>bitmask_and(a: <a href="string.html">string</a>, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_and"></a><code>bitmask_and(a: <a href="string.html">string</a>, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_and"></a><code>bitmask_and(a: varbit, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_and"></a><code>bitmask_and(a: varbit, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_or"></a><code>bitmask_or(a: <a href="string.html">string</a>, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_or"></a><code>bitmask_or(a: <a href="string.html">string</a>, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_or"></a><code>bitmask_or(a: varbit, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_or"></a><code>bitmask_or(a: varbit, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_xor"></a><code>bitmask_xor(a: <a href="string.html">string</a>, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise XOR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_xor"></a><code>bitmask_xor(a: <a href="string.html">string</a>, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise XOR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_xor"></a><code>bitmask_xor(a: varbit, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise XOR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_xor"></a><code>bitmask_xor(a: varbit, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise XOR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="btrim"></a><code>btrim(input: <a href="string.html">string</a>, trim_chars: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes any characters included in <code>trim_chars</code> from the beginning or end of <code>input</code> (applies recursively).</p>
 <p>For example, <code>btrim('doggie', 'eod')</code> returns <code>ggi</code>.</p>
 </span></td><td>Immutable</td></tr>
