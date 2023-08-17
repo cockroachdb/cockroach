@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -73,11 +72,13 @@ func slurpUserDataKVs(t testing.TB, e storage.Engine) []roachpb.KeyValue {
 
 func TestRowFetcherMVCCMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	store, _ := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	store, _ := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
@@ -86,10 +87,10 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		a STRING PRIMARY KEY, b STRING, c STRING, d STRING,
 		FAMILY (a, b, c), FAMILY (d)
 	)`)
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `parent`)
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), `d`, `parent`)
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, keys.SystemSQLCodec, desc, desc.GetPrimaryIndex(), desc.PublicColumnIDs(),
+		&spec, s.Codec(), desc, desc.GetPrimaryIndex(), desc.PublicColumnIDs(),
 	); err != nil {
 		t.Fatal(err)
 	}
