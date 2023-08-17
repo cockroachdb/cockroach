@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // TestStatsWithLowTTL simulates a CREATE STATISTICS run that takes longer than
@@ -141,4 +143,46 @@ SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 	if goroutineErr != nil {
 		t.Fatal(goroutineErr)
 	}
+}
+
+func TestStaleStatsForDeletedTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	stats.AutomaticStatisticsClusterMode.Override(ctx, &s.ClusterSettings().SV, false)
+
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, `CREATE TABLE t(a int PRIMARY KEY)`)
+	sqlRunner.Exec(t, `CREATE STATISTICS s FROM t`)
+
+	// Simulate a stale entry in system.table_statistics that references a
+	// table descriptor that does not exist anywhere else.
+	sqlRunner.Exec(t, `
+INSERT INTO system.table_statistics (
+	"tableID",
+	"name",
+	"columnIDs",
+	"createdAt",
+	"rowCount",
+	"distinctCount",
+	"nullCount",
+	"avgSize"
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		201,
+		"t_deleted",
+		"{1}",
+		timeutil.Now(),
+		1, /* rowCount */
+		1, /* distinctCount */
+		0, /* nullCount */
+		4, /* avgSize */
+	)
+	sqlRunner.CheckQueryResults(
+		t,
+		`SELECT stxrelid::regclass::text, stxname, stxnamespace::regnamespace::text FROM pg_catalog.pg_statistic_ext`,
+		[][]string{{"t", "s", "public"}},
+	)
 }
