@@ -3734,5 +3734,5 @@ func (cfg *ExecutorConfig) RequireSystemTenantOrClusterSetting(
 	if cfg.Codec.ForSystemTenant() || setting.Get(&cfg.Settings.SV) {
 		return nil
 	}
-	return errors.Newf("tenant cluster setting %s disabled", setting.Key())
+	return errors.Newf("tenant cluster setting %s disabled", setting.Name())
 }

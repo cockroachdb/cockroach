@@ -31,7 +31,7 @@ import (
 )
 
 // CacheEnabledSettingName is the name of the CacheEnabled cluster setting.
-var CacheEnabledSettingName = "server.authentication_cache.enabled"
+const CacheEnabledSettingName = "server.authentication_cache.enabled"
 
 // CacheEnabled is a cluster setting that determines if the
 // sessioninit.Cache and associated logic is enabled.

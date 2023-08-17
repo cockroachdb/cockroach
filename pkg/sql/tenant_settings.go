@@ -29,7 +29,7 @@ import (
 // alterTenantSetClusterSettingNode represents an
 // ALTER VIRTUAL CLUSTER ... SET CLUSTER SETTING statement.
 type alterTenantSetClusterSettingNode struct {
-	name       string
+	name       settings.SettingName
 	tenantSpec tenantSpec
 	st         *cluster.Settings
 	setting    settings.NonMaskedSetting
@@ -55,7 +55,7 @@ func (p *planner) AlterTenantSetClusterSetting(
 			"ALTER VIRTUAL CLUSTER can only be called by system operators")
 	}
 
-	name := strings.ToLower(n.Name)
+	name := settings.SettingName(strings.ToLower(n.Name))
 	st := p.EvalContext().Settings
 	setting, ok := settings.LookupForLocalAccess(name, true /* forSystemTenant - checked above already */)
 	if !ok {
@@ -67,7 +67,7 @@ func (p *planner) AlterTenantSetClusterSetting(
 			"%s is a system-only setting and must be set in the admin tenant using SET CLUSTER SETTING", name)
 	}
 
-	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "ALTER VIRTUAL CLUSTER SET CLUSTER SETTING "+name)
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "ALTER VIRTUAL CLUSTER SET CLUSTER SETTING "+string(name))
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		if _, err := params.p.InternalSQLTxn().ExecEx(
 			params.ctx, "reset-tenant-setting", params.p.Txn(),
 			sessiondata.RootUserSessionDataOverride,
-			"DELETE FROM system.tenant_settings WHERE tenant_id = $1 AND name = $2", tenantID, n.name,
+			"DELETE FROM system.tenant_settings WHERE tenant_id = $1 AND name = $2", tenantID, n.setting.InternalKey(),
 		); err != nil {
 			return err
 		}
@@ -127,7 +127,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		encoded, err := toSettingString(params.ctx, n.st, n.name, n.setting, value)
+		encoded, err := toSettingString(params.ctx, n.st, n.setting, value)
 		if err != nil {
 			return err
 		}
@@ -135,7 +135,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 			params.ctx, "update-tenant-setting", params.p.Txn(),
 			sessiondata.RootUserSessionDataOverride,
 			`UPSERT INTO system.tenant_settings (tenant_id, name, value, last_updated, value_type) VALUES ($1, $2, $3, now(), $4)`,
-			tenantID, n.name, encoded, n.setting.Typ(),
+			tenantID, n.setting.InternalKey(), encoded, n.setting.Typ(),
 		); err != nil {
 			return err
 		}
@@ -146,7 +146,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		params.ctx,
 		0, /* no target */
 		&eventpb.SetTenantClusterSetting{
-			SettingName: n.name,
+			SettingName: string(n.name),
 			Value:       reportedValue,
 			TenantId:    tenantID,
 			AllTenants:  tenantID == 0,
@@ -173,7 +173,7 @@ func (p *planner) ShowTenantClusterSetting(
 		return nil, err
 	}
 
-	name := strings.ToLower(n.Name)
+	name := settings.SettingName(strings.ToLower(n.Name))
 	setting, ok := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
@@ -236,7 +236,7 @@ FROM
 				ctx, "get-tenant-setting-value", p.txn,
 				sessiondata.RootUserSessionDataOverride,
 				lookupEncodedTenantSetting,
-				name, rec.ID)
+				setting.InternalKey(), rec.ID)
 			if err != nil {
 				return false, "", err
 			}

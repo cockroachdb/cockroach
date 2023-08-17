@@ -27,5 +27,5 @@ type OverridesMonitor interface {
 	// Overrides retrieves the current set of setting overrides, as a map from
 	// setting key to EncodedValue. Any settings that are present must be set to
 	// the overridden value.
-	Overrides() map[string]settings.EncodedValue
+	Overrides() map[settings.InternalKey]settings.EncodedValue
 }

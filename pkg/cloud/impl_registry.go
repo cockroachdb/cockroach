@@ -66,10 +66,10 @@ func registerLimiterSettings(providerType cloudpb.ExternalStorageProvider) {
 		sinkName = "nullsink" // keep the settings name pieces free of reserved keywords.
 	}
 
-	readRateName := fmt.Sprintf("cloudstorage.%s.read.node_rate_limit", sinkName)
-	readBurstName := fmt.Sprintf("cloudstorage.%s.read.node_burst_limit", sinkName)
-	writeRateName := fmt.Sprintf("cloudstorage.%s.write.node_rate_limit", sinkName)
-	writeBurstName := fmt.Sprintf("cloudstorage.%s.write.node_burst_limit", sinkName)
+	readRateName := settings.InternalKey(fmt.Sprintf("cloudstorage.%s.read.node_rate_limit", sinkName))
+	readBurstName := settings.InternalKey(fmt.Sprintf("cloudstorage.%s.read.node_burst_limit", sinkName))
+	writeRateName := settings.InternalKey(fmt.Sprintf("cloudstorage.%s.write.node_rate_limit", sinkName))
+	writeBurstName := settings.InternalKey(fmt.Sprintf("cloudstorage.%s.write.node_burst_limit", sinkName))
 
 	limiterSettings[providerType] = readAndWriteSettings{
 		read: rateAndBurstSettings{
@@ -265,7 +265,7 @@ type Limiters map[cloudpb.ExternalStorageProvider]rwLimiter
 func makeLimiter(
 	ctx context.Context, sv *settings.Values, s rateAndBurstSettings,
 ) *quotapool.RateLimiter {
-	lim := quotapool.NewRateLimiter(s.rate.Key(), quotapool.Limit(0), 0)
+	lim := quotapool.NewRateLimiter(string(s.rate.Name()), quotapool.Limit(0), 0)
 	fn := func(ctx context.Context) {
 		rate := quotapool.Limit(s.rate.Get(sv))
 		if rate == 0 {

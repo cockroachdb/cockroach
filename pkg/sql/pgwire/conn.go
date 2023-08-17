@@ -173,7 +173,7 @@ func (c *conn) checkMaxConnections(ctx context.Context, sqlServer *sql.Server) e
 			pgerror.New(pgcode.TooManyConnections, "sorry, too many clients already"),
 			"the maximum number of allowed connections is %d and can be modified using the %s config key",
 			maxNumConnectionsValue,
-			maxNumNonAdminConnections.Key(),
+			maxNumNonAdminConnections.Name(),
 		))
 	}
 	return nil

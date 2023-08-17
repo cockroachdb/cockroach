@@ -1221,7 +1221,7 @@ func TestAdminAPISettings(t *testing.T) {
 	st := s.ClusterSettings()
 	allKeys := settings.Keys(settings.ForSystemTenant)
 
-	checkSetting := func(t *testing.T, k string, v serverpb.SettingsResponse_Value) {
+	checkSetting := func(t *testing.T, k settings.InternalKey, v serverpb.SettingsResponse_Value) {
 		ref, ok := settings.LookupForReporting(k, settings.ForSystemTenant)
 		if !ok {
 			t.Fatalf("%s: not found after initial lookup", k)
@@ -1292,7 +1292,7 @@ func TestAdminAPISettings(t *testing.T) {
 				}
 			}
 
-			checkSetting(t, k, v)
+			checkSetting(t, settings.InternalKey(k), v)
 		}
 
 		if !seenRef {

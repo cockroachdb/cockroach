@@ -175,12 +175,12 @@ type connector struct {
 		// receivedFirstAllTenantOverrides is set to true when the first batch of
 		// all-tenant overrides has been received.
 		receivedFirstAllTenantOverrides bool
-		allTenantOverrides              map[string]settings.EncodedValue
+		allTenantOverrides              map[settings.InternalKey]settings.EncodedValue
 
 		// receivedFirstSpecificOverrides is set to true when the first batch of
 		// tenant-specific overrides has been received.
 		receivedFirstSpecificOverrides bool
-		specificOverrides              map[string]settings.EncodedValue
+		specificOverrides              map[settings.InternalKey]settings.EncodedValue
 
 		// notifyCh receives an event when there are changes to overrides.
 		notifyCh chan struct{}
@@ -253,8 +253,8 @@ func NewConnector(cfg ConnectorConfig, addrs []string) Connector {
 	c.mu.nodeDescs = make(map[roachpb.NodeID]*roachpb.NodeDescriptor)
 	c.mu.storeDescs = make(map[roachpb.StoreID]*roachpb.StoreDescriptor)
 	c.mu.systemConfigChannels = make(map[chan<- struct{}]struct{})
-	c.settingsMu.allTenantOverrides = make(map[string]settings.EncodedValue)
-	c.settingsMu.specificOverrides = make(map[string]settings.EncodedValue)
+	c.settingsMu.allTenantOverrides = make(map[settings.InternalKey]settings.EncodedValue)
+	c.settingsMu.specificOverrides = make(map[settings.InternalKey]settings.EncodedValue)
 	return c
 }
 

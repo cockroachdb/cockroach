@@ -1213,13 +1213,13 @@ func TestLintClusterSettingNames(t *testing.T) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var varName, sType, desc string
-		if err := rows.Scan(&varName, &sType, &desc); err != nil {
+		var settingName, sType, desc string
+		if err := rows.Scan(&settingName, &sType, &desc); err != nil {
 			t.Fatal(err)
 		}
 
-		if strings.ToLower(varName) != varName {
-			t.Errorf("%s: variable name must be all lowercase", varName)
+		if strings.ToLower(settingName) != settingName {
+			t.Errorf("%s: variable name must be all lowercase", settingName)
 		}
 
 		suffixSuggestions := map[string]string{
@@ -1229,37 +1229,37 @@ func TestLintClusterSettingNames(t *testing.T) {
 		}
 
 		nameErr := func() error {
-			segments := strings.Split(varName, ".")
+			segments := strings.Split(settingName, ".")
 			for _, segment := range segments {
 				if strings.TrimSpace(segment) != segment {
-					return errors.Errorf("%s: part %q has heading or trailing whitespace", varName, segment)
+					return errors.Errorf("%s: part %q has heading or trailing whitespace", settingName, segment)
 				}
 				tokens, ok := parser.Tokens(segment)
 				if !ok {
-					return errors.Errorf("%s: part %q does not scan properly", varName, segment)
+					return errors.Errorf("%s: part %q does not scan properly", settingName, segment)
 				}
 				if len(tokens) == 0 || len(tokens) > 1 {
-					return errors.Errorf("%s: part %q has invalid structure", varName, segment)
+					return errors.Errorf("%s: part %q has invalid structure", settingName, segment)
 				}
 				if tokens[0].TokenID != parser.IDENT {
 					cat, ok := lexbase.KeywordsCategories[tokens[0].Str]
 					if !ok {
-						return errors.Errorf("%s: part %q has invalid structure", varName, segment)
+						return errors.Errorf("%s: part %q has invalid structure", settingName, segment)
 					}
 					if cat == "R" {
-						return errors.Errorf("%s: part %q is a reserved keyword", varName, segment)
+						return errors.Errorf("%s: part %q is a reserved keyword", settingName, segment)
 					}
 				}
 			}
 
 			for suffix, repl := range suffixSuggestions {
-				if strings.HasSuffix(varName, suffix) {
-					return errors.Errorf("%s: use %q instead of %q", varName, repl, suffix)
+				if strings.HasSuffix(settingName, suffix) {
+					return errors.Errorf("%s: use %q instead of %q", settingName, repl, suffix)
 				}
 			}
 
-			if sType == "b" && !strings.HasSuffix(varName, ".enabled") {
-				return errors.Errorf("%s: use .enabled for booleans", varName)
+			if sType == "b" && !strings.HasSuffix(settingName, ".enabled") {
+				return errors.Errorf("%s: use .enabled for booleans", settingName)
 			}
 
 			return nil
@@ -1298,27 +1298,27 @@ func TestLintClusterSettingNames(t *testing.T) {
 				"sql.defaults.idle_in_session_timeout":             `sql.defaults.idle_in_session_timeout: use ".timeout" instead of "_timeout"`,
 				"sql.defaults.idle_in_transaction_session_timeout": `sql.defaults.idle_in_transaction_session_timeout: use ".timeout" instead of "_timeout"`,
 			}
-			expectedErr, found := grandFathered[varName]
+			expectedErr, found := grandFathered[settingName]
 			if !found || expectedErr != nameErr.Error() {
 				t.Error(nameErr)
 			}
 		}
 
 		if strings.TrimSpace(desc) != desc {
-			t.Errorf("%s: description %q has heading or trailing whitespace", varName, desc)
+			t.Errorf("%s: description %q has heading or trailing whitespace", settingName, desc)
 		}
 
 		if len(desc) == 0 {
-			t.Errorf("%s: description is empty", varName)
+			t.Errorf("%s: description is empty", settingName)
 		}
 
 		if len(desc) > 0 {
 			if strings.ToLower(desc[0:1]) != desc[0:1] {
-				t.Errorf("%s: description %q must not start with capital", varName, desc)
+				t.Errorf("%s: description %q must not start with capital", settingName, desc)
 			}
 			if sType != "e" && (desc[len(desc)-1] == '.') && !strings.Contains(desc, ". ") {
 				// TODO(knz): this check doesn't work with the way enum values are added to their descriptions.
-				t.Errorf("%s: description %q must end with period only if it contains a secondary sentence", varName, desc)
+				t.Errorf("%s: description %q must end with period only if it contains a secondary sentence", settingName, desc)
 			}
 		}
 	}

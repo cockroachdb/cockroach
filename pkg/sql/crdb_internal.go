@@ -2050,7 +2050,8 @@ CREATE TABLE crdb_internal.cluster_settings (
   public        BOOL NOT NULL, -- whether the setting is documented, which implies the user can expect support.
   description   STRING NOT NULL,
   default_value STRING NOT NULL,
-  origin        STRING NOT NULL -- the origin of the value: 'default' , 'override' or 'external-override'
+  origin        STRING NOT NULL, -- the origin of the value: 'default' , 'override' or 'external-override'
+  key           STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		hasSqlModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING, p.User())
@@ -2082,10 +2083,10 @@ CREATE TABLE crdb_internal.cluster_settings (
 		}
 		for _, k := range settings.Keys(p.ExecCfg().Codec.ForSystemTenant()) {
 			// If the user has specifically MODIFYSQLCLUSTERSETTING, hide non-sql.defaults settings.
-			if !hasModify && !hasView && hasSqlModify && !strings.HasPrefix(k, "sql.defaults") {
+			if !hasModify && !hasView && hasSqlModify && !strings.HasPrefix(string(k), "sql.defaults") {
 				continue
 			}
-			setting, _ := settings.LookupForLocalAccess(k, p.ExecCfg().Codec.ForSystemTenant())
+			setting, _ := settings.LookupForLocalAccessByKey(k, p.ExecCfg().Codec.ForSystemTenant())
 			strVal := setting.String(&p.ExecCfg().Settings.SV)
 			isPublic := setting.Visibility() == settings.Public
 			desc := setting.Description()
@@ -2095,13 +2096,14 @@ CREATE TABLE crdb_internal.cluster_settings (
 			}
 			origin := setting.ValueOrigin(ctx, &p.ExecCfg().Settings.SV).String()
 			if err := addRow(
-				tree.NewDString(k),
+				tree.NewDString(string(setting.Name())),
 				tree.NewDString(strVal),
 				tree.NewDString(setting.Typ()),
 				tree.MakeDBool(tree.DBool(isPublic)),
 				tree.NewDString(desc),
 				tree.NewDString(defaultVal),
 				tree.NewDString(origin),
+				tree.NewDString(string(setting.InternalKey())),
 			); err != nil {
 				return err
 			}

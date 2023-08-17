@@ -131,17 +131,17 @@ WITH
     LEFT JOIN system.tenants st ON id = tenant_id.tenant_id
   ),
   tenantspecific AS (
-     SELECT t.name, t.value
+     SELECT t.name AS setting_key, t.value
      FROM system.tenant_settings t, tenant_id
      WHERE t.tenant_id = tenant_id.tenant_id
   ),
   allsettings AS (
-    SELECT variable, value, public, type, description
+    SELECT variable AS setting_name, value, public, type, description, key AS setting_key
     FROM system.crdb_internal.cluster_settings ` + publicFilter + `
   )
 SELECT
-  allsettings.variable || substr('', (SELECT ok FROM isvalid)) AS variable,
-  crdb_internal.decode_cluster_setting(allsettings.variable,
+  allsettings.setting_name || substr('', (SELECT ok FROM isvalid)) AS variable,
+  crdb_internal.decode_cluster_setting(allsettings.setting_name,
      -- NB: careful not to coalesce with allsettings.value directly!
      -- This is the value for the system tenant and is not relevant to other tenants.
      COALESCE(tenantspecific.value,
@@ -161,8 +161,8 @@ SELECT
 FROM
   allsettings
   LEFT JOIN tenantspecific ON
-                  allsettings.variable = tenantspecific.name
+                  allsettings.setting_key = tenantspecific.setting_key
   LEFT JOIN system.tenant_settings AS overrideall ON
-                  allsettings.variable = overrideall.name AND overrideall.tenant_id = 0
+                  allsettings.setting_key = overrideall.name AND overrideall.tenant_id = 0
 `)
 }

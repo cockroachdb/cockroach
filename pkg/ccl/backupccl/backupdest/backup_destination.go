@@ -197,7 +197,7 @@ func ResolveDest(
 						"Or, to take a full backup at a specific subdirectory, "+
 						"enable the deprecated syntax by switching the %q cluster setting to true; "+
 						"however, note this deprecated syntax will not be available in a future release.",
-						chosenSuffix, featureFullBackupUserSubdir.Key())
+						chosenSuffix, featureFullBackupUserSubdir.Name())
 			}
 		}
 		// There's no full backup in the resolved subdirectory; therefore, we're conducting a full backup.
