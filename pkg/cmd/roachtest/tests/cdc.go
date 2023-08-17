@@ -74,6 +74,13 @@ const (
 	nullSink         sinkType = "null"
 )
 
+var envVars = []string{
+	// Setting COCKROACH_CHANGEFEED_TESTING_FAST_RETRY helps tests run quickly.
+	// NB: This is crucial for chaos tests as we expect changefeeds to see
+	// many retries.
+	"COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true",
+}
+
 type cdcTester struct {
 	ctx          context.Context
 	t            test.Test
@@ -152,6 +159,7 @@ func (ct *cdcTester) startCRDBChaos() {
 		Timer:   Periodic{Period: 2 * time.Minute, DownTime: 20 * time.Second},
 		Target:  ct.crdbNodes.RandNode,
 		Stopper: chaosStopper,
+		Env:     envVars,
 	}
 	ct.mon.Go(ch.Runner(ct.cluster, ct.t, ct.mon))
 }
@@ -535,7 +543,7 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	settings := install.MakeClusterSettings()
-	settings.Env = append(settings.Env, "COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true")
+	settings.Env = append(settings.Env, envVars...)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, tester.crdbNodes)
 
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", tester.workloadNode)
