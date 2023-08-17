@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -515,4 +516,41 @@ func constructStreamIngestionPlanSpecs(
 	}
 
 	return streamIngestionSpecs, streamIngestionFrontierSpec, nil
+}
+
+// waitUntilProducerActive pings the producer job and waits until it
+// is active/running. It returns nil when the job is active.
+func waitUntilProducerActive(
+	ctx context.Context,
+	client streamclient.Client,
+	streamID streampb.StreamID,
+	heartbeatTimestamp hlc.Timestamp,
+	ingestionJobID jobspb.JobID,
+) error {
+	ro := retry.Options{
+		InitialBackoff: 1 * time.Second,
+		Multiplier:     2,
+		MaxBackoff:     5 * time.Second,
+		MaxRetries:     4,
+	}
+	// Make sure the producer job is active before start the stream replication.
+	var status streampb.StreamReplicationStatus
+	var err error
+	for r := retry.Start(ro); r.Next(); {
+		status, err = client.Heartbeat(ctx, streamID, heartbeatTimestamp)
+		if err != nil {
+			return errors.Wrapf(err, "failed to resume ingestion job %d due to producer job %d error",
+				ingestionJobID, streamID)
+		}
+		if status.StreamStatus != streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
+			break
+		}
+		log.Warningf(ctx, "producer job %d has status %s, retrying", streamID, status.StreamStatus)
+	}
+	if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
+		return jobs.MarkAsPermanentJobError(errors.Errorf("failed to resume ingestion job %d "+
+			"as the producer job %d is not active and in status %s", ingestionJobID,
+			streamID, status.StreamStatus))
+	}
+	return nil
 }
