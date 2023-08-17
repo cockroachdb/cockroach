@@ -136,7 +136,8 @@ func (d *DurationSetting) WithPublic() *DurationSetting {
 // RegisterDurationSetting defines a new setting with type duration.
 func RegisterDurationSetting(
 	class Class,
-	key, desc string,
+	key InternalKey,
+	desc string,
 	defaultValue time.Duration,
 	validateFns ...func(time.Duration) error,
 ) *DurationSetting {
@@ -169,7 +170,11 @@ func RegisterDurationSetting(
 // public setting with type duration which requires an explicit unit when being
 // set.
 func RegisterPublicDurationSettingWithExplicitUnit(
-	class Class, key, desc string, defaultValue time.Duration, validateFn func(time.Duration) error,
+	class Class,
+	key InternalKey,
+	desc string,
+	defaultValue time.Duration,
+	validateFn func(time.Duration) error,
 ) *DurationSettingWithExplicitUnit {
 	var fn func(time.Duration) error
 

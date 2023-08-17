@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -34,24 +34,24 @@ func TestWatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
 
-	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, `INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES
 	  (0, 'foo', 'foo-all', 's'),
 	  (1, 'foo', 'foo-t1', 's'),
 	  (1, 'bar', 'bar-t1', 's'),
 	  (2, 'baz', 'baz-t2', 's')`)
 
-	s0 := tc.Server(0)
 	w := tenantsettingswatcher.New(
-		s0.Clock(),
-		s0.ExecutorConfig().(sql.ExecutorConfig).RangeFeedFactory,
-		s0.Stopper(),
-		s0.ClusterSettings(),
+		ts.Clock(),
+		ts.ExecutorConfig().(sql.ExecutorConfig).RangeFeedFactory,
+		ts.Stopper(),
+		ts.ClusterSettings(),
 	)
-	err := w.Start(ctx, s0.SystemTableIDResolver().(catalog.SystemTableIDResolver))
+	err := w.Start(ctx, ts.SystemTableIDResolver().(catalog.SystemTableIDResolver))
 	require.NoError(t, err)
 	// WaitForStart should return immediately.
 	err = w.WaitForStart(ctx)
@@ -61,10 +61,10 @@ func TestWatcher(t *testing.T) {
 		t.Helper()
 		var vals []string
 		for _, s := range overrides {
-			if s.Name == clusterversion.KeyVersionSetting {
+			if s.InternalKey == clusterversion.KeyVersionSetting {
 				continue
 			}
-			vals = append(vals, fmt.Sprintf("%s=%s", s.Name, s.Value.Value))
+			vals = append(vals, fmt.Sprintf("%s=%s", s.InternalKey, s.Value.Value))
 		}
 		if actual := strings.Join(vals, " "); actual != expected {
 			t.Errorf("expected: %s; got: %s", expected, actual)

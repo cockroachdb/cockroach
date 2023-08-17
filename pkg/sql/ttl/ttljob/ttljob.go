@@ -330,7 +330,7 @@ func checkEnabled(settingsValues *settings.Values) error {
 	if enabled := jobEnabled.Get(settingsValues); !enabled {
 		return errors.Newf(
 			"ttl jobs are currently disabled by CLUSTER SETTING %s",
-			jobEnabled.Key(),
+			jobEnabled.Name(),
 		)
 	}
 	return nil

@@ -154,7 +154,7 @@ func (s *ProtobufSetting) UnmarshalFromJSON(jsonEncoded string) (protoutil.Messa
 
 // RegisterProtobufSetting defines a new setting with type protobuf.
 func RegisterProtobufSetting(
-	class Class, key, desc string, defaultValue protoutil.Message,
+	class Class, key InternalKey, desc string, defaultValue protoutil.Message,
 ) *ProtobufSetting {
 	return RegisterValidatedProtobufSetting(class, key, desc, defaultValue, nil)
 }
@@ -163,7 +163,8 @@ func RegisterProtobufSetting(
 // with a validation function.
 func RegisterValidatedProtobufSetting(
 	class Class,
-	key, desc string,
+	key InternalKey,
+	desc string,
 	defaultValue protoutil.Message,
 	validateFn func(*Values, protoutil.Message) error,
 ) *ProtobufSetting {

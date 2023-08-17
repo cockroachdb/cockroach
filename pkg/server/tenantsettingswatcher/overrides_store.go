@@ -86,11 +86,11 @@ func (s *overridesStore) SetAll(allOverrides map[roachpb.TenantID][]kvpb.TenantS
 	for tenantID, overrides := range allOverrides {
 		// Make sure settings are sorted.
 		sort.Slice(overrides, func(i, j int) bool {
-			return overrides[i].Name < overrides[j].Name
+			return overrides[i].InternalKey < overrides[j].InternalKey
 		})
 		// Sanity check.
 		for i := 1; i < len(overrides); i++ {
-			if overrides[i].Name == overrides[i-1].Name {
+			if overrides[i].InternalKey == overrides[i-1].InternalKey {
 				panic("duplicate setting")
 			}
 		}
@@ -137,8 +137,8 @@ func (s *overridesStore) SetTenantOverride(tenantID roachpb.TenantID, setting kv
 		close(existing.changeCh)
 	}
 	after := make([]kvpb.TenantSetting, 0, len(before)+1)
-	// 1. Add all settings up to setting.Name.
-	for len(before) > 0 && before[0].Name < setting.Name {
+	// 1. Add all settings up to setting.InternalKey.
+	for len(before) > 0 && before[0].InternalKey < setting.InternalKey {
 		after = append(after, before[0])
 		before = before[1:]
 	}
@@ -146,11 +146,11 @@ func (s *overridesStore) SetTenantOverride(tenantID roachpb.TenantID, setting kv
 	if setting.Value != (settings.EncodedValue{}) {
 		after = append(after, setting)
 	}
-	// Skip any existing setting for this name.
-	if len(before) > 0 && before[0].Name == setting.Name {
+	// Skip any existing setting for this setting key.
+	if len(before) > 0 && before[0].InternalKey == setting.InternalKey {
 		before = before[1:]
 	}
-	// 3. Append all settings after setting.Name.
+	// 3. Append all settings after setting.InternalKey.
 	after = append(after, before...)
 	s.mu.tenants[tenantID] = newTenantOverrides(after)
 }

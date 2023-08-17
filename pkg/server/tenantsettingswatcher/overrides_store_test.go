@@ -29,9 +29,9 @@ func TestOverridesStore(t *testing.T) {
 	s.Init()
 	t1 := roachpb.MustMakeTenantID(1)
 	t2 := roachpb.MustMakeTenantID(2)
-	st := func(name, val string) kvpb.TenantSetting {
+	st := func(key settings.InternalKey, val string) kvpb.TenantSetting {
 		return kvpb.TenantSetting{
-			Name: name,
+			InternalKey: key,
 			Value: settings.EncodedValue{
 				Value: val,
 			},
@@ -41,7 +41,7 @@ func TestOverridesStore(t *testing.T) {
 		t.Helper()
 		var vals []string
 		for _, s := range o.overrides {
-			vals = append(vals, fmt.Sprintf("%s=%s", s.Name, s.Value.Value))
+			vals = append(vals, fmt.Sprintf("%s=%s", s.InternalKey, s.Value.Value))
 		}
 		if actual := strings.Join(vals, " "); actual != expected {
 			t.Errorf("expected: %s; got: %s", expected, actual)

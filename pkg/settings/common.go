@@ -18,7 +18,7 @@ import (
 // common implements basic functionality used by all setting types.
 type common struct {
 	class         Class
-	key           string
+	key           InternalKey
 	description   string
 	visibility    Visibility
 	slot          slotIdx
@@ -33,7 +33,7 @@ type common struct {
 type slotIdx int32
 
 // init must be called to initialize the fields that don't have defaults.
-func (c *common) init(class Class, key string, description string, slot slotIdx) {
+func (c *common) init(class Class, key InternalKey, description string, slot slotIdx) {
 	c.class = class
 	c.key = key
 	c.description = description
@@ -50,8 +50,12 @@ func (c common) Class() Class {
 	return c.class
 }
 
-func (c common) Key() string {
+func (c common) InternalKey() InternalKey {
 	return c.key
+}
+
+func (c common) Name() SettingName {
+	return SettingName(c.key)
 }
 
 func (c common) Description() string {
@@ -119,7 +123,7 @@ func (c *common) SetOnChange(sv *Values, fn func(ctx context.Context)) {
 type internalSetting interface {
 	NonMaskedSetting
 
-	init(class Class, key, description string, slot slotIdx)
+	init(class Class, key InternalKey, description string, slot slotIdx)
 	isRetired() bool
 	setToDefault(ctx context.Context, sv *Values)
 

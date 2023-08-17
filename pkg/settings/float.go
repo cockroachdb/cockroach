@@ -125,7 +125,11 @@ func (f *FloatSetting) WithPublic() *FloatSetting {
 
 // RegisterFloatSetting defines a new setting with type float.
 func RegisterFloatSetting(
-	class Class, key, desc string, defaultValue float64, validateFns ...func(float64) error,
+	class Class,
+	key InternalKey,
+	desc string,
+	defaultValue float64,
+	validateFns ...func(float64) error,
 ) *FloatSetting {
 	var validateFn func(float64) error
 	if len(validateFns) > 0 {
