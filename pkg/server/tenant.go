@@ -256,7 +256,17 @@ func newTenantServer(
 
 	// Inform the server identity provider that we're operating
 	// for a tenant server.
-	baseCfg.idProvider.SetTenant(sqlCfg.TenantID)
+	//
+	// TODO(#77336): we would like to set the tenant name here too.
+	// Unfortunately, this is not possible for now because the name is
+	// only known after the SQL server has initialized the connector (in
+	// preStart), which cannot be called yet.
+	// Instead, the tenant name is currently added to the idProvider
+	// inside preStart().
+	// The better approach would be to have the CLI flag use a name,
+	// then rely on some mechanism to retrieve the ID from the name to
+	// initialize the rest of the server.
+	baseCfg.idProvider.SetTenantID(sqlCfg.TenantID)
 	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, serviceMode)
 	if err != nil {
 		return nil, err
