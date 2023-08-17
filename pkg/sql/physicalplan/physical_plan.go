@@ -573,12 +573,10 @@ func isIdentityProjection(columns []uint32, numExistingCols int) bool {
 // Note: the columns slice is relinquished to this function, which can modify it
 // or use it directly in specs.
 func (p *PhysicalPlan) AddProjection(columns []uint32, newMergeOrdering execinfrapb.Ordering) {
-	// Set the merge ordering early since we might short-circuit.
-	p.SetMergeOrdering(newMergeOrdering)
-
 	// If the projection we are trying to apply projects every column, don't
 	// update the spec.
 	if isIdentityProjection(columns, len(p.GetResultTypes())) {
+		p.SetMergeOrdering(newMergeOrdering)
 		return
 	}
 
@@ -590,6 +588,38 @@ func (p *PhysicalPlan) AddProjection(columns []uint32, newMergeOrdering execinfr
 	post := p.GetLastStagePost()
 
 	if post.RenderExprs != nil {
+		// Check whether each render expression is projected at least once, if
+		// that's not the case, then we must add another processor in order for
+		// each render expression to be evaluated (this is needed for edge cases
+		// like the render expressions resulting in errors).
+		var addNewProcessor bool
+		if len(columns) < len(post.RenderExprs) {
+			// We're definitely not projecting some render expressions, so we'll
+			// need a new processor.
+			addNewProcessor = true
+		} else {
+			renderUsed := make([]bool, len(post.RenderExprs))
+			for _, c := range columns {
+				renderUsed[c] = true
+			}
+			for _, used := range renderUsed {
+				// Need to add a new processor if at least one render is not
+				// projected.
+				addNewProcessor = addNewProcessor || !used
+			}
+		}
+		if addNewProcessor {
+			p.AddNoGroupingStage(
+				execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
+				execinfrapb.PostProcessSpec{
+					Projection:    true,
+					OutputColumns: columns,
+				},
+				newResultTypes,
+				newMergeOrdering,
+			)
+			return
+		}
 		// Apply the projection to the existing rendering; in other words, keep
 		// only the renders needed by the new output columns, and reorder them
 		// accordingly.
@@ -612,6 +642,7 @@ func (p *PhysicalPlan) AddProjection(columns []uint32, newMergeOrdering execinfr
 	}
 
 	p.SetLastStagePost(post, newResultTypes)
+	p.SetMergeOrdering(newMergeOrdering)
 }
 
 // exprColumn returns the column that is referenced by the expression, if the
