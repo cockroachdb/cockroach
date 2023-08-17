@@ -6008,3 +6008,158 @@ SELECT ST_AsText(ST_AsMVTGeom(
     ST_GeomFromText('LINESTRING (0 0, 10.6 0.4, 10.6 5.4, 0 -5, 0 0)'),
     ST_MakeBox2D(ST_Point(0, 0), ST_Point(20, 20)),
     20, -1, false))
+
+subtest regression_103616
+
+# Regression test for #103616
+statement ok
+CREATE TABLE t103616 (
+  tag string,
+  geog GEOGRAPHY,
+  geom GEOMETRY,
+  INVERTED INDEX geog_idx (geog),
+  INVERTED INDEX geom_idx (geom)
+);
+
+statement ok
+insert into t103616 values ('null', null, null);
+
+statement ok
+insert into t103616 values ('point (0 0)', 'POINT(0 0)'::GEOGRAPHY, 'POINT(0 0)'::GEOMETRY);
+
+statement ok
+insert into t103616 values ('point (10 10)', 'POINT(10 10)'::GEOGRAPHY, 'POINT(10 10)'::GEOMETRY);
+
+statement ok
+insert into t103616 values ('empty 1', ST_GeogFromText('POLYGON EMPTY'), ST_GeomFromText('POLYGON EMPTY'));
+
+statement ok
+insert into t103616 values ('empty 2', ST_GeogFromText('GEOMETRYCOLLECTION EMPTY'), ST_GeomFromText('GEOMETRYCOLLECTION EMPTY'));
+
+# Null and empty geog values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616@geog_idx
+WHERE
+    st_distance(geog, 'POINT(0 0)'::GEOGRAPHY, false) = 0;
+----
+point (0 0)
+
+# Null and empty geom values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616@geog_idx
+WHERE
+    st_distance(geog, 'POINT(0 0)'::GEOGRAPHY, false) = 0;
+----
+point (0 0)
+
+# Null and empty geog values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616@geog_idx
+WHERE
+    NOT 1.2345678901234566e-43 < st_distance(geog, 'POINT(0 0)'::GEOGRAPHY);
+----
+point (0 0)
+
+# Null and empty geog values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616
+WHERE
+    NOT 1.2345678901234566e-43 > st_distance(geog, 'POINT(0 0)'::GEOGRAPHY);
+----
+point (10 10)
+
+# Null and empty geog values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616@geog_idx
+WHERE
+    1.2345678901234566e-43 > st_distance(geog, 'POINT(0 0)'::GEOGRAPHY);
+----
+point (0 0)
+
+# Null and empty geog values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616
+WHERE
+    1.2345678901234566e-43 < st_distance(geog, 'POINT(0 0)'::GEOGRAPHY);
+----
+point (10 10)
+
+# Null and empty geog values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616
+WHERE
+    0 <= st_distance(geog, 'POINT(0 0)'::GEOGRAPHY);
+----
+point (0 0)
+point (10 10)
+
+# Only null and empty geog values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616
+WHERE
+    (st_distance(geog, 'POINT(0 0)'::GEOGRAPHY, false) = 0) IS NULL;
+----
+null
+empty 1
+empty 2
+
+# Only null and empty geog values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616
+WHERE
+    (0 <= st_distance(geog, 'POINT(0 0)'::GEOGRAPHY)) IS NULL;
+----
+null
+empty 1
+empty 2
+
+# Null and empty geom values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616@geom_idx
+WHERE
+    NOT 1.2345678901234566e-43 < st_maxdistance(geom, 'POINT(0 0)'::GEOMETRY);
+----
+point (0 0)
+
+# Null and empty geom values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616
+WHERE
+    NOT 1.2345678901234566e-43 > st_maxdistance(geom, 'POINT(0 0)'::GEOMETRY);
+----
+point (10 10)
+
+# Null and empty geom values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616@geom_idx
+WHERE
+    1.2345678901234566e-43 > st_maxdistance(geom, 'POINT(0 0)'::GEOMETRY);
+----
+point (0 0)
+
+# Null and empty geom values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616
+WHERE
+    1.2345678901234566e-43 < st_maxdistance(geom, 'POINT(0 0)'::GEOMETRY);
+----
+point (10 10)
+
+# Null and empty geom values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616
+WHERE
+    0 <= st_maxdistance(geom, 'POINT(0 0)'::GEOMETRY);
+----
+point (0 0)
+point (10 10)
+
+# Only null and empty geog values should not appear in the output.
+query T rowsort
+SELECT tag FROM t103616
+WHERE
+    (0 <= st_maxdistance(geom, 'POINT(0 0)'::GEOMETRY)) IS NULL;
+----
+null
+empty 1
+empty 2

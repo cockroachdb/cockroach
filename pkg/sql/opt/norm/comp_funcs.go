@@ -177,47 +177,24 @@ func (c *CustomFuncs) MakeIntersectionFunction(args memo.ScalarListExpr) opt.Sca
 	)
 }
 
-// MakeSTDWithinLeft returns an ST_DWithin function that replaces an expression
-// of the following form: ST_Distance(a,b) <= x. Note that the ST_Distance
-// function is on the left side of the inequality.
-func (c *CustomFuncs) MakeSTDWithinLeft(
-	op opt.Operator, args memo.ScalarListExpr, bound opt.ScalarExpr,
+// MakeSTDWithin returns an ST_DWithin function that replaces an expression
+// of the form: ST_Distance(a,b) <= x or x <= ST_Distance(a,b). fnIsLeftArg should
+// be passed as true if the ST_Distance is on the left, otherwise false.
+func (c *CustomFuncs) MakeSTDWithin(
+	op opt.Operator, args memo.ScalarListExpr, bound opt.ScalarExpr, fnIsLeftArg bool,
 ) opt.ScalarExpr {
 	const fnName = "st_dwithin"
-	const fnIsLeftArg = true
 	return c.makeSTDWithin(op, args, bound, fnName, fnIsLeftArg)
 }
 
-// MakeSTDWithinRight returns an ST_DWithin function that replaces an expression
-// of the following form: x <= ST_Distance(a,b). Note that the ST_Distance
-// function is on the right side of the inequality.
-func (c *CustomFuncs) MakeSTDWithinRight(
-	op opt.Operator, args memo.ScalarListExpr, bound opt.ScalarExpr,
-) opt.ScalarExpr {
-	const fnName = "st_dwithin"
-	const fnIsLeftArg = false
-	return c.makeSTDWithin(op, args, bound, fnName, fnIsLeftArg)
-}
-
-// MakeSTDFullyWithinLeft returns an ST_DFullyWithin function that replaces an
-// expression of the following form: ST_MaxDistance(a,b) <= x. Note that the
-// ST_MaxDistance function is on the left side of the inequality.
-func (c *CustomFuncs) MakeSTDFullyWithinLeft(
-	op opt.Operator, args memo.ScalarListExpr, bound opt.ScalarExpr,
+// MakeSTDFullyWithin returns an ST_DFullyWithin function that replaces an
+// expression of the form: ST_MaxDistance(a,b) <= x or x <= ST_MaxDistance(a,b).
+// fnIsLeftArg should be passed as true if the ST_MaxDistance is on the left,
+// otherwise false.
+func (c *CustomFuncs) MakeSTDFullyWithin(
+	op opt.Operator, args memo.ScalarListExpr, bound opt.ScalarExpr, fnIsLeftArg bool,
 ) opt.ScalarExpr {
 	const fnName = "st_dfullywithin"
-	const fnIsLeftArg = true
-	return c.makeSTDWithin(op, args, bound, fnName, fnIsLeftArg)
-}
-
-// MakeSTDFullyWithinRight returns an ST_DFullyWithin function that replaces an
-// expression of the following form: x <= ST_MaxDistance(a,b). Note that the
-// ST_MaxDistance function is on the right side of the inequality.
-func (c *CustomFuncs) MakeSTDFullyWithinRight(
-	op opt.Operator, args memo.ScalarListExpr, bound opt.ScalarExpr,
-) opt.ScalarExpr {
-	const fnName = "st_dfullywithin"
-	const fnIsLeftArg = false
 	return c.makeSTDWithin(op, args, bound, fnName, fnIsLeftArg)
 }
 
