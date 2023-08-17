@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -202,7 +203,8 @@ func (s storage) acquire(
 		// If the version is the same as the previous version, then a valid
 		// row exists within the leases table. We only need to upsert if
 		// expiry is active. FIXME: Feed in...
-		if desc.GetVersion() != previousVersion {
+		if desc.GetVersion() != previousVersion ||
+			!s.settings.Version.IsActive(ctx, clusterversion.V23_2) {
 			return s.writer.insertLease(ctx, txn, lf)
 		}
 		return nil

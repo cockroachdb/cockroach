@@ -1,5 +1,4 @@
-pkg/sql/logictest/testdata/logic_test/pg_catalog
-g# LogicTest: local
+# LogicTest: local
 
 # Set the distsql_workmem to the default production value because of a problem
 # with losing 'name' attribute when spilling to disk (#78547).
