@@ -273,3 +273,18 @@ SELECT ARRAY[]::TIMESTAMPTZ[] >
 query error pq: cannot determine type of empty array\. Consider casting to the desired type, for example ARRAY\[\]::int\[\]
 SELECT ARRAY[]::TIMESTAMPTZ[] <
        SOME (ARRAY[TIMESTAMPTZ '1969-12-29T21:20:13+01'], ARRAY[NULL]);
+
+# Static analysis types should never make it to execution.
+statement ok
+CREATE TABLE t83496 (
+  a STRING,
+  b STRING
+);
+CREATE TYPE typ83496 AS ENUM ('foo', 'bar');
+
+statement ok
+SELECT * FROM t83496
+WHERE (
+  (SELECT 'bar':::typ83496 FROM t83496 WHERE false)
+  IS NOT DISTINCT FROM CASE WHEN NULL THEN NULL ELSE NULL END
+);
