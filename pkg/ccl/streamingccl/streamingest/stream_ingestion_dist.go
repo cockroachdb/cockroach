@@ -10,7 +10,6 @@ package streamingest
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 var replanThreshold = settings.RegisterFloatSetting(
@@ -78,19 +78,14 @@ func startDistIngestion(
 		heartbeatTimestamp = initialScanTimestamp
 	}
 
-	msg := fmt.Sprintf("resuming stream (producer job %d) from %s",
-		streamID, heartbeatTimestamp)
+	msg := redact.Sprintf("resuming stream (producer job %d) from %s", streamID, heartbeatTimestamp)
 	updateRunningStatus(ctx, ingestionJob, jobspb.InitializingReplication, msg)
 
 	client, err := connectToActiveClient(ctx, ingestionJob, execCtx.ExecCfg().InternalDB)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := client.Close(ctx); err != nil {
-			log.Warningf(ctx, "stream ingestion client did not shut down properly: %s", err.Error())
-		}
-	}()
+	defer closeAndLog(ctx, client)
 	if err := waitUntilProducerActive(ctx, client, streamID, heartbeatTimestamp, ingestionJob.ID()); err != nil {
 		return err
 	}
@@ -155,8 +150,6 @@ func startDistIngestion(
 	)
 
 	execInitialPlan := func(ctx context.Context) error {
-		log.Infof(ctx, "starting to run DistSQL flow for stream ingestion job %d",
-			ingestionJob.ID())
 		defer stopReplanner()
 		ctx = logtags.AddTag(ctx, "stream-ingest-distsql", nil)
 
@@ -180,8 +173,7 @@ func startDistIngestion(
 		return rw.Err()
 	}
 
-	updateRunningStatus(ctx, ingestionJob, jobspb.Replicating,
-		"running the SQL flow for the stream ingestion job")
+	updateRunningStatus(ctx, ingestionJob, jobspb.Replicating, "physical replication running")
 	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner)
 	if errors.Is(err, sql.ErrPlanChanged) {
 		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
@@ -209,9 +201,7 @@ func (p *replicationFlowPlanner) makePlan(
 	gatewayID base.SQLInstanceID,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
-		log.Infof(ctx, "Generating DistSQL plan candidate for stream ingestion job %d",
-			ingestionJobID)
-
+		log.Infof(ctx, "generating DistSQL plan candidate")
 		streamID := streampb.StreamID(details.StreamID)
 		topology, err := client.Plan(ctx, streamID)
 		if err != nil {
