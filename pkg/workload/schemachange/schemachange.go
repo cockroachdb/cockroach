@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -194,11 +195,14 @@ func (s *schemaChange) Ops(
 			declarativeOpWeights[idx] = weight
 		}
 	}
-	declarativeOps := newDeck(rand.New(rand.NewSource(timeutil.Now().UnixNano())), declarativeOpWeights...)
+	stdoutLog := makeAtomicLog(os.Stdout)
+
+	rng, seed := randutil.NewTestRand()
+	stdoutLog.printLn(fmt.Sprintf("using random seed: %d", seed))
+	declarativeOps := newDeck(rng, declarativeOpWeights...)
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 
-	stdoutLog := makeAtomicLog(os.Stdout)
 	var artifactsLog *atomicLog
 	if s.logFilePath != "" {
 		err := s.initJSONLogFile(s.logFilePath)
@@ -215,7 +219,7 @@ func (s *schemaChange) Ops(
 			seqNum:             seqNum,
 			errorRate:          s.errorRate,
 			enumPct:            s.enumPct,
-			rng:                rand.New(rand.NewSource(timeutil.Now().UnixNano())),
+			rng:                rng,
 			ops:                ops,
 			declarativeOps:     declarativeOps,
 			maxSourceTables:    s.maxSourceTables,
