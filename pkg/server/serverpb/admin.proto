@@ -597,7 +597,7 @@ message DecommissionStatusResponse {
 
 // SettingsRequest inquires what are the current settings in the cluster.
 message SettingsRequest {
-  // The array of setting names to retrieve.
+  // The array of setting keys or names to retrieve.
   // An empty keys array means "all".
   repeated string keys = 1;
 
@@ -617,6 +617,7 @@ message SettingsResponse {
       string description = 3;
       bool public = 4;
       google.protobuf.Timestamp last_updated = 5 [(gogoproto.nullable) = true, (gogoproto.stdtime) = true];
+      string name = 6; // for display purposes.
    }
    map<string, Value> key_values = 1 [(gogoproto.nullable) = false];
 }

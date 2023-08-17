@@ -18,7 +18,7 @@ import (
 // DefaultTenantSelectSettingName is the name of the setting that
 // configures the default tenant to use when a client does not specify
 // a specific tenant.
-var DefaultTenantSelectSettingName = "server.controller.default_tenant"
+const DefaultTenantSelectSettingName = "server.controller.default_tenant"
 
 // DefaultTenantSelect determines which tenant serves requests from
 // clients that do not specify explicitly the tenant they want to use.

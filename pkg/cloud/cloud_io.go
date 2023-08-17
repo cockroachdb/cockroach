@@ -166,7 +166,7 @@ func ResumingReaderRetryOnErrFnForSettings(
 
 		retryTimeouts := retryConnectionTimedOut.Get(&st.SV)
 		if retryTimeouts && sysutil.IsErrTimedOut(err) {
-			log.Warningf(ctx, "retrying connection timed out because %s = true", retryConnectionTimedOut.Key())
+			log.Warningf(ctx, "retrying connection timed out because %s = true", retryConnectionTimedOut.Name())
 			return true
 		}
 		return false

@@ -215,11 +215,11 @@ Output the list of cluster settings known to this binary.
 			return s
 		}
 
-		wrapDivSlug := func(s string) string {
+		wrapDivSlug := func(key settings.InternalKey, name settings.SettingName) string {
 			if sqlExecCtx.TableDisplayFormat == clisqlexec.TableDisplayRawHTML {
-				return fmt.Sprintf(`<div id="setting-%s" class="anchored">%s</div>`, slugify.Slugify(s), wrapCode(s))
+				return fmt.Sprintf(`<div id="setting-%s" class="anchored">%s</div>`, slugify.Slugify(string(key)), wrapCode(string(name)))
 			}
-			return s
+			return string(name)
 		}
 
 		// Fill a Values struct with the defaults.
@@ -227,11 +227,12 @@ Output the list of cluster settings known to this binary.
 		settings.NewUpdater(&s.SV).ResetRemaining(context.Background())
 
 		var rows [][]string
-		for _, name := range settings.Keys(settings.ForSystemTenant) {
-			setting, ok := settings.LookupForLocalAccess(name, settings.ForSystemTenant)
+		for _, key := range settings.Keys(settings.ForSystemTenant) {
+			setting, ok := settings.LookupForLocalAccessByKey(key, settings.ForSystemTenant)
 			if !ok {
-				panic(fmt.Sprintf("could not find setting %q", name))
+				panic(fmt.Sprintf("could not find setting %q", key))
 			}
+			name := setting.Name()
 
 			if excludeSystemSettings && setting.Class() == settings.SystemOnly {
 				continue
@@ -250,7 +251,7 @@ Output the list of cluster settings known to this binary.
 				defaultVal = sm.SettingsListDefault()
 			} else {
 				defaultVal = setting.String(&s.SV)
-				if override, ok := upgrades.SettingsDefaultOverrides[name]; ok {
+				if override, ok := upgrades.SettingsDefaultOverrides[key]; ok {
 					defaultVal = override
 				}
 			}
@@ -261,7 +262,7 @@ Output the list of cluster settings known to this binary.
 				settingDesc = html.EscapeString(settingDesc)
 				alterRoleLink = `<a href="alter-role.html"><code>ALTER ROLE... SET</code></a>`
 			}
-			if strings.Contains(name, "sql.defaults") {
+			if strings.Contains(string(name), "sql.defaults") || strings.Contains(string(key), "sql.defaults") {
 				settingDesc = fmt.Sprintf(`%s
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using %s`,
@@ -270,7 +271,7 @@ This session variable default should now be configured using %s`,
 				)
 			}
 
-			row := []string{wrapDivSlug(name), typ, wrapCode(defaultVal), settingDesc}
+			row := []string{wrapDivSlug(key, name), typ, wrapCode(defaultVal), settingDesc}
 			if showSettingClass {
 				class := "unknown"
 				switch setting.Class() {

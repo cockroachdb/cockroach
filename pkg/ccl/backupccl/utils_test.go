@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -391,7 +392,7 @@ func thresholdFromTrace(t *testing.T, traceString string) hlc.Timestamp {
 
 func setAndWaitForTenantReadOnlyClusterSetting(
 	t *testing.T,
-	setting string,
+	settingName settings.SettingName,
 	systemTenantRunner *sqlutils.SQLRunner,
 	tenantRunner *sqlutils.SQLRunner,
 	tenantID roachpb.TenantID,
@@ -402,7 +403,7 @@ func setAndWaitForTenantReadOnlyClusterSetting(
 		t,
 		fmt.Sprintf(
 			"ALTER TENANT [$1] SET CLUSTER SETTING %s = '%s'",
-			setting,
+			settingName,
 			val,
 		),
 		tenantID.ToUint64(),
@@ -412,7 +413,7 @@ func setAndWaitForTenantReadOnlyClusterSetting(
 		var currentVal string
 		tenantRunner.QueryRow(t,
 			fmt.Sprintf(
-				"SHOW CLUSTER SETTING %s", setting,
+				"SHOW CLUSTER SETTING %s", settingName,
 			),
 		).Scan(&currentVal)
 

@@ -3258,7 +3258,7 @@ message TenantSettingsEvent {
 
 // TenantSetting contains the name and value of a tenant setting.
 message TenantSetting {
-  string name = 1;
+  string internal_key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/settings.InternalKey"];
   settings.EncodedValue value = 2 [(gogoproto.nullable) = false];
 }
 

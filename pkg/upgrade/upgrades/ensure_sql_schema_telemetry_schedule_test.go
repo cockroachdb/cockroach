@@ -96,11 +96,11 @@ func TestSchemaTelemetrySchedule(t *testing.T) {
 
 		// Check that the schedule can have its recurrence altered.
 		tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING %s = '* * * * *'`,
-			schematelemetrycontroller.SchemaTelemetryRecurrence.Key()))
+			schematelemetrycontroller.SchemaTelemetryRecurrence.Name()))
 		tdb.CheckQueryResultsRetry(t, qExists, [][]string{{"* * * * *", "1"}})
 		exp = scheduledjobs.MaybeRewriteCronExpr(clusterID, "@daily")
 		tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING %s = '@daily'`,
-			schematelemetrycontroller.SchemaTelemetryRecurrence.Key()))
+			schematelemetrycontroller.SchemaTelemetryRecurrence.Name()))
 		tdb.CheckQueryResultsRetry(t, qExists, [][]string{{exp, "1"}})
 	})
 
