@@ -374,7 +374,7 @@ func (c *connector) dialSQLServer(
 		return err
 	})
 	if err != nil {
-		if getErrorCode(err) == codeBackendDown {
+		if getErrorCode(err) == codeBackendDialFailed {
 			return nil, markAsRetriableConnectorError(err)
 		}
 		return nil, err

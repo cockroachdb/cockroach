@@ -40,7 +40,7 @@ func TestMetricsUpdateForError(t *testing.T) {
 		{codeParamsRoutingFailed, []*metric.Counter{m.RoutingErrCount}},
 		{codeUnavailable, []*metric.Counter{m.RoutingErrCount}},
 
-		{codeBackendDown, []*metric.Counter{m.BackendDownCount}},
+		{codeBackendDialFailed, []*metric.Counter{m.BackendDownCount}},
 
 		{codeAuthFailed, []*metric.Counter{m.AuthFailedCount}},
 	}

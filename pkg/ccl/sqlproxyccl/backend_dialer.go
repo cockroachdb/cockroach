@@ -32,7 +32,7 @@ var BackendDial = func(
 	if err != nil {
 		return nil, withCode(
 			errors.Wrap(err, "unable to reach backend SQL server"),
-			codeBackendDown)
+			codeBackendDialFailed)
 	}
 
 	// Try to upgrade the PG connection to use SSL.
@@ -46,44 +46,32 @@ var BackendDial = func(
 		if tlsConfig != nil {
 			// Send SSLRequest.
 			if err := binary.Write(conn, binary.BigEndian, pgSSLRequest); err != nil {
-				return withCode(
-					errors.Wrap(err, "sending SSLRequest to target server"),
-					codeBackendDown)
+				return errors.Wrap(err, "sending SSLRequest to target server")
 			}
 			response := make([]byte, 1)
 			if _, err = io.ReadFull(conn, response); err != nil {
-				return withCode(
-					errors.New("reading response to SSLRequest"),
-					codeBackendDown)
+				return errors.New("reading response to SSLRequest")
 			}
 			if response[0] != pgAcceptSSLRequest {
-				return withCode(
-					errors.New("target server refused TLS connection"),
-					codeBackendRefusedTLS)
+				return errors.New("target server refused TLS connection")
 			}
 			conn = tls.Client(conn, tlsConfig.Clone())
 		}
 
 		// Forward startup message to the backend connection.
 		if _, err := conn.Write(msg.Encode(nil)); err != nil {
-			return withCode(
-				errors.Wrapf(err, "relaying StartupMessage to target server %v", serverAddress),
-				codeBackendDown)
+			return errors.Wrapf(err, "relaying StartupMessage to target server %v", serverAddress)
 		}
-
 		return nil
 	}()
 	if ctx.Err() != nil {
 		// If the context is cancelled, overwrite the error because closing the
 		// connection caused the connection to fail at an arbitrary step.
-		err = withCode(
-			errors.Wrapf(ctx.Err(), "unable to negotiate connection with %s", serverAddress),
-			codeBackendDown,
-		)
+		err = errors.Wrapf(ctx.Err(), "unable to negotiate connection with %s", serverAddress)
 	}
 	if err != nil {
 		_ = conn.Close()
-		return nil, err
+		return nil, withCode(err, codeBackendDialFailed)
 	}
 
 	return conn, nil

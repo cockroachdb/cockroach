@@ -294,7 +294,11 @@ func (metrics *metrics) updateForError(err error) {
 		metrics.RefusedConnCount.Inc(1)
 	case codeParamsRoutingFailed, codeUnavailable:
 		metrics.RoutingErrCount.Inc(1)
-	case codeBackendDown:
+	case codeBackendDialFailed:
+		// NOTE: Historically, we had the code named codeBackendDown instead of
+		// codeBackendDialFailed. This has been renamed to codeBackendDialFailed
+		// for accuracy, and to prevent confusion by developers. We don't rename
+		// the metrics here as that may break downstream consumers.
 		metrics.BackendDownCount.Inc(1)
 	case codeAuthFailed:
 		metrics.AuthFailedCount.Inc(1)
