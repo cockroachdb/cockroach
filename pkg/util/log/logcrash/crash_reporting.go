@@ -255,6 +255,7 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 	crashReportingActive = true
 
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetTags(getTagsFromEnvironment())
 		scope.SetTags(map[string]string{
 			"cmd":          cmd,
 			"platform":     info.Platform,
