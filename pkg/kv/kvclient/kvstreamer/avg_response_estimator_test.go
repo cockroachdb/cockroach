@@ -30,7 +30,7 @@ func TestAvgResponseEstimator(t *testing.T) {
 	e := avgResponseEstimator{avgResponseSizeMultiple: defaultAvgResponseSizeMultiple}
 
 	// Before receiving any responses, we should be using the initial estimate.
-	require.Equal(t, int64(initialAvgResponseSize), e.getAvgResponseSize())
+	require.Equal(t, int64(InitialAvgResponseSize), e.getAvgResponseSize())
 
 	// Simulate receiving a single response.
 	firstResponseSize := int64(42)
