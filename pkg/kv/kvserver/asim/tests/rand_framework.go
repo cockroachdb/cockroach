@@ -39,12 +39,13 @@ type testRandOptions struct {
 type OutputFlags int
 
 const (
-	OutputNothing      OutputFlags       = 0
-	OutputTestSettings                   = 1 << (iota - 1) // 1 << 0: 0000 0001
-	OutputInitialState                                     // 1 << 1: 0000 0010
-	OutputConfigGen                                        // 1 << 2: 0000 0100
-	OutputPlotHistory                                      // 1 << 3: 0000 1000
-	OutputAll          = (1 << iota) - 1                   // (1 << 4) - 1: 0000 1111
+	OutputNothing        OutputFlags       = 0
+	OutputTestSettings                     = 1 << (iota - 1) // 1 << 0: 0000 0001
+	OutputInitialState                                       // 1 << 1: 0000 0010
+	OutputConfigGen                                          // 1 << 2: 0000 0100
+	OutputPlotHistory                                        // 1 << 3: 0000 1000
+	OutputStaticSettings                                     // 1 << 4: 0001 0000
+	OutputAll            = (1 << iota) - 1                   // (1 << 5) - 1: 0001 1111
 )
 
 func (o OutputFlags) ScanFlags(inputs []string) OutputFlags {
@@ -107,11 +108,11 @@ func (t testSettings) printTestSettings(w *tabwriter.Writer) {
 }
 
 type randTestingFramework struct {
-	recordBuf            *strings.Builder
-	staticOptionSettings staticOptionSettings
-	s                    testSettings
-	rangeGenerator       generator
-	keySpaceGenerator    generator
+	recordBuf         *strings.Builder
+	staticSettings    staticOptionSettings
+	s                 testSettings
+	rangeGenerator    generator
+	keySpaceGenerator generator
 }
 
 // newRandTestingFramework constructs a new testing framework with the given
@@ -133,11 +134,11 @@ func newRandTestingFramework(
 	var buf strings.Builder
 
 	return randTestingFramework{
-		recordBuf:            &buf,
-		staticOptionSettings: staticOptionSettings,
-		s:                    s,
-		rangeGenerator:       rangeGenerator,
-		keySpaceGenerator:    keySpaceGenerator,
+		recordBuf:         &buf,
+		staticSettings:    staticOptionSettings,
+		s:                 s,
+		rangeGenerator:    rangeGenerator,
+		keySpaceGenerator: keySpaceGenerator,
 	}
 }
 
@@ -230,6 +231,9 @@ func (f randTestingFramework) runRandTestRepeated() {
 	if f.s.verbose.Has(OutputTestSettings) {
 		f.s.printTestSettings(w)
 	}
+	if f.s.verbose.Has(OutputStaticSettings) {
+		f.staticSettings.printStaticOptionSettings(w)
+	}
 	for i := 0; i < numIterations; i++ {
 		if i == 0 {
 			f.recordBuf.WriteString(fmt.Sprintln("----------------------------------"))
@@ -246,7 +250,7 @@ func (f randTestingFramework) runRandTestRepeated() {
 	}
 
 	if f.s.verbose.Has(OutputPlotHistory) {
-		plotAllHistory(runs, f.recordBuf)
+		f.plotAllHistory(runs, f.recordBuf)
 	}
 }
 
@@ -360,7 +364,7 @@ func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
 		if f.s.randOptions.cluster {
 			panic("randomized cluster with weighted rand stores is not supported")
 		}
-		if stores, length := f.staticOptionSettings.storesPerNode*f.staticOptionSettings.nodes, len(f.s.rangeGen.weightedRand); stores != length {
+		if stores, length := f.staticSettings.storesPerNode*f.staticSettings.nodes, len(f.s.rangeGen.weightedRand); stores != length {
 			panic(fmt.Sprintf("number of stores %d does not match length of weighted_rand %d: ", stores, length))
 		}
 		return WeightedRandomizedBasicRanges{

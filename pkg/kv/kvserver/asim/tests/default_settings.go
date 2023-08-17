@@ -113,8 +113,8 @@ func getDefaultStaticOptionSettings() staticOptionSettings {
 
 func (f randTestingFramework) defaultBasicClusterGen() gen.BasicCluster {
 	return gen.BasicCluster{
-		Nodes:         f.staticOptionSettings.nodes,
-		StoresPerNode: f.staticOptionSettings.storesPerNode,
+		Nodes:         f.staticSettings.nodes,
+		StoresPerNode: f.staticSettings.storesPerNode,
 	}
 }
 
@@ -128,25 +128,25 @@ func (f randTestingFramework) defaultStaticEventsGen() gen.StaticEvents {
 
 func (f randTestingFramework) defaultLoadGen() gen.BasicLoad {
 	return gen.BasicLoad{
-		RWRatio:      f.staticOptionSettings.rwRatio,
-		Rate:         f.staticOptionSettings.rate,
-		SkewedAccess: f.staticOptionSettings.skewedAccess,
-		MinBlockSize: f.staticOptionSettings.minBlock,
-		MaxBlockSize: f.staticOptionSettings.maxBlock,
-		MinKey:       f.staticOptionSettings.minKey,
-		MaxKey:       f.staticOptionSettings.maxKey,
+		RWRatio:      f.staticSettings.rwRatio,
+		Rate:         f.staticSettings.rate,
+		SkewedAccess: f.staticSettings.skewedAccess,
+		MinBlockSize: f.staticSettings.minBlock,
+		MaxBlockSize: f.staticSettings.maxBlock,
+		MinKey:       f.staticSettings.minKey,
+		MaxKey:       f.staticSettings.maxKey,
 	}
 }
 
 func (f randTestingFramework) defaultBasicRangesGen() gen.BasicRanges {
 	return gen.BasicRanges{
 		BaseRanges: gen.BaseRanges{
-			Ranges:            f.staticOptionSettings.ranges,
-			KeySpace:          f.staticOptionSettings.keySpace,
-			ReplicationFactor: f.staticOptionSettings.replicationFactor,
-			Bytes:             f.staticOptionSettings.bytes,
+			Ranges:            f.staticSettings.ranges,
+			KeySpace:          f.staticSettings.keySpace,
+			ReplicationFactor: f.staticSettings.replicationFactor,
+			Bytes:             f.staticSettings.bytes,
 		},
-		PlacementType: f.staticOptionSettings.placementType,
+		PlacementType: f.staticSettings.placementType,
 	}
 }
 
@@ -157,8 +157,8 @@ type plotSettings struct {
 
 func (f randTestingFramework) defaultPlotSettings() plotSettings {
 	return plotSettings{
-		stat:   f.staticOptionSettings.stat,
-		height: f.staticOptionSettings.height,
-		width:  f.staticOptionSettings.width,
+		stat:   f.staticSettings.stat,
+		height: f.staticSettings.height,
+		width:  f.staticSettings.width,
 	}
 }
