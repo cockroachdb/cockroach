@@ -323,6 +323,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		systemExecInsightsTableMigration,
 	),
+	upgrade.NewPermanentTenantUpgrade(
+		"add default SQL schema telemetry schedule",
+		toCV(clusterversion.V23_2_EnsureRowLevelTTLJobForExecInsightsTable),
+		ensureExecInsightsRowLevelTTLSchedule,
+		"validate and start row level TTL job for txn_exec_insights and stmt_exec_insights tables",
+	),
 }
 
 var (
