@@ -55,7 +55,7 @@ type State interface {
 	// TODO(kvoli): Unit test this fn.
 	// String returns string containing a compact representation of the state.
 	String() string
-	// PrettyPrint returns string  BETTER COMMENT
+	// PrettyPrint returns a pretty formatted string representation of the state.
 	PrettyPrint() string
 	// ClusterInfo returns the info of the cluster represented in state.
 	ClusterInfo() ClusterInfo

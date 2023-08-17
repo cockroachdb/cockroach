@@ -43,7 +43,7 @@ func (t testRandOptions) printRandOptions(w *tabwriter.Writer) {
 type testSettings struct {
 	numIterations int
 	duration      time.Duration
-	verbose       bool
+	verbose       int
 	randSource    *rand.Rand
 	assertions    []SimulationAssertion
 	randOptions   testRandOptions
@@ -162,9 +162,13 @@ func (f randTestingFramework) runRandTest() (asim.History, bool, string) {
 	staticSettings := f.getStaticSettings()
 	staticEvents := f.getStaticEvents()
 	seed := f.s.randSource.Int63()
-	f.printAsimInputs(f.s.duration, cluster, ranges, load, staticEvents, seed)
+	if f.s.verbose {
+		f.printAsimInputs(f.s.duration, cluster, ranges, load, staticEvents, seed)
+	}
 	simulator := gen.GenerateSimulation(f.s.duration, cluster, ranges, load, staticSettings, staticEvents, seed)
-	simulator.PrintState(f.recordBuf)
+	if f.s.verbose {
+		simulator.PrintState(f.recordBuf)
+	}
 	simulator.RunSim(ctx)
 	history := simulator.History()
 	failed, reason := checkAssertions(ctx, history, f.s.assertions)
