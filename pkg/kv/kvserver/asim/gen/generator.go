@@ -192,12 +192,15 @@ type PlacementType int
 const (
 	Even PlacementType = iota
 	Skewed
+	Random
+	WeightedRandom
 )
 
 // BaseRanges provide fundamental range functionality and are embedded in
 // specialized range structs. These structs implement the RangeGen interface
 // which is then utilized to generate allocator simulation. Key structs that
-// embed BaseRanges are: BasicRanges.
+// embed BaseRanges are: BasicRanges, RandomizedBasicRanges, and
+// WeightedRandomizedBasicRanges.
 type BaseRanges struct {
 	Ranges            int
 	KeySpace          int
@@ -205,21 +208,27 @@ type BaseRanges struct {
 	Bytes             int64
 }
 
-// getRangesInfo generates and distributes ranges across stores based on
+// GetRangesInfo generates and distributes ranges across stores based on
 // PlacementType while using other BaseRanges fields for range configuration.
-func (b BaseRanges) getRangesInfo(pType PlacementType, numOfStores int) state.RangesInfo {
+func (b BaseRanges) GetRangesInfo(
+	pType PlacementType, numOfStores int, randSource *rand.Rand, weightedRandom []float64,
+) state.RangesInfo {
 	switch pType {
 	case Even:
 		return state.RangesInfoEvenDistribution(numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
 	case Skewed:
 		return state.RangesInfoSkewedDistribution(numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+	case Random:
+		return state.RangesInfoRandDistribution(randSource, numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+	case WeightedRandom:
+		return state.RangesInfoWeightedRandDistribution(randSource, weightedRandom, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
 	default:
 		panic(fmt.Sprintf("unexpected range placement type %v", pType))
 	}
 }
 
-// loadRangeInfo loads the given state with the specified rangesInfo.
-func (b BaseRanges) loadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
+// LoadRangeInfo loads the given state with the specified rangesInfo.
+func (b BaseRanges) LoadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
 	for _, rangeInfo := range rangesInfo {
 		rangeInfo.Size = b.Bytes
 	}
@@ -239,8 +248,11 @@ type BasicRanges struct {
 func (br BasicRanges) Generate(
 	seed int64, settings *config.SimulationSettings, s state.State,
 ) state.State {
-	rangesInfo := br.getRangesInfo(br.PlacementType, len(s.Stores()))
-	br.loadRangeInfo(s, rangesInfo)
+	if br.PlacementType == Random || br.PlacementType == WeightedRandom {
+		panic("BasicRanges generate only uniform or skewed distributions")
+	}
+	rangesInfo := br.GetRangesInfo(br.PlacementType, len(s.Stores()), nil, []float64{})
+	br.LoadRangeInfo(s, rangesInfo)
 	return s
 }
 
