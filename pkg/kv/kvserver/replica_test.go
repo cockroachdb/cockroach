@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -463,6 +464,29 @@ func TestIsOnePhaseCommit(t *testing.T) {
 				}
 			})
 	}
+}
+
+func TestReplicaStringAndSafeFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This test really only needs a hollow shell of a Store and Replica.
+	s := &Store{}
+	s.Ident = &roachpb.StoreIdent{NodeID: 1, StoreID: 2}
+	r := &Replica{}
+	r.store = s
+	r.rangeStr.store(4, &roachpb.RangeDescriptor{
+		RangeID:  3,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("b"),
+	})
+
+	// String.
+	assert.Equal(t, "[n1,s2,r3/4:{a-b}]", r.String())
+	// Redactable string.
+	assert.EqualValues(t, "[n1,s2,r3/4:‹{a-b}›]", redact.Sprint(r))
+	// Redacted string.
+	assert.EqualValues(t, "[n1,s2,r3/4:‹×›]", redact.Sprint(r).Redact())
 }
 
 // TestReplicaContains verifies that the range uses Key.Address() in
