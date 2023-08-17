@@ -31,7 +31,7 @@ func CheckKeyCount(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) {
 	}
 }
 
-// CheckKeyCountE returns an error if the the number of keys in the
+// CheckKeyCountE returns an error if the number of keys in the
 // provided span does not match numKeys.
 func CheckKeyCountE(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) error {
 	t.Helper()

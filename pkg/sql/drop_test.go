@@ -860,7 +860,12 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	}
 
 	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
-	tests.CheckKeyCount(t, kvDB, tableSpan, numRows)
+	testutils.SucceedsSoon(t, func() error {
+		if err := tests.CheckKeyCountE(t, kvDB, tableSpan, numRows); err != nil {
+			return errors.Wrap(err, "failed to verify expected amount of keys")
+		}
+		return nil
+	})
 
 	sqlDB.Exec(t, `DROP TABLE test.t`)
 
