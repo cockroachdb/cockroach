@@ -178,7 +178,7 @@ UPDATE system.namespace SET id = %d WHERE id = %d;
 
 	// Ensure that our logs are flushed to disk before asserting about log
 	// entries.
-	log.Flush()
+	log.FlushFiles()
 
 	// Ensure that a log line is emitted for each invalid object, with a loose
 	// enforcement of the log structure.
