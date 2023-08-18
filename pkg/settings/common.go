@@ -13,12 +13,15 @@ package settings
 import (
 	"context"
 	"fmt"
+
+	"github.com/cockroachdb/errors"
 )
 
 // common implements basic functionality used by all setting types.
 type common struct {
 	class         Class
 	key           InternalKey
+	name          SettingName
 	description   string
 	visibility    Visibility
 	slot          slotIdx
@@ -36,6 +39,7 @@ type slotIdx int32
 func (c *common) init(class Class, key InternalKey, description string, slot slotIdx) {
 	c.class = class
 	c.key = key
+	c.name = SettingName(key) // until overridden
 	c.description = description
 	if slot < 0 {
 		panic(fmt.Sprintf("Invalid slot index %d", slot))
@@ -55,7 +59,7 @@ func (c common) InternalKey() InternalKey {
 }
 
 func (c common) Name() SettingName {
-	return SettingName(c.key)
+	return c.name
 }
 
 func (c common) Description() string {
@@ -104,6 +108,15 @@ func (c *common) setVisibility(v Visibility) {
 func (c *common) setRetired() {
 	c.description = "do not use - " + c.description
 	c.retired = true
+}
+
+// setName is used to override the name of the setting.
+// Refer to the WithName option for details.
+func (c *common) setName(name SettingName) {
+	if c.name != SettingName(c.key) {
+		panic(errors.AssertionFailedf("duplicate use of WithName"))
+	}
+	c.name = name
 }
 
 // SetOnChange installs a callback to be called when a setting's value changes.

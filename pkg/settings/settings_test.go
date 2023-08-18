@@ -346,7 +346,7 @@ func TestCache(t *testing.T) {
 
 	t.Run("lookup-system", func(t *testing.T) {
 		for _, s := range []settings.Setting{i1A, iVal, fA, fVal, dA, dVal, eA, mA, duA} {
-			result, ok := settings.LookupForLocalAccess(s.Name(), settings.ForSystemTenant)
+			result, ok, _ := settings.LookupForLocalAccess(s.Name(), settings.ForSystemTenant)
 			if !ok {
 				t.Fatalf("lookup(%s) failed", s.Name())
 			}
@@ -357,7 +357,7 @@ func TestCache(t *testing.T) {
 	})
 	t.Run("lookup-tenant", func(t *testing.T) {
 		for _, s := range []settings.Setting{i1A, fA, dA, duA} {
-			result, ok := settings.LookupForLocalAccess(s.Name(), false /* forSystemTenant */)
+			result, ok, _ := settings.LookupForLocalAccess(s.Name(), false /* forSystemTenant */)
 			if !ok {
 				t.Fatalf("lookup(%s) failed", s.Name())
 			}
@@ -368,7 +368,7 @@ func TestCache(t *testing.T) {
 	})
 	t.Run("lookup-tenant-fail", func(t *testing.T) {
 		for _, s := range []settings.Setting{iVal, fVal, dVal, eA, mA} {
-			_, ok := settings.LookupForLocalAccess(s.Name(), false /* forSystemTenant */)
+			_, ok, _ := settings.LookupForLocalAccess(s.Name(), false /* forSystemTenant */)
 			if ok {
 				t.Fatalf("lookup(%s) should have failed", s.Name())
 			}
@@ -683,12 +683,12 @@ func TestCache(t *testing.T) {
 }
 
 func TestIsReportable(t *testing.T) {
-	if v, ok := settings.LookupForLocalAccess(
+	if v, ok, _ := settings.LookupForLocalAccess(
 		"bool.t", settings.ForSystemTenant,
 	); !ok || !settings.TestingIsReportable(v) {
 		t.Errorf("expected 'bool.t' to be marked as isReportable() = true")
 	}
-	if v, ok := settings.LookupForLocalAccess(
+	if v, ok, _ := settings.LookupForLocalAccess(
 		"sekretz", settings.ForSystemTenant,
 	); !ok || settings.TestingIsReportable(v) {
 		t.Errorf("expected 'sekretz' to be marked as isReportable() = false")
@@ -708,7 +708,7 @@ func TestOnChangeWithMaxSettings(t *testing.T) {
 	sv := &settings.Values{}
 	sv.Init(ctx, settings.TestOpaque)
 	var changes int
-	s, ok := settings.LookupForLocalAccess(maxName, settings.ForSystemTenant)
+	s, ok, _ := settings.LookupForLocalAccess(maxName, settings.ForSystemTenant)
 	if !ok {
 		t.Fatalf("expected lookup of %s to succeed", maxName)
 	}
