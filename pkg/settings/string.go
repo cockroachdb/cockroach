@@ -107,14 +107,20 @@ func (s *StringSetting) WithPublic() *StringSetting {
 }
 
 // RegisterStringSetting defines a new setting with type string.
-func RegisterStringSetting(class Class, key, desc string, defaultValue string) *StringSetting {
+func RegisterStringSetting(
+	class Class, key InternalKey, desc string, defaultValue string,
+) *StringSetting {
 	return RegisterValidatedStringSetting(class, key, desc, defaultValue, nil)
 }
 
 // RegisterValidatedStringSetting defines a new setting with type string with a
 // validation function.
 func RegisterValidatedStringSetting(
-	class Class, key, desc string, defaultValue string, validateFn func(*Values, string) error,
+	class Class,
+	key InternalKey,
+	desc string,
+	defaultValue string,
+	validateFn func(*Values, string) error,
 ) *StringSetting {
 	if validateFn != nil {
 		if err := validateFn(nil, defaultValue); err != nil {

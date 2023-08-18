@@ -104,7 +104,9 @@ func (b *BoolSetting) WithPublic() *BoolSetting {
 }
 
 // RegisterBoolSetting defines a new setting with type bool.
-func RegisterBoolSetting(class Class, key, desc string, defaultValue bool) *BoolSetting {
+func RegisterBoolSetting(
+	class Class, key InternalKey, desc string, defaultValue bool,
+) *BoolSetting {
 	setting := &BoolSetting{defaultValue: defaultValue}
 	register(class, key, desc, setting)
 	return setting

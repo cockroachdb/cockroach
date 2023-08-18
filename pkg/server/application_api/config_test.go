@@ -51,8 +51,8 @@ func TestAdminAPISettings(t *testing.T) {
 	st := s.ClusterSettings()
 	allKeys := settings.Keys(settings.ForSystemTenant)
 
-	checkSetting := func(t *testing.T, k string, v serverpb.SettingsResponse_Value) {
-		ref, ok := settings.LookupForReporting(k, settings.ForSystemTenant)
+	checkSetting := func(t *testing.T, k settings.InternalKey, v serverpb.SettingsResponse_Value) {
+		ref, ok := settings.LookupForReportingByKey(k, settings.ForSystemTenant)
 		if !ok {
 			t.Fatalf("%s: not found after initial lookup", k)
 		}
@@ -106,7 +106,7 @@ func TestAdminAPISettings(t *testing.T) {
 			t.Fatalf("expected %d keys, got %d", len(allKeys), len(resp.KeyValues))
 		}
 		for _, k := range allKeys {
-			if _, ok := resp.KeyValues[k]; !ok {
+			if _, ok := resp.KeyValues[string(k)]; !ok {
 				t.Fatalf("expected key %s not found in response", k)
 			}
 		}
@@ -122,7 +122,7 @@ func TestAdminAPISettings(t *testing.T) {
 				}
 			}
 
-			checkSetting(t, k, v)
+			checkSetting(t, settings.InternalKey(k), v)
 		}
 
 		if !seenRef {
@@ -137,7 +137,7 @@ func TestAdminAPISettings(t *testing.T) {
 		// type and description must match.
 		for _, k := range allKeys {
 			q := make(url.Values)
-			q.Add("keys", k)
+			q.Add("keys", string(k))
 			url := "settings?" + q.Encode()
 			if err := srvtestutils.GetAdminJSONProto(s, url, &resp); err != nil {
 				t.Fatalf("%s: %v", k, err)
@@ -145,7 +145,7 @@ func TestAdminAPISettings(t *testing.T) {
 			if len(resp.KeyValues) != 1 {
 				t.Fatalf("%s: expected 1 response, got %d", k, len(resp.KeyValues))
 			}
-			v, ok := resp.KeyValues[k]
+			v, ok := resp.KeyValues[string(k)]
 			if !ok {
 				t.Fatalf("%s: response does not contain key", k)
 			}
@@ -218,7 +218,7 @@ func TestAdminAPISettings(t *testing.T) {
 		}
 		require.True(t, len(resp.KeyValues) == len(consoleKeys))
 		for k := range resp.KeyValues {
-			require.True(t, slices.Contains(consoleKeys, k))
+			require.True(t, slices.Contains(consoleKeys, settings.InternalKey(k)))
 		}
 
 		// Non-admin with VIEWACTIVITY and not VIEWCLUSTERSETTING permission requesting specific cluster setting

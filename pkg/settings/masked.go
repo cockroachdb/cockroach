@@ -11,7 +11,7 @@
 package settings
 
 // maskedSetting is a wrapper for non-reportable settings that were retrieved
-// for reporting (see SetReportable and LookupForReporting).
+// for reporting (see SetReportable and LookupForReportingByKey).
 type maskedSetting struct {
 	setting NonMaskedSetting
 }
@@ -33,9 +33,14 @@ func (s *maskedSetting) Visibility() Visibility {
 	return s.setting.Visibility()
 }
 
-// Key returns the key string for the underlying setting.
-func (s *maskedSetting) Key() string {
-	return s.setting.Key()
+// InternalKey returns the key string for the underlying setting.
+func (s *maskedSetting) InternalKey() InternalKey {
+	return s.setting.InternalKey()
+}
+
+// Name returns the name string for the underlying setting.
+func (s *maskedSetting) Name() SettingName {
+	return s.setting.Name()
 }
 
 // Description returns the description string for the underlying setting.

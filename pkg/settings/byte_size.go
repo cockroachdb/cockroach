@@ -52,7 +52,7 @@ func (b *ByteSizeSetting) WithPublic() *ByteSizeSetting {
 // supplied validation function(s). If no validation functions are given, then
 // the non-negative int validation is performed.
 func RegisterByteSizeSetting(
-	class Class, key, desc string, defaultValue int64, validateFns ...func(int64) error,
+	class Class, key InternalKey, desc string, defaultValue int64, validateFns ...func(int64) error,
 ) *ByteSizeSetting {
 
 	var validateFn = func(v int64) error {

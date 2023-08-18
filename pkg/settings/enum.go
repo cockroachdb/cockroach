@@ -124,7 +124,7 @@ func (e *EnumSetting) WithPublic() *EnumSetting {
 
 // RegisterEnumSetting defines a new setting with type int.
 func RegisterEnumSetting(
-	class Class, key, desc string, defaultValue string, enumValues map[int64]string,
+	class Class, key InternalKey, desc string, defaultValue string, enumValues map[int64]string,
 ) *EnumSetting {
 	enumValuesLower := make(map[int64]string)
 	var i int64

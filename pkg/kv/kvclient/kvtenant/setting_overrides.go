@@ -191,7 +191,7 @@ func (c *connector) processSettingsEvent(
 	c.settingsMu.Lock()
 	defer c.settingsMu.Unlock()
 
-	var m map[string]settings.EncodedValue
+	var m map[settings.InternalKey]settings.EncodedValue
 	switch e.Precedence {
 	case kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES:
 		if !c.settingsMu.receivedFirstAllTenantOverrides && e.Incremental {
@@ -230,9 +230,9 @@ func (c *connector) processSettingsEvent(
 	for _, o := range e.Overrides {
 		if o.Value == (settings.EncodedValue{}) {
 			// Empty value indicates that the override is removed.
-			delete(m, o.Name)
+			delete(m, o.InternalKey)
 		} else {
-			m[o.Name] = o.Value
+			m[o.InternalKey] = o.Value
 		}
 	}
 
@@ -248,20 +248,20 @@ func (c *connector) processSettingsEvent(
 }
 
 // Overrides is part of the settingswatcher.OverridesMonitor interface.
-func (c *connector) Overrides() (map[string]settings.EncodedValue, <-chan struct{}) {
+func (c *connector) Overrides() (map[settings.InternalKey]settings.EncodedValue, <-chan struct{}) {
 	c.settingsMu.Lock()
 	defer c.settingsMu.Unlock()
 
-	res := make(map[string]settings.EncodedValue, len(c.settingsMu.allTenantOverrides)+len(c.settingsMu.specificOverrides))
+	res := make(map[settings.InternalKey]settings.EncodedValue, len(c.settingsMu.allTenantOverrides)+len(c.settingsMu.specificOverrides))
 
 	// First copy the all-tenant overrides.
-	for name, val := range c.settingsMu.allTenantOverrides {
-		res[name] = val
+	for key, val := range c.settingsMu.allTenantOverrides {
+		res[key] = val
 	}
 	// Then copy the specific overrides (which can overwrite some all-tenant
 	// overrides).
-	for name, val := range c.settingsMu.specificOverrides {
-		res[name] = val
+	for key, val := range c.settingsMu.specificOverrides {
+		res[key] = val
 	}
 	return res, c.settingsMu.notifyCh
 }

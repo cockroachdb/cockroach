@@ -64,7 +64,7 @@ var (
 		schematelemetrycontroller.SchemaTelemetryScheduleName)
 
 	qSet = fmt.Sprintf(`SET CLUSTER SETTING %s = '* * * * *'`,
-		schematelemetrycontroller.SchemaTelemetryRecurrence.Key())
+		schematelemetrycontroller.SchemaTelemetryRecurrence.Name())
 
 	qJob = fmt.Sprintf(`SELECT %s()`,
 		builtinconstants.CreateSchemaTelemetryJobBuiltinName)

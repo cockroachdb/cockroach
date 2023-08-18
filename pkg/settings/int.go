@@ -117,7 +117,7 @@ func (i *IntSetting) setToDefault(ctx context.Context, sv *Values) {
 // RegisterIntSetting defines a new setting with type int with a
 // validation function.
 func RegisterIntSetting(
-	class Class, key, desc string, defaultValue int64, validateFns ...func(int64) error,
+	class Class, key InternalKey, desc string, defaultValue int64, validateFns ...func(int64) error,
 ) *IntSetting {
 	var composed func(int64) error
 	if len(validateFns) > 0 {

@@ -88,6 +88,8 @@ CREATE TABLE system.zones (
 
 	SettingsTableSchema = `
 CREATE TABLE system.settings (
+	-- the internal key for the setting. The column is called 'name' for
+	-- historical reasons.
 	name              STRING    NOT NULL,
 	value             STRING    NOT NULL,
 	"lastUpdated"     TIMESTAMP NOT NULL DEFAULT now(),
@@ -838,6 +840,8 @@ CREATE TABLE system.tenant_settings (
 	-- applies to all tenants which don't a tenant-specific value for this
 	-- setting.
 	tenant_id    INT8 NOT NULL,
+	-- the internal key for the setting. The column is called 'name' for
+	-- historical reasons.
 	name         STRING NOT NULL,
 	value        STRING NOT NULL,
 	last_updated TIMESTAMP NOT NULL DEFAULT now(),
