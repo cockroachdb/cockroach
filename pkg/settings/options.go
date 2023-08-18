@@ -18,12 +18,39 @@ import (
 
 // SettingOption is the type of an option that can be passed to Register.
 type SettingOption struct {
+	nameOverride       SettingName
 	commonOpt          func(*common)
 	validateDurationFn func(time.Duration) error
 	validateInt64Fn    func(int64) error
 	validateFloat64Fn  func(float64) error
 	validateStringFn   func(*Values, string) error
 	validateProtoFn    func(*Values, protoutil.Message) error
+}
+
+// NameStatus indicates the status of a setting name.
+type NameStatus bool
+
+const (
+	// NameActive indicates that the name is currently in use.
+	NameActive NameStatus = true
+	// NameRetired indicates that the name is no longer in use.
+	NameRetired NameStatus = false
+)
+
+// WithName configures the user-visible name of the setting.
+func WithName(name SettingName) SettingOption {
+	return SettingOption{commonOpt: func(c *common) {
+		c.setName(name)
+		registerAlias(c.key, name, NameActive)
+	}}
+}
+
+// WithRetiredName configure a previous user-visible name of the setting,
+// when that name was diferent from the key and is not in use any more.
+func WithRetiredName(name SettingName) SettingOption {
+	return SettingOption{commonOpt: func(c *common) {
+		registerAlias(c.key, name, NameRetired)
+	}}
 }
 
 // WithVisibility customizes the visibility of a setting.
