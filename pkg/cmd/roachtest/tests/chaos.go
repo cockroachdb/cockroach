@@ -56,6 +56,9 @@ type Chaos struct {
 	// Chaos is responsible for closing the channel when the test is over.
 	// This is optional.
 	ChaosEventCh chan ChaosEvent
+	// Env is an array of enviroment variables to set when restarting nodes.
+	// Ex. "COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true"
+	Env []string
 }
 
 // ChaosEventType signifies an event that occurs during chaos.
@@ -159,7 +162,9 @@ func (ch *Chaos) Runner(
 				l.Printf("restarting %v (chaos is done)\n", target)
 				startOpts := option.DefaultStartOpts()
 				startOpts.RoachtestOpts.Worker = true
-				if err := c.StartE(ctx, l, startOpts, install.MakeClusterSettings(), target); err != nil {
+				settings := install.MakeClusterSettings()
+				settings.Env = append(settings.Env, ch.Env...)
+				if err := c.StartE(ctx, l, startOpts, settings, target); err != nil {
 					return errors.Wrapf(err, "could not restart node %s", target)
 				}
 				return nil
@@ -173,7 +178,9 @@ func (ch *Chaos) Runner(
 				defer cancel()
 				startOpts := option.DefaultStartOpts()
 				startOpts.RoachtestOpts.Worker = true
-				if err := c.StartE(tCtx, l, startOpts, install.MakeClusterSettings(), target); err != nil {
+				settings := install.MakeClusterSettings()
+				settings.Env = append(settings.Env, ch.Env...)
+				if err := c.StartE(tCtx, l, startOpts, settings, target); err != nil {
 					return errors.Wrapf(err, "could not restart node %s", target)
 				}
 				return ctx.Err()
@@ -184,7 +191,9 @@ func (ch *Chaos) Runner(
 			ch.sendEvent(ChaosEventTypePreStartup, target)
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachtestOpts.Worker = true
-			if err := c.StartE(ctx, l, startOpts, install.MakeClusterSettings(), target); err != nil {
+			settings := install.MakeClusterSettings()
+			settings.Env = append(settings.Env, ch.Env...)
+			if err := c.StartE(ctx, l, startOpts, settings, target); err != nil {
 				return errors.Wrapf(err, "could not restart node %s", target)
 			}
 			ch.sendEvent(ChaosEventTypeStartupComplete, target)
