@@ -1803,6 +1803,8 @@ type StreamingTestingKnobs struct {
 
 	AfterRetryIteration func(err error)
 
+	MockSpanConfigTableName *tree.TableName
+
 	AfterResumerJobLoad func(err error) error
 }
 

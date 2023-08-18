@@ -396,7 +396,7 @@ func (m *RandomStreamClient) Create(
 // SetupSpanConfigsStream implements the Client interface.
 func (m *RandomStreamClient) SetupSpanConfigsStream(
 	ctx context.Context, tenant roachpb.TenantName,
-) (streampb.StreamID, Topology, error) {
+) (Subscription, error) {
 	panic("SetupSpanConfigsStream not implemented")
 }
 

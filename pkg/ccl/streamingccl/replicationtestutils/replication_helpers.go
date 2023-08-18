@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -50,6 +49,12 @@ func KeyMatches(key roachpb.Key) FeedEventPredicate {
 			return false
 		}
 		return bytes.Equal(key, msg.GetKV().Key)
+	}
+}
+
+func AnySpanConfigMatches() FeedEventPredicate {
+	return func(msg streamingccl.Event) bool {
+		return msg.Type() == streamingccl.SpanConfigEvent
 	}
 }
 
@@ -111,6 +116,18 @@ func (rf *ReplicationFeed) ObserveKey(ctx context.Context, key roachpb.Key) roac
 		return false
 	})
 	return *rf.msg.GetKV()
+}
+
+// ObserveAnySpanConfigRecord consumes the feed until any span config record is observed.
+// Note: we don't do any buffering here.  Therefore, it is required that the key
+// we want to observe will arrive at some point in the future.
+func (rf *ReplicationFeed) ObserveAnySpanConfigRecord(
+	ctx context.Context,
+) streampb.StreamedSpanConfigEntry {
+	rf.consumeUntil(ctx, AnySpanConfigMatches(), func(err error) bool {
+		return false
+	})
+	return *rf.msg.GetSpanConfigEvent()
 }
 
 // ObserveResolved consumes the feed until we received resolved timestamp that's at least
@@ -201,16 +218,13 @@ func NewReplicationHelper(
 	// Start server
 	s, db, _ := serverutils.StartServer(t, serverArgs)
 
-	// Make changefeeds run faster.
-	resetFreq := changefeedbase.TestingSetDefaultMinCheckpointFrequency(50 * time.Millisecond)
-
 	// Set required cluster settings.
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.ExecMultiple(t, strings.Split(`
 SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
-SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 SET CLUSTER SETTING cross_cluster_replication.enabled = true;
+SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '10ms'
 `, `;`)...)
 
 	// Sink to read data from.
@@ -228,7 +242,6 @@ SET CLUSTER SETTING cross_cluster_replication.enabled = true;
 
 	return h, func() {
 		cleanupSink()
-		resetFreq()
 		s.Stopper().Stop(ctx)
 	}
 }
@@ -270,18 +283,6 @@ func (rh *ReplicationHelper) StartReplicationStream(
 	err := protoutil.Unmarshal(rawReplicationProducerSpec, &replicationProducerSpec)
 	require.NoError(t, err)
 	return replicationProducerSpec
-}
-
-func (rh *ReplicationHelper) SetupSpanConfigsReplicationStream(
-	t *testing.T, sourceTenantName roachpb.TenantName,
-) streampb.ReplicationStreamSpec {
-	var rawSpec []byte
-	row := rh.SysSQL.QueryRow(t, `SELECT crdb_internal.setup_span_configs_stream($1)`, sourceTenantName)
-	row.Scan(&rawSpec)
-	var spec streampb.ReplicationStreamSpec
-	err := protoutil.Unmarshal(rawSpec, &spec)
-	require.NoError(t, err)
-	return spec
 }
 
 func (rh *ReplicationHelper) MaybeGenerateInlineURL(t *testing.T) *url.URL {
