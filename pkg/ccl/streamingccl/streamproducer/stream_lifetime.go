@@ -59,7 +59,7 @@ func startReplicationProducerJob(
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
 	ptsID := uuid.MakeV4()
 
-	jr := makeProducerJobRecord(registry, tenantID, timeout, evalCtx.SessionData().User(), ptsID)
+	jr := makeProducerJobRecord(registry, tenantRecord, timeout, evalCtx.SessionData().User(), ptsID)
 	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
