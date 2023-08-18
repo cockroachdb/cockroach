@@ -268,13 +268,15 @@ type granterWithIOTokens interface {
 	// provided by tokens. This method needs to be called periodically.
 	// {io, elasticDiskBandwidth}TokensCapacity is the ceiling up to which we allow
 	// elastic or disk bandwidth tokens to accumulate. The return value is the
-	// number of used tokens in the interval since the prior call to this method.
-	// Note that tokensUsed can be negative, though that will be rare, since it is
-	// possible for tokens to be returned.
+	// number of used tokens in the interval since the prior call to this method
+	// (and the tokens used by elastic work). Note that tokensUsed* can be
+	// negative, though that will be rare, since it is possible for tokens to be
+	// returned.
 	setAvailableTokens(
-		ioTokens int64, elasticDiskBandwidthTokens int64,
-		ioTokensCapacity int64, elasticDiskBandwidthTokensCapacity int64,
-	) (tokensUsed int64)
+		ioTokens int64, elasticIOTokens int64, elasticDiskBandwidthTokens int64,
+		ioTokensCapacity int64, elasticIOTokenCapacity int64, elasticDiskBandwidthTokensCapacity int64,
+		lastTick bool,
+	) (tokensUsed int64, tokensUsedByElasticWork int64)
 	// getDiskTokensUsedAndReset returns the disk bandwidth tokens used
 	// since the last such call.
 	getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64
