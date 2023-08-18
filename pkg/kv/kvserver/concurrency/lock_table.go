@@ -699,11 +699,14 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 		return false, nil, nil
 	}
 
-	if l.isHeld() {
-		lockHolderTxn, _ := l.getLockHolder()
-		if !g.isSameTxn(lockHolderTxn) &&
-			lock.Conflicts(l.getLockMode(), makeLockMode(str, g.txn, g.ts), &g.lt.settings.SV) {
-			return true, l.holder.txn, nil // they key is locked by some other txn; return the holder
+	if l.isLocked() {
+		for e := l.holders.Front(); e != nil; e = e.Next() {
+			tl := e.Value.(*txnLock)
+			lockHolderTxn, _ := tl.getLockHolder()
+			if !g.isSameTxn(lockHolderTxn) &&
+				lock.Conflicts(tl.getLockMode(), makeLockMode(str, g.txn, g.ts), &g.lt.settings.SV) {
+				return true, tl.txn, nil // the key is locked by some other transaction; return it
+			}
 		}
 		// We can be in either of 2 cases at this point:
 		// 1. All locks held on this key are at non-conflicting strengths (i.e,
@@ -1128,13 +1131,15 @@ func (rlh *replicatedLockHolderInfo) safeFormat(sb *redact.StringBuilder) {
 	sb.SafeString("repl")
 }
 
-// Per lock state in lockTableImpl.
+// Per-key locks state in lockTableImpl.
 //
 // NOTE: we can't easily pool lockState objects without some form of reference
 // counting because they are used as elements in a copy-on-write btree and may
 // still be referenced by clones of the tree even when deleted from the primary.
 // However, other objects referenced by lockState can be pooled as long as they
 // are removed from all lockStates that reference them first.
+//
+// TODO(arul): s/lockState/keyLocks/g
 type lockState struct {
 	id     uint64 // needed for implementing util/interval/generic type contract
 	endKey []byte // used in btree iteration and tests
@@ -1145,57 +1150,25 @@ type lockState struct {
 
 	mu syncutil.Mutex // Protects everything below.
 
-	// Invariant summary (see detailed comments below):
-	// - both holder.locked and waitQ.reservation != nil cannot be true.
-	// - if holder.locked and multiple holderInfos have txn != nil: all the
-	//   txns must have the same txn.ID.
-	// - !holder.locked => waitingReaders.Len() == 0. That is, readers wait
-	//   only if the lock is held. They do not wait for a reservation.
-	// - If reservation != nil, that request is not in queuedWriters.
+	// Some Invariants:
+	// - holders.Len() == len(heldByMap). That is, every transaction that holds a
+	// lock on this key must also have an entry in the heldByMap (and vice versa).
+	// - !holder.isLocked() => waitingReaders.Len() == 0. That is, readers only
+	// wait if the lock is held.
+
+	// holders is a list of *txnLocks. Lock information on a particular key is
+	// tracked per-transaction; every element in this list represents a lock
+	// acquired by a different transaction.
 	//
-	// TODO(arul): These invariants are stale now that we don't have reservations.
-	// However, we'll replace this structure soon with what's proposed in the
-	// SHARED locks RFC, at which point there will be new invariants altogether.
-
-	// Information about whether the lock is held and the holder. We track
-	// information for each durability level separately since a transaction can
-	// go through multiple epochs and TxnSeq and may acquire the same lock in
-	// replicated and unreplicated mode at different stages.
-	holder struct {
-		// If held, the TxnMeta of the transaction that holds the lock. For a given
-		// transaction, the lock may be acquired/updated using a series of different
-		// TxnMetas. While doing so, we provide a few invariants:
-		//
-		// 1. The epoch of the TxnMeta stored here must be monotonically increasing.
-		// 2. The tracking of sequence numbers in unreplicatedLockInfo corresponds
-		// to the epoch of the TxnMeta stored below. This allows us to account for
-		// savepoint rollbacks within a particular epoch.
-		//
-		// As a result, the TxnMeta stored here may not correspond to the latest
-		// call to acquire/update the lock (if the call was made using a TxnMeta
-		// with an older epoch).
-		txn *enginepb.TxnMeta
-
-		// INVARIANT: If the lock is held (i.e. the locked boolean is set to true),
-		// then atleast one of (and possibly both of) unreplicatedInfo and
-		// replicatedInfo must track lock holder information.
-
-		// unreplicatedInfo tracks lock holder information if the lock is held with
-		// durability unreplicated.
-		unreplicatedInfo unreplicatedLockHolderInfo
-
-		// replicatedInfo tracks lock holder information if the lock is held with
-		// durability replicated.
-		replicatedInfo replicatedLockHolderInfo
-
-		// The start time of the lockholder being marked as held in the lock table.
-		// NB: In the case of a replicated lock that is held by a transaction, if
-		// there is no wait-queue, the lock is not tracked by the in-memory lock
-		// table; thus for uncontended replicated locks, the startTime may not
-		// represent the initial acquisition time of the lock but rather the time
-		// of the wait-queue forming and the lock being tracked in the lock table.
-		startTime time.Time
-	}
+	// This list may be empty, in which case the current key is unlocked.
+	holders list.List
+	// heldByMap is used to lookup a txnLock in the holders list using transaction
+	// IDs. This obviates the need to iterate over the entire list in various
+	// places where we index by transaction ID.
+	//
+	// TODO(arul): This can change to map[uuid.UUID]*list.Element[*txnLock] once
+	// https://github.com/cockroachdb/cockroach/pull/109084 lands.
+	heldBy map[uuid.UUID]*list.Element
 
 	// Information about the requests waiting on the lock.
 	lockWaitQueue
@@ -1207,6 +1180,277 @@ type lockState struct {
 	// behaves like a reference count since multiple requests may want to mark
 	// the same lock as not removable.
 	notRemovable int
+}
+
+// txnLock tracks information about locks held by a specific transaction on a
+// single key.
+type txnLock struct {
+	// The TxnMeta of the transaction that holds the lock. For a given
+	// transaction, the lock may be acquired/updated using a series of different
+	// TxnMetas. While doing so, we provide a few invariants:
+	//
+	// 1. The epoch of the TxnMeta stored here must be monotonically increasing.
+	// 2. The tracking of sequence numbers in unreplicatedLockInfo corresponds
+	// to the epoch of the TxnMeta stored below. This allows us to account for
+	// savepoint rollbacks within a particular epoch.
+	//
+	// As a result, the TxnMeta stored here may not correspond to the latest
+	// call to acquire/update the lock (if the call was made using a TxnMeta
+	// with an older epoch).
+	//
+	// TODO(arul): Now that we expect this to always be set, let's store the
+	// entire txnMeta here instead of storing it by reference.
+	txn *enginepb.TxnMeta
+
+	// INVARIANT: At least one of (and possibly both of) unreplicatedInfo and
+	// replicatedInfo must be set to track lock holder information.
+
+	// unreplicatedInfo tracks lock holder information if the lock is held with
+	// durability unreplicated.
+	unreplicatedInfo unreplicatedLockHolderInfo
+
+	// replicatedInfo tracks lock holder information if the lock is held with
+	// durability replicated.
+	replicatedInfo replicatedLockHolderInfo
+
+	// The time at which the lock table started tracking this transaction's lock.
+	// Note that if the lock is replicated in nature, the lock would not be
+	// tracked by the lock table when it was acquired as we do not track
+	// uncontended replicated locks. Instead, this field would be initialized when
+	// a contending reader/writer discovered this lock.
+	startTime time.Time
+}
+
+// newTxnLock constructs and returns a new txnLock.
+func newTxnLock(txn *enginepb.TxnMeta, clock *hlc.Clock) *txnLock {
+	tl := &txnLock{}
+	tl.txn = txn
+	tl.unreplicatedInfo.init()
+	tl.startTime = clock.PhysicalTime()
+	return tl
+}
+
+// getLockHolder returns information about the lock's holder.
+//
+// REQUIRES: l.mu is locked.
+func (tl *txnLock) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
+	assert(
+		tl.isHeldReplicated() || tl.isHeldUnreplicated(),
+		"lock held, but no replicated or unreplicated lock holder info",
+	)
+
+	var ts hlc.Timestamp
+	if tl.isHeldReplicated() && tl.isHeldUnreplicated() {
+		// If the lock is held as both replicated and unreplicated, we want to
+		// prefer the lower of the two timestamps, since the lower timestamp
+		// contends with more transactions.
+		ts = tl.unreplicatedInfo.ts
+		ts.Backward(tl.replicatedInfo.ts)
+	} else if tl.isHeldUnreplicated() {
+		ts = tl.unreplicatedInfo.ts
+	} else {
+		ts = tl.replicatedInfo.ts
+	}
+	return tl.txn, ts
+}
+
+// isHeldReplicated returns true if the receiver is held as a replicated lock.
+//
+// REQUIRES: l.mu is locked.
+func (tl *txnLock) isHeldReplicated() bool {
+	return !tl.replicatedInfo.ts.IsEmpty()
+}
+
+// isHeldUnreplicated returns true if the receiver is held as a unreplicated
+// lock.
+//
+// REQUIRES: l.mu is locked.
+func (tl *txnLock) isHeldUnreplicated() bool {
+	return !tl.unreplicatedInfo.ts.IsEmpty()
+}
+
+// getLockMode returns the Mode with which a lock is held. If a lock is held
+// by a transaction with multiple locking strengths, the mode corresponding to
+// the highest lock strength is returned.
+//
+// REQUIRES: l.mu is locked.
+func (tl *txnLock) getLockMode() lock.Mode {
+	lockHolderTxn, lockHolderTS := tl.getLockHolder()
+
+	if tl.isHeldReplicated() {
+		return lock.MakeModeIntent(lockHolderTS)
+	}
+	for _, str := range unreplicatedHolderStrengths {
+		if !tl.unreplicatedInfo.held(str) {
+			continue
+		}
+		switch str {
+		case lock.Exclusive:
+			return lock.MakeModeExclusive(lockHolderTS, lockHolderTxn.IsoLevel)
+		case lock.Shared:
+			return lock.MakeModeShared()
+		default:
+			panic(fmt.Sprintf("unexpected lock strength %s", str))
+		}
+	}
+	panic("unreachable")
+}
+
+// isIdempotentLockAcquisition returns true if the lock acquisition is
+// idempotent. Idempotent lock acquisitions do not require any changes to what
+// is being tracked in the lock's state.
+//
+// REQUIRES: l.mu to be locked.
+func (tl *txnLock) isIdempotentLockAcquisition(acq *roachpb.LockAcquisition) bool {
+	txn, _ := tl.getLockHolder()
+	assert(txn.ID == acq.Txn.ID, "existing lock transaction is different from the acquisition")
+	switch acq.Durability {
+	case lock.Unreplicated:
+		if !tl.unreplicatedInfo.held(acq.Strength) { // unheld lock
+			return false
+		}
+		// Lock is being re-acquired at a higher sequence number when it's already
+		// held at a lower sequence number.
+		return tl.unreplicatedInfo.minSeqNumber(acq.Strength) <= acq.Txn.Sequence &&
+			// NB: Lock re-acquisitions at different timestamps are not considered
+			// idempotent. Strictly speaking, we could tighten this condition to
+			// consider lock re-acquisition at lower timestamps idempotent, as a
+			// lock's timestamp at a given durability never regresses.
+			tl.unreplicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
+	case lock.Replicated:
+		// NB: Lock re-acquisitions at different timestamps are not considered
+		// idempotent. Strictly speaking, we could tighten this condition to
+		// consider lock re-acquisition at lower timestamps idempotent, as a
+		// lock's timestamp at a given durability never regresses.
+		return tl.isHeldReplicated() && tl.replicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
+	default:
+		panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
+	}
+}
+
+// reacquireLock is called in response to a lock re-acquisition. In such cases,
+// a lock is already held on the receiver's key by the transaction referenced in
+// the supplied lock acquisition.
+//
+// REQUIRES: l.mu to be locked.
+func (tl *txnLock) reacquireLock(acq *roachpb.LockAcquisition) error {
+	// An unreplicated lock is being re-acquired...
+	if acq.Durability == lock.Unreplicated && tl.isHeldUnreplicated() {
+		switch {
+		case tl.txn.Epoch < acq.Txn.Epoch: // at a higher epoch
+			tl.unreplicatedInfo.epochBumped()
+		case tl.txn.Epoch == acq.Txn.Epoch: // at the same epoch
+			// Prune the list of sequence numbers tracked for this lock by removing
+			// any sequence numbers that are considered ignored by virtue of a
+			// savepoint rollback.
+			//
+			// Note that the in-memory lock table is the source of truth for just
+			// unreplicated locks, and as such, sequence numbers are only tracked
+			// for them.
+			tl.unreplicatedInfo.rollbackIgnoredSeqNumbers(acq.IgnoredSeqNums)
+		case tl.txn.Epoch > acq.Txn.Epoch: // at a prior epoch
+			// Reject the request; the logic here parallels how mvccPutInternal
+			// handles this case for intents.
+			return errors.Errorf(
+				"locking request with epoch %d came after lock(unreplicated) had already been acquired at epoch %d in txn %s",
+				acq.Txn.Epoch, tl.txn.Epoch, acq.Txn.ID,
+			)
+		default:
+			panic("unreachable")
+		}
+	}
+	if tl.isIdempotentLockAcquisition(acq) {
+		return nil // nothing more to do here.
+	}
+	// Forward the lock's timestamp instead of assigning to it blindly.
+	// While lock acquisition uses monotonically increasing timestamps
+	// from the perspective of the transaction's coordinator, this does
+	// not guarantee that a lock will never be acquired at a higher
+	// epoch and/or sequence number but with a lower timestamp when in
+	// the presence of transaction pushes. Consider the following
+	// sequence of events:
+	//
+	//  - txn A acquires lock at sequence 1, ts 10
+	//  - txn B pushes txn A to ts 20
+	//  - txn B updates lock to ts 20
+	//  - txn A's coordinator does not immediately learn of the push
+	//  - txn A re-acquires lock at sequence 2, ts 15
+	//
+	// A lock's timestamp at a given durability level is not allowed to
+	// regress, so by forwarding its timestamp during the second acquisition
+	// instead of assigning to it blindly, it remains at 20.
+	//
+	// However, a lock's timestamp as reported by getLockHolder can regress
+	// if it is acquired at a lower timestamp and a different durability
+	// than it was previously held with. This is necessary to support
+	// because the hard constraint which we must uphold here that the
+	// lockHolderInfo for a replicated lock cannot diverge from the
+	// replicated state machine in such a way that its timestamp in the
+	// lockTable exceeds that in the replicated keyspace. If this invariant
+	// were to be violated, we'd risk infinite lock-discovery loops for
+	// requests that conflict with the lock as is written in the replicated
+	// state machine but not as is reflected in the lockTable.
+	//
+	// Lock timestamp regressions are safe from the perspective of other
+	// transactions because the request which re-acquired the lock at the
+	// lower timestamp must have been holding a write latch at or below the
+	// new lock's timestamp. This means that no conflicting requests could
+	// be evaluating concurrently. Instead, all will need to re-scan the
+	// lockTable once they acquire latches and will notice the reduced
+	// timestamp at that point, which may cause them to conflict with the
+	// lock even if they had not conflicted before. In a sense, it is no
+	// different than the first time a lock is added to the lockTable.
+	switch acq.Durability {
+	case lock.Unreplicated:
+		tl.unreplicatedInfo.ts.Forward(acq.Txn.WriteTimestamp)
+		if err := tl.unreplicatedInfo.acquire(acq.Strength, acq.Txn.Sequence); err != nil {
+			return err
+		}
+	case lock.Replicated:
+		tl.replicatedInfo.ts.Forward(acq.Txn.WriteTimestamp)
+	default:
+		panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
+	}
+
+	// Selectively update the txn meta.
+	switch {
+	case tl.txn.Epoch > acq.Txn.Epoch: // lock is being acquired at a prior epoch
+		// We do not update the txn meta here -- the epoch is not allowed to
+		// regress.
+		//
+		// NB: We can get here if the lock acquisition here corresponds to an
+		// operation from a prior epoch. We've already handled the case for
+		// unreplicated lock acquisition above, so this can only happen if the
+		// lock acquisition corresponds to a replicated lock.
+		//
+		// If mvccPutInternal is aware of the newer epoch, it'll simply reject
+		// this operation and we'll never get here. However, it's not guaranteed
+		// that mvccPutInternal knows about this newer epoch. The in-memory lock
+		// table may know about the newer epoch though, if there's been a
+		// different unreplicated lock acquisition on this key by the transaction.
+		// So if we were to blindly update the TxnMeta here, we'd be regressing
+		// the epoch, which messes with our sequence number tracking inside of
+		// unreplicatedLockInfo.
+		assert(acq.Durability == lock.Replicated, "the unreplicated case should have been handled above")
+	case tl.txn.Epoch == acq.Txn.Epoch: // lock is being acquired at the same epoch
+		tl.txn = &acq.Txn
+	case tl.txn.Epoch < acq.Txn.Epoch: // lock is being acquired at a newer epoch
+		tl.txn = &acq.Txn
+		// The txn meta tracked here corresponds to unreplicated locks. When we
+		// learn about a newer epoch during lock acquisition of a replicated lock,
+		// we clear out the unreplicatedLockInfo state being tracked from the
+		// older epoch.
+		//
+		// Note that we don't clear out replicatedLockInfo when an unreplicated
+		// lock is being acquired at a newer epoch. This is because replicated
+		// locks are held across epochs, and there is no per-epoch tracking in the
+		// lock table for them.
+		if acq.Durability == lock.Replicated {
+			tl.unreplicatedInfo.clear()
+		}
+	}
+
+	return nil
 }
 
 type lockWaitQueue struct {
@@ -1368,17 +1612,20 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 		sb.SafeString("  empty\n")
 		return
 	}
-	txn, ts := l.getLockHolder()
-	if txn != nil { // lock is held
+	if l.isLocked() {
+		// TODO(arul): Change this formatting to consider multiple lock holders in a
+		// subsequent patch.
+		tl := l.holders.Front().Value.(*txnLock)
+		txn, ts := tl.getLockHolder()
 		sb.Printf("  holder: txn: %v epoch: %d, iso: %s, ts: %v, info: ", redact.Safe(txn.ID), redact.Safe(txn.Epoch), redact.Safe(txn.IsoLevel), redact.Safe(ts))
-		if !l.holder.replicatedInfo.isEmpty() {
-			l.holder.replicatedInfo.safeFormat(sb)
-			if !l.holder.unreplicatedInfo.isEmpty() {
+		if !tl.replicatedInfo.isEmpty() {
+			tl.replicatedInfo.safeFormat(sb)
+			if !tl.unreplicatedInfo.isEmpty() {
 				sb.Printf(", ")
 			}
 		}
-		if !l.holder.unreplicatedInfo.isEmpty() {
-			l.holder.unreplicatedInfo.safeFormat(sb)
+		if !tl.unreplicatedInfo.isEmpty() {
+			tl.unreplicatedInfo.safeFormat(sb)
 		}
 		if txnStatusCache != nil {
 			finalizedTxn, ok := txnStatusCache.finalizedTxns.get(txn.ID)
@@ -1467,8 +1714,11 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 
 	durability := lock.Unreplicated
 	if l.isLocked() {
-		txnHolder = l.holder.txn
-		if l.isHeldReplicated() {
+		// TODO(arul): This doesn't work with multiple lock holders; file an issue
+		// about this observability gap.
+		tl := l.holders.Front().Value.(*txnLock)
+		txnHolder = tl.txn
+		if tl.isHeldReplicated() {
 			durability = lock.Replicated
 		}
 	}
@@ -1638,13 +1888,13 @@ func (l *lockState) informActiveWaiters() {
 }
 
 // claimantTxn returns the transaction that the lock table deems as having
-// claimed the lock. Every lock stored in the lock table must have one and only
-// one transaction associated with it that claims the lock. All actively waiting
+// claimed the key. Every lock stored in the lock table must have one and only
+// one transaction associated with it that claims the key. All actively waiting
 // requests in this lock's wait queues should use this transaction as the
 // transaction to push for {liveness,deadlock,etc.} detection purposes related
 // to this key.
 //
-// The transaction that is considered to have claimed the lock may be the lock
+// The transaction that is considered to have claimed the key may be the lock
 // holder, in which case the return value of held will be true. It may also be
 // another request being sequenced through the lock table that other waiters
 // conflict with. In such cases, this request is deemed to be the next preferred
@@ -1655,13 +1905,18 @@ func (l *lockState) informActiveWaiters() {
 // also be multiple (compatible) requests being sequenced through the lock table
 // concurrently that can acquire locks on a particular key, one of which will
 // win the race. Waiting requests should be oblivious to such details; instead,
-// they use the concept of the transaction that has claimed a particular lock
-// as the transaction to push.
+// they use the concept of the transaction that has claimed a particular key as
+// the transaction to push.
 //
 // REQUIRES: l.mu to be locked.
 func (l *lockState) claimantTxn() (_ *enginepb.TxnMeta, held bool) {
-	if lockHolderTxn, _ := l.getLockHolder(); lockHolderTxn != nil {
-		return lockHolderTxn, true
+	if l.isLocked() {
+		// We want the claimant transaction to remain the same unless there has been
+		// a state transition (e.g. the claimant released the lock) that
+		// necessitates it to change. So we always return the first lock holder,
+		// ensuring all requests consider the same transaction to have claimed a
+		// key.
+		return l.holders.Front().Value.(*txnLock).txn, true
 	}
 	if l.queuedWriters.Len() == 0 {
 		panic("no queued writers or lock holder; no one should be waiting on the lock")
@@ -1733,12 +1988,12 @@ func (l *lockState) isEmptyLock() bool {
 	if l.isLocked() {
 		return false // lock is held
 	}
-	// The lock isn't held. Sanity check the lock state is sane:
-	// 1. Lock holder information should be zero-ed out.
+	// The lock isn't held. Sanity check the lock holder state is sane.
+	// 1. The heldBy map and the holders list should be empty.
 	// 2. There should be no waiting readers.
-	assert(l.holder.unreplicatedInfo.isEmpty(), "lockState !locked but non-zero unreplicatedInfo")
-	assert(l.holder.replicatedInfo.isEmpty(), "lockState !locked but non-zero replicatedInfo")
-	assert(l.waitingReaders.Len() == 0, "lockState with waiting readers but no holder")
+	assert(l.holders.Len() == 0, "non-empty list of holders for an unlocked key")
+	assert(len(l.heldBy) == 0, "non-empty heldBy map for an unlocked key")
+	assert(l.waitingReaders.Len() == 0, "lockState with waiting readers for unlocked key")
 	// Determine if the lock is empty or not by checking the list of queued
 	// writers.
 	return l.queuedWriters.Len() == 0
@@ -1763,19 +2018,22 @@ func (l *lockState) assertEmptyLockUnlocked() {
 	l.assertEmptyLock()
 }
 
-// isHeldReplicated returns true if the receiver is held as a replicated lock.
+// isAnyLockHeldReplicated returns true if any of the locks held on the key are
+// held with durability replicated. If so, the first transaction that holds a
+// replicated lock is also returned.
 //
 // REQUIRES: l.mu is locked.
-func (l *lockState) isHeldReplicated() bool {
-	return l.isLocked() && !l.holder.replicatedInfo.ts.IsEmpty()
-}
-
-// isheldUnreplicated returns true if the receiver is held as a unreplicated
-// lock.
-//
-// REQUIRES: l.mu is locked.
-func (l *lockState) isHeldUnreplicated() bool {
-	return l.isLocked() && !l.holder.unreplicatedInfo.ts.IsEmpty()
+func (l *lockState) isAnyLockHeldReplicated() (bool, *enginepb.TxnMeta) {
+	if !l.isLocked() {
+		return false, nil
+	}
+	for e := l.holders.Front(); e != nil; e = e.Next() {
+		tl := e.Value.(*txnLock)
+		if tl.isHeldReplicated() {
+			return true, tl.txn
+		}
+	}
+	return false, nil
 }
 
 // Returns the duration of time the lock has been tracked as held in the lock table.
@@ -1785,7 +2043,14 @@ func (l *lockState) lockHeldDuration(now time.Time) time.Duration {
 		return time.Duration(0)
 	}
 
-	return now.Sub(l.holder.startTime)
+	var minStartTS time.Time // we'll find the lowest timestamp across all locks held on this key
+	for e := l.holders.Front(); e != nil; e = e.Next() {
+		tl := e.Value.(*txnLock)
+		if minStartTS.IsZero() || tl.startTime.Before(minStartTS) {
+			minStartTS = tl.startTime
+		}
+	}
+	return now.Sub(minStartTS)
 }
 
 // Returns the total amount of time all waiters in the queues of
@@ -1823,8 +2088,8 @@ func (l *lockState) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.
 // REQUIRES: l.mu is locked.
 func (l *lockState) isLockedBy(id uuid.UUID) bool {
 	if l.isLocked() {
-		holderTxn, _ := l.getLockHolder()
-		return id == holderTxn.ID
+		_, ok := l.heldBy[id]
+		return ok
 	}
 	return false
 }
@@ -1835,73 +2100,36 @@ func (l *lockState) isLockedBy(id uuid.UUID) bool {
 //
 // REQUIRES: l.mu is locked.
 func (l *lockState) isLocked() bool {
-	return l.holder.txn != nil
+	return l.holders.Len() != 0
 }
 
-// Returns information about the current lock holder if the lock is held, else
-// returns nil.
-// REQUIRES: l.mu is locked.
-func (l *lockState) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
-	if !l.isLocked() {
-		return nil, hlc.Timestamp{}
-	}
-
-	assert(
-		l.isHeldReplicated() || l.isHeldUnreplicated(),
-		"lock held, but no replicated or unreplicated lock holder info",
-	)
-
-	// If the lock is held as both replicated and unreplicated, we want to prefer
-	// the lower of the two timestamps, since the lower timestamp contends with
-	// more transactions.
-	if l.isHeldReplicated() && l.isHeldUnreplicated() {
-		minTS := l.holder.unreplicatedInfo.ts
-		minTS.Backward(l.holder.replicatedInfo.ts)
-		return l.holder.txn, minTS
-	}
-
-	// Else, we return whichever one the lock is held at.
-	if l.isHeldUnreplicated() {
-		return l.holder.txn, l.holder.unreplicatedInfo.ts
-	}
-	return l.holder.txn, l.holder.replicatedInfo.ts
-}
-
-// getLockMode returns the Mode with which a lock is held. If a lock is held
-// by a transaction with multiple locking strengths, the mode corresponding to
-// the highest lock strength is returned.
+// clearLockHeldBy removes the lock, if held, by the transaction referenced by
+// the supplied ID. It is a no-op if the lock isn't held by the transaction.
 //
-// REQUIRES: l.mu is locked.
-func (l *lockState) getLockMode() lock.Mode {
-	lockHolderTxn, lockHolderTS := l.getLockHolder()
-	assert(lockHolderTxn != nil, "cannot get lock mode of an unheld lock")
-
-	if l.isHeldReplicated() {
-		return lock.MakeModeIntent(lockHolderTS)
+// REQUIRES: l.mu to be locked.
+func (l *lockState) clearLockHeldBy(ID uuid.UUID) {
+	e, held := l.heldBy[ID]
+	if !held {
+		return // nothing to do
 	}
-	for _, str := range unreplicatedHolderStrengths {
-		if !l.holder.unreplicatedInfo.held(str) {
-			continue
-		}
-		switch str {
-		case lock.Exclusive:
-			return lock.MakeModeExclusive(lockHolderTS, lockHolderTxn.IsoLevel)
-		case lock.Shared:
-			return lock.MakeModeShared()
-		default:
-			panic(fmt.Sprintf("unexpected lock strength %s", str))
-		}
-	}
-	panic("unreachable")
+	l.holders.Remove(e)
+	delete(l.heldBy, ID)
 }
 
-// Removes the current lock holder from the lock.
-// REQUIRES: l.mu is locked.
-func (l *lockState) clearLockHolder() {
-	l.holder.txn = nil
-	l.holder.startTime = time.Time{}
-	l.holder.replicatedInfo.clear()
-	l.holder.unreplicatedInfo.clear()
+func (l *lockState) clearAllLockHolders() {
+	l.holders.Init()
+	l.heldBy = nil
+}
+
+// lockAcquiredOrDiscovered is called when the supplied lock is successfully
+// acquired or discovered on the key referenced in the receiver for the first
+// time.
+//
+// REQUIRES: l.mu to be locked.
+func (l *lockState) lockAcquiredOrDiscovered(tl *txnLock) {
+	_, found := l.heldBy[tl.txn.ID]
+	assert(!found, "lock was already being tracked for this key")
+	l.heldBy[tl.txn.ID] = l.holders.PushBack(tl)
 }
 
 // scanAndMaybeEnqueue scans all locks held on the receiver's key and performs
@@ -2025,14 +2253,18 @@ func (l *lockState) constructWaitingState(g *lockTableGuardImpl) waitingState {
 func (l *lockState) alreadyHoldsLockAndIsAllowedToProceed(
 	g *lockTableGuardImpl, str lock.Strength,
 ) bool {
-	lockHolderTxn, _ := l.getLockHolder()
-	if lockHolderTxn == nil {
+	if !l.isLocked() {
 		return false // no one holds the lock
 	}
-	if !g.isSameTxn(lockHolderTxn) {
+	if g.txn == nil {
+		return false // non-transactional requests do not hold locks
+	}
+	e, found := l.heldBy[g.txn.ID]
+	if !found {
 		return false
 	}
-	heldMode := l.getLockMode()
+	tl := e.Value.(*txnLock)
+	heldMode := tl.getLockMode()
 	// Check if the lock is already held by the guard's transaction with an equal
 	// or higher lock strength. If it is, we're good to go. Otherwise, the request
 	// is trying to promote a lock it previously acquired. In such cases, the
@@ -2051,10 +2283,10 @@ func (l *lockState) alreadyHoldsLockAndIsAllowedToProceed(
 		(str == lock.Intent && heldMode.Strength == lock.Exclusive)
 }
 
-// conflictsWithLockHolder returns true if the request, referenced by the
-// supplied lockTableGuardImpl, conflicts with the lock holder. Non-conflicting
-// requests are allowed to proceed; conflicting requests must actively wait for
-// the lock to be released.
+// conflictsWithLockHolders returns true if the request, referenced by the
+// supplied lockTableGuardImpl, conflicts with any of the locks held on this
+// key. Non-conflicting requests are allowed to proceed; conflicting requests
+// must actively wait for the lock to be released.
 //
 // Locks held by transactions that are known to be finalized are considered
 // non-conflicting. However, the caller may be responsible for cleaning them up
@@ -2063,105 +2295,112 @@ func (l *lockState) alreadyHoldsLockAndIsAllowedToProceed(
 // REQUIRES: l.mu is locked.
 // REQUIRES: the transaction, to which the request belongs, should not be a lock
 // holder.
-func (l *lockState) conflictsWithLockHolder(g *lockTableGuardImpl) bool {
-	lockHolderTxn, _ := l.getLockHolder()
-	if lockHolderTxn == nil {
+func (l *lockState) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
+	if !l.isLocked() {
 		return false // the lock isn't held; no conflict to speak of
 	}
-	// We should never get here if the lock is already held by another request
-	// from the same transaction with sufficient strength (read: less than or
-	// equal to what this guy wants); this should already be checked in
-	// alreadyHoldLockAndIsAllowedToProceed.
-	assert(
-		!g.isSameTxn(lockHolderTxn) || g.curStrength() > l.getLockMode().Strength,
-		"lock already held by the request's transaction with sufficient strength",
-	)
-	finalizedTxn, ok := g.lt.txnStatusCache.finalizedTxns.get(lockHolderTxn.ID)
-	if ok {
-		up := roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: l.key})
-		// The lock belongs to a finalized transaction. There's no conflict, but the
-		// lock must be resolved -- accumulate it on the appropriate slice.
-		if !l.isHeldReplicated() { // only held unreplicated
-			g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
-		} else {
-			g.toResolve = append(g.toResolve, up)
+	for e := l.holders.Front(); e != nil; e = e.Next() {
+		tl := e.Value.(*txnLock)
+		lockHolderTxn, _ := tl.getLockHolder()
+		// We should never get here if the lock is already held by another request
+		// from the same transaction with sufficient strength (read: less than or
+		// equal to what this guy wants); this should already be checked in
+		// alreadyHoldLockAndIsAllowedToProceed.
+		assert(
+			!g.isSameTxn(lockHolderTxn) || g.curStrength() > tl.getLockMode().Strength,
+			"lock already held by the request's transaction with sufficient strength",
+		)
+
+		finalizedTxn, ok := g.lt.txnStatusCache.finalizedTxns.get(lockHolderTxn.ID)
+		if ok {
+			up := roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: l.key})
+			// The lock belongs to a finalized transaction. There's no conflict, but
+			// the lock must be resolved -- accumulate it on the appropriate slice.
+			if !tl.isHeldReplicated() { // only held unreplicated
+				g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
+			} else {
+				g.toResolve = append(g.toResolve, up)
+			}
+			continue // check next lock
 		}
-		return false
-	}
 
-	// The lock is held by a different, un-finalized transaction.
+		// The lock is held by a different, un-finalized transaction.
 
-	if g.curStrength() == lock.None {
-		// If the non-locking reader is reading at a higher timestamp than the lock
-		// holder, but it knows that the lock holder has been pushed above its read
-		// timestamp, it can proceed after rewriting the lock at its transaction's
-		// pushed timestamp. Intent resolution can be deferred to maximize batching
-		// opportunities.
-		//
-		// This fast-path is only enabled for readers without uncertainty intervals,
-		// as readers with uncertainty intervals must contend with the possibility
-		// of pushing a conflicting intent up into their uncertainty interval and
-		// causing more work for themselves, which is avoided with care by the
-		// lockTableWaiter but difficult to coordinate through the txnStatusCache.
-		// This limitation is acceptable because the most important case here is
-		// optimizing the Export requests issued by backup.
-		if !g.hasUncertaintyInterval() && g.lt.batchPushedLockResolution() {
-			pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(lockHolderTxn.ID)
-			if ok && g.ts.Less(pushedTxn.WriteTimestamp) {
-				up := roachpb.MakeLockUpdate(pushedTxn, roachpb.Span{Key: l.key})
-				if !l.isHeldReplicated() {
-					// Only held unreplicated. Accumulate it as an unreplicated lock to
-					// resolve, in case any other waiting readers can benefit from the
-					// pushed timestamp.
-					//
-					// TODO(arul): this case is only possible while non-locking reads
-					// block on Exclusive locks. Once non-locking reads start only
-					// blocking on intents, it can be removed and asserted against.
-					g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
-				} else {
-					// Resolve to push the replicated intent.
-					g.toResolve = append(g.toResolve, up)
+		if g.curStrength() == lock.None {
+			// If the non-locking reader is reading at a higher timestamp than the
+			// lock holder, but it knows that the lock holder has been pushed above
+			// its read timestamp, it can proceed after rewriting the lock at its
+			// transaction's pushed timestamp. Intent resolution can be deferred to
+			// maximize batching opportunities.
+			//
+			// This fast-path is only enabled for readers without uncertainty
+			// intervals, as readers with uncertainty intervals must contend with the
+			// possibility of pushing a conflicting intent up into their uncertainty
+			// interval and causing more work for themselves, which is avoided with
+			// care by the lockTableWaiter but difficult to coordinate through the
+			// txnStatusCache. This limitation is acceptable because the most
+			// important case here is optimizing the Export requests issued by backup.
+			if !g.hasUncertaintyInterval() && g.lt.batchPushedLockResolution() {
+				pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(lockHolderTxn.ID)
+				if ok && g.ts.Less(pushedTxn.WriteTimestamp) {
+					up := roachpb.MakeLockUpdate(pushedTxn, roachpb.Span{Key: l.key})
+					if !tl.isHeldReplicated() {
+						// Only held unreplicated. Accumulate it as an unreplicated lock to
+						// resolve, in case any other waiting readers can benefit from the
+						// pushed timestamp.
+						//
+						// TODO(arul): this case is only possible while non-locking reads
+						// block on Exclusive locks. Once non-locking reads start only
+						// blocking on intents, it can be removed and asserted against.
+						g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
+					} else {
+						// Resolve to push the replicated intent.
+						g.toResolve = append(g.toResolve, up)
+					}
+					continue // check next lock
 				}
+			}
+
+			g.mu.Lock()
+			_, alsoLocksWithHigherStrength := g.mu.locks[l]
+			g.mu.Unlock()
+			if alsoLocksWithHigherStrength {
+				// If the request already has this lock in its locks map, it must also
+				// be trying to acquire this lock at a higher strength. For it to be
+				// here, it must have a (possibly joint) claim on this lock. The claim
+				// may have been broken since, but that's besides the point -- we defer
+				// to the stronger lock strength and continue with our scan.
+				//
+				// NB: If we were to not defer to the stronger lock strength and start
+				// waiting here, we could potentially end up doing so in the wrong wait
+				// queue (queuedReaders vs. queuedWriters). There wouldn't be a
+				// correctness issue in doing so, but it isn't ideal.
+				//
+				// NB: Non-transactional requests do not make claims or acquire locks.
+				// They can only perform reads or writes, which means they can only have
+				// lock spans with strength {None,Intent}. However, because they cannot
+				// make claims on locks, we can not detect a key is being accessed with
+				// both None and Intent locking strengths, like we can for transactional
+				// requests. In some rare cases, the lock may now be held at a timestamp
+				// that is not compatible with this request, and it will wait here --
+				// there's no correctness issue in doing so.
+				//
+				// TODO(arul): I'm not entirely sure I understand why we have the g.str
+				// == lock.None condition above. We do need it, because taking it out
+				// breaks some tests. Will need to figure this out when trying to extend
+				// the lock table to work with multiple lock strengths.
 				return false
 			}
 		}
 
-		g.mu.Lock()
-		_, alsoLocksWithHigherStrength := g.mu.locks[l]
-		g.mu.Unlock()
-		if alsoLocksWithHigherStrength {
-			// If the request already has this lock in its locks map, it must also be
-			// trying to acquire this lock at a higher strength. For it to be here, it
-			// must have a (possibly joint) claim on this lock. The claim may have been
-			// broken since, but that's besides the point -- we defer to the stronger
-			// lock strength and continue with our scan.
-			//
-			// NB: If we were to not defer to the stronger lock strength and start
-			// waiting here, we could potentially end up doing so in the wrong wait
-			// queue (queuedReaders vs. queuedWriters). There wouldn't be a correctness
-			// issue in doing so, but it isn't ideal.
-			//
-			// NB: Non-transactional requests do not make claims or acquire locks. They
-			// can only perform reads or writes, which means they can only have lock
-			// spans with strength {None,Intent}. However, because they cannot make
-			// claims on locks, we can not detect a key is being accessed with both None
-			// and Intent locking strengths, like we can for transactional requests. In
-			// some rare cases, the lock may now be held at a timestamp that is not
-			// compatible with this request, and it will wait here -- there's no
-			// correctness issue in doing so.
-			//
-			// TODO(arul): I'm not entirely sure I understand why we have the
-			// g.str == lock.None condition above. We do need it, because taking it
-			// out breaks some tests. Will need to figure this out when trying to
-			// extend the lock table to work with multiple lock strengths.
-			return false
+		// The held lock neither belongs to the request's transaction (which has
+		// special handling above) nor to a transaction that has been finalized.
+		// Check for conflicts.
+		if lock.Conflicts(tl.getLockMode(), g.curLockMode(), &g.lt.settings.SV) {
+			return true
 		}
 	}
-
-	// The held lock neither belongs to the request's transaction (which has
-	// special handling above) nor to a transaction that has been finalized. Check
-	// for conflicts.
-	return lock.Conflicts(l.getLockMode(), g.curLockMode(), &g.lt.settings.SV)
+	return false
 }
 
 // maybeEnqueueNonLockingReadRequest enqueues a read request in the receiver's
@@ -2172,7 +2411,7 @@ func (l *lockState) conflictsWithLockHolder(g *lockTableGuardImpl) bool {
 // REQUIRES: l.mu to be locked.
 func (l *lockState) maybeEnqueueNonLockingReadRequest(g *lockTableGuardImpl) (conflicts bool) {
 	assert(g.curStrength() == lock.None, "unexpected locking strength; expected read")
-	if !l.conflictsWithLockHolder(g) {
+	if !l.conflictsWithLockHolders(g) {
 		return false // no conflict, no need to enqueue
 	}
 	l.waitingReaders.PushFront(g)
@@ -2288,7 +2527,7 @@ func (l *lockState) shouldRequestActivelyWait(g *lockTableGuardImpl) bool {
 		return true // non-locking read requests always actively wait
 	}
 
-	if l.conflictsWithLockHolder(g) {
+	if l.conflictsWithLockHolders(g) {
 		return true
 	}
 
@@ -2395,56 +2634,60 @@ func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl) bool {
 	}
 	// Lock is not empty.
 	if !l.isLocked() {
-		// If the lock is neither empty nor held it must be the case that another
-		// transaction has claimed the lock. Locks that have been claimed, but have
-		// not been acquired yet, are considered non-conflicting. Optimistic
-		// evaluation may call into this function with or without holding latches.
-		// It's worth considering both these cases separately:
+		// If the lock is neither empty nor held it must be the case that
+		// another transaction has claimed the lock. Locks that have been
+		// claimed, but have not been acquired yet, are considered
+		// non-conflicting. Optimistic evaluation may call into this function
+		// with or without holding latches. It's worth considering both these
+		// cases separately:
 		//
-		// 1. If Optimistic evaluation is holding latches, then there cannot be a
-		// conflicting request that has claimed (but not acquired) the lock that is
-		// also holding latches. A request could have claimed this lock, discovered
-		// a different lock, and dropped its latches before waiting in this second
-		// lock's wait queue. In such cases, the request that claimed this lock will
-		// have to re-acquire and re-scan the lock table after this optimistic
-		// evaluation request drops its latches.
+		// 1. If Optimistic evaluation is holding latches, then there cannot be
+		// a conflicting request that has claimed (but not acquired) the lock
+		// that is also holding latches. A request could have claimed this lock,
+		// discovered a different lock, and dropped its latches before waiting
+		// in this second lock's wait queue. In such cases, the request that
+		// claimed this lock will have to re-acquire and re-scan the lock table
+		// after this optimistic evaluation request drops its latches.
 		//
-		// 2. If optimistic evaluation does not hold latches, then it will check for
-		// conflicting latches before declaring success. A request that claimed this
-		// lock, did not discover any other locks, and proceeded to evaluation would
-		// thus conflict on latching with our request going through optimistic
-		// evaluation. This will be detected, and the request will have to retry
-		// pessimistically.
-		//
-		// All this is to say that if we found a claimed, but not yet acquired lock,
-		// we can treat it as non-conflicting. It'll either be detected as a true
-		// conflict when we check for conflicting latches, or the request that
-		// claimed the lock will know what happened and what to do about it.
-		return true
-	}
-	lockHolderTxn, _ := l.getLockHolder()
-	if g.isSameTxn(lockHolderTxn) {
-		// NB: Unlike the pessimistic (normal) evaluation code path, we do not need
-		// to check the lock's strength if it is already held by this transaction --
-		// it's non-conflicting. There's two cases to consider:
-		//
-		// 1. If the lock is held with the same/higher lock strength on this key
-		// then this optimistic evaluation attempt already has all the protection it
-		// needs.
-		//
-		// 2. If the lock is held with a weaker lock strength other transactions may
-		// be able to acquire a lock on this key that conflicts with this optimistic
-		// evaluation attempt. This is okay, as we'll detect such cases -- however,
-		// the weaker lock in itself is not conflicting with the optimistic
-		// evaluation attempt.
+		// 2. If optimistic evaluation does not hold latches, then it will check
+		// for conflicting latches before declaring success. A request that
+		// claimed this lock, did not discover any other locks, and proceeded to
+		// evaluation would thus conflict on latching with our request going
+		// through optimistic evaluation. This will be detected, and the request
+		// will have to retry pessimistically.
+		// All this is to say that if we found a claimed, but not yet acquired
+		// lock, we can treat it as non-conflicting. It'll either be detected as
+		// a true conflict when we check for conflicting latches, or the request
+		// that claimed the lock will know what happened and what to do about
+		// it.
 		return true
 	}
 
-	// NB: We do not look at the txnStatusCache in this optimistic evaluation
-	// path. A conflict with a finalized txn will be noticed when retrying
-	// pessimistically.
-
-	return !lock.Conflicts(l.getLockMode(), g.curLockMode(), &g.lt.settings.SV) // non-conflicting
+	for e := l.holders.Front(); e != nil; e = e.Next() {
+		tl := e.Value.(*txnLock)
+		if g.isSameTxn(tl.txn) {
+			// NB: Unlike the pessimistic (normal) evaluation code path, we do
+			// not need to check the lock's strength if it is already held by
+			// this transaction -- it's non-conflicting. There's two cases to
+			// consider:
+			//
+			// 1. If the lock is held with the same/higher lock strength on this
+			// key then this optimistic evaluation attempt already has all the
+			// protection it needs.
+			//
+			// 2. If the lock is held with a weaker lock strength other
+			// transactions may be able to acquire a lock on this key that
+			// conflicts with this optimistic evaluation attempt. This is okay,
+			// as we'll detect such cases as we continue our iteration here --
+			// however, the weaker lock in itself is not conflicting with the
+			// optimistic evaluation attempt.
+			continue
+		}
+		if lock.Conflicts(tl.getLockMode(), g.curLockMode(), &g.lt.settings.SV) {
+			return false // is not non-conflicting
+		}
+	}
+	return true // non-conflicting
 }
 
 // Acquires this lock. Any requests that are waiting in the lock's wait queues
@@ -2454,10 +2697,41 @@ func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl) bool {
 func (l *lockState) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.isLocked() {
+	if l.isLockedBy(acq.Txn.ID) {
 		// Already held.
-		assert(l.isLockedBy(acq.Txn.ID), "multiple lock holders on a single key aren't supported yet")
-		return l.reacquireLock(acq)
+		e, found := l.heldBy[acq.Txn.ID]
+		assert(found, "expected to find lock held by the transaction")
+		tl := e.Value.(*txnLock)
+		_, beforeTs := tl.getLockHolder()
+		err := tl.reacquireLock(acq)
+		if err != nil {
+			return err
+		}
+		_, afterTs := tl.getLockHolder()
+		if beforeTs.Less(afterTs) {
+			// Check if the lock's timestamp has increased as a result of this
+			// lock acquisition. If it has, some waiting readers may no longer
+			// conflict with this lock, so they can be allowed through. We only
+			// need to do so if the lock is held with a strength of
+			// {Exclusive,Intent}, as non-locking readers do not conflict with
+			// any other lock strength (read: Shared). Conveniently, a key can
+			// only ever be locked by a single transaction with strength
+			// {Exclusive,Intent}. This means we don't have to bother with maintaining
+			// a low watermark timestamp across multiple lock holders by being cute
+			// here.
+			if tl.getLockMode().Strength == lock.Exclusive ||
+				tl.getLockMode().Strength == lock.Intent {
+				l.increasedLockTs(afterTs)
+			}
+		}
+		return nil
+	}
+
+	if l.isLocked() {
+		// TODO(arul): multilpe lock holders on a single key haven't been wired up
+		// fully. Return an error until that's the case. Note that the reacquisition
+		// case has already been handled above.
+		return errors.AssertionFailedf("existing lock cannot be acquired by different transaction")
 	}
 
 	// NB: The lock isn't held, so the request trying to acquire the lock must be
@@ -2491,188 +2765,23 @@ func (l *lockState) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 		panic("lockTable bug")
 	}
 
-	l.holder.txn = &acq.Txn // first acquisition, blindly assign
-	l.holder.startTime = clock.PhysicalTime()
+	tl := newTxnLock(&acq.Txn, clock)
 	switch acq.Durability {
 	case lock.Unreplicated:
-		l.holder.unreplicatedInfo.ts = acq.Txn.WriteTimestamp
-		if err := l.holder.unreplicatedInfo.acquire(acq.Strength, acq.Txn.Sequence); err != nil {
+		tl.unreplicatedInfo.ts = acq.Txn.WriteTimestamp
+		if err := tl.unreplicatedInfo.acquire(acq.Strength, acq.Txn.Sequence); err != nil {
 			return err
 		}
 	case lock.Replicated:
-		l.holder.replicatedInfo.ts = acq.Txn.WriteTimestamp
+		tl.replicatedInfo.ts = acq.Txn.WriteTimestamp
 	default:
 		panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
 	}
-
+	// Update the tracking to include this transaction's lock.
+	l.lockAcquiredOrDiscovered(tl)
 	// Inform active waiters since lock has transitioned to held.
 	l.informActiveWaiters()
 	return nil
-}
-
-// reacquireLock is called in response to a lock re-acquisition. In such cases,
-// a lock is already held on the receiver's key by the transaction referenced in
-// the supplied lock acquisition.
-//
-// REQUIRES: l.mu to be locked.
-func (l *lockState) reacquireLock(acq *roachpb.LockAcquisition) error {
-	beforeTxn, beforeTs := l.getLockHolder()
-	if acq.Txn.ID != beforeTxn.ID {
-		return errors.AssertionFailedf("existing lock cannot be acquired by different transaction")
-	}
-	// An unreplicated lock is being re-acquired...
-	if acq.Durability == lock.Unreplicated && l.isHeldUnreplicated() {
-		switch {
-		case l.holder.txn.Epoch < acq.Txn.Epoch: // at a higher epoch
-			l.holder.unreplicatedInfo.epochBumped()
-		case l.holder.txn.Epoch == acq.Txn.Epoch: // at the same epoch
-			// Prune the list of sequence numbers tracked for this lock by removing
-			// any sequence numbers that are considered ignored by virtue of a
-			// savepoint rollback.
-			//
-			// Note that the in-memory lock table is the source of truth for just
-			// unreplicated locks, and as such, sequence numbers are only tracked
-			// for them.
-			l.holder.unreplicatedInfo.rollbackIgnoredSeqNumbers(acq.IgnoredSeqNums)
-		case l.holder.txn.Epoch > acq.Txn.Epoch: // at a prior epoch
-			// Reject the request; the logic here parallels how mvccPutInternal
-			// handles this case for intents.
-			return errors.Errorf(
-				"locking request with epoch %d came after lock(unreplicated) had already been acquired at epoch %d in txn %s",
-				acq.Txn.Epoch, l.holder.txn.Epoch, acq.Txn.ID,
-			)
-		default:
-			panic("unreachable")
-		}
-	}
-	if l.isIdempotentLockAcquisition(acq) {
-		return nil // nothing more to do here.
-	}
-	// Forward the lock's timestamp instead of assigning to it blindly.
-	// While lock acquisition uses monotonically increasing timestamps
-	// from the perspective of the transaction's coordinator, this does
-	// not guarantee that a lock will never be acquired at a higher
-	// epoch and/or sequence number but with a lower timestamp when in
-	// the presence of transaction pushes. Consider the following
-	// sequence of events:
-	//
-	//  - txn A acquires lock at sequence 1, ts 10
-	//  - txn B pushes txn A to ts 20
-	//  - txn B updates lock to ts 20
-	//  - txn A's coordinator does not immediately learn of the push
-	//  - txn A re-acquires lock at sequence 2, ts 15
-	//
-	// A lock's timestamp at a given durability level is not allowed to
-	// regress, so by forwarding its timestamp during the second acquisition
-	// instead of assigning to it blindly, it remains at 20.
-	//
-	// However, a lock's timestamp as reported by getLockHolder can regress
-	// if it is acquired at a lower timestamp and a different durability
-	// than it was previously held with. This is necessary to support
-	// because the hard constraint which we must uphold here that the
-	// lockHolderInfo for a replicated lock cannot diverge from the
-	// replicated state machine in such a way that its timestamp in the
-	// lockTable exceeds that in the replicated keyspace. If this invariant
-	// were to be violated, we'd risk infinite lock-discovery loops for
-	// requests that conflict with the lock as is written in the replicated
-	// state machine but not as is reflected in the lockTable.
-	//
-	// Lock timestamp regressions are safe from the perspective of other
-	// transactions because the request which re-acquired the lock at the
-	// lower timestamp must have been holding a write latch at or below the
-	// new lock's timestamp. This means that no conflicting requests could
-	// be evaluating concurrently. Instead, all will need to re-scan the
-	// lockTable once they acquire latches and will notice the reduced
-	// timestamp at that point, which may cause them to conflict with the
-	// lock even if they had not conflicted before. In a sense, it is no
-	// different than the first time a lock is added to the lockTable.
-	switch acq.Durability {
-	case lock.Unreplicated:
-		l.holder.unreplicatedInfo.ts.Forward(acq.Txn.WriteTimestamp)
-		if err := l.holder.unreplicatedInfo.acquire(acq.Strength, acq.Txn.Sequence); err != nil {
-			return err
-		}
-	case lock.Replicated:
-		l.holder.replicatedInfo.ts.Forward(acq.Txn.WriteTimestamp)
-	default:
-		panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
-	}
-
-	// Selectively update the txn meta.
-	switch {
-	case l.holder.txn.Epoch > acq.Txn.Epoch: // lock is being acquired at a prior epoch
-		// We do not update the txn meta here -- the epoch is not allowed to
-		// regress.
-		//
-		// NB: We can get here if the lock acquisition here corresponds to an
-		// operation from a prior epoch. We've already handled the case for
-		// unreplicated lock acquisition above, so this can only happen if the
-		// lock acquisition corresponds to a replicated lock.
-		//
-		// If mvccPutInternal is aware of the newer epoch, it'll simply reject
-		// this operation and we'll never get here. However, it's not guaranteed
-		// that mvccPutInternal knows about this newer epoch. The in-memory lock
-		// table may know about the newer epoch though, if there's been a
-		// different unreplicated lock acquisition on this key by the transaction.
-		// So if we were to blindly update the TxnMeta here, we'd be regressing
-		// the epoch, which messes with our sequence number tracking inside of
-		// unreplicatedLockInfo.
-		assert(acq.Durability == lock.Replicated, "the unreplicated case should have been handled above")
-	case l.holder.txn.Epoch == acq.Txn.Epoch: // lock is being acquired at the same epoch
-		l.holder.txn = &acq.Txn
-	case l.holder.txn.Epoch < acq.Txn.Epoch: // lock is being acquired at a newer epoch
-		l.holder.txn = &acq.Txn
-		// The txn meta tracked here corresponds to unreplicated locks. When we
-		// learn about a newer epoch during lock acquisition of a replicated lock,
-		// we clear out the unreplicatedLockInfo state being tracked from the
-		// older epoch.
-		//
-		// Note that we don't clear out replicatedLockInfo when an unreplicated
-		// lock is being acquired at a newer epoch. This is because replicated
-		// locks are held across epochs, and there is no per-epoch tracking in the
-		// lock table for them.
-		if acq.Durability == lock.Replicated {
-			l.holder.unreplicatedInfo.clear()
-		}
-	}
-
-	_, afterTs := l.getLockHolder()
-	if beforeTs.Less(afterTs) {
-		l.increasedLockTs(afterTs)
-	}
-	return nil
-}
-
-// isIdempotentLockAcquisition returns true if the lock acquisition is
-// idempotent. Idempotent lock acquisitions do not require any changes to what
-// is being tracked in the lock's state.
-//
-// REQUIRES: l.mu to be locked.
-func (l *lockState) isIdempotentLockAcquisition(acq *roachpb.LockAcquisition) bool {
-	txn, _ := l.getLockHolder()
-	assert(txn.ID == acq.Txn.ID, "existing lock transaction is different from the acquisition")
-	switch acq.Durability {
-	case lock.Unreplicated:
-		if !l.holder.unreplicatedInfo.held(acq.Strength) { // unheld lock
-			return false
-		}
-		// Lock is being re-acquired at a higher sequence number when it's already
-		// held at a lower sequence number.
-		return l.holder.unreplicatedInfo.minSeqNumber(acq.Strength) <= acq.Txn.Sequence &&
-			// NB: Lock re-acquisitions at different timestamps are not considered
-			// idempotent. Strictly speaking, we could tighten this condition to
-			// consider lock re-acquisition at lower timestamps idempotent, as a
-			// lock's timestamp at a given durability never regresses.
-			l.holder.unreplicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
-	case lock.Replicated:
-		// NB: Lock re-acquisitions at different timestamps are not considered
-		// idempotent. Strictly speaking, we could tighten this condition to
-		// consider lock re-acquisition at lower timestamps idempotent, as a
-		// lock's timestamp at a given durability never regresses.
-		return l.isHeldReplicated() && l.holder.replicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
-	default:
-		panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
-	}
 }
 
 // A replicated lock held by txn with timestamp ts was discovered by guard g
@@ -2692,8 +2801,12 @@ func (l *lockState) discoveredLock(
 	if notRemovable {
 		l.notRemovable++
 	}
+
+	var tl *txnLock
 	if l.isLocked() {
-		if !l.isLockedBy(txn.ID) {
+		e, found := l.heldBy[txn.ID]
+		tl = e.Value.(*txnLock)
+		if !found {
 			return errors.AssertionFailedf(
 				"discovered lock by different transaction (%s) than existing lock (see issue #63592): %s",
 				txn, l)
@@ -2701,12 +2814,12 @@ func (l *lockState) discoveredLock(
 		// TODO(arul): If the discovered lock indicates a newer epoch than what's
 		// being tracked, should we clear out unreplicatedLockInfo here?
 	} else {
-		l.holder.txn = txn
-		l.holder.startTime = clock.PhysicalTime()
+		tl = newTxnLock(txn, clock)
+		l.lockAcquiredOrDiscovered(tl)
 	}
 
-	if l.holder.replicatedInfo.isEmpty() {
-		l.holder.replicatedInfo.ts = ts
+	if tl.replicatedInfo.isEmpty() {
+		tl.replicatedInfo.ts = ts
 	}
 
 	switch accessStrength {
@@ -2785,8 +2898,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 
 	// Clear lock holder. While doing so, construct the closure used to transition
 	// waiters.
-	lockHolderTxn, _ := l.getLockHolder() // only needed if this is a replicated lock
-	replicatedHeld := l.isHeldReplicated()
+	replicatedHeld, replicatedLockHolderTxn := l.isAnyLockHeldReplicated()
 	transitionWaiter := func(g *lockTableGuardImpl) {
 		if replicatedHeld && !force {
 			// Note that none of the current waiters can be requests from
@@ -2794,7 +2906,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 			// themselves.
 			waitState := waitingState{
 				kind: waitElsewhere,
-				txn:  lockHolderTxn,
+				txn:  replicatedLockHolderTxn,
 				key:  l.key,
 				held: true,
 			}
@@ -2805,7 +2917,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 			g.updateStateToDoneWaitingLocked()
 		}
 	}
-	l.clearLockHolder()
+	l.clearAllLockHolders()
 
 	// Clear waitingReaders.
 	for e := l.waitingReaders.Front(); e != nil; {
@@ -2869,14 +2981,20 @@ func (l *lockState) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 		return false, false
 	}
 	if up.Status.IsFinalized() {
-		l.clearLockHolder()
-		gc = l.releaseWaitersOnKeyUnlocked()
+		l.clearLockHeldBy(up.Txn.ID)
+		if !l.isLocked() {
+			// The lock transitioned from held to unheld as a result of this lock
+			// update.
+			gc = l.releaseWaitersOnKeyUnlocked()
+		}
 		return true, gc
 	}
 
+	e := l.heldBy[up.Txn.ID]
+	tl := e.Value.(*txnLock)
 	txn := &up.Txn
 	ts := up.Txn.WriteTimestamp
-	_, beforeTs := l.getLockHolder()
+	_, beforeTs := tl.getLockHolder()
 	advancedTs := beforeTs.Less(ts)
 	isLocked := false
 	// The MVCC keyspace is the source of truth about the disposition of a
@@ -2890,32 +3008,32 @@ func (l *lockState) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 	// than the epoch of the intent. The intent is written at the newer epoch (the
 	// one not known to the pusher) but at a higher timestamp. The pusher will
 	// then call into this function with that lower epoch.
-	if !l.holder.replicatedInfo.isEmpty() {
-		l.holder.replicatedInfo.clear()
+	if !tl.replicatedInfo.isEmpty() {
+		tl.replicatedInfo.clear()
 	}
 	// However, for unreplicated locks, the lock table is the source of truth.
 	// As such, we best-effort mirror the behavior of mvccResolveWriteIntent().
-	if l.isHeldUnreplicated() {
+	if tl.isHeldUnreplicated() {
 		switch {
 		//...update corresponds to a higher epoch.
-		case txn.Epoch > l.holder.txn.Epoch:
+		case txn.Epoch > tl.txn.Epoch:
 			// Forget what was tracked previously.
-			l.holder.unreplicatedInfo.clear()
+			tl.unreplicatedInfo.clear()
 
 			// ...update corresponds to the current epoch.
-		case txn.Epoch == l.holder.txn.Epoch:
-			l.holder.unreplicatedInfo.rollbackIgnoredSeqNumbers(up.IgnoredSeqNums)
+		case txn.Epoch == tl.txn.Epoch:
+			tl.unreplicatedInfo.rollbackIgnoredSeqNumbers(up.IgnoredSeqNums)
 			// Check if the lock is still held after rolling back ignored sequence
 			// numbers.
 			held := false
 			for _, str := range unreplicatedHolderStrengths {
-				if l.holder.unreplicatedInfo.held(str) {
+				if tl.unreplicatedInfo.held(str) {
 					held = true
 					break
 				}
 			}
 			if !held {
-				l.holder.unreplicatedInfo.clear()
+				tl.unreplicatedInfo.clear()
 				isLocked = false
 				break
 			}
@@ -2926,19 +3044,19 @@ func (l *lockState) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 				// that doing so doesn't get us too much -- other than the epoch and
 				// transaction ID, we don't make use of the fields on the TxnMeta
 				// anyway (and we know both of those haven't changed).
-				l.holder.txn = txn
-				l.holder.unreplicatedInfo.ts = ts
+				tl.txn = txn
+				tl.unreplicatedInfo.ts = ts
 			}
 			isLocked = true
 
 			// ...update corresponds to an older epoch of the transaction.
-		case txn.Epoch < l.holder.txn.Epoch:
+		case txn.Epoch < tl.txn.Epoch:
 			if advancedTs {
 				// We may advance ts here but not update the holder.txn object below for
 				// the reason stated in the comment about mvccResolveWriteIntent(). The
 				// {unreplicated,replicated}LockHolderInfo.ts is the source of truth
 				// regarding the timestamp of the lock, and not TxnMeta.WriteTimestamp.
-				l.holder.unreplicatedInfo.ts = ts
+				tl.unreplicatedInfo.ts = ts
 			}
 			isLocked = true
 		default:
@@ -2947,13 +3065,21 @@ func (l *lockState) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 	}
 
 	if !isLocked {
-		l.clearLockHolder()
-		gc = l.releaseWaitersOnKeyUnlocked()
+		l.clearLockHeldBy(txn.ID)
+		if !l.isLocked() {
+			gc = l.releaseWaitersOnKeyUnlocked()
+		}
 		return true, gc
 	}
 
 	if advancedTs {
-		l.increasedLockTs(ts)
+		// We only need to let through non-locking readers if the lock is held with
+		// strength {Exclusive,Intent}. See acquireLock for an explanation as to
+		// why.
+		if tl.getLockMode().Strength == lock.Exclusive ||
+			tl.getLockMode().Strength == lock.Intent {
+			l.increasedLockTs(ts)
+		}
 	}
 	// Else no change for waiters. This can happen due to a race between different
 	// callers of UpdateLocks().
@@ -3107,7 +3233,7 @@ func (l *lockState) tryFreeLockOnReplicatedAcquire() bool {
 	defer l.mu.Unlock()
 
 	// Bail if not locked with only the Unreplicated durability.
-	if !l.isLocked() || l.isHeldReplicated() {
+	if anyReplicated, _ := l.isAnyLockHeldReplicated(); !l.isLocked() || anyReplicated {
 		return false
 	}
 
@@ -3118,9 +3244,15 @@ func (l *lockState) tryFreeLockOnReplicatedAcquire() bool {
 
 	// The lock is uncontended by other writers, so we're safe to drop it.
 	// This may release readers who were waiting on the lock.
-	l.clearLockHolder()
+	//
+	// TODO(arul): Once we support replicated shared locks, we only want to clear
+	// the lock holder that's promoting its durability from unreplicated to
+	// replicated -- not all lock holders.
+	l.clearAllLockHolders()
 	gc := l.releaseWaitersOnKeyUnlocked()
-	assert(gc, "expected releaseWaitersOnKeyUnlocked to return true")
+	if !gc {
+		panic("expected lockIsFree to return true")
+	}
 	return true
 }
 
@@ -3431,7 +3563,8 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		l = &lockState{id: lockSeqNum, key: key}
 		l.queuedWriters.Init()
 		l.waitingReaders.Init()
-		l.holder.unreplicatedInfo.init()
+		l.holders.Init()
+		l.heldBy = make(map[uuid.UUID]*list.Element)
 		t.locks.Set(l)
 		atomic.AddInt64(&t.locks.numLocks, 1)
 	} else {
@@ -3499,7 +3632,8 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 		l = &lockState{id: lockSeqNum, key: acq.Key}
 		l.queuedWriters.Init()
 		l.waitingReaders.Init()
-		l.holder.unreplicatedInfo.init()
+		l.holders.Init()
+		l.heldBy = make(map[uuid.UUID]*list.Element)
 		t.locks.Set(l)
 		atomic.AddInt64(&t.locks.numLocks, 1)
 	} else {
