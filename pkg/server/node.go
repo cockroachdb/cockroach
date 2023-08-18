@@ -1238,7 +1238,9 @@ func (n *Node) batchInternal(
 	// replica to notice the cancellation and return a response. For this reason,
 	// we log the server-side trace of the cancelled request to help debug what
 	// the request was doing at the time it noticed the cancellation.
-	if pErr != nil && ctx.Err() != nil {
+	// NOTE: we only log on Export requests to avoid this causing log spam in this
+	// backported version of the code.
+	if pErr != nil && ctx.Err() != nil && args.IsSingleExportRequest() {
 		if sp := tracing.SpanFromContext(ctx); sp != nil && !sp.IsNoop() {
 			recording := sp.GetConfiguredRecording()
 			if recording.Len() != 0 {
