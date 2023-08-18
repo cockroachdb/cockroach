@@ -162,10 +162,10 @@ func Example_sql_config() {
 	// ERROR: -e: unknown variable name: "unknownoption"
 	// sql --set display_format=invalidvalue -e select 123 as "123"
 	// ERROR: -e: \set display_format=invalidvalue: invalid table display format: invalidvalue
-	// HINT: Possible values: tsv, csv, table, records, ndjson, json, sql, html, raw.
+	// HINT: Possible values: tsv, csv, table, records, ndjson, json, sql, html, unnumbered-html, raw.
 	// sql -e \set display_format=invalidvalue -e select 123 as "123"
 	// ERROR: -e: \set display_format=invalidvalue: invalid table display format: invalidvalue
-	// HINT: Possible values: tsv, csv, table, records, ndjson, json, sql, html, raw.
+	// HINT: Possible values: tsv, csv, table, records, ndjson, json, sql, html, unnumbered-html, raw.
 }
 
 func Example_sql_watch() {
