@@ -595,7 +595,7 @@ func TestBackendDownRetry(t *testing.T) {
 		if callCount >= 3 {
 			directoryServer.DeleteTenant(roachpb.MustMakeTenantID(28))
 		}
-		return nil, withCode(errors.New("SQL pod is down"), codeBackendDown)
+		return nil, withCode(errors.New("SQL pod is down"), codeBackendDialFailed)
 	})()
 
 	// Valid connection, but no backend server running.
@@ -1358,7 +1358,7 @@ func TestDirectoryConnect(t *testing.T) {
 			if countFailures >= 3 {
 				return nil, withCode(errors.New("backend disconnected"), codeBackendDisconnected)
 			}
-			return nil, withCode(errors.New("backend down"), codeBackendDown)
+			return nil, withCode(errors.New("backend down"), codeBackendDialFailed)
 		})()
 
 		// Ensure that Directory.ReportFailure is being called correctly.

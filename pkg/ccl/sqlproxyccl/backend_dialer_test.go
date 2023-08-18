@@ -94,22 +94,22 @@ func TestBackendDialTLS(t *testing.T) {
 		name:     "tenant10To11",
 		addr:     sql11.SQLAddr(),
 		tenantID: 10,
-		errCode:  codeBackendDown,
+		errCode:  codeBackendDialFailed,
 	}, {
 		name:     "tenant11To10",
 		addr:     sql10.SQLAddr(),
 		tenantID: 11,
-		errCode:  codeBackendDown,
+		errCode:  codeBackendDialFailed,
 	}, {
 		name:     "tenant10ToStorage",
 		addr:     storageServer.ServingSQLAddr(),
 		tenantID: 10,
-		errCode:  codeBackendDown,
+		errCode:  codeBackendDialFailed,
 	}, {
 		name:     "tenantWithNodeIDToStoage",
 		addr:     storageServer.ServingSQLAddr(),
 		tenantID: uint64(storageServer.NodeID()),
-		errCode:  codeBackendDown,
+		errCode:  codeBackendDialFailed,
 	}}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

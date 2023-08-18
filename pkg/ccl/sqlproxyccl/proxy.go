@@ -34,7 +34,7 @@ func toPgError(err error) *pgproto3.ErrorResponse {
 		switch getErrorCode(err) {
 		// These are send as is.
 		case codeExpiredClientConnection,
-			codeBackendDown,
+			codeBackendDialFailed,
 			codeParamsRoutingFailed,
 			codeClientDisconnected,
 			codeBackendDisconnected,
