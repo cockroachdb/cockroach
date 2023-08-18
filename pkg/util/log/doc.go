@@ -83,8 +83,8 @@
 //
 // # Output
 //
-// Log output is buffered and written periodically using Flush. Programs
-// should call Flush before exiting to guarantee all log output is written.
+// Log output is buffered and written periodically using FlushFiles. Programs
+// should call FlushFiles before exiting to guarantee all log output is written.
 //
 // By default, all log statements write to files in a temporary directory.
 // This package provides several flags that modify this behavior.
