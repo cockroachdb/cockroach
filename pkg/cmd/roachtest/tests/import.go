@@ -90,7 +90,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(4),
 		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().Cloud != spec.GCE {
+			if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
 				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
 			c.Put(ctx, t.Cockroach(), "./cockroach")
@@ -108,7 +108,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(4),
 		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().Cloud != spec.GCE {
+			if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
 				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
 			c.Put(ctx, t.Cockroach(), "./cockroach")
@@ -225,7 +225,7 @@ func registerImportTPCH(r registry.Registry) {
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud != spec.GCE {
+				if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
 					t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
 				}
 				tick, perfBuf := initBulkJobPerfArtifacts(t.Name(), item.timeout)
