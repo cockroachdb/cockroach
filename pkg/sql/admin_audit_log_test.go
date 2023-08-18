@@ -71,7 +71,7 @@ func TestAdminAuditLogBasic(t *testing.T) {
 	db.Exec(t, `SELECT 1;`)
 
 	var selectAdminRe = regexp.MustCompile(`"EventType":"admin_query","Statement":"SELECT ‹1›","Tag":"SELECT","User":"root"`)
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, selectAdminRe,
 		log.WithMarkedSensitiveData)
@@ -112,7 +112,7 @@ func TestAdminAuditLogRegularUser(t *testing.T) {
 
 	var selectRe = regexp.MustCompile(`SELECT 1`)
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, selectRe,
 		log.WithMarkedSensitiveData)
@@ -168,7 +168,7 @@ COMMIT;
 		},
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -253,7 +253,7 @@ COMMIT;
 		},
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -297,7 +297,7 @@ COMMIT;
 		t.Fatal(err)
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err = log.FetchEntriesFromFiles(
 		0,

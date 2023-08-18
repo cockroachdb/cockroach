@@ -537,7 +537,7 @@ func requireRecoveryEvent(
 	expected eventpb.RecoveryEvent,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		log.Flush()
+		log.FlushFiles()
 		entries, err := log.FetchEntriesFromFiles(
 			startTime,
 			math.MaxInt64,

@@ -26,11 +26,11 @@ type flushSyncWriter interface {
 	io.Writer
 }
 
-// Flush explicitly flushes all pending log file I/O.
+// FlushFiles explicitly flushes all pending log file I/O.
 // See also flushDaemon() that manages background (asynchronous)
 // flushes, and signalFlusher() that manages flushes in reaction to a
 // user signal.
-func Flush() {
+func FlushFiles() {
 	_ = logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
 		l.lockAndFlushAndMaybeSync(true /*doSync*/)
 		return nil
@@ -97,7 +97,7 @@ func signalFlusher() {
 	ch := sysutil.RefreshSignaledChan()
 	for sig := range ch {
 		Ops.Infof(context.Background(), "%s received, flushing logs", sig)
-		Flush()
+		FlushFiles()
 	}
 }
 
@@ -109,5 +109,5 @@ func signalFlusher() {
 func StartAlwaysFlush() {
 	logging.flushWrites.Set(true)
 	// There may be something in the buffers already; flush it.
-	Flush()
+	FlushFiles()
 }

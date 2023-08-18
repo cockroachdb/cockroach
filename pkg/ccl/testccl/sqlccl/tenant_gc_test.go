@@ -184,7 +184,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 
 	checkGCBlockedByPTS := func(t *testing.T, sj *jobs.StartableJob, tenID uint64) {
 		testutils.SucceedsSoon(t, func() error {
-			log.Flush()
+			log.FlushFiles()
 			entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 				regexp.MustCompile(fmt.Sprintf("GC TTL for dropped tenant %d has expired, but protected timestamp record\\(s\\)", tenID)),
 				log.WithFlattenedSensitiveData)
