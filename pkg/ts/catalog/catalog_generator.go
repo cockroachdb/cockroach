@@ -40,6 +40,12 @@ func GenerateCatalog(metadata map[string]metric.Metadata) ([]ChartSection, error
 		if meta.MetricType == prometheusgo.MetricType_COUNTER {
 			der = tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE
 		}
+		origUnit := meta.Unit.String()
+		dstUnit := AxisUnits_UNSET_UNITS
+		if candidate, ok := AxisUnits_value[origUnit]; ok {
+			dstUnit = AxisUnits(candidate)
+		}
+
 		sl = append(sl, ChartSection{
 			Title:           name,
 			LongTitle:       name,
@@ -53,14 +59,14 @@ func GenerateCatalog(metadata map[string]metric.Metadata) ([]ChartSection, error
 				Downsampler:     &avgAgg,
 				Aggregator:      &avgAgg,
 				Derivative:      &der,
-				Units:           AxisUnits_UNSET_UNITS,
+				Units:           dstUnit,
 				AxisLabel:       meta.Measurement,
 				Metrics: []ChartMetric{
 					{
 						Name:           name,
 						Help:           meta.Help,
 						AxisLabel:      meta.Measurement,
-						PreferredUnits: AxisUnits_UNSET_UNITS,
+						PreferredUnits: dstUnit,
 						MetricType:     meta.MetricType,
 					},
 				},
