@@ -520,7 +520,7 @@ var ConfigureOIDC = func(
 				"attempting to extract SQL username from the payload using the claim key %s, issuer %s, and %s",
 				claim,
 				token.Issuer,
-				pgwire.ConnIdentityMapConf.Key(),
+				pgwire.ConnIdentityMapConf.Name(),
 			)
 		}
 
@@ -605,7 +605,7 @@ var ConfigureOIDC = func(
 		}
 
 		if len(acceptedUsernames) == 0 {
-			log.Errorf(ctx, "OIDC: failed to extract usernames from principals %v; check %s", tokenPrincipals, pgwire.ConnIdentityMapConf.Key())
+			log.Errorf(ctx, "OIDC: failed to extract usernames from principals %v; check %s", tokenPrincipals, pgwire.ConnIdentityMapConf.Name())
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}

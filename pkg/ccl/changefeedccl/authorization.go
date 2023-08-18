@@ -133,7 +133,7 @@ func authorizeUserToCreateChangefeed(
 				return pgerror.Newf(
 					pgcode.InsufficientPrivilege,
 					`the %s privilege on all tables can only be used with external connection sinks. see cluster setting %s`,
-					privilege.CHANGEFEED, changefeedbase.RequireExternalConnectionSink.Key(),
+					privilege.CHANGEFEED, changefeedbase.RequireExternalConnectionSink.Name(),
 				)
 			}
 		}

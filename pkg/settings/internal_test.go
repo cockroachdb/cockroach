@@ -19,7 +19,7 @@ import (
 
 var b = RegisterBoolSetting(SystemOnly, "b", "desc", true)
 
-func TesIgnoreDefaults(t *testing.T) {
+func TestIgnoreDefaults(t *testing.T) {
 	ctx := context.Background()
 	sv := &Values{}
 	sv.Init(ctx, TestOpaque)
@@ -27,11 +27,11 @@ func TesIgnoreDefaults(t *testing.T) {
 	ignoreAllUpdates = true
 	defer func() { ignoreAllUpdates = false }()
 	u := NewUpdater(sv)
-	require.NoError(t, u.Set(ctx, b.Key(), EncodedValue{Value: EncodeBool(false), Type: "b"}))
+	require.NoError(t, u.Set(ctx, b.InternalKey(), EncodedValue{Value: EncodeBool(false), Type: "b"}))
 	require.Equal(t, true, b.Get(sv))
 
 	ignoreAllUpdates = false
 	u = NewUpdater(sv)
-	require.NoError(t, u.Set(ctx, b.Key(), EncodedValue{Value: EncodeBool(false), Type: "b"}))
+	require.NoError(t, u.Set(ctx, b.InternalKey(), EncodedValue{Value: EncodeBool(false), Type: "b"}))
 	require.Equal(t, false, b.Get(sv))
 }

@@ -634,7 +634,7 @@ func createChangefeedJobRecord(
 		if !status.ChildMetricsEnabled.Get(&p.ExecCfg().Settings.SV) {
 			p.BufferClientNotice(ctx, pgnotice.Newf(
 				"%s is set to false, metrics will only be published to the '%s' label when it is set to true",
-				status.ChildMetricsEnabled.Key(),
+				status.ChildMetricsEnabled.Name(),
 				scope,
 			))
 		}
