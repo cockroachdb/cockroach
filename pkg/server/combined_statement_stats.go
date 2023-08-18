@@ -159,7 +159,7 @@ func getCombinedStatementStats(
 		return nil, srverrors.ServerError(ctx, err)
 	}
 
-	stmtsRunTime, txnsRunTime, err := getTotalRuntimeSecs(
+	stmtsRunTime, txnsRunTime, olderDate, stmtSourceTable, txnSourceTable, err := getSourceStatsInfo(
 		ctx,
 		req,
 		ie,
@@ -172,12 +172,15 @@ func getCombinedStatementStats(
 	}
 
 	response := &serverpb.StatementsResponse{
-		Statements:            statements,
-		Transactions:          transactions,
-		LastReset:             statsProvider.GetLastReset(),
-		InternalAppNamePrefix: catconstants.InternalAppNamePrefix,
-		StmtsTotalRuntimeSecs: stmtsRunTime,
-		TxnsTotalRuntimeSecs:  txnsRunTime,
+		Statements:                statements,
+		Transactions:              transactions,
+		LastReset:                 statsProvider.GetLastReset(),
+		InternalAppNamePrefix:     catconstants.InternalAppNamePrefix,
+		StmtsTotalRuntimeSecs:     stmtsRunTime,
+		TxnsTotalRuntimeSecs:      txnsRunTime,
+		OlderAggregatedTsReturned: olderDate,
+		StmtsSourceTable:          stmtSourceTable,
+		TxnsSourceTable:           txnSourceTable,
 	}
 
 	return response, nil
@@ -249,14 +252,27 @@ FROM crdb_internal.statement_activity
 	return hasData, nil
 }
 
-func getTotalRuntimeSecs(
+// getSourceStatsInfo returns information about the stats returned:
+// - the total runtime (in seconds) on the selected period for
+// statement and transactions
+// - the oldest aggregated_ts we have data for on the
+// selected period
+// - which table the data was retrieve from
+func getSourceStatsInfo(
 	ctx context.Context,
 	req *serverpb.CombinedStatementsStatsRequest,
 	ie *sql.InternalExecutor,
 	testingKnobs *sqlstats.TestingKnobs,
 	activityTableHasAllData bool,
 	tableSuffix string,
-) (stmtsRuntime float32, txnsRuntime float32, err error) {
+) (
+	stmtsRuntime float32,
+	txnsRuntime float32,
+	olderDate time.Time,
+	stmtSourceTable string,
+	txnSourceTable string,
+	err error,
+) {
 	var buffer strings.Builder
 	buffer.WriteString(testingKnobs.GetAOSTClause())
 	var args []interface{}
@@ -300,12 +316,12 @@ FROM %s %s`, table, whereClause), args...)
 			return 0, err
 		}
 		if !ok {
-			return 0, errors.New("expected one row but got none on getTotalRuntimeSecs")
+			return 0, errors.New("expected one row but got none on getSourceStatsInfo.getRuntime")
 		}
 
 		var row tree.Datums
 		if row = it.Cur(); row == nil {
-			return 0, errors.New("unexpected null row on getTotalRuntimeSecs")
+			return 0, errors.New("unexpected null row on getSourceStatsInfo.getRuntime")
 		}
 
 		defer func() {
@@ -315,27 +331,75 @@ FROM %s %s`, table, whereClause), args...)
 		return float32(tree.MustBeDFloat(row[0])), nil
 	}
 
+	getOlderDate := func(table string) (time.Time, error) {
+		it, err := ie.QueryIteratorEx(
+			ctx,
+			fmt.Sprintf(`console-combined-stmts-%s-older_date`, table),
+			nil,
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(`
+SELECT COALESCE(min(aggregated_ts), now())
+FROM %s %s`, table, whereClause), args...)
+
+		if err != nil {
+			return timeutil.Now(), err
+		}
+		ok, err := it.Next(ctx)
+		if err != nil {
+			return timeutil.Now(), err
+		}
+		if !ok {
+			return timeutil.Now(), errors.New("expected one row but got none on getSourceStatsInfo.getOlderDate")
+		}
+
+		var row tree.Datums
+		if row = it.Cur(); row == nil {
+			return timeutil.Now(), nil
+		}
+
+		defer func() {
+			err = closeIterator(it, err)
+		}()
+
+		return tree.MustBeDTimestampTZ(row[0]).Time, nil
+	}
+
 	stmtsRuntime = 0
 	if req.FetchMode == nil || req.FetchMode.StatsType != serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
 		if activityTableHasAllData {
-			stmtsRuntime, err = getRuntime("crdb_internal.statement_activity")
+			stmtSourceTable = "crdb_internal.statement_activity"
+			stmtsRuntime, err = getRuntime(stmtSourceTable)
 			if err != nil {
-				return 0, 0, err
+				return 0, 0, timeutil.Now(), stmtSourceTable, "", err
+			}
+			olderDate, err = getOlderDate(stmtSourceTable)
+			if err != nil {
+				return stmtsRuntime, 0, timeutil.Now(), stmtSourceTable, "", err
 			}
 		}
 		// If there are no results from the activity table, retrieve the data from the persisted table.
 		if stmtsRuntime == 0 {
-			stmtsRuntime, err = getRuntime("crdb_internal.statement_statistics_persisted" + tableSuffix)
+			stmtSourceTable = "crdb_internal.statement_statistics_persisted" + tableSuffix
+			stmtsRuntime, err = getRuntime(stmtSourceTable)
 			if err != nil {
-				return 0, 0, err
+				return 0, 0, timeutil.Now(), stmtSourceTable, "", err
+			}
+			olderDate, err = getOlderDate(stmtSourceTable)
+			if err != nil {
+				return stmtsRuntime, 0, timeutil.Now(), stmtSourceTable, "", err
 			}
 		}
 		// If there are no results from the persisted table, retrieve the data from the combined view
 		// with data in-memory.
 		if stmtsRuntime == 0 {
-			stmtsRuntime, err = getRuntime("crdb_internal.statement_statistics")
+			stmtSourceTable = "crdb_internal.statement_statistics"
+			stmtsRuntime, err = getRuntime(stmtSourceTable)
 			if err != nil {
-				return 0, 0, err
+				return 0, 0, timeutil.Now(), stmtSourceTable, "", err
+			}
+			olderDate, err = getOlderDate(stmtSourceTable)
+			if err != nil {
+				return stmtsRuntime, 0, timeutil.Now(), stmtSourceTable, "", err
 			}
 		}
 	}
@@ -343,29 +407,32 @@ FROM %s %s`, table, whereClause), args...)
 	txnsRuntime = 0
 	if req.FetchMode == nil || req.FetchMode.StatsType != serverpb.CombinedStatementsStatsRequest_StmtStatsOnly {
 		if activityTableHasAllData {
-			txnsRuntime, err = getRuntime("crdb_internal.transaction_activity")
+			txnSourceTable = "crdb_internal.transaction_activity"
+			txnsRuntime, err = getRuntime(txnSourceTable)
 			if err != nil {
-				return 0, 0, err
+				return 0, 0, timeutil.Now(), stmtSourceTable, txnSourceTable, err
 			}
 		}
 		// If there are no results from the activity table, retrieve the data from the persisted table.
 		if txnsRuntime == 0 {
-			txnsRuntime, err = getRuntime("crdb_internal.transaction_statistics_persisted" + tableSuffix)
+			txnSourceTable = "crdb_internal.transaction_statistics_persisted" + tableSuffix
+			txnsRuntime, err = getRuntime(txnSourceTable)
 			if err != nil {
-				return 0, 0, err
+				return 0, 0, timeutil.Now(), stmtSourceTable, txnSourceTable, err
 			}
 		}
 		// If there are no results from the persisted table, retrieve the data from the combined view
 		// with data in-memory.
 		if txnsRuntime == 0 {
-			txnsRuntime, err = getRuntime("crdb_internal.transaction_statistics")
+			txnSourceTable = "crdb_internal.transaction_statistics"
+			txnsRuntime, err = getRuntime(txnSourceTable)
 			if err != nil {
-				return 0, 0, err
+				return 0, 0, timeutil.Now(), stmtSourceTable, txnSourceTable, err
 			}
 		}
 	}
 
-	return stmtsRuntime, txnsRuntime, err
+	return stmtsRuntime, txnsRuntime, olderDate, stmtSourceTable, txnSourceTable, err
 }
 
 // Return true is the limit request is within the limit

@@ -4102,6 +4102,9 @@ tenant pods.
 | transactions | [StatementsResponse.ExtendedCollectedTransactionStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.ExtendedCollectedTransactionStatistics) | repeated | Transactions is transaction-level statistics for the collection of statements in this response. | [reserved](#support-status) |
 | stmts_total_runtime_secs | [float](#cockroach.server.serverpb.StatementsResponse-float) |  |  | [reserved](#support-status) |
 | txns_total_runtime_secs | [float](#cockroach.server.serverpb.StatementsResponse-float) |  |  | [reserved](#support-status) |
+| older_aggregated_ts_returned | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementsResponse-google.protobuf.Timestamp) |  | OlderAggregatedTsReturned is the timestamp of the oldest entry returned, or NOW() if there is no data returned. | [reserved](#support-status) |
+| stmts_source_table | [string](#cockroach.server.serverpb.StatementsResponse-string) |  | StmtsSourceTable returns the table used to return the statements data. | [reserved](#support-status) |
+| txns_source_table | [string](#cockroach.server.serverpb.StatementsResponse-string) |  | TxnsSourceTable returns the table used to return the transactions data. | [reserved](#support-status) |
 
 
 
@@ -4214,6 +4217,9 @@ Support status: [reserved](#support-status)
 | transactions | [StatementsResponse.ExtendedCollectedTransactionStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.ExtendedCollectedTransactionStatistics) | repeated | Transactions is transaction-level statistics for the collection of statements in this response. | [reserved](#support-status) |
 | stmts_total_runtime_secs | [float](#cockroach.server.serverpb.StatementsResponse-float) |  |  | [reserved](#support-status) |
 | txns_total_runtime_secs | [float](#cockroach.server.serverpb.StatementsResponse-float) |  |  | [reserved](#support-status) |
+| older_aggregated_ts_returned | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementsResponse-google.protobuf.Timestamp) |  | OlderAggregatedTsReturned is the timestamp of the oldest entry returned, or NOW() if there is no data returned. | [reserved](#support-status) |
+| stmts_source_table | [string](#cockroach.server.serverpb.StatementsResponse-string) |  | StmtsSourceTable returns the table used to return the statements data. | [reserved](#support-status) |
+| txns_source_table | [string](#cockroach.server.serverpb.StatementsResponse-string) |  | TxnsSourceTable returns the table used to return the transactions data. | [reserved](#support-status) |
 
 
 
