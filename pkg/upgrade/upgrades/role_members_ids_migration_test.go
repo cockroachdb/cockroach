@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -51,6 +52,9 @@ func runTestRoleMembersIDMigration(t *testing.T, numUsers int) {
 	tc := testcluster.StartTestCluster(t, 1 /* nodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
+				SQLEvalContext: &eval.TestingKnobs{
+					ForceProductionValues: true,
+				},
 				Server: &server.TestingKnobs{
 					BootstrapVersionKeyOverride:    clusterversion.V22_2,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
