@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -37,14 +38,16 @@ func makeTenantSpan(tenantID uint64) roachpb.Span {
 
 func makeProducerJobRecord(
 	registry *jobs.Registry,
-	tenantID uint64,
+	tenantInfo *mtinfopb.TenantInfo,
 	timeout time.Duration,
 	user username.SQLUsername,
 	ptsID uuid.UUID,
 ) jobs.Record {
+	tenantID := tenantInfo.ID
+	tenantName := tenantInfo.Name
 	return jobs.Record{
 		JobID:       registry.MakeJobID(),
-		Description: fmt.Sprintf("stream replication for tenant %d", tenantID),
+		Description: fmt.Sprintf("Physical replication stream producer for %q (%d)", tenantName, tenantID),
 		Username:    user,
 		Details: jobspb.StreamReplicationDetails{
 			ProtectedTimestampRecordID: ptsID,
@@ -141,7 +144,7 @@ func (p *producerJobResumer) OnFailOrCancel(
 
 func init() {
 	jobs.RegisterConstructor(
-		jobspb.TypeStreamReplication,
+		jobspb.TypeReplicationStreamProducer,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			ts := timeutil.DefaultTimeSource{}
 			return &producerJobResumer{

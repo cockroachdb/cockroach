@@ -1024,11 +1024,11 @@ func (rrd *replShutdownDriver) getJobIDs(ctx context.Context) {
 	jobIDQuery := `SELECT job_id FROM [SHOW JOBS] WHERE job_type = '%s'`
 	testutils.SucceedsWithin(rrd.t, func() error {
 		if err := rrd.setup.dst.db.QueryRowContext(ctx, fmt.Sprintf(jobIDQuery,
-			`STREAM INGESTION`)).Scan(&rrd.dstJobID); err != nil {
+			`REPLICATION STREAM INGESTION`)).Scan(&rrd.dstJobID); err != nil {
 			return err
 		}
 		if err := rrd.setup.src.db.QueryRowContext(ctx, fmt.Sprintf(jobIDQuery,
-			`STREAM REPLICATION`)).Scan(&rrd.srcJobID); err != nil {
+			`REPLICATION STREAM PRODUCER`)).Scan(&rrd.srcJobID); err != nil {
 			return err
 		}
 		return nil
