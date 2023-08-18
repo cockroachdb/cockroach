@@ -8187,13 +8187,14 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				{Name: "b", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.VarBit),
-			Fn: func(_ context.Context, _ *eval.Context, a *tree.DBitArray, b string) (tree.Datum, error) {
-				bBitArray, err := bitarray.Parse(b)
+			Fn: func(_ context.Context, _ *eval.Context, datums tree.Datums) (tree.Datum, error) {
+				a, b := datums[0], datums[1]
+				bBitArray, err := bitarray.Parse(string(tree.MustBeDString(b)))
 				if err != nil {
 					return nil, err
 				}
 
-				return bitmaskOr(a.BitArray.String(), bBitArray.String())
+				return bitmaskOr(a.(*tree.DBitArray).BitArray.String(), bBitArray.String())
 			},
 			Info:       "Calculates bitwise OR value of unsigned bit arrays 'a' and 'b' that may have different lengths.",
 			Volatility: volatility.Immutable,
@@ -8204,13 +8205,14 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				{Name: "b", Typ: types.VarBit},
 			},
 			ReturnType: tree.FixedReturnType(types.VarBit),
-			Fn: func(_ context.Context, _ *eval.Context, a string, b *tree.DBitArray) (tree.Datum, error) {
-				aBitArray, err := bitarray.Parse(a)
+			Fn: func(_ context.Context, _ *eval.Context, datums tree.Datums) (tree.Datum, error) {
+				a, b := datums[0], datums[1]
+				aBitArray, err := bitarray.Parse(string(tree.MustBeDString(a)))
 				if err != nil {
 					return nil, err
 				}
 
-				return bitmaskOr(aBitArray.String(), b.BitArray.String())
+				return bitmaskOr(aBitArray.String(), b.(*tree.DBitArray).BitArray.String())
 			},
 			Info:       "Calculates bitwise OR value of unsigned bit arrays 'a' and 'b' that may have different lengths.",
 			Volatility: volatility.Immutable,
@@ -8250,13 +8252,14 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				{Name: "b", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.VarBit),
-			Fn: func(_ context.Context, _ *eval.Context, a *tree.DBitArray, b string) (tree.Datum, error) {
-				bBitArray, err := bitarray.Parse(b)
+			Fn: func(_ context.Context, _ *eval.Context, datums tree.Datums) (tree.Datum, error) {
+				a, b := datums[0], datums[1]
+				bBitArray, err := bitarray.Parse(string(tree.MustBeDString(b)))
 				if err != nil {
 					return nil, err
 				}
 
-				return bitmaskAnd(a.BitArray.String(), bBitArray.String())
+				return bitmaskAnd(a.(*tree.DBitArray).BitArray.String(), bBitArray.String())
 			},
 			Info:       "Calculates bitwise AND value of unsigned bit arrays 'a' and 'b' that may have different lengths.",
 			Volatility: volatility.Immutable,
@@ -8267,13 +8270,14 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				{Name: "b", Typ: types.VarBit},
 			},
 			ReturnType: tree.FixedReturnType(types.VarBit),
-			Fn: func(_ context.Context, _ *eval.Context, a string, b *tree.DBitArray) (tree.Datum, error) {
-				aBitArray, err := bitarray.Parse(a)
+			Fn: func(_ context.Context, _ *eval.Context, datums tree.Datums) (tree.Datum, error) {
+				a, b := datums[0], datums[1]
+				aBitArray, err := bitarray.Parse(string(tree.MustBeDString(a)))
 				if err != nil {
 					return nil, err
 				}
 
-				return bitmaskAnd(aBitArray.String(), b.BitArray.String())
+				return bitmaskAnd(aBitArray.String(), b.(*tree.DBitArray).BitArray.String())
 			},
 			Info:       "Calculates bitwise AND value of unsigned bit arrays 'a' and 'b' that may have different lengths.",
 			Volatility: volatility.Immutable,
@@ -8313,13 +8317,14 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				{Name: "b", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.VarBit),
-			Fn: func(_ context.Context, _ *eval.Context, a *tree.DBitArray, b string) (tree.Datum, error) {
-				bBitArray, err := bitarray.Parse(b)
+			Fn: func(_ context.Context, _ *eval.Context, datums tree.Datums) (tree.Datum, error) {
+				a, b := datums[0], datums[1]
+				bBitArray, err := bitarray.Parse(string(tree.MustBeDString(b)))
 				if err != nil {
 					return nil, err
 				}
 
-				return bitmaskXor(a.BitArray.String(), bBitArray.String())
+				return bitmaskXor(a.(*tree.DBitArray).BitArray.String(), bBitArray.String())
 			},
 			Info:       "Calculates bitwise XOR value of unsigned bit arrays 'a' and 'b' that may have different lengths.",
 			Volatility: volatility.Immutable,
@@ -8330,13 +8335,14 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				{Name: "b", Typ: types.VarBit},
 			},
 			ReturnType: tree.FixedReturnType(types.VarBit),
-			Fn: func(_ context.Context, _ *eval.Context, a string, b *tree.DBitArray) (tree.Datum, error) {
-				aBitArray, err := bitarray.Parse(a)
+			Fn: func(_ context.Context, _ *eval.Context, datums tree.Datums) (tree.Datum, error) {
+				a, b := datums[0], datums[1]
+				aBitArray, err := bitarray.Parse(string(tree.MustBeDString(a)))
 				if err != nil {
 					return nil, err
 				}
 
-				return bitmaskXor(aBitArray.String(), b.BitArray.String())
+				return bitmaskXor(aBitArray.String(), b.(*tree.DBitArray).BitArray.String())
 			},
 			Info:       "Calculates bitwise XOR value of unsigned bit arrays 'a' and 'b' that may have different lengths.",
 			Volatility: volatility.Immutable,
