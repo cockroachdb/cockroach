@@ -62,12 +62,7 @@ var ReadBufferMaxMessageSizeClusterSetting = settings.RegisterByteSizeSetting(
 	readBufferMaxMessageSizeClusterSettingName,
 	"maximum buffer size to allow for ingesting sql statements. Connections must be restarted for this to take effect.",
 	defaultMaxReadBufferMessageSize,
-	func(val int64) error {
-		if val < minReadBufferMessageSize {
-			return errors.Newf("buffer message size must be at least %s", humanize.Bytes(minReadBufferMessageSize))
-		}
-		return nil
-	},
+	settings.ByteSizeWithMinimum(minReadBufferMessageSize),
 )
 
 // FormatCode represents a pgwire data format.

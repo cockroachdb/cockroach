@@ -229,7 +229,7 @@ var (
 		"external.graphite.endpoint",
 		"if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port",
 		"",
-	).WithPublic()
+		settings.WithPublic)
 	// graphiteInterval is how often metrics are pushed to Graphite, if enabled.
 	graphiteInterval = settings.RegisterDurationSetting(
 		settings.TenantWritable,
@@ -237,13 +237,13 @@ var (
 		"the interval at which metrics are pushed to Graphite (if enabled)",
 		10*time.Second,
 		settings.NonNegativeDurationWithMaximum(maxGraphiteInterval),
-	).WithPublic()
+		settings.WithPublic)
 	RedactServerTracesForSecondaryTenants = settings.RegisterBoolSetting(
 		settings.SystemOnly,
 		"server.secondary_tenants.redact_trace.enabled",
 		"controls if server side traces are redacted for tenant operations",
 		true,
-	).WithPublic()
+		settings.WithPublic)
 
 	slowRequestHistoricalStackThreshold = settings.RegisterDurationSetting(
 		settings.SystemOnly,

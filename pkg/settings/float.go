@@ -117,70 +117,117 @@ func (f *FloatSetting) setToDefault(ctx context.Context, sv *Values) {
 	}
 }
 
-// WithPublic sets public visibility and can be chained.
-func (f *FloatSetting) WithPublic() *FloatSetting {
-	f.SetVisibility(Public)
-	return f
-}
-
 // RegisterFloatSetting defines a new setting with type float.
 func RegisterFloatSetting(
-	class Class,
-	key InternalKey,
-	desc string,
-	defaultValue float64,
-	validateFns ...func(float64) error,
+	class Class, key InternalKey, desc string, defaultValue float64, opts ...SettingOption,
 ) *FloatSetting {
-	var validateFn func(float64) error
-	if len(validateFns) > 0 {
-		validateFn = func(v float64) error {
-			for _, fn := range validateFns {
+	validateFn := func(v float64) error {
+		for _, opt := range opts {
+			if opt.validateDurationFn != nil ||
+				opt.validateInt64Fn != nil ||
+				opt.validateStringFn != nil ||
+				opt.validateProtoFn != nil {
+				panic(errors.AssertionFailedf("wrong validator type"))
+			}
+			if fn := opt.validateFloat64Fn; fn != nil {
 				if err := fn(v); err != nil {
-					return errors.Wrapf(err, "invalid value for %s", key)
+					return err
 				}
 			}
-			return nil
 		}
+		return nil
 	}
 
-	if validateFn != nil {
-		if err := validateFn(defaultValue); err != nil {
-			panic(errors.Wrap(err, "invalid default"))
-		}
+	if err := validateFn(defaultValue); err != nil {
+		panic(errors.Wrap(err, "invalid default"))
 	}
 	setting := &FloatSetting{
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}
 	register(class, key, desc, setting)
+	setting.apply(opts)
 	return setting
 }
 
 // NonNegativeFloat can be passed to RegisterFloatSetting.
-func NonNegativeFloat(v float64) error {
-	if v < 0 {
-		return errors.Errorf("cannot set to a negative value: %f", v)
-	}
-	return nil
+var NonNegativeFloat SettingOption = NonNegativeFloatWithMinimum(0)
+
+// NonNegativeFloatWithMinimum can be passed to RegisterFloatSetting.
+func NonNegativeFloatWithMinimum(minVal float64) SettingOption {
+	return WithValidateFloat(func(v float64) error {
+		if v < 0 {
+			return errors.Errorf("cannot set to a negative value: %f", v)
+		}
+		if v < minVal {
+			return errors.Errorf("cannot set to a value lower than %f: %f", minVal, v)
+		}
+		return nil
+	})
+}
+
+// NonNegativeFloatWithMinimumOrZeroDisable is an option that verifies
+// the value is at least the given minimum, or zero to diassble.
+func NonNegativeFloatWithMinimumOrZeroDisable(minVal float64) SettingOption {
+	return WithValidateFloat(func(v float64) error {
+		if v < 0 {
+			return errors.Errorf("cannot set to a negative value: %f", v)
+		}
+		if v != 0 && v < minVal {
+			return errors.Errorf("cannot set to a value lower than %f: %f", minVal, v)
+		}
+		return nil
+	})
 }
 
 // NonNegativeFloatWithMaximum can be passed to RegisterFloatSetting.
-func NonNegativeFloatWithMaximum(maxValue float64) func(float64) error {
-	return func(v float64) error {
-		if v < 0 {
-			return errors.Errorf("cannot be set to a negative value: %f", v)
-		}
-		if v > maxValue {
-			return errors.Errorf("cannot be set to a value larger than %f", maxValue)
-		}
-		return nil
-	}
+func NonNegativeFloatWithMaximum(maxValue float64) SettingOption {
+	return FloatInRange(0, maxValue)
 }
 
 // PositiveFloat can be passed to RegisterFloatSetting.
-func PositiveFloat(v float64) error {
+var PositiveFloat SettingOption = WithValidateFloat(func(v float64) error {
 	if v <= 0 {
 		return errors.Errorf("cannot set to a non-positive value: %f", v)
 	}
 	return nil
+})
+
+// NonZeroFloat can be passed to RegisterFloatSetting.
+var NonZeroFloat SettingOption = WithValidateFloat(func(v float64) error {
+	if v == 0 {
+		return errors.New("cannot set to zero value")
+	}
+	return nil
+})
+
+// Fraction requires the setting to be in the interval [0, 1]. It can
+// be passed to RegisterFloatSetting.
+var Fraction SettingOption = FloatInRange(0, 1)
+
+// FloatInRange returns a validation function that checks the value
+// is within the given bounds (inclusive).
+func FloatInRange(minVal, maxVal float64) SettingOption {
+	return WithValidateFloat(func(v float64) error {
+		if v < minVal || v > maxVal {
+			return errors.Errorf("expected value in range [%f, %f], got: %f", minVal, maxVal, v)
+		}
+		return nil
+	})
+}
+
+// FractionUpperExclusive requires the setting to be in the interval
+// [0, 1]. It can be passed to RegisterFloatSetting.
+var FractionUpperExclusive SettingOption = FloatInRangeUpperExclusive(0, 1)
+
+// FloatInRangeUpperExclusive returns a validation function that
+// checks the value is within the given bounds (inclusive lower,
+// exclusive upper).
+func FloatInRangeUpperExclusive(minVal, maxVal float64) SettingOption {
+	return WithValidateFloat(func(v float64) error {
+		if v < minVal || v >= maxVal {
+			return errors.Errorf("expected value in range [%f, %f), got: %f", minVal, maxVal, v)
+		}
+		return nil
+	})
 }

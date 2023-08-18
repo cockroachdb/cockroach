@@ -117,56 +117,59 @@ var enableNetTrace = settings.RegisterBoolSetting(
 	"trace.debug.enable",
 	"if set, traces for recent requests can be seen at https://<ui>/debug/requests",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
-var openTelemetryCollector = settings.RegisterValidatedStringSetting(
+var openTelemetryCollector = settings.RegisterStringSetting(
 	settings.TenantWritable,
 	"trace.opentelemetry.collector",
 	"address of an OpenTelemetry trace collector to receive "+
 		"traces using the otel gRPC protocol, as <host>:<port>. "+
 		"If no port is specified, 4317 will be used.",
 	envutil.EnvOrDefaultString("COCKROACH_OTLP_COLLECTOR", ""),
-	func(_ *settings.Values, s string) error {
+	settings.WithValidateString(func(_ *settings.Values, s string) error {
 		if s == "" {
 			return nil
 		}
 		_, _, err := addr.SplitHostPort(s, "4317")
 		return err
-	},
-).WithPublic()
+	}),
+	settings.WithPublic,
+)
 
-var jaegerAgent = settings.RegisterValidatedStringSetting(
+var jaegerAgent = settings.RegisterStringSetting(
 	settings.TenantWritable,
 	"trace.jaeger.agent",
 	"the address of a Jaeger agent to receive traces using the "+
 		"Jaeger UDP Thrift protocol, as <host>:<port>. "+
 		"If no port is specified, 6381 will be used.",
 	envutil.EnvOrDefaultString("COCKROACH_JAEGER", ""),
-	func(_ *settings.Values, s string) error {
+	settings.WithValidateString(func(_ *settings.Values, s string) error {
 		if s == "" {
 			return nil
 		}
 		_, _, err := addr.SplitHostPort(s, "6381")
 		return err
-	},
-).WithPublic()
+	}),
+	settings.WithPublic,
+)
 
 // ZipkinCollector is the cluster setting that specifies the Zipkin instance
 // to send traces to, if any.
-var ZipkinCollector = settings.RegisterValidatedStringSetting(
+var ZipkinCollector = settings.RegisterStringSetting(
 	settings.TenantWritable,
 	"trace.zipkin.collector",
 	"the address of a Zipkin instance to receive traces, as <host>:<port>. "+
 		"If no port is specified, 9411 will be used.",
 	envutil.EnvOrDefaultString("COCKROACH_ZIPKIN", ""),
-	func(_ *settings.Values, s string) error {
+	settings.WithValidateString(func(_ *settings.Values, s string) error {
 		if s == "" {
 			return nil
 		}
 		_, _, err := addr.SplitHostPort(s, "9411")
 		return err
-	},
-).WithPublic()
+	}),
+	settings.WithPublic,
+)
 
 // EnableActiveSpansRegistry controls Tracers configured as
 // WithTracingMode(TracingModeFromEnv) (which is the default). When enabled,
@@ -178,7 +181,7 @@ var EnableActiveSpansRegistry = settings.RegisterBoolSetting(
 	"trace.span_registry.enabled",
 	"if set, ongoing traces can be seen at https://<ui>/#/debug/tracez",
 	envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", true),
-).WithPublic()
+	settings.WithPublic)
 
 var periodicSnapshotInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
@@ -186,7 +189,7 @@ var periodicSnapshotInterval = settings.RegisterDurationSetting(
 	"if non-zero, interval at which background trace snapshots are captured",
 	0,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 // panicOnUseAfterFinish, if set, causes use of a span after Finish() to panic
 // if detected.

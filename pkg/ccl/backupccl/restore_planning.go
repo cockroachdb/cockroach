@@ -96,7 +96,7 @@ var featureRestoreEnabled = settings.RegisterBoolSetting(
 	"feature.restore.enabled",
 	"set to true to enable restore, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
+	settings.WithPublic)
 
 // maybeFilterMissingViews filters the set of tables to restore to exclude views
 // whose dependencies are either missing or are themselves unrestorable due to

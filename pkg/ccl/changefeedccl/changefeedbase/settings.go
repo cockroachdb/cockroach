@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/errors"
 )
 
 // TableDescriptorPollInterval controls how fast table descriptors are polled. A
@@ -49,7 +48,7 @@ var PerChangefeedMemLimit = settings.RegisterByteSizeSetting(
 	"changefeed.memory.per_changefeed_limit",
 	"controls amount of data that can be buffered per changefeed",
 	1<<29, // 512MiB
-).WithPublic()
+	settings.WithPublic)
 
 // SlowSpanLogThreshold controls when we will log slow spans.
 var SlowSpanLogThreshold = settings.RegisterDurationSetting(
@@ -88,7 +87,7 @@ var FrontierHighwaterLagCheckpointThreshold = settings.RegisterDurationSetting(
 	"controls the maximum the high-water mark is allowed to lag behind the leading spans of the frontier before per-span checkpointing is enabled; if 0, checkpointing due to high-water lag is disabled",
 	10*time.Minute,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 // FrontierCheckpointMaxBytes controls the maximum number of key bytes that will be added
 // to the checkpoint record.
@@ -119,7 +118,7 @@ var ScanRequestLimit = settings.RegisterIntSetting(
 	"changefeed.backfill.concurrent_scan_requests",
 	"number of concurrent scan requests per node issued during a backfill",
 	0,
-).WithPublic()
+	settings.WithPublic)
 
 // ScanRequestSize is the target size of the scan request response.
 //
@@ -130,7 +129,7 @@ var ScanRequestSize = settings.RegisterIntSetting(
 	"changefeed.backfill.scan_request_size",
 	"the maximum number of bytes returned by each scan request",
 	1<<19, // 1/2 MiB
-).WithPublic()
+	settings.WithPublic)
 
 // SinkThrottleConfig describes throttling configuration for the sink.
 // 0 values for any of the settings disable that setting.
@@ -150,18 +149,15 @@ type SinkThrottleConfig struct {
 }
 
 // NodeSinkThrottleConfig is the node wide throttling configuration for changefeeds.
-var NodeSinkThrottleConfig = func() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
-		settings.TenantWritable,
-		"changefeed.node_throttle_config",
-		"specifies node level throttling configuration for all changefeeeds",
-		"",
-		validateSinkThrottleConfig,
-	)
-	s.SetVisibility(settings.Public)
-	s.SetReportable(true)
-	return s
-}()
+var NodeSinkThrottleConfig = settings.RegisterStringSetting(
+	settings.TenantWritable,
+	"changefeed.node_throttle_config",
+	"specifies node level throttling configuration for all changefeeeds",
+	"",
+	settings.WithValidateString(validateSinkThrottleConfig),
+	settings.WithPublic,
+	settings.WithReportable(true),
+)
 
 func validateSinkThrottleConfig(values *settings.Values, configStr string) error {
 	if configStr == "" {
@@ -181,7 +177,7 @@ var MinHighWaterMarkCheckpointAdvance = settings.RegisterDurationSetting(
 		"advances, as long as the rate of checkpointing keeps up with the rate of frontier changes",
 	0,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 // EventMemoryMultiplier is the multiplier for the amount of memory needed to process an event.
 //
@@ -194,12 +190,7 @@ var EventMemoryMultiplier = settings.RegisterFloatSetting(
 	"changefeed.event_memory_multiplier",
 	"the amount of memory required to process an event is multiplied by this factor",
 	3,
-	func(v float64) error {
-		if v < 1 {
-			return errors.New("changefeed.event_memory_multiplier must be at least 1")
-		}
-		return nil
-	},
+	settings.NonNegativeFloatWithMinimum(1),
 )
 
 // ProtectTimestampInterval controls the frequency of protected timestamp record updates
@@ -209,7 +200,7 @@ var ProtectTimestampInterval = settings.RegisterDurationSetting(
 	"controls how often the changefeed forwards its protected timestamp to the resolved timestamp",
 	10*time.Minute,
 	settings.PositiveDuration,
-).WithPublic()
+	settings.WithPublic)
 
 // MaxProtectedTimestampAge controls the frequency of protected timestamp record updates
 var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
@@ -218,7 +209,7 @@ var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
 	"fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration",
 	4*24*time.Hour,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 // BatchReductionRetryEnabled enables the temporary reduction of batch sizes upon kafka message too large errors
 var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
@@ -226,7 +217,7 @@ var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
 	"changefeed.batch_reduction_retry_enabled",
 	"if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 // UseMuxRangeFeed enables the use of MuxRangeFeed RPC.
 var UseMuxRangeFeed = settings.RegisterBoolSetting(
@@ -245,7 +236,7 @@ var EventConsumerWorkers = settings.RegisterIntSetting(
 		"0 assigns a reasonable default, >0 assigns the setting value. for experimental/core "+
 		"changefeeds and changefeeds using parquet format, this is disabled",
 	0,
-).WithPublic()
+	settings.WithPublic)
 
 // EventConsumerWorkerQueueSize specifies the maximum number of events a worker buffer.
 var EventConsumerWorkerQueueSize = settings.RegisterIntSetting(
@@ -255,7 +246,7 @@ var EventConsumerWorkerQueueSize = settings.RegisterIntSetting(
 		"which a worker can buffer",
 	int64(util.ConstantWithMetamorphicTestRange("changefeed.event_consumer_worker_queue_size", 16, 0, 16)),
 	settings.NonNegativeInt,
-).WithPublic()
+	settings.WithPublic)
 
 // EventConsumerPacerRequestSize specifies how often (measured in CPU time)
 // that event consumer workers request CPU time from admission control.
@@ -299,7 +290,7 @@ var SinkIOWorkers = settings.RegisterIntSetting(
 	"the number of workers used by changefeeds when sending requests to the sink "+
 		"(currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value",
 	0,
-).WithPublic()
+	settings.WithPublic)
 
 // SinkPacerRequestSize specifies how often (measured in CPU time)
 // that the Sink batching worker request CPU time from admission control. For

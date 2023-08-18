@@ -30,7 +30,7 @@ var TxnFingerprintIDCacheCapacity = settings.RegisterIntSetting(
 	"the maximum number of txn fingerprint IDs stored",
 	100,
 	settings.NonNegativeInt,
-).WithPublic()
+	settings.WithPublic)
 
 // TxnFingerprintIDCache is a thread-safe cache tracking transaction
 // fingerprint IDs at the session level.

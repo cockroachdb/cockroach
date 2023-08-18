@@ -127,101 +127,107 @@ func (d *DurationSetting) setToDefault(ctx context.Context, sv *Values) {
 	}
 }
 
-// WithPublic sets the visibility to public and can be chained.
-func (d *DurationSetting) WithPublic() *DurationSetting {
-	d.SetVisibility(Public)
-	return d
-}
-
 // RegisterDurationSetting defines a new setting with type duration.
 func RegisterDurationSetting(
-	class Class,
-	key InternalKey,
-	desc string,
-	defaultValue time.Duration,
-	validateFns ...func(time.Duration) error,
+	class Class, key InternalKey, desc string, defaultValue time.Duration, opts ...SettingOption,
 ) *DurationSetting {
-	var validateFn func(time.Duration) error
-	if len(validateFns) > 0 {
-		validateFn = func(v time.Duration) error {
-			for _, fn := range validateFns {
-				if err := fn(v); err != nil {
+	validateFn := func(val time.Duration) error {
+		for _, opt := range opts {
+			if opt.validateInt64Fn != nil ||
+				opt.validateFloat64Fn != nil ||
+				opt.validateStringFn != nil ||
+				opt.validateProtoFn != nil {
+				panic(errors.AssertionFailedf("wrong validator type"))
+			}
+			if fn := opt.validateDurationFn; fn != nil {
+				if err := fn(val); err != nil {
 					return errors.Wrapf(err, "invalid value for %s", key)
 				}
 			}
-			return nil
 		}
+		return nil
 	}
 
-	if validateFn != nil {
-		if err := validateFn(defaultValue); err != nil {
-			panic(errors.Wrap(err, "invalid default"))
-		}
+	if err := validateFn(defaultValue); err != nil {
+		panic(errors.Wrap(err, "invalid default"))
 	}
 	setting := &DurationSetting{
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}
 	register(class, key, desc, setting)
+	setting.apply(opts)
 	return setting
 }
 
 // RegisterPublicDurationSettingWithExplicitUnit defines a new
 // public setting with type duration which requires an explicit unit when being
 // set.
-func RegisterPublicDurationSettingWithExplicitUnit(
-	class Class,
-	key InternalKey,
-	desc string,
-	defaultValue time.Duration,
-	validateFn func(time.Duration) error,
+func RegisterDurationSettingWithExplicitUnit(
+	class Class, key InternalKey, desc string, defaultValue time.Duration, opts ...SettingOption,
 ) *DurationSettingWithExplicitUnit {
-	var fn func(time.Duration) error
-
-	if validateFn != nil {
-		fn = func(v time.Duration) error {
-			return errors.Wrapf(validateFn(v), "invalid value for %s", key)
+	validateFn := func(val time.Duration) error {
+		for _, opt := range opts {
+			if opt.validateInt64Fn != nil ||
+				opt.validateFloat64Fn != nil ||
+				opt.validateStringFn != nil ||
+				opt.validateProtoFn != nil {
+				panic(errors.AssertionFailedf("wrong validator type"))
+			}
+			if fn := opt.validateDurationFn; fn != nil {
+				if err := fn(val); err != nil {
+					return errors.Wrapf(err, "invalid value for %s", key)
+				}
+			}
 		}
+		return nil
 	}
-
+	if err := validateFn(defaultValue); err != nil {
+		panic(errors.Wrap(err, "invalid default"))
+	}
 	setting := &DurationSettingWithExplicitUnit{
 		DurationSetting{
 			defaultValue: defaultValue,
-			validateFn:   fn,
+			validateFn:   validateFn,
 		},
 	}
-	setting.SetVisibility(Public)
 	register(class, key, desc, setting)
+	setting.apply(opts)
 	return setting
 }
 
 // NonNegativeDuration can be passed to RegisterDurationSetting.
-func NonNegativeDuration(v time.Duration) error {
+var NonNegativeDuration SettingOption = WithValidateDuration(nonNegativeDurationInternal)
+
+func nonNegativeDurationInternal(v time.Duration) error {
 	if v < 0 {
 		return errors.Errorf("cannot be set to a negative duration: %s", v)
 	}
 	return nil
 }
 
-// NonNegativeDurationWithMaximum returns a validation function that can be
-// passed to RegisterDurationSetting.
-func NonNegativeDurationWithMaximum(maxValue time.Duration) func(time.Duration) error {
-	return func(v time.Duration) error {
-		if v < 0 {
-			return errors.Errorf("cannot be set to a negative duration: %s", v)
-		}
-		if v > maxValue {
-			return errors.Errorf("cannot be set to a value larger than %s", maxValue)
+// DurationInRange returns a validation function that checks the value
+// is within the given bounds (inclusive).
+func DurationInRange(minVal, maxVal time.Duration) SettingOption {
+	return WithValidateDuration(func(v time.Duration) error {
+		if v < minVal || v > maxVal {
+			return errors.Errorf("expected value in range [%v, %v], got: %v", minVal, maxVal, v)
 		}
 		return nil
-	}
+	})
+}
+
+// NonNegativeDurationWithMaximum returns a validation function that can be
+// passed to RegisterDurationSetting.
+func NonNegativeDurationWithMaximum(maxValue time.Duration) SettingOption {
+	return DurationInRange(0, maxValue)
 }
 
 // NonNegativeDurationWithMinimum returns a validation function can be passed
 // to RegisterDurationSetting.
-func NonNegativeDurationWithMinimum(minValue time.Duration) func(time.Duration) error {
-	return func(v time.Duration) error {
-		if err := NonNegativeDuration(v); err != nil {
+func NonNegativeDurationWithMinimum(minValue time.Duration) SettingOption {
+	return WithValidateDuration(func(v time.Duration) error {
+		if err := nonNegativeDurationInternal(v); err != nil {
 			return err
 		}
 		if v < minValue {
@@ -229,13 +235,29 @@ func NonNegativeDurationWithMinimum(minValue time.Duration) func(time.Duration) 
 				minValue)
 		}
 		return nil
-	}
+	})
+}
+
+// NonNegativeDurationWithMinimumOrZeroDisable returns a validation
+// function can be passed to RegisterDurationSetting. It verifies the value
+// is at least the given minimum, or zero to disable.
+func NonNegativeDurationWithMinimumOrZeroDisable(minValue time.Duration) SettingOption {
+	return WithValidateDuration(func(v time.Duration) error {
+		if err := nonNegativeDurationInternal(v); err != nil {
+			return err
+		}
+		if v != 0 && v < minValue {
+			return errors.Errorf("cannot be set to a value smaller than %s",
+				minValue)
+		}
+		return nil
+	})
 }
 
 // PositiveDuration can be passed to RegisterDurationSetting.
-func PositiveDuration(v time.Duration) error {
+var PositiveDuration SettingOption = WithValidateDuration(func(v time.Duration) error {
 	if v <= 0 {
 		return errors.Errorf("cannot be set to a non-positive duration: %s", v)
 	}
 	return nil
-}
+})

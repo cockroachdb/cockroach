@@ -13,7 +13,6 @@ go_library(
         "//pkg/kv/kvserver/constraint",
         "//pkg/roachpb",
         "//pkg/settings",
-        "@com_github_cockroachdb_errors//:errors",
         "@io_etcd_go_raft_v3//:raft",
     ],
 )

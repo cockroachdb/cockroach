@@ -404,7 +404,7 @@ const (
 	maxTokensPerStream kvflowcontrol.Tokens = 64 << 20 // 64 MiB
 )
 
-func validateTokenRange(b int64) error {
+var validateTokenRange = settings.WithValidateInt(func(b int64) error {
 	t := kvflowcontrol.Tokens(b)
 	if t < minTokensPerStream {
 		return fmt.Errorf("minimum flowed tokens allowed is %s, got %s", minTokensPerStream, t)
@@ -413,7 +413,7 @@ func validateTokenRange(b int64) error {
 		return fmt.Errorf("maximum flow tokens allowed is %s, got %s", maxTokensPerStream, t)
 	}
 	return nil
-}
+})
 
 func (c *Controller) getTokensForStream(stream kvflowcontrol.Stream) tokensPerWorkClass {
 	c.mu.Lock()

@@ -15,6 +15,7 @@ go_library(
         "float.go",
         "int.go",
         "masked.go",
+        "options.go",
         "protobuf.go",
         "registry.go",
         "setting.go",
@@ -44,6 +45,7 @@ go_test(
     name = "settings_test",
     size = "small",
     srcs = [
+        "duration_test.go",
         "encoding_test.go",
         "internal_test.go",
         "settings_test.go",

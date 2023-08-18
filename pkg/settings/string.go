@@ -100,32 +100,25 @@ func (s *StringSetting) setToDefault(ctx context.Context, sv *Values) {
 	}
 }
 
-// WithPublic sets public visibility and can be chained.
-func (s *StringSetting) WithPublic() *StringSetting {
-	s.SetVisibility(Public)
-	return s
-}
-
 // RegisterStringSetting defines a new setting with type string.
 func RegisterStringSetting(
-	class Class, key InternalKey, desc string, defaultValue string,
+	class Class, key InternalKey, desc string, defaultValue string, opts ...SettingOption,
 ) *StringSetting {
-	return RegisterValidatedStringSetting(class, key, desc, defaultValue, nil)
-}
-
-// RegisterValidatedStringSetting defines a new setting with type string with a
-// validation function.
-func RegisterValidatedStringSetting(
-	class Class,
-	key InternalKey,
-	desc string,
-	defaultValue string,
-	validateFn func(*Values, string) error,
-) *StringSetting {
-	if validateFn != nil {
-		if err := validateFn(nil, defaultValue); err != nil {
-			panic(errors.Wrap(err, "invalid default"))
+	validateFn := func(sv *Values, val string) error {
+		for _, opt := range opts {
+			if opt.validateDurationFn != nil ||
+				opt.validateFloat64Fn != nil ||
+				opt.validateInt64Fn != nil ||
+				opt.validateProtoFn != nil {
+				panic(errors.AssertionFailedf("wrong validator type"))
+			}
+			if fn := opt.validateStringFn; fn != nil {
+				if err := fn(sv, val); err != nil {
+					return err
+				}
+			}
 		}
+		return nil
 	}
 	setting := &StringSetting{
 		defaultValue: defaultValue,
@@ -134,7 +127,8 @@ func RegisterValidatedStringSetting(
 	// By default all string settings are considered to perhaps contain
 	// PII and are thus non-reportable (to exclude them from telemetry
 	// reports).
-	setting.SetReportable(false)
+	setting.setReportable(false)
 	register(class, key, desc, setting)
+	setting.apply(opts)
 	return setting
 }
