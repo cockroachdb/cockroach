@@ -343,10 +343,11 @@ sudo systemd-run --unit prometheus --same-dir \
 sudo apt-get install -qqy apt-transport-https &&
 sudo apt-get install -qqy software-properties-common wget &&
 sudo apt-get install -y adduser libfontconfig1 &&
-wget https://dl.grafana.com/enterprise/release/grafana-enterprise_9.2.3_%s.deb -O grafana-enterprise_9.2.3_%s.deb &&
-sudo dpkg -i grafana-enterprise_9.2.3_%s.deb &&
+echo "Downloading https://dl.grafana.com/enterprise/release/grafana-enterprise_9.2.3_%[1]s.deb" &&
+wget https://dl.grafana.com/enterprise/release/grafana-enterprise_9.2.3_%[1]s.deb -O grafana-enterprise_9.2.3_%[1]s.deb --no-verbose &&
+sudo dpkg -i grafana-enterprise_9.2.3_%[1]s.deb &&
 sudo mkdir -p /var/lib/grafana/dashboards`,
-				binArch, binArch, binArch)); err != nil {
+				binArch)); err != nil {
 			return nil, err
 		}
 
