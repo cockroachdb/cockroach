@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -177,6 +178,38 @@ func fullyDecommissionStep(target, from int, binaryVersion string) versionStep {
 		c := u.c
 		c.Run(ctx, c.Node(from), cockroachBinaryPath(binaryVersion), "node", "decommission",
 			"--wait=all", "--insecure", strconv.Itoa(target), "--port", fmt.Sprintf("{pgport:%d}", from))
+
+		// If we are decommissioning a target node from the same node, the drain
+		// step will be skipped. In this case, we should not consider the step done
+		// until the health check for the node returns non-200 OK.
+		// TODO(sarkesian): This could be removed after 23.2, as in these versions
+		// the "decommissioned" state is considered in the health check.
+		if target == from {
+			t.L().Printf("waiting for n%d to fail health check after decommission")
+			var healthCheckURL string
+			if addrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(target)); err != nil {
+				t.Fatalf("failed to get admin ui addresses: %v", err)
+			} else {
+				healthCheckURL = fmt.Sprintf(`http://%s/health?ready=1`, addrs[0])
+			}
+
+			if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+				resp, err := httputil.Get(ctx, healthCheckURL)
+				if err != nil {
+					return errors.Wrapf(err, "failed to get n%d /health?ready=1 HTTP endpoint", target)
+				}
+				if resp.StatusCode == 200 {
+					return errors.Errorf("n%d /health?ready=1 status=%d %s "+
+						"(expected 503 service unavailable after decommission)",
+						target, resp.StatusCode, resp.Status)
+				}
+
+				t.L().Printf("n%d /health?ready=1 status=%d %s", target, resp.StatusCode, resp.Status)
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }
 
