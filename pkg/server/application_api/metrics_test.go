@@ -39,7 +39,7 @@ func TestMetricsMetadata(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	metricsMetadata := s.MetricsRecorder().GetMetricsMetadata()
+	metricsMetadata, _, _ := s.MetricsRecorder().GetMetricsMetadata(true /* combine */)
 
 	if len(metricsMetadata) < 200 {
 		t.Fatal("s.recorder.GetMetricsMetadata() failed sanity check; didn't return enough metrics.")

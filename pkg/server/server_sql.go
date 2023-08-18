@@ -321,7 +321,8 @@ type sqlServerArgs struct {
 	db *kv.DB
 
 	// Various components want to register themselves with metrics.
-	registry *metric.Registry
+	registry    *metric.Registry
+	sysRegistry *metric.Registry
 
 	// Recorder exposes metrics to the prometheus endpoint.
 	recorder *status.MetricsRecorder
