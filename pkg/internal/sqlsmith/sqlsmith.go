@@ -174,6 +174,9 @@ var prettyCfg = func() tree.PrettyCfg {
 	return cfg
 }()
 
+// TestingPrettyCfg is only exposed to be used in tests.
+var TestingPrettyCfg = prettyCfg
+
 // Generate returns a random SQL string.
 func (s *Smither) Generate() string {
 	i := 0

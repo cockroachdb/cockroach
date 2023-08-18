@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -412,8 +413,10 @@ func startTestFullServer(
 	resetRetry := testingUseFastRetry()
 	resetFlushFrequency := changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)
 	s, db, _ := serverutils.StartServer(t, args)
-
 	ctx := context.Background()
+	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ApplicationLayer().ClusterSettings().SV, true)
+	sql.SecondaryTenantScatterEnabled.Override(ctx, &s.ApplicationLayer().ClusterSettings().SV, true)
+
 	cleanup := func() {
 		s.Stopper().Stop(ctx)
 		resetFlushFrequency()
