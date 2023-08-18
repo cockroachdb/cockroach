@@ -120,10 +120,19 @@ func runUnoptimizedQueryOracleImpl(
 	if err := h.execStmt(disableVectorizeStmt); err != nil {
 		return h.makeError(err, "failed to disable the vectorized engine")
 	}
+	disableDistSQLStmt := "SET distsql = off"
+	if err := h.execStmt(disableDistSQLStmt); err != nil {
+		return h.makeError(err, "failed to disable DistSQL")
+	}
 
 	unoptimizedRows, err := h.runQuery(stmt)
 	if err != nil {
-		// Skip unoptimized statements that fail with an error.
+		// Skip unoptimized statements that fail with an error (unless it's an
+		// internal error).
+		if es := err.Error(); strings.Contains(es, "internal error") {
+			verboseLogging = true
+			return h.makeError(err, "internal error while running unoptimized statement")
+		}
 		//nolint:returnerrcheck
 		return nil
 	}
@@ -149,6 +158,15 @@ func runUnoptimizedQueryOracleImpl(
 		// Disable not visible index feature to run the statement with more optimization.
 		if err := h.execStmt("SET optimizer_use_not_visible_indexes = true"); err != nil {
 			return h.makeError(err, "failed to disable not visible index feature")
+		}
+	}
+	if roll := rnd.Intn(4); roll > 0 {
+		distSQLMode := "auto"
+		if roll == 3 {
+			distSQLMode = "on"
+		}
+		if err := h.execStmt(fmt.Sprintf("SET distsql = %s", distSQLMode)); err != nil {
+			return h.makeError(err, "failed to re-enable DistSQL")
 		}
 	}
 
