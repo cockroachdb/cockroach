@@ -4166,3 +4166,34 @@ query T
 SELECT bitmask_xor('xffffffffffffffffff', '010');
 ----
 111111111111111111111111111111111111111111111111111111111111111111111101
+
+# Regression test for mixed-type arguments (#108976).
+query T
+SELECT bitmask_or('101'::STRING, B'001'::VARBIT);
+----
+101
+
+query T
+SELECT bitmask_or(B'001'::VARBIT, '101'::STRING);
+----
+101
+
+query T
+SELECT bitmask_and('101'::STRING, B'001'::VARBIT);
+----
+001
+
+query T
+SELECT bitmask_and(B'001'::VARBIT, '101'::STRING);
+----
+001
+
+query T
+SELECT bitmask_xor('101'::STRING, B'001'::VARBIT);
+----
+100
+
+query T
+SELECT bitmask_xor(B'001'::VARBIT, '101'::STRING);
+----
+100
