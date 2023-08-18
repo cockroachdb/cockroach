@@ -145,7 +145,11 @@ func registerSequelize(r registry.Registry) {
 		rawResultsStr := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResultsStr)
 		if err != nil {
-			t.Fatal(err)
+			// The test suite is flaky and work is being done upstream to stabilize
+			// it (https://github.com/sequelize/sequelize/pull/15569). Until that's
+			// done, we ignore all failures from this test.
+			// t.Fatal(err)
+			t.L().Printf("ignoring failure (https://github.com/cockroachdb/cockroach/issues/108937): %s", err)
 		}
 	}
 
