@@ -284,19 +284,13 @@ var (
       WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = $1`,
 		unconstrainedDeleteStmt: `
       DELETE FROM system.statement_statistics
-      WHERE (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id) IN (
-        SELECT aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
-        FROM system.statement_statistics
         WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = $1
           AND aggregated_ts < $3
         ORDER BY aggregated_ts ASC
         LIMIT $2
-      ) RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id`,
+       RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id`,
 		constrainedDeleteStmt: `
     DELETE FROM system.statement_statistics
-    WHERE (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id) IN (
-    SELECT aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id
-    FROM system.statement_statistics
     WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = $1
     AND (
       (
@@ -311,7 +305,7 @@ var (
         AND aggregated_ts < $3
       ORDER BY aggregated_ts ASC
       LIMIT $2
-    ) RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id`,
+     RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id`,
 	}
 	txnStatsCleanupOps = &cleanupOperations{
 		initialScanStmtTemplate: `
@@ -321,19 +315,13 @@ var (
       WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = $1`,
 		unconstrainedDeleteStmt: `
     DELETE FROM system.transaction_statistics
-    WHERE (aggregated_ts, fingerprint_id, app_name, node_id) IN (
-      SELECT aggregated_ts, fingerprint_id, app_name, node_id
-      FROM system.transaction_statistics
       WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = $1
         AND aggregated_ts < $3
       ORDER BY aggregated_ts ASC
       LIMIT $2
-    ) RETURNING aggregated_ts, fingerprint_id, app_name, node_id`,
+     RETURNING aggregated_ts, fingerprint_id, app_name, node_id`,
 		constrainedDeleteStmt: `
     DELETE FROM system.transaction_statistics
-      WHERE (aggregated_ts, fingerprint_id, app_name, node_id) IN (
-      SELECT aggregated_ts, fingerprint_id, app_name, node_id
-      FROM system.transaction_statistics
       WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = $1
       AND (
         (
@@ -346,7 +334,7 @@ var (
         AND aggregated_ts < $3
       ORDER BY aggregated_ts ASC
       LIMIT $2
-    ) RETURNING aggregated_ts, fingerprint_id, app_name, node_id`,
+     RETURNING aggregated_ts, fingerprint_id, app_name, node_id`,
 	}
 )
 
