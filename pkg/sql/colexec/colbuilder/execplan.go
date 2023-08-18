@@ -2088,7 +2088,7 @@ func planSelectionOperators(
 			ctx, evalCtx, t.TypedRight(), typs, leftOp, acc, factory, releasables,
 		)
 		return rightOp, resultIdx, typs, err
-	case *tree.CaseExpr:
+	case *tree.CaseExpr, *tree.CastExpr, *tree.CoalesceExpr:
 		op, resultIdx, typs, err = planProjectionOperators(
 			ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables,
 		)
