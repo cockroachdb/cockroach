@@ -12,52 +12,15 @@ package sqlsmith
 
 import (
 	"context"
-	"flag"
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
-
-var (
-	flagExec    = flag.Bool("ex", false, "execute (instead of just parse) generated statements")
-	flagNum     = flag.Int("num", 100, "number of statements to generate")
-	flagSetup   = flag.String("setup", "", "setup for TestGenerateParse, empty for random")
-	flagSetting = flag.String("setting", "", "setting for TestGenerateParse, empty for random")
-)
-
-// TestSetups verifies that all setups generate executable SQL.
-func TestSetups(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
-
-	for name, setup := range Setups {
-		t.Run(name, func(t *testing.T) {
-			ctx := context.Background()
-			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-			defer s.Stopper().Stop(ctx)
-
-			rnd, _ := randutil.NewTestRand()
-
-			sql := setup(rnd)
-			for _, stmt := range sql {
-				if _, err := sqlDB.Exec(stmt); err != nil {
-					t.Log(stmt)
-					t.Fatal(err)
-				}
-			}
-		})
-	}
-}
 
 // TestRandTableInserts tests that valid INSERTS can be generated for the
 // rand-tables setup.
@@ -139,78 +102,5 @@ func TestRandTableInserts(t *testing.T) {
 			numInserts, numErrors, numZeroRowInserts,
 		)
 		t.Log(setup)
-	}
-}
-
-// TestGenerateParse verifies that statements produced by Generate can be
-// parsed. This is useful because since we make AST nodes directly we can
-// sometimes put them into bad states that the parser would never do.
-func TestGenerateParse(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
-
-	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	rnd, seed := randutil.NewTestRand()
-	t.Log("seed:", seed)
-
-	db := sqlutils.MakeSQLRunner(sqlDB)
-
-	setupName := *flagSetup
-	if setupName == "" {
-		setupName = RandSetup(rnd)
-	}
-	setup, ok := Setups[setupName]
-	if !ok {
-		t.Fatalf("unknown setup %s", setupName)
-	}
-	t.Log("setup:", setupName)
-	settingName := *flagSetting
-	if settingName == "" {
-		settingName = RandSetting(rnd)
-	}
-	setting, ok := Settings[settingName]
-	if !ok {
-		t.Fatalf("unknown setting %s", settingName)
-	}
-	settings := setting(rnd)
-	t.Log("setting:", settingName, settings.Options)
-	setupSQL := setup(rnd)
-	t.Log(strings.Join(setupSQL, "\n"))
-	for _, stmt := range setupSQL {
-		db.Exec(t, stmt)
-	}
-
-	smither, err := NewSmither(sqlDB, rnd, settings.Options...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer smither.Close()
-
-	seen := map[string]bool{}
-	for i := 0; i < *flagNum; i++ {
-		stmt := smither.Generate()
-		if err != nil {
-			t.Fatalf("%v: %v", stmt, err)
-		}
-		parsed, err := parser.ParseOne(stmt)
-		if err != nil {
-			t.Fatalf("%v: %v", stmt, err)
-		}
-		stmt = prettyCfg.Pretty(parsed.AST)
-		fmt.Print("STMT: ", i, "\n", stmt, ";\n\n")
-		if *flagExec {
-			db.Exec(t, `SET statement_timeout = '9s'`)
-			if _, err := sqlDB.Exec(stmt); err != nil {
-				es := err.Error()
-				if !seen[es] {
-					seen[es] = true
-					fmt.Printf("ERR (%d): %v\n", i, err)
-				}
-			}
-		}
 	}
 }

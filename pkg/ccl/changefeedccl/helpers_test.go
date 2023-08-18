@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -400,7 +401,7 @@ func startTestFullServer(
 		Knobs: knobs,
 		// This test suite is already probabilistically running with
 		// tenants. No need for the test tenant.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		UseDatabase:       `d`,
 		ExternalIODir:     options.externalIODir,
 		Settings:          options.settings,
@@ -521,10 +522,13 @@ func startTestTenant(
 	tenantRunner := sqlutils.MakeSQLRunner(tenantDB)
 	tenantRunner.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
 
+	ctx := context.Background()
+	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tenantServer.ClusterSettings().SV, true)
+	sql.SecondaryTenantScatterEnabled.Override(ctx, &tenantServer.ClusterSettings().SV, true)
 	waitForTenantPodsActive(t, tenantServer, 1)
 	resetRetry := testingUseFastRetry()
 	return tenantID, tenantServer, tenantDB, func() {
-		tenantServer.Stopper().Stop(context.Background())
+		tenantServer.Stopper().Stop(ctx)
 		resetRetry()
 	}
 }

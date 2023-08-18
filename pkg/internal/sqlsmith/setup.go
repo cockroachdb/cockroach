@@ -34,11 +34,11 @@ const SeedMultiRegionSetupName = "seed-multi-region"
 
 // Setups is a collection of useful initial table states.
 var Setups = map[string]Setup{
-	"empty": wrapCommonSetup(stringSetup("")),
+	"empty": wrapCommonSetup(stringSetup("", "")),
 	// seed is a SQL statement that creates a table with most data types
 	// and some sample rows.
-	"seed":                   wrapCommonSetup(stringSetup(seedTable)),
-	SeedMultiRegionSetupName: wrapCommonSetup(stringSetup(multiregionSeed)),
+	"seed":                   wrapCommonSetup(stringSetup(seedTable, "seed")),
+	SeedMultiRegionSetupName: wrapCommonSetup(stringSetup(multiregionSeed, "seed_mr_table")),
 	RandTableSetupName:       wrapCommonSetup(randTables),
 }
 
@@ -67,9 +67,23 @@ func RandSetup(r *rand.Rand) string {
 	return setupNames[n]
 }
 
-func stringSetup(s string) Setup {
-	return func(*rand.Rand) []string {
-		return []string{s}
+func stringSetup(s, tableName string) Setup {
+	return func(r *rand.Rand) []string {
+		setup := []string{s}
+		if tableName != "" {
+			numSplits := r.Intn(10)
+			for i := 0; i < numSplits; i++ {
+				// At the moment, this function is called only for "seed" and
+				// "seed-multi-region" setups which don't define an explicit
+				// primary key, so the table has hidden rowid column as its PK.
+				splitValue := r.Int63()
+				setup = append(setup, fmt.Sprintf("ALTER TABLE %s SPLIT AT VALUES (%d)", tableName, splitValue))
+			}
+			if numSplits > 0 {
+				setup = append(setup, fmt.Sprintf("ALTER TABLE %s SCATTER", tableName))
+			}
+		}
+		return setup
 	}
 }
 

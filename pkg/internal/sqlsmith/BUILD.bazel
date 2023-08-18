@@ -48,6 +48,7 @@ go_test(
     size = "medium",
     srcs = [
         "main_test.go",
+        "setup_test.go",
         "sqlsmith_test.go",
     ],
     args = ["-test.timeout=295s"],
@@ -59,6 +60,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/parser",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
