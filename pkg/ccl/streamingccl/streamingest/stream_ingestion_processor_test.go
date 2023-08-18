@@ -77,7 +77,7 @@ func (m *mockStreamClient) Create(
 // SetupSpanConfigsStream implements the Client interface.
 func (m *mockStreamClient) SetupSpanConfigsStream(
 	ctx context.Context, tenant roachpb.TenantName,
-) (streampb.StreamID, streamclient.Topology, error) {
+) (streamclient.Subscription, error) {
 	panic("unimplemented")
 }
 
