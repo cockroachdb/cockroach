@@ -315,11 +315,17 @@ func TestRegistry(t *testing.T) {
 			LatencyInSeconds: 2,
 			Query:            "SELECT * FROM users",
 		}
-		statementIgnored := &Statement{
+		statementIgnoredSet := &Statement{
 			ID:               clusterunique.IDFromBytes([]byte("dddddddddddddddddddddddddddddddd")),
 			FingerprintID:    appstatspb.StmtFingerprintID(101),
 			LatencyInSeconds: 2,
 			Query:            "SET vectorize = '_'",
+		}
+		statementIgnoredExplain := &Statement{
+			ID:               clusterunique.IDFromBytes([]byte("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")),
+			FingerprintID:    appstatspb.StmtFingerprintID(102),
+			LatencyInSeconds: 2,
+			Query:            "EXPLAIN SELECT * FROM users",
 		}
 
 		st := cluster.MakeTestingClusterSettings()
@@ -327,7 +333,8 @@ func TestRegistry(t *testing.T) {
 		store := newStore(st)
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, statementNotIgnored)
-		registry.ObserveStatement(session.ID, statementIgnored)
+		registry.ObserveStatement(session.ID, statementIgnoredSet)
+		registry.ObserveStatement(session.ID, statementIgnoredExplain)
 		registry.ObserveTransaction(session.ID, transaction)
 
 		expected := []*Insight{
@@ -336,7 +343,8 @@ func TestRegistry(t *testing.T) {
 				Transaction: transaction,
 				Statements: []*Statement{
 					newStmtWithProblemAndCauses(statementNotIgnored, Problem_SlowExecution, nil),
-					statementIgnored,
+					statementIgnoredSet,
+					statementIgnoredExplain,
 				},
 			},
 		}
