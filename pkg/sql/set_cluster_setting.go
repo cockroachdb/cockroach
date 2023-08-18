@@ -156,9 +156,13 @@ func (p *planner) SetClusterSetting(
 ) (planNode, error) {
 	name := settings.SettingName(strings.ToLower(n.Name))
 	st := p.EvalContext().Settings
-	setting, ok := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
+	setting, ok, nameStatus := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
+	}
+	if nameStatus != settings.NameActive {
+		p.BufferClientNotice(ctx, pgnotice.Newf("the name %q is deprecated; use %q instead", name, setting.Name()))
+		name = setting.Name()
 	}
 
 	if err := checkPrivilegesForSetting(ctx, p, name, "set"); err != nil {

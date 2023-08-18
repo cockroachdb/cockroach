@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -57,9 +58,13 @@ func (p *planner) AlterTenantSetClusterSetting(
 
 	name := settings.SettingName(strings.ToLower(n.Name))
 	st := p.EvalContext().Settings
-	setting, ok := settings.LookupForLocalAccess(name, true /* forSystemTenant - checked above already */)
+	setting, ok, nameStatus := settings.LookupForLocalAccess(name, true /* forSystemTenant - checked above already */)
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
+	}
+	if nameStatus != settings.NameActive {
+		p.BufferClientNotice(ctx, pgnotice.Newf("the name %q is deprecated; use %q instead", name, setting.Name()))
+		name = setting.Name()
 	}
 	// Error out if we're trying to set a system-only variable.
 	if setting.Class() == settings.SystemOnly {
@@ -174,9 +179,13 @@ func (p *planner) ShowTenantClusterSetting(
 	}
 
 	name := settings.SettingName(strings.ToLower(n.Name))
-	setting, ok := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
+	setting, ok, nameStatus := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
+	}
+	if nameStatus != settings.NameActive {
+		p.BufferClientNotice(ctx, pgnotice.Newf("the name %q is deprecated; use %q instead", name, setting.Name()))
+		name = setting.Name()
 	}
 
 	// Error out if we're trying to call this from a non-system tenant or if
