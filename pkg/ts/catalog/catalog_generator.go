@@ -32,8 +32,17 @@ import (
 // the metrics in any useful way.
 //
 // No new uses of this endpoint should be added.
-func GenerateCatalog(metadata map[string]metric.Metadata) ([]ChartSection, error) {
+func GenerateCatalog(nodeMd, appMd, srvMd map[string]metric.Metadata) ([]ChartSection, error) {
 	var sl []ChartSection
+	sl = generateInternal(nodeMd, sl, MetricLayer_STORAGE)
+	sl = generateInternal(appMd, sl, MetricLayer_APPLICATION)
+	sl = generateInternal(srvMd, sl, MetricLayer_SERVER)
+	return sl, nil
+}
+
+func generateInternal(
+	metadata map[string]metric.Metadata, sl []ChartSection, metricLayer MetricLayer,
+) []ChartSection {
 	avgAgg := tspb.TimeSeriesQueryAggregator_AVG
 	for name, meta := range metadata {
 		der := tspb.TimeSeriesQueryDerivative_NONE
@@ -52,6 +61,7 @@ func GenerateCatalog(metadata map[string]metric.Metadata) ([]ChartSection, error
 			CollectionTitle: name,
 			Description:     name,
 			Level:           0,
+			MetricLayer:     metricLayer,
 			Charts: []*IndividualChart{{
 				Title:           name,
 				LongTitle:       name,
@@ -73,5 +83,5 @@ func GenerateCatalog(metadata map[string]metric.Metadata) ([]ChartSection, error
 			}},
 		})
 	}
-	return sl, nil
+	return sl
 }

@@ -1760,7 +1760,7 @@ func (v *v2AuthDecorator) RoundTrip(r *http.Request) (*http.Response, error) {
 
 // MustGetSQLCounter implements serverutils.ApplicationLayerInterface.
 func (ts *testServer) MustGetSQLCounter(name string) int64 {
-	return mustGetSQLCounterForRegistry(ts.registry, name)
+	return mustGetSQLCounterForRegistry(ts.appRegistry, name)
 }
 
 // MustGetSQLNetworkCounter implements the serverutils.ApplicationLayerInterface.

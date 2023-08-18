@@ -141,5 +141,19 @@ message ChartSection {
   repeated ChartSection subsections = 6;
   // charts are the IndividualCharts that are grouped into this section.
   repeated IndividualChart charts = 7;
+  // metricLayer indicates which layer the metrics are coming from.
+  required MetricLayer metricLayer = 8 [(gogoproto.nullable) = false];
 }
 
+// MetricLayer is the component layer at which metrics are collected.
+enum MetricLayer {
+  // STORAGE indicates that the metric relates to the storage/KV layers.
+  STORAGE = 0;
+  // APPLICATION indicates that the metric relates to the application
+  // (SQL/RPC/HTTP) layer.
+  APPLICATION = 1;
+  // SERVER indicates that the metric relates to the server layer:
+  // they are not application-level, but are included
+  // when the SQL service is running as a separate process.
+  SERVER = 2;
+}
