@@ -52,7 +52,7 @@ import (
 //
 // To investigate, consider using "COCKROACH_TEST_TENANT=true" to force-enable
 // just the secondary tenant in all runs (or, alternatively, "false" to
-// force-disable), or use "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=false"
+// force-disable), or use "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true"
 // to disable all random test variables altogether.`
 
 const defaultTestTenantMessage = `test server using tenant; see comment at top of test_server_shim.go for details.`
