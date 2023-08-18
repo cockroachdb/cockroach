@@ -54,7 +54,7 @@ func TestChangefeedNemeses(t *testing.T) {
 	//
 	// TODO(knz): This seems incorrect, see issue #109417.
 	cdcTest(t, testFn, feedTestNoTenants)
-	log.Flush()
+	log.FlushFiles()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
 	if err != nil {

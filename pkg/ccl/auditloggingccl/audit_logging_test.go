@@ -62,7 +62,7 @@ func TestRoleBasedAuditEnterpriseGated(t *testing.T) {
 	// Run a test query.
 	rootRunner.Exec(t, `SHOW CLUSTER SETTING sql.log.user_audit`)
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -87,7 +87,7 @@ func TestRoleBasedAuditEnterpriseGated(t *testing.T) {
 	// Run a test query.
 	rootRunner.Exec(t, `SHOW CLUSTER SETTING sql.log.user_audit`)
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err = log.FetchEntriesFromFiles(
 		0,
@@ -214,7 +214,7 @@ func TestSingleRoleAuditLogging(t *testing.T) {
 		rootRunner.Exec(t, fmt.Sprintf("REVOKE %s from testuser", td.role))
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -317,7 +317,7 @@ func TestMultiRoleAuditLogging(t *testing.T) {
 		testRunner.Exec(t, query)
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -412,7 +412,7 @@ func TestReducedAuditConfig(t *testing.T) {
 	// for the user at that time.
 	testRunner.Exec(t, testQuery)
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -439,7 +439,7 @@ func TestReducedAuditConfig(t *testing.T) {
 	// The user now has a corresponding audit setting. We use a new query here to differentiate.
 	testRunner2.Exec(t, `GRANT SELECT ON TABLE u TO root`)
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err = log.FetchEntriesFromFiles(
 		0,
