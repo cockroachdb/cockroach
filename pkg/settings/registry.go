@@ -28,6 +28,17 @@ import (
 // read concurrently by different callers.
 var registry = make(map[InternalKey]internalSetting)
 
+// aliasRegistry contains the mapping of names to keys, for names
+// different from the keys.
+var aliasRegistry = make(map[SettingName]aliasEntry)
+
+type aliasEntry struct {
+	// key is the setting this name is referring to.
+	key InternalKey
+	// active indicates whether this name is currently in use.
+	active NameStatus
+}
+
 // slotTable stores the same settings as the registry, but accessible by the
 // slot index.
 var slotTable [MaxSettings]internalSetting
@@ -39,8 +50,13 @@ func TestingSaveRegistry() func() {
 	for k, v := range registry {
 		origRegistry[k] = v
 	}
+	var origAliases = make(map[SettingName]aliasEntry)
+	for k, v := range aliasRegistry {
+		origAliases[k] = v
+	}
 	return func() {
 		registry = origRegistry
+		aliasRegistry = origAliases
 	}
 }
 
@@ -224,21 +240,29 @@ var sqlDefaultSettings = map[InternalKey]struct{}{
 	"sql.defaults.zigzag_join.enabled":                                          {},
 }
 
-// register adds a setting to the registry.
-func register(class Class, key InternalKey, desc string, s internalSetting) {
-	if _, ok := retiredSettings[key]; ok {
-		panic(fmt.Sprintf("cannot reuse previously defined setting key: %s", key))
+// checkNameFound verifies whether the given string is known as key or name.
+func checkNameFound(keyOrName string) {
+	if _, ok := retiredSettings[InternalKey(keyOrName)]; ok {
+		panic(fmt.Sprintf("cannot reuse previously defined setting key: %s", InternalKey(keyOrName)))
 	}
-	if _, ok := registry[key]; ok {
-		panic(fmt.Sprintf("setting already defined: %s", key))
+	if _, ok := registry[InternalKey(keyOrName)]; ok {
+		panic(fmt.Sprintf("setting already defined: %s", keyOrName))
 	}
-	if strings.Contains(string(key), "sql.defaults") {
-		if _, ok := sqlDefaultSettings[key]; !ok {
+	if a, ok := aliasRegistry[SettingName(keyOrName)]; ok {
+		panic(fmt.Sprintf("setting already defined: %s (with key %s)", keyOrName, a.key))
+	}
+	if strings.Contains(keyOrName, "sql.defaults") {
+		if _, ok := sqlDefaultSettings[InternalKey(keyOrName)]; !ok {
 			panic(fmt.Sprintf(
 				"new sql.defaults cluster settings: %s is not needed now that `ALTER ROLE ... SET` syntax "+
-					"is supported; please remove the new sql.defaults cluster setting", key))
+					"is supported; please remove the new sql.defaults cluster setting", keyOrName))
 		}
 	}
+}
+
+// register adds a setting to the registry.
+func register(class Class, key InternalKey, desc string, s internalSetting) {
+	checkNameFound(string(key))
 	if len(desc) == 0 {
 		panic(fmt.Sprintf("setting missing description: %s", key))
 	}
@@ -261,6 +285,11 @@ func register(class Class, key InternalKey, desc string, s internalSetting) {
 	s.init(class, key, desc, slot)
 	registry[key] = s
 	slotTable[slot] = s
+}
+
+func registerAlias(key InternalKey, name SettingName, nameStatus NameStatus) {
+	checkNameFound(string(name))
+	aliasRegistry[name] = aliasEntry{key: key, active: nameStatus}
 }
 
 // NumRegisteredSettings returns the number of registered settings.
@@ -308,19 +337,36 @@ var allConsoleKeys = []InternalKey{
 }
 
 // NameToKey returns the key associated with a setting name.
-func NameToKey(name SettingName) (InternalKey, bool) {
-	// TODO(knz): improve this.
-	key := InternalKey(name)
-	return key, true
+func NameToKey(name SettingName) (key InternalKey, found bool, nameStatus NameStatus) {
+	// First check the alias registry.
+	if alias, ok := aliasRegistry[name]; ok {
+		return alias.key, true, alias.active
+	}
+	// No alias: did they perhaps use the key directly?
+	maybeKey := InternalKey(name)
+	if s, ok := registry[maybeKey]; ok {
+		nameStatus := NameActive
+		if s.Name() != SettingName(maybeKey) {
+			// The user is invited to use the new name instead of the key.
+			nameStatus = NameRetired
+		}
+		return maybeKey, true, nameStatus
+	}
+	return "", false, NameActive
 }
 
 // LookupForLocalAccess returns a NonMaskedSetting by name. Used when a setting
 // is being retrieved for local processing within the cluster and not for
 // reporting; sensitive values are accessible.
-func LookupForLocalAccess(name SettingName, forSystemTenant bool) (NonMaskedSetting, bool) {
-	// TODO(knz): handle names different from keys.
-	key := InternalKey(name)
-	return LookupForLocalAccessByKey(key, forSystemTenant)
+func LookupForLocalAccess(
+	name SettingName, forSystemTenant bool,
+) (NonMaskedSetting, bool, NameStatus) {
+	key, ok, nameStatus := NameToKey(name)
+	if !ok {
+		return nil, ok, nameStatus
+	}
+	s, ok := LookupForLocalAccessByKey(key, forSystemTenant)
+	return s, ok, nameStatus
 }
 
 // LookupForLocalAccessByKey returns a NonMaskedSetting by key. Used when a

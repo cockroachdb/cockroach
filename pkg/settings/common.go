@@ -13,12 +13,15 @@ package settings
 import (
 	"context"
 	"fmt"
+
+	"github.com/cockroachdb/errors"
 )
 
 // common implements basic functionality used by all setting types.
 type common struct {
 	class         Class
 	key           InternalKey
+	name          SettingName
 	description   string
 	visibility    Visibility
 	slot          slotIdx
@@ -36,6 +39,7 @@ type slotIdx int32
 func (c *common) init(class Class, key InternalKey, description string, slot slotIdx) {
 	c.class = class
 	c.key = key
+	c.name = SettingName(key) // until overridden
 	c.description = description
 	if slot < 0 {
 		panic(fmt.Sprintf("Invalid slot index %d", slot))
@@ -55,7 +59,7 @@ func (c common) InternalKey() InternalKey {
 }
 
 func (c common) Name() SettingName {
-	return SettingName(c.key)
+	return c.name
 }
 
 func (c common) Description() string {
@@ -112,6 +116,32 @@ func (c *common) SetRetired() {
 	c.description = "do not use - " + c.description
 	c.retired = true
 }
+
+// SetName is used to configure the user-visible name of the setting.
+func (c *common) SetName(name SettingName) {
+	if c.name != SettingName(c.key) {
+		panic(errors.AssertionFailedf("duplicate use of WithName"))
+	}
+	c.name = name
+	registerAlias(c.key, name, NameActive)
+}
+
+// SetRetiredName configures a previous user-visible name of the
+// setting, when that name was diferent from the key and is not in use
+// any more.
+func (c *common) SetRetiredName(name SettingName) {
+	registerAlias(c.key, name, NameRetired)
+}
+
+// NameStatus indicates the status of a setting name.
+type NameStatus bool
+
+const (
+	// NameActive indicates that the name is currently in use.
+	NameActive NameStatus = true
+	// NameRetired indicates that the name is no longer in use.
+	NameRetired NameStatus = false
+)
 
 // SetOnChange installs a callback to be called when a setting's value changes.
 // `fn` should avoid doing long-running or blocking work as it is called on the
