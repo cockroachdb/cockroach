@@ -25,7 +25,7 @@ var experimentalBox2DClusterSetting = settings.RegisterBoolSetting(
 	experimentalBox2DClusterSettingName,
 	"enables the use of certain experimental box2d comparison operators",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 func checkExperimentalBox2DComparisonOperatorEnabled(s *cluster.Settings) error {
 	if !experimentalBox2DClusterSetting.Get(&s.SV) {

@@ -27,7 +27,7 @@ var featureSchemaChangeEnabled = settings.RegisterBoolSetting(
 	"feature.schema_change.enabled",
 	"set to true to enable schema changes, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
+	settings.WithPublic)
 
 // checkSchemaChangeEnabled is a method that wraps the featureflag.CheckEnabled
 // method specifically for all features that are categorized as schema changes.

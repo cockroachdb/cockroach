@@ -47,28 +47,28 @@ var (
 		"default amount of rows to select in a single query during a TTL job",
 		500,
 		settings.PositiveInt,
-	).WithPublic()
+		settings.WithPublic)
 	defaultDeleteBatchSize = settings.RegisterIntSetting(
 		settings.TenantWritable,
 		"sql.ttl.default_delete_batch_size",
 		"default amount of rows to delete in a single query during a TTL job",
 		100,
 		settings.PositiveInt,
-	).WithPublic()
+		settings.WithPublic)
 	defaultDeleteRateLimit = settings.RegisterIntSetting(
 		settings.TenantWritable,
 		"sql.ttl.default_delete_rate_limit",
 		"default delete rate limit for all TTL jobs. Use 0 to signify no rate limit.",
 		0,
 		settings.NonNegativeInt,
-	).WithPublic()
+		settings.WithPublic)
 
 	jobEnabled = settings.RegisterBoolSetting(
 		settings.TenantWritable,
 		"sql.ttl.job.enabled",
 		"whether the TTL job is enabled",
 		true,
-	).WithPublic()
+		settings.WithPublic)
 )
 
 type rowLevelTTLResumer struct {

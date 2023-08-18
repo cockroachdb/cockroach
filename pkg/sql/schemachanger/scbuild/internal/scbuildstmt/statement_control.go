@@ -27,32 +27,30 @@ type schemaStatementControl map[string]bool
 // for the declarative schema changer. Users can specify statement
 // tags for each statement and a "!" symbol in front can have the opposite
 // effect to force enable fully unimplemented features.
-var schemaChangerDisabledStatements = func() *settings.StringSetting {
-	return settings.RegisterValidatedStringSetting(
-		settings.TenantWritable,
-		"sql.schema.force_declarative_statements",
-		"allows force enabling / disabling declarative schema changer for specific statements",
-		"",
-		func(values *settings.Values, s string) error {
-			if s == "" {
-				return nil
-			}
-			// First split the string into individual tags.
-			tags := strings.Split(s, ",")
-			for _, tag := range tags {
-				tag = strings.ToUpper(strings.TrimSpace(tag))
-				if len(tag) > 0 && (tag[0] == '+' || tag[0] == '!') {
-					tag = tag[1:]
-				} else {
-					return errors.Errorf("tag is not properly formatted, must start with '+' or '!' (%s)", tag)
-				}
-				if _, ok := supportedStatementTags[tag]; !ok {
-					return errors.Errorf("statement tag %q is not controlled by the declarative schema changer", tag)
-				}
-			}
+var schemaChangerDisabledStatements = settings.RegisterStringSetting(
+	settings.TenantWritable,
+	"sql.schema.force_declarative_statements",
+	"allows force enabling / disabling declarative schema changer for specific statements",
+	"",
+	settings.WithValidateString(func(values *settings.Values, s string) error {
+		if s == "" {
 			return nil
-		})
-}()
+		}
+		// First split the string into individual tags.
+		tags := strings.Split(s, ",")
+		for _, tag := range tags {
+			tag = strings.ToUpper(strings.TrimSpace(tag))
+			if len(tag) > 0 && (tag[0] == '+' || tag[0] == '!') {
+				tag = tag[1:]
+			} else {
+				return errors.Errorf("tag is not properly formatted, must start with '+' or '!' (%s)", tag)
+			}
+			if _, ok := supportedStatementTags[tag]; !ok {
+				return errors.Errorf("statement tag %q is not controlled by the declarative schema changer", tag)
+			}
+		}
+		return nil
+	}))
 
 // CheckStatementControl if a statement is forced to disabled or enabled. If a
 // statement is disabled then an not implemented error will be panicked. Otherwise,

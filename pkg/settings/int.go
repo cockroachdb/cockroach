@@ -117,64 +117,91 @@ func (i *IntSetting) setToDefault(ctx context.Context, sv *Values) {
 // RegisterIntSetting defines a new setting with type int with a
 // validation function.
 func RegisterIntSetting(
-	class Class, key InternalKey, desc string, defaultValue int64, validateFns ...func(int64) error,
+	class Class, key InternalKey, desc string, defaultValue int64, opts ...SettingOption,
 ) *IntSetting {
-	var composed func(int64) error
-	if len(validateFns) > 0 {
-		composed = func(v int64) error {
-			for _, validateFn := range validateFns {
-				if err := validateFn(v); err != nil {
-					return errors.Wrapf(err, "invalid value for %s", key)
+	validateFn := func(val int64) error {
+		for _, opt := range opts {
+			if opt.validateDurationFn != nil ||
+				opt.validateFloat64Fn != nil ||
+				opt.validateStringFn != nil ||
+				opt.validateProtoFn != nil {
+				panic(errors.AssertionFailedf("wrong validator type"))
+			}
+			if fn := opt.validateInt64Fn; fn != nil {
+				if err := fn(val); err != nil {
+					return err
 				}
 			}
-			return nil
 		}
+		return nil
 	}
-	if composed != nil {
-		if err := composed(defaultValue); err != nil {
-			panic(errors.Wrap(err, "invalid default"))
-		}
+	if err := validateFn(defaultValue); err != nil {
+		panic(errors.Wrap(err, "invalid default"))
 	}
 	setting := &IntSetting{
 		defaultValue: defaultValue,
-		validateFn:   composed,
+		validateFn:   validateFn,
 	}
 	register(class, key, desc, setting)
+	setting.apply(opts)
 	return setting
 }
 
-// WithPublic sets public visibility and can be chained.
-func (i *IntSetting) WithPublic() *IntSetting {
-	i.SetVisibility(Public)
-	return i
-}
-
-// PositiveInt can be passed to RegisterIntSetting
-func PositiveInt(v int64) error {
-	if v < 1 {
+// PositiveInt can be passed to RegisterIntSetting.
+var PositiveInt SettingOption = WithValidateInt(func(v int64) error {
+	if v <= 0 {
 		return errors.Errorf("cannot be set to a non-positive value: %d", v)
 	}
 	return nil
-}
+})
 
 // NonNegativeInt can be passed to RegisterIntSetting.
-func NonNegativeInt(v int64) error {
+var NonNegativeInt SettingOption = WithValidateInt(nonNegativeIntInternal)
+
+func nonNegativeIntInternal(v int64) error {
 	if v < 0 {
 		return errors.Errorf("cannot be set to a negative value: %d", v)
 	}
 	return nil
 }
 
-// NonNegativeIntWithMaximum returns a validation function that can be
-// passed to RegisterIntSetting.
-func NonNegativeIntWithMaximum(maxValue int64) func(int64) error {
-	return func(v int64) error {
-		if v < 0 {
-			return errors.Errorf("cannot be set to a negative integer: %d", v)
+// NonNegativeIntWithMinimum can be passed to RegisterIntSetting.
+func NonNegativeIntWithMinimum(minVal int64) SettingOption {
+	return WithValidateInt(func(v int64) error {
+		if err := nonNegativeIntInternal(v); err != nil {
+			return err
 		}
-		if v > maxValue {
-			return errors.Errorf("cannot be set to a value larger than %d", maxValue)
+		if v < minVal {
+			return errors.Errorf("cannot be set to a value lower than %d: %d", minVal, v)
 		}
 		return nil
-	}
+	})
+}
+
+// NonNegativeIntWithMaximum returns a validation function that can be
+// passed to RegisterIntSetting.
+func NonNegativeIntWithMaximum(maxValue int64) SettingOption {
+	return IntInRange(0, maxValue)
+}
+
+// IntInRange returns a validation function that checks the value
+// is within the given bounds (inclusive).
+func IntInRange(minVal, maxVal int64) SettingOption {
+	return WithValidateInt(func(v int64) error {
+		if v < minVal || v > maxVal {
+			return errors.Errorf("expected value in range [%d, %d], got: %d", minVal, maxVal, v)
+		}
+		return nil
+	})
+}
+
+// IntInRangeOrZeroDisable returns a validation function that checks the value
+// is within the given bounds (inclusive) or is zero (disabled).
+func IntInRangeOrZeroDisable(minVal, maxVal int64) SettingOption {
+	return WithValidateInt(func(v int64) error {
+		if v != 0 && (v < minVal || v > maxVal) {
+			return errors.Errorf("expected value in range [%d, %d] or 0 to disable, got: %d", minVal, maxVal, v)
+		}
+		return nil
+	})
 }

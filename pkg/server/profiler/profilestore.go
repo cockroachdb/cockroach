@@ -44,18 +44,18 @@ var (
 )
 
 func init() {
-	s := settings.RegisterIntSetting(
+	_ = settings.RegisterIntSetting(
 		settings.TenantWritable,
-		"server.heap_profile.max_profiles", "use server.mem_profile.max_profiles instead", 5)
-	s.SetRetired()
+		"server.heap_profile.max_profiles", "use server.mem_profile.max_profiles instead", 5,
+		settings.Retired)
 
-	b := settings.RegisterByteSizeSetting(
+	_ = settings.RegisterByteSizeSetting(
 		settings.TenantWritable,
 		"server.heap_profile.total_dump_size_limit",
 		"use server.mem_profile.total_dump_size_limit instead",
 		128<<20, // 128MiB
+		settings.Retired,
 	)
-	b.SetRetired()
 }
 
 // profileStore represents the directory where heap profiles are stored.

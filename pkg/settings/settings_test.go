@@ -155,7 +155,7 @@ var i1A = settings.RegisterIntSetting(settings.TenantWritable, "i.1", "desc", 0)
 var i2A = settings.RegisterIntSetting(settings.TenantWritable, "i.2", "desc", 5)
 var fA = settings.RegisterFloatSetting(settings.TenantReadOnly, "f", "desc", 5.4)
 var dA = settings.RegisterDurationSetting(settings.TenantWritable, "d", "desc", time.Second)
-var duA = settings.RegisterPublicDurationSettingWithExplicitUnit(settings.TenantWritable, "d_with_explicit_unit", "desc", time.Second, settings.NonNegativeDuration)
+var duA = settings.RegisterDurationSettingWithExplicitUnit(settings.TenantWritable, "d_with_explicit_unit", "desc", time.Second, settings.NonNegativeDuration, settings.WithPublic)
 var _ = settings.RegisterDurationSetting(settings.TenantWritable, "d_with_maximum", "desc", time.Second, settings.NonNegativeDurationWithMaximum(time.Hour))
 var eA = settings.RegisterEnumSetting(settings.SystemOnly, "e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
 var byteSize = settings.RegisterByteSizeSetting(settings.TenantWritable, "zzz", "desc", mb)
@@ -166,37 +166,29 @@ var mA = func() *settings.VersionSetting {
 }()
 
 func init() {
-	settings.RegisterBoolSetting(settings.SystemOnly, "sekretz", "desc", false).SetReportable(false)
-	settings.RegisterBoolSetting(settings.SystemOnly, "rezervedz", "desc", false).SetVisibility(settings.Reserved)
+	_ = settings.RegisterBoolSetting(settings.SystemOnly, "sekretz", "desc", false, settings.WithReportable(false))
+	_ = settings.RegisterBoolSetting(settings.SystemOnly, "rezervedz", "desc", false, settings.WithVisibility(settings.Reserved))
 }
 
-var strVal = settings.RegisterValidatedStringSetting(settings.SystemOnly,
-	"str.val", "desc", "", func(sv *settings.Values, v string) error {
+var strVal = settings.RegisterStringSetting(settings.SystemOnly,
+	"str.val", "desc", "", settings.WithValidateString(func(sv *settings.Values, v string) error {
 		for _, c := range v {
 			if !unicode.IsLetter(c) {
 				return errors.Errorf("not all runes of %s are letters: %c", v, c)
 			}
 		}
 		return nil
-	})
+	}))
 var dVal = settings.RegisterDurationSetting(settings.SystemOnly, "dVal", "desc", time.Second, settings.NonNegativeDuration)
 var fVal = settings.RegisterFloatSetting(settings.SystemOnly, "fVal", "desc", 5.4, settings.NonNegativeFloat)
 var byteSizeVal = settings.RegisterByteSizeSetting(settings.SystemOnly, "byteSize.Val", "desc", mb)
 var iVal = settings.RegisterIntSetting(settings.SystemOnly,
-	"i.Val", "desc", 0, func(v int64) error {
+	"i.Val", "desc", 0, settings.WithValidateInt(func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("int cannot be negative")
 		}
 		return nil
-	})
-
-func TestNonNegativeDurationWithMinimum(t *testing.T) {
-	validator := settings.NonNegativeDurationWithMinimum(time.Minute)
-	require.NoError(t, validator(time.Minute))
-	require.NoError(t, validator(2*time.Minute))
-	require.Error(t, validator(59*time.Second))
-	require.Error(t, validator(-1*time.Second))
-}
+	}))
 
 func TestValidation(t *testing.T) {
 	ctx := context.Background()

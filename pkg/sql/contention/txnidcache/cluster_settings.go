@@ -18,4 +18,4 @@ var MaxSize = settings.RegisterByteSizeSetting(
 	`sql.contention.txn_id_cache.max_size`,
 	"the maximum byte size TxnID cache will use (set to 0 to disable)",
 	64*1024*1024, // 64MiB
-).WithPublic()
+	settings.WithPublic)

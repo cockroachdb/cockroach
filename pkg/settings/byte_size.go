@@ -42,29 +42,33 @@ func (b *ByteSizeSetting) DecodeToString(encoded string) (string, error) {
 	return string(humanizeutil.IBytes(iv)), nil
 }
 
-// WithPublic sets public visibility and can be chained.
-func (b *ByteSizeSetting) WithPublic() *ByteSizeSetting {
-	b.SetVisibility(Public)
-	return b
-}
-
 // RegisterByteSizeSetting defines a new setting with type bytesize and any
 // supplied validation function(s). If no validation functions are given, then
 // the non-negative int validation is performed.
 func RegisterByteSizeSetting(
-	class Class, key InternalKey, desc string, defaultValue int64, validateFns ...func(int64) error,
+	class Class, key InternalKey, desc string, defaultValue int64, opts ...SettingOption,
 ) *ByteSizeSetting {
-
-	var validateFn = func(v int64) error {
-		if len(validateFns) > 0 {
-			for _, fn := range validateFns {
+	validateFn := func(v int64) error {
+		hasExplicitValidationFn := false
+		for _, opt := range opts {
+			if opt.validateProtoFn != nil ||
+				opt.validateFloat64Fn != nil ||
+				opt.validateStringFn != nil ||
+				opt.validateDurationFn != nil {
+				panic(errors.AssertionFailedf("wrong validator type"))
+			}
+			if fn := opt.validateInt64Fn; fn != nil {
+				hasExplicitValidationFn = true
 				if err := fn(v); err != nil {
 					return errors.Wrapf(err, "invalid value for %s", key)
 				}
 			}
-			return nil
 		}
-		return NonNegativeInt(v)
+		if !hasExplicitValidationFn {
+			// Default validation.
+			return nonNegativeIntInternal(v)
+		}
+		return nil
 	}
 
 	if err := validateFn(defaultValue); err != nil {
@@ -75,5 +79,17 @@ func RegisterByteSizeSetting(
 		validateFn:   validateFn,
 	}}
 	register(class, key, desc, setting)
+	setting.apply(opts)
 	return setting
+}
+
+// ByteSizeWithMinimum can be passed to RegisterByteSizeSetting.
+func ByteSizeWithMinimum(minVal int64) SettingOption {
+	return WithValidateInt(func(v int64) error {
+		if v < minVal {
+			return errors.Errorf("cannot be set to a value lower than %v",
+				humanizeutil.IBytes(minVal))
+		}
+		return nil
+	})
 }
