@@ -192,7 +192,9 @@ func TestMultiRegionDataDriven(t *testing.T) {
 				for _, stmt := range strings.Split(`
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.4s';
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s';
-SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s'
+SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s';
+SET CLUSTER SETTING kv.allocator.load_based_rebalancing = 'off';
+SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false
 `,
 					";") {
 					_, err = sqlConn.Exec(stmt)
