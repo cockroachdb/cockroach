@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -272,6 +271,10 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 	// or release any latches.
 
 	origP := origCmd.proposal
+	seedP := origP.seedProp
+	if seedP == nil {
+		seedP = origP
+	}
 
 	// We want to move a few items from origCmd to the new command, but only if we
 	// managed to propose the new command. For example, if we move the latches
@@ -342,19 +345,18 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		// proposal got rejected), but since it's still "local" we don't want to put
 		// it into  an undefined state by removing its response. The same goes for
 		// Request.
-		Local:                   origP.Local,
-		Request:                 origP.Request,
-		leaseStatus:             origP.leaseStatus,
-		tok:                     TrackedRequestToken{}, // filled in in `propose`
-		encodedCommand:          nil,
-		raftAdmissionMeta:       nil,
+		Local:       origP.Local,
+		Request:     origP.Request,
+		leaseStatus: origP.leaseStatus,
+
+		tok:               TrackedRequestToken{}, // filled in in `propose`
+		encodedCommand:    nil,
+		raftAdmissionMeta: nil,
+
 		v2SeenDuringApplication: false,
+		seedProp:                seedP,
 	}
 
-	if buildutil.CrdbTestBuild && origP.reproposal != nil {
-		log.Fatalf(ctx, "ProposalData considered for reproposal twice:\n%+v\nreproposed before as: %+v",
-			origP, origP.reproposal)
-	}
 	defer func() {
 		if !success {
 			return
@@ -371,12 +373,21 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		origP.ec = makeEmptyEndCmds()
 		origP.doneCh = nil
 
-		// If the proposal is synchronous, the client is waiting on the original
+		// If the proposal is synchronous, the client is waiting on the seed
 		// proposal. By the time it has to act on the result, a bunch of reproposals
-		// can have happened. Link them all, so that the client can see all
-		// proposals for post-processing.
-		// NB: origP.reproposal was nil, as verified above.
-		origP.reproposal = newProposal
+		// can have happened, and some may still be running and using the
+		// context/tracing span.
+		//
+		// Unbind the latest reproposal's context so that it no longer posts updates
+		// to the tracing span (it won't apply anyway). Link to the new latest
+		// reproposal, so that the client can clear its context at post-processing.
+		//
+		// TODO(pavelkalinnikov): there should be a better way, after ProposalData
+		// lifecycle is reconsidered.
+		if latest := seedP.reproposal; latest != nil {
+			latest.ctx = r.AnnotateCtx(context.TODO())
+		}
+		seedP.reproposal = newProposal
 	}()
 
 	// We need to track the request again in order to protect its timestamp until

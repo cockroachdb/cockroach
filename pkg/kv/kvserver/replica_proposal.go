@@ -199,9 +199,21 @@ type ProposalData struct {
 	// accidentally reinsert a finished proposal into the map.
 	v2SeenDuringApplication bool
 
-	// reproposal is the proposal that superseded this one. Superseding proposals
-	// form a chain starting from the original proposal. See Replica.mu.proposals
-	// comment for details.
+	// seedProp points at the original proposal in the chain of (re-)proposals, if
+	// this ProposalData is a reproposal. This field is nil for the seed proposal.
+	seedProp *ProposalData
+	// reproposal is the last proposal that superseded the seed proposal.
+	// Superseding proposals form a chain starting from the seed proposal. This
+	// field is set only on the seed proposal, and is updated every time a new
+	// reproposal is cast.
+	//
+	// See Replica.mu.proposals comment for more details.
+	//
+	// TODO(pavelkalinnikov): We are pointing at the latest reproposal only, so
+	// that the intermediate ones can be GCed in case the chain of reproposals is
+	// very long. This chain reasoning is subtle, we should decompose ProposalData
+	// in such a way that the "common" parts of the (re-)proposals are shared and
+	// chaining isn't necessary.
 	reproposal *ProposalData
 }
 
