@@ -67,6 +67,13 @@ var (
 		"if nonzero, entries in system.web_sessions older than this duration are periodically purged",
 		time.Hour,
 		settings.WithPublic)
+
+	execInsightsPurgeTTL = settings.RegisterDurationSetting(
+		settings.ApplicationLevel,
+		"server.execution_insights.purge.ttl",
+		"if nonzero, entries in system.transaction_execution_insights and system.statement_execution_insights older than this duration are periodically purged",
+		7*24*time.Hour, // 7 days
+		settings.WithPublic)
 )
 
 // gcSystemLog deletes entries in the given system log table between
@@ -222,6 +229,8 @@ func getTablesToGC() []systemLogGCConfig {
 		{false, "eventlog", "timestamp", eventLogTTL, timeutil.Unix(0, 0)},
 		{false, "web_sessions", "expiresAt", webSessionPurgeTTL, timeutil.Unix(0, 0)},
 		{false, "web_sessions", "revokedAt", webSessionPurgeTTL, timeutil.Unix(0, 0)},
+		{false, "statement_execution_insights", "created", execInsightsPurgeTTL, timeutil.Unix(0, 0)},
+		{false, "transaction_execution_insights", "created", execInsightsPurgeTTL, timeutil.Unix(0, 0)},
 	}
 }
 

@@ -247,3 +247,98 @@ func TestLogGCTrigger(t *testing.T) {
 		})
 	}
 }
+
+func TestExecutionInsightsGCTrigger(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	systemExecInsightsRowCount := func(ctx context.Context, db *gosql.DB, table string, ts time.Time) int {
+		var count int
+		err := db.QueryRowContext(ctx,
+			fmt.Sprintf(`SELECT count(*) FROM system.%s WHERE created <= $1`, table),
+			ts,
+		).Scan(&count)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+
+	systemExecInsightsMaxTS := func(ctx context.Context, db *gosql.DB, table string) (time.Time, error) {
+		var ts time.Time
+		err := db.QueryRowContext(ctx,
+			fmt.Sprintf(`SELECT created FROM system.%s ORDER by created DESC LIMIT 1`, table),
+		).Scan(&ts)
+		if err != nil {
+			return time.Time{}, err
+		}
+		return ts, nil
+	}
+
+	gcDone := make(chan struct{})
+
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				SystemLogsGCGCDone: gcDone,
+				SystemLogsGCPeriod: time.Nanosecond,
+			},
+		},
+	}
+
+	s, db, _ := serverutils.StartServer(t, params)
+	ctx := context.Background()
+
+	if _, err := db.Exec(
+		`INSERT INTO system.statement_execution_insights 
+    (session_id, transaction_id, transaction_fingerprint_id, statement_id, statement_fingerprint_id) 
+		VALUES ('sessionid', gen_random_uuid(), b'\141\142\143', 'statementid', b'\141\142\143')`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO system.transaction_execution_insights 
+    (session_id, transaction_id, transaction_fingerprint_id) 
+		VALUES ('sessionid', gen_random_uuid(), b'\141\142\143')`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stopper().Stop(ctx)
+
+	// Reading gcDone once ensures that the previous gc is done
+	// (it could have been done long back and is waiting to send on this channel),
+	// and the next gc has started.
+	// Reading it twice guarantees that the next gc has also completed.
+	// Before running the assertions below one gc run has to be guaranteed.
+	<-gcDone
+	<-gcDone
+
+	a := assert.New(t)
+	stmtInsightsMaxTS, err := systemExecInsightsMaxTS(ctx, db, "statement_execution_insights")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.NotEqual(
+		systemExecInsightsRowCount(ctx, db, "statement_execution_insights", stmtInsightsMaxTS),
+		0,
+		"Expected non zero number of stmt insights before %v as gc is not enabled",
+		stmtInsightsMaxTS,
+	)
+	txnInsightsMaxTS, err := systemExecInsightsMaxTS(ctx, db, "transaction_execution_insights")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.NotEqual(
+		systemExecInsightsRowCount(ctx, db, "transaction_execution_insights", txnInsightsMaxTS),
+		0,
+		"Expected non zero number of txn insights before %v as gc is not enabled",
+		txnInsightsMaxTS,
+	)
+
+	_, err = db.Exec("SET CLUSTER SETTING server.execution_insights.purge.ttl='1us'")
+	a.NoError(err)
+
+	<-gcDone
+	<-gcDone
+	a.Equal(0, systemExecInsightsRowCount(ctx, db, "statement_execution_insights", stmtInsightsMaxTS), "Expected zero stmt insights before %v after gc", stmtInsightsMaxTS)
+	a.Equal(0, systemExecInsightsRowCount(ctx, db, "transaction_execution_insights", txnInsightsMaxTS), "Expected zero txn insights before %v after gc", txnInsightsMaxTS)
+}
