@@ -773,6 +773,7 @@ func init() {
 		[]*cobra.Command{
 			sqlShellCmd,
 			genSettingsListCmd,
+			genMetricListCmd,
 			demoCmd,
 			statementBundleRecreateCmd,
 			debugListFilesCmd,

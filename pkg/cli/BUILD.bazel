@@ -183,6 +183,7 @@ go_library(
         "//pkg/storage/fs",
         "//pkg/testutils/serverutils",
         "//pkg/ts",
+        "//pkg/ts/catalog",
         "//pkg/ts/tspb",
         "//pkg/ts/tsutil",
         "//pkg/upgrade/upgrades",

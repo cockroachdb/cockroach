@@ -101,9 +101,15 @@ type SQLServerWrapper struct {
 	grpc       *grpcServer
 	nodeDialer *nodedialer.Dialer
 	db         *kv.DB
-	registry   *metric.Registry
-	recorder   *status.MetricsRecorder
-	runtime    *status.RuntimeStatSampler
+
+	// Metric registries.
+	// See the explanatory comments in server.go and status/recorder.g o
+	// for details.
+	registry    *metric.Registry
+	sysRegistry *metric.Registry
+
+	recorder *status.MetricsRecorder
+	runtime  *status.RuntimeStatSampler
 
 	http            *httpServer
 	adminAuthzCheck privchecker.CheckerForRPCHandlers
@@ -444,12 +450,13 @@ func newTenantServer(
 		clock:      args.clock,
 		rpcContext: args.rpcContext,
 
-		grpc:       args.grpc,
-		nodeDialer: args.nodeDialer,
-		db:         args.db,
-		registry:   args.registry,
-		recorder:   args.recorder,
-		runtime:    args.runtime,
+		grpc:        args.grpc,
+		nodeDialer:  args.nodeDialer,
+		db:          args.db,
+		registry:    args.registry,
+		sysRegistry: args.sysRegistry,
+		recorder:    args.recorder,
+		runtime:     args.runtime,
 
 		http:            sHTTP,
 		adminAuthzCheck: adminAuthzCheck,
@@ -621,7 +628,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 
 	// Start measuring the Go scheduler latency.
 	if err := schedulerlatency.StartSampler(
-		workersCtx, s.sqlServer.cfg.Settings, s.stopper, s.registry, base.DefaultMetricsSampleInterval,
+		workersCtx, s.sqlServer.cfg.Settings, s.stopper, s.sysRegistry, base.DefaultMetricsSampleInterval,
 	); err != nil {
 		return err
 	}
@@ -659,10 +666,11 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		panic(errors.AssertionFailedf("nil log metrics registry at server startup"))
 	}
 
-	// We can now add the node registry.
+	// We can now connect the metric registries to the recorder.
 	s.recorder.AddNode(
+		metric.NewRegistry(), // node registry -- unused here
 		s.registry,
-		logRegistry,
+		logRegistry, s.sysRegistry,
 		roachpb.NodeDescriptor{
 			NodeID: s.rpcContext.NodeID.Get(),
 		},
@@ -1146,9 +1154,8 @@ func makeTenantSQLServerArgs(
 	circularJobRegistry := &jobs.Registry{}
 
 	// Initialize the protectedts subsystem in multi-tenant clusters.
-	var protectedTSProvider protectedts.Provider
 	protectedtsKnobs, _ := baseCfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
-	pp, err := ptprovider.New(ptprovider.Config{
+	protectedTSProvider, err := ptprovider.New(ptprovider.Config{
 		DB:       internalExecutorFactory,
 		Settings: st,
 		Knobs:    protectedtsKnobs,
@@ -1164,8 +1171,7 @@ func makeTenantSQLServerArgs(
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
-	registry.AddMetricStruct(pp.Metrics())
-	protectedTSProvider = pp
+	registry.AddMetricStruct(protectedTSProvider.Metrics())
 
 	recorder := status.NewMetricsRecorder(
 		sqlCfg.TenantID, tenantNameContainer, nil /* nodeLiveness */, nil, /* remoteClocks */
@@ -1177,7 +1183,8 @@ func makeTenantSQLServerArgs(
 	} else {
 		runtime = status.NewRuntimeStatSampler(startupCtx, clock.WallClock())
 	}
-	registry.AddMetricStruct(runtime)
+	sysRegistry := metric.NewRegistry()
+	sysRegistry.AddMetricStruct(runtime)
 
 	// NB: The init method will be called in (*SQLServerWrapper).PreStart().
 	esb := &externalStorageBuilder{}
@@ -1263,6 +1270,7 @@ func makeTenantSQLServerArgs(
 		distSender:               ds,
 		db:                       db,
 		registry:                 registry,
+		sysRegistry:              sysRegistry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
 		remoteFlowRunner:         remoteFlowRunner,
