@@ -2210,11 +2210,8 @@ COMMIT
 subtest add_multiple_in_txn
 
 statement ok
-CREATE SEQUENCE IF NOT EXISTS multipleinstmt_seq MAXVALUE 9007199254740991;
-
-statement ok
 CREATE TABLE IF NOT EXISTS multipleinstmt (
-	id INT8 DEFAULT nextval('multipleinstmt_seq') PRIMARY KEY, key STRING, value STRING
+	key STRING PRIMARY KEY, value STRING
 );
 
 statement ok
@@ -2229,23 +2226,23 @@ ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS a BOOL DEFAULT false;
 ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS b STRING;
 COMMIT;
 
-query ITTBT
-SELECT * FROM multipleinstmt ORDER BY id ASC;
+query TTBT
+SELECT * FROM multipleinstmt ORDER BY key ASC;
 ----
-1  a  a  false  NULL
-2  b  b  false  NULL
-3  c  c  false  NULL
+a  a  false  NULL
+b  b  false  NULL
+c  c  false  NULL
 
 statement ok
 ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS c BOOL DEFAULT true,
                            ADD COLUMN IF NOT EXISTS d STRING;
 
-query ITTBTBT
-SELECT * FROM multipleinstmt ORDER BY id ASC;
+query TTBTBT
+SELECT * FROM multipleinstmt ORDER BY key ASC;
 ----
-1  a  a  false  NULL  true  NULL
-2  b  b  false  NULL  true  NULL
-3  c  c  false  NULL  true  NULL
+a  a  false  NULL  true  NULL
+b  b  false  NULL  true  NULL
+c  c  false  NULL  true  NULL
 
 skip_on_retry
 
@@ -2412,8 +2409,8 @@ FROM (
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
 table_id  name               state   refobjid
-202       test_serial_b_seq  PUBLIC  201
-201       test_serial        PUBLIC  NULL
+201       test_serial_b_seq  PUBLIC  200
+200       test_serial        PUBLIC  NULL
 
 statement ok
 DROP TABLE test_serial;
@@ -2447,8 +2444,8 @@ FROM (
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
 table_id  name               state   refobjid
-204       test_serial_b_seq  PUBLIC  203
-203       test_serial        PUBLIC  NULL
+203       test_serial_b_seq  PUBLIC  202
+202       test_serial        PUBLIC  NULL
 
 statement ok
 ALTER TABLE test_serial DROP COLUMN b;
@@ -2463,7 +2460,7 @@ FROM (
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
 table_id  name         state   refobjid
-203       test_serial  PUBLIC  NULL
+202       test_serial  PUBLIC  NULL
 
 statement ok
 DROP TABLE test_serial;
