@@ -457,3 +457,23 @@ num=7
    queued writers:
     active: true req: 7, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 7
+
+# ---------------------------------------------------------------------------------
+# Ensure the case where a locking skip locked request finds another request from
+# its own transaction correctly returns an error.
+# ---------------------------------------------------------------------------------
+
+new-request r=req10 txn=txn1 ts=10,1 spans=exclusive@f skip-locked
+----
+
+scan r=req10
+----
+start-waiting: false
+
+should-wait r=req10
+----
+false
+
+is-key-locked-by-conflicting-txn r=req10 k=f strength=exclusive
+----
+SKIP LOCKED request should not find another waiting request from the same transaction

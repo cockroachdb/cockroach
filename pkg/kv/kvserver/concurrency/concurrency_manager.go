@@ -783,7 +783,7 @@ func (g *Guard) CheckOptimisticNoLatchConflicts() (ok bool) {
 // returned, but so is nil.
 func (g *Guard) IsKeyLockedByConflictingTxn(
 	key roachpb.Key, strength lock.Strength,
-) (bool, *enginepb.TxnMeta) {
+) (bool, *enginepb.TxnMeta, error) {
 	return g.ltg.IsKeyLockedByConflictingTxn(key, strength)
 }
 

@@ -933,7 +933,7 @@ type LockTableView interface {
 	// for conflicts. This helps prevent a stream of locking SKIP LOCKED requests
 	// from starving out regular locking requests. In such cases, true is
 	// returned, but so is nil.
-	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta)
+	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta, error)
 }
 
 // MVCCGetOptions bundles options for the MVCCGet family of functions.
