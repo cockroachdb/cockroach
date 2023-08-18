@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -1821,8 +1820,8 @@ func (desc *wrapper) validateMinStaleRows(vea catalog.ValidationErrorAccumulator
 	if value != nil {
 		settingName := catpb.AutoStatsMinStaleTableSettingName
 		desc.verifyProperTableForStatsSetting(vea, settingName)
-		if err := settings.NonNegativeInt(*value); err != nil {
-			vea.Report(errors.Wrapf(err, "invalid integer value for %s", settingName))
+		if *value < 0 {
+			vea.Report(errors.Newf("invalid integer value for %s: cannot be set to a negative value: %d", settingName, *value))
 		}
 	}
 }
@@ -1833,8 +1832,8 @@ func (desc *wrapper) validateFractionStaleRows(
 	if value != nil {
 		settingName := catpb.AutoStatsFractionStaleTableSettingName
 		desc.verifyProperTableForStatsSetting(vea, settingName)
-		if err := settings.NonNegativeFloat(*value); err != nil {
-			vea.Report(errors.Wrapf(err, "invalid float value for %s", settingName))
+		if *value < 0 {
+			vea.Report(errors.Newf("invalid float value for %s: cannot set to a negative value: %f", settingName, *value))
 		}
 	}
 }

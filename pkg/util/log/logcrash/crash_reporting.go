@@ -57,7 +57,7 @@ var (
 		"diagnostics.reporting.enabled",
 		"enable reporting diagnostic metrics to cockroach labs",
 		false,
-	).WithPublic()
+		settings.WithPublic)
 
 	// CrashReports wraps "diagnostics.reporting.send_crash_reports".
 	CrashReports = settings.RegisterBoolSetting(

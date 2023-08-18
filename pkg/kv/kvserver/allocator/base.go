@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/errors"
 	"go.etcd.io/raft/v3"
 )
 
@@ -105,61 +104,38 @@ type TestingKnobs struct {
 // rangeRebalanceThreshold because QPS can naturally vary over time as
 // workloads change and clients come and go, so we need to be a little more
 // forgiving to avoid thrashing.
-var QPSRebalanceThreshold = func() *settings.FloatSetting {
-	s := settings.RegisterFloatSetting(
-		settings.SystemOnly,
-		"kv.allocator.qps_rebalance_threshold",
-		"minimum fraction away from the mean a store's QPS (such as queries per second) can be before it is considered overfull or underfull",
-		0.10,
-		settings.NonNegativeFloat,
-		func(f float64) error {
-			if f < 0.01 {
-				return errors.Errorf("cannot set kv.allocator.qps_rebalance_threshold to less than 0.01")
-			}
-			return nil
-		},
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
+var QPSRebalanceThreshold = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.allocator.qps_rebalance_threshold",
+	"minimum fraction away from the mean a store's QPS (such as queries per second) can be before it is considered overfull or underfull",
+	0.10,
+	settings.FloatWithMinimum(0.01),
+	settings.WithPublic,
+)
 
 // CPURebalanceThreshold is the minimum ratio of a store's cpu time to the mean
 // cpu time at which that store is considered overfull or underfull of cpu
 // usage.
-var CPURebalanceThreshold = func() *settings.FloatSetting {
-	s := settings.RegisterFloatSetting(
-		settings.SystemOnly,
-		"kv.allocator.store_cpu_rebalance_threshold",
-		"minimum fraction away from the mean a store's cpu usage can be before it is considered overfull or underfull",
-		0.10,
-		settings.NonNegativeFloat,
-		func(f float64) error {
-			if f < 0.01 {
-				return errors.Errorf("cannot set kv.allocator.store_cpu_rebalance_threshold to less than 0.01")
-			}
-			return nil
-		},
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
+var CPURebalanceThreshold = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.allocator.store_cpu_rebalance_threshold",
+	"minimum fraction away from the mean a store's cpu usage can be before it is considered overfull or underfull",
+	0.10,
+	settings.FloatWithMinimum(0.01),
+	settings.WithPublic,
+)
 
 // LoadBasedRebalanceInterval controls how frequently each store checks for
 // load-base lease/replica rebalancing opportunties.
-var LoadBasedRebalanceInterval = settings.RegisterPublicDurationSettingWithExplicitUnit(
+var LoadBasedRebalanceInterval = settings.RegisterDurationSettingWithExplicitUnit(
 	settings.SystemOnly,
 	"kv.allocator.load_based_rebalancing_interval",
 	"the rough interval at which each store will check for load-based lease / replica rebalancing opportunities",
 	defaultLoadBasedRebalancingInterval,
-	func(d time.Duration) error {
-		// Setting this interval to a very low duration is generally going to be a
-		// bad idea without any real benefit, so let's disallow that.
-		const min = 10 * time.Second
-		if d < min {
-			return errors.Errorf("must specify a minimum of %s", min)
-		}
-		return nil
-	},
+	// Setting this interval to a very low duration is generally going to be a
+	// bad idea without any real benefit, so let's disallow that.
+	settings.DurationWithMinimum(10*time.Second),
+	settings.WithPublic,
 )
 
 // MinQPSDifferenceForTransfers is the minimum QPS difference that the store
@@ -172,18 +148,15 @@ var LoadBasedRebalanceInterval = settings.RegisterPublicDurationSettingWithExpli
 // be above or below the mean to be considered overfull or underfull
 // respectively. This is to make lease and replica transfers less sensitive to
 // the jitters in any given workload.
-var MinQPSDifferenceForTransfers = func() *settings.FloatSetting {
-	s := settings.RegisterFloatSetting(
-		settings.SystemOnly,
-		"kv.allocator.min_qps_difference_for_transfers",
-		"the minimum qps difference that must exist between any two stores"+
-			" for the allocator to allow a lease or replica transfer between them",
-		2*MinQPSThresholdDifference,
-		settings.NonNegativeFloat,
-	)
-	s.SetVisibility(settings.Reserved)
-	return s
-}()
+var MinQPSDifferenceForTransfers = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.allocator.min_qps_difference_for_transfers",
+	"the minimum qps difference that must exist between any two stores"+
+		" for the allocator to allow a lease or replica transfer between them",
+	2*MinQPSThresholdDifference,
+	settings.NonNegativeFloat,
+	settings.WithVisibility(settings.Reserved),
+)
 
 // transferLeaseGoal dictates whether a call to TransferLeaseTarget should
 // improve locality of access, convergence of lease counts or convergence of

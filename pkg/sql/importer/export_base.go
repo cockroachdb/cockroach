@@ -13,7 +13,6 @@ package importer
 import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/errors"
 )
 
 // eventMemoryMultipier is the multiplier for the amount of memory needed to
@@ -25,12 +24,7 @@ var eventMemoryMultipier = settings.RegisterFloatSetting(
 	"export.event_memory_multiplier",
 	"the amount of memory required to export a datum is multiplied by this factor",
 	3,
-	func(v float64) error {
-		if v < 1 {
-			return errors.New("value must be at least 1")
-		}
-		return nil
-	},
+	settings.FloatWithMinimum(1),
 )
 
 // ExportTestingKnobs contains testing knobs for Export.

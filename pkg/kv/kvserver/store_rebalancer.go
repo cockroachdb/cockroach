@@ -80,7 +80,7 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 		int64(LBRebalancingLeasesOnly):        "leases",
 		int64(LBRebalancingLeasesAndReplicas): "leases and replicas",
 	},
-).WithPublic()
+	settings.WithPublic)
 
 // LBRebalancingMode controls if and when we do store-level rebalancing
 // based on load.

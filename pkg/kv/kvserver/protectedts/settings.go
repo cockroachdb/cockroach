@@ -27,6 +27,7 @@ var MaxBytes = settings.RegisterIntSetting(
 	"if non-zero the limit of the number of bytes of spans and metadata which can be protected",
 	1<<20, // 1 MiB
 	settings.NonNegativeInt,
+	settings.WithVisibility(settings.Reserved),
 )
 
 // MaxSpans controls the maximum number of spans which can be protected
@@ -37,6 +38,7 @@ var MaxSpans = settings.RegisterIntSetting(
 	"if non-zero the limit of the number of spans which can be protected",
 	32768,
 	settings.NonNegativeInt,
+	settings.WithVisibility(settings.Reserved),
 )
 
 // PollInterval defines how frequently the protectedts state is polled by the
@@ -47,8 +49,3 @@ var PollInterval = settings.RegisterDurationSetting(
 	// TODO(ajwerner): better description.
 	"the interval at which the protectedts subsystem state is polled",
 	2*time.Minute, settings.NonNegativeDuration)
-
-func init() {
-	MaxBytes.SetVisibility(settings.Reserved)
-	MaxSpans.SetVisibility(settings.Reserved)
-}

@@ -54,14 +54,11 @@ func init() {
 // Endpoint is the entry point under which the debug tools are housed.
 const Endpoint = "/debug/"
 
-var _ = func() *settings.StringSetting {
-	// This setting definition still exists so as to not break
-	// deployment scripts that set it unconditionally.
-	v := settings.RegisterStringSetting(
-		settings.TenantWritable, "server.remote_debugging.mode", "unused", "local")
-	v.SetRetired()
-	return v
-}()
+// This setting definition still exists so as to not break
+// deployment scripts that set it unconditionally.
+var _ = settings.RegisterStringSetting(
+	settings.TenantWritable, "server.remote_debugging.mode", "unused", "local",
+	settings.Retired)
 
 // Server serves the /debug/* family of tools.
 type Server struct {

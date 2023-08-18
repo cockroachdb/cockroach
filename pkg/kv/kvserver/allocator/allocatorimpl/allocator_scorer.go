@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -124,18 +123,15 @@ const (
 // RangeRebalanceThreshold is the minimum ratio of a store's range count to
 // the mean range count at which that store is considered overfull or underfull
 // of ranges.
-var RangeRebalanceThreshold = func() *settings.FloatSetting {
-	s := settings.RegisterFloatSetting(
-		settings.SystemOnly,
-		"kv.allocator.range_rebalance_threshold",
-		"minimum fraction away from the mean a store's range count can be before "+
-			"it is considered overfull or underfull",
-		0.05,
-		settings.NonNegativeFloat,
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
+var RangeRebalanceThreshold = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.allocator.range_rebalance_threshold",
+	"minimum fraction away from the mean a store's range count can be before "+
+		"it is considered overfull or underfull",
+	0.05,
+	settings.NonNegativeFloat,
+	settings.WithPublic,
+)
 
 // ReplicaIOOverloadThreshold is the maximum IO overload score of a candidate
 // store before being excluded as a candidate for rebalancing replicas or
@@ -236,18 +232,7 @@ var maxDiskUtilizationThreshold = settings.RegisterFloatSetting(
 		"this should be set higher than "+
 		"`kv.allocator.rebalance_to_max_disk_utilization_threshold`",
 	defaultMaxDiskUtilizationThreshold,
-	func(f float64) error {
-		if f > 0.99 {
-			return errors.Errorf(
-				"Cannot set kv.allocator.max_disk_utilization_threshold " +
-					"greater than 0.99")
-		}
-		if f < 0.0 {
-			return errors.Errorf(
-				"Cannot set kv.allocator.max_disk_utilization_threshold less than 0")
-		}
-		return nil
-	},
+	settings.FloatInRange(0, 0.99),
 )
 
 // rebalanceToMaxDiskUtilizationThreshold: if the fraction used of a store
@@ -264,19 +249,7 @@ var rebalanceToMaxDiskUtilizationThreshold = settings.RegisterFloatSetting(
 		"target; this should be set lower than "+
 		"`kv.allocator.max_disk_utilization_threshold`",
 	defaultRebalanceToMaxDiskUtilizationThreshold,
-	func(f float64) error {
-		if f > 0.99 {
-			return errors.Errorf(
-				"Cannot set kv.allocator.rebalance_to_max_disk_utilization_threshold " +
-					"greater than 0.99")
-		}
-		if f < 0.0 {
-			return errors.Errorf(
-				"Cannot set kv.allocator.rebalance_to_max_disk_utilization_threshold " +
-					"less than 0")
-		}
-		return nil
-	},
+	settings.FloatInRange(0, 0.99),
 )
 
 // ScorerOptions defines the interface for the two heuristics that trigger

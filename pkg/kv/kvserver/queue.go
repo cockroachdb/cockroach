@@ -59,11 +59,8 @@ var queueGuaranteedProcessingTimeBudget = settings.RegisterDurationSetting(
 	"the guaranteed duration before which the processing of a queue may "+
 		"time out",
 	defaultProcessTimeout,
+	settings.WithVisibility(settings.Reserved),
 )
-
-func init() {
-	queueGuaranteedProcessingTimeBudget.SetVisibility(settings.Reserved)
-}
 
 func defaultProcessTimeoutFunc(cs *cluster.Settings, _ replicaInQueue) time.Duration {
 	return queueGuaranteedProcessingTimeBudget.Get(&cs.SV)
