@@ -193,7 +193,7 @@ func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth 
 
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
-	log.FlushFiles()
+	log.FlushAllSync()
 }
 
 // PanicAsError turns r into an error if it is not one already.
