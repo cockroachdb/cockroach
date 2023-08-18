@@ -53,6 +53,7 @@ type StoreGrantCoordinators struct {
 	makeStoreRequesterFunc          makeStoreRequesterFunc
 	kvIOTokensExhaustedDuration     *metric.Counter
 	kvIOTokensAvailable             *metric.Gauge
+	kvElasticIOTokensAvailable      *metric.Gauge
 	kvIOTokensTookWithoutPermission *metric.Counter
 	kvIOTotalTokensTaken            *metric.Counter
 
@@ -166,12 +167,15 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		// pebbleMetricsTick and allocateIOTokensTick will get called during
 		// initialization, which will also set these to unlimited.
 		startingIOTokens:                unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval(),
+		startingElasticIOTokens:         unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval(),
 		ioTokensExhaustedDurationMetric: sgc.kvIOTokensExhaustedDuration,
 		availableTokensMetrics:          sgc.kvIOTokensAvailable,
+		availableElasticTokensMetric:    sgc.kvElasticIOTokensAvailable,
 		tookWithoutPermissionMetric:     sgc.kvIOTokensTookWithoutPermission,
 		totalTokensTaken:                sgc.kvIOTotalTokensTaken,
 	}
 	kvg.coordMu.availableIOTokens = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
+	kvg.coordMu.availableElasticIOTokens = kvg.coordMu.availableIOTokens
 	kvg.coordMu.elasticDiskBWTokensAvailable = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
 
 	opts := makeWorkQueueOptions(KVWork)
@@ -466,6 +470,7 @@ func makeStoresGrantCoordinators(
 		kvIOTokensTookWithoutPermission: metrics.KVIOTokensTookWithoutPermission,
 		kvIOTotalTokensTaken:            metrics.KVIOTotalTokensTaken,
 		kvIOTokensAvailable:             metrics.KVIOTokensAvailable,
+		kvElasticIOTokensAvailable:      metrics.KVElasticIOTokensAvailable,
 		workQueueMetrics:                storeWorkQueueMetrics,
 		onLogEntryAdmitted:              onLogEntryAdmitted,
 		knobs:                           knobs,
@@ -975,7 +980,8 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
 			case *slotGranter:
 				s.Printf("%s%s: used: %d, total: %d", curSep, workKindString(kind), g.usedSlots, g.totalSlots)
 			case *kvStoreTokenGranter:
-				s.Printf(" io-avail: %d, elastic-disk-bw-tokens-avail: %d", g.coordMu.availableIOTokens,
+				s.Printf(" io-avail: %d(%d), elastic-disk-bw-tokens-avail: %d", g.coordMu.availableIOTokens,
+					g.coordMu.availableElasticIOTokens,
 					g.coordMu.elasticDiskBWTokensAvailable)
 			}
 		case SQLStatementLeafStartWork, SQLStatementRootStartWork:
@@ -1011,6 +1017,7 @@ type GrantCoordinatorMetrics struct {
 	KVIOTokensTookWithoutPermission *metric.Counter
 	KVIOTotalTokensTaken            *metric.Counter
 	KVIOTokensAvailable             *metric.Gauge
+	KVElasticIOTokensAvailable      *metric.Gauge
 	SQLLeafStartUsedSlots           *metric.Gauge
 	SQLRootStartUsedSlots           *metric.Gauge
 }
@@ -1033,6 +1040,7 @@ func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 		KVIOTokensTookWithoutPermission: metric.NewCounter(kvIONumIOTokensTookWithoutPermission),
 		KVIOTotalTokensTaken:            metric.NewCounter(kvIOTotalTokensTaken),
 		KVIOTokensAvailable:             metric.NewGauge(kvIOTokensAvailable),
+		KVElasticIOTokensAvailable:      metric.NewGauge(kvElasticIOTokensAvailable),
 	}
 	return m
 }

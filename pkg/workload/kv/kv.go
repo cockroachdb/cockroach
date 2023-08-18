@@ -95,6 +95,7 @@ type kv struct {
 	enum                                 bool
 	keySize                              int
 	insertCount                          int
+	useBackgroundTxnQoS                  bool
 }
 
 func init() {
@@ -172,6 +173,8 @@ var kvMeta = workload.Meta{
 		g.flags.IntVar(&g.insertCount, `insert-count`, 0,
 			`Number of rows to insert before beginning the workload. Keys are inserted `+
 				`uniformly over the key range.`)
+		g.flags.BoolVar(&g.useBackgroundTxnQoS, `background-qos`, false,
+			`Set default_transaction_quality_of_service session variable to "background".`)
 		g.flags.DurationVar(&g.timeout, `timeout`, 0, `Client-side statement timeout.`)
 		RandomSeed.AddFlag(&g.flags)
 		g.flags.IntVar(&g.keySize, `key-size`, 0,
@@ -534,6 +537,10 @@ func (w *kv) Ops(
 		}
 		op.spanStmt = op.sr.Define(spanStmtStr)
 		op.delStmt = op.sr.Define(delStmtStr)
+		if w.useBackgroundTxnQoS {
+			stmt := op.sr.Define(" SET default_transaction_quality_of_service = background")
+			op.qosStmt = &stmt
+		}
 		if err := op.sr.Init(ctx, "kv", mcp); err != nil {
 			return workload.QueryLoad{}, err
 		}
@@ -556,6 +563,7 @@ type kvOp struct {
 	spanStmt        workload.StmtHandle
 	sfuStmt         workload.StmtHandle
 	delStmt         workload.StmtHandle
+	qosStmt         *workload.StmtHandle
 	g               keyGenerator
 	t               keyTransformer
 	numEmptyResults *atomic.Int64
@@ -568,6 +576,12 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		defer cancel()
 	}
 
+	if o.qosStmt != nil {
+		_, err := o.qosStmt.Exec(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	statementProbability := o.g.rand().Intn(100) // Determines what statement is executed.
 	if statementProbability < o.config.readPercent {
 		args := make([]interface{}, o.config.batchSize)
