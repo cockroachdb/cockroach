@@ -96,4 +96,13 @@
       }
     }
   }
+
+  .summary-small-info {
+    color: $colors--neutral-7;
+    display: flex;
+    font-size: 13px;
+    font-weight: $font-weight--light;
+    justify-content: right;
+    margin-top: -13px;
+  }
 }
