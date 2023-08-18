@@ -2475,18 +2475,18 @@ type mockLockTableView struct {
 
 func (lt *mockLockTableView) IsKeyLockedByConflictingTxn(
 	k roachpb.Key, s lock.Strength,
-) (bool, *enginepb.TxnMeta) {
+) (bool, *enginepb.TxnMeta, error) {
 	holder, ok := lt.locks[string(k)]
 	if !ok {
-		return false, nil
+		return false, nil, nil
 	}
 	if lt.txn != nil && lt.txn.ID == holder.ID {
-		return false, nil
+		return false, nil, nil
 	}
 	if s == lock.None && lt.ts.Less(holder.WriteTimestamp) {
-		return false, nil
+		return false, nil, nil
 	}
-	return true, &holder.TxnMeta
+	return true, &holder.TxnMeta, nil
 }
 
 func (e *evalCtx) visitWrappedIters(fn func(it storage.SimpleMVCCIterator) (done bool)) {

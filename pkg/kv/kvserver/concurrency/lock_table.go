@@ -678,32 +678,32 @@ func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(
 
 func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 	key roachpb.Key, str lock.Strength,
-) (bool, *enginepb.TxnMeta) {
+) (bool, *enginepb.TxnMeta, error) {
 	iter := g.tableSnapshot.MakeIter()
 	iter.SeekGE(&lockState{key: key})
 	if !iter.Valid() || !iter.Cur().key.Equal(key) {
 		// No lock on key.
-		return false, nil
+		return false, nil, nil
 	}
 	l := iter.Cur()
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.isEmptyLock() {
 		// The lock is empty but has not yet been deleted.
-		return false, nil
+		return false, nil, nil
 	}
 
 	if l.alreadyHoldsLockAndIsAllowedToProceed(g, str) {
 		// If another request from this transaction has already locked this key with
 		// sufficient locking strength then there's no conflict; we can proceed.
-		return false, nil
+		return false, nil, nil
 	}
 
 	if l.isHeld() {
 		lockHolderTxn, _ := l.getLockHolder()
 		if !g.isSameTxn(lockHolderTxn) &&
 			lock.Conflicts(l.getLockMode(), makeLockMode(str, g.txn, g.ts), &g.lt.settings.SV) {
-			return true, l.holder.txn // they key is locked by some other transaction; return the holder
+			return true, l.holder.txn, nil // they key is locked by some other txn; return the holder
 		}
 		// We can be in either of 2 cases at this point:
 		// 1. All locks held on this key are at non-conflicting strengths (i.e,
@@ -719,7 +719,7 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 	// preventing a stream of locking[1] SKIP LOCKED requests from starving out
 	// regular locking requests.
 	if str == lock.None { // [1] we only need to do this checking for locking requests
-		return false, nil
+		return false, nil, nil
 	}
 
 	for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
@@ -731,15 +731,15 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 			break
 		}
 		if g.isSameTxn(qqg.guard.txnMeta()) {
-			panic(errors.AssertionFailedf(
+			return false, nil, errors.AssertionFailedf(
 				"SKIP LOCKED request should not find another waiting request from the same transaction",
-			))
+			)
 		}
 		if lock.Conflicts(qqg.mode, makeLockMode(str, g.txn, g.ts), &g.lt.settings.SV) {
-			return true, nil // the conflict isn't with a lock holder, nil is returned
+			return true, nil, nil // the conflict isn't with a lock holder, nil is returned
 		}
 	}
-	return false, nil // no conflict
+	return false, nil, nil // no conflict
 }
 
 func (g *lockTableGuardImpl) notify() {
