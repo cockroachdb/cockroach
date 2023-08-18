@@ -214,7 +214,9 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	case err := <-errCh:
 		t.Fatal(err)
 	}
-
+	// If we end up ever retrying the txn, we should not block on
+	// the allow request channel again.
+	setTableID(descpb.InvalidID)
 	autoStatsRunShouldFail := func() {
 		_, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.t`)
 		expected := "another CREATE STATISTICS job is already running"
