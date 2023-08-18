@@ -1638,6 +1638,16 @@ message StatementsResponse {
   float stmts_total_runtime_secs = 6;
 
   float txns_total_runtime_secs = 7;
+
+  // OldestAggregatedTsReturned is the timestamp of the oldest entry returned,
+  // or now() if there is no data returned.
+  google.protobuf.Timestamp oldest_aggregated_ts_returned = 8 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+
+  // StmtsSourceTable returns the table used to return the statements data.
+  string stmts_source_table = 9;
+
+  // TxnsSourceTable returns the table used to return the transactions data.
+  string txns_source_table = 10;
 }
 
 enum StatsSortOptions {
