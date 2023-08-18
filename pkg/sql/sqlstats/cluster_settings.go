@@ -20,7 +20,7 @@ import (
 var StmtStatsEnable = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
-).WithPublic()
+	settings.WithPublic)
 
 // TxnStatsNumStmtFingerprintIDsToRecord limits the number of statementFingerprintIDs stored in
 // transactions statistics for a single transaction. This defaults to 1000, and
@@ -38,7 +38,7 @@ var TxnStatsNumStmtFingerprintIDsToRecord = settings.RegisterIntSetting(
 var TxnStatsEnable = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.metrics.transaction_details.enabled", "collect per-application transaction statistics", true,
-).WithPublic()
+	settings.WithPublic)
 
 // StatsCollectionLatencyThreshold specifies the minimum amount of time
 // consumed by a SQL statement before it is collected for statistics reporting.
@@ -48,7 +48,7 @@ var StatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
 	"minimum execution time to cause statement statistics to be collected. "+
 		"If configured, no transaction stats are collected.",
 	0,
-).WithPublic()
+	settings.WithPublic)
 
 // DumpStmtStatsToLogBeforeReset specifies whether we dump the statements
 // statistics to logs before being reset.
@@ -57,7 +57,7 @@ var DumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
 	"sql.metrics.statement_details.dump_to_logs",
 	"dump collected statement statistics to node logs when periodically cleared",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 // SampleLogicalPlans specifies whether we periodically sample the logical plan
 // for each fingerprint.
@@ -66,7 +66,7 @@ var SampleLogicalPlans = settings.RegisterBoolSetting(
 	"sql.metrics.statement_details.plan_collection.enabled",
 	"periodically save a logical plan for each fingerprint",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 // LogicalPlanCollectionPeriod specifies the interval between collections of
 // logical plans for each fingerprint.
@@ -76,7 +76,7 @@ var LogicalPlanCollectionPeriod = settings.RegisterDurationSetting(
 	"the time until a new logical plan is collected",
 	5*time.Minute,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 // MaxMemSQLStatsStmtFingerprints specifies the maximum of unique statement
 // fingerprints we store in memory.
@@ -85,7 +85,7 @@ var MaxMemSQLStatsStmtFingerprints = settings.RegisterIntSetting(
 	"sql.metrics.max_mem_stmt_fingerprints",
 	"the maximum number of statement fingerprints stored in memory",
 	100000,
-).WithPublic()
+	settings.WithPublic)
 
 // MaxMemSQLStatsTxnFingerprints specifies the maximum of unique transaction
 // fingerprints we store in memory.
@@ -94,7 +94,7 @@ var MaxMemSQLStatsTxnFingerprints = settings.RegisterIntSetting(
 	"sql.metrics.max_mem_txn_fingerprints",
 	"the maximum number of transaction fingerprints stored in memory",
 	100000,
-).WithPublic()
+	settings.WithPublic)
 
 // MaxMemReportedSQLStatsStmtFingerprints specifies the maximum of unique statement
 // fingerprints we store in memory.
@@ -103,7 +103,7 @@ var MaxMemReportedSQLStatsStmtFingerprints = settings.RegisterIntSetting(
 	"sql.metrics.max_mem_reported_stmt_fingerprints",
 	"the maximum number of reported statement fingerprints stored in memory",
 	100000,
-).WithPublic()
+	settings.WithPublic)
 
 // MaxMemReportedSQLStatsTxnFingerprints specifies the maximum of unique transaction
 // fingerprints we store in memory.
@@ -112,7 +112,7 @@ var MaxMemReportedSQLStatsTxnFingerprints = settings.RegisterIntSetting(
 	"sql.metrics.max_mem_reported_txn_fingerprints",
 	"the maximum number of reported transaction fingerprints stored in memory",
 	100000,
-).WithPublic()
+	settings.WithPublic)
 
 // MaxSQLStatsStmtFingerprintsPerExplicitTxn specifies the maximum of unique statement
 // fingerprints we store for each explicit transaction.
@@ -158,7 +158,7 @@ var MaxSQLStatReset = settings.RegisterDurationSetting(
 		"if not collected by telemetry reporter. It has a max value of 24H.",
 	time.Hour*2,
 	settings.NonNegativeDurationWithMaximum(time.Hour*24),
-).WithPublic()
+	settings.WithPublic)
 
 // SampleIndexRecommendation specifies whether we generate an index recommendation
 // for each fingerprint ID.
@@ -167,7 +167,7 @@ var SampleIndexRecommendation = settings.RegisterBoolSetting(
 	"sql.metrics.statement_details.index_recommendation_collection.enabled",
 	"generate an index recommendation for each fingerprint ID",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // MaxMemReportedSampleIndexRecommendations specifies the maximum of unique index
 // recommendations info we store in memory.
@@ -176,7 +176,7 @@ var MaxMemReportedSampleIndexRecommendations = settings.RegisterIntSetting(
 	"sql.metrics.statement_details.max_mem_reported_idx_recommendations",
 	"the maximum number of reported index recommendation info stored in memory",
 	5000,
-).WithPublic()
+	settings.WithPublic)
 
 // GatewayNodeEnabled specifies whether we save the gateway node id for each fingerprint
 // during sql stats collection, otherwise the value will be set to 0.
@@ -186,4 +186,4 @@ var GatewayNodeEnabled = settings.RegisterBoolSetting(
 	"save the gateway node for each statement fingerprint. If false, the value will "+
 		"be stored as 0.",
 	true,
-).WithPublic()
+	settings.WithPublic)

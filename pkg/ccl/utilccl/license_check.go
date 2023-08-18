@@ -31,24 +31,23 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-var enterpriseLicense = func() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
-		settings.TenantWritable,
-		"enterprise.license",
-		"the encoded cluster license",
-		"",
+var enterpriseLicense = settings.RegisterStringSetting(
+	settings.TenantWritable,
+	"enterprise.license",
+	"the encoded cluster license",
+	"",
+	settings.WithValidateString(
 		func(sv *settings.Values, s string) error {
 			_, err := decode(s)
 			return err
 		},
-	)
+	),
 	// Even though string settings are non-reportable by default, we
 	// still mark them explicitly in case a future code change flips the
 	// default.
-	s.SetReportable(false)
-	s.SetVisibility(settings.Public)
-	return s
-}()
+	settings.WithReportable(false),
+	settings.WithPublic,
+)
 
 // enterpriseStatus determines whether the cluster is enabled
 // for enterprise features or if enterprise status depends on the license.

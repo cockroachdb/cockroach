@@ -72,7 +72,7 @@ var MaxSyncDuration = settings.RegisterDurationSetting(
 	"maximum duration for disk operations; any operations that take longer"+
 		" than this setting trigger a warning log entry or process crash",
 	maxSyncDurationDefault,
-).WithPublic()
+	settings.WithPublic)
 
 // MaxSyncDurationFatalOnExceeded governs whether disk stalls longer than
 // MaxSyncDuration fatal the Cockroach process. Defaults to true.
@@ -81,7 +81,7 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 	"storage.max_sync_duration.fatal.enabled",
 	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // ValueBlocksEnabled controls whether older versions of MVCC keys in the same
 // sstable will have their values written to value blocks. This only affects
@@ -93,7 +93,8 @@ var ValueBlocksEnabled = settings.RegisterBoolSetting(
 	"storage.value_blocks.enabled",
 	"set to true to enable writing of value blocks in sstables",
 	util.ConstantWithMetamorphicTestBool(
-		"storage.value_blocks.enabled", true)).WithPublic()
+		"storage.value_blocks.enabled", true),
+	settings.WithPublic)
 
 // IngestAsFlushable controls whether ingested sstables that overlap the
 // memtable may be lazily ingested: written to the WAL and enqueued in the list

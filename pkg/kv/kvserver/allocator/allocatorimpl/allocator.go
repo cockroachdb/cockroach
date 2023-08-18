@@ -53,7 +53,7 @@ var LeaseRebalanceThreshold = settings.RegisterFloatSetting(
 	"minimum fraction away from the mean a store's lease count can be before "+
 		"it is considered for lease-transfers",
 	0.05,
-).WithPublic()
+	settings.WithPublic)
 
 // LeaseRebalanceThresholdMin is the absolute number of leases above/below the
 // mean lease count that a store can have before considered overfull/underfull.
@@ -83,7 +83,7 @@ var EnableLoadBasedLeaseRebalancing = settings.RegisterBoolSetting(
 	"kv.allocator.load_based_lease_rebalancing.enabled",
 	"set to enable rebalancing of range leases based on load and latency",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // leaseRebalancingAggressiveness enables users to tweak how aggressive their
 // cluster is at moving leases towards the localities where the most requests

@@ -44,7 +44,7 @@ var consistencyCheckRate = settings.RegisterByteSizeSetting(
 		"negatively impact performance.",
 	8<<20, // 8MB
 	settings.PositiveInt,
-).WithPublic()
+	settings.WithPublic)
 
 // consistencyCheckRateBurstFactor we use this to set the burst parameter on the
 // quotapool.RateLimiter. It seems overkill to provide a user setting for this,

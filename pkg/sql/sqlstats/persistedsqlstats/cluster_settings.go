@@ -27,7 +27,7 @@ var SQLStatsFlushInterval = settings.RegisterDurationSetting(
 		"this value must be less than or equal to 1 hour",
 	time.Minute*10,
 	settings.NonNegativeDurationWithMaximum(time.Hour*24),
-).WithPublic()
+	settings.WithPublic)
 
 // MinimumInterval is the cluster setting that controls the minimum interval
 // between each flush operation. If flush operations get triggered faster
@@ -62,7 +62,7 @@ var SQLStatsFlushEnabled = settings.RegisterBoolSetting(
 	"sql.stats.flush.enabled",
 	"if set, SQL execution statistics are periodically flushed to disk",
 	true, /* defaultValue */
-).WithPublic()
+	settings.WithPublic)
 
 // SQLStatsFlushJitter specifies the jitter fraction on the interval between
 // attempts to flush SQL Stats.
@@ -75,12 +75,7 @@ var SQLStatsFlushJitter = settings.RegisterFloatSetting(
 	"sql.stats.flush.jitter",
 	"jitter fraction on the duration between sql stats flushes",
 	0.15,
-	func(f float64) error {
-		if f < 0 || f > 1 {
-			return errors.Newf("%f is not in [0, 1]", f)
-		}
-		return nil
-	},
+	settings.Fraction,
 )
 
 // SQLStatsMaxPersistedRows specifies maximum number of rows that will be
@@ -91,22 +86,23 @@ var SQLStatsMaxPersistedRows = settings.RegisterIntSetting(
 	"maximum number of rows of statement and transaction statistics that "+
 		"will be persisted in the system tables before compaction begins",
 	1000000, /* defaultValue */
-).WithPublic()
+	settings.WithPublic)
 
 // SQLStatsCleanupRecurrence is the cron-tab string specifying the recurrence
 // for SQL Stats cleanup job.
-var SQLStatsCleanupRecurrence = settings.RegisterValidatedStringSetting(
+var SQLStatsCleanupRecurrence = settings.RegisterStringSetting(
 	settings.TenantWritable,
 	"sql.stats.cleanup.recurrence",
 	"cron-tab recurrence for SQL Stats cleanup job",
 	"@hourly", /* defaultValue */
-	func(_ *settings.Values, s string) error {
+	settings.WithValidateString(func(_ *settings.Values, s string) error {
 		if _, err := cron.ParseStandard(s); err != nil {
 			return errors.Wrap(err, "invalid cron expression")
 		}
 		return nil
-	},
-).WithPublic()
+	}),
+	settings.WithPublic,
+)
 
 // SQLStatsAggregationInterval is the cluster setting that controls the aggregation
 // interval for stats when we flush to disk.

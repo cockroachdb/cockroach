@@ -33,7 +33,7 @@ var tenantCoalesceAdjacentSetting = settings.RegisterBoolSetting(
 	"spanconfig.tenant_coalesce_adjacent.enabled",
 	`collapse adjacent ranges with the same span configs across all secondary tenant keyspaces`,
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // StorageCoalesceAdjacentSetting is a public cluster setting that controls
 // whether we coalesce adjacent ranges outside of the secondary tenant keyspaces
@@ -43,7 +43,7 @@ var StorageCoalesceAdjacentSetting = settings.RegisterBoolSetting(
 	"spanconfig.storage_coalesce_adjacent.enabled",
 	`collapse adjacent ranges with the same span configs, for the ranges specific to the system tenant`,
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // spanConfigStore is an in-memory data structure to store and retrieve
 // SpanConfigs associated with a single span. Internally it makes use of a

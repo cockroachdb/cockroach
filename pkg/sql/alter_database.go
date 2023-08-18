@@ -294,7 +294,7 @@ var allowDropFinalRegion = settings.RegisterBoolSetting(
 	"sql.multiregion.drop_primary_region.enabled",
 	"allows dropping the PRIMARY REGION of a database if it is the last region",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // AlterDatabaseDropRegion transforms a tree.AlterDatabaseDropRegion into a plan node.
 func (p *planner) AlterDatabaseDropRegion(

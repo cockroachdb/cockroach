@@ -22,7 +22,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util/errorutil",
         "//pkg/util/hlc",
-        "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/quotapool",
         "//pkg/util/syncutil",

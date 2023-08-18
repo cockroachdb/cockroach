@@ -27,8 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -45,7 +43,7 @@ var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
 	catpb.AutoStatsEnabledSettingName,
 	"automatic statistics collection mode",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // UseStatisticsOnSystemTables controls the cluster setting for enabling
 // statistics usage by the optimizer for planning queries involving system
@@ -55,7 +53,7 @@ var UseStatisticsOnSystemTables = settings.RegisterBoolSetting(
 	catpb.UseStatsOnSystemTables,
 	"when true, enables use of statistics on system tables by the query optimizer",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // AutomaticStatisticsOnSystemTables controls the cluster setting for enabling
 // automatic statistics collection on system tables. Auto stats must be enabled
@@ -66,7 +64,7 @@ var AutomaticStatisticsOnSystemTables = settings.RegisterBoolSetting(
 	catpb.AutoStatsOnSystemTables,
 	"when true, enables automatic collection of statistics on system tables",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // MultiColumnStatisticsClusterMode controls the cluster setting for enabling
 // automatic collection of multi-column statistics.
@@ -75,7 +73,7 @@ var MultiColumnStatisticsClusterMode = settings.RegisterBoolSetting(
 	"sql.stats.multi_column_collection.enabled",
 	"multi-column statistics collection mode",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // AutomaticStatisticsMaxIdleTime controls the maximum fraction of time that
 // the sampler processors will be idle when scanning large tables for automatic
@@ -86,45 +84,33 @@ var AutomaticStatisticsMaxIdleTime = settings.RegisterFloatSetting(
 	"sql.stats.automatic_collection.max_fraction_idle",
 	"maximum fraction of time that automatic statistics sampler processors are idle",
 	0.9,
-	func(val float64) error {
-		if val < 0 || val >= 1 {
-			return pgerror.Newf(pgcode.InvalidParameterValue,
-				"sql.stats.automatic_collection.max_fraction_idle must be >= 0 and < 1 but found: %v", val)
-		}
-		return nil
-	},
+	settings.FractionUpperExclusive,
 )
 
 // AutomaticStatisticsFractionStaleRows controls the cluster setting for
 // the target fraction of rows in a table that should be stale before
 // statistics on that table are refreshed, in addition to the constant value
 // AutomaticStatisticsMinStaleRows.
-var AutomaticStatisticsFractionStaleRows = func() *settings.FloatSetting {
-	s := settings.RegisterFloatSetting(
-		settings.TenantWritable,
-		catpb.AutoStatsFractionStaleSettingName,
-		"target fraction of stale rows per table that will trigger a statistics refresh",
-		0.2,
-		settings.NonNegativeFloat,
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
+var AutomaticStatisticsFractionStaleRows = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	catpb.AutoStatsFractionStaleSettingName,
+	"target fraction of stale rows per table that will trigger a statistics refresh",
+	0.2,
+	settings.NonNegativeFloat,
+	settings.WithPublic,
+)
 
 // AutomaticStatisticsMinStaleRows controls the cluster setting for the target
 // number of rows that should be updated before a table is refreshed, in
 // addition to the fraction AutomaticStatisticsFractionStaleRows.
-var AutomaticStatisticsMinStaleRows = func() *settings.IntSetting {
-	s := settings.RegisterIntSetting(
-		settings.TenantWritable,
-		catpb.AutoStatsMinStaleSettingName,
-		"target minimum number of stale rows per table that will trigger a statistics refresh",
-		500,
-		settings.NonNegativeInt,
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
+var AutomaticStatisticsMinStaleRows = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	catpb.AutoStatsMinStaleSettingName,
+	"target minimum number of stale rows per table that will trigger a statistics refresh",
+	500,
+	settings.NonNegativeInt,
+	settings.WithPublic,
+)
 
 // statsGarbageCollectionInterval controls the interval between running an
 // internal query to delete stats for dropped tables.

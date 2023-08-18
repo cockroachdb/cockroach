@@ -68,7 +68,7 @@ var PublicSchemaCreatePrivilegeEnabled = settings.RegisterBoolSetting(
 	"determines whether to grant all users the CREATE privileges on the public "+
 		"schema when it is created",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // createDatabase takes Database descriptor and creates it if needed,
 // incrementing the descriptor counter. Returns true if the descriptor
@@ -347,7 +347,7 @@ var DefaultPrimaryRegion = settings.RegisterStringSetting(
 	`if not empty, all databases created without a PRIMARY REGION will `+
 		`implicitly have the given PRIMARY REGION`,
 	"",
-).WithPublic()
+	settings.WithPublic)
 
 // SecondaryTenantsMultiRegionAbstractionsEnabledSettingName is the name of the
 // cluster setting that governs secondary tenant multi-region abstraction usage.

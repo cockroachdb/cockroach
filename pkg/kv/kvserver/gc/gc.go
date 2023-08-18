@@ -71,12 +71,7 @@ var IntentAgeThreshold = settings.RegisterDurationSetting(
 	"kv.gc.intent_age_threshold",
 	"intents older than this threshold will be resolved when encountered by the MVCC GC queue",
 	2*time.Hour,
-	func(d time.Duration) error {
-		if d < 2*time.Minute {
-			return errors.New("intent age threshold must be >= 2 minutes")
-		}
-		return nil
-	},
+	settings.DurationWithMinimum(2*time.Minute),
 )
 
 // TxnCleanupThreshold is the threshold after which a transaction is

@@ -34,7 +34,7 @@ var DefaultHistogramBuckets = settings.RegisterIntSetting(
 	"maximum number of histogram buckets to build during table statistics collection",
 	200,
 	settings.NonNegativeIntWithMaximum(math.MaxUint32),
-).WithPublic()
+	settings.WithPublic)
 
 // HistogramClusterMode controls the cluster setting for enabling
 // histogram collection.
@@ -43,7 +43,7 @@ var HistogramClusterMode = settings.RegisterBoolSetting(
 	"sql.stats.histogram_collection.enabled",
 	"histogram collection mode",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // HistogramVersion identifies histogram versions.
 type HistogramVersion uint32

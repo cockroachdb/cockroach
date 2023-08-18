@@ -51,15 +51,16 @@ var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
 	"sql.trace.log_statement_execute",
 	"set to true to enable logging of executed statements",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
-var slowQueryLogThreshold = settings.RegisterPublicDurationSettingWithExplicitUnit(
+var slowQueryLogThreshold = settings.RegisterDurationSettingWithExplicitUnit(
 	settings.TenantWritable,
 	"sql.log.slow_query.latency_threshold",
 	"when set to non-zero, log statements whose service latency exceeds "+
 		"the threshold to a secondary logger on each node",
 	0,
 	settings.NonNegativeDuration,
+	settings.WithPublic,
 )
 
 var slowInternalQueryLogEnabled = settings.RegisterBoolSetting(
@@ -69,7 +70,7 @@ var slowInternalQueryLogEnabled = settings.RegisterBoolSetting(
 		"are logged to a separate log. Must have the slow query log enabled for this "+
 		"setting to have any effect.",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 var slowQueryLogFullTableScans = settings.RegisterBoolSetting(
 	settings.TenantWritable,
@@ -78,7 +79,7 @@ var slowQueryLogFullTableScans = settings.RegisterBoolSetting(
 		"slow query log even if they do not meet the latency threshold. Must have the slow query "+
 		"log enabled for this setting to have any effect.",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 var adminAuditLogEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
@@ -98,7 +99,7 @@ var telemetryLoggingEnabled = settings.RegisterBoolSetting(
 	// setting directly after tenant creation without significant overhead in terms
 	// of time and code.
 	envutil.EnvOrDefaultBool("COCKROACH_SQL_TELEMETRY_QUERY_SAMPLING_ENABLED", false),
-).WithPublic()
+	settings.WithPublic)
 
 type executorType int
 

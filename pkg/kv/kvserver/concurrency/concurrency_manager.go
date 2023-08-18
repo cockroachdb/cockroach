@@ -69,7 +69,7 @@ var MaxLockWaitQueueLength = settings.RegisterIntSetting(
 		"wait-queue is already equal to or exceeding this length, requests will be rejected "+
 		"eagerly instead of entering the queue and waiting. Set to 0 to disable.",
 	0,
-	func(v int64) error {
+	settings.WithValidateInt(func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("cannot be set to a negative value: %d", v)
 		}
@@ -83,7 +83,7 @@ var MaxLockWaitQueueLength = settings.RegisterIntSetting(
 			return errors.Errorf("cannot be set below %d: %d", minSafeMaxLength, v)
 		}
 		return nil
-	},
+	}),
 )
 
 // DiscoveredLocksThresholdToConsultTxnStatusCache sets a threshold as mentioned

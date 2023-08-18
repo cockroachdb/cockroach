@@ -321,7 +321,7 @@ var enableBalancedRangeDistribution = settings.RegisterBoolSetting(
 	"if enabled, the ranges are balanced equally among all nodes",
 	util.ConstantWithMetamorphicTestBool(
 		"changefeed.balance_range_distribution.enable", false),
-).WithPublic()
+	settings.WithPublic)
 
 func makePlan(
 	execCtx sql.JobExecContext,

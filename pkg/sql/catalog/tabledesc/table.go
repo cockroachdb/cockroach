@@ -311,7 +311,7 @@ var DefaultHashShardedIndexBucketCount = settings.RegisterIntSetting(
 	"used as bucket count if bucket count is not specified in hash sharded index definition",
 	16,
 	settings.NonNegativeInt,
-).WithPublic()
+	settings.WithPublic)
 
 // GetShardColumnName generates a name for the hidden shard column to be used to create a
 // hash sharded index.

@@ -14,7 +14,6 @@ package kvadmission
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -45,17 +44,7 @@ var elasticCPUDurationPerExportRequest = settings.RegisterDurationSetting(
 	"kvadmission.elastic_cpu.duration_per_export_request",
 	"controls how many CPU tokens are allotted for each export request",
 	admission.MaxElasticCPUDuration,
-	func(duration time.Duration) error {
-		if duration < admission.MinElasticCPUDuration {
-			return fmt.Errorf("minimum CPU duration allowed per export request is %s, got %s",
-				admission.MinElasticCPUDuration, duration)
-		}
-		if duration > admission.MaxElasticCPUDuration {
-			return fmt.Errorf("maximum CPU duration allowed per export request is %s, got %s",
-				admission.MaxElasticCPUDuration, duration)
-		}
-		return nil
-	},
+	settings.DurationInRange(admission.MinElasticCPUDuration, admission.MaxElasticCPUDuration),
 )
 
 // elasticCPUDurationPerRangefeedScanUnit controls how many CPU tokens are
@@ -66,17 +55,7 @@ var elasticCPUDurationPerRangefeedScanUnit = settings.RegisterDurationSetting(
 	"kvadmission.elastic_cpu.duration_per_rangefeed_scan_unit",
 	"controls how many CPU tokens are allotted for each unit of work during rangefeed catchup scans",
 	admission.MaxElasticCPUDuration,
-	func(duration time.Duration) error {
-		if duration < admission.MinElasticCPUDuration {
-			return fmt.Errorf("minimum CPU duration allowed is %s, got %s",
-				admission.MinElasticCPUDuration, duration)
-		}
-		if duration > admission.MaxElasticCPUDuration {
-			return fmt.Errorf("maximum CPU duration allowed is %s, got %s",
-				admission.MaxElasticCPUDuration, duration)
-		}
-		return nil
-	},
+	settings.DurationInRange(admission.MinElasticCPUDuration, admission.MaxElasticCPUDuration),
 )
 
 // rangefeedCatchupScanElasticControlEnabled determines whether rangefeed catch
@@ -94,7 +73,8 @@ var ProvisionedBandwidth = settings.RegisterByteSizeSetting(
 	settings.SystemOnly, "kvadmission.store.provisioned_bandwidth",
 	"if set to a non-zero value, this is used as the provisioned bandwidth (in bytes/s), "+
 		"for each store. It can be over-ridden on a per-store basis using the --store flag",
-	0).WithPublic()
+	0,
+	settings.WithPublic)
 
 // FlowTokenDropInterval determines the frequency at which we check for pending
 // flow token dispatches to nodes we're no longer connected to, in order to drop

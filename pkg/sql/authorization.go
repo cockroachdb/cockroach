@@ -648,7 +648,7 @@ var useSingleQueryForRoleMembershipCache = settings.RegisterBoolSetting(
 	"sql.auth.resolve_membership_single_scan.enabled",
 	"determines whether to populate the role membership cache with a single scan",
 	defaultSingleQueryForRoleMembershipCache,
-).WithPublic()
+	settings.WithPublic)
 
 // resolveMemberOfWithAdminOption performs the actual recursive role membership lookup.
 func resolveMemberOfWithAdminOption(

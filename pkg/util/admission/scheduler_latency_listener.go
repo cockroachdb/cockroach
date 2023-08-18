@@ -12,7 +12,6 @@ package admission
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -213,12 +212,7 @@ var ( // cluster settings to control how elastic CPU % is adjusted
 		"admission.elastic_cpu.max_utilization",
 		"sets the ceiling on per-node elastic work CPU % utilization",
 		0.75, // 75%
-		func(f float64) error {
-			if f < 0.05 || f > 1.0 {
-				return fmt.Errorf("expected max_utilization to be between [0.0, 1.0], got %0.2f", f)
-			}
-			return nil
-		},
+		settings.FloatInRange(0.05, 1.0),
 	)
 
 	elasticCPUMinUtilization = settings.RegisterFloatSetting(
@@ -226,12 +220,7 @@ var ( // cluster settings to control how elastic CPU % is adjusted
 		"admission.elastic_cpu.min_utilization",
 		"sets the floor on per-node elastic work CPU % utilization",
 		0.05, // 5%
-		func(f float64) error {
-			if f < 0.01 || f > 1.0 {
-				return fmt.Errorf("expected min_utilization to be between [0.01, 1.0], got %0.2f", f)
-			}
-			return nil
-		},
+		settings.FloatInRange(0.01, 1.0),
 	)
 
 	elasticCPUInactivePoint = settings.RegisterFloatSetting(
@@ -239,12 +228,7 @@ var ( // cluster settings to control how elastic CPU % is adjusted
 		"admission.elastic_cpu.inactive_point",
 		"the point between {min,max}_utilization the CPU % decreases to when there's no elastic work",
 		0.10, // 10% of the way between {min,max} utilization -- 12% if [min,max] = [5%,75%]
-		func(f float64) error {
-			if f < 0.0 || f > 1.0 {
-				return fmt.Errorf("expected inactive_point to be between [0.0, 1.0], got %0.2f", f)
-			}
-			return nil
-		},
+		settings.Fraction,
 	)
 
 	elasticCPUAdjustmentDeltaPerSecond = settings.RegisterFloatSetting(
@@ -252,12 +236,7 @@ var ( // cluster settings to control how elastic CPU % is adjusted
 		"admission.elastic_cpu.adjustment_delta_per_second",
 		"sets the per-second % adjustment used when when adapting elastic work CPU %s",
 		0.001, // 0.1%, takes 10s to add 1% to elastic CPU limit
-		func(f float64) error {
-			if f < 0.0001 || f > 1.0 {
-				return fmt.Errorf("expected additive_delta_per_second to be between [0.0001, 1.0], got %0.2f", f)
-			}
-			return nil
-		},
+		settings.FloatInRange(0.0001, 1.0),
 	)
 
 	elasticCPUMultiplicativeFactorOnDecrease = settings.RegisterFloatSetting(
@@ -279,12 +258,7 @@ var ( // cluster settings to control how elastic CPU % is adjusted
 		"admission.elastic_cpu.scheduler_latency_target",
 		"sets the p99 scheduling latency the elastic CPU controller aims for",
 		time.Millisecond,
-		func(duration time.Duration) error {
-			if duration < 50*time.Microsecond || duration > time.Second {
-				return fmt.Errorf("expected scheduler_latency_target to be between [50μs, 1s], got %s", duration)
-			}
-			return nil
-		},
+		settings.DurationInRange(50*time.Microsecond, time.Second),
 	)
 )
 

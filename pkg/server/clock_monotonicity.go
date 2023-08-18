@@ -28,7 +28,7 @@ var (
 		"server.clock.forward_jump_check_enabled",
 		"if enabled, forward clock jumps > max_offset/2 will cause a panic",
 		false,
-	).WithPublic()
+		settings.WithPublic)
 
 	persistHLCUpperBoundInterval = settings.RegisterDurationSetting(
 		settings.TenantWritable,
@@ -40,7 +40,7 @@ var (
 			"time across server restarts. Not setting this or setting a value of 0 disables this "+
 			"feature.",
 		0,
-	).WithPublic()
+		settings.WithPublic)
 )
 
 // startMonitoringForwardClockJumps starts a background task to monitor forward

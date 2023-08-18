@@ -496,7 +496,7 @@ var AutoSelectPasswordAuth = settings.RegisterBoolSetting(
 	"server.user_login.cert_password_method.auto_scram_promotion.enabled",
 	"whether to automatically promote cert-password authentication to use SCRAM",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // authAutoSelectPasswordProtocol is the AuthMethod constructor used
 // for HBA method "cert-password" when the SQL client does not provide

@@ -40,7 +40,7 @@ var telemetryInternalQueriesEnabled = settings.RegisterBoolSetting(
 	"sql.telemetry.query_sampling.internal.enabled",
 	"when set to true, internal queries will be sampled in telemetry logging",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 var telemetryInternalConsoleQueriesEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,

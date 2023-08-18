@@ -38,18 +38,19 @@ const SchemaTelemetryScheduleName = "sql-schema-telemetry"
 
 // SchemaTelemetryRecurrence is the cron-tab string specifying the recurrence
 // for schema telemetry job.
-var SchemaTelemetryRecurrence = settings.RegisterValidatedStringSetting(
+var SchemaTelemetryRecurrence = settings.RegisterStringSetting(
 	settings.TenantReadOnly,
 	"sql.schema.telemetry.recurrence",
 	"cron-tab recurrence for SQL schema telemetry job",
 	"@weekly", /* defaultValue */
-	func(_ *settings.Values, s string) error {
+	settings.WithValidateString(func(_ *settings.Values, s string) error {
 		if _, err := cron.ParseStandard(s); err != nil {
 			return errors.Wrap(err, "invalid cron expression")
 		}
 		return nil
-	},
-).WithPublic()
+	}),
+	settings.WithPublic,
+)
 
 // ErrDuplicatedSchedules indicates that there is already a schedule for SQL
 // schema telemetry jobs existing in the system.scheduled_jobs table.

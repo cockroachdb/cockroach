@@ -50,7 +50,8 @@ var KVAdmissionControlEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"admission.kv.enabled",
 	"when true, work performed by the KV layer is subject to admission control",
-	true).WithPublic()
+	true,
+	settings.WithPublic)
 
 // KVBulkOnlyAdmissionControlEnabled controls whether user (normal and above
 // priority) work is subject to admission control. If it is set to true, then
@@ -73,7 +74,8 @@ var SQLKVResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
 	"admission.sql_kv_response.enabled",
 	"when true, work performed by the SQL layer when receiving a KV response is subject to "+
 		"admission control",
-	true).WithPublic()
+	true,
+	settings.WithPublic)
 
 // SQLSQLResponseAdmissionControlEnabled controls whether response processing
 // in SQL, for DistSQL requests, is enabled.
@@ -82,7 +84,8 @@ var SQLSQLResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
 	"admission.sql_sql_response.enabled",
 	"when true, work performed by the SQL layer when receiving a DistSQL response is subject "+
 		"to admission control",
-	true).WithPublic()
+	true,
+	settings.WithPublic)
 
 var admissionControlEnabledSettings = [numWorkKinds]*settings.BoolSetting{
 	KVWork:             KVAdmissionControlEnabled,
@@ -97,7 +100,8 @@ var KVTenantWeightsEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"admission.kv.tenant_weights.enabled",
 	"when true, tenant weights are enabled for KV admission control",
-	false).WithPublic()
+	false,
+	settings.WithPublic)
 
 // KVStoresTenantWeightsEnabled controls whether tenant weights are enabled
 // for KV-stores admission control. This setting has no effect if
@@ -106,7 +110,8 @@ var KVStoresTenantWeightsEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"admission.kv.stores.tenant_weights.enabled",
 	"when true, tenant weights are enabled for KV-stores admission control",
-	false).WithPublic()
+	false,
+	settings.WithPublic)
 
 // EpochLIFOEnabled controls whether the adaptive epoch-LIFO scheme is enabled
 // for admission control. Is only relevant when the above admission control
@@ -119,43 +124,44 @@ var EpochLIFOEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"admission.epoch_lifo.enabled",
 	"when true, epoch-LIFO behavior is enabled when there is significant delay in admission",
-	false).WithPublic()
+	false,
+	settings.WithPublic)
 
 var epochLIFOEpochDuration = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"admission.epoch_lifo.epoch_duration",
 	"the duration of an epoch, for epoch-LIFO admission control ordering",
 	epochLength,
-	func(v time.Duration) error {
+	settings.WithValidateDuration(func(v time.Duration) error {
 		if v < time.Millisecond {
 			return errors.Errorf("epoch-LIFO: epoch duration is too small")
 		}
 		return nil
-	}).WithPublic()
+	}), settings.WithPublic)
 
 var epochLIFOEpochClosingDeltaDuration = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"admission.epoch_lifo.epoch_closing_delta_duration",
 	"the delta duration before closing an epoch, for epoch-LIFO admission control ordering",
 	epochClosingDelta,
-	func(v time.Duration) error {
+	settings.WithValidateDuration(func(v time.Duration) error {
 		if v < time.Millisecond {
 			return errors.Errorf("epoch-LIFO: epoch closing delta is too small")
 		}
 		return nil
-	}).WithPublic()
+	}), settings.WithPublic)
 
 var epochLIFOQueueDelayThresholdToSwitchToLIFO = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo",
 	"the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering",
 	maxQueueDelayToSwitchToLifo,
-	func(v time.Duration) error {
+	settings.WithValidateDuration(func(v time.Duration) error {
 		if v < time.Millisecond {
 			return errors.Errorf("epoch-LIFO: queue delay threshold is too small")
 		}
 		return nil
-	}).WithPublic()
+	}), settings.WithPublic)
 
 var rangeSequencerGCThreshold = settings.RegisterDurationSetting(
 	settings.TenantWritable,

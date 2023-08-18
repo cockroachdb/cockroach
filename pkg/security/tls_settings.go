@@ -45,14 +45,15 @@ var ocspMode = settings.RegisterEnumSetting(
 	"use OCSP to check whether TLS certificates are revoked. If the OCSP "+
 		"server is unreachable, in strict mode all certificates will be rejected "+
 		"and in lax mode all certificates will be accepted.",
-	"off", map[int64]string{ocspOff: "off", ocspLax: "lax", ocspStrict: "strict"}).WithPublic()
+	"off", map[int64]string{ocspOff: "off", ocspLax: "lax", ocspStrict: "strict"},
+	settings.WithPublic)
 
 var ocspTimeout = settings.RegisterDurationSetting(
 	settings.TenantWritable, "security.ocsp.timeout",
 	"timeout before considering the OCSP server unreachable",
 	3*time.Second,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 type clusterTLSSettings struct {
 	settings *cluster.Settings

@@ -34,14 +34,14 @@ var (
 		"the period at which log-like system tables are checked for old entries",
 		time.Hour,
 		settings.NonNegativeDuration,
-	).WithPublic()
+		settings.WithPublic)
 
 	systemLogGCLimit = settings.RegisterIntSetting(
 		settings.TenantWritable,
 		"server.log_gc.max_deletions_per_cycle",
 		"the maximum number of entries to delete on each purge of log-like system tables",
 		1000,
-	).WithPublic()
+		settings.WithPublic)
 
 	// rangeLogTTL is the TTL for rows in system.rangelog. If non zero, range log
 	// entries are periodically garbage collected.
@@ -50,7 +50,7 @@ var (
 		"server.rangelog.ttl",
 		"if nonzero, entries in system.rangelog older than this duration are periodically purged",
 		30*24*time.Hour, // 30 days
-	).WithPublic()
+		settings.WithPublic)
 
 	// eventLogTTL is the TTL for rows in system.eventlog. If non zero, event log
 	// entries are periodically garbage collected.
@@ -59,14 +59,14 @@ var (
 		"server.eventlog.ttl",
 		"if nonzero, entries in system.eventlog older than this duration are periodically purged",
 		90*24*time.Hour, // 90 days
-	).WithPublic()
+		settings.WithPublic)
 
 	webSessionPurgeTTL = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"server.web_session.purge.ttl",
 		"if nonzero, entries in system.web_sessions older than this duration are periodically purged",
 		time.Hour,
-	).WithPublic()
+		settings.WithPublic)
 )
 
 // gcSystemLog deletes entries in the given system log table between

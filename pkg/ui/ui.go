@@ -51,7 +51,7 @@ var _ = settings.RegisterEnumSetting(
 		// See pkg/ui/workspaces/cluster-ui/webpack.config.js
 		// and pkg/ui/workspaces/db-console/webpack.config.js.
 	},
-).WithPublic()
+	settings.WithPublic)
 
 // Assets is used for embedded JS assets required for UI.
 // In case the binary is built without UI, it provides single index.html file with

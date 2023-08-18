@@ -20,7 +20,7 @@ var SQLStatsResponseMax = settings.RegisterIntSetting(
 	"the maximum number of statements and transaction stats returned in a CombinedStatements request",
 	20000,
 	settings.NonNegativeInt,
-).WithPublic()
+	settings.WithPublic)
 
 // SQLStatsShowInternal controls if statistics for internal executions should be returned in sql stats APIs,
 // including: CombinedStatementStats, ListSessions, and ListLocalSessions.
@@ -31,7 +31,7 @@ var SQLStatsShowInternal = settings.RegisterBoolSetting(
 		"internal sessions should be returned by the ListSessions endpoints. These endpoints are used to display "+
 		"statistics on the SQL Activity pages",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 // StatsActivityUIEnabled controls if the combined statement stats uses
 // the system.statement_activity and system.transaction_activity which

@@ -37,7 +37,7 @@ var ClientCertExpirationCacheCapacity = settings.RegisterIntSetting(
 	"server.client_cert_expiration_cache.capacity",
 	"the maximum number of client cert expirations stored",
 	1000,
-).WithPublic()
+	settings.WithPublic)
 
 // ClientCertExpirationCache contains a cache of gauge objects keyed by
 // SQL username strings. It is a FIFO cache that stores gauges valued by

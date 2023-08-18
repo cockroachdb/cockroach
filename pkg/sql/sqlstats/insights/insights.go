@@ -31,7 +31,7 @@ var ExecutionInsightsCapacity = settings.RegisterIntSetting(
 	"the size of the per-node store of execution insights",
 	1000,
 	settings.NonNegativeInt,
-).WithPublic()
+	settings.WithPublic)
 
 // LatencyThreshold configures the execution time beyond which a statement is
 // considered slow. A LatencyThreshold of 0 (the default) disables this
@@ -41,7 +41,7 @@ var LatencyThreshold = settings.RegisterDurationSetting(
 	"sql.insights.latency_threshold",
 	"amount of time after which an executing statement is considered slow. Use 0 to disable.",
 	100*time.Millisecond,
-).WithPublic()
+	settings.WithPublic)
 
 // AnomalyDetectionEnabled turns on a per-fingerprint heuristic-based
 // algorithm for marking statements as slow, attempting to capture elevated
@@ -52,7 +52,7 @@ var AnomalyDetectionEnabled = settings.RegisterBoolSetting(
 	"sql.insights.anomaly_detection.enabled",
 	"enable per-fingerprint latency recording and anomaly detection",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // AnomalyDetectionLatencyThreshold sets the bar above which we consider
 // statement executions worth inspecting for slow execution. A statement's
@@ -66,7 +66,7 @@ var AnomalyDetectionLatencyThreshold = settings.RegisterDurationSetting(
 	"statements must surpass this threshold to trigger anomaly detection and identification",
 	50*time.Millisecond,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 // AnomalyDetectionMemoryLimit restricts the overall memory available for
 // tracking per-statement execution latencies. When changing this setting, keep
@@ -77,7 +77,7 @@ var AnomalyDetectionMemoryLimit = settings.RegisterByteSizeSetting(
 	"sql.insights.anomaly_detection.memory_limit",
 	"the maximum amount of memory allowed for tracking statement latencies",
 	1024*1024,
-).WithPublic()
+	settings.WithPublic)
 
 // HighRetryCountThreshold sets the number of times a slow statement must have
 // been retried to be marked as having a high retry count.
@@ -87,7 +87,7 @@ var HighRetryCountThreshold = settings.RegisterIntSetting(
 	"the number of retries a slow statement must have undergone for its high retry count to be highlighted as a potential problem",
 	10,
 	settings.NonNegativeInt,
-).WithPublic()
+	settings.WithPublic)
 
 // Metrics holds running measurements of various insights-related runtime stats.
 type Metrics struct {
