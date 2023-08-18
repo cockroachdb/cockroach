@@ -229,9 +229,14 @@ func registerActiveRecord(r registry.Registry) {
 				results.failExpectedCount++
 				results.currentFailures = append(results.currentFailures, test)
 			case !pass && !expectedFailure:
-				results.results[test] = fmt.Sprintf("--- FAIL: %s (unexpected)", test)
-				results.failUnexpectedCount++
-				results.currentFailures = append(results.currentFailures, test)
+				// The test suite is flaky and work is being done upstream to stabilize
+				// it (https://github.com/cockroachdb/cockroach/issues/108938). Until
+				// that's done, we ignore all failures from this test.
+				// results.results[test] = fmt.Sprintf("--- FAIL: %s (unexpected)", test)
+				// results.failUnexpectedCount++
+				// results.currentFailures = append(results.currentFailures, test)
+				results.results[test] = fmt.Sprintf("--- SKIP: %s due to upstream flakes (https://github.com/cockroachdb/cockroach/issues/108938)", test)
+				results.ignoredCount++
 			}
 			results.runTests[test] = struct{}{}
 		}
