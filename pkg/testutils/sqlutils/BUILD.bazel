@@ -58,6 +58,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//require",

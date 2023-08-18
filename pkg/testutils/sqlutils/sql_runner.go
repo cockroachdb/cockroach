@@ -31,6 +31,7 @@ import (
 type SQLRunner struct {
 	DB                   DBHandle
 	SucceedsSoonDuration time.Duration // defaults to testutils.DefaultSucceedsSoonDuration
+	MaxTxnRetries        int           // defaults to 0 for unlimited retries
 }
 
 // DBHandle is an interface that applies to *gosql.DB, *gosql.Conn, and
@@ -317,6 +318,78 @@ func (sr *SQLRunner) CheckQueryResultsRetry(t Fataler, query string, expected []
 		}
 		return nil
 	})
+}
+
+type beginner interface {
+	Begin() (*gosql.Tx, error)
+}
+
+// Begin starts a new transaction. It fails if the underlying DBHandle
+// doesn't support starting transactions or if starting the
+// transaction fails.
+func (sr *SQLRunner) Begin(t Fataler) *gosql.Tx {
+	helperOrNoop(t)()
+	b, ok := sr.DB.(beginner)
+	if !ok {
+		t.Fatalf("Begin() not supported by this SQLRunner")
+	}
+
+	txn, err := b.Begin()
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	return txn
+}
+
+// RunWithRetriableTxn starts a transaction and runs the given
+// function in the context of that transaction. The transaction is
+// commited when the given fuction returns and is automatically
+// retried if it hits a retriable error.
+func (sr *SQLRunner) RunWithRetriableTxn(t Fataler, fn func(*gosql.Tx) error) {
+	if err := sr.runWithRetriableTxnImpl(t, fn); err != nil {
+		t.Fatalf("%v", err)
+	}
+}
+
+const retryTxnErrorSubstring = "restart transaction"
+
+func (sr *SQLRunner) runWithRetriableTxnImpl(t Fataler, fn func(*gosql.Tx) error) (err error) {
+	txn := sr.Begin(t)
+	defer func() {
+		if err != nil {
+			_ = txn.Rollback()
+		}
+
+	}()
+	_, err = txn.Exec("SAVEPOINT cockroach_restart")
+	if err != nil {
+		return err
+	}
+
+	retryCount := 0
+	for {
+		err = fn(txn)
+		if err == nil {
+			_, err = txn.Exec("RELEASE SAVEPOINT cockroach_restart")
+			if err == nil {
+				return txn.Commit()
+			}
+		}
+
+		if !strings.Contains(err.Error(), retryTxnErrorSubstring) {
+			return err
+		}
+
+		_, rollbackErr := txn.Exec("ROLLBACK TO SAVEPOINT cockroach_restart")
+		if rollbackErr != nil {
+			return errors.CombineErrors(rollbackErr, err)
+		}
+
+		retryCount++
+		if sr.MaxTxnRetries > 0 && retryCount > sr.MaxTxnRetries {
+			return errors.Wrapf(err, "%d retries exhausted", sr.MaxTxnRetries)
+		}
+	}
 }
 
 // RoundRobinDBHandle aggregates multiple DBHandles into a single one; each time
