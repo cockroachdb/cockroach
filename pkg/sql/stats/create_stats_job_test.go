@@ -145,11 +145,10 @@ func TestCreateStatisticsCanBeCancelled(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)  WITH (sql_stats_automatic_collection_enabled = false)`)
 	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
 	var tID descpb.ID
 	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int`).Scan(&tID)
-	setTableID(tID)
 
 	// Run CREATE STATISTICS and wait for to create the job.
 	allowRequest = make(chan struct{})
@@ -159,6 +158,9 @@ func TestCreateStatisticsCanBeCancelled(t *testing.T) {
 		errCh <- err
 	}()
 	allowRequest <- struct{}{}
+	// If we end up ever retrying the txn, we should not block on
+	// the allow request channel again.
+	setTableID(descpb.InvalidID)
 	testutils.SucceedsSoon(t, func() error {
 		row := conn.QueryRow("SELECT query_id FROM [SHOW CLUSTER STATEMENTS] WHERE query LIKE 'CREATE STATISTICS%';")
 		var queryID string
@@ -214,7 +216,6 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	case err := <-errCh:
 		t.Fatal(err)
 	}
-
 	autoStatsRunShouldFail := func() {
 		_, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.t`)
 		expected := "another CREATE STATISTICS job is already running"
