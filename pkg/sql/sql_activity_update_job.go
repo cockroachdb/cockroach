@@ -63,7 +63,7 @@ var sqlStatsActivityMaxPersistedRows = settings.RegisterIntSetting(
 		" activity that will be persisted in the system tables",
 	200000, /* defaultValue*/
 	settings.NonNegativeInt,
-).WithPublic()
+	settings.WithPublic)
 
 const numberOfTopColumns = 6
 

@@ -11,7 +11,6 @@
 package keyvissettings
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -29,7 +28,7 @@ var SampleInterval = settings.RegisterDurationSetting(
 	"keyvisualizer.sample_interval",
 	"the frequency at which the key visualizer samples are collected",
 	5*time.Minute,
-	settings.NonNegativeDurationWithMinimum(1*time.Minute),
+	settings.DurationWithMinimum(1*time.Minute),
 )
 
 // MaxBuckets defines the maximum buckets allowed in a sample.
@@ -40,10 +39,5 @@ var MaxBuckets = settings.RegisterIntSetting(
 	"keyvisualizer.max_buckets",
 	"the maximum number of buckets in a sample",
 	256,
-	func(i int64) error {
-		if i < 1 || i > 1024 {
-			return fmt.Errorf("expected max_buckets to be in range [1, 1024], got %d", i)
-		}
-		return nil
-	},
+	settings.IntInRange(1, 1024),
 )

@@ -131,7 +131,7 @@ var (
 		"the amount of time for which records for completed jobs are retained",
 		defaultRetentionTime,
 		settings.PositiveDuration,
-	).WithPublic()
+		settings.WithPublic)
 
 	cancellationsUpdateLimitSetting = settings.RegisterIntSetting(
 		settings.TenantWritable,

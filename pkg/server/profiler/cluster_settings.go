@@ -25,4 +25,4 @@ var ActiveQueryDumpsEnabled = settings.RegisterBoolSetting(
 	"diagnostics.active_query_dumps.enabled",
 	"experimental: enable dumping of anonymized active queries to disk when node is under memory pressure",
 	true,
-).WithPublic()
+	settings.WithPublic)

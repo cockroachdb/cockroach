@@ -53,7 +53,7 @@ var ReporterInterval = settings.RegisterDurationSetting(
 		"replication_critical_localities reports (set to 0 to disable)",
 	time.Minute,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 // Reporter periodically produces a couple of reports on the cluster's data
 // distribution: the system tables: replication_constraint_stats,
