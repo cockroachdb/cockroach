@@ -368,18 +368,28 @@ type testGranterWithIOTokens struct {
 var _ granterWithIOTokens = &testGranterWithIOTokens{}
 
 func (g *testGranterWithIOTokens) setAvailableTokens(
-	ioTokens int64, elasticDiskBandwidthTokens int64, maxIOTokens int64, maxElasticTokens int64,
-) (tokensUsed int64) {
-	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s elastic-disk-bw-tokens=%s max-byte-tokens=%s max-disk-bw-tokens=%s",
+	ioTokens int64,
+	elasticIOTokens int64,
+	elasticDiskBandwidthTokens int64,
+	maxIOTokens int64,
+	maxElasticIOTokens int64,
+	maxElasticDiskBandwidthTokens int64,
+	lastTick bool,
+) (tokensUsed int64, tokensUsedByElasticWork int64) {
+	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s(elastic %s) "+
+		"elastic-disk-bw-tokens=%s max-byte-tokens=%s(elastic %s) max-disk-bw-tokens=%s lastTick=%t",
 		tokensForTokenTickDurationToString(ioTokens),
+		tokensForTokenTickDurationToString(elasticIOTokens),
 		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens),
 		tokensForTokenTickDurationToString(maxIOTokens),
-		tokensForTokenTickDurationToString(maxElasticTokens),
+		tokensForTokenTickDurationToString(maxElasticIOTokens),
+		tokensForTokenTickDurationToString(maxElasticDiskBandwidthTokens),
+		lastTick,
 	)
 	if g.allTokensUsed {
-		return ioTokens * 2
+		return ioTokens * 2, 0
 	}
-	return 0
+	return 0, 0
 }
 
 func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64 {
@@ -414,11 +424,18 @@ type testGranterNonNegativeTokens struct {
 var _ granterWithIOTokens = &testGranterNonNegativeTokens{}
 
 func (g *testGranterNonNegativeTokens) setAvailableTokens(
-	ioTokens int64, elasticDiskBandwidthTokens int64, _ int64, _ int64,
-) (tokensUsed int64) {
+	ioTokens int64,
+	elasticIOTokens int64,
+	elasticDiskBandwidthTokens int64,
+	_ int64,
+	_ int64,
+	_ int64,
+	_ bool,
+) (tokensUsed int64, tokensUsedByElasticWork int64) {
 	require.LessOrEqual(g.t, int64(0), ioTokens)
+	require.LessOrEqual(g.t, int64(0), elasticIOTokens)
 	require.LessOrEqual(g.t, int64(0), elasticDiskBandwidthTokens)
-	return 0
+	return 0, 0
 }
 
 func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64 {
