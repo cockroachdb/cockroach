@@ -437,7 +437,7 @@ var eventLogSystemTableEnabled = settings.RegisterBoolSetting(
 	"server.eventlog.enabled",
 	"if set, logged notable events are also stored in the table system.eventlog",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // EventLogTestingKnobs provides hooks and knobs for event logging.
 type EventLogTestingKnobs struct {

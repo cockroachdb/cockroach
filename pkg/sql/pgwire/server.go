@@ -74,19 +74,21 @@ var connResultsBufferSize = settings.RegisterByteSizeSetting(
 		"Updating the setting only affects new connections. "+
 		"Setting to 0 disables any buffering.",
 	16<<10, // 16 KiB
-).WithPublic()
+	settings.WithPublic)
 
 var logConnAuth = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	sql.ConnAuditingClusterSettingName,
 	"if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)",
-	false).WithPublic()
+	false,
+	settings.WithPublic)
 
 var logSessionAuth = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	sql.AuthAuditingClusterSettingName,
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
-	false).WithPublic()
+	false,
+	settings.WithPublic)
 
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a

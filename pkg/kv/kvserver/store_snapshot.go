@@ -71,12 +71,13 @@ const (
 
 // TODO(baptist): Remove in v24.1, no longer read in v23.2.
 func init() {
-	settings.RegisterBoolSetting(
+	_ = settings.RegisterBoolSetting(
 		settings.SystemOnly,
 		"kv.snapshot_prioritization.enabled",
 		"deprecated no longer used",
 		true,
-	).SetRetired()
+		settings.Retired,
+	)
 }
 
 // snapshotMetrics contains metrics on the number and size of snapshots in
@@ -1528,23 +1529,19 @@ var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_rebalance.max_rate",
 	"the rate limit (bytes/sec) to use for rebalance and upreplication snapshots",
 	32<<20, // 32mb/s
-	func(v int64) error {
-		if v < minSnapshotRate {
-			return errors.Errorf("snapshot rate cannot be set to a value below %s: %s",
-				humanizeutil.IBytes(minSnapshotRate), humanizeutil.IBytes(v))
-		}
-		return nil
-	},
-).WithPublic()
+	settings.ByteSizeWithMinimum(minSnapshotRate),
+	settings.WithPublic,
+)
 
 // TODO(baptist): Remove in v24.1, no longer read in v23.2.
 func init() {
-	settings.RegisterByteSizeSetting(
+	_ = settings.RegisterByteSizeSetting(
 		settings.SystemOnly,
 		"kv.snapshot_recovery.max_rate",
 		"use kv.snapshot_rebalance.max_rate instead",
 		32<<20, // 32mb/s
-	).SetRetired()
+		settings.Retired,
+	)
 }
 
 // snapshotSenderBatchSize is the size that key-value batches are allowed to
@@ -1652,15 +1649,7 @@ var snapshotReservationQueueTimeoutFraction = settings.RegisterFloatSetting(
 	"the fraction of a snapshot's total timeout that it is allowed to spend "+
 		"queued on the receiver waiting for a reservation",
 	0.4,
-	func(v float64) error {
-		const min, max = 0.25, 1.0
-		if v < min {
-			return errors.Errorf("cannot set to a value less than %f: %f", min, v)
-		} else if v > max {
-			return errors.Errorf("cannot set to a value greater than %f: %f", max, v)
-		}
-		return nil
-	},
+	settings.FloatInRange(0.25, 1.0),
 )
 
 // snapshotSSTWriteSyncRate is the size of chunks to write before fsync-ing.

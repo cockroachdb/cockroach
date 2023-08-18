@@ -67,9 +67,10 @@ func registerClusterVersionSetting() *clusterVersionSetting {
 		settings.TenantWritable,
 		KeyVersionSetting,
 		"set the active cluster version in the format '<major>.<minor>'", // hide optional `-<internal>,
-		&s.VersionSetting)
-	s.SetVisibility(settings.Public)
-	s.SetReportable(true)
+		&s.VersionSetting,
+		settings.WithPublic,
+		settings.WithReportable(true),
+	)
 	return s
 }
 
@@ -239,37 +240,32 @@ func (cv *clusterVersionSetting) validateBinaryVersions(
 	return nil
 }
 
-var PreserveDowngradeVersion = registerPreserveDowngradeVersionSetting()
-
-func registerPreserveDowngradeVersionSetting() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
-		settings.TenantWritable,
-		"cluster.preserve_downgrade_option",
-		"disable (automatic or manual) cluster version upgrade from the specified version until reset",
-		"",
-		func(sv *settings.Values, s string) error {
-			if sv == nil || s == "" {
-				return nil
-			}
-			clusterVersion := version.activeVersion(context.TODO(), sv).Version
-			downgradeVersion, err := roachpb.ParseVersion(s)
-			if err != nil {
-				return err
-			}
-
-			// cluster.preserve_downgrade_option can only be set to the current cluster version.
-			if downgradeVersion != clusterVersion {
-				return errors.Errorf(
-					"cannot set cluster.preserve_downgrade_option to %s (cluster version is %s)",
-					s, clusterVersion)
-			}
+var PreserveDowngradeVersion = settings.RegisterStringSetting(
+	settings.TenantWritable,
+	"cluster.preserve_downgrade_option",
+	"disable (automatic or manual) cluster version upgrade from the specified version until reset",
+	"",
+	settings.WithValidateString(func(sv *settings.Values, s string) error {
+		if sv == nil || s == "" {
 			return nil
-		},
-	)
-	s.SetReportable(true)
-	s.SetVisibility(settings.Public)
-	return s
-}
+		}
+		clusterVersion := version.activeVersion(context.TODO(), sv).Version
+		downgradeVersion, err := roachpb.ParseVersion(s)
+		if err != nil {
+			return err
+		}
+
+		// cluster.preserve_downgrade_option can only be set to the current cluster version.
+		if downgradeVersion != clusterVersion {
+			return errors.Errorf(
+				"cannot set cluster.preserve_downgrade_option to %s (cluster version is %s)",
+				s, clusterVersion)
+		}
+		return nil
+	}),
+	settings.WithReportable(true),
+	settings.WithPublic,
+)
 
 var metaPreserveDowngradeLastUpdated = metric.Metadata{
 	Name:        "cluster.preserve-downgrade-option.last-updated",

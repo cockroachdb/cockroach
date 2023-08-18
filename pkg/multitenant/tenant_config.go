@@ -27,7 +27,7 @@ var DefaultTenantSelect = settings.RegisterStringSetting(
 	DefaultTenantSelectSettingName,
 	"name of the tenant to use to serve requests when clients don't specify a tenant",
 	catconstants.SystemTenantName,
-).WithPublic()
+	settings.WithPublic)
 
 // VerifyTenantService determines whether there should be an advisory
 // interlock between changes to the tenant service and changes to the

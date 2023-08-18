@@ -39,7 +39,7 @@ var TargetPeriodSetting = settings.RegisterDurationSetting(
 	"tenant_cost_control_period",
 	"target duration between token bucket requests from tenants (requires restart)",
 	10*time.Second,
-	checkDurationInRange(5*time.Second, 120*time.Second),
+	settings.DurationInRange(5*time.Second, 120*time.Second),
 )
 
 // CPUUsageAllowance is exported for testing purposes.
@@ -50,26 +50,26 @@ var CPUUsageAllowance = settings.RegisterDurationSetting(
 		"doesn't contribute to consumption; for example, if it is set to 10ms, "+
 		"that corresponds to 1% of a CPU",
 	10*time.Millisecond,
-	checkDurationInRange(0, 1000*time.Millisecond),
+	settings.DurationInRange(0, 1000*time.Millisecond),
 )
 
 // ExternalIORUAccountingMode controls whether external ingress and
 // egress bytes are included in RU calculations.
-var ExternalIORUAccountingMode = *settings.RegisterValidatedStringSetting(
+var ExternalIORUAccountingMode = *settings.RegisterStringSetting(
 	settings.TenantReadOnly,
 	"tenant_external_io_ru_accounting_mode",
 	"controls how external IO RU accounting behaves; allowed values are 'on' (external IO RUs are accounted for and callers wait for RUs), "+
 		"'nowait' (external IO RUs are accounted for but callers do not wait for RUs), "+
 		"and 'off' (no external IO RU accounting)",
 	"on",
-	func(_ *settings.Values, s string) error {
+	settings.WithValidateString(func(_ *settings.Values, s string) error {
 		switch s {
 		case "on", "off", "nowait":
 			return nil
 		default:
 			return errors.Errorf("invalid value %q, expected 'on', 'off', or 'nowait'", s)
 		}
-	},
+	}),
 )
 
 type externalIORUAccountingMode int64
@@ -97,19 +97,6 @@ func externalIORUAccountingModeFromString(s string) externalIORUAccountingMode {
 	default:
 		// Default to off given an unknown value.
 		return externalIORUAccountingOff
-	}
-}
-
-// checkDurationInRange returns a function used to validate duration cluster
-// settings. Because these values are currently settable by the tenant, we need
-// to restrict the allowed values to avoid possible sabotage of the cost control
-// mechanisms.
-func checkDurationInRange(min, max time.Duration) func(v time.Duration) error {
-	return func(v time.Duration) error {
-		if v < min || v > max {
-			return errors.Errorf("value %s out of range (%s, %s)", v, min, max)
-		}
-		return nil
 	}
 }
 

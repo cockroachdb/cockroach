@@ -41,7 +41,7 @@ var MaxTxnRefreshSpansBytes = settings.RegisterIntSetting(
 	"kv.transaction.max_refresh_spans_bytes",
 	"maximum number of bytes used to track refresh spans in serializable transactions",
 	1<<22, /* 4 MB */
-).WithPublic()
+	settings.WithPublic)
 
 // txnSpanRefresher is a txnInterceptor that collects the read spans of a
 // serializable transaction in the event it gets a serializable retry error. It
