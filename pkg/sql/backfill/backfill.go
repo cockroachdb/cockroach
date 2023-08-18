@@ -166,11 +166,12 @@ func (cb *ColumnBackfiller) init(
 	return cb.fetcher.Init(
 		ctx,
 		row.FetcherInitArgs{
-			Txn:        txn,
-			Alloc:      &cb.alloc,
-			MemMonitor: cb.mon,
-			Spec:       &spec,
-			TraceKV:    traceKV,
+			Txn:                        txn,
+			Alloc:                      &cb.alloc,
+			MemMonitor:                 cb.mon,
+			Spec:                       &spec,
+			TraceKV:                    traceKV,
+			ForceProductionKVBatchSize: cb.evalCtx.TestingKnobs.ForceProductionValues,
 		},
 	)
 }
