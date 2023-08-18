@@ -693,7 +693,8 @@ func (tc *TxnCoordSender) maybeRejectIncompatibleRequest(
 func (tc *TxnCoordSender) maybeRejectClientLocked(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) *kvpb.Error {
-	if ba != nil && ba.IsSingleAbortTxnRequest() && tc.mu.txn.Status != roachpb.COMMITTED {
+	rollback := ba != nil && ba.IsSingleAbortTxnRequest()
+	if rollback && tc.mu.txn.Status != roachpb.COMMITTED {
 		// As a special case, we allow rollbacks to be sent at any time. Any
 		// rollback attempt moves the TxnCoordSender state to txnFinalized, but higher
 		// layers are free to retry rollbacks if they want (and they do, for
@@ -717,8 +718,13 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	case txnFinalized:
 		msg := redact.Sprintf("client already committed or rolled back the transaction. "+
 			"Trying to execute: %s", ba.Summary())
-		stack := string(debug.Stack())
-		log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
+		if !rollback {
+			// If the client is trying to do anything other than rollback, it is
+			// unexpected for it to find the transaction already in a txnFinalized
+			// state. This may be a bug, so log a stack trace.
+			stack := string(debug.Stack())
+			log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
+		}
 		reason := kvpb.TransactionStatusError_REASON_UNKNOWN
 		if tc.mu.txn.Status == roachpb.COMMITTED {
 			reason = kvpb.TransactionStatusError_REASON_TXN_COMMITTED
