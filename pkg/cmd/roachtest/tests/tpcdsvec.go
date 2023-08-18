@@ -191,7 +191,7 @@ WITH unsafe_restore_incompatible_version;
 		Benchmark: true,
 		Cluster:   r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().Cloud != spec.GCE {
+			if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
 				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
 			runTPCDSVec(ctx, t, c)
