@@ -151,7 +151,9 @@ type topLevelServer struct {
 	distSender       *kvcoord.DistSender
 	db               *kv.DB
 	node             *Node
-	registry         *metric.Registry
+	nodeRegistry     *metric.Registry
+	appRegistry      *metric.Registry
+	sysRegistry      *metric.Registry
 	recorder         *status.MetricsRecorder
 	runtime          *status.RuntimeStatSampler
 	ruleRegistry     *metric.RuleRegistry
@@ -243,7 +245,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if err != nil {
 		return nil, err
 	}
-	registry := metric.NewRegistry()
+
+	// nodeRegistry holds metrics that are specific to the storage and KV layer.
+	// Do not use this for metrics that could possibly be reported by secondary
+	// tenants, i.e. those also registered in tenant.go.
+	nodeRegistry := metric.NewRegistry()
+	// appRegistry holds application-level metrics. These are the metrics
+	// that are also registered in tenant.go.
+	appRegistry := metric.NewRegistry()
 	ruleRegistry := metric.NewRuleRegistry()
 	promRuleExporter := metric.NewPrometheusRuleExporter(ruleRegistry)
 	stopper.SetTracer(cfg.AmbientCtx.Tracer)
@@ -293,7 +302,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		cfg.ClusterIDContainer,
 		nodeIDContainer,
 		stopper,
-		registry,
+		nodeRegistry,
 		cfg.Locality,
 		&cfg.DefaultZoneConfig,
 	)
@@ -342,7 +351,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		return rpc.VerifyDialback(ctx, rpcContext, req, resp, cfg.Locality, &rpcContext.Settings.SV)
 	}
 
-	registry.AddMetricStruct(rpcContext.Metrics())
+	appRegistry.AddMetricStruct(rpcContext.Metrics())
 
 	// Attempt to load TLS configs right away, failures are permanent.
 	if !cfg.Insecure {
@@ -362,7 +371,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			return nil, err
 		}
 		// Expose cert expirations in metrics.
-		registry.AddMetricStruct(cm.Metrics())
+		appRegistry.AddMetricStruct(cm.Metrics())
 	}
 
 	// Check the compatibility between the configured addresses and that
@@ -387,12 +396,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		nodedialer.DialerOpt{TestingKnobs: dialerKnobs})
 
 	runtimeSampler := status.NewRuntimeStatSampler(ctx, clock.WallClock())
-	registry.AddMetricStruct(runtimeSampler)
+	sysRegistry := metric.NewRegistry()
+	sysRegistry.AddMetricStruct(runtimeSampler)
 	// Save a reference to this sampler for use by additional servers
 	// started via the server controller.
 	cfg.RuntimeStatSampler = runtimeSampler
 
-	registry.AddMetric(base.LicenseTTL)
+	appRegistry.AddMetric(base.LicenseTTL)
 	err = base.UpdateMetricOnLicenseChange(ctx, cfg.Settings, base.LicenseTTL, timeutil.DefaultTimeSource{}, stopper)
 	if err != nil {
 		log.Errorf(ctx, "unable to initialize periodic license metric update: %v", err)
@@ -436,10 +446,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		TestingKnobs:       clientTestingKnobs,
 	}
 	distSender := kvcoord.NewDistSender(distSenderCfg)
-	registry.AddMetricStruct(distSender.Metrics())
+	appRegistry.AddMetricStruct(distSender.Metrics())
 
 	txnMetrics := kvcoord.MakeTxnMetrics(cfg.HistogramWindowInterval())
-	registry.AddMetricStruct(txnMetrics)
+	appRegistry.AddMetricStruct(txnMetrics)
 	txnCoordSenderFactoryCfg := kvcoord.TxnCoordSenderFactoryConfig{
 		AmbientCtx:   cfg.AmbientCtx,
 		Settings:     st,
@@ -516,7 +526,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		NodeDialer: nodeDialer,
 	})
 
-	registry.AddMetricStruct(nodeLiveness.Metrics())
+	nodeRegistry.AddMetricStruct(nodeLiveness.Metrics())
 
 	nodeLivenessFn := storepool.MakeStorePoolNodeLivenessFunc(nodeLiveness)
 	if nodeLivenessKnobs, ok := cfg.TestingKnobs.NodeLiveness.(kvserver.NodeLivenessTestingKnobs); ok {
@@ -548,7 +558,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 
 	storesForFlowControl := kvserver.MakeStoresForFlowControl(stores)
-	kvflowTokenDispatch := kvflowdispatch.New(registry, storesForFlowControl, nodeIDContainer)
+	kvflowTokenDispatch := kvflowdispatch.New(appRegistry, storesForFlowControl, nodeIDContainer)
 	admittedEntryAdaptor := newAdmittedLogEntryAdaptor(kvflowTokenDispatch)
 	admissionKnobs, ok := cfg.TestingKnobs.AdmissionControl.(*admission.TestingKnobs)
 	if !ok {
@@ -558,7 +568,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		cfg.AmbientCtx,
 		st,
 		admissionOptions,
-		registry,
+		nodeRegistry,
 		admittedEntryAdaptor,
 		admissionKnobs,
 	)
@@ -578,7 +588,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		kvFlowHandleMetrics      *kvflowhandle.Metrics
 	}
 	admissionControl.schedulerLatencyListener = gcoords.Elastic.SchedulerLatencyListener
-	admissionControl.kvflowController = kvflowcontroller.New(registry, st, clock)
+	admissionControl.kvflowController = kvflowcontroller.New(nodeRegistry, st, clock)
 	admissionControl.kvflowTokenDispatch = kvflowTokenDispatch
 	admissionControl.storesFlowControl = storesForFlowControl
 	admissionControl.kvAdmissionController = kvadmission.MakeController(
@@ -590,7 +600,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		admissionControl.storesFlowControl,
 		cfg.Settings,
 	)
-	admissionControl.kvFlowHandleMetrics = kvflowhandle.NewMetrics(registry)
+	admissionControl.kvFlowHandleMetrics = kvflowhandle.NewMetrics(nodeRegistry)
 	kvflowcontrol.Mode.SetOnChange(&st.SV, func(ctx context.Context) {
 		admissionControl.storesFlowControl.ResetStreams(ctx)
 	})
@@ -611,7 +621,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		admissionControl.storesFlowControl,
 		raftTransportKnobs,
 	)
-	registry.AddMetricStruct(raftTransport.Metrics())
+	nodeRegistry.AddMetricStruct(raftTransport.Metrics())
 
 	ctSender := sidetransport.NewSender(stopper, st, clock, nodeDialer)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
@@ -648,7 +658,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if err != nil {
 		return nil, err
 	}
-	registry.AddMetricStruct(protectedtsProvider.Metrics())
+	appRegistry.AddMetricStruct(protectedtsProvider.Metrics())
 
 	// Break a circular dependency: we need the rootSQLMemoryMonitor to construct
 	// the KV memory monitor for the StoreConfig.
@@ -677,7 +687,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			},
 			&st.SV))
 	if rangeReedBudgetFactory != nil {
-		registry.AddMetricStruct(rangeReedBudgetFactory.Metrics())
+		nodeRegistry.AddMetricStruct(rangeReedBudgetFactory.Metrics())
 	}
 	// Closer order is important with BytesMonitor.
 	stopper.AddCloser(stop.CloserFn(func() {
@@ -688,7 +698,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}))
 
 	tsDB := ts.NewDB(db, cfg.Settings)
-	registry.AddMetricStruct(tsDB.Metrics())
+	nodeRegistry.AddMetricStruct(tsDB.Metrics())
 	nodeCountFn := func() int64 {
 		return nodeLiveness.Metrics().LiveNodes.Value()
 	}
@@ -758,7 +768,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 				cfg.Settings,
 				spanconfigstore.NewBoundsReader(tenantCapabilitiesWatcher),
 				spanConfigKnobs,
-				registry,
+				nodeRegistry,
 			)
 		}
 
@@ -870,7 +880,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		clock.WallClock(),
 		st,
 	)
-	registry.AddMetricStruct(rpcContext.RemoteClocks.Metrics())
+	appRegistry.AddMetricStruct(rpcContext.RemoteClocks.Metrics())
 
 	updates := &diagnostics.UpdateChecker{
 		StartTime:        timeutil.Now(),
@@ -888,7 +898,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 
 	tenantUsage := NewTenantUsageServer(st, db, insqlDB)
-	registry.AddMetricStruct(tenantUsage.Metrics())
+	nodeRegistry.AddMetricStruct(tenantUsage.Metrics())
 
 	tenantSettingsWatcher := tenantsettingswatcher.New(
 		clock, rangeFeedFactory, stopper, st,
@@ -897,7 +907,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	node := NewNode(
 		storeCfg,
 		recorder,
-		registry,
+		nodeRegistry,
 		stopper,
 		txnMetrics,
 		stores,
@@ -1023,7 +1033,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		Settings:                st,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 	})
-	registry.AddMetricStruct(kvProber.Metrics())
+	nodeRegistry.AddMetricStruct(kvProber.Metrics())
 
 	flushInterval := 5 * time.Second
 	flushTriggerBytesSize := uint64(1 << 20) // 1MB
@@ -1090,7 +1100,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		true, /* acceptTenantName */
 	)
 	for _, m := range pgPreServer.Metrics() {
-		registry.AddMetricStruct(m)
+		appRegistry.AddMetricStruct(m)
 	}
 
 	inspectzServer := inspectz.NewServer(
@@ -1129,7 +1139,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
 		db:                       db,
-		registry:                 registry,
+		registry:                 appRegistry,
+		sysRegistry:              sysRegistry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
 		closedSessionCache:       closedSessionCache,
@@ -1273,7 +1284,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		distSender:                distSender,
 		db:                        db,
 		node:                      node,
-		registry:                  registry,
+		nodeRegistry:              nodeRegistry,
+		appRegistry:               appRegistry,
+		sysRegistry:               sysRegistry,
 		recorder:                  recorder,
 		ruleRegistry:              ruleRegistry,
 		promRuleExporter:          promRuleExporter,
@@ -1790,7 +1803,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 
 	// Start measuring the Go scheduler latency.
 	if err := schedulerlatency.StartSampler(
-		workersCtx, s.st, s.stopper, s.registry, base.DefaultMetricsSampleInterval,
+		workersCtx, s.st, s.stopper, s.appRegistry, base.DefaultMetricsSampleInterval,
 	); err != nil {
 		return err
 	}
@@ -1866,8 +1879,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 
 	// We can now add the node registry.
 	s.recorder.AddNode(
-		s.registry,
-		logRegistry,
+		s.nodeRegistry, s.appRegistry,
+		logRegistry, s.sysRegistry,
 		s.node.Descriptor,
 		s.node.startedAt,
 		s.cfg.AdvertiseAddr,
@@ -2072,7 +2085,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		true, /* allowLocalFastPath */
 		s.sqlServer.execCfg.InternalDB.CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
 		nil, /* TenantExternalIORecorder */
-		s.registry,
+		s.appRegistry,
 	)
 	if err := s.cfg.ExternalStorageAccessor.Init(
 		s.externalStorageBuilder.makeExternalStorage, s.externalStorageBuilder.makeExternalStorageFromURI,

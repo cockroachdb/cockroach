@@ -98,12 +98,13 @@ type SQLServerWrapper struct {
 	clock      *hlc.Clock
 	rpcContext *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
-	grpc       *grpcServer
-	nodeDialer *nodedialer.Dialer
-	db         *kv.DB
-	registry   *metric.Registry
-	recorder   *status.MetricsRecorder
-	runtime    *status.RuntimeStatSampler
+	grpc        *grpcServer
+	nodeDialer  *nodedialer.Dialer
+	db          *kv.DB
+	registry    *metric.Registry
+	sysRegistry *metric.Registry
+	recorder    *status.MetricsRecorder
+	runtime     *status.RuntimeStatSampler
 
 	http            *httpServer
 	adminAuthzCheck privchecker.CheckerForRPCHandlers
@@ -661,8 +662,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 
 	// We can now add the node registry.
 	s.recorder.AddNode(
+		metric.NewRegistry(), // node registry -- unused here
 		s.registry,
-		logRegistry,
+		logRegistry, s.sysRegistry,
 		roachpb.NodeDescriptor{
 			NodeID: s.rpcContext.NodeID.Get(),
 		},
@@ -1177,7 +1179,8 @@ func makeTenantSQLServerArgs(
 	} else {
 		runtime = status.NewRuntimeStatSampler(startupCtx, clock.WallClock())
 	}
-	registry.AddMetricStruct(runtime)
+	sysRegistry := metric.NewRegistry()
+	sysRegistry.AddMetricStruct(runtime)
 
 	// NB: The init method will be called in (*SQLServerWrapper).PreStart().
 	esb := &externalStorageBuilder{}
@@ -1263,6 +1266,7 @@ func makeTenantSQLServerArgs(
 		distSender:               ds,
 		db:                       db,
 		registry:                 registry,
+		sysRegistry:              sysRegistry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
 		remoteFlowRunner:         remoteFlowRunner,

@@ -133,10 +133,15 @@ type MetricsRecorder struct {
 		// nodeRegistry contains, as subregistries, the multiple component-specific
 		// registries which are recorded as "node level" metrics.
 		nodeRegistry *metric.Registry
+		// appRegistry contains, as subregistries, the component-specific
+		// registries that are recorded at the "application" level.
+		appRegistry *metric.Registry
 		// logRegistry contains the global metrics registry used by the logging
 		// package. NB: The underlying metrics are global, but each server gets
 		// its own separate registry to avoid things such as colliding labels.
 		logRegistry *metric.Registry
+		// sysRegistry contains the system-wide metrics.
+		sysRegistry *metric.Registry
 		desc        roachpb.NodeDescriptor
 		startedAt   int64
 
@@ -193,11 +198,13 @@ func (mr *MetricsRecorder) AddTenantRegistry(tenantID roachpb.TenantID, rec *met
 
 	if !disableNodeAndTenantLabels {
 		// If there are no in-process tenants running, we don't set the
-		// tenant label on the system tenant metrics until a seconary
+		// tenant label on the system tenant metrics until a secondary
 		// tenant is initialized.
 		mr.mu.Do(func() {
 			mr.mu.nodeRegistry.AddLabel("tenant", catconstants.SystemTenantName)
+			mr.mu.appRegistry.AddLabel("tenant", catconstants.SystemTenantName)
 			mr.mu.logRegistry.AddLabel("tenant", catconstants.SystemTenantName)
+			mr.mu.sysRegistry.AddLabel("tenant", catconstants.SystemTenantName)
 		})
 	}
 	mr.mu.tenantRegistries[tenantID] = rec
@@ -214,7 +221,7 @@ func (mr *MetricsRecorder) RemoveTenantRegistry(tenantID roachpb.TenantID) {
 // AddNode adds the Registry from an initialized node, along with its descriptor
 // and start time. It also adds the logging registry.
 func (mr *MetricsRecorder) AddNode(
-	nodeReg, logReg *metric.Registry,
+	nodeReg, appReg, logReg, sysReg *metric.Registry,
 	desc roachpb.NodeDescriptor,
 	startedAt int64,
 	advertiseAddr, httpAddr, sqlAddr string,
@@ -222,7 +229,9 @@ func (mr *MetricsRecorder) AddNode(
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.mu.nodeRegistry = nodeReg
+	mr.mu.appRegistry = appReg
 	mr.mu.logRegistry = logReg
+	mr.mu.sysRegistry = sysReg
 	mr.mu.desc = desc
 	mr.mu.startedAt = startedAt
 
@@ -311,7 +320,9 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
 	}
 	includeChildMetrics := ChildMetricsEnabled.Get(&mr.settings.SV)
 	pm.ScrapeRegistry(mr.mu.nodeRegistry, includeChildMetrics)
+	pm.ScrapeRegistry(mr.mu.appRegistry, includeChildMetrics)
 	pm.ScrapeRegistry(mr.mu.logRegistry, includeChildMetrics)
+	pm.ScrapeRegistry(mr.mu.sysRegistry, includeChildMetrics)
 	for _, reg := range mr.mu.storeRegistries {
 		pm.ScrapeRegistry(reg, includeChildMetrics)
 	}
@@ -371,8 +382,14 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 		timestampNanos: now.UnixNano(),
 	}
 	recorder.record(&data)
+	// Now record the app metrics.
+	recorder.registry = mr.mu.appRegistry
+	recorder.record(&data)
 	// Now record the log metrics.
 	recorder.registry = mr.mu.logRegistry
+	recorder.record(&data)
+	// Now record the system metrics.
+	recorder.registry = mr.mu.sysRegistry
 	recorder.record(&data)
 
 	// Record time series from node-level registries for secondary tenants.
@@ -418,7 +435,12 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 
 // GetMetricsMetadata returns the metadata from all metrics tracked in the node's
 // nodeRegistry and a randomly selected storeRegistry.
-func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
+//
+// If the argument is true, both node-level and app-level metrics are
+// combined in the firt return value.
+func (mr *MetricsRecorder) GetMetricsMetadata(
+	combined bool,
+) (nodeMetrics, appMetrics, srvMetrics map[string]metric.Metadata) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
@@ -427,13 +449,22 @@ func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 		if log.V(1) {
 			log.Warning(context.TODO(), "MetricsRecorder.GetMetricsMetadata() called before NodeID allocation")
 		}
-		return nil
+		return nil, nil, nil
 	}
 
-	metrics := make(map[string]metric.Metadata)
+	nodeMetrics = make(map[string]metric.Metadata)
+	if combined {
+		appMetrics = nodeMetrics
+		srvMetrics = nodeMetrics
+	} else {
+		appMetrics = make(map[string]metric.Metadata)
+		srvMetrics = make(map[string]metric.Metadata)
+	}
 
-	mr.mu.nodeRegistry.WriteMetricsMetadata(metrics)
-	mr.mu.logRegistry.WriteMetricsMetadata(metrics)
+	mr.mu.nodeRegistry.WriteMetricsMetadata(nodeMetrics)
+	mr.mu.appRegistry.WriteMetricsMetadata(appMetrics)
+	mr.mu.logRegistry.WriteMetricsMetadata(srvMetrics)
+	mr.mu.sysRegistry.WriteMetricsMetadata(srvMetrics)
 
 	// Get a random storeID.
 	var sID roachpb.StoreID
@@ -447,10 +478,10 @@ func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 
 	// Get metric metadata from that store because all stores have the same metadata.
 	if storeFound {
-		mr.mu.storeRegistries[sID].WriteMetricsMetadata(metrics)
+		mr.mu.storeRegistries[sID].WriteMetricsMetadata(nodeMetrics)
 	}
 
-	return metrics
+	return nodeMetrics, appMetrics, srvMetrics
 }
 
 // getNetworkActivity produces a map of network activity from this node to all
@@ -521,6 +552,9 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 	}
 
 	eachRecordableValue(mr.mu.nodeRegistry, func(name string, val float64) {
+		nodeStat.Metrics[name] = val
+	})
+	eachRecordableValue(mr.mu.appRegistry, func(name string, val float64) {
 		nodeStat.Metrics[name] = val
 	})
 	eachRecordableValue(mr.mu.logRegistry, func(name string, val float64) {
