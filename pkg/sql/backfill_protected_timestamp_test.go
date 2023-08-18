@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -54,6 +55,9 @@ func TestValidationWithProtectedTS(t *testing.T) {
 	indexScanQuery := regexp.MustCompile(`SELECT count\(1\) FROM \[\d+ AS t\]@\[2\]`)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
+			SQLEvalContext: &eval.TestingKnobs{
+				ForceProductionValues: true,
+			},
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				BeforeExecute: func(ctx context.Context, sql string, descriptors *descs.Collection) {
 					if indexScanQuery.MatchString(sql) {
