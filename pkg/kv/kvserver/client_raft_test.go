@@ -1574,7 +1574,7 @@ func TestReceiveSnapshotLogging(t *testing.T) {
 		// When ready, flush logs and check messages from store_raft.go since
 		// call to repl.ChangeReplicas(..).
 		<-signals.receiverDoneCh
-		log.Flush()
+		log.FlushFiles()
 		entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
 			math.MaxInt64, 100, regexp.MustCompile(`store_raft\.go`), log.WithMarkedSensitiveData)
 		require.NoError(t, err)
