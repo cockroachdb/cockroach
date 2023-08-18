@@ -11,6 +11,7 @@ package streamproducer
 import (
 	"context"
 	"fmt"
+	"runtime/pprof"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 type eventStream struct {
@@ -96,6 +98,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 
 	// Common rangefeed options.
 	opts := []rangefeed.Option{
+		rangefeed.WithPProfLabel("job", fmt.Sprintf("id=%d", s.streamID)),
 		rangefeed.WithOnCheckpoint(s.onCheckpoint),
 
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
@@ -176,6 +179,14 @@ func (s *eventStream) startStreamProcessor(ctx context.Context, frontier *span.F
 	// withErrCapture wraps fn to capture and report error to the error channel.
 	withErrCapture := func(fn ctxGroupFn) ctxGroupFn {
 		return func(ctx context.Context) error {
+			// Attach the streamID as a job ID so that the job-specific
+			// CPU profile on the Job's advanced debug page includes
+			// stacks from these streams.
+			defer pprof.SetGoroutineLabels(ctx)
+			ctx = logtags.AddTag(ctx, "job", s.streamID)
+			ctx = pprof.WithLabels(ctx, pprof.Labels("job", fmt.Sprintf("id=%d", s.streamID)))
+			pprof.SetGoroutineLabels(ctx)
+
 			err := fn(ctx)
 			if err != nil {
 				// Signal ValueGenerator that this stream is terminating due to an error
