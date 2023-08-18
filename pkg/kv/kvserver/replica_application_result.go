@@ -317,11 +317,15 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		// for (some reincarnation of) the command to eventually apply, its trace
 		// will reflect the reproposal as well.
 		ctx:             origP.ctx,
-		sp:              origP.sp, // NB: special handling below
 		idKey:           raftlog.MakeCmdIDKey(),
 		proposedAtTicks: 0, // set in registerProposalLocked
 		createdAtTicks:  0, // set in registerProposalLocked
 		command:         &newCommand,
+
+		// Next comes the block of fields that are "moved" to the new proposal. See
+		// the deferred function call below which, correspondingly, clears these
+		// fields in the original proposal.
+		sp: origP.sp,
 		// NB: quotaAlloc is always nil here, because we already released the quota
 		// unconditionally in retrieveLocalProposals. So the below is a no-op.
 		//
@@ -330,8 +334,10 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		// releasing it here.
 		quotaAlloc: origP.quotaAlloc,
 		ec:         origP.ec,
-		applied:    false,
 		doneCh:     origP.doneCh,
+
+		applied: false,
+
 		// Local is copied over. It won't be used on the old proposal (since that
 		// proposal got rejected), but since it's still "local" we don't want to put
 		// it into  an undefined state by removing its response. The same goes for
