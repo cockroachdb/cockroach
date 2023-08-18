@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -344,6 +345,10 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		v2SeenDuringApplication: false,
 	}
 
+	if buildutil.CrdbTestBuild && origP.reproposal != nil {
+		log.Fatalf(ctx, "ProposalData considered for reproposal twice:\n%+v\nreproposed before as: %+v",
+			origP, origP.reproposal)
+	}
 	defer func() {
 		if !success {
 			return
@@ -364,8 +369,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		// proposal. By the time it has to act on the result, a bunch of reproposals
 		// can have happened. Link them all, so that the client can see all
 		// proposals for post-processing.
-		//
-		// TODO(pavelkalinnikov): prove and assert that origP.reproposal was nil.
+		// NB: origP.reproposal was nil, as verified above.
 		origP.reproposal = newProposal
 	}()
 
