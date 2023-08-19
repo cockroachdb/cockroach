@@ -71,7 +71,7 @@ var (
 		db := tc.ServerConn(0)
 		tdb := sqlutils.MakeSQLRunner(db)
 		tdb.Exec(t, "CREATE DATABASE "+databaseName)
-		tdb.Exec(t, "SET CLUSTER SETTING kv.raft_log.disable_synchronization_unsafe = true")
+		tdb.Exec(t, "SET CLUSTER SETTING kv.raft_log.synchronization.disabled = true")
 		tdb.Exec(t, "USE "+databaseName)
 		tpcc, err := workload.Get("tpcc")
 		require.NoError(t, err)

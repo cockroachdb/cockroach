@@ -256,7 +256,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	defer cleanupTenant()
 
 	// Makes the stream time out really soon
-	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10ms'")
+	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness.timeout = '10ms'")
 	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1ms'")
 	t.Run("failed-after-timeout", func(t *testing.T) {
 		replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
@@ -268,7 +268,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	})
 
 	// Make sure the stream does not time out within the test timeout
-	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '500s'")
+	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness.timeout = '500s'")
 	t.Run("continuously-running-within-timeout", func(t *testing.T) {
 		replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
 		streamID := replicationProducerSpec.StreamID
@@ -600,7 +600,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 
 	// Make the producer job times out fast and fastly tracks ingestion cutover signal.
 	h.SysSQL.ExecMultiple(t,
-		"SET CLUSTER SETTING stream_replication.job_liveness_timeout = '2s';",
+		"SET CLUSTER SETTING stream_replication.job_liveness.timeout = '2s';",
 		"SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '2s';")
 
 	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
@@ -608,7 +608,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 	jobutils.WaitForJobToFail(t, h.SysSQL, jobspb.JobID(timedOutStreamID))
 
 	// Makes the producer job not easily time out.
-	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10m';")
+	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness.timeout = '10m';")
 	testCompleteStreamReplication := func(t *testing.T, successfulIngestion bool) {
 		// Verify no error when completing a timed out replication stream.
 		h.SysSQL.Exec(t, "SELECT crdb_internal.complete_replication_stream($1, $2)",

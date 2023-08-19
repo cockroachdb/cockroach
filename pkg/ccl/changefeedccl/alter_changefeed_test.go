@@ -142,7 +142,7 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 		})
 
 		// With require_external_connection_sink enabled, the user requires USAGE on the external connection.
-		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink = true")
+		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = true")
 		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t,
 				"user user1 does not have USAGE privilege on external_connection second",
@@ -155,7 +155,7 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
 			)
 		})
-		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink = false")
+		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = false")
 	})
 
 	// TODO(#94757): remove CONTROLCHANGEFEED entirely
