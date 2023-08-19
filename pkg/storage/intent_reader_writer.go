@@ -12,7 +12,6 @@ package storage
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -83,63 +82,4 @@ func (idw intentDemuxWriter) ClearMVCCRange(
 	lstart, buf := keys.LockTableSingleKey(start, buf)
 	lend, _ := keys.LockTableSingleKey(end, nil)
 	return buf, idw.w.ClearRawRange(lstart, lend, true /* pointKeys */, false /* rangeKeys */)
-}
-
-// wrappableReader is used to implement a wrapped Reader. A wrapped Reader
-// should be used and immediately discarded. It maintains no state of its own
-// between calls.
-// Why do we not keep the wrapped reader as a member in the caller? Because
-// different methods on Reader can need different wrappings depending on what
-// they want to observe.
-//
-// TODO(sumeer): for allocation optimization we could expose a scratch space
-// struct that the caller keeps on behalf of the wrapped reader. But can only
-// do such an optimization when know that the wrappableReader will be used
-// with external synchronization that prevents preallocated buffers from being
-// modified concurrently. pebbleBatch.{MVCCGet,MVCCGetProto} have MVCCKey
-// serialization allocation optimizations which we can't do below. But those
-// are probably not performance sensitive, since the performance sensitive
-// code probably uses an MVCCIterator.
-type wrappableReader interface {
-	Reader
-}
-
-// wrapReader wraps the provided reader, to return an implementation of MVCCIterator
-// that supports MVCCKeyAndIntentsIterKind.
-func wrapReader(r wrappableReader) *intentInterleavingReader {
-	iiReader := intentInterleavingReaderPool.Get().(*intentInterleavingReader)
-	*iiReader = intentInterleavingReader{wrappableReader: r}
-	return iiReader
-}
-
-type intentInterleavingReader struct {
-	wrappableReader
-}
-
-var _ Reader = &intentInterleavingReader{}
-
-var intentInterleavingReaderPool = sync.Pool{
-	New: func() interface{} {
-		return &intentInterleavingReader{}
-	},
-}
-
-// NewMVCCIterator implements the Reader interface. The
-// intentInterleavingReader can be freed once this method returns.
-func (imr *intentInterleavingReader) NewMVCCIterator(
-	iterKind MVCCIterKind, opts IterOptions,
-) (MVCCIterator, error) {
-	if (!opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty()) &&
-		iterKind == MVCCKeyAndIntentsIterKind {
-		panic("cannot ask for interleaved intents when specifying timestamp hints")
-	}
-	if iterKind == MVCCKeyIterKind || opts.KeyTypes == IterKeyTypeRangesOnly {
-		return imr.wrappableReader.NewMVCCIterator(MVCCKeyIterKind, opts)
-	}
-	return newIntentInterleavingIterator(imr.wrappableReader, opts)
-}
-
-func (imr *intentInterleavingReader) Free() {
-	*imr = intentInterleavingReader{}
-	intentInterleavingReaderPool.Put(imr)
 }
