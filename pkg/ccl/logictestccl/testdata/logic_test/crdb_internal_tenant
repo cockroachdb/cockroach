@@ -440,7 +440,7 @@ test  {}
 statement ok
 CREATE TABLE foo (a INT PRIMARY KEY, INDEX idx(a)); INSERT INTO foo VALUES(1)
 
-statement error tenant cluster setting sql.split_at.allow_for_secondary_tenant.enabled disabled
+statement error tenant cluster setting sql.virtual_cluster.feature_access.manual_range_split.enabled disabled
 ALTER TABLE foo SPLIT AT VALUES(2)
 
 # Make sure that the cluster id isn't unset.
