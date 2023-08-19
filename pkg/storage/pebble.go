@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
@@ -806,8 +805,6 @@ type Pebble struct {
 	// onClose is a slice of functions to be invoked before the engine closes.
 	onClose []func(*Pebble)
 
-	wrappedIntentWriter intentDemuxWriter
-
 	storeIDPebbleLog *base.StoreIDContainer
 	replayer         *replay.WorkloadCollector
 }
@@ -1151,7 +1148,6 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 
 	p.eventListener = &el
 	opts.EventListener = &el
-	p.wrappedIntentWriter = wrapIntentWriter(p)
 
 	// If both cfg.SharedStorage and cfg.RemoteStorageFactory are set, CRDB uses
 	// cfg.SharedStorage. Note that eventually we will enable using both at the
@@ -1558,14 +1554,6 @@ func (p *Pebble) ClearUnversioned(key roachpb.Key, opts ClearOptions) error {
 	return p.clear(MVCCKey{Key: key}, opts)
 }
 
-// ClearIntent implements the Engine interface.
-func (p *Pebble) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts ClearOptions,
-) error {
-	_, err := p.wrappedIntentWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, nil, opts)
-	return err
-}
-
 // ClearEngineKey implements the Engine interface.
 func (p *Pebble) ClearEngineKey(key EngineKey, opts ClearOptions) error {
 	if len(key.Key) == 0 {
@@ -1616,8 +1604,14 @@ func (p *Pebble) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool
 
 // ClearMVCCRange implements the Engine interface.
 func (p *Pebble) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
-	_, err := p.wrappedIntentWriter.ClearMVCCRange(start, end, pointKeys, rangeKeys, nil)
-	return err
+	// Write all the tombstones in one batch.
+	batch := p.NewUnindexedBatch()
+	defer batch.Close()
+
+	if err := batch.ClearMVCCRange(start, end, pointKeys, rangeKeys); err != nil {
+		return err
+	}
+	return batch.Commit(true)
 }
 
 // ClearMVCCVersions implements the Engine interface.
@@ -1699,14 +1693,6 @@ func (p *Pebble) PutRawMVCC(key MVCCKey, value []byte) error {
 // PutUnversioned implements the Engine interface.
 func (p *Pebble) PutUnversioned(key roachpb.Key, value []byte) error {
 	return p.put(MVCCKey{Key: key}, value)
-}
-
-// PutIntent implements the Engine interface.
-func (p *Pebble) PutIntent(
-	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
-) error {
-	_, err := p.wrappedIntentWriter.PutIntent(ctx, key, value, txnUUID, nil)
-	return err
 }
 
 // PutEngineKey implements the Engine interface.
@@ -2570,12 +2556,6 @@ func (p *pebbleReadOnly) ClearUnversioned(key roachpb.Key, opts ClearOptions) er
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts ClearOptions,
-) error {
-	panic("not implemented")
-}
-
 func (p *pebbleReadOnly) ClearEngineKey(key EngineKey, opts ClearOptions) error {
 	panic("not implemented")
 }
@@ -2635,12 +2615,6 @@ func (p *pebbleReadOnly) PutRawMVCC(key MVCCKey, value []byte) error {
 }
 
 func (p *pebbleReadOnly) PutUnversioned(key roachpb.Key, value []byte) error {
-	panic("not implemented")
-}
-
-func (p *pebbleReadOnly) PutIntent(
-	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
-) error {
 	panic("not implemented")
 }
 

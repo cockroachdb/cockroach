@@ -15,10 +15,10 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
@@ -52,10 +52,6 @@ type pebbleBatch struct {
 	iterUsed  bool // avoids cloning after PinEngineStateForIterators()
 	writeOnly bool
 	closed    bool
-
-	wrappedIntentWriter intentDemuxWriter
-	// scratch space for wrappedIntentWriter.
-	scratch []byte
 
 	parent                           *Pebble
 	batchStatsReporter               batchStatsReporter
@@ -123,8 +119,6 @@ func newPebbleBatch(
 		mayWriteSizedDeletes: settings.Version.ActiveVersionOrEmpty(context.TODO()).
 			IsActive(clusterversion.V23_2_UseSizedPebblePointTombstones),
 	}
-
-	pb.wrappedIntentWriter = wrapIntentWriter(pb)
 	return pb
 }
 
@@ -317,15 +311,6 @@ func (p *pebbleBatch) ClearUnversioned(key roachpb.Key, opts ClearOptions) error
 	return p.clear(MVCCKey{Key: key}, opts)
 }
 
-// ClearIntent implements the Batch interface.
-func (p *pebbleBatch) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts ClearOptions,
-) error {
-	var err error
-	p.scratch, err = p.wrappedIntentWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, p.scratch, opts)
-	return err
-}
-
 // ClearEngineKey implements the Batch interface.
 func (p *pebbleBatch) ClearEngineKey(key EngineKey, opts ClearOptions) error {
 	if len(key.Key) == 0 {
@@ -379,9 +364,17 @@ func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys
 
 // ClearMVCCRange implements the Batch interface.
 func (p *pebbleBatch) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
-	var err error
-	p.scratch, err = p.wrappedIntentWriter.ClearMVCCRange(start, end, pointKeys, rangeKeys, p.scratch)
-	return err
+	if err := p.ClearRawRange(start, end, pointKeys, rangeKeys); err != nil {
+		return err
+	}
+	// The lock table only contains point keys, so only clear it when point keys
+	// are requested, and don't clear range keys in it.
+	if !pointKeys {
+		return nil
+	}
+	lstart, _ := keys.LockTableSingleKey(start, nil)
+	lend, _ := keys.LockTableSingleKey(end, nil)
+	return p.ClearRawRange(lstart, lend, true /* pointKeys */, false /* rangeKeys */)
 }
 
 // ClearMVCCVersions implements the Batch interface.
@@ -553,15 +546,6 @@ func (p *pebbleBatch) PutRawMVCC(key MVCCKey, value []byte) error {
 // PutUnversioned implements the Batch interface.
 func (p *pebbleBatch) PutUnversioned(key roachpb.Key, value []byte) error {
 	return p.put(MVCCKey{Key: key}, value)
-}
-
-// PutIntent implements the Batch interface.
-func (p *pebbleBatch) PutIntent(
-	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
-) error {
-	var err error
-	p.scratch, err = p.wrappedIntentWriter.PutIntent(ctx, key, value, txnUUID, p.scratch)
-	return err
 }
 
 // PutEngineKey implements the Batch interface.

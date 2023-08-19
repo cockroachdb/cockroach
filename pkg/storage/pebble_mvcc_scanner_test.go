@@ -17,6 +17,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -70,7 +71,12 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, k := range keys {
-		err = eng.PutIntent(context.Background(), k, metaBytes, uuid)
+		lockTableKey, _ := LockTableKey{
+			Key:      k,
+			Strength: lock.Exclusive,
+			TxnUUID:  uuid[:],
+		}.ToEngineKey(nil)
+		err = eng.PutEngineKey(lockTableKey, metaBytes)
 		require.NoError(t, err)
 	}
 

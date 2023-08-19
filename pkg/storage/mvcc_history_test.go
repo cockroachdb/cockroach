@@ -414,7 +414,7 @@ func TestMVCCHistories(t *testing.T) {
 				// output.
 				var buf redact.StringBuilder
 				e.results.buf = &buf
-				e.results.traceIntentWrites = trace
+				e.results.traceClearKey = trace
 
 				// We reset the stats such that they accumulate for all commands
 				// in a single test.
@@ -876,30 +876,26 @@ func cmdTxnUpdate(e *evalCtx) error {
 	return nil
 }
 
-type intentPrintingReadWriter struct {
+type clearKeyPrintingReadWriter struct {
 	storage.ReadWriter
 	buf *redact.StringBuilder
 }
 
-func (rw intentPrintingReadWriter) PutIntent(
-	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
+func (rw clearKeyPrintingReadWriter) ClearEngineKey(
+	key storage.EngineKey, opts storage.ClearOptions,
 ) error {
-	rw.buf.Printf("called PutIntent(%v, _, %v)\n",
-		key, txnUUID)
-	return rw.ReadWriter.PutIntent(ctx, key, value, txnUUID)
+	rw.buf.Printf("called ClearEngineKey(%v)\n", key)
+	return rw.ReadWriter.ClearEngineKey(key, opts)
 }
 
-func (rw intentPrintingReadWriter) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts storage.ClearOptions,
-) error {
-	rw.buf.Printf("called ClearIntent(%v, TDNUM(%t), %v)\n",
-		key, txnDidNotUpdateMeta, txnUUID)
-	return rw.ReadWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, opts)
+func (rw clearKeyPrintingReadWriter) SingleClearEngineKey(key storage.EngineKey) error {
+	rw.buf.Printf("called SingleClearEngineKey(%v)\n", key)
+	return rw.ReadWriter.SingleClearEngineKey(key)
 }
 
-func (e *evalCtx) tryWrapForIntentPrinting(rw storage.ReadWriter) storage.ReadWriter {
-	if e.results.traceIntentWrites {
-		return intentPrintingReadWriter{ReadWriter: rw, buf: e.results.buf}
+func (e *evalCtx) tryWrapForClearKeyPrinting(rw storage.ReadWriter) storage.ReadWriter {
+	if e.results.traceClearKey {
+		return clearKeyPrintingReadWriter{ReadWriter: rw, buf: e.results.buf}
 	}
 	return rw
 }
@@ -2153,9 +2149,9 @@ func formatStats(ms enginepb.MVCCStats, delta bool) string {
 // script.
 type evalCtx struct {
 	results struct {
-		buf               *redact.StringBuilder
-		txn               *roachpb.Transaction
-		traceIntentWrites bool
+		buf           *redact.StringBuilder
+		txn           *roachpb.Transaction
+		traceClearKey bool
 	}
 	ctx               context.Context
 	st                *cluster.Settings
@@ -2333,7 +2329,7 @@ func (e *evalCtx) withWriter(cmd string, fn func(_ storage.ReadWriter) error) er
 		defer batch.Close()
 		rw = batch
 	}
-	rw = e.tryWrapForIntentPrinting(rw)
+	rw = e.tryWrapForClearKeyPrinting(rw)
 	err := fn(rw)
 	if e.hasArg("batched") {
 		batchStatus := "non-empty"

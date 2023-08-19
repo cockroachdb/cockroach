@@ -553,15 +553,6 @@ func (s spanSetWriter) ClearUnversioned(key roachpb.Key, opts storage.ClearOptio
 	return s.w.ClearUnversioned(key, opts)
 }
 
-func (s spanSetWriter) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts storage.ClearOptions,
-) error {
-	if err := s.checkAllowed(key); err != nil {
-		return err
-	}
-	return s.w.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, opts)
-}
-
 func (s spanSetWriter) ClearEngineKey(key storage.EngineKey, opts storage.ClearOptions) error {
 	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
 		return err
@@ -693,15 +684,6 @@ func (s spanSetWriter) PutUnversioned(key roachpb.Key, value []byte) error {
 		return err
 	}
 	return s.w.PutUnversioned(key, value)
-}
-
-func (s spanSetWriter) PutIntent(
-	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
-) error {
-	if err := s.checkAllowed(key); err != nil {
-		return err
-	}
-	return s.w.PutIntent(ctx, key, value, txnUUID)
 }
 
 func (s spanSetWriter) PutEngineKey(key storage.EngineKey, value []byte) error {
