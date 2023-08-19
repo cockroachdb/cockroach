@@ -38,6 +38,10 @@ import {
   TimestampToMoment,
   unique,
   batchStatements,
+  formatNumberForDisplay,
+  Duration,
+  Count,
+  longToInt,
 } from "src/util";
 import { getValidErrorsList, Loading } from "src/loading";
 import { Button } from "src/button";
@@ -694,6 +698,8 @@ export class StatementDetails extends React.Component<
       });
     }
 
+    const duration = (v: number) => Duration(v * 1e9);
+
     return (
       <>
         <PageConfig>
@@ -773,6 +779,68 @@ export class StatementDetails extends React.Component<
                   value={renderTransactionType(implicit_txn)}
                 />
                 <SummaryCardItem label="Last execution time" value={lastExec} />
+              </SummaryCard>
+            </Col>
+          </Row>
+          <Row gutter={24} className={cx("margin-left-neg")}>
+            <Col className="gutter-row" span={12}>
+              <SummaryCard className={cx("summary-card")}>
+                <SummaryCardItem
+                  label="Statement Time"
+                  value={`${formatNumberForDisplay(
+                    stats?.service_lat.mean,
+                    duration,
+                  )}`}
+                />
+                <span className={summaryCardStylesCx("summary-small-info")}>
+                  {`Execution: ${formatNumberForDisplay(
+                    stats?.run_lat.mean,
+                    duration,
+                  )} /
+                  Planning: 
+                  ${formatNumberForDisplay(stats?.plan_lat.mean, duration)}`}
+                </span>
+                <SummaryCardItem
+                  label="Rows Processed"
+                  value={`${Count(
+                    Number(stats?.rows_read?.mean),
+                  )} Reads / ${Count(
+                    Number(stats?.rows_written?.mean),
+                  )} Writes`}
+                />
+                <SummaryCardItem
+                  label="Execution Retries"
+                  value={Count(
+                    longToInt(stats?.count) -
+                      longToInt(stats?.first_attempt_count),
+                  )}
+                />
+                <SummaryCardItem
+                  label="Execution Count"
+                  value={Count(longToInt(stats?.count))}
+                />
+              </SummaryCard>
+            </Col>
+            <Col className="gutter-row" span={12}>
+              <SummaryCard className={cx("summary-card")}>
+                <SummaryCardItem
+                  label="Contention Time"
+                  value={formatNumberForDisplay(
+                    stats?.exec_stats?.contention_time.mean,
+                    duration,
+                  )}
+                />
+                <SummaryCardItem
+                  label="CPU Time"
+                  value={formatNumberForDisplay(
+                    stats?.exec_stats?.cpu_sql_nanos.mean,
+                    Duration,
+                  )}
+                />
+                <SummaryCardItem
+                  label="Client Wait Time"
+                  value={formatNumberForDisplay(stats?.idle_lat.mean, duration)}
+                />
               </SummaryCard>
             </Col>
           </Row>
