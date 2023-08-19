@@ -15,6 +15,9 @@ import { Button } from "src/button";
 import { ResultsPerPageLabel } from "src/pagination";
 import classNames from "classnames/bind";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
+import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
+import { TimeScale } from "src/timeScaleDropdown";
+import moment from "moment-timezone";
 
 const { statistic, countTitle } = statisticsClasses;
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
@@ -26,7 +29,8 @@ interface TableStatistics {
   activeFilters: number;
   search?: string;
   onClearFilters?: () => void;
-  period?: string;
+  timeScale?: TimeScale;
+  requestTime?: moment.Moment;
 }
 
 // TableStatistics shows statistics about the results being
@@ -41,14 +45,14 @@ export const TableStatistics: React.FC<TableStatistics> = ({
   arrayItemName,
   onClearFilters,
   activeFilters,
-  period,
+  timeScale,
+  requestTime,
 }) => {
-  const periodLabel = (
+  const periodLabel = timeScale && requestTime && (
     <>
       &nbsp;&nbsp;&nbsp;| &nbsp;
       <p className={timeScaleStylesCx("time-label")}>
-        Showing aggregated stats from{" "}
-        <span className={timeScaleStylesCx("bold")}>{period}</span>
+        <TimeScaleLabel timeScale={timeScale} requestTime={requestTime} />
       </p>
     </>
   );
@@ -60,7 +64,7 @@ export const TableStatistics: React.FC<TableStatistics> = ({
         pageName={arrayItemName}
         search={search}
       />
-      {period && periodLabel}
+      {periodLabel}
     </>
   );
 
@@ -76,7 +80,7 @@ export const TableStatistics: React.FC<TableStatistics> = ({
   const resultsCountAndClear = (
     <>
       {totalCount} {totalCount === 1 ? "result" : "results"}
-      {period && periodLabel}
+      {periodLabel}
       &nbsp;&nbsp;&nbsp;{onClearFilters && clearBtn}
     </>
   );
