@@ -22,18 +22,18 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(kvpb.Get, DefaultDeclareIsolatedKeys, Get)
+	RegisterReadWriteCommand(kvpb.Get, DefaultDeclareIsolatedKeys, Get)
 }
 
 // Get returns the value for a specified key.
 func Get(
-	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*kvpb.GetRequest)
 	h := cArgs.Header
 	reply := resp.(*kvpb.GetResponse)
 
-	getRes, err := storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
+	getRes, err := storage.MVCCGet(ctx, readWriter, args.Key, h.Timestamp, storage.MVCCGetOptions{
 		Inconsistent:          h.ReadConsistency != kvpb.CONSISTENT,
 		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:                   h.Txn,
@@ -70,7 +70,7 @@ func Get(
 		// CollectIntentRows as well so that we're guaranteed to use the same
 		// cached iterator and observe a consistent snapshot of the engine.
 		const usePrefixIter = true
-		intentVals, err = CollectIntentRows(ctx, reader, usePrefixIter, intents)
+		intentVals, err = CollectIntentRows(ctx, readWriter, usePrefixIter, intents)
 		if err == nil {
 			switch len(intentVals) {
 			case 0:

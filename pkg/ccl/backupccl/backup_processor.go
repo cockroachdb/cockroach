@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -92,6 +93,7 @@ var (
 		"send each export request with a verbose tracing span",
 		util.ConstantWithMetamorphicTestBool("export_request_verbose_tracing", false),
 	)
+
 	testingDiscardBackupData = envutil.EnvOrDefaultBool("COCKROACH_BACKUP_TESTING_DISCARD_DATA", false)
 )
 
@@ -130,7 +132,8 @@ type backupDataProcessor struct {
 
 	// Aggregator that aggregates StructuredEvents emitted in the
 	// backupDataProcessors' trace recording.
-	agg *bulk.TracingAggregator
+	agg      *bulk.TracingAggregator
+	aggTimer *timeutil.Timer
 
 	// completedSpans tracks how many spans have been successfully backed up by
 	// the backup processor.
@@ -168,7 +171,7 @@ func newBackupDataProcessor(
 			InputsToDrain: nil,
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				bp.close()
-				return nil
+				return []execinfrapb.ProducerMetadata{*bp.constructTracingAggregatorProducerMeta(ctx)}
 			},
 		}); err != nil {
 		return nil, err
@@ -186,6 +189,8 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 	// bps' trace recording.
 	ctx, bp.agg = bulk.MakeTracingAggregatorWithSpan(ctx,
 		fmt.Sprintf("%s-aggregator", backupProcessorName), bp.EvalCtx.Tracer)
+	bp.aggTimer = timeutil.NewTimer()
+	bp.aggTimer.Reset(15 * time.Second)
 
 	bp.cancelAndWaitForWorker = func() {
 		cancel()
@@ -208,51 +213,85 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 	}
 }
 
+func (bp *backupDataProcessor) constructProgressProducerMeta(
+	prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+) *execinfrapb.ProducerMetadata {
+	// Take a copy so that we can send the progress address to the output
+	// processor.
+	p := prog
+	p.NodeID = bp.flowCtx.NodeID.SQLInstanceID()
+	p.FlowID = bp.flowCtx.ID
+
+	// Annotate the progress with the fraction completed by this backupDataProcessor.
+	progDetails := backuppb.BackupManifest_Progress{}
+	if err := gogotypes.UnmarshalAny(&prog.ProgressDetails, &progDetails); err != nil {
+		log.Warningf(bp.Ctx(), "failed to unmarshal progress details %v", err)
+	} else {
+		totalSpans := int32(len(bp.spec.Spans) + len(bp.spec.IntroducedSpans))
+		bp.completedSpans += progDetails.CompletedSpans
+		if totalSpans != 0 {
+			if p.CompletedFraction == nil {
+				p.CompletedFraction = make(map[int32]float32)
+			}
+			p.CompletedFraction[bp.ProcessorID] = float32(bp.completedSpans) / float32(totalSpans)
+		}
+	}
+
+	return &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p}
+}
+
+func (bp *backupDataProcessor) constructTracingAggregatorProducerMeta(
+	ctx context.Context,
+) *execinfrapb.ProducerMetadata {
+	aggEvents := &execinfrapb.TracingAggregatorEvents{
+		SQLInstanceID: bp.flowCtx.NodeID.SQLInstanceID(),
+		FlowID:        bp.flowCtx.ID,
+		Events:        make(map[string][]byte),
+	}
+	bp.agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
+		msg, ok := event.(protoutil.Message)
+		if !ok {
+			// This should never happen but if it does skip the aggregated event.
+			log.Warningf(ctx, "event is not a protoutil.Message: %T", event)
+			return
+		}
+		data := make([]byte, msg.Size())
+		if _, err := msg.MarshalTo(data); err != nil {
+			// This should never happen but if it does skip the aggregated event.
+			log.Warningf(ctx, "failed to unmarshal aggregated event: %v", err.Error())
+			return
+		}
+		aggEvents.Events[name] = data
+	})
+
+	return &execinfrapb.ProducerMetadata{AggregatorEvents: aggEvents}
+}
+
 // Next is part of the RowSource interface.
 func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if bp.State != execinfra.StateRunning {
 		return nil, bp.DrainHelper()
 	}
 
-	prog, ok := <-bp.progCh
-	if ok {
-		// Take a copy so that we can send the progress address to the output
-		// processor.
-		p := prog
-		p.NodeID = bp.flowCtx.NodeID.SQLInstanceID()
-		p.FlowID = bp.flowCtx.ID
-
-		// Annotate the progress with the fraction completed by this backupDataProcessor.
-		progDetails := backuppb.BackupManifest_Progress{}
-		if err := gogotypes.UnmarshalAny(&prog.ProgressDetails, &progDetails); err != nil {
-			log.Warningf(bp.Ctx(), "failed to unmarshal progress details %v", err)
-		} else {
-			totalSpans := int32(len(bp.spec.Spans) + len(bp.spec.IntroducedSpans))
-			bp.completedSpans += progDetails.CompletedSpans
-			if totalSpans != 0 {
-				if p.CompletedFraction == nil {
-					p.CompletedFraction = make(map[int32]float32)
-				}
-				p.CompletedFraction[bp.ProcessorID] = float32(bp.completedSpans) / float32(totalSpans)
-			}
+	select {
+	case prog, ok := <-bp.progCh:
+		if !ok {
+			bp.MoveToDraining(bp.backupErr)
+			return nil, bp.DrainHelper()
 		}
-
-		return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p}
+		return nil, bp.constructProgressProducerMeta(prog)
+	case <-bp.aggTimer.C:
+		bp.aggTimer.Read = true
+		bp.aggTimer.Reset(15 * time.Second)
+		return nil, bp.constructTracingAggregatorProducerMeta(bp.Ctx())
 	}
-
-	if bp.backupErr != nil {
-		bp.MoveToDraining(bp.backupErr)
-		return nil, bp.DrainHelper()
-	}
-
-	bp.MoveToDraining(nil /* error */)
-	return nil, bp.DrainHelper()
 }
 
 func (bp *backupDataProcessor) close() {
 	bp.cancelAndWaitForWorker()
 	if bp.InternalClose() {
 		bp.agg.Close()
+		bp.aggTimer.Stop()
 		bp.memAcc.Close(bp.Ctx())
 	}
 }

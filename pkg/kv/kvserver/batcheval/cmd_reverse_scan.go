@@ -21,7 +21,7 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(kvpb.ReverseScan, DefaultDeclareIsolatedKeys, ReverseScan)
+	RegisterReadWriteCommand(kvpb.ReverseScan, DefaultDeclareIsolatedKeys, ReverseScan)
 }
 
 // ReverseScan scans the key range specified by start key through
@@ -29,7 +29,7 @@ func init() {
 // maxKeys stores the number of scan results remaining for this batch
 // (MaxInt64 for no limit).
 func ReverseScan(
-	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*kvpb.ReverseScanRequest)
 	h := cArgs.Header
@@ -60,14 +60,14 @@ func ReverseScan(
 	switch args.ScanFormat {
 	case kvpb.BATCH_RESPONSE:
 		scanRes, err = storage.MVCCScanToBytes(
-			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
+			ctx, readWriter, args.Key, args.EndKey, h.Timestamp, opts)
 		if err != nil {
 			return result.Result{}, err
 		}
 		reply.BatchResponses = scanRes.KVData
 	case kvpb.COL_BATCH_RESPONSE:
 		scanRes, err = storage.MVCCScanToCols(
-			ctx, reader, cArgs.Header.IndexFetchSpec, args.Key, args.EndKey,
+			ctx, readWriter, cArgs.Header.IndexFetchSpec, args.Key, args.EndKey,
 			h.Timestamp, opts, cArgs.EvalCtx.ClusterSettings(),
 		)
 		if err != nil {
@@ -80,7 +80,7 @@ func ReverseScan(
 		}
 	case kvpb.KEY_VALUES:
 		scanRes, err = storage.MVCCScan(
-			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
+			ctx, readWriter, args.Key, args.EndKey, h.Timestamp, opts)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -103,7 +103,7 @@ func ReverseScan(
 		// one in CollectIntentRows either so that we're guaranteed to use the
 		// same cached iterator and observe a consistent snapshot of the engine.
 		const usePrefixIter = false
-		reply.IntentRows, err = CollectIntentRows(ctx, reader, usePrefixIter, scanRes.Intents)
+		reply.IntentRows, err = CollectIntentRows(ctx, readWriter, usePrefixIter, scanRes.Intents)
 		if err != nil {
 			return result.Result{}, err
 		}

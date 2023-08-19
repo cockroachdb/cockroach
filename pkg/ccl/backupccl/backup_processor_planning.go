@@ -156,6 +156,7 @@ func distBackup(
 	planCtx *sql.PlanningCtx,
 	dsp *sql.DistSQLPlanner,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	tracingAggCh chan *execinfrapb.TracingAggregatorEvents,
 	backupSpecs map[base.SQLInstanceID]*execinfrapb.BackupDataSpec,
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.distBackup")
@@ -165,6 +166,7 @@ func distBackup(
 
 	if len(backupSpecs) == 0 {
 		close(progCh)
+		close(tracingAggCh)
 		return nil
 	}
 
@@ -194,6 +196,10 @@ func distBackup(
 			// Send the progress up a level to be written to the manifest.
 			progCh <- meta.BulkProcessorProgress
 		}
+
+		if meta.AggregatorEvents != nil {
+			tracingAggCh <- meta.AggregatorEvents
+		}
 		return nil
 	}
 
@@ -211,6 +217,7 @@ func distBackup(
 	defer recv.Release()
 
 	defer close(progCh)
+	defer close(tracingAggCh)
 	execCfg := execCtx.ExecCfg()
 	jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
 
