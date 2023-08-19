@@ -42,6 +42,7 @@ var authorizerMode = settings.RegisterEnumSetting(
 		int64(authorizerModeAllowAll): "allow-all",
 		int64(authorizerModeV222):     "v222",
 	},
+	settings.WithName("server.virtual_cluster_authorization.mode"),
 )
 
 type authorizerModeType int64

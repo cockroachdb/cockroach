@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -824,7 +823,7 @@ func (dsp *DistSQLPlanner) Run(
 	defer dsp.distSQLSrv.ServerConfig.Metrics.QueryStop()
 
 	recv.outputTypes = plan.GetResultTypes()
-	if multitenant.TenantRUEstimateEnabled.Get(&dsp.st.SV) &&
+	if execinfra.IncludeRUEstimateInExplainAnalyze.Get(&dsp.st.SV) &&
 		dsp.distSQLSrv.TenantCostController != nil && planCtx.planner != nil {
 		if instrumentation := planCtx.planner.curPlan.instrumentation; instrumentation != nil {
 			// Only collect the network egress estimate for a tenant that is running

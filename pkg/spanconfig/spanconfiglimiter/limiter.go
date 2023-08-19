@@ -32,8 +32,9 @@ var _ spanconfig.Limiter = &Limiter{}
 var tenantLimitSetting = settings.RegisterIntSetting(
 	settings.TenantReadOnly,
 	"spanconfig.tenant_limit",
-	"limit on the number of span configs a tenant is allowed to install",
+	"limit on the number of span configs that can be set up by a virtual cluster",
 	5000,
+	settings.WithName("spanconfig.virtual_cluster.max_spans"),
 )
 
 // Limiter is used to limit the number of span configs installed by secondary

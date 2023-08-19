@@ -130,8 +130,8 @@ func (c *TenantStreamingClusters) setupSrcTenant() {
 
 func (c *TenantStreamingClusters) init() {
 	c.SrcSysSQL.ExecMultiple(c.T, ConfigureClusterSettings(c.Args.SrcClusterSettings)...)
-	c.SrcSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled=true`, c.Args.SrcTenantName)
-	c.SrcSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING sql.scatter.allow_for_secondary_tenant.enabled=true`, c.Args.SrcTenantName)
+	c.SrcSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_split.enabled=true`, c.Args.SrcTenantName)
+	c.SrcSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_scatter.enabled=true`, c.Args.SrcTenantName)
 	if c.Args.SrcInitFunc != nil {
 		c.Args.SrcInitFunc(c.T, c.SrcSysSQL, c.SrcTenantSQL)
 	}

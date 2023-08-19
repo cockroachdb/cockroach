@@ -192,7 +192,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 
 	// TODO(irfansharif): The data-distribution page and underyling APIs don't
 	// know how to deal with coalesced ranges. See #97942.
-	sqlDB.Exec(t, `SET CLUSTER SETTING spanconfig.storage_coalesce_adjacent.enabled = false`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING spanconfig.range_coalescing.system.enabled = false`)
 
 	// Create some tables.
 	sqlDB.Exec(t, `CREATE DATABASE roachblog`)
