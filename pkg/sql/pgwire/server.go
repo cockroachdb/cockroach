@@ -150,7 +150,7 @@ var (
 	}
 	MetaNewConns = metric.Metadata{
 		Name:        "sql.new_conns",
-		Help:        "Counter of the number of SQL connections created",
+		Help:        "Number of SQL connections created",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -186,19 +186,19 @@ var (
 	}
 	MetaPGWireCancelTotal = metric.Metadata{
 		Name:        "sql.pgwire_cancel.total",
-		Help:        "Counter of the number of pgwire query cancel requests",
+		Help:        "Number of pgwire query cancel requests",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaPGWireCancelIgnored = metric.Metadata{
 		Name:        "sql.pgwire_cancel.ignored",
-		Help:        "Counter of the number of pgwire query cancel requests that were ignored due to rate limiting",
+		Help:        "Number of pgwire query cancel requests that were ignored due to rate limiting",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaPGWireCancelSuccessful = metric.Metadata{
 		Name:        "sql.pgwire_cancel.successful",
-		Help:        "Counter of the number of pgwire query cancel requests that were successful",
+		Help:        "Number of pgwire query cancel requests that were successful",
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
