@@ -56,15 +56,9 @@ var _ eval.ValueGenerator = &seriesValueGenerator{}
 var _ eval.ValueGenerator = &arrayValueGenerator{}
 
 func init() {
-	// Add all windows to the builtins map after a few sanity checks.
 	for k, v := range generators {
-		for _, g := range v.overloads {
-			if g.Class != tree.GeneratorClass {
-				panic(errors.AssertionFailedf("generator functions should be marked with the tree.GeneratorClass "+
-					"function class, found %v", v))
-			}
-		}
-		registerBuiltin(k, v)
+		const enforceClass = true
+		registerBuiltin(k, v, tree.GeneratorClass, enforceClass)
 	}
 }
 

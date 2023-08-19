@@ -36,9 +36,9 @@ import (
 )
 
 func init() {
-	// Add all pgcryptoBuiltins to the builtins map after a sanity check.
 	for k, v := range pgcryptoBuiltins {
-		registerBuiltin(k, v)
+		const enforceClass = true
+		registerBuiltin(k, v, tree.NormalClass, enforceClass)
 	}
 }
 
