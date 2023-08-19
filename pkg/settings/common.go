@@ -87,28 +87,21 @@ func (c *common) ValueOrigin(ctx context.Context, sv *Values) ValueOrigin {
 	return sv.getValueOrigin(ctx, c.slot)
 }
 
-// SetReportable indicates whether a setting's value can show up in SHOW ALL
-// CLUSTER SETTINGS and telemetry reports.
-//
-// The setting can still be used with SET and SHOW if the exact
-// setting name is known. Use SetReportable(false) for data that must
-// be hidden from standard setting report, telemetry and
-// troubleshooting screenshots, such as license data or keys.
-//
-// All string settings are also non-reportable by default and must be
-// opted in to reports manually with SetReportable(true).
-func (c *common) SetReportable(reportable bool) {
+// setReportable configures the reportability.
+// Refer to the WithReportable option for details.
+func (c *common) setReportable(reportable bool) {
 	c.nonReportable = !reportable
 }
 
-// SetVisibility customizes the visibility of a setting.
-func (c *common) SetVisibility(v Visibility) {
+// setVisibility customizes the visibility of a setting.
+// Refer to the WithVisibility option for details.
+func (c *common) setVisibility(v Visibility) {
 	c.visibility = v
 }
 
-// SetRetired marks the setting as obsolete. It also hides
+// setRetired marks the setting as obsolete. It also hides
 // it from the output of SHOW CLUSTER SETTINGS.
-func (c *common) SetRetired() {
+func (c *common) setRetired() {
 	c.description = "do not use - " + c.description
 	c.retired = true
 }

@@ -23,13 +23,14 @@ import (
 const auditConfigDefaultValue = ""
 
 // UserAuditLogConfig is a cluster setting that takes a user/role-based audit configuration.
-var UserAuditLogConfig = settings.RegisterValidatedStringSetting(
+var UserAuditLogConfig = settings.RegisterStringSetting(
 	settings.TenantWritable,
 	"sql.log.user_audit",
 	"user/role-based audit logging configuration. An enterprise license is required for this cluster setting to take effect.",
 	auditConfigDefaultValue,
-	validateAuditLogConfig,
-).WithPublic()
+	settings.WithValidateString(validateAuditLogConfig),
+	settings.WithPublic,
+)
 
 // UserAuditEnableReducedConfig is a cluster setting that enables/disables a computed
 // reduced configuration. This allows us to compute the audit configuration once at
@@ -46,7 +47,8 @@ var UserAuditEnableReducedConfig = settings.RegisterBoolSetting(
 		"(user role memberships/cluster setting) are not reflected within session. "+
 		"Users will need to start a new session to see these changes in their auditing behaviour.",
 	false,
-).WithPublic()
+	settings.WithPublic,
+)
 
 func validateAuditLogConfig(_ *settings.Values, input string) error {
 	if input == auditConfigDefaultValue {

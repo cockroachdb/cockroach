@@ -60,7 +60,7 @@ var scheduledBackupGCProtectionEnabled = settings.RegisterBoolSetting(
 	"schedules.backup.gc_protection.enabled",
 	"enable chaining of GC protection across backups run as part of a schedule",
 	true, /* defaultValue */
-).WithPublic()
+	settings.WithPublic)
 
 // scheduledBackupSpec is a representation of tree.ScheduledBackup, prepared
 // for evaluation

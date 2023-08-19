@@ -35,7 +35,7 @@ var multipleModificationsOfTableEnabled = settings.RegisterBoolSetting(
 		"modified multiple times by a single statement (multiple INSERT subqueries without ON "+
 		"CONFLICT cannot cause corruption and are always allowed)",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 // windowAggregateFrame() returns a frame that any aggregate built as a window
 // can use.

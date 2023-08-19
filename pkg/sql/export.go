@@ -99,7 +99,7 @@ var featureExportEnabled = settings.RegisterBoolSetting(
 	"feature.export.enabled",
 	"set to true to enable exports, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
+	settings.WithPublic)
 
 // ConstructExport is part of the exec.Factory interface.
 func (ef *execFactory) ConstructExport(

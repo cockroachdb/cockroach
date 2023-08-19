@@ -105,7 +105,7 @@ var ShowRangesDeprecatedBehaviorSetting = settings.RegisterBoolSetting(
 		" NB: the new SHOW RANGES interface has richer WITH options "+
 		"than pre-v23.1 SHOW RANGES.",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 const envVarName = "COCKROACH_FORCE_DEPRECATED_SHOW_RANGE_BEHAVIOR"
 

@@ -447,7 +447,7 @@ var userLoginTimeout = settings.RegisterDurationSetting(
 	"timeout after which client authentication times out if some system range is unavailable (0 = no timeout)",
 	10*time.Second,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 // GetAllRoles returns a "set" (map) of Roles -> true.
 func (p *planner) GetAllRoles(ctx context.Context) (map[username.SQLUsername]bool, error) {

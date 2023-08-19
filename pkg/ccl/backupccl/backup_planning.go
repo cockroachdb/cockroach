@@ -87,7 +87,7 @@ var featureBackupEnabled = settings.RegisterBoolSetting(
 	"feature.backup.enabled",
 	"set to true to enable backups, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
+	settings.WithPublic)
 
 // includeTableSpans returns true if the backup should include spans for the
 // given table descriptor.

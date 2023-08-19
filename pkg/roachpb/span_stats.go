@@ -11,7 +11,6 @@
 package roachpb
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -59,12 +58,7 @@ var RangeDescPageSize = settings.RegisterIntSetting(
 	"server.span_stats.range_desc_page_size",
 	"the page size when iterating through range descriptors",
 	100,
-	func(i int64) error {
-		if i < 5 || i > 25000 {
-			return fmt.Errorf("expected range_desc_page_size to be in range [5, 25000], got %d", i)
-		}
-		return nil
-	},
+	settings.IntInRange(5, 25000),
 )
 
 func (m *SpanStats) Add(other *SpanStats) {

@@ -53,7 +53,7 @@ var histogramSamples = settings.RegisterIntSetting(
 	"number of rows sampled for histogram construction during table statistics collection",
 	10000,
 	settings.NonNegativeIntWithMaximum(math.MaxUint32),
-).WithPublic()
+	settings.WithPublic)
 
 // maxTimestampAge is the maximum allowed age of a scan timestamp during table
 // stats collection, used when creating statistics AS OF SYSTEM TIME. The

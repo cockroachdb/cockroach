@@ -79,7 +79,7 @@ var rangefeedRangeStuckThreshold = settings.RegisterDurationSetting(
 	"restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.closed_timestamp.side_transport_interval takes precedence)",
 	time.Minute,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 func maxConcurrentCatchupScans(sv *settings.Values) int {
 	l := catchupScanConcurrency.Get(sv)

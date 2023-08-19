@@ -30,7 +30,7 @@ var UniquenessChecksForGenRandomUUIDClusterMode = settings.RegisterBoolSetting(
 	"if enabled, uniqueness checks may be planned for mutations of UUID columns updated with"+
 		" gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 // buildUniqueChecksForInsert builds uniqueness check queries for an insert.
 // These check queries are used to enforce UNIQUE WITHOUT INDEX constraints.

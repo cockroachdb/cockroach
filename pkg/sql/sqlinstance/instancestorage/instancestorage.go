@@ -62,17 +62,9 @@ var PreallocatedCount = settings.RegisterIntSetting(
 	"server.instance_id.preallocated_count",
 	"number of preallocated instance IDs within the system.sql_instances table",
 	10,
-	func(v int64) error {
-		// If this is 0, the assignment op will block forever if there are no
-		// preallocated instance IDs.
-		if v < 1 {
-			return errors.Errorf("cannot be less than 1: %d", v)
-		}
-		if v > math.MaxInt32 {
-			return errors.Errorf("cannot be more than %d: %d", math.MaxInt32, v)
-		}
-		return nil
-	},
+	// If this is 0, the assignment op will block forever if there are no
+	// preallocated instance IDs.
+	settings.IntInRange(1, math.MaxInt32),
 )
 
 var errNoPreallocatedRows = errors.New("no preallocated rows")

@@ -117,15 +117,13 @@ import (
 // to https://github.com/cockroachdb/cockroach/issues/78412 we have changed
 // the default to false for v22.1.
 // TODO(sumeer): update the above comment when we have a revised plan.
-var looselyCoupledTruncationEnabled = func() *settings.BoolSetting {
-	s := settings.RegisterBoolSetting(
-		settings.SystemOnly,
-		"kv.raft_log.loosely_coupled_truncation.enabled",
-		"set to true to loosely couple the raft log truncation",
-		false)
-	s.SetVisibility(settings.Reserved)
-	return s
-}()
+var looselyCoupledTruncationEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.raft_log.loosely_coupled_truncation.enabled",
+	"set to true to loosely couple the raft log truncation",
+	false,
+	settings.WithVisibility(settings.Reserved),
+)
 
 const (
 	// raftLogQueueTimerDuration is the duration between truncations.

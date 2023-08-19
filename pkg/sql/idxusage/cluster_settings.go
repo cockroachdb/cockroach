@@ -16,4 +16,4 @@ import "github.com/cockroachdb/cockroach/pkg/settings"
 var Enable = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.metrics.index_usage_stats.enabled", "collect per index usage statistics", true, /* defaultValue */
-).WithPublic()
+	settings.WithPublic)

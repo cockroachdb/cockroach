@@ -113,7 +113,7 @@ var LoadBasedRebalancingObjective = settings.RegisterEnumSetting(
 		"`cpu` the cluster will attempt to balance cpu usage among stores",
 	"cpu",
 	LoadBasedRebalancingObjectiveMap,
-).WithPublic()
+	settings.WithPublic)
 
 // ToDimension returns the equivalent allocator load dimension of a rebalancing
 // objective.

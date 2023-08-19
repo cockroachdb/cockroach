@@ -39,14 +39,14 @@ var Timeout = settings.RegisterDurationSetting(
 	"cloudstorage.timeout",
 	"the timeout for import/export storage operations",
 	10*time.Minute,
-).WithPublic()
+	settings.WithPublic)
 
 var httpCustomCA = settings.RegisterStringSetting(
 	settings.TenantWritable,
 	"cloudstorage.http.custom_ca",
 	"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
 	"",
-).WithPublic()
+	settings.WithPublic)
 
 // WriteChunkSize is used to control the size of each chunk that is buffered and
 // uploaded by the cloud storage client.

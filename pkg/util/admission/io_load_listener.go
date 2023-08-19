@@ -65,7 +65,8 @@ var DiskBandwidthTokensForElasticEnabled = settings.RegisterBoolSetting(
 	"admission.disk_bandwidth_tokens.elastic.enabled",
 	"when true, and provisioned bandwidth for the disk corresponding to a store is configured, "+
 		"tokens for elastic work will be limited if disk bandwidth becomes a bottleneck",
-	true).WithPublic()
+	true,
+	settings.WithPublic)
 
 // L0FileCountOverloadThreshold sets a file count threshold that signals an
 // overloaded store.

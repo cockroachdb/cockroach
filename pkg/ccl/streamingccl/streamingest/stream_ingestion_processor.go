@@ -48,12 +48,12 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-var minimumFlushInterval = settings.RegisterPublicDurationSettingWithExplicitUnit(
+var minimumFlushInterval = settings.RegisterDurationSettingWithExplicitUnit(
 	settings.TenantWritable,
 	"bulkio.stream_ingestion.minimum_flush_interval",
 	"the minimum timestamp between flushes; flushes may still occur if internal buffers fill up",
 	5*time.Second,
-	nil, /* validateFn */
+	settings.WithPublic,
 )
 
 var maxKVBufferSize = settings.RegisterByteSizeSetting(

@@ -14,7 +14,6 @@ import (
 	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/errors"
 )
 
 // Config contains the configuration of the rate limiter.
@@ -79,12 +78,7 @@ var (
 		"per-tenant rate limit in KV Compute Units per second if positive, "+
 			"or KV Compute Units per second per CPU if negative",
 		-200,
-		func(v float64) error {
-			if v == 0 {
-				return errors.New("cannot set to zero value")
-			}
-			return nil
-		},
+		settings.NonZeroFloat,
 	)
 
 	kvcuBurstLimitSeconds = settings.RegisterFloatSetting(

@@ -21,9 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -284,13 +282,7 @@ var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
 	"kv.range_split.by_load_merge_delay",
 	"the delay that range splits created due to load will wait before considering being merged away",
 	5*time.Minute,
-	func(v time.Duration) error {
-		const minDelay = 5 * time.Second
-		if v < minDelay {
-			return errors.Errorf("cannot be set to a value below %s", minDelay)
-		}
-		return nil
-	},
+	settings.DurationWithMinimum(5*time.Second),
 )
 
 const (
@@ -309,10 +301,5 @@ var MaxCommandSize = settings.RegisterByteSizeSetting(
 	"kv.raft.command.max_size",
 	"maximum size of a raft command",
 	MaxCommandSizeDefault,
-	func(size int64) error {
-		if size < MaxCommandSizeFloor {
-			return fmt.Errorf("max_size must be greater than %s", humanizeutil.IBytes(MaxCommandSizeFloor))
-		}
-		return nil
-	},
+	settings.ByteSizeWithMinimum(MaxCommandSizeFloor),
 )

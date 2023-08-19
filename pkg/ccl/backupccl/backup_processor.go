@@ -57,7 +57,7 @@ var (
 		"amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads",
 		time.Minute,
 		settings.NonNegativeDuration,
-	).WithPublic()
+		settings.WithPublic)
 	delayPerAttempt = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"bulkio.backup.read_retry_delay",
@@ -71,13 +71,13 @@ var (
 		"amount of time after which a read attempt is considered timed out, which causes the backup to fail",
 		time.Minute*5,
 		settings.NonNegativeDuration,
-	).WithPublic()
+		settings.WithPublic)
 	targetFileSize = settings.RegisterByteSizeSetting(
 		settings.TenantWritable,
 		"bulkio.backup.file_size",
 		"target size for individual data files produced during BACKUP",
 		128<<20,
-	).WithPublic()
+		settings.WithPublic)
 
 	splitKeysOnTimestamps = settings.RegisterBoolSetting(
 		settings.TenantWritable,

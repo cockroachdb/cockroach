@@ -82,7 +82,7 @@ var TrackedWritesMaxSize = settings.RegisterIntSetting(
 	"kv.transaction.max_intents_bytes",
 	"maximum number of bytes used to track locks in transactions",
 	1<<22, /* 4 MB */
-).WithPublic()
+	settings.WithPublic)
 
 // rejectTxnOverTrackedWritesBudget dictates what happens when a txn exceeds
 // kv.transaction.max_intents_bytes.
@@ -92,7 +92,7 @@ var rejectTxnOverTrackedWritesBudget = settings.RegisterBoolSetting(
 	"if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) "+
 		"are rejected instead of having their lock spans imprecisely compressed",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 // txnPipeliner is a txnInterceptor that pipelines transactional writes by using
 // asynchronous consensus. The interceptor then tracks all writes that have been

@@ -185,7 +185,7 @@ var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	"kv.bulk_io_write.max_rate",
 	"the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops",
 	1<<40, // 1 TiB
-).WithPublic()
+	settings.WithPublic)
 
 // addSSTableRequestLimit limits concurrent AddSSTable requests.
 var addSSTableRequestLimit = settings.RegisterIntSetting(
@@ -240,25 +240,16 @@ var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterIntSetting(
 )
 
 // leaseTransferWait is the timeout for a single iteration of draining range leases.
-var leaseTransferWait = func() *settings.DurationSetting {
-	s := settings.RegisterDurationSetting(
-		settings.SystemOnly,
-		leaseTransferWaitSettingName,
-		"the timeout for a single iteration of the range lease transfer phase of draining "+
-			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
-			"after changing this setting)",
-		5*time.Second,
-		func(v time.Duration) error {
-			if v < 0 {
-				return errors.Errorf("cannot set %s to a negative duration: %s",
-					leaseTransferWaitSettingName, v)
-			}
-			return nil
-		},
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
+var leaseTransferWait = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	leaseTransferWaitSettingName,
+	"the timeout for a single iteration of the range lease transfer phase of draining "+
+		"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
+		"after changing this setting)",
+	5*time.Second,
+	settings.NonNegativeDuration,
+	settings.WithPublic,
+)
 
 const leaseTransferWaitSettingName = "server.shutdown.lease_transfer_wait"
 
@@ -1232,18 +1223,14 @@ type StoreConfig struct {
 // (e.g., split, merge, add/remove voter/non-voter) into the system.rangelog
 // table and node join and restart events into system.eventolog table.
 // Decommissioning events are not controlled by this setting.
-var logRangeAndNodeEventsEnabled = func() *settings.BoolSetting {
-	s := settings.RegisterBoolSetting(
-		settings.SystemOnly,
-		"kv.log_range_and_node_events.enabled",
-		"set to true to transactionally log range events"+
-			" (e.g., split, merge, add/remove voter/non-voter) into system.rangelog"+
-			"and node join and restart events into system.eventolog",
-		true,
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
+var logRangeAndNodeEventsEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.log_range_and_node_events.enabled",
+	"set to true to transactionally log range events"+
+		" (e.g., split, merge, add/remove voter/non-voter) into system.rangelog"+
+		"and node join and restart events into system.eventolog",
+	true,
+	settings.WithPublic)
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
 // behavior of the consistency checker for tests.

@@ -67,7 +67,7 @@ var featureChangefeedEnabled = settings.RegisterBoolSetting(
 	"feature.changefeed.enabled",
 	"set to true to enable changefeeds, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
+	settings.WithPublic)
 
 func init() {
 	sql.AddPlanHook("changefeed", changefeedPlanHook, changefeedTypeCheck)

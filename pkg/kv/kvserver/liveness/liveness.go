@@ -48,25 +48,31 @@ const (
 	timeAfterNodeSuspectSettingName = "server.time_after_store_suspect"
 )
 
+// Setting this to less than the interval for gossiping stores is a big
+// no-no, since this value is compared to the age of the most recent gossip
+// from each store to determine whether that store is live. Put a buffer of
+// 15 seconds on top to allow time for gossip to propagate.
+const minTimeUntilNodeDead = gossip.StoresInterval + 15*time.Second
+
 // TimeUntilNodeDead wraps "server.time_until_store_dead".
 var TimeUntilNodeDead = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	timeUntilNodeDeadSettingName,
 	"the time after which if there is no new gossiped information about a store, it is considered dead",
 	5*time.Minute,
-	func(v time.Duration) error {
-		// Setting this to less than the interval for gossiping stores is a big
-		// no-no, since this value is compared to the age of the most recent gossip
-		// from each store to determine whether that store is live. Put a buffer of
-		// 15 seconds on top to allow time for gossip to propagate.
-		const minTimeUntilNodeDead = gossip.StoresInterval + 15*time.Second
-		if v < minTimeUntilNodeDead {
-			return errors.Errorf("cannot set %s to less than %v: %v",
-				timeUntilNodeDeadSettingName, minTimeUntilNodeDead, v)
-		}
-		return nil
-	},
-).WithPublic()
+	settings.DurationWithMinimum(minTimeUntilNodeDead),
+	settings.WithPublic,
+)
+
+// Setting this to less than the interval for gossiping stores is a big
+// no-no, since this value is compared to the age of the most recent gossip
+// from each store to determine whether that store is live.
+const minTimeUntilNodeSuspect = gossip.StoresInterval
+
+// We enforce a maximum value of 5 minutes for this settings, as setting this
+// to high may result in a prolonged period of unavailability as a recovered
+// store will not be able to acquire leases or replicas for a long time.
+const maxTimeAfterNodeSuspect = 5 * time.Minute
 
 // TimeAfterNodeSuspect measures how long we consider a store suspect since
 // it's last failure.
@@ -76,27 +82,7 @@ var TimeAfterNodeSuspect = settings.RegisterDurationSetting(
 	"the amount of time we consider a node suspect for after it becomes unavailable."+
 		" A suspect node is typically treated the same as an unavailable node.",
 	30*time.Second,
-	func(v time.Duration) error {
-		// Setting this to less than the interval for gossiping stores is a big
-		// no-no, since this value is compared to the age of the most recent gossip
-		// from each store to determine whether that store is live.
-		const minTimeUntilNodeSuspect = gossip.StoresInterval
-		if v < minTimeUntilNodeSuspect {
-			return errors.Errorf("cannot set %s to less than %v: %v",
-				timeAfterNodeSuspectSettingName, minTimeUntilNodeSuspect, v)
-		}
-		return nil
-	}, func(v time.Duration) error {
-		// We enforce a maximum value of 5 minutes for this settings, as setting this
-		// to high may result in a prolonged period of unavailability as a recovered
-		// store will not be able to acquire leases or replicas for a long time.
-		const maxTimeAfterNodeSuspect = 5 * time.Minute
-		if v > maxTimeAfterNodeSuspect {
-			return errors.Errorf("cannot set %s to more than %v: %v",
-				timeAfterNodeSuspectSettingName, maxTimeAfterNodeSuspect, v)
-		}
-		return nil
-	},
+	settings.DurationInRange(minTimeUntilNodeSuspect, maxTimeAfterNodeSuspect),
 )
 
 var (

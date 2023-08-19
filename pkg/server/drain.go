@@ -45,7 +45,7 @@ var (
 			"after changing this setting)",
 		10*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Hour),
-	).WithPublic()
+		settings.WithPublic)
 
 	drainWait = settings.RegisterDurationSetting(
 		settings.TenantWritable,
@@ -57,7 +57,7 @@ var (
 			"wait time for health probes to notice that the node is not ready.)",
 		0*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Hour),
-	).WithPublic()
+		settings.WithPublic)
 
 	connectionWait = settings.RegisterDurationSetting(
 		settings.TenantWritable,
@@ -68,7 +68,7 @@ var (
 			"after changing this setting)",
 		0*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Hour),
-	).WithPublic()
+		settings.WithPublic)
 
 	jobRegistryWait = settings.RegisterDurationSetting(
 		settings.TenantWritable,
@@ -77,7 +77,7 @@ var (
 			"to notice drain request and to perform orderly shutdown",
 		10*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Minute),
-	).WithPublic()
+		settings.WithPublic)
 )
 
 // Drain puts the node into the specified drain mode(s) and optionally

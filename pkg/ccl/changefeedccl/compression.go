@@ -27,7 +27,7 @@ var useFastGzip = settings.RegisterBoolSetting(
 	util.ConstantWithMetamorphicTestBool(
 		"changefeed.fast_gzip.enabled", true,
 	),
-).WithPublic()
+	settings.WithPublic)
 
 type compressionAlgo string
 

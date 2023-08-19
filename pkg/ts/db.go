@@ -46,7 +46,7 @@ var TimeseriesStorageEnabled = settings.RegisterBoolSetting(
 	"if set, periodic timeseries data is stored within the cluster; disabling is not recommended "+
 		"unless you are storing the data elsewhere",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // Resolution10sStorageTTL defines the maximum age of data that will be retained
 // at he 10 second resolution. Data older than this is subject to being "rolled
@@ -57,7 +57,7 @@ var Resolution10sStorageTTL = settings.RegisterDurationSetting(
 	"the maximum age of time series data stored at the 10 second resolution. Data older than this "+
 		"is subject to rollup and deletion.",
 	resolution10sDefaultRollupThreshold,
-).WithPublic()
+	settings.WithPublic)
 
 // Resolution30mStorageTTL defines the maximum age of data that will be
 // retained at he 30 minute resolution. Data older than this is subject to
@@ -68,7 +68,7 @@ var Resolution30mStorageTTL = settings.RegisterDurationSetting(
 	"the maximum age of time series data stored at the 30 minute resolution. Data older than this "+
 		"is subject to deletion.",
 	resolution30mDefaultPruneThreshold,
-).WithPublic()
+	settings.WithPublic)
 
 // DB provides Cockroach's Time Series API.
 type DB struct {

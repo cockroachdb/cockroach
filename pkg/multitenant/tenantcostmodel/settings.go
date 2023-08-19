@@ -109,17 +109,14 @@ var (
 		settings.NonNegativeFloat,
 	)
 
-	CrossRegionNetworkCostSetting = func() *settings.StringSetting {
-		s := settings.RegisterValidatedStringSetting(
-			settings.TenantReadOnly,
-			"tenant_cost_model.cross_region_network_cost",
-			"network cost table for cross-region traffic",
-			"",
-			validateRegionalCostMultiplierTableSetting,
-		)
-		s.SetReportable(true)
-		return s
-	}()
+	CrossRegionNetworkCostSetting = settings.RegisterStringSetting(
+		settings.TenantReadOnly,
+		"tenant_cost_model.cross_region_network_cost",
+		"network cost table for cross-region traffic",
+		"",
+		settings.WithValidateString(validateRegionalCostMultiplierTableSetting),
+		settings.WithReportable(true),
+	)
 
 	// List of config settings, used by SetOnChange.
 	configSettings = [...]settings.NonMaskedSetting{

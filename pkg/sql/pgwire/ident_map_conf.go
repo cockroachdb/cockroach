@@ -25,20 +25,18 @@ import (
 const serverIdentityMapSetting = "server.identity_map.configuration"
 
 // ConnIdentityMapConf maps system-identities to database-usernames using the pg_ident.conf format.
-var ConnIdentityMapConf = func() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
-		settings.TenantWritable,
-		serverIdentityMapSetting,
-		"system-identity to database-username mappings",
-		"",
-		func(values *settings.Values, s string) error {
-			_, err := identmap.From(strings.NewReader(s))
-			return err
-		},
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
+var ConnIdentityMapConf = settings.RegisterStringSetting(
+	settings.TenantWritable,
+	serverIdentityMapSetting,
+	"system-identity to database-username mappings",
+	"",
+	settings.WithValidateString(func(values *settings.Values, s string) error {
+		_, err := identmap.From(strings.NewReader(s))
+		return err
+	},
+	),
+	settings.WithPublic,
+)
 
 // loadLocalIdentityMapUponRemoteSettingChange initializes the local
 // node's cache of the identity map configuration each time the cluster

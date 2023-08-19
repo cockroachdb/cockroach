@@ -60,12 +60,7 @@ var GCJitter = settings.RegisterFloatSetting(
 	"server.sqlliveness.gc_jitter",
 	"jitter fraction on the duration between attempts to delete extant sessions that have expired",
 	.15,
-	func(f float64) error {
-		if f < 0 || f > 1 {
-			return errors.Errorf("%f is not in [0, 1]", f)
-		}
-		return nil
-	},
+	settings.Fraction,
 )
 
 // CacheSize is the size of the entries to store in the cache.

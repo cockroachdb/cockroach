@@ -50,7 +50,7 @@ var createStatsPostEvents = settings.RegisterBoolSetting(
 	"sql.stats.post_events.enabled",
 	"if set, an event is logged for every CREATE STATISTICS job",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 // featureStatsEnabled is used to enable and disable the CREATE STATISTICS and
 // ANALYZE features.
@@ -59,7 +59,7 @@ var featureStatsEnabled = settings.RegisterBoolSetting(
 	"feature.stats.enabled",
 	"set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
+	settings.WithPublic)
 
 const nonIndexColHistogramBuckets = 2
 

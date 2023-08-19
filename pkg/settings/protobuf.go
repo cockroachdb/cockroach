@@ -126,12 +126,6 @@ func (s *ProtobufSetting) setToDefault(ctx context.Context, sv *Values) {
 	}
 }
 
-// WithPublic sets public visibility and can be chained.
-func (s *ProtobufSetting) WithPublic() *ProtobufSetting {
-	s.SetVisibility(Public)
-	return s
-}
-
 // MarshalToJSON returns a JSON representation of the protobuf.
 func (s *ProtobufSetting) MarshalToJSON(p protoutil.Message) (string, error) {
 	jsonEncoder := jsonpb.Marshaler{EmitDefaults: false}
@@ -154,24 +148,22 @@ func (s *ProtobufSetting) UnmarshalFromJSON(jsonEncoded string) (protoutil.Messa
 
 // RegisterProtobufSetting defines a new setting with type protobuf.
 func RegisterProtobufSetting(
-	class Class, key InternalKey, desc string, defaultValue protoutil.Message,
+	class Class, key InternalKey, desc string, defaultValue protoutil.Message, opts ...SettingOption,
 ) *ProtobufSetting {
-	return RegisterValidatedProtobufSetting(class, key, desc, defaultValue, nil)
-}
-
-// RegisterValidatedProtobufSetting defines a new setting with type protobuf
-// with a validation function.
-func RegisterValidatedProtobufSetting(
-	class Class,
-	key InternalKey,
-	desc string,
-	defaultValue protoutil.Message,
-	validateFn func(*Values, protoutil.Message) error,
-) *ProtobufSetting {
-	if validateFn != nil {
-		if err := validateFn(nil, defaultValue); err != nil {
-			panic(errors.Wrap(err, "invalid default"))
+	validateFn := func(sv *Values, p protoutil.Message) error {
+		for _, opt := range opts {
+			switch {
+			case opt.commonOpt != nil:
+				continue
+			case opt.validateProtoFn != nil:
+			default:
+				panic(errors.AssertionFailedf("wrong validator type"))
+			}
+			if err := opt.validateProtoFn(sv, p); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
 	setting := &ProtobufSetting{
 		defaultValue: defaultValue,
@@ -180,14 +172,14 @@ func RegisterValidatedProtobufSetting(
 
 	// By default, all protobuf settings are considered to contain PII and are
 	// thus non-reportable (to exclude them from telemetry reports).
-	setting.SetReportable(false)
+	setting.setReportable(false)
 	register(class, key, desc, setting)
+	setting.apply(opts)
 	return setting
 }
 
 // Defeat the unused linter.
 var _ = (*ProtobufSetting).Default
-var _ = (*ProtobufSetting).WithPublic
 
 // newProtoMessage creates a new protocol message object, given its fully
 // qualified name.
