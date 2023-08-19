@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -90,7 +89,6 @@ func newTestHelperForTables(
 		sqlDB.Exec(t, jobstest.GetJobsTableSchema(env))
 	}
 
-	restoreRegistry := settings.TestingSaveRegistry()
 	return &testHelper{
 			env:    env,
 			server: s,
@@ -107,7 +105,6 @@ func newTestHelperForTables(
 				sqlDB.Exec(t, "DROP TABLE "+env.ScheduledJobsTableName())
 			}
 			s.Stopper().Stop(context.Background())
-			restoreRegistry()
 		}
 }
 
