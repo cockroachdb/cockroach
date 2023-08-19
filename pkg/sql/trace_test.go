@@ -346,7 +346,7 @@ func TestTrace(t *testing.T) {
 							}
 
 							if _, err := cluster.ServerConn(0).Exec(
-								fmt.Sprintf(`SET CLUSTER SETTING trace.debug.enable = %t`, enableTr),
+								fmt.Sprintf(`SET CLUSTER SETTING trace.debug_http_endpoint.enabled = %t`, enableTr),
 							); err != nil {
 								t.Fatal(err)
 							}

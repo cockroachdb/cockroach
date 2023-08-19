@@ -46,6 +46,7 @@ var disableSyncRaftLog = settings.RegisterBoolSetting(
 		"This not only disables fsync, but also disables flushing writes to the OS buffer. "+
 		"The setting is meant for internal testing only and SHOULD NOT be used in production.",
 	envutil.EnvOrDefaultBool("COCKROACH_DISABLE_RAFT_LOG_SYNCHRONIZATION_UNSAFE", false),
+	settings.WithName("kv.raft_log.synchronization.disabled"),
 )
 
 var enableNonBlockingRaftLogSync = settings.RegisterBoolSetting(

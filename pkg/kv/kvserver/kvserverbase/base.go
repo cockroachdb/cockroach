@@ -32,6 +32,7 @@ var MergeQueueEnabled = settings.RegisterBoolSetting(
 	"kv.range_merge.queue_enabled",
 	"whether the automatic merge queue is enabled",
 	true,
+	settings.WithName("kv.range_merge.queue.enabled"),
 )
 
 // ReplicateQueueEnabled is a setting that controls whether the replicate queue

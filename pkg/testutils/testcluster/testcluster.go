@@ -441,7 +441,7 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 		if _, err := tc.Servers[0].SystemLayer().
 			InternalExecutor().(isql.Executor).
 			Exec(ctx, "enable-merge-queue", nil, /* txn */
-				`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
+				`SET CLUSTER SETTING kv.range_merge.queue.enabled = false`); err != nil {
 			tc.Stopper().Stop(ctx)
 			t.Fatal(err)
 		}
@@ -451,7 +451,7 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 		if _, err := tc.Servers[0].SystemLayer().
 			InternalExecutor().(isql.Executor).
 			Exec(ctx, "enable-split-by-load", nil, /*txn */
-				`SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
+				`SET CLUSTER SETTING kv.range_split.by_load.enabled = false`); err != nil {
 			tc.Stopper().Stop(ctx)
 			t.Fatal(err)
 		}

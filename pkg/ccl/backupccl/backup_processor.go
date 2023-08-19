@@ -85,6 +85,7 @@ var (
 		"bulkio.backup.split_keys_on_timestamps",
 		"split backup data on timestamps when writing revision history",
 		true,
+		settings.WithName("bulkio.backup.split_keys_on_timestamps.enabled"),
 	)
 
 	sendExportRequestWithVerboseTracing = settings.RegisterBoolSetting(
@@ -92,6 +93,7 @@ var (
 		"bulkio.backup.export_request_verbose_tracing",
 		"send each export request with a verbose tracing span",
 		util.ConstantWithMetamorphicTestBool("export_request_verbose_tracing", false),
+		settings.WithName("bulkio.backup.verbose_tracing.enabled"),
 	)
 
 	testingDiscardBackupData = envutil.EnvOrDefaultBool("COCKROACH_BACKUP_TESTING_DISCARD_DATA", false)

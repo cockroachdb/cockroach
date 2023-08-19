@@ -1651,7 +1651,7 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 	db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s'`,
 		testingTargetDuration))
 	db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s'`, testingSideTransportInterval))
-	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true`)
+	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
 	var scratchDesc roachpb.RangeDescriptor
@@ -2039,7 +2039,7 @@ func TestMergeQueueDoesNotInterruptReplicationChange(t *testing.T) {
 
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	// TestCluster currently overrides this when used with ReplicationManual.
-	db.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`)
+	db.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue.enabled = true`)
 
 	// While this replication change is stalled, we'll trigger a merge and
 	// ensure that the merge correctly notices that there is a snapshot in
@@ -2068,7 +2068,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	// TestCluster currently overrides this when used with ReplicationManual.
-	db.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`)
+	db.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
 	origDesc := tc.LookupRangeOrFatal(t, scratchStartKey)

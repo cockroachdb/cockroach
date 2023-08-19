@@ -1223,10 +1223,13 @@ func TestLintClusterSettingNames(t *testing.T) {
 			t.Errorf("%s: variable name must be all lowercase", settingName)
 		}
 
-		suffixSuggestions := map[string]string{
-			"_ttl":     ".ttl",
-			"_enabled": ".enabled",
-			"_timeout": ".timeout",
+		suffixSuggestions := map[string]struct {
+			suggestion string
+			exceptions []string
+		}{
+			"_ttl":     {suggestion: ".ttl"},
+			"_enabled": {suggestion: ".enabled"},
+			"_timeout": {suggestion: ".timeout", exceptions: []string{".read_timeout", ".write_timeout"}},
 		}
 
 		nameErr := func() error {
@@ -1253,68 +1256,34 @@ func TestLintClusterSettingNames(t *testing.T) {
 				}
 			}
 
-			for suffix, repl := range suffixSuggestions {
-				if strings.HasSuffix(settingName, suffix) {
-					return errors.Errorf("%s: use %q instead of %q", settingName, repl, suffix)
+			if !strings.HasPrefix(settingName, "sql.defaults.") {
+				// The sql.default settings are special cased: they correspond
+				// to same-name session variables, and session var names cannot
+				// contain periods.
+				for suffix, repl := range suffixSuggestions {
+					if strings.HasSuffix(settingName, suffix) {
+						hasException := false
+						for _, e := range repl.exceptions {
+							if strings.HasSuffix(settingName, e) {
+								hasException = true
+								break
+							}
+						}
+						if !hasException {
+							return errors.Errorf("%s: use %q instead of %q", settingName, repl.suggestion, suffix)
+						}
+					}
 				}
-			}
 
-			if sType == "b" && !strings.HasSuffix(settingName, ".enabled") {
-				return errors.Errorf("%s: use .enabled for booleans", settingName)
+				if sType == "b" && !strings.HasSuffix(settingName, ".enabled") && !strings.HasSuffix(settingName, ".disabled") {
+					return errors.Errorf("%s: use .enabled for booleans (or, rarely, .disabled)", settingName)
+				}
 			}
 
 			return nil
 		}()
 		if nameErr != nil {
-			var grandFathered = map[string]string{
-				"server.declined_reservation_timeout":                `server.declined_reservation_timeout: use ".timeout" instead of "_timeout"`,
-				"server.failed_reservation_timeout":                  `server.failed_reservation_timeout: use ".timeout" instead of "_timeout"`,
-				"server.web_session_timeout":                         `server.web_session_timeout: use ".timeout" instead of "_timeout"`,
-				"sql.distsql.flow_stream_timeout":                    `sql.distsql.flow_stream_timeout: use ".timeout" instead of "_timeout"`,
-				"debug.panic_on_failed_assertions":                   `debug.panic_on_failed_assertions: use .enabled for booleans`,
-				"diagnostics.reporting.send_crash_reports":           `diagnostics.reporting.send_crash_reports: use .enabled for booleans`,
-				"kv.closed_timestamp.follower_reads_enabled":         `kv.closed_timestamp.follower_reads_enabled: use ".enabled" instead of "_enabled"`,
-				"kv.raft_log.disable_synchronization_unsafe":         `kv.raft_log.disable_synchronization_unsafe: use .enabled for booleans`,
-				"kv.range_merge.queue_enabled":                       `kv.range_merge.queue_enabled: use ".enabled" instead of "_enabled"`,
-				"kv.range_split.by_load_enabled":                     `kv.range_split.by_load_enabled: use ".enabled" instead of "_enabled"`,
-				"kv.transaction.parallel_commits_enabled":            `kv.transaction.parallel_commits_enabled: use ".enabled" instead of "_enabled"`,
-				"kv.transaction.write_pipelining_enabled":            `kv.transaction.write_pipelining_enabled: use ".enabled" instead of "_enabled"`,
-				"server.clock.forward_jump_check_enabled":            `server.clock.forward_jump_check_enabled: use ".enabled" instead of "_enabled"`,
-				"sql.defaults.experimental_optimizer_mutations":      `sql.defaults.experimental_optimizer_mutations: use .enabled for booleans`,
-				"sql.distsql.distribute_index_joins":                 `sql.distsql.distribute_index_joins: use .enabled for booleans`,
-				"sql.metrics.statement_details.dump_to_logs":         `sql.metrics.statement_details.dump_to_logs: use .enabled for booleans`,
-				"sql.metrics.statement_details.sample_logical_plans": `sql.metrics.statement_details.sample_logical_plans: use .enabled for booleans`,
-				"sql.trace.log_statement_execute":                    `sql.trace.log_statement_execute: use .enabled for booleans`,
-				"trace.debug.enable":                                 `trace.debug.enable: use .enabled for booleans`,
-
-				// These were grandfathered because the test wasn't running on
-				// the CCL code.
-				"bulkio.backup.export_request_verbose_tracing":            `bulkio.backup.export_request_verbose_tracing: use .enabled for booleans`,
-				"bulkio.backup.read_timeout":                              `bulkio.backup.read_timeout: use ".timeout" instead of "_timeout"`,
-				"bulkio.backup.split_keys_on_timestamps":                  `bulkio.backup.split_keys_on_timestamps: use .enabled for booleans`,
-				"bulkio.restore.memory_monitor_ssts":                      `bulkio.restore.memory_monitor_ssts: use .enabled for booleans`,
-				"bulkio.restore.use_simple_import_spans":                  `bulkio.restore.use_simple_import_spans: use .enabled for booleans`,
-				"changefeed.balance_range_distribution.enable":            `changefeed.balance_range_distribution.enable: use .enabled for booleans`,
-				"changefeed.batch_reduction_retry_enabled":                `changefeed.batch_reduction_retry_enabled: use ".enabled" instead of "_enabled"`,
-				"changefeed.idle_timeout":                                 `changefeed.idle_timeout: use ".timeout" instead of "_timeout"`,
-				"changefeed.new_pubsub_sink_enabled":                      `changefeed.new_pubsub_sink_enabled: use ".enabled" instead of "_enabled"`,
-				"changefeed.new_webhook_sink_enabled":                     `changefeed.new_webhook_sink_enabled: use ".enabled" instead of "_enabled"`,
-				"changefeed.permissions.require_external_connection_sink": `changefeed.permissions.require_external_connection_sink: use .enabled for booleans`,
-				"server.oidc_authentication.autologin":                    `server.oidc_authentication.autologin: use .enabled for booleans`,
-				"stream_replication.job_liveness_timeout":                 `stream_replication.job_liveness_timeout: use ".timeout" instead of "_timeout"`,
-
-				// These use the _timeout suffix to stay consistent with the
-				// corresponding session variables.
-				"sql.defaults.statement_timeout":                   `sql.defaults.statement_timeout: use ".timeout" instead of "_timeout"`,
-				"sql.defaults.lock_timeout":                        `sql.defaults.lock_timeout: use ".timeout" instead of "_timeout"`,
-				"sql.defaults.idle_in_session_timeout":             `sql.defaults.idle_in_session_timeout: use ".timeout" instead of "_timeout"`,
-				"sql.defaults.idle_in_transaction_session_timeout": `sql.defaults.idle_in_transaction_session_timeout: use ".timeout" instead of "_timeout"`,
-				"cloudstorage.gs.chunking.retry_timeout":           `cloudstorage.gs.chunking.retry_timeout: use ".timeout" instead of "_timeout"`,
-			}
-			expectedErr, found := grandFathered[settingName]
-			if !found || expectedErr != nameErr.Error() {
-				t.Error(nameErr)
-			}
+			t.Error(nameErr)
 		}
 
 		if strings.TrimSpace(desc) != desc {

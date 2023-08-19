@@ -26,12 +26,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// SplitByLoadEnabled wraps "kv.range_split.by_load_enabled".
+// SplitByLoadEnabled wraps "kv.range_split.by_load.enabled".
 var SplitByLoadEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.range_split.by_load_enabled",
 	"allow automatic splits of ranges based on where load is concentrated",
 	true,
+	settings.WithName("kv.range_split.by_load.enabled"),
 	settings.WithPublic)
 
 // SplitByLoadQPSThreshold wraps "kv.range_split.load_qps_threshold".

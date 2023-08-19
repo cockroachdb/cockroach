@@ -32,7 +32,7 @@ const (
 	OIDCClaimJSONKeySettingName   = baseOIDCSettingName + "claim_json_key"
 	OIDCPrincipalRegexSettingName = baseOIDCSettingName + "principal_regex"
 	OIDCButtonTextSettingName     = baseOIDCSettingName + "button_text"
-	OIDCAutoLoginSettingName      = baseOIDCSettingName + "autologin"
+	OIDCAutoLoginSettingName      = baseOIDCSettingName + "autologin.enabled"
 
 	OIDCGenerateClusterSSOTokenEnabledSettingName  = baseOIDCSettingName + "generate_cluster_sso_token.enabled"
 	OIDCGenerateClusterSSOTokenUseTokenSettingName = baseOIDCSettingName + "generate_cluster_sso_token.use_token"
@@ -259,10 +259,11 @@ var OIDCButtonText = settings.RegisterStringSetting(
 // the DB Console.
 var OIDCAutoLogin = settings.RegisterBoolSetting(
 	settings.TenantWritable,
-	OIDCAutoLoginSettingName,
+	"server.oidc_authentication.autologin",
 	"if true, logged-out visitors to the DB Console will be "+
 		"automatically redirected to the OIDC login endpoint",
 	false,
+	settings.WithName(OIDCAutoLoginSettingName),
 	settings.WithPublic,
 )
 

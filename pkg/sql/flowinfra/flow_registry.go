@@ -45,6 +45,7 @@ var SettingFlowStreamTimeout = settings.RegisterDurationSetting(
 	"amount of time incoming streams wait for a flow to be set up before erroring out",
 	10*time.Second,
 	settings.NonNegativeDuration,
+	settings.WithName("sql.distsql.flow_stream.timeout"),
 )
 
 // expectedConnectionTime is the expected time taken by a flow to connect to its

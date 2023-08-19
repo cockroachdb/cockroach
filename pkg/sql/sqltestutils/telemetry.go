@@ -304,7 +304,7 @@ func (tt *telemetryTest) prepareCluster(db *gosql.DB) {
 	runner := sqlutils.MakeSQLRunner(db)
 	// Disable automatic reporting so it doesn't interfere with the test.
 	runner.Exec(tt.t, "SET CLUSTER SETTING diagnostics.reporting.enabled = false")
-	runner.Exec(tt.t, "SET CLUSTER SETTING diagnostics.reporting.send_crash_reports = false")
+	runner.Exec(tt.t, "SET CLUSTER SETTING diagnostics.reporting.send_crash_reports.enabled = false")
 	// Disable plan caching to get accurate counts if the same statement is
 	// issued multiple times.
 	runner.Exec(tt.t, "SET CLUSTER SETTING sql.query_cache.enabled = false")

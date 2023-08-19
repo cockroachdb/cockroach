@@ -256,7 +256,7 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 	// Disable the consistency checker, to avoid interleaving requests
 	// artificially inflating measurement due to consistency checking.
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_split.by_load_enabled = false`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_split.by_load.enabled = false`)
 
 	for _, testCase := range testCases {
 		// This test can flake, where an errant request - not sent here
@@ -387,7 +387,7 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 	// Disable the consistency checker, to avoid interleaving requests
 	// artificially inflating measurement due to consistency checking.
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_split.by_load_enabled = false`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_split.by_load.enabled = false`)
 
 	for _, testCase := range testCases {
 		// This test can flake, where an errant request - not sent here
