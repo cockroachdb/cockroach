@@ -38,7 +38,7 @@ var UseStatisticsForecasts = settings.RegisterBoolSetting(
 	"sql.stats.forecasts.enabled",
 	"when true, enables generation of statistics forecasts by default for all tables",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // minObservationsForForecast is the minimum number of observed statistics
 // required to produce a statistics forecast. Forecasts based on 1 or 2

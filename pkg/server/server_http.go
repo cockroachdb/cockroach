@@ -75,7 +75,7 @@ var HSTSEnabled = settings.RegisterBoolSetting(
 		"access the DB Console. Ensure that TLS is correctly configured "+
 		"prior to enabling.",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 const hstsHeaderKey = "Strict-Transport-Security"
 

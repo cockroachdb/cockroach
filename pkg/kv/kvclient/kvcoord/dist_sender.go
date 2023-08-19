@@ -261,14 +261,8 @@ var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 	"kv.range_descriptor_cache.size",
 	"maximum number of entries in the range descriptor cache",
 	1e6,
-	func(v int64) error {
-		// Set a minimum value to avoid a cache that is too small to be useful.
-		const minVal = 64
-		if v < minVal {
-			return errors.Errorf("cannot be set to a value less than %d", minVal)
-		}
-		return nil
-	},
+	// Set a minimum value to avoid a cache that is too small to be useful.
+	settings.IntWithMinimum(64),
 )
 
 // senderConcurrencyLimit controls the maximum number of asynchronous send

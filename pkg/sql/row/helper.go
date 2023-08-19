@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -51,21 +50,9 @@ var maxRowSizeLog = settings.RegisterByteSizeSetting(
 		"write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF "+
 		"if the mutating statement was internal); use 0 to disable",
 	kvserverbase.MaxCommandSizeDefault,
-	func(size int64) error {
-		if size != 0 && size < maxRowSizeFloor {
-			return errors.Newf(
-				"cannot set sql.guardrails.max_row_size_log to %v, must be 0 or >= %v",
-				size, maxRowSizeFloor,
-			)
-		} else if size > maxRowSizeCeil {
-			return errors.Newf(
-				"cannot set sql.guardrails.max_row_size_log to %v, must be <= %v",
-				size, maxRowSizeCeil,
-			)
-		}
-		return nil
-	},
-).WithPublic()
+	settings.IntInRangeOrZeroDisable(maxRowSizeFloor, maxRowSizeCeil),
+	settings.WithPublic,
+)
 
 var maxRowSizeErr = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
@@ -73,21 +60,9 @@ var maxRowSizeErr = settings.RegisterByteSizeSetting(
 	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
 		"write to the database, above which an error is returned; use 0 to disable",
 	512<<20, /* 512 MiB */
-	func(size int64) error {
-		if size != 0 && size < maxRowSizeFloor {
-			return errors.Newf(
-				"cannot set sql.guardrails.max_row_size_err to %v, must be 0 or >= %v",
-				size, maxRowSizeFloor,
-			)
-		} else if size > maxRowSizeCeil {
-			return errors.Newf(
-				"cannot set sql.guardrails.max_row_size_err to %v, must be <= %v",
-				size, maxRowSizeCeil,
-			)
-		}
-		return nil
-	},
-).WithPublic()
+	settings.IntInRangeOrZeroDisable(maxRowSizeFloor, maxRowSizeCeil),
+	settings.WithPublic,
+)
 
 // RowHelper has the common methods for table row manipulations.
 type RowHelper struct {

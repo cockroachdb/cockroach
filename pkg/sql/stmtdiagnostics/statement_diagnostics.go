@@ -45,12 +45,7 @@ var bundleChunkSize = settings.RegisterByteSizeSetting(
 	"sql.stmt_diagnostics.bundle_chunk_size",
 	"chunk size for statement diagnostic bundles",
 	1024*1024,
-	func(val int64) error {
-		if val < 16 {
-			return errors.Errorf("chunk size must be at least 16 bytes")
-		}
-		return nil
-	},
+	settings.ByteSizeWithMinimum(16),
 )
 
 // collectUntilExpiration enables continuous collection of statement bundles for

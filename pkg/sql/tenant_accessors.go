@@ -196,18 +196,15 @@ func GetExtendedTenantInfo(
 	return res, nil
 }
 
-var defaultTenantConfigTemplate = func() *settings.StringSetting {
-	s := settings.RegisterStringSetting(
-		settings.SystemOnly,
-		"sql.create_tenant.default_template",
-		"tenant to use as configuration template when LIKE is not specified in CREATE VIRTUAL CLUSTER",
-		// We use the empty string so that no template is used by default
-		// (i.e. empty proto, no setting overrides).
-		"",
-	)
-	s.SetReportable(true)
-	return s
-}()
+var defaultTenantConfigTemplate = settings.RegisterStringSetting(
+	settings.SystemOnly,
+	"sql.create_tenant.default_template",
+	"tenant to use as configuration template when LIKE is not specified in CREATE VIRTUAL CLUSTER",
+	// We use the empty string so that no template is used by default
+	// (i.e. empty proto, no setting overrides).
+	"",
+	settings.WithReportable(true),
+)
 
 // GetTenantTemplate loads the tenant template corresponding to the
 // provided origin tenant. If info is nil, likeTenantID is zero and
