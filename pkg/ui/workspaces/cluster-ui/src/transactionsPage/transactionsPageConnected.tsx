@@ -88,6 +88,8 @@ export const TransactionsPageConnected = withRouter(
         limit: selectTxnsPageLimit(state),
         reqSortSetting: selectTxnsPageReqSort(state),
         requestTime: selectRequestTime(state),
+        oldestDataAvailable:
+          state.adminUI?.transactions?.data?.oldest_aggregated_ts_returned,
       },
       activePageProps: mapStateToActiveTransactionsPageProps(state),
     }),
