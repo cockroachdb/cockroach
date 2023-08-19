@@ -7474,7 +7474,10 @@ func init() {
 	for k, v := range geoBuiltins {
 		v.props.Category = builtinconstants.CategorySpatial
 		v.props.AvailableOnPublicSchema = true
-		registerBuiltin(k, v)
+		// Most builtins in geoBuiltins are of the Normal class, but there are a
+		// few of the Generator or SQL classes.
+		const enforceClass = false
+		registerBuiltin(k, v, tree.NormalClass, enforceClass)
 	}
 }
 

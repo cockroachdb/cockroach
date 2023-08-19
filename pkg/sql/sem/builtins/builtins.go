@@ -197,7 +197,8 @@ func mustBeDIntInTenantRange(e tree.Expr) (tree.DInt, error) {
 
 func init() {
 	for k, v := range regularBuiltins {
-		registerBuiltin(k, v)
+		const enforceClass = true
+		registerBuiltin(k, v, tree.NormalClass, enforceClass)
 	}
 }
 

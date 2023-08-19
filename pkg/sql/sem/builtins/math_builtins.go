@@ -27,9 +27,9 @@ import (
 )
 
 func init() {
-	// Add all mathBuiltins to the builtins map after a sanity check.
 	for k, v := range mathBuiltins {
-		registerBuiltin(k, v)
+		const enforceClass = true
+		registerBuiltin(k, v, tree.NormalClass, enforceClass)
 	}
 }
 

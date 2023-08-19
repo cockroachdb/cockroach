@@ -25,7 +25,8 @@ func init() {
 	for k, v := range trigramBuiltins {
 		v.props.Category = builtinconstants.CategoryTrigram
 		v.props.AvailableOnPublicSchema = true
-		registerBuiltin(k, v)
+		const enforceClass = true
+		registerBuiltin(k, v, tree.NormalClass, enforceClass)
 	}
 }
 
