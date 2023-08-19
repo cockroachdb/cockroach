@@ -33,7 +33,7 @@ import {
   filterTransactions,
 } from "./utils";
 import { flatMap, merge } from "lodash";
-import { unique, syncHistory } from "src/util";
+import { Timestamp, TimestampToMoment, syncHistory, unique } from "src/util";
 import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
 import { Loading } from "../loading";
 import { Delayed } from "../delayed";
@@ -82,9 +82,9 @@ import {
 } from "src/util/sqlActivityConstants";
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
-import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
 import { RequestState } from "../api";
 import moment from "moment-timezone";
+import { TimeScaleLabel } from "src/timeScaleDropdown/aggregatedLabel";
 
 const cx = classNames.bind(styles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
@@ -110,6 +110,7 @@ export interface TransactionsPageStateProps {
   sortSetting: SortSetting;
   hasAdminRole?: UIConfigState["hasAdminRole"];
   requestTime: moment.Moment;
+  oldestDataAvailable: Timestamp;
 }
 
 export interface TransactionsPageDispatchProps {
@@ -535,12 +536,6 @@ export class TransactionsPage extends React.Component<
       isSelectedColumn(userSelectedColumnsToShow, c),
     );
 
-    const period = (
-      <FormattedTimescale
-        ts={this.props.timeScale}
-        requestTime={moment(this.props.requestTime)}
-      />
-    );
     const sortSettingLabel = getSortLabel(
       this.props.reqSortSetting,
       "Transaction",
@@ -587,8 +582,14 @@ export class TransactionsPage extends React.Component<
           <PageConfig className={cx("float-right")}>
             <PageConfigItem>
               <p className={timeScaleStylesCx("time-label")}>
-                Showing aggregated stats from{" "}
-                <span className={timeScaleStylesCx("bold")}>{period}</span>
+                <TimeScaleLabel
+                  timeScale={this.props.timeScale}
+                  requestTime={moment(this.props.requestTime)}
+                  oldestDataTime={
+                    this.props.oldestDataAvailable &&
+                    TimestampToMoment(this.props.oldestDataAvailable)
+                  }
+                />
                 {", "}
                 <ResultsPerPageLabel
                   pagination={{
