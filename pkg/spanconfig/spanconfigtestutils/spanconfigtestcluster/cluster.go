@@ -120,7 +120,7 @@ func (h *Handle) AllowSecondaryTenantToSetZoneConfigurations(t *testing.T, tenID
 	sqlDB := sqlutils.MakeSQLRunner(h.tc.ServerConn(0))
 	sqlDB.Exec(
 		t,
-		"ALTER TENANT [$1] SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
+		"ALTER TENANT [$1] SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true",
 		tenID.ToUint64(),
 	)
 }
@@ -132,12 +132,12 @@ func (h *Handle) EnsureTenantCanSetZoneConfigurationsOrFatal(t *testing.T, tenan
 	testutils.SucceedsSoon(t, func() error {
 		var val string
 		tenant.QueryRow(
-			"SHOW CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled",
+			"SHOW CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled",
 		).Scan(&val)
 
 		if val == "false" {
 			return errors.New(
-				"waiting for sql.zone_configs.allow_for_secondary_tenant.enabled to be updated",
+				"waiting for sql.virtual_cluster.feature_access.zone_configs.enabled to be updated",
 			)
 		}
 		return nil

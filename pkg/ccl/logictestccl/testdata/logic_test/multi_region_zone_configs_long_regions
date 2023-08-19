@@ -1,4 +1,4 @@
-# tenant-cluster-setting-override-opt: sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
+# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.multiregion.enabled=true
 # LogicTest: multiregion-3node-3superlongregions
 
 query TTTTT rowsort
