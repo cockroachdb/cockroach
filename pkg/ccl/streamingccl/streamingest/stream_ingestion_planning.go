@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
@@ -262,13 +261,4 @@ func ingestionPlanHook(
 
 func init() {
 	sql.AddPlanHook("ingestion", ingestionPlanHook, ingestionTypeCheck)
-	jobs.RegisterConstructor(
-		jobspb.TypeStreamIngestion,
-		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
-			return &streamIngestionResumer{
-				job: job,
-			}
-		},
-		jobs.UsesTenantCostControl,
-	)
 }

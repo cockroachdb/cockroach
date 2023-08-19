@@ -477,12 +477,12 @@ message RestoreDetails {
   bool SkipLocalitiesCheck = 29;
 
   roachpb.Locality execution_locality = 30 [(gogoproto.nullable) = false];
-  
+
   bool experimental_online = 31;
-  
+
   // DownloadSpans indicates this job is the download-step of a multi-step
   // online restore.
-  repeated roachpb.Span download_spans = 32 [(gogoproto.nullable) = false]; 
+  repeated roachpb.Span download_spans = 32 [(gogoproto.nullable) = false];
 
   // NEXT ID: 33.
 }
@@ -502,8 +502,8 @@ message RestoreProgress {
   repeated FrontierEntry checkpoint = 2 [(gogoproto.nullable) = false];
 
   // TotalDownloadRequired is set in the download job for an online restore, and
-  // reflects the total amount that was initially found to be needing to be 
-  // downloaded. 
+  // reflects the total amount that was initially found to be needing to be
+  // downloaded.
   uint64 total_download_required = 3;
 }
 
@@ -1385,12 +1385,12 @@ enum Type {
   // We can't name this TYPE_SCHEMA_CHANGE due to how proto generates actual
   // names for this enum, which cause a conflict with the SCHEMA_CHANGE entry.
   TYPEDESC_SCHEMA_CHANGE = 9 [(gogoproto.enumvalue_customname) = "TypeTypeSchemaChange"];
-  STREAM_INGESTION = 10 [(gogoproto.enumvalue_customname) = "TypeStreamIngestion"];
+  REPLICATION_STREAM_INGESTION = 10 [(gogoproto.enumvalue_customname) = "TypeReplicationStreamIngestion"];
   NEW_SCHEMA_CHANGE = 11 [(gogoproto.enumvalue_customname) = "TypeNewSchemaChange"];
   MIGRATION = 12 [(gogoproto.enumvalue_customname) = "TypeMigration"];
   AUTO_SPAN_CONFIG_RECONCILIATION = 13 [(gogoproto.enumvalue_customname) = "TypeAutoSpanConfigReconciliation"];
   AUTO_SQL_STATS_COMPACTION = 14 [(gogoproto.enumvalue_customname) = "TypeAutoSQLStatsCompaction"];
-  STREAM_REPLICATION = 15 [(gogoproto.enumvalue_customname) = "TypeStreamReplication"];
+  REPLICATION_STREAM_PRODUCER = 15 [(gogoproto.enumvalue_customname) = "TypeReplicationStreamProducer"];
   ROW_LEVEL_TTL = 16 [(gogoproto.enumvalue_customname) = "TypeRowLevelTTL"];
   AUTO_SCHEMA_TELEMETRY = 17 [(gogoproto.enumvalue_customname) = "TypeAutoSchemaTelemetry"];
   KEY_VISUALIZER = 18 [(gogoproto.enumvalue_customname) = "TypeKeyVisualizer"];

@@ -646,7 +646,7 @@ var _ jobs.Resumer = &streamIngestionResumer{}
 
 func init() {
 	jobs.RegisterConstructor(
-		jobspb.TypeStreamIngestion,
+		jobspb.TypeReplicationStreamIngestion,
 		func(job *jobs.Job,
 			settings *cluster.Settings) jobs.Resumer {
 			return &streamIngestionResumer{job: job}

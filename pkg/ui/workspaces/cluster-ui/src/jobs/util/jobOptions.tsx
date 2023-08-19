@@ -26,6 +26,12 @@ export function jobToVisual(job: Job): JobStatusVisual {
   if (job.type === "CHANGEFEED") {
     return JobStatusVisual.BadgeOnly;
   }
+  if (job.type === "REPLICATION STREAM PRODUCER") {
+    return JobStatusVisual.BadgeOnly;
+  }
+  if (job.type === "REPLICATION STREAM INGESTION") {
+    return jobToVisualForReplicationIngestion(job);
+  }
   switch (job.status) {
     case JOB_STATUS_SUCCEEDED:
       return JobStatusVisual.BadgeWithDuration;
@@ -46,6 +52,13 @@ export function jobToVisual(job: Job): JobStatusVisual {
     default:
       return JobStatusVisual.BadgeOnly;
   }
+}
+
+function jobToVisualForReplicationIngestion(job: Job): JobStatusVisual {
+  if (job.fraction_completed > 0 && job.status == JOB_STATUS_RUNNING) {
+    return JobStatusVisual.ProgressBarWithDuration;
+  }
+  return JobStatusVisual.BadgeOnly;
 }
 
 export const JOB_STATUS_SUCCEEDED = "succeeded";
@@ -172,11 +185,6 @@ export const typeOptions = [
     key: jobTypeKeys[JobType.TYPEDESC_SCHEMA_CHANGE],
   },
   {
-    value: JobType.STREAM_INGESTION.toString(),
-    name: "Stream Ingestion",
-    key: jobTypeKeys[JobType.STREAM_INGESTION],
-  },
-  {
     value: JobType.NEW_SCHEMA_CHANGE.toString(),
     name: "New Schema Changes",
     key: jobTypeKeys[JobType.NEW_SCHEMA_CHANGE],
@@ -187,6 +195,16 @@ export const typeOptions = [
     key: jobTypeKeys[JobType.MIGRATION],
   },
   {
+    value: JobType.REPLICATION_STREAM_INGESTION.toString(),
+    name: "Physical Replication Ingestion",
+    key: jobTypeKeys[JobType.REPLICATION_STREAM_INGESTION],
+  },
+  {
+    value: JobType.REPLICATION_STREAM_PRODUCER.toString(),
+    name: "Physical Replication Producer",
+    key: jobTypeKeys[JobType.REPLICATION_STREAM_PRODUCER],
+  },
+  {
     value: JobType.AUTO_SPAN_CONFIG_RECONCILIATION.toString(),
     name: "Span Config Reconciliation",
     key: jobTypeKeys[JobType.AUTO_SPAN_CONFIG_RECONCILIATION],
@@ -195,11 +213,6 @@ export const typeOptions = [
     value: JobType.AUTO_SQL_STATS_COMPACTION.toString(),
     name: "SQL Stats Compactions",
     key: jobTypeKeys[JobType.AUTO_SQL_STATS_COMPACTION],
-  },
-  {
-    value: JobType.STREAM_REPLICATION.toString(),
-    name: "Stream Replication",
-    key: jobTypeKeys[JobType.STREAM_REPLICATION],
   },
   {
     value: JobType.ROW_LEVEL_TTL.toString(),

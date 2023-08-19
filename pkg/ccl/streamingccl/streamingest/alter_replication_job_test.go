@@ -303,7 +303,7 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 	waitBeforeCh := make(chan struct{})
 	waitAfterCh := make(chan struct{})
 	registry := c.DestSysServer.JobRegistry().(*jobs.Registry)
-	registry.TestingWrapResumerConstructor(jobspb.TypeStreamIngestion,
+	registry.TestingWrapResumerConstructor(jobspb.TypeReplicationStreamIngestion,
 		func(raw jobs.Resumer) jobs.Resumer {
 			r := blockingResumer{
 				orig:       raw,
@@ -391,7 +391,7 @@ func TestTenantStatusWithLatestCutoverTime(t *testing.T) {
 	waitBeforeCh := make(chan struct{})
 	waitAfterCh := make(chan struct{})
 	registry := c.DestSysServer.JobRegistry().(*jobs.Registry)
-	registry.TestingWrapResumerConstructor(jobspb.TypeStreamIngestion,
+	registry.TestingWrapResumerConstructor(jobspb.TypeReplicationStreamIngestion,
 		func(raw jobs.Resumer) jobs.Resumer {
 			r := blockingResumer{
 				orig:       raw,
