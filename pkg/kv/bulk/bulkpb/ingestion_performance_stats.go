@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -87,8 +88,8 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 }
 
 // Tag implements the TracingAggregatorEvent interface.
-func (s *IngestionPerformanceStats) Tag() string {
-	return "IngestionPerformanceStats"
+func (s *IngestionPerformanceStats) ProtoName() string {
+	return reflect.TypeOf(s).Elem().String()
 }
 
 // Render implements the TracingAggregatorEvent interface.

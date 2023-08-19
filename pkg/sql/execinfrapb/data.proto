@@ -353,9 +353,10 @@ message RemoteProducerMetadata {
     Metrics metrics = 8;
     BulkProcessorProgress bulk_processor_progress = 9;
     ChangefeedMeta changefeed = 11;
+    TracingAggregatorEvents tracing_aggregator_events= 12;
   }
   reserved 6, 10;
-  // NEXT ID: 12
+  // NEXT ID: 13
 }
 
 // DistSQLVersionGossipInfo represents the DistSQL server version information
@@ -377,4 +378,21 @@ message DistSQLVersionGossipInfo {
 // known to be draining.
 message DistSQLDrainingInfo {
   optional bool draining = 1 [(gogoproto.nullable) = false];
+}
+
+// TracingAggregatorEvents represent a collection of events emitted by a tracing
+// aggregator. These events contain the execution details of the component being
+// monitored by the tracing aggregator.
+message TracingAggregatorEvents {
+  // SQLInstanceID is the node from which the aggregator event is being pushed
+  // to the coordinator of the job.
+  optional int32 sql_instance_id = 1 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "SQLInstanceID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
+  // FlowID is the unique identifier of the physical plan shared by all remote
+  // flows.
+  optional bytes flow_id = 2 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "FlowID",
+    (gogoproto.customtype) = "FlowID"];
+  map<string, bytes> events = 3;
 }
