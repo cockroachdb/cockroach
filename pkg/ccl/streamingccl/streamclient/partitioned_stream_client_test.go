@@ -83,7 +83,7 @@ func TestPartitionedStreamReplicationClient(t *testing.T) {
 	ctx := context.Background()
 	// Makes sure source cluster producer job does not time out within test timeout
 	h.SysSQL.Exec(t, `
-SET CLUSTER SETTING stream_replication.job_liveness_timeout = '500s';
+SET CLUSTER SETTING stream_replication.job_liveness.timeout = '500s';
 `)
 	tenant.SQL.Exec(t, `
 CREATE DATABASE d;

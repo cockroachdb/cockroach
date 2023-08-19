@@ -427,3 +427,24 @@ SHOW CLUSTER SETTING sql.defaults.distsql;
 query T noticetrace
 SHOW CLUSTER SETTING sql.notices.enabled
 ----
+
+subtest deprecated_names
+
+# The following tests exercise  the general mechanism to inform the user
+# of new setting names. It is not specific to the particular setting
+# named below.
+
+query B noticetrace
+SHOW CLUSTER SETTING sql.trace.log_statement_execute
+----
+NOTICE: the name "sql.trace.log_statement_execute" is deprecated; use "sql.log.all_statements.enabled" instead
+
+query T noticetrace
+RESET CLUSTER SETTING sql.trace.log_statement_execute
+----
+NOTICE: the name "sql.trace.log_statement_execute" is deprecated; use "sql.log.all_statements.enabled" instead
+
+query T noticetrace
+ALTER TENANT ALL RESET CLUSTER SETTING sql.trace.log_statement_execute
+----
+NOTICE: the name "sql.trace.log_statement_execute" is deprecated; use "sql.log.all_statements.enabled" instead

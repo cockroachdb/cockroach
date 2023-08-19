@@ -14,7 +14,7 @@ system "if test -e $logfile; then false; fi"
 end_test
 
 start_test "Check that the exec log is created after enabled"
-send "SET CLUSTER   SETTING sql.trace.log_statement_execute = TRUE;\r"
+send "SET CLUSTER   SETTING sql.log.all_statements.enabled = TRUE;\r"
 eexpect "SET CLUSTER SETTING"
 eexpect root@
 system "test -e $logfile"
@@ -33,7 +33,7 @@ eexpect "does not exist"
 eexpect root@
 
 # Check logging after disable
-send "SET CLUSTER SETTING sql.trace.log_statement_execute = FALSE;\r"
+send "SET CLUSTER SETTING sql.log.all_statements.enabled = FALSE;\r"
 eexpect root@
 send "SELECT 'lov' || 'ely';\r"
 eexpect "lovely"
@@ -59,7 +59,7 @@ system "if grep -q lovely $logfile; then false; fi"
 end_test
 
 # Re-enable logging for the next test.
-send "SET CLUSTER   SETTING sql.trace.log_statement_execute = TRUE;\r"
+send "SET CLUSTER   SETTING sql.log.all_statements.enabled = TRUE;\r"
 eexpect "SET CLUSTER SETTING"
 eexpect root@
 

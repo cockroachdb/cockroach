@@ -59,20 +59,22 @@ var (
 		false,
 		settings.WithPublic)
 
-	// CrashReports wraps "diagnostics.reporting.send_crash_reports".
+	// CrashReports wraps "diagnostics.reporting.send_crash_reports.enabled".
 	CrashReports = settings.RegisterBoolSetting(
 		settings.TenantWritable,
 		"diagnostics.reporting.send_crash_reports",
 		"send crash and panic reports",
 		true,
+		settings.WithName("diagnostics.reporting.send_crash_reports.enabled"),
 	)
 
-	// PanicOnAssertions wraps "debug.panic_on_failed_assertions"
+	// PanicOnAssertions wraps "debug.panic_on_failed_assertions.enabled"
 	PanicOnAssertions = settings.RegisterBoolSetting(
 		settings.TenantWritable,
 		"debug.panic_on_failed_assertions",
 		"panic when an assertion fails rather than reporting",
 		false,
+		settings.WithName("debug.panic_on_failed_assertions.enabled"),
 	)
 
 	// startTime records when the process started so that crash reports can

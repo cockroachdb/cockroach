@@ -12,8 +12,8 @@ bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the re
 bulkio.stream_ingestion.minimum_flush_interval	duration	5s	the minimum timestamp between flushes; flushes may still occur if internal buffers fill up	tenant-rw
 changefeed.backfill.concurrent_scan_requests	integer	0	number of concurrent scan requests per node issued during a backfill	tenant-rw
 changefeed.backfill.scan_request_size	integer	524288	the maximum number of bytes returned by each scan request	tenant-rw
-changefeed.balance_range_distribution.enable	boolean	false	if enabled, the ranges are balanced equally among all nodes	tenant-rw
-changefeed.batch_reduction_retry_enabled	boolean	false	if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes	tenant-rw
+changefeed.balance_range_distribution.enabled	boolean	false	if enabled, the ranges are balanced equally among all nodes	tenant-rw
+changefeed.batch_reduction_retry.enabled	boolean	false	if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes	tenant-rw
 changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events which a worker can buffer	tenant-rw
 changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled	tenant-rw
 changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation	tenant-rw
@@ -58,7 +58,7 @@ server.auth_log.sql_sessions.enabled	boolean	false	if set, log SQL session login
 server.authentication_cache.enabled	boolean	true	enables a cache used during authentication to avoid lookups to system tables when retrieving per-user authentication-related information	tenant-rw
 server.child_metrics.enabled	boolean	false	enables the exporting of child metrics, additional prometheus time series with extra labels	tenant-rw
 server.client_cert_expiration_cache.capacity	integer	1000	the maximum number of client cert expirations stored	tenant-rw
-server.clock.forward_jump_check_enabled	boolean	false	if enabled, forward clock jumps > max_offset/2 will cause a panic	tenant-rw
+server.clock.forward_jump_check.enabled	boolean	false	if enabled, forward clock jumps > max_offset/2 will cause a panic	tenant-rw
 server.clock.persist_upper_bound_interval	duration	0s	the interval between persisting the wall time upper bound of the clock. The clock does not generate a wall time greater than the persisted timestamp and will panic if it sees a wall time greater than this value. When cockroach starts, it waits for the wall time to catch-up till this persisted timestamp. This guarantees monotonic wall time across server restarts. Not setting this or setting a value of 0 disables this feature.	tenant-rw
 server.eventlog.enabled	boolean	true	if set, logged notable events are also stored in the table system.eventlog	tenant-rw
 server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are periodically purged	tenant-rw
@@ -69,7 +69,7 @@ server.identity_map.configuration	string		system-identity to database-username m
 server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries to delete on each purge of log-like system tables	tenant-rw
 server.log_gc.period	duration	1h0m0s	the period at which log-like system tables are checked for old entries	tenant-rw
 server.max_connections_per_gateway	integer	-1	the maximum number of SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.	tenant-rw
-server.oidc_authentication.autologin	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint	tenant-rw
+server.oidc_authentication.autologin.enabled	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint	tenant-rw
 server.oidc_authentication.button_text	string	Log in with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)	tenant-rw
 server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)	tenant-rw
 server.oidc_authentication.client_id	string		sets OIDC client id	tenant-rw
@@ -95,7 +95,7 @@ server.user_login.rehash_scram_stored_passwords_on_cost_change.enabled	boolean	t
 server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)	tenant-rw
 server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled	boolean	true	if server.user_login.password_encryption=scram-sha-256, this controls whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256	tenant-rw
 server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged	tenant-rw
-server.web_session_timeout	duration	168h0m0s	the duration that a newly created web session will be valid	tenant-rw
+server.web_session.timeout	duration	168h0m0s	the duration that a newly created web session will be valid	tenant-rw
 sql.auth.change_own_password.enabled	boolean	false	controls whether a user is allowed to change their own password, even if they have no other privileges	tenant-rw
 sql.auth.public_schema_create_privilege.enabled	boolean	true	determines whether to grant all users the CREATE privileges on the public schema when it is created	tenant-rw
 sql.auth.resolve_membership_single_scan.enabled	boolean	true	determines whether to populate the role membership cache with a single scan	tenant-rw
@@ -250,7 +250,7 @@ sql.metrics.max_mem_reported_stmt_fingerprints	integer	100000	the maximum number
 sql.metrics.max_mem_reported_txn_fingerprints	integer	100000	the maximum number of reported transaction fingerprints stored in memory	tenant-rw
 sql.metrics.max_mem_stmt_fingerprints	integer	100000	the maximum number of statement fingerprints stored in memory	tenant-rw
 sql.metrics.max_mem_txn_fingerprints	integer	100000	the maximum number of transaction fingerprints stored in memory	tenant-rw
-sql.metrics.statement_details.dump_to_logs	boolean	false	dump collected statement statistics to node logs when periodically cleared	tenant-rw
+sql.metrics.statement_details.dump_to_logs.enabled	boolean	false	dump collected statement statistics to node logs when periodically cleared	tenant-rw
 sql.metrics.statement_details.enabled	boolean	true	collect per-statement query statistics	tenant-rw
 sql.metrics.statement_details.gateway_node.enabled	boolean	true	save the gateway node for each statement fingerprint. If false, the value will be stored as 0.	tenant-rw
 sql.metrics.statement_details.index_recommendation_collection.enabled	boolean	true	generate an index recommendation for each fingerprint ID	tenant-rw
@@ -289,7 +289,7 @@ sql.telemetry.query_sampling.enabled	boolean	false	when set to true, executed qu
 sql.telemetry.query_sampling.internal.enabled	boolean	false	when set to true, internal queries will be sampled in telemetry logging	tenant-rw
 sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up orphaned temporary objects	tenant-rw
 sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up	tenant-rw
-sql.trace.log_statement_execute	boolean	false	set to true to enable logging of executed statements	tenant-rw
+sql.log.all_statements.enabled	boolean	false	set to true to enable logging of all executed statements	tenant-rw
 sql.trace.session_eventlog.enabled	boolean	false	set to true to enable session tracing; note that enabling this may have a negative performance impact	tenant-rw
 sql.trace.stmt.enable_threshold	duration	0s	enables tracing on all statements; statements executing for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold	tenant-rw
 sql.trace.txn.enable_threshold	duration	0s	enables tracing on all transactions; transactions open for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting is coarser-grained than sql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries)	tenant-rw
@@ -303,7 +303,7 @@ storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process 
 timeseries.storage.enabled	boolean	true	if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere	tenant-rw
 timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.	tenant-rw
 timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.	tenant-rw
-trace.debug.enable	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests	tenant-rw
+trace.debug_http_endpoint.enabled	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests	tenant-rw
 trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using the Jaeger UDP Thrift protocol, as <host>:<port>. If no port is specified, 6381 will be used.	tenant-rw
 trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.	tenant-rw
 trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace snapshots are captured	tenant-rw

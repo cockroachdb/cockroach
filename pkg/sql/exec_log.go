@@ -49,8 +49,9 @@ import (
 var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.trace.log_statement_execute",
-	"set to true to enable logging of executed statements",
+	"set to true to enable logging of all executed statements",
 	false,
+	settings.WithName("sql.log.all_statements.enabled"),
 	settings.WithPublic)
 
 var slowQueryLogThreshold = settings.RegisterDurationSettingWithExplicitUnit(

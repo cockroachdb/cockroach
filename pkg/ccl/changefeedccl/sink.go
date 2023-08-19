@@ -163,7 +163,8 @@ var WebhookV2Enabled = settings.RegisterBoolSetting(
 	"changefeed.new_webhook_sink_enabled",
 	"if enabled, this setting enables a new implementation of the webhook sink"+
 		" that allows for a much higher throughput",
-	util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink_enabled", false),
+	util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink.enabled", false),
+	settings.WithName("changefeed.new_webhook_sink.enabled"),
 )
 
 // PubsubV2Enabled determines whether or not the refactored Webhook sink
@@ -173,7 +174,8 @@ var PubsubV2Enabled = settings.RegisterBoolSetting(
 	"changefeed.new_pubsub_sink_enabled",
 	"if enabled, this setting enables a new implementation of the pubsub sink"+
 		" that allows for a higher throughput",
-	util.ConstantWithMetamorphicTestBool("changefeed.new_pubsub_sink_enabled", false),
+	util.ConstantWithMetamorphicTestBool("changefeed.new_pubsub_sink.enabled", false),
+	settings.WithName("changefeed.new_pubsub_sink.enabled"),
 )
 
 func getSink(

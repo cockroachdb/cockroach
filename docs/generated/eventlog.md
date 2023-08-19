@@ -526,7 +526,7 @@ Events in this category are logged to the `SQL_EXEC` channel.
 ### `query_execute`
 
 An event of type `query_execute` is recorded when a query is executed,
-and the cluster setting `sql.trace.log_statement_execute` is set.
+and the cluster setting `sql.log.all_statements.enabled` is set.
 
 
 

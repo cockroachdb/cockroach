@@ -2936,7 +2936,7 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 	})
 
 	// With require_external_connection_sink enabled, the user requires USAGE on the external connection.
-	rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink = true")
+	rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = true")
 	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 		userDB.ExpectErr(t,
 			"pq: the CHANGEFEED privilege on all tables can only be used with external connection sinks",
@@ -2949,7 +2949,7 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 			"CREATE CHANGEFEED for table_a, table_b INTO 'external://nope'",
 		)
 	})
-	rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink = false")
+	rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = false")
 }
 
 func TestChangefeedGrant(t *testing.T) {

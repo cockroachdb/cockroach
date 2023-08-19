@@ -75,7 +75,7 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 
 	// Disable writing of new timeseries, as well as roll-ups and deletion.
 	for _, stmt := range []string{
-		"SET CLUSTER SETTING kv.raft_log.disable_synchronization_unsafe = 'true';",
+		"SET CLUSTER SETTING kv.raft_log.synchronization.disabled = 'true';",
 		"SET CLUSTER SETTING timeseries.storage.enabled = 'false';",
 		"SET CLUSTER SETTING timeseries.storage.resolution_10s.ttl = '99999h';",
 		"SET CLUSTER SETTING timeseries.storage.resolution_30m.ttl = '99999h';",

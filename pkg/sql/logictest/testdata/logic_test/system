@@ -1168,7 +1168,8 @@ GRANT ALL ON system.lease TO testuser
 # NB: the "order by" is necessary or this test is flaky under DistSQL.
 # This is somewhat surprising.
 # With probabilistic test tenant creation, we have to filter out
-# kv.range_merge.queue_enabled, since it will only be set in cases
+# kv.range_merge.queue.enabled (with key name
+# kv.range_merge.queue_enabled), since it will only be set in cases
 # where a test tenant is not allocated.
 query T
 SELECT name
@@ -1203,7 +1204,7 @@ version
 statement ok
 INSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalue')
 
-# Have to exclude kv.range_merge.queue_enabled as it is not accessible
+# Have to exclude kv.range_merge.queue.enabled as it is not accessible
 # to tenants.
 query TT
 SELECT name, value
@@ -1212,7 +1213,7 @@ WHERE name NOT LIKE 'sql.defaults%'
 AND name NOT LIKE 'sql.distsql%'
 AND name NOT LIKE 'sql.testing%'
 AND name NOT LIKE 'sql.stats%'
-AND name NOT IN ('version', 'cluster.secret', 'kv.range_merge.queue_enabled')
+AND name NOT IN ('version', 'cluster.secret', 'kv.range_merge.queue.enabled')
 ORDER BY name
 ----
 diagnostics.reporting.enabled                      true

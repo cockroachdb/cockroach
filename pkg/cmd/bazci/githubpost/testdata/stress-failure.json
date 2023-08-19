@@ -15,7 +15,7 @@
 {"Action":"run","Test":"TestReplicateQueueRebalance"}
 {"Action":"output","Test":"TestReplicateQueueRebalance","Output":"=== RUN   TestReplicateQueueRebalance\n"}
 {"Action":"output","Test":"TestReplicateQueueRebalance","Output":"W180711 20:06:50.873091 39 server/status/runtime.go:143  Could not parse build timestamp: parsing time \"\" as \"2006/01/02 15:04:05\": cannot parse \"\" as \"2006\"\n"}
-{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"I180711 20:06:50.883719 39 server/server.go:794  [n?] monitoring forward clock jumps based on server.clock.forward_jump_check_enabled\n"}
+{"Action":"output","Test":"TestReplicateQueueRebalance","Output":"I180711 20:06:50.883719 39 server/server.go:794  [n?] monitoring forward clock jumps based on server.clock.forward_jump_check.enabled\n"}
 {"Action":"output","Test":"TestReplicateQueueRebalance","Output":"I180711 20:06:50.887957 39 server/config.go:545  [n?] 1 storage engine initialized\n"}
 {"Action":"output","Test":"TestReplicateQueueRebalance","Output":"I180711 20:06:50.887979 39 server/config.go:548  [n?] RocksDB cache size: 128 MiB\n"}
 {"Action":"output","Test":"TestReplicateQueueRebalance","Output":"I180711 20:06:53.142470 3621 storage/replica.go:835  [replicaGC,n1,s1,r6/1:/{System/tse-Table/System…}] removed 8 (0+8) keys in 0ms [clear=0ms commit=0ms]\n"}

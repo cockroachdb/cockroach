@@ -604,7 +604,7 @@ func runTestRestoreMemoryMonitoring(t *testing.T, numSplits, numInc, restoreProc
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.memory_monitor_ssts=true")
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.sst_memory_limit.enabled=true")
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.bulk_io_write.restore_node_concurrency=2")
 
 	// Add some splits in the table, and set the target file size to be something
