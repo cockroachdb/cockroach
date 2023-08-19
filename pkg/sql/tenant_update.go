@@ -126,7 +126,7 @@ func validateTenantInfo(
 			pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"cannot stop service while tenant is selected as default"),
 			"Update the cluster setting %q to a different value.",
-			multitenant.DefaultTenantSelectSettingName)
+			multitenant.DefaultClusterSelectSettingName)
 	}
 
 	return nil

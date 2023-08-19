@@ -76,7 +76,7 @@ We propose splitting the cluster settings into three *classes*:
    single command; the value applies to all tenants that don't have their own
    specific value, including future tenants.
 
-   Examples: `kv.bulk_ingest.batch_size`, `tenant_cpu_usage_allowance`.
+   Examples: `kv.bulk_ingest.batch_size`, `tenant_cost_control.cpu_usage_allowance`.
 
 3. Tenant writable (`tenant-rw`)
 

@@ -27,8 +27,9 @@ import (
 var DefaultBytesAllowedBeforeAccounting = settings.RegisterIntSetting(
 	settings.TenantReadOnly,
 	"tenant_external_io_default_bytes_allowed_before_accounting",
-	"controls how many bytes will be read/written before blocking for RUs when writing to external storage in a tenant",
+	"controls how many bytes will be read/written before blocking for RUs when writing to external storage",
 	16<<20, // 16 MB
+	settings.WithName("tenant_cost_control.external_io.byte_usage_allowance"),
 	settings.PositiveInt,
 )
 

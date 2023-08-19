@@ -60,7 +60,7 @@ func TestDataDriven(t *testing.T) {
 		// TODO(irfansharif): This is a stop-gap for tenant read-only cluster
 		// settings. See https://github.com/cockroachdb/cockroach/pull/76929. Once
 		// that's done, this test should be updated to use:
-		//   SET CLUSTER SETTING spanconfig.tenant_limit = <whatever>
+		//   SET CLUSTER SETTING spanconfig.virtual_cluster.max_spans = <whatever>
 		limitOverride := 50
 		scKnobs := &spanconfig.TestingKnobs{
 			// Instead of relying on the GC job to wait out TTLs and clear out

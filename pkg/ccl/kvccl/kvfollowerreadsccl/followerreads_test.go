@@ -970,7 +970,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 		systemSQL.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.1s'`)
 		// We're making assertions on traces collected by the tenant using log lines
 		// in KV so we must ensure they're not redacted.
-		systemSQL.Exec(t, `SET CLUSTER SETTING server.secondary_tenants.redact_trace.enabled = 'false'`)
+		systemSQL.Exec(t, `SET CLUSTER SETTING trace.redact_at_virtual_cluster_boundary.enabled = 'false'`)
 
 		dbs := make([]*gosql.DB, numNodes)
 		for i := 0; i < numNodes; i++ {

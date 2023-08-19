@@ -203,6 +203,7 @@ var defaultTenantConfigTemplate = settings.RegisterStringSetting(
 	// We use the empty string so that no template is used by default
 	// (i.e. empty proto, no setting overrides).
 	"",
+	settings.WithName("sql.create_virtual_cluster.default_template"),
 	settings.WithReportable(true),
 )
 
