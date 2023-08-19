@@ -2020,7 +2020,7 @@ func (s *adminServer) Settings(
 	settingsKeys := make([]settings.InternalKey, 0, len(req.Keys))
 	for _, desiredSetting := range req.Keys {
 		// The API client can pass either names or internal keys through the API.
-		key, ok := settings.NameToKey(settings.SettingName(desiredSetting))
+		key, ok, _ := settings.NameToKey(settings.SettingName(desiredSetting))
 		if ok {
 			settingsKeys = append(settingsKeys, key)
 		} else {

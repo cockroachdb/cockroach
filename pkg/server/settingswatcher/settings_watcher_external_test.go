@@ -301,7 +301,7 @@ func TestSettingsWatcherWithOverrides(t *testing.T) {
 	expectSoon("i1", "10")
 
 	// Verify that version cannot be overridden.
-	version, ok := settings.LookupForLocalAccess("version", settings.ForSystemTenant)
+	version, ok, _ := settings.LookupForLocalAccess("version", settings.ForSystemTenant)
 	require.True(t, ok)
 	versionValue := version.String(&st.SV)
 

@@ -45,6 +45,7 @@ go_test(
     name = "settings_test",
     size = "small",
     srcs = [
+        "alias_test.go",
         "encoding_test.go",
         "internal_test.go",
         "settings_test.go",
@@ -59,6 +60,7 @@ go_test(
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )
