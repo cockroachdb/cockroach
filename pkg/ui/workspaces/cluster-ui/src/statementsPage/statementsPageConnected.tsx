@@ -115,6 +115,8 @@ export const ConnectedStatementsPage = withRouter(
         reqSortSetting: selectStmtsPageReqSort(state),
         stmtsTotalRuntimeSecs:
           state.adminUI?.statements?.data?.stmts_total_runtime_secs ?? 0,
+        oldestDataAvailable:
+          state.adminUI?.statements?.data?.oldest_aggregated_ts_returned,
       },
       activePageProps: mapStateToRecentStatementsPageProps(state),
     }),

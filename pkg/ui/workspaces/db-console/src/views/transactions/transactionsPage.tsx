@@ -80,6 +80,13 @@ export const selectLastError = createSelector(
   (state: CachedDataReducerState<StatementsResponseMessage>) => state.lastError,
 );
 
+const selectOldestDate = createSelector(
+  (state: AdminUIState) => state.cachedData.transactions,
+  (txns: CachedDataReducerState<StatementsResponseMessage>) => {
+    return txns?.data?.oldest_aggregated_ts_returned;
+  },
+);
+
 export const sortSettingLocalSetting = new LocalSetting(
   "sortSetting/TransactionsPage",
   (state: AdminUIState) => state.localSettings,
@@ -190,6 +197,7 @@ const TransactionsPageConnected = withRouter(
         limit: limitSetting.selector(state),
         reqSortSetting: reqSortSetting.selector(state),
         requestTime: requestTimeLocalSetting.selector(state),
+        oldestDataAvailable: selectOldestDate(state),
       },
       activePageProps: mapStateToRecentTransactionsPageProps(state),
     }),

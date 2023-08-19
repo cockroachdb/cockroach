@@ -20,12 +20,15 @@ import { StatementDiagnosticsReport } from "../api";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import ILatencyInfo = cockroach.sql.ILatencyInfo;
 import { AggregateStatistics } from "src/statementsTable";
-import { DEFAULT_STATS_REQ_OPTIONS } from "../api/statementsApi";
+import { DEFAULT_STATS_REQ_OPTIONS } from "src/api/statementsApi";
 
 type IStatementStatistics = protos.cockroach.sql.IStatementStatistics;
 type IExecStats = protos.cockroach.sql.IExecStats;
 
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
+const timestamp = new protos.google.protobuf.Timestamp({
+  seconds: new Long(Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3),
+});
 
 const execStats: IExecStats = {
   count: Long.fromNumber(180),
@@ -604,6 +607,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   isTenant: false,
   hasViewActivityRedactedRole: false,
   hasAdminRole: true,
+  oldestDataAvailable: timestamp,
   dismissAlertMessage: noop,
   refreshDatabases: noop,
   refreshStatementDiagnosticsRequests: noop,
