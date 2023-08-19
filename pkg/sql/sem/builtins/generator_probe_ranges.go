@@ -34,14 +34,7 @@ import (
 )
 
 func init() {
-	// Add all windows to the Builtins map after a few sanity checks.
 	for k, v := range probeRangesGenerators {
-		for _, g := range v.overloads {
-			if g.Class != tree.GeneratorClass {
-				panic(errors.AssertionFailedf("generator functions should be marked with the tree.GeneratorClass "+
-					"function class, found %v", v))
-			}
-		}
 		registerBuiltin(k, v)
 	}
 }

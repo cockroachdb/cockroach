@@ -11,7 +11,6 @@
 package builtins
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 
@@ -118,29 +117,9 @@ func addResolvedFuncDef(
 func registerBuiltin(name string, def builtinDefinition) {
 	for i := range def.overloads {
 		overload := &def.overloads[i]
-		fnCount := 0
-		if overload.Fn != nil {
-			fnCount++
-		}
-		if overload.FnWithExprs != nil {
-			fnCount++
-		}
-		if overload.Generator != nil {
+		if overload.Class == tree.GeneratorClass {
 			overload.Fn = unsuitableUseOfGeneratorFn
 			overload.FnWithExprs = unsuitableUseOfGeneratorFnWithExprs
-			fnCount++
-		}
-		if overload.GeneratorWithExprs != nil {
-			overload.Fn = unsuitableUseOfGeneratorFn
-			overload.FnWithExprs = unsuitableUseOfGeneratorFnWithExprs
-			fnCount++
-		}
-		if fnCount > 1 {
-			panic(fmt.Sprintf(
-				"builtin %s: at most 1 of Fn, FnWithExprs, Generator, and GeneratorWithExprs"+
-					"must be set on overloads; (found %d)",
-				name, fnCount,
-			))
 		}
 	}
 	if def.props.ShouldDocument() && def.props.Category == "" {

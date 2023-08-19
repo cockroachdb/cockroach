@@ -27,7 +27,6 @@ import (
 )
 
 func init() {
-	// Add all replicationBuiltins to the builtins map after a sanity check.
 	for k, v := range replicationBuiltins {
 		registerBuiltin(k, v)
 	}
