@@ -2,18 +2,24 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "rangecache",
-    srcs = ["range_cache.go"],
+    srcs = [
+        "range_cache.go",
+        "range_lookup.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
+        "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util",
         "//pkg/util/cache",
         "//pkg/util/grpcutil",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/syncutil/singleflight",

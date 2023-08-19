@@ -81,18 +81,18 @@ type Connector interface {
 	// network.
 	kvcoord.NodeDescStore
 
-	// RangeDescriptorDB provides range addressing information in the form of
+	// RangeLookup provides range addressing information in the form of
 	// RangeDescriptors through delegated RangeLookup requests. This is
 	// necessary because SQL-only tenants are restricted from reading Range
 	// Metadata keys directly. Instead, the RangeLookup requests are proxied
 	// through existing KV nodes while being subject to additional validation
 	// (e.g. is the Range being requested owned by the requesting tenant?).
-	rangecache.RangeDescriptorDB
+	rangecache.RangeLookup
 
 	// IteratorFactory allows secondary tenants to access Range Metadata in the
 	// form of iterators that return RangeDescriptors. Iterators are constructed
 	// through delegated GetRangeDescriptors requests; the rationale behind
-	// proxying requests is similar to the RangeDescriptorDB interface -- doing so
+	// proxying requests is similar to the RangeLookup interface -- doing so
 	// ensures SQL-only tenants are not able to access Range Metadata for Ranges
 	// not owned by the requesting tenant.
 	rangedesc.IteratorFactory
@@ -239,7 +239,7 @@ var _ kvcoord.NodeDescStore = (*connector)(nil)
 // directly. Instead, the RangeLookup requests are proxied through existing KV
 // nodes while being subject to additional validation (e.g. is the Range being
 // requested owned by the requesting tenant?).
-var _ rangecache.RangeDescriptorDB = (*connector)(nil)
+var _ rangecache.RangeLookup = (*connector)(nil)
 
 // connector is capable of providing a filtered view of the SystemConfig
 // containing only information applicable to secondary tenants. This obviates
@@ -593,7 +593,7 @@ func (c *connector) RegisterSystemConfigChannel() (_ <-chan struct{}, unregister
 	}
 }
 
-// RangeLookup implements the kvcoord.RangeDescriptorDB interface.
+// RangeLookup implements the rangecache.RangeLookup interface.
 func (c *connector) RangeLookup(
 	ctx context.Context, key roachpb.RKey, rc rangecache.RangeLookupConsistency, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
@@ -610,7 +610,7 @@ func (c *connector) RangeLookup(
 			// for more discussion on the choice of ReadConsistency and its
 			// implications.
 			ReadConsistency: rc,
-			PrefetchNum:     kvcoord.RangeLookupPrefetchCount,
+			PrefetchNum:     rangecache.RangeLookupPrefetchCount,
 			PrefetchReverse: useReverseScan,
 		})
 		if err != nil {
@@ -663,11 +663,6 @@ func (c *connector) TenantRanges(
 		return
 	})
 	return
-}
-
-// FirstRange implements the kvcoord.RangeDescriptorDB interface.
-func (c *connector) FirstRange() (*roachpb.RangeDescriptor, error) {
-	return nil, status.Error(codes.Unauthenticated, "kvtenant.Proxy does not have access to FirstRange")
 }
 
 // NewIterator implements the rangedesc.IteratorFactory interface.

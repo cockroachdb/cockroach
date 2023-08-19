@@ -497,7 +497,7 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 }
 
-// MockRangeDescriptorDB is an implementation of RangeDescriptorDB. Unlike
+// MockRangeDescriptorDB is an implementation of RangeLookup. Unlike
 // DistSender's implementation, MockRangeDescriptorDB does not call back into
 // the RangeDescriptorCache by default to perform RangeLookups. Because of this,
 // tests should not rely on that behavior and should implement it themselves if
@@ -540,7 +540,7 @@ func (mdb MockRangeDescriptorDB) withMetaRecursion(
 }
 
 // withMetaRecursion calls MockRangeDescriptorDB.withMetaRecursion on the
-// DistSender's RangeDescriptorDB.
+// DistSender's RangeLookup.
 func (ds *DistSender) withMetaRecursion() *DistSender {
 	ds.rangeCache.TestingSetDB(ds.rangeCache.DB().(MockRangeDescriptorDB).withMetaRecursion(ds.rangeCache))
 	return ds
@@ -1580,7 +1580,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 				kv.SenderFunc(sender),
 			),
 		},
-		// Provide both FirstRangeProvider and RangeDescriptorDB to listen to
+		// Provide both FirstRangeProvider and RangeLookup to listen to
 		// changes to the first range while still using a MockRangeDescriptorDB.
 		FirstRangeProvider: g,
 		RangeDescriptorDB:  rDB,
@@ -2035,7 +2035,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 		FirstRangeProvider: n.Nodes[0].Gossip,
 		Settings:           cluster.MakeTestingClusterSettings(),
 	})
-	if _, err := ds.FirstRange(); err == nil {
+	if _, _, err := ds.rangeCache.DB().RangeLookup(context.TODO(), roachpb.RKeyMin, rangecache.ReadFromLeaseholder, false); err == nil {
 		t.Errorf("expected not to find first range descriptor")
 	}
 	expectedDesc := &roachpb.RangeDescriptor{}
@@ -2050,7 +2050,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	}
 	const maxCycles = 25
 	n.SimulateNetwork(func(cycle int, network *simulation.Network) bool {
-		desc, err := ds.FirstRange()
+		desc, _, err := ds.rangeCache.DB().RangeLookup(context.TODO(), roachpb.RKeyMin, rangecache.ReadFromLeaseholder, false)
 		if err != nil {
 			if cycle >= maxCycles {
 				t.Errorf("could not get range descriptor after %d cycles", cycle)
@@ -2058,8 +2058,8 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 			}
 			return true
 		}
-		if !bytes.Equal(desc.StartKey, expectedDesc.StartKey) ||
-			!bytes.Equal(desc.EndKey, expectedDesc.EndKey) {
+		if !bytes.Equal(desc[0].StartKey, expectedDesc.StartKey) ||
+			!bytes.Equal(desc[0].EndKey, expectedDesc.EndKey) {
 			t.Errorf("expected first range descriptor %v, instead was %v",
 				expectedDesc, desc)
 		}
@@ -4897,7 +4897,7 @@ func TestDescriptorChangeAfterRequestSubdivision(t *testing.T) {
 				// Wait for both partial requests to be sent.
 				wg.Done()
 				wg.Wait()
-				// Switch out the RangeDescriptorDB.
+				// Switch out the RangeLookup.
 				once.Do(func() { rc.TestingSetDB(splitRDB) })
 			}
 
@@ -5098,11 +5098,10 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 				// itself.
 
 				st := cluster.MakeTestingClusterSettings()
+				st.SV.NonSystemTenant()
 				tr := tracing.NewTracer()
-				getRangeDescCacheSize := func() int64 {
-					return 1 << 20
-				}
-				rc := rangecache.NewRangeCache(st, nil /* db */, getRangeDescCacheSize, stopper)
+				rangecache.RangeDescriptorCacheSize.Override(ctx, &st.SV, 1<<20)
+				rc := rangecache.NewRangeCache(st, nil, nil, nil, stopper)
 				rc.Insert(ctx, roachpb.RangeInfo{
 					Desc: tc.initialDesc,
 					Lease: roachpb.Lease{
@@ -6138,7 +6137,7 @@ func (m mockFirstRangeProvider) GetFirstRangeDescriptor() (*roachpb.RangeDescrip
 
 func (m mockFirstRangeProvider) OnFirstRangeChanged(f func(*roachpb.RangeDescriptor)) {}
 
-var _ FirstRangeProvider = (*mockFirstRangeProvider)(nil)
+var _ rangecache.FirstRangeProvider = (*mockFirstRangeProvider)(nil)
 
 // mockTenantSideCostController is an implementation of TenantSideCostController
 // that has a cost config object.

@@ -17,17 +17,21 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
@@ -99,42 +103,18 @@ const (
 // RangeInfo or any other message which uses the type.
 const UnknownClosedTimestampPolicy roachpb.RangeClosedTimestampPolicy = -1
 
-// RangeDescriptorDB is a type which can query range descriptors from an
-// underlying datastore. This interface is used by RangeCache to
-// initially retrieve information which will be cached.
-type RangeDescriptorDB interface {
-	// RangeLookup takes a key to look up descriptors for. Two slices of range
-	// descriptors are returned. The first of these slices holds descriptors
-	// whose [startKey,endKey) spans contain the given key (possibly from
-	// intents), and the second holds prefetched adjacent descriptors.
-	//
-	// Note that the acceptable consistency values are the constants defined
-	// in this package: ReadFromFollower and ReadFromLeaseholder. The
-	// RangeLookupConsistency type is aliased to kvpb.ReadConsistencyType
-	// in order to permit implementations of this interface to import this
-	// package.
-	RangeLookup(
-		ctx context.Context,
-		key roachpb.RKey,
-		consistency RangeLookupConsistency,
-		useReverseScan bool,
-	) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error)
-
-	// FirstRange returns the descriptor for the first Range. This is the
-	// Range containing all meta1 entries.
-	// TODO(nvanbenschoten): pull this detail in DistSender.
-	FirstRange() (*roachpb.RangeDescriptor, error)
-}
-
 // RangeCache is used to retrieve range descriptors for
 // arbitrary keys. Descriptors are initially queried from storage
-// using a RangeDescriptorDB, but are cached for subsequent lookups.
+// using a RangeLookup, but are cached for subsequent lookups.
 type RangeCache struct {
-	st      *cluster.Settings
+	log.AmbientContext
+
+	st *cluster.Settings
+
 	stopper *stop.Stopper
-	// RangeDescriptorDB is used to retrieve range descriptors from the
+	// RangeLookup is used to retrieve range descriptors from the
 	// database, which will be cached by this structure.
-	db RangeDescriptorDB
+	db RangeLookup
 	// rangeCache caches replica metadata for key ranges. The cache is
 	// filled while servicing read and write requests to the key value
 	// store.
@@ -143,7 +123,7 @@ type RangeCache struct {
 		cache *cache.OrderedCache
 	}
 	// lookupRequests stores all inflight requests retrieving range
-	// descriptors from the database. It allows multiple RangeDescriptorDB
+	// descriptors from the database. It allows multiple RangeLookup
 	// lookup requests for the same inferred range descriptor to be
 	// multiplexed onto the same database lookup. See makeLookupRequestKey
 	// for details on this inference.
@@ -153,6 +133,14 @@ type RangeCache struct {
 	// another in-flight one. Used by tests to block until a lookup request is
 	// blocked on the single-flight querying the db.
 	coalesced chan struct{}
+
+	// disableFirstRangeUpdates disables updates of the first range via
+	// gossip. Used by tests which want finer control of the contents of the
+	// range cache.
+	disableFirstRangeUpdates int32
+
+	// rangeLookups counts the number of range lookups this cache does.
+	rangeLookups *metric.Counter
 }
 
 // makeLookupRequestKey constructs a key for the lookupRequest group with the
@@ -227,22 +215,67 @@ func makeLookupRequestKey(
 	return ret.String()
 }
 
-// NewRangeCache returns a new RangeCache which uses the given RangeDescriptorDB
+var RangeDescriptorCacheSize = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"kv.range_descriptor_cache.size",
+	"maximum number of entries in the range descriptor cache",
+	1e6,
+	func(v int64) error {
+		// Set a minimum value to avoid a cache that is too small to be useful.
+		const minVal = 64
+		if v < minVal {
+			return errors.Errorf("cannot be set to a value less than %d", minVal)
+		}
+		return nil
+	},
+)
+
+// NewRangeCache returns a new RangeCache which uses the given RangeLookup
 // as the underlying source of range descriptors.
 func NewRangeCache(
-	st *cluster.Settings, db RangeDescriptorDB, size func() int64, stopper *stop.Stopper,
+	st *cluster.Settings,
+	firstRangeProvider FirstRangeProvider,
+	sender kv.Sender,
+	rangeLookups *metric.Counter,
+	stopper *stop.Stopper,
 ) *RangeCache {
+
+	rangeLookup := RangeLookupKV{
+		firstRangeProvider: firstRangeProvider,
+		sender:             sender,
+	}
+
 	rdc := &RangeCache{
-		st: st, db: db, stopper: stopper,
+		st: st, db: &rangeLookup, stopper: stopper,
+		rangeLookups:   rangeLookups,
 		lookupRequests: singleflight.NewGroup("range lookup", "lookup"),
 	}
 	rdc.rangeCache.cache = cache.NewOrderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		ShouldEvict: func(n int, _, _ interface{}) bool {
-			return int64(n) > size()
+			return int64(n) > RangeDescriptorCacheSize.Get(&st.SV)
 		},
 	})
+
+	if firstRangeProvider != nil {
+		ctx := rdc.AnnotateCtx(context.Background())
+		firstRangeProvider.OnFirstRangeChanged(func(desc *roachpb.RangeDescriptor) {
+			if atomic.LoadInt32(&rdc.disableFirstRangeUpdates) == 1 {
+				return
+			}
+			log.VEventf(ctx, 1, "gossiped first range descriptor: %+v", desc.Replicas())
+			rdc.EvictByKey(ctx, roachpb.RKeyMin)
+		})
+	}
+
 	return rdc
+}
+
+// DisableFirstRangeUpdates disables updates of the first range via
+// gossip. Used by tests which want finer control of the contents of the range
+// cache.
+func (rc *RangeCache) DisableFirstRangeUpdates() {
+	atomic.StoreInt32(&rc.disableFirstRangeUpdates, 1)
 }
 
 func (rc *RangeCache) String() string {
@@ -1020,24 +1053,14 @@ func tryLookupImpl(
 }
 
 // performRangeLookup handles delegating the range lookup to the cache's
-// RangeDescriptorDB.
+// RangeLookup.
 func (rc *RangeCache) performRangeLookup(
 	ctx context.Context, key roachpb.RKey, consistency RangeLookupConsistency, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	// Tag inner operations.
 	ctx = logtags.AddTag(ctx, "range-lookup", key)
 
-	// In this case, the requested key is stored in the cluster's first
-	// range. Return the first range, which is always gossiped and not
-	// queried from the datastore.
-	if keys.RangeMetaKey(key).Equal(roachpb.RKeyMin) {
-		desc, err := rc.db.FirstRange()
-		if err != nil {
-			return nil, nil, err
-		}
-		return []roachpb.RangeDescriptor{*desc}, nil, nil
-	}
-
+	rc.rangeLookups.Inc(1)
 	return rc.db.RangeLookup(ctx, key, consistency, useReverseScan)
 }
 
@@ -1308,12 +1331,12 @@ func (rc *RangeCache) delEntryLocked(entry *cache.Entry) {
 }
 
 // DB returns the descriptor database, for tests.
-func (rc *RangeCache) DB() RangeDescriptorDB {
+func (rc *RangeCache) DB() RangeLookup {
 	return rc.db
 }
 
 // TestingSetDB allows tests to override the database.
-func (rc *RangeCache) TestingSetDB(db RangeDescriptorDB) {
+func (rc *RangeCache) TestingSetDB(db RangeLookup) {
 	rc.db = db
 }
 
