@@ -39,37 +39,37 @@ import (
 var (
 	MetaPreServeNewConns = metric.Metadata{
 		Name:        "sql.pre_serve.new_conns",
-		Help:        "Counter of the number of SQL connections created prior to routine the connection a specific tenant",
+		Help:        "Number of SQL connections created prior to routing the connection to the target SQL server",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaPreServeBytesIn = metric.Metadata{
 		Name:        "sql.pre_serve.bytesin",
-		Help:        "Number of SQL bytes received prior to routing the connection to a specific tenant",
+		Help:        "Number of SQL bytes received prior to routing the connection to the target SQL server",
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	MetaPreServeBytesOut = metric.Metadata{
 		Name:        "sql.pre_serve.bytesout",
-		Help:        "Number of SQL bytes sent prior to routing the connection to a specific tenant",
+		Help:        "Number of SQL bytes sent prior to routing the connection to the target SQL server",
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	MetaPreServeConnFailures = metric.Metadata{
 		Name:        "sql.pre_serve.conn.failures",
-		Help:        "Number of SQL connection failures prior to routing the connection to a specific tenant",
+		Help:        "Number of SQL connection failures prior to routing the connection to the target SQL server",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaPreServeMaxBytes = metric.Metadata{
 		Name:        "sql.pre_serve.mem.max",
-		Help:        "Memory usage for SQL connections prior to routing the connection to a specific tenant",
+		Help:        "Memory usage for SQL connections prior to routing the connection to the target SQL server",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 	}
 	MetaPreServeCurBytes = metric.Metadata{
 		Name:        "sql.pre_serve.mem.cur",
-		Help:        "Current memory usage for SQL connections prior to routing the connection to a specific tenant",
+		Help:        "Current memory usage for SQL connections prior to routing the connection to the target SQL server",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 	}
