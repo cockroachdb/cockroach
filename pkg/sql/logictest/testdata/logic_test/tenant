@@ -365,7 +365,7 @@ DROP TENANT 'tenant-one'
 subtest tenant_templates
 
 query T
-SHOW CLUSTER SETTING sql.create_tenant.default_template
+SHOW CLUSTER SETTING sql.create_virtual_cluster.default_template
 ----
 ·
 
@@ -435,13 +435,13 @@ DROP TENANT othertenant
 
 # Now set the default template and try again.
 statement ok
-SET CLUSTER SETTING sql.create_tenant.default_template = 'nonexistent';
+SET CLUSTER SETTING sql.create_virtual_cluster.default_template = 'nonexistent';
 
 statement error retrieving default tenant configuration template.*tenant "nonexistent" does not exist
 CREATE TENANT othertenant
 
 statement ok
-SET CLUSTER SETTING sql.create_tenant.default_template = 'tmpl';
+SET CLUSTER SETTING sql.create_virtual_cluster.default_template = 'tmpl';
 
 # Create a new tenant - this should use the template implicitly now.
 statement ok
@@ -484,7 +484,7 @@ ALTER TENANT tmpl STOP SERVICE;
 DROP TENANT tmpl
 
 statement ok
-RESET CLUSTER SETTING sql.create_tenant.default_template
+RESET CLUSTER SETTING sql.create_virtual_cluster.default_template
 
 subtest block_drop_virtual_cluster
 
@@ -509,19 +509,19 @@ statement ok
 CREATE TENANT noservice
 
 statement error shared service not enabled for tenant "noservice"
-SET CLUSTER SETTING server.controller.default_tenant = noservice
+SET CLUSTER SETTING server.controller.default_target_cluster = noservice
 
 statement ok
-SET CLUSTER SETTING server.controller.default_tenant.check_service.enabled = false
+SET CLUSTER SETTING server.controller.default_target_cluster.check_service.enabled = false
 
 statement ok
-SET CLUSTER SETTING server.controller.default_tenant = noservice
+SET CLUSTER SETTING server.controller.default_target_cluster = noservice
 
 statement ok
-RESET CLUSTER SETTING server.controller.default_tenant.check_service.enabled
+RESET CLUSTER SETTING server.controller.default_target_cluster.check_service.enabled
 
 statement ok
-RESET CLUSTER SETTING server.controller.default_tenant
+RESET CLUSTER SETTING server.controller.default_target_cluster
 
 statement ok
 DROP TENANT noservice;
@@ -529,23 +529,23 @@ CREATE TENANT withservice;
 ALTER TENANT withservice START SERVICE SHARED
 
 statement ok
-SET CLUSTER SETTING server.controller.default_tenant = withservice
+SET CLUSTER SETTING server.controller.default_target_cluster = withservice
 
 statement error cannot stop service while tenant is selected as default
 ALTER TENANT withservice STOP SERVICE
 
 statement ok
-SET CLUSTER SETTING server.controller.default_tenant.check_service.enabled = false
+SET CLUSTER SETTING server.controller.default_target_cluster.check_service.enabled = false
 
 statement ok
 ALTER TENANT withservice STOP SERVICE
 
 # clean up
 statement ok
-RESET CLUSTER SETTING server.controller.default_tenant.check_service.enabled
+RESET CLUSTER SETTING server.controller.default_target_cluster.check_service.enabled
 
 statement ok
-RESET CLUSTER SETTING server.controller.default_tenant
+RESET CLUSTER SETTING server.controller.default_target_cluster
 
 statement ok
 DROP TENANT withservice

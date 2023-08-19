@@ -122,7 +122,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 
 // TestTenantBackupMultiRegionDatabases ensures secondary tenants restoring
 // MR databases respect the
-// sql.multi_region.allow_abstractions_for_secondary_tenants.enabled cluster
+// sql.virtual_cluster.feature_access.multiregion.enabled cluster
 // setting.
 func TestTenantBackupMultiRegionDatabases(t *testing.T) {
 	defer leaktest.AfterTest(t)()

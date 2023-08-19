@@ -107,8 +107,8 @@ func TestSQLStatsRegions(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_override = '500ms'`)
 	tdb.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '500ms'`)
 
-	tdb.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true")
-	tdb.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.multi_region.allow_abstractions_for_secondary_tenants.enabled = true")
+	tdb.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true")
+	tdb.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled = true")
 	tdb.Exec(t, `ALTER RANGE meta configure zone using constraints = '{"+region=gcp-us-west1": 1, "+region=gcp-us-central1": 1, "+region=gcp-us-east1": 1}';`)
 
 	// Create secondary tenants

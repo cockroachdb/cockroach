@@ -459,7 +459,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 			// Choose the tenant to use when no tenant is specified on a
 			// connection or web URL.
 			if _, err := ie.Exec(ctx, "default-tenant", nil,
-				`SET CLUSTER SETTING `+multitenant.DefaultTenantSelectSettingName+` = $1`,
+				`SET CLUSTER SETTING `+multitenant.DefaultClusterSelectSettingName+` = $1`,
 				demoTenantName); err != nil {
 				return err
 			}

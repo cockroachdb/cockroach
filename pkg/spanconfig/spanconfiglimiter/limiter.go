@@ -29,12 +29,16 @@ var _ spanconfig.Limiter = &Limiter{}
 
 // tenantLimitSetting controls how many span configs a secondary tenant is
 // allowed to install. It's settable only by the system tenant.
-var tenantLimitSetting = settings.RegisterIntSetting(
-	settings.TenantReadOnly,
-	"spanconfig.tenant_limit",
-	"limit on the number of span configs a tenant is allowed to install",
-	5000,
-)
+var tenantLimitSetting = func() *settings.IntSetting {
+	s := settings.RegisterIntSetting(
+		settings.TenantReadOnly,
+		"spanconfig.tenant_limit",
+		"limit on the number of span configs that can be set up by a virtual cluster",
+		5000,
+	)
+	s.SetName("spanconfig.virtual_cluster.max_spans")
+	return s
+}()
 
 // Limiter is used to limit the number of span configs installed by secondary
 // tenants. It's a concrete implementation of the spanconfig.Limiter interface.

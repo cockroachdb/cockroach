@@ -339,7 +339,7 @@ var DefaultPrimaryRegion = settings.RegisterStringSetting(
 
 // SecondaryTenantsMultiRegionAbstractionsEnabledSettingName is the name of the
 // cluster setting that governs secondary tenant multi-region abstraction usage.
-const SecondaryTenantsMultiRegionAbstractionsEnabledSettingName = "sql.multi_region.allow_abstractions_for_secondary_tenants.enabled"
+const SecondaryTenantsMultiRegionAbstractionsEnabledSettingName = "sql.virtual_cluster.feature_access.multiregion.enabled"
 
 // SecondaryTenantsMultiRegionAbstractionsEnabled controls if secondary tenants
 // are allowed to use multi-region abstractions. In particular, it controls if
@@ -349,12 +349,16 @@ const SecondaryTenantsMultiRegionAbstractionsEnabledSettingName = "sql.multi_reg
 // This setting has no effect for existing multi-region databases that have
 // already been configured. It only affects regions being added to new
 // databases.
-var SecondaryTenantsMultiRegionAbstractionsEnabled = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
-	SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
-	"allow secondary tenants to use multi-region abstractions",
-	false,
-)
+var SecondaryTenantsMultiRegionAbstractionsEnabled = func() *settings.BoolSetting {
+	s := settings.RegisterBoolSetting(
+		settings.TenantReadOnly,
+		"sql.multi_region.allow_abstractions_for_secondary_tenants.enabled", // internal key, name defined above
+		"allow the use of multi-region abstractions and syntax in virtual clusters",
+		false,
+	)
+	s.SetName(SecondaryTenantsMultiRegionAbstractionsEnabledSettingName)
+	return s
+}()
 
 // maybeInitializeMultiRegionMetadata initializes multi-region metadata if a
 // primary region is supplied and works as a pass-through otherwise. It creates

@@ -32,17 +32,21 @@ import (
 //   - v222: requests not subject to capabilities are accepted; other
 //     requests are only accepted for the system tenant.
 //     This is also adequate for CC serverless.
-var authorizerMode = settings.RegisterEnumSetting(
-	settings.SystemOnly,
-	"server.secondary_tenants.authorization.mode",
-	"configures how requests are authorized for secondary tenants",
-	"on",
-	map[int64]string{
-		int64(authorizerModeOn):       "on",
-		int64(authorizerModeAllowAll): "allow-all",
-		int64(authorizerModeV222):     "v222",
-	},
-)
+var authorizerMode = func() *settings.EnumSetting {
+	s := settings.RegisterEnumSetting(
+		settings.SystemOnly,
+		"server.secondary_tenants.authorization.mode",
+		"configures how requests are authorized for secondary tenants",
+		"on",
+		map[int64]string{
+			int64(authorizerModeOn):       "on",
+			int64(authorizerModeAllowAll): "allow-all",
+			int64(authorizerModeV222):     "v222",
+		},
+	)
+	s.SetName("server.virtual_cluster_authorization.mode")
+	return s
+}()
 
 type authorizerModeType int64
 

@@ -258,6 +258,7 @@ var defaultTenantConfigTemplate = func() *settings.StringSetting {
 		"",
 	)
 	s.SetReportable(true)
+	s.SetName("sql.create_virtual_cluster.default_template")
 	return s
 }()
 
