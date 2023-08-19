@@ -11,13 +11,12 @@ with t=A
 >> txn_begin ts=11 t=A
 txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
 >> put v=abc k=a t=A
-called PutIntent("a", _, 00000000-0000-0000-0000-000000000001)
 meta: "a"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=8 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/11.000000000,0 -> /BYTES/abc
 >> get k=a t=A
 get: "a" -> /BYTES/abc @11.000000000,0
 >> resolve_intent k=a t=A
-called ClearIntent("a", TDNUM(true), 00000000-0000-0000-0000-000000000001)
+called SingleClearEngineKey(/Local/Lock/Intent"a"/0300000000000000000000000000000001)
 data: "a"/11.000000000,0 -> /BYTES/abc
 
 run ok

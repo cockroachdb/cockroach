@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -1401,10 +1402,11 @@ func mvccGetMetadata(
 // allocations. Managing this temporary buffer using a sync.Pool
 // completely eliminates allocation from the put common path.
 type putBuffer struct {
-	meta    enginepb.MVCCMetadata
-	newMeta enginepb.MVCCMetadata
-	ts      hlc.LegacyTimestamp // avoids heap allocations
-	tmpbuf  []byte              // avoids heap allocations
+	meta     enginepb.MVCCMetadata
+	newMeta  enginepb.MVCCMetadata
+	ts       hlc.LegacyTimestamp // avoids heap allocations
+	ltKeyBuf []byte              // avoids heap allocations
+	metaBuf  []byte              // avoids heap allocations
 }
 
 var putBufferPool = sync.Pool{
@@ -1418,13 +1420,23 @@ func newPutBuffer() *putBuffer {
 }
 
 func (b *putBuffer) release() {
-	*b = putBuffer{tmpbuf: b.tmpbuf[:0]}
+	*b = putBuffer{ltKeyBuf: b.ltKeyBuf[:0], metaBuf: b.metaBuf[:0]}
 	putBufferPool.Put(b)
+}
+
+func (b *putBuffer) lockTableKey(key roachpb.Key, str lock.Strength, txnID uuid.UUID) EngineKey {
+	var lockTableKey EngineKey
+	lockTableKey, b.ltKeyBuf = LockTableKey{
+		Key:      key,
+		Strength: str,
+		TxnUUID:  txnID,
+	}.ToEngineKey(b.ltKeyBuf)
+	return lockTableKey
 }
 
 func (b *putBuffer) marshalMeta(meta *enginepb.MVCCMetadata) (_ []byte, err error) {
 	size := meta.Size()
-	data := b.tmpbuf
+	data := b.metaBuf
 	if cap(data) < size {
 		data = make([]byte, size)
 	} else {
@@ -1434,7 +1446,7 @@ func (b *putBuffer) marshalMeta(meta *enginepb.MVCCMetadata) (_ []byte, err erro
 	if err != nil {
 		return nil, err
 	}
-	b.tmpbuf = data
+	b.metaBuf = data
 	return data[:n], nil
 }
 
@@ -1453,8 +1465,9 @@ func (b *putBuffer) putInlineMeta(
 
 var trueValue = true
 
+// putIntentMeta puts an intent at the given key with the provided value.
 func (b *putBuffer) putIntentMeta(
-	ctx context.Context, writer Writer, key MVCCKey, meta *enginepb.MVCCMetadata, alreadyExists bool,
+	writer Writer, key MVCCKey, meta *enginepb.MVCCMetadata, alreadyExists bool,
 ) (keyBytes, valBytes int64, err error) {
 	if meta.Txn != nil && meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
 		// The timestamps are supposed to be in sync. If they weren't, it wouldn't
@@ -1462,6 +1475,7 @@ func (b *putBuffer) putIntentMeta(
 		return 0, 0, errors.AssertionFailedf(
 			"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
 	}
+	lockTableKey := b.lockTableKey(key.Key, lock.Exclusive, meta.Txn.ID)
 	if alreadyExists {
 		// Absence represents false.
 		meta.TxnDidNotUpdateMeta = nil
@@ -1472,10 +1486,31 @@ func (b *putBuffer) putIntentMeta(
 	if err != nil {
 		return 0, 0, err
 	}
-	if err = writer.PutIntent(ctx, key.Key, bytes, meta.Txn.ID); err != nil {
+	if err = writer.PutEngineKey(lockTableKey, bytes); err != nil {
 		return 0, 0, err
 	}
 	return int64(key.EncodedSize()), int64(len(bytes)), nil
+}
+
+// clearIntentMeta clears an intent at the given key. txnDidNotUpdateMeta allows
+// for performance optimization when set to true, and has semantics defined in
+// MVCCMetadata.TxnDidNotUpdateMeta (it can be conservatively set to false).
+//
+// TODO(sumeer): after the full transition to separated locks, measure the cost
+// of a putIntentMeta implementation, where there is an existing intent, that
+// does a <single-clear, put> pair. If there isn't a performance decrease, we
+// can stop tracking txnDidNotUpdateMeta and still optimize clearIntentMeta by
+// always doing single-clear.
+func (b *putBuffer) clearIntentMeta(
+	writer Writer, key MVCCKey, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts ClearOptions,
+) (keyBytes, valBytes int64, err error) {
+	lockTableKey := b.lockTableKey(key.Key, lock.Exclusive, txnUUID)
+	if txnDidNotUpdateMeta {
+		err = writer.SingleClearEngineKey(lockTableKey)
+	} else {
+		err = writer.ClearEngineKey(lockTableKey, opts)
+	}
+	return int64(key.EncodedSize()), 0, err
 }
 
 // MVCCPut sets the value for a specified key. It will save the value
@@ -2206,7 +2241,7 @@ func mvccPutInternal(
 		alreadyExists := ok && buf.meta.Txn != nil
 		// Write the intent metadata key.
 		metaKeySize, metaValSize, err = buf.putIntentMeta(
-			ctx, writer, metaKey, newMeta, alreadyExists)
+			writer, metaKey, newMeta, alreadyExists)
 		if err != nil {
 			return false, err
 		}
@@ -4896,13 +4931,13 @@ func mvccResolveWriteIntent(
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
 			metaKeySize, metaValSize, err = buf.putIntentMeta(
-				ctx, rw, metaKey, newMeta, true /* alreadyExists */)
+				rw, metaKey, newMeta, true /* alreadyExists */)
 		} else {
-			metaKeySize = int64(metaKey.EncodedSize())
-			err = rw.ClearIntent(metaKey.Key, canSingleDelHelper.onCommitIntent(), meta.Txn.ID, ClearOptions{
-				ValueSizeKnown: true,
-				ValueSize:      uint32(origMetaValSize),
-			})
+			metaKeySize, metaValSize, err = buf.clearIntentMeta(
+				rw, metaKey, canSingleDelHelper.onCommitIntent(), meta.Txn.ID, ClearOptions{
+					ValueSizeKnown: true,
+					ValueSize:      uint32(origMetaValSize),
+				})
 		}
 		if err != nil {
 			return false, err
@@ -5010,10 +5045,12 @@ func mvccResolveWriteIntent(
 
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
-		if err = rw.ClearIntent(metaKey.Key, canSingleDelHelper.onAbortIntent(), meta.Txn.ID, ClearOptions{
-			ValueSizeKnown: true,
-			ValueSize:      uint32(origMetaValSize),
-		}); err != nil {
+		_, _, err := buf.clearIntentMeta(
+			rw, metaKey, canSingleDelHelper.onAbortIntent(), meta.Txn.ID, ClearOptions{
+				ValueSizeKnown: true,
+				ValueSize:      uint32(origMetaValSize),
+			})
+		if err != nil {
 			return false, err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
@@ -5030,14 +5067,14 @@ func mvccResolveWriteIntent(
 		KeyBytes: MVCCVersionTimestampSize,
 		ValBytes: int64(nextValueLen),
 	}
-	if err = rw.ClearIntent(metaKey.Key, canSingleDelHelper.onAbortIntent(), meta.Txn.ID, ClearOptions{
-		ValueSizeKnown: true,
-		ValueSize:      uint32(origMetaValSize),
-	}); err != nil {
+	metaKeySize, metaValSize, err := buf.clearIntentMeta(
+		rw, metaKey, canSingleDelHelper.onAbortIntent(), meta.Txn.ID, ClearOptions{
+			ValueSizeKnown: true,
+			ValueSize:      uint32(origMetaValSize),
+		})
+	if err != nil {
 		return false, err
 	}
-	metaKeySize := int64(metaKey.EncodedSize())
-	metaValSize := int64(0)
 
 	// Update stat counters with older version.
 	if ms != nil {
