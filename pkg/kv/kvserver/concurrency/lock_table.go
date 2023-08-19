@@ -2859,7 +2859,7 @@ func (l *lockState) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 	}
 	if up.Status.IsFinalized() {
 		l.clearLockHolder()
-		gc = l.lockIsFree()
+		gc = l.releaseWaitersOnKeyUnlocked()
 		return true, gc
 	}
 
@@ -2937,7 +2937,7 @@ func (l *lockState) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 
 	if !isLocked {
 		l.clearLockHolder()
-		gc = l.lockIsFree()
+		gc = l.releaseWaitersOnKeyUnlocked()
 		return true, gc
 	}
 
@@ -3108,22 +3108,20 @@ func (l *lockState) tryFreeLockOnReplicatedAcquire() bool {
 	// The lock is uncontended by other writers, so we're safe to drop it.
 	// This may release readers who were waiting on the lock.
 	l.clearLockHolder()
-	gc := l.lockIsFree()
-	if !gc {
-		panic("expected lockIsFree to return true")
-	}
+	gc := l.releaseWaitersOnKeyUnlocked()
+	assert(gc, "expected releaseWaitersOnKeyUnlocked to return true")
 	return true
 }
 
-// The lock has transitioned from locked to unlocked. There could be waiters.
+// releaseWaitersOnKeyUnlocked is called when the key, referenced in the
+// receiver, transitions from locked to unlocked to handle state transitions for
+// waiting{Readers,Writers}; if this results in there no longer being waiters on
+// this key (read: the receiver is empty), a boolean gc=true is returned,
+// indicating the receiver can be GC-ed by the caller.
 //
 // REQUIRES: l.mu is locked.
-// TODO(arul): rename this + improve comment here to better reflect the state
-// transitions this function performs.
-func (l *lockState) lockIsFree() (gc bool) {
-	if l.isHeld() {
-		panic("called lockIsFree on lock with holder")
-	}
+func (l *lockState) releaseWaitersOnKeyUnlocked() (gc bool) {
+	assert(!l.isHeld(), "releaseWaitersOnKeyUnlocked should only be called on unheld locks")
 
 	// All waiting readers don't need to wait here anymore.
 	// NB: all waiting readers are by definition active waiters.
