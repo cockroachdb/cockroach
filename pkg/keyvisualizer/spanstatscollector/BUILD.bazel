@@ -10,6 +10,7 @@ go_library(
         "//pkg/keyvisualizer/keyvissettings",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/util/container/ring",
         "//pkg/util/interval",
         "//pkg/util/log",
         "//pkg/util/stop",
