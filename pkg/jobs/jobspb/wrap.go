@@ -185,7 +185,7 @@ func DetailsType(d isPayload_Details) (Type, error) {
 	case *Payload_TypeSchemaChange:
 		return TypeTypeSchemaChange, nil
 	case *Payload_StreamIngestion:
-		return TypeStreamIngestion, nil
+		return TypeReplicationStreamIngestion, nil
 	case *Payload_NewSchemaChange:
 		return TypeNewSchemaChange, nil
 	case *Payload_Migration:
@@ -195,7 +195,7 @@ func DetailsType(d isPayload_Details) (Type, error) {
 	case *Payload_AutoSQLStatsCompaction:
 		return TypeAutoSQLStatsCompaction, nil
 	case *Payload_StreamReplication:
-		return TypeStreamReplication, nil
+		return TypeReplicationStreamProducer, nil
 	case *Payload_RowLevelTTL:
 		return TypeRowLevelTTL, nil
 	case *Payload_SchemaTelemetry:
@@ -242,12 +242,12 @@ var JobDetailsForEveryJobType = map[Type]Details{
 	},
 	TypeSchemaChangeGC:               SchemaChangeGCDetails{},
 	TypeTypeSchemaChange:             TypeSchemaChangeDetails{},
-	TypeStreamIngestion:              StreamIngestionDetails{},
+	TypeReplicationStreamIngestion:   StreamIngestionDetails{},
 	TypeNewSchemaChange:              NewSchemaChangeDetails{},
 	TypeMigration:                    MigrationDetails{},
 	TypeAutoSpanConfigReconciliation: AutoSpanConfigReconciliationDetails{},
 	TypeAutoSQLStatsCompaction:       AutoSQLStatsCompactionDetails{},
-	TypeStreamReplication:            StreamReplicationDetails{},
+	TypeReplicationStreamProducer:    StreamReplicationDetails{},
 	TypeRowLevelTTL:                  RowLevelTTLDetails{},
 	TypeAutoSchemaTelemetry:          SchemaTelemetryDetails{},
 	TypeKeyVisualizer:                KeyVisualizerDetails{},

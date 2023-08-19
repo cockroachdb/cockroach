@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -126,7 +127,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		mt := timeutil.NewManualTime(timeutil.Now())
 		waitJobFinishReverting := make(chan struct{})
 		in, out := make(chan struct{}, 1), make(chan struct{}, 1)
-		jobs.RegisterConstructor(jobspb.TypeStreamReplication, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		jobs.RegisterConstructor(jobspb.TypeReplicationStreamProducer, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			r := &producerJobResumer{
 				job:        job,
 				timeSource: mt,
@@ -185,7 +186,10 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		{ // Job times out at the beginning
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			ptsID := uuid.MakeV4()
-			jr := makeProducerJobRecord(registry, 10, timeout, usr, ptsID)
+			ti := &mtinfopb.TenantInfo{
+				SQLInfo: mtinfopb.SQLInfo{ID: 10},
+			}
+			jr := makeProducerJobRecord(registry, ti, timeout, usr, ptsID)
 			defer jobs.ResetConstructors()()
 
 			mt, timeGiven, waitForTimeRequest, waitJobFinishReverting := registerConstructor()
@@ -215,10 +219,13 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 
 		{ // Job starts running and eventually fails after it's timed out
 			ptsTime := timeutil.Now()
+			ti := &mtinfopb.TenantInfo{
+				SQLInfo: mtinfopb.SQLInfo{ID: 20},
+			}
 			ts := hlc.Timestamp{WallTime: ptsTime.UnixNano()}
 			ptsID := uuid.MakeV4()
 
-			jr := makeProducerJobRecord(registry, 20, timeout, usr, ptsID)
+			jr := makeProducerJobRecord(registry, ti, timeout, usr, ptsID)
 			defer jobs.ResetConstructors()()
 			mt, timeGiven, waitForTimeRequest, waitJobFinishReverting :=
 				registerConstructor()
