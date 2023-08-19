@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "list",
+    srcs = ["list.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/container/list",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "list_test",
+    srcs = [
+        "example_test.go",
+        "list_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    embed = [":list"],
+)

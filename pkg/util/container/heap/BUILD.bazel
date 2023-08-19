@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "heap",
+    srcs = ["heap.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/container/heap",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "heap_test",
+    srcs = [
+        "example_intheap_test.go",
+        "example_pq_test.go",
+        "heap_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    embed = [":heap"],
+)
