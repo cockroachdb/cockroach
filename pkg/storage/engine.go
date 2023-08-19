@@ -692,21 +692,6 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearUnversioned(key roachpb.Key, opts ClearOptions) error
-	// ClearIntent removes an intent from the db. Unlike ClearMVCC and
-	// ClearUnversioned, this is a higher-level method that may make changes in
-	// parts of the key space that are not only a function of the input, and may
-	// choose to use a single-clear under the covers. txnDidNotUpdateMeta allows
-	// for performance optimization when set to true, and has semantics defined in
-	// MVCCMetadata.TxnDidNotUpdateMeta (it can be conservatively set to false).
-	//
-	// It is safe to modify the contents of the arguments after it returns.
-	//
-	// TODO(sumeer): after the full transition to separated locks, measure the
-	// cost of a PutIntent implementation, where there is an existing intent,
-	// that does a <single-clear, put> pair. If there isn't a performance
-	// decrease, we can stop tracking txnDidNotUpdateMeta and still optimize
-	// ClearIntent by always doing single-clear.
-	ClearIntent(key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts ClearOptions) error
 	// ClearEngineKey removes the given point key from the engine. It does not
 	// affect range keys.  Note that clear actually removes entries from the
 	// storage engine. This is a general-purpose and low-level method that should
@@ -840,16 +825,6 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
 	PutUnversioned(key roachpb.Key, value []byte) error
-	// PutIntent puts an intent at the given key to the value provided. This is
-	// a higher-level method that may make changes in parts of the key space
-	// that are not only a function of the input key, and may explicitly clear
-	// the preceding intent. txnDidNotUpdateMeta defines what happened prior to
-	// this put, and allows for performance optimization when set to true, and
-	// has semantics defined in MVCCMetadata.TxnDidNotUpdateMeta (it can be
-	// conservatively set to false).
-	//
-	// It is safe to modify the contents of the arguments after Put returns.
-	PutIntent(ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID) error
 	// PutEngineKey sets the given key to the value provided. This is a
 	// general-purpose and low-level method that should be used sparingly,
 	// only when the other Put* methods are not applicable.
