@@ -541,7 +541,7 @@ func main() {
 	c.Start(context.Background())
 	defer c.Close()
 	c.UpdateZoneConfig(1, 1<<20)
-	_, err := c.Nodes[0].DB().Exec("SET CLUSTER SETTING kv.raft_log.disable_synchronization_unsafe = true")
+	_, err := c.Nodes[0].DB().Exec("SET CLUSTER SETTING kv.raft_log.synchronization.disabled = true")
 	if err != nil {
 		log.Fatalf(context.Background(), "%v", err)
 	}

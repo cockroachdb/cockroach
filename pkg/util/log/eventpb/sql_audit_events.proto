@@ -231,7 +231,7 @@ message TxnRowsReadLimitInternal {
 // are only emitted via external logging.
 
 // QueryExecute is recorded when a query is executed,
-// and the cluster setting `sql.trace.log_statement_execute` is set.
+// and the cluster setting `sql.log.all_statements.enabled` is set.
 message QueryExecute {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];

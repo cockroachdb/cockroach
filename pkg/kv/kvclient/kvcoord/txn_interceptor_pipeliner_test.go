@@ -1256,7 +1256,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 }
 
 // TestTxnPipelinerMaxBatchSize tests that batches that contain more requests
-// than allowed by the kv.transaction.write_pipelining_max_batch_size setting
+// than allowed by the kv.transaction.write_pipelining.max_batch_size setting
 // will not be pipelined.
 func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()

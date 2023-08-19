@@ -383,7 +383,7 @@ SELECT id FROM system.tenants WHERE name = 'tmpl'
 
 statement ok
 ALTER TENANT tmpl GRANT CAPABILITY can_view_node_info; -- will be copied
-ALTER TENANT tmpl SET CLUSTER SETTING trace.debug.enable = true; -- will be copied
+ALTER TENANT tmpl SET CLUSTER SETTING trace.debug_http_endpoint.enabled = true; -- will be copied
 -- Simulate resource limits. Will be copied.
 -- Note: we cannot use the update_tenant_resource_limits() builtin
 -- directly here because it can only be used from a CCL binary.
@@ -419,7 +419,7 @@ query TTTT rowsort
 SELECT variable, value, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT othertenant]
 WHERE origin != 'no-override'
 ----
-trace.debug.enable  true  b  per-tenant-override
+trace.debug_http_endpoint.enabled  true  b  per-tenant-override
 
 # Check that the resource usage parameters were copied.
 query IIRRRRI
@@ -467,7 +467,7 @@ query TTTT rowsort
 SELECT variable, value, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT othertenant]
 WHERE origin != 'no-override'
 ----
-trace.debug.enable  true  b  per-tenant-override
+trace.debug_http_endpoint.enabled  true  b  per-tenant-override
 
 # Check that the resource usage parameters were copied.
 query IIRRRRI

@@ -109,7 +109,7 @@ const SENSITIVE_ACCESS = logpb.Channel_SENSITIVE_ACCESS
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 const SQL_EXEC = logpb.Channel_SQL_EXEC
 

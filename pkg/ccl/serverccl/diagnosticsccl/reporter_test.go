@@ -201,6 +201,7 @@ func TestServerReport(t *testing.T) {
 	require.Equal(t, expected, actual, "expected %d changed settings, got %d: %v", expected, actual, last.AlteredSettings)
 
 	for key, expected := range map[string]string{
+		// Note: this uses setting _keys_, not setting names.
 		"cluster.organization":                     "<redacted>",
 		"diagnostics.reporting.send_crash_reports": "false",
 		"server.time_until_store_dead":             "1m30s",
@@ -446,7 +447,7 @@ func setupCluster(t *testing.T, db *gosql.DB) {
 	_, err = db.Exec(`SET CLUSTER SETTING diagnostics.reporting.enabled = true`)
 	require.NoError(t, err)
 
-	_, err = db.Exec(`SET CLUSTER SETTING diagnostics.reporting.send_crash_reports = false`)
+	_, err = db.Exec(`SET CLUSTER SETTING diagnostics.reporting.send_crash_reports.enabled = false`)
 	require.NoError(t, err)
 
 	_, err = db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName))

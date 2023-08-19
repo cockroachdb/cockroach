@@ -47,7 +47,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	args.SrcClusterSettings[`stream_replication.job_liveness_timeout`] = `'1m'`
+	args.SrcClusterSettings[`stream_replication.job_liveness.timeout`] = `'1m'`
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
@@ -67,7 +67,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 
 	// Make producer job easily times out
 	c.SrcSysSQL.ExecMultiple(t, replicationtestutils.ConfigureClusterSettings(map[string]string{
-		`stream_replication.job_liveness_timeout`: `'100ms'`,
+		`stream_replication.job_liveness.timeout`: `'100ms'`,
 	})...)
 
 	jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))

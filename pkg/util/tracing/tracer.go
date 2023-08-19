@@ -117,6 +117,7 @@ var enableNetTrace = settings.RegisterBoolSetting(
 	"trace.debug.enable",
 	"if set, traces for recent requests can be seen at https://<ui>/debug/requests",
 	false,
+	settings.WithName("trace.debug_http_endpoint.enabled"),
 	settings.WithPublic)
 
 var openTelemetryCollector = settings.RegisterStringSetting(

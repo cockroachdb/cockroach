@@ -134,16 +134,16 @@ SELECT x FROM test WHERE y = 1/z
 # Set a cluster setting to make it show up below. Which one is set
 # does not matter.
 statement ok
-SET CLUSTER SETTING debug.panic_on_failed_assertions = true;
+SET CLUSTER SETTING debug.panic_on_failed_assertions.enabled = true;
 
 statement ok
-RESET CLUSTER SETTING debug.panic_on_failed_assertions
+RESET CLUSTER SETTING debug.panic_on_failed_assertions.enabled
 
 statement ok
 SHOW application_name
 
 statement ok
-SHOW CLUSTER SETTING debug.panic_on_failed_assertions
+SHOW CLUSTER SETTING debug.panic_on_failed_assertions.enabled
 
 statement ok
 SET application_name = '';
@@ -167,11 +167,11 @@ SELECT x FROM test WHERE y = (_ / z)                              !+
 SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)                 ·
 SELECT x FROM test WHERE y IN (_, _, __more1_10__)                   +
 SELECT x FROM test WHERE y NOT IN (_, _, __more1_10__)               ·
-SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  ·
-SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        ·
+SET CLUSTER SETTING "debug.panic_on_failed_assertions.enabled" = DEFAULT  ·
+SET CLUSTER SETTING "debug.panic_on_failed_assertions.enabled" = _        ·
 SET application_name = '_'                                        ·
 SET distsql = "on"                                                ·
-SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"           ·
+SHOW CLUSTER SETTING "debug.panic_on_failed_assertions.enabled"           ·
 SHOW application_name                                             ·
 
 # Check that the latency measurements looks reasonable, protecting
