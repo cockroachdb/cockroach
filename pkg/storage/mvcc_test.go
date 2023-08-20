@@ -615,7 +615,7 @@ func TestMVCCScanLockConflictError(t *testing.T) {
 			}
 
 			if scan.consistent {
-				intents = lcErr.Intents
+				intents = lcErr.Locks
 			}
 
 			if !reflect.DeepEqual(intents, scan.expIntents) {
@@ -6620,9 +6620,9 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 				if !errors.As(err, &e) {
 					require.Fail(t, "Expected WriteIntentFailure, got %T", err)
 				}
-				require.Equal(t, len(expectedIntentIndices), len(e.Intents))
+				require.Equal(t, len(expectedIntentIndices), len(e.Locks))
 				for i, dataIdx := range expectedIntentIndices {
-					requireTxnForValue(t, data[dataIdx], e.Intents[i])
+					requireTxnForValue(t, data[dataIdx], e.Locks[i])
 				}
 			}
 		}

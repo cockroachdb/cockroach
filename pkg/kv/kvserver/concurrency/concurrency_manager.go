@@ -480,9 +480,9 @@ func (m *managerImpl) HandleLockConflictError(
 	// Either way, there is no possibility of the request entering an infinite
 	// loop without making progress.
 	consultTxnStatusCache :=
-		int64(len(t.Intents)) > DiscoveredLocksThresholdToConsultTxnStatusCache.Get(&m.st.SV)
-	for i := range t.Intents {
-		intent := &t.Intents[i]
+		int64(len(t.Locks)) > DiscoveredLocksThresholdToConsultTxnStatusCache.Get(&m.st.SV)
+	for i := range t.Locks {
+		intent := &t.Locks[i]
 		added, err := m.lt.AddDiscoveredLock(intent, seq, consultTxnStatusCache, g.ltg)
 		if err != nil {
 			log.Fatalf(ctx, "%v", err)

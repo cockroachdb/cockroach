@@ -123,8 +123,8 @@ func assertExpectErr(
 
 	_, err := iter.Valid()
 	if lcErr := (*kvpb.LockConflictError)(nil); errors.As(err, &lcErr) {
-		if !expectedIntent.Key.Equal(lcErr.Intents[0].Key) {
-			t.Fatalf("Expected intent key %v, but got %v", expectedIntent.Key, lcErr.Intents[0].Key)
+		if !expectedIntent.Key.Equal(lcErr.Locks[0].Key) {
+			t.Fatalf("Expected intent key %v, but got %v", expectedIntent.Key, lcErr.Locks[0].Key)
 		}
 	} else {
 		t.Fatalf("expected error with intent %v but got %v", expectedIntent, err)
@@ -165,11 +165,11 @@ func assertExpectErrs(
 	err := iter.TryGetIntentError()
 	if lcErr := (*kvpb.LockConflictError)(nil); errors.As(err, &lcErr) {
 		for i := range expectedIntents {
-			if !expectedIntents[i].Key.Equal(lcErr.Intents[i].Key) {
-				t.Fatalf("%d intent key: got %v, expected %v", i, lcErr.Intents[i].Key, expectedIntents[i].Key)
+			if !expectedIntents[i].Key.Equal(lcErr.Locks[i].Key) {
+				t.Fatalf("%d intent key: got %v, expected %v", i, lcErr.Locks[i].Key, expectedIntents[i].Key)
 			}
-			if !expectedIntents[i].Txn.ID.Equal(lcErr.Intents[i].Txn.ID) {
-				t.Fatalf("%d intent key: got %v, expected %v", i, lcErr.Intents[i].Txn.ID, expectedIntents[i].Txn.ID)
+			if !expectedIntents[i].Txn.ID.Equal(lcErr.Locks[i].Txn.ID) {
+				t.Fatalf("%d intent key: got %v, expected %v", i, lcErr.Locks[i].Txn.ID, expectedIntents[i].Txn.ID)
 			}
 		}
 	} else {
@@ -202,11 +202,11 @@ func assertExportedErrs(
 
 	if lcErr := (*kvpb.LockConflictError)(nil); errors.As(err, &lcErr) {
 		for i := range expectedIntents {
-			if !expectedIntents[i].Key.Equal(lcErr.Intents[i].Key) {
-				t.Fatalf("%d intent key: got %v, expected %v", i, lcErr.Intents[i].Key, expectedIntents[i].Key)
+			if !expectedIntents[i].Key.Equal(lcErr.Locks[i].Key) {
+				t.Fatalf("%d intent key: got %v, expected %v", i, lcErr.Locks[i].Key, expectedIntents[i].Key)
 			}
-			if !expectedIntents[i].Txn.ID.Equal(lcErr.Intents[i].Txn.ID) {
-				t.Fatalf("%d intent key: got %v, expected %v", i, lcErr.Intents[i].Txn.ID, expectedIntents[i].Txn.ID)
+			if !expectedIntents[i].Txn.ID.Equal(lcErr.Locks[i].Txn.ID) {
+				t.Fatalf("%d intent key: got %v, expected %v", i, lcErr.Locks[i].Txn.ID, expectedIntents[i].Txn.ID)
 			}
 		}
 	} else {
@@ -787,7 +787,7 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 	kv2_2_2 := makeKVT(testKey2, testValue2, ts2)
 	txn, intent2_2_2 := makeKVTxn(testKey2, ts2)
 
-	lcErr := &kvpb.LockConflictError{Intents: []roachpb.Intent{intent2_2_2}}
+	lcErr := &kvpb.LockConflictError{Locks: []roachpb.Intent{intent2_2_2}}
 
 	e := NewDefaultInMemForTesting()
 	defer e.Close()

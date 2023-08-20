@@ -926,17 +926,18 @@ func (e *LockConflictError) SafeFormatError(p errors.Printer) (next error) {
 }
 
 func (e *LockConflictError) printError(buf Printer) {
+	// TODO(nvanbenschoten): s/intent/lock/ below.
 	buf.Printf("conflicting intents on ")
 
-	// If we have a lot of intents, we only want to show the first and the last.
+	// If we have a lot of locks, we only want to show the first and the last.
 	const maxBegin = 5
 	const maxEnd = 5
 	var begin, end []roachpb.Intent
-	if len(e.Intents) <= maxBegin+maxEnd {
-		begin = e.Intents
+	if len(e.Locks) <= maxBegin+maxEnd {
+		begin = e.Locks
 	} else {
-		begin = e.Intents[0:maxBegin]
-		end = e.Intents[len(e.Intents)-maxEnd : len(e.Intents)]
+		begin = e.Locks[0:maxBegin]
+		end = e.Locks[len(e.Locks)-maxEnd : len(e.Locks)]
 	}
 
 	for i := range begin {

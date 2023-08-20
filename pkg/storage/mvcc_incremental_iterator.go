@@ -436,7 +436,7 @@ func (i *MVCCIncrementalIterator) updateMeta() error {
 		switch i.intentPolicy {
 		case MVCCIncrementalIterIntentPolicyError:
 			i.err = &kvpb.LockConflictError{
-				Intents: []roachpb.Intent{
+				Locks: []roachpb.Intent{
 					roachpb.MakeIntent(i.meta.Txn, i.iter.UnsafeKey().Key.Clone()),
 				},
 			}
@@ -764,12 +764,13 @@ func (i *MVCCIncrementalIterator) NumCollectedIntents() int {
 // TryGetIntentError returns kvpb.LockConflictError if intents were encountered
 // during iteration and intent aggregation is enabled. Otherwise function
 // returns nil. kvpb.LockConflictError will contain all encountered intents.
+// TODO(nvanbenschoten): rename to TryGetLockConflictError.
 func (i *MVCCIncrementalIterator) TryGetIntentError() error {
 	if len(i.intents) == 0 {
 		return nil
 	}
 	return &kvpb.LockConflictError{
-		Intents: i.intents,
+		Locks: i.intents,
 	}
 }
 
