@@ -335,7 +335,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				opName := fmt.Sprintf("handle lock conflict error %s", reqName)
 				mon.runAsync(opName, func(ctx context.Context) {
 					seq := roachpb.LeaseSequence(leaseSeq)
-					lcErr := &kvpb.LockConflictError{Intents: intents}
+					lcErr := &kvpb.LockConflictError{Locks: intents}
 					guard, err := m.HandleLockConflictError(ctx, prev, seq, lcErr)
 					if err != nil {
 						log.Eventf(ctx, "handled %v, returned error: %v", lcErr, err)

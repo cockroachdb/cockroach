@@ -1231,7 +1231,7 @@ func mvccGetWithValueHeader(
 		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, err
 	}
 	if opts.errOnIntents() && len(intents) > 0 {
-		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, &kvpb.LockConflictError{Intents: intents}
+		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, &kvpb.LockConflictError{Locks: intents}
 	}
 
 	if len(intents) > 1 {
@@ -1954,7 +1954,7 @@ func mvccPutInternal(
 			if opts.Txn == nil || meta.Txn.ID != opts.Txn.ID {
 				// The current Put operation does not come from the same
 				// transaction.
-				return false, &kvpb.LockConflictError{Intents: []roachpb.Intent{
+				return false, &kvpb.LockConflictError{Locks: []roachpb.Intent{
 					roachpb.MakeIntent(meta.Txn, key),
 				}}
 			} else if opts.Txn.Epoch < meta.Txn.Epoch {
@@ -3221,7 +3221,7 @@ func MVCCPredicateDeleteRange(
 	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
 		return nil, err
 	} else if len(intents) > 0 {
-		return nil, &kvpb.LockConflictError{Intents: intents}
+		return nil, &kvpb.LockConflictError{Locks: intents}
 	}
 
 	// continueRun returns three bools: the first is true if the current run
@@ -3516,7 +3516,7 @@ func MVCCDeleteRangeUsingTombstone(
 	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
 		return err
 	} else if len(intents) > 0 {
-		return &kvpb.LockConflictError{Intents: intents}
+		return &kvpb.LockConflictError{Locks: intents}
 	}
 
 	// If requested, check if there are any point keys/tombstones in the span that
@@ -3900,7 +3900,7 @@ func finalizeScanResult(
 	}
 
 	if opts.errOnIntents() && len(res.Intents) > 0 {
-		return &kvpb.LockConflictError{Intents: res.Intents}
+		return &kvpb.LockConflictError{Locks: res.Intents}
 	}
 	return nil
 }

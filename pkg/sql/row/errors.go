@@ -56,7 +56,7 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 		return NewUniquenessConstraintViolationError(ctx, tableDesc, kv.Key, v.ActualValue)
 
 	case *kvpb.LockConflictError:
-		key := v.Intents[0].Key
+		key := v.Locks[0].Key
 		decodeKeyFn := func() (tableName string, indexName string, colNames []string, values []string, err error) {
 			codec, index, err := decodeKeyCodecAndIndex(tableDesc, key)
 			if err != nil {
@@ -84,7 +84,7 @@ func ConvertFetchError(spec *fetchpb.IndexFetchSpec, err error) error {
 	}
 	switch {
 	case errors.As(err, &errs.lc):
-		key := errs.lc.Intents[0].Key
+		key := errs.lc.Locks[0].Key
 		decodeKeyFn := func() (tableName string, indexName string, colNames []string, values []string, err error) {
 			colNames, values, err = decodeKeyValsUsingSpec(spec, key)
 			return spec.TableName, spec.IndexName, colNames, values, err
