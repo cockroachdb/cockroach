@@ -109,6 +109,18 @@ func TestURLsForApplication(t *testing.T) {
 			},
 		},
 		{
+			name: "workload",
+			args: args{
+				application: "workload",
+				version:     "563ea3967c98c67d47ede30d895c82315e4b1a77",
+				os:          "linux",
+				arch:        "arm64",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/workload.linux-gnu-arm64.563ea3967c98c67d47ede30d895c82315e4b1a77",
+			},
+		},
+		{
 			name: "cockroach linux latest",
 			args: args{
 				application: "cockroach",
