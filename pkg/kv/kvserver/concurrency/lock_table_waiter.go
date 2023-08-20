@@ -176,7 +176,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 					if state.held {
 						err = w.pushLockTxn(ctx, req, state)
 					} else {
-						err = newWriteIntentErr(req, state, reasonWaitPolicy)
+						err = newLockConflictErr(req, state, reasonWaitPolicy)
 					}
 					if err != nil {
 						return err
@@ -319,7 +319,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// The request attempted to wait in a lock wait-queue whose length was
 				// already equal to or exceeding the request's configured maximum. As a
 				// result, the request was rejected.
-				return newWriteIntentErr(req, state, reasonWaitQueueMaxLengthExceeded)
+				return newLockConflictErr(req, state, reasonWaitQueueMaxLengthExceeded)
 
 			case doneWaiting:
 				// The request has waited for all conflicting locks to be released
@@ -413,7 +413,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				if timerWaitingState.held {
 					return w.pushLockTxnAfterTimeout(ctx, req, timerWaitingState)
 				}
-				return newWriteIntentErr(req, timerWaitingState, reasonLockTimeout)
+				return newLockConflictErr(req, timerWaitingState, reasonLockTimeout)
 			}
 
 			// We push with or without the option to wait on the conflict,
@@ -463,7 +463,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	ctx context.Context, req Request, ws waitingState,
 ) *Error {
 	if w.disableTxnPushing {
-		return newWriteIntentErr(req, ws, reasonWaitPolicy)
+		return newLockConflictErr(req, ws, reasonWaitPolicy)
 	}
 
 	// Construct the request header and determine which form of push to use.
@@ -522,7 +522,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// If pushing with an Error WaitPolicy and the push fails, then the lock
 		// holder is still active. Transform the error into a LockConflictError.
 		if _, ok := err.GetDetail().(*kvpb.TransactionPushError); ok && req.WaitPolicy == lock.WaitPolicy_Error {
-			err = newWriteIntentErr(req, ws, reasonWaitPolicy)
+			err = newLockConflictErr(req, ws, reasonWaitPolicy)
 		}
 		return err
 	}
@@ -666,7 +666,7 @@ func (w *lockTableWaiterImpl) pushLockTxnAfterTimeout(
 	req.WaitPolicy = lock.WaitPolicy_Error
 	err := w.pushLockTxn(ctx, req, ws)
 	if _, ok := err.GetDetail().(*kvpb.LockConflictError); ok {
-		err = newWriteIntentErr(req, ws, reasonLockTimeout)
+		err = newLockConflictErr(req, ws, reasonLockTimeout)
 	}
 	return err
 }
@@ -1257,7 +1257,7 @@ const (
 	reasonWaitQueueMaxLengthExceeded = kvpb.LockConflictError_REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED
 )
 
-func newWriteIntentErr(req Request, ws waitingState, reason kvpb.LockConflictError_Reason) *Error {
+func newLockConflictErr(req Request, ws waitingState, reason kvpb.LockConflictError_Reason) *Error {
 	err := kvpb.NewError(&kvpb.LockConflictError{
 		Intents: []roachpb.Intent{roachpb.MakeIntent(ws.txn, ws.key)},
 		Reason:  reason,
