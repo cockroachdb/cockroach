@@ -4536,8 +4536,8 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 				TestingConcurrencyRetryFilter: func(ctx context.Context, ba *kvpb.BatchRequest, pErr *kvpb.Error) {
 					if txn := ba.Txn; txn != nil && txn.ID == txn2ID.Load() {
 						txn2BBlockOnce.Do(func() {
-							if !errors.HasType(pErr.GoError(), (*kvpb.WriteIntentError)(nil)) {
-								t.Errorf("expected WriteIntentError; got %v", pErr)
+							if !errors.HasType(pErr.GoError(), (*kvpb.LockConflictError)(nil)) {
+								t.Errorf("expected LockConflictError; got %v", pErr)
 							}
 
 							unblockCh := make(chan struct{})

@@ -107,7 +107,7 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.Savepoin
 	}
 
 	// We don't allow rollback to savepoint after errors (except after
-	// ConditionFailedError and WriteIntentError, which are special-cased
+	// ConditionFailedError and LockConflictError, which are special-cased
 	// elsewhere and don't move the txn to the txnError state). In particular, we
 	// cannot allow rollbacks to savepoint after ambiguous errors where it's
 	// possible for a previously-successfully written intent to have been pushed

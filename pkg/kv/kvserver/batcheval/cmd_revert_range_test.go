@@ -231,7 +231,7 @@ func TestCmdRevertRange(t *testing.T) {
 
 			if tc.expectErr {
 				if !testutils.IsError(err, "intents") {
-					t.Fatalf("expected write intent error; got: %T %+v", err, err)
+					t.Fatalf("expected lock conflict error; got: %T %+v", err, err)
 				}
 			} else {
 				if err != nil {

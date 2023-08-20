@@ -271,7 +271,7 @@ type StoreTestingKnobs struct {
 	SystemLogsGCPeriod time.Duration
 	// SystemLogsGCGCDone is used to notify when system logs GC is done.
 	SystemLogsGCGCDone chan<- struct{}
-	// DontPushOnWriteIntentError will propagate a write intent error immediately
+	// DontPushOnWriteIntentError will propagate a lock conflict error immediately
 	// instead of utilizing the intent resolver to try to push the corresponding
 	// transaction.
 	// TODO(nvanbenschoten): can we replace this knob with usage of the Error

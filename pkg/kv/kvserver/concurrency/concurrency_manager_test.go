@@ -335,15 +335,15 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				opName := fmt.Sprintf("handle write intent error %s", reqName)
 				mon.runAsync(opName, func(ctx context.Context) {
 					seq := roachpb.LeaseSequence(leaseSeq)
-					wiErr := &kvpb.WriteIntentError{Intents: intents}
-					guard, err := m.HandleWriterIntentError(ctx, prev, seq, wiErr)
+					lcErr := &kvpb.LockConflictError{Intents: intents}
+					guard, err := m.HandleWriterIntentError(ctx, prev, seq, lcErr)
 					if err != nil {
-						log.Eventf(ctx, "handled %v, returned error: %v", wiErr, err)
+						log.Eventf(ctx, "handled %v, returned error: %v", lcErr, err)
 						c.mu.Lock()
 						delete(c.guardsByReqName, reqName)
 						c.mu.Unlock()
 					} else {
-						log.Eventf(ctx, "handled %v, released latches", wiErr)
+						log.Eventf(ctx, "handled %v, released latches", lcErr)
 						c.mu.Lock()
 						c.guardsByReqName[reqName] = guard
 						c.mu.Unlock()

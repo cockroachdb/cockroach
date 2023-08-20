@@ -980,7 +980,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 			// intents written by other transactions and seek to the next key.
 			// However, we return the intent separately if we have room; the caller
 			// may want to resolve it. Unlike below, this intent will not result in
-			// a WriteIntentError because MVCC{Scan,Get}Options.errOnIntents returns
+			// a LockConflictError because MVCC{Scan,Get}Options.errOnIntents returns
 			// false when skipLocked in enabled.
 			if p.maxIntents == 0 || int64(p.intents.Count()) < p.maxIntents {
 				if !p.addCurIntent(ctx) {
@@ -1004,7 +1004,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 		if !p.addCurIntent(ctx) {
 			return false, false
 		}
-		// Limit number of intents returned in write intent error.
+		// Limit number of intents returned in lock conflict error.
 		if p.maxIntents > 0 && int64(p.intents.Count()) >= p.maxIntents {
 			p.resumeReason = kvpb.RESUME_INTENT_LIMIT
 			return false, false

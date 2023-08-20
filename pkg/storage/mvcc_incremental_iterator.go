@@ -140,7 +140,7 @@ const (
 	// MVCCIncrementalIterIntentPolicyAggregate will not fail on
 	// first encountered intent, but will proceed further. All
 	// found intents will be aggregated into a single
-	// WriteIntentError which would be updated during
+	// LockConflictError which would be updated during
 	// iteration. Consumer would be free to decide if it wants to
 	// keep collecting entries and intents or skip entries.
 	MVCCIncrementalIterIntentPolicyAggregate
@@ -437,7 +437,7 @@ func (i *MVCCIncrementalIterator) updateMeta() error {
 	if i.startTime.Less(metaTimestamp) && metaTimestamp.LessEq(i.endTime) {
 		switch i.intentPolicy {
 		case MVCCIncrementalIterIntentPolicyError:
-			i.err = &kvpb.WriteIntentError{
+			i.err = &kvpb.LockConflictError{
 				Intents: []roachpb.Intent{
 					roachpb.MakeIntent(i.meta.Txn, i.iter.UnsafeKey().Key.Clone()),
 				},
@@ -763,14 +763,14 @@ func (i *MVCCIncrementalIterator) NumCollectedIntents() int {
 	return len(i.intents)
 }
 
-// TryGetIntentError returns kvpb.WriteIntentError if intents were encountered
+// TryGetIntentError returns kvpb.LockConflictError if intents were encountered
 // during iteration and intent aggregation is enabled. Otherwise function
-// returns nil. kvpb.WriteIntentError will contain all encountered intents.
+// returns nil. kvpb.LockConflictError will contain all encountered intents.
 func (i *MVCCIncrementalIterator) TryGetIntentError() error {
 	if len(i.intents) == 0 {
 		return nil
 	}
-	return &kvpb.WriteIntentError{
+	return &kvpb.LockConflictError{
 		Intents: i.intents,
 	}
 }
