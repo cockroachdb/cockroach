@@ -104,6 +104,15 @@ func TestDataDriven(t *testing.T) {
 				d.Input = strings.ReplaceAll(d.Input, v, ds.vars[v])
 			}
 
+			// A few built-in replacements since we
+			// already have these IDs in many cases, we
+			// don't need to force the caller to get them
+			// again.
+			d.Input = strings.ReplaceAll(d.Input, "$_producerJobID", fmt.Sprintf("%d", ds.producerJobID))
+			d.Input = strings.ReplaceAll(d.Input, "$_ingestionJobID", fmt.Sprintf("%d", ds.ingestionJobID))
+			d.Expected = strings.ReplaceAll(d.Expected, "$_producerJobID", fmt.Sprintf("%d", ds.producerJobID))
+			d.Expected = strings.ReplaceAll(d.Expected, "$_ingestionJobID", fmt.Sprintf("%d", ds.ingestionJobID))
+
 			switch d.Cmd {
 			case "skip":
 				var issue int
@@ -121,7 +130,7 @@ func TestDataDriven(t *testing.T) {
 				})
 
 			case "start-replication-stream":
-				ds.producerJobID, ds.replicationJobID = ds.replicationClusters.StartStreamReplication(ctx)
+				ds.producerJobID, ds.ingestionJobID = ds.replicationClusters.StartStreamReplication(ctx)
 
 			case "wait-until-replicated-time":
 				var replicatedTimeTarget string
@@ -131,7 +140,7 @@ func TestDataDriven(t *testing.T) {
 					replicatedTimeTarget = varValue
 				}
 				ds.replicationClusters.WaitUntilReplicatedTime(stringToHLC(t, replicatedTimeTarget),
-					jobspb.JobID(ds.replicationJobID))
+					jobspb.JobID(ds.ingestionJobID))
 			case "start-replicated-tenant":
 				cleanupTenant := ds.replicationClusters.StartDestTenant(ctx)
 				ds.cleanupFns = append(ds.cleanupFns, cleanupTenant)
@@ -174,7 +183,7 @@ func TestDataDriven(t *testing.T) {
 				}
 				timestamp, _, err := tree.ParseDTimestamp(nil, cutoverTime, time.Microsecond)
 				require.NoError(t, err)
-				ds.replicationClusters.Cutover(ds.producerJobID, ds.replicationJobID, timestamp.Time, async)
+				ds.replicationClusters.Cutover(ds.producerJobID, ds.ingestionJobID, timestamp.Time, async)
 				return ""
 
 			case "exec-sql":
@@ -186,7 +195,6 @@ func TestDataDriven(t *testing.T) {
 			case "query-sql":
 				var as string
 				d.ScanArgs(t, "as", &as)
-
 				return ds.queryAs(t, as, d.Input)
 
 			case "compare-replication-results":
@@ -254,7 +262,7 @@ func TestDataDriven(t *testing.T) {
 					jobID = ds.producerJobID
 					runner = ds.replicationClusters.SrcSysSQL
 				} else if as == "destination-system" {
-					jobID = ds.replicationJobID
+					jobID = ds.ingestionJobID
 					runner = ds.replicationClusters.DestSysSQL
 				} else {
 					t.Fatalf("job cmd only works on consumer and producer jobs run on system tenant")
@@ -299,10 +307,11 @@ func stringToHLC(t *testing.T, timestamp string) hlc.Timestamp {
 }
 
 type datadrivenTestState struct {
-	producerJobID, replicationJobID int
-	replicationClusters             *replicationtestutils.TenantStreamingClusters
-	cleanupFns                      []func() error
-	vars                            map[string]string
+	producerJobID       int
+	ingestionJobID      int
+	replicationClusters *replicationtestutils.TenantStreamingClusters
+	cleanupFns          []func() error
+	vars                map[string]string
 }
 
 func (d *datadrivenTestState) cleanup(t *testing.T) {
