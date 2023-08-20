@@ -6,6 +6,7 @@ go_library(
         "client.go",
         "client_helpers.go",
         "partitioned_stream_client.go",
+        "pgconn.go",
         "random_stream_client.go",
         "span_config_stream_client.go",
     ],

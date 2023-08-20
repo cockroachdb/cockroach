@@ -32,8 +32,12 @@ type spanConfigStreamClient struct {
 // side, consider implementing a different interface for the spanConfig client.
 var _ Client = &spanConfigStreamClient{}
 
-func NewSpanConfigStreamClient(ctx context.Context, remote *url.URL) (Client, error) {
-	config, err := setupPGXConfig(remote)
+func NewSpanConfigStreamClient(
+	ctx context.Context, remote *url.URL, opts ...Option,
+) (Client, error) {
+	options := processOptions(opts)
+
+	config, err := setupPGXConfig(remote, options)
 	if err != nil {
 		return nil, err
 	}

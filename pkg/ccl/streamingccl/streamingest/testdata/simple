@@ -30,6 +30,13 @@ SELECT strip_host(source_cluster_uri) FROM [SHOW TENANT destination WITH REPLICA
 ----
 postgres://root@?sslcert=redacted&sslkey=redacted&sslmode=verify-full&sslrootcert=redacted
 
+# The session on the source should have an app name set.
+query-sql as=source-system
+SELECT application_name FROM [SHOW SESSIONS] WHERE application_name LIKE '%repstream%' LIMIT 1
+----
+repstream job id=$_producerJobID
+
+
 query-sql as=source-system
 SHOW TENANT source WITH REPLICATION STATUS
 ----

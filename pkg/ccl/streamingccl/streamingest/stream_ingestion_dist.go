@@ -81,7 +81,8 @@ func startDistIngestion(
 	msg := redact.Sprintf("resuming stream (producer job %d) from %s", streamID, heartbeatTimestamp)
 	updateRunningStatus(ctx, ingestionJob, jobspb.InitializingReplication, msg)
 
-	client, err := connectToActiveClient(ctx, ingestionJob, execCtx.ExecCfg().InternalDB)
+	client, err := connectToActiveClient(ctx, ingestionJob, execCtx.ExecCfg().InternalDB,
+		streamclient.WithStreamID(streamID))
 	if err != nil {
 		return err
 	}

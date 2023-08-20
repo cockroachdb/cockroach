@@ -10,6 +10,7 @@ package streamclient
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
@@ -148,7 +149,7 @@ type Subscription interface {
 
 // NewStreamClient creates a new stream client based on the stream address.
 func NewStreamClient(
-	ctx context.Context, streamAddress streamingccl.StreamAddress, db isql.DB,
+	ctx context.Context, streamAddress streamingccl.StreamAddress, db isql.DB, opts ...Option,
 ) (Client, error) {
 	var streamClient Client
 	streamURL, err := streamAddress.URL()
@@ -160,7 +161,7 @@ func NewStreamClient(
 	case "postgres", "postgresql":
 		// The canonical PostgreSQL URL scheme is "postgresql", however our
 		// own client commands also accept "postgres".
-		return NewPartitionedStreamClient(ctx, streamURL)
+		return NewPartitionedStreamClient(ctx, streamURL, opts...)
 	case "external":
 		if db == nil {
 			return nil, errors.AssertionFailedf("nil db handle can't be used to dereference external URI")
@@ -199,14 +200,16 @@ func lookupExternalConnection(
 
 // GetFirstActiveClient iterates through each provided stream address
 // and returns the first client it's able to successfully Dial.
-func GetFirstActiveClient(ctx context.Context, streamAddresses []string) (Client, error) {
+func GetFirstActiveClient(
+	ctx context.Context, streamAddresses []string, opts ...Option,
+) (Client, error) {
 	if len(streamAddresses) == 0 {
 		return nil, errors.Newf("failed to connect, no partition addresses")
 	}
 	var combinedError error = nil
 	for _, address := range streamAddresses {
 		streamAddress := streamingccl.StreamAddress(address)
-		client, err := NewStreamClient(ctx, streamAddress, nil)
+		client, err := NewStreamClient(ctx, streamAddress, nil, opts...)
 		if err == nil {
 			err = client.Dial(ctx)
 			if err == nil {
@@ -220,6 +223,38 @@ func GetFirstActiveClient(ctx context.Context, streamAddresses []string) (Client
 	}
 
 	return nil, errors.Wrap(combinedError, "failed to connect to any partition address")
+}
+
+type options struct {
+	streamID streampb.StreamID
+}
+
+func (o *options) appName() string {
+	const appNameBase = "repstream"
+	if o.streamID != 0 {
+		return fmt.Sprintf("%s job id=%d", appNameBase, o.streamID)
+	} else {
+		return appNameBase
+	}
+}
+
+// An Option configures some part of a Client.
+type Option func(*options)
+
+// WithStreamID sets the StreamID for the client. This only impacts
+// metadata such as the application_name on the SQL connection.
+func WithStreamID(id streampb.StreamID) Option {
+	return func(o *options) {
+		o.streamID = id
+	}
+}
+
+func processOptions(opts []Option) *options {
+	ret := &options{}
+	for _, o := range opts {
+		o(ret)
+	}
+	return ret
 }
 
 /*

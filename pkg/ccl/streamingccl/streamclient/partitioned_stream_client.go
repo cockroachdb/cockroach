@@ -38,9 +38,11 @@ type partitionedStreamClient struct {
 	}
 }
 
-func NewPartitionedStreamClient(ctx context.Context, remote *url.URL) (Client, error) {
-
-	config, err := setupPGXConfig(remote)
+func NewPartitionedStreamClient(
+	ctx context.Context, remote *url.URL, opts ...Option,
+) (Client, error) {
+	options := processOptions(opts)
+	config, err := setupPGXConfig(remote, options)
 	if err != nil {
 		return nil, err
 	}
