@@ -171,13 +171,15 @@ type heartbeatSender struct {
 func newHeartbeatSender(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, spec execinfrapb.StreamIngestionFrontierSpec,
 ) (*heartbeatSender, error) {
-	streamClient, err := streamclient.GetFirstActiveClient(ctx, spec.StreamAddresses)
+
+	streamID := streampb.StreamID(spec.StreamID)
+	streamClient, err := streamclient.GetFirstActiveClient(ctx, spec.StreamAddresses, streamclient.WithStreamID(streamID))
 	if err != nil {
 		return nil, err
 	}
 	return &heartbeatSender{
 		client:          streamClient,
-		streamID:        streampb.StreamID(spec.StreamID),
+		streamID:        streamID,
 		sv:              &flowCtx.EvalCtx.Settings.SV,
 		frontierUpdates: make(chan hlc.Timestamp),
 		cancel:          func() {},
