@@ -60,12 +60,12 @@ const (
 	// minimum total for a single store node must be under 2048 for Windows
 	// compatibility.
 	MinimumMaxOpenFiles = 1700
-	// MaxIntentsPerWriteIntentErrorDefault is the default value for maximum
+	// MaxIntentsPerLockConflictErrorDefault is the default value for maximum
 	// number of intents reported by ExportToSST and Scan operations in
-	// LockConflictError is set to half of the maximum lock table size.
-	// This value is subject to tuning in real environment as we have more data
+	// LockConflictError is set to half of the maximum lock table size. This
+	// value is subject to tuning in real environment as we have more data
 	// available.
-	MaxIntentsPerWriteIntentErrorDefault = 5000
+	MaxIntentsPerLockConflictErrorDefault = 5000
 )
 
 var minWALSyncInterval = settings.RegisterDurationSetting(
@@ -107,14 +107,14 @@ func CanUseMVCCRangeTombstones(ctx context.Context, st *cluster.Settings) bool {
 		MVCCRangeTombstonesEnabledInMixedClusters.Get(&st.SV)
 }
 
-// MaxIntentsPerWriteIntentError sets maximum number of intents returned in
+// MaxIntentsPerLockConflictError sets maximum number of intents returned in
 // LockConflictError in operations that return multiple intents per error.
 // Currently it is used in Scan, ReverseScan, and ExportToSST.
-var MaxIntentsPerWriteIntentError = settings.RegisterIntSetting(
+var MaxIntentsPerLockConflictError = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"storage.mvcc.max_intents_per_error",
 	"maximum number of intents returned in error during export of scan requests",
-	MaxIntentsPerWriteIntentErrorDefault,
+	MaxIntentsPerLockConflictErrorDefault,
 )
 
 var rocksdbConcurrency = envutil.EnvOrDefaultInt(
