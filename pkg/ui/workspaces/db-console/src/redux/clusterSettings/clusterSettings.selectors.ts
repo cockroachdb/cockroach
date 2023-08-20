@@ -105,3 +105,15 @@ export const selectIndexUsageStatsEnabled = createSelector(
     return util.greaterOrEqualThanVersion(value, [22, 1, 0]);
   },
 );
+
+export const selectDropUnusedIndexDuration = createSelector(
+  selectClusterSettings,
+  (settings): string => {
+    if (!settings) {
+      return "168h";
+    }
+    return (
+      settings["sql.index_recommendation.drop_unused_duration"]?.value || "168h"
+    );
+  },
+);

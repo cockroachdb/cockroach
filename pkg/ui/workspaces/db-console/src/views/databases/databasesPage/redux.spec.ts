@@ -39,8 +39,11 @@ class TestDriver {
     return this.actions.refreshDatabases();
   }
 
-  async refreshDatabaseDetails(database: string) {
-    return this.actions.refreshDatabaseDetails(database);
+  async refreshDatabaseDetails(
+    database: string,
+    csIndexUnusedDuration: string,
+  ) {
+    return this.actions.refreshDatabaseDetails(database, csIndexUnusedDuration);
   }
 
   async refreshNodes() {
@@ -101,6 +104,7 @@ describe("Databases Page", function () {
       automaticStatsCollectionEnabled: true,
       indexRecommendationsEnabled: true,
       showNodeRegionsColumn: false,
+      csIndexUnusedDuration: "168h",
     });
   });
 
@@ -168,6 +172,7 @@ describe("Databases Page", function () {
       sortSetting: { ascending: true, columnTitle: "name" },
       showNodeRegionsColumn: false,
       indexRecommendationsEnabled: true,
+      csIndexUnusedDuration: "168h",
       automaticStatsCollectionEnabled: true,
     });
   });
@@ -218,7 +223,10 @@ describe("Databases Page", function () {
     );
 
     fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
-      clusterUiApi.createDatabaseDetailsReq("test"),
+      clusterUiApi.createDatabaseDetailsReq({
+        database: "test",
+        csIndexUnusedDuration: "168h",
+      }),
       [
         // Id
         { rows: [] },
@@ -279,7 +287,7 @@ describe("Databases Page", function () {
 
     await driver.refreshNodes();
     await driver.refreshDatabases();
-    await driver.refreshDatabaseDetails("test");
+    await driver.refreshDatabaseDetails("test", "168h");
 
     driver.assertDatabaseProperties("test", {
       loading: false,

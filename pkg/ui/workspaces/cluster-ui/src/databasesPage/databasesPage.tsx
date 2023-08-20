@@ -94,6 +94,7 @@ export interface DatabasesPageData {
   automaticStatsCollectionEnabled?: boolean;
   indexRecommendationsEnabled: boolean;
   showNodeRegionsColumn?: boolean;
+  csIndexUnusedDuration: string;
 }
 
 export interface DatabasesPageDataDatabase {
@@ -115,7 +116,10 @@ export interface DatabasesPageDataDatabase {
 
 export interface DatabasesPageActions {
   refreshDatabases: () => void;
-  refreshDatabaseDetails: (database: string) => void;
+  refreshDatabaseDetails: (
+    database: string,
+    csIndexUnusedDuration: string,
+  ) => void;
   refreshSettings: () => void;
   refreshNodes?: () => void;
   onFilterChange?: (value: Filters) => void;
@@ -336,7 +340,10 @@ export class DatabasesPage extends React.Component<
         !database.loading &&
         database.lastError === undefined
       ) {
-        this.props.refreshDatabaseDetails(database.name);
+        this.props.refreshDatabaseDetails(
+          database.name,
+          this.props.csIndexUnusedDuration,
+        );
       }
     });
   }
