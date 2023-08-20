@@ -3144,7 +3144,7 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
-	cfg.TestingKnobs.DontPushOnWriteIntentError = true
+	cfg.TestingKnobs.DontPushOnLockConflictError = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	// Set clock to time 2s and do the conditional put.
@@ -3228,7 +3228,7 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
-	cfg.TestingKnobs.DontPushOnWriteIntentError = true
+	cfg.TestingKnobs.DontPushOnLockConflictError = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	// InitPut args to write "0". Should succeed.
@@ -3370,7 +3370,7 @@ func TestReplicaNoTSCacheUpdateOnFailure(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(nil)
-	cfg.TestingKnobs.DontPushOnWriteIntentError = true
+	cfg.TestingKnobs.DontPushOnLockConflictError = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	// Test for both read & write attempts.
@@ -4665,7 +4665,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
 		cfg := TestStoreConfig(nil)
-		cfg.TestingKnobs.DontPushOnWriteIntentError = true
+		cfg.TestingKnobs.DontPushOnLockConflictError = true
 		tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 		key := []byte("a")
@@ -4849,7 +4849,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(nil)
-	cfg.TestingKnobs.DontPushOnWriteIntentError = true
+	cfg.TestingKnobs.DontPushOnLockConflictError = true
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	key := roachpb.Key("a")
@@ -5060,7 +5060,7 @@ func TestEndTxnResolveOnlyLocalIntents(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.DontPushOnWriteIntentError = true
+	tsc.TestingKnobs.DontPushOnLockConflictError = true
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
@@ -6780,7 +6780,7 @@ func TestReplicaDanglingMetaIntent(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
 		cfg := TestStoreConfig(nil)
-		cfg.TestingKnobs.DontPushOnWriteIntentError = true
+		cfg.TestingKnobs.DontPushOnLockConflictError = true
 		cfg.TestingKnobs.DisableCanAckBeforeApplication = true
 		tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
