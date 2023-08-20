@@ -209,7 +209,7 @@ handle-lock-conflict-error req=reqDiscoverInitial lease-seq=1
   lock txn=txnSSINormalPushee  key=kSSINormal3
   lock txn=txnSSINormalPushee  key=kSSINormal4
 ----
-[6] handle lock conflict error reqDiscoverInitial: handled conflicting intents on ‹"kRCHigh1"›, ‹"kRCHigh2"›, ‹"kRCHigh3"›, ‹"kRCHigh4"›, ‹"kRCNormal1"› ... ‹"kSSIHigh4"›, ‹"kSSINormal1"›, ‹"kSSINormal2"›, ‹"kSSINormal3"›, ‹"kSSINormal4"›, released latches
+[6] handle lock conflict error reqDiscoverInitial: handled conflicting locks on ‹"kRCHigh1"›, ‹"kRCHigh2"›, ‹"kRCHigh3"›, ‹"kRCHigh4"›, ‹"kRCNormal1"› ... ‹"kSSIHigh4"›, ‹"kSSINormal1"›, ‹"kSSINormal2"›, ‹"kSSINormal3"›, ‹"kSSINormal4"›, released latches
 
 finish req=reqDiscoverInitial
 ----
