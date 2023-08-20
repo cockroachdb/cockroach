@@ -34,7 +34,7 @@ handle-lock-conflict-error req=req1 lease-seq=1
   lock txn=txn2 key=i
   lock txn=txn2 key=j
 ----
-[2] handle lock conflict error req1: handled conflicting intents on ‹"a"›, ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
 
 debug-lock-table
 ----
@@ -162,7 +162,7 @@ handle-lock-conflict-error req=req1 lease-seq=1
   lock txn=txn2 key=a
   lock txn=txn2 key=b
 ----
-[2] handle lock conflict error req1: handled conflicting intents on ‹"a"›, ‹"b"›, released latches
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, released latches
 
 debug-lock-table
 ----
@@ -270,7 +270,7 @@ handle-lock-conflict-error req=req1 lease-seq=1
   lock txn=txn2 key=b
   lock txn=txn2 key=c
 ----
-[2] handle lock conflict error req1: handled conflicting intents on ‹"a"›, ‹"b"›, ‹"c"›, released latches
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›, released latches
 
 debug-lock-table
 ----
@@ -360,7 +360,7 @@ handle-lock-conflict-error req=req1 lease-seq=1
   lock txn=txn2 key=i
   lock txn=txn2 key=j
 ----
-[2] handle lock conflict error req1: handled conflicting intents on ‹"a"›, ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
 
 debug-lock-table
 ----

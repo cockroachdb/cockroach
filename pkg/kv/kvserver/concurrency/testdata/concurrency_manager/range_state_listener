@@ -126,7 +126,7 @@ handle-lock-conflict-error req=req2 lease-seq=1
   lock txn=txn1 key=k
 ----
 [3] handle lock conflict error req2: intent on ‹"k"› discovered but not added to disabled lock table
-[3] handle lock conflict error req2: handled conflicting intents on ‹"k"›, released latches
+[3] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
@@ -158,7 +158,7 @@ sequence req=req2
 handle-lock-conflict-error req=req2 lease-seq=2
   lock txn=txn1 key=k
 ----
-[6] handle lock conflict error req2: handled conflicting intents on ‹"k"›, released latches
+[6] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
@@ -257,7 +257,7 @@ handle-lock-conflict-error req=req3 lease-seq=2
   lock txn=txn1 key=k
 ----
 [10] handle lock conflict error req3: intent on ‹"k"› discovered but not added to disabled lock table
-[10] handle lock conflict error req3: handled conflicting intents on ‹"k"›, released latches
+[10] handle lock conflict error req3: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
@@ -273,7 +273,7 @@ sequence req=req3
 handle-lock-conflict-error req=req3 lease-seq=4
   lock txn=txn2 key=k
 ----
-[12] handle lock conflict error req3: handled conflicting intents on ‹"k"›, released latches
+[12] handle lock conflict error req3: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
@@ -431,7 +431,7 @@ num=0
 handle-lock-conflict-error req=req2 lease-seq=1
   lock txn=txn1 key=k
 ----
-[3] handle lock conflict error req2: handled conflicting intents on ‹"k"›, released latches
+[3] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
@@ -623,7 +623,7 @@ handle-lock-conflict-error req=req2 lease-seq=1
   lock txn=txn1 key=k
 ----
 [4] handle lock conflict error req2: intent on ‹"k"› discovered but not added to disabled lock table
-[4] handle lock conflict error req2: handled conflicting intents on ‹"k"›, released latches
+[4] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
 
 sequence req=req2
 ----
@@ -651,7 +651,7 @@ sequence req=req2
 handle-lock-conflict-error req=req2 lease-seq=2
   lock txn=txn1 key=k
 ----
-[7] handle lock conflict error req2: handled conflicting intents on ‹"k"›, released latches
+[7] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
@@ -809,7 +809,7 @@ num=0
 handle-lock-conflict-error req=req2 lease-seq=1
   lock txn=txn1 key=k
 ----
-[3] handle lock conflict error req2: handled conflicting intents on ‹"k"›, released latches
+[3] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----

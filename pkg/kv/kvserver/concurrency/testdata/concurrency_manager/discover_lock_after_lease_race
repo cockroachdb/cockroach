@@ -132,7 +132,7 @@ sequence req=req4
 handle-lock-conflict-error req=req4 lease-seq=3
   lock txn=txn3 key=k
 ----
-[4] handle lock conflict error req4: handled conflicting intents on ‹"k"›, released latches
+[4] handle lock conflict error req4: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
@@ -155,7 +155,7 @@ handle-lock-conflict-error req=req2 lease-seq=1
   lock txn=txn1 key=k
 ----
 [6] handle lock conflict error req2: intent on ‹"k"› discovered but not added to disabled lock table
-[6] handle lock conflict error req2: handled conflicting intents on ‹"k"›, released latches
+[6] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----

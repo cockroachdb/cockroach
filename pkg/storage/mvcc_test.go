@@ -2019,7 +2019,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		defer b.Close()
 		addIntent(t, b)
 		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts0, ts5, nil, nil, 64, 10, 1<<10)
-		require.EqualError(t, err, "conflicting intents on \"/db3\"")
+		require.EqualError(t, err, "conflicting locks on \"/db3\"")
 	})
 
 	t.Run("clear exactly hitting intent fails", func(t *testing.T) {
@@ -2027,7 +2027,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		defer b.Close()
 		addIntent(t, b)
 		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, testKey4, ts2, ts3, nil, nil, 64, 10, 1<<10)
-		require.EqualError(t, err, "conflicting intents on \"/db3\"")
+		require.EqualError(t, err, "conflicting locks on \"/db3\"")
 	})
 
 	t.Run("clear everything above intent", func(t *testing.T) {

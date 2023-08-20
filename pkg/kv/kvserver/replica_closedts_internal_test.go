@@ -847,7 +847,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				minTSBound: ts20,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
-					"conflicting intents on .*",
+					"conflicting locks on .*",
 				),
 			},
 			{
@@ -856,7 +856,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				minTSBound: ts30,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
-					"conflicting intents on .*",
+					"conflicting locks on .*",
 				),
 			},
 			{
@@ -865,7 +865,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				minTSBound: ts40,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
-					"conflicting intents on .*",
+					"conflicting locks on .*",
 				),
 			},
 			{
@@ -880,7 +880,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				minTSBound: ts20,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
-					"conflicting intents on .*",
+					"conflicting locks on .*",
 				),
 			},
 			{
@@ -889,7 +889,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				minTSBound: ts30,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
-					"conflicting intents on .*",
+					"conflicting locks on .*",
 				),
 			},
 			{
@@ -898,7 +898,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				minTSBound: ts40,
 				expErr: ifStrict(
 					"bounded staleness read .* could not be satisfied",
-					"conflicting intents on .*",
+					"conflicting locks on .*",
 				),
 			},
 			{

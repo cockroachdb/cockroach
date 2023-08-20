@@ -922,8 +922,7 @@ func (e *LockConflictError) SafeFormatError(p errors.Printer) (next error) {
 }
 
 func (e *LockConflictError) printError(buf Printer) {
-	// TODO(nvanbenschoten): s/intent/lock/ below.
-	buf.Printf("conflicting intents on ")
+	buf.Printf("conflicting locks on ")
 
 	// If we have a lot of locks, we only want to show the first and the last.
 	const maxBegin = 5

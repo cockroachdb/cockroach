@@ -230,7 +230,7 @@ func TestCmdRevertRange(t *testing.T) {
 			}
 
 			if tc.expectErr {
-				if !testutils.IsError(err, "intents") {
+				if !testutils.IsError(err, "conflicting locks") {
 					t.Fatalf("expected lock conflict error; got: %T %+v", err, err)
 				}
 			} else {
