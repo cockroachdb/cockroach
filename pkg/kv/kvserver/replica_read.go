@@ -136,7 +136,7 @@ func (r *Replica) executeReadOnlyBatch(
 			// wait until resolution and evaluate pessimistically again.
 			//
 			// TODO(sumeer): scans and gets are correctly setting the resume span
-			// when returning a WriteIntentError. I am not sure about other
+			// when returning a LockConflictError. I am not sure about other
 			// concurrency errors. We could narrow the spans we check the latch
 			// conflicts for by using collectSpansRead as done below in the
 			// non-error path.
@@ -272,7 +272,7 @@ var allowDroppingLatchesBeforeEval = settings.RegisterBoolSetting(
 // `PinEngineStateForIterators` in `executeReadOnlyBatch`), so if there are no
 // lock conflicts, the rest of the execution is guaranteed to be isolated from
 // the effects of other requests.
-// If any conflicting intents are found, then it returns a WriteIntentError
+// If any conflicting intents are found, then it returns a LockConflictError
 // which needs to be handled by the caller before proceeding.
 //
 // [2] if the request can drop its latches early, whether it needs an intent
@@ -324,7 +324,7 @@ func (r *Replica) canDropLatchesBeforeEval(
 	}
 	if len(intents) > 0 {
 		return false /* ok */, false /* stillNeedsIntentInterleaving */, maybeAttachLease(
-			kvpb.NewError(&kvpb.WriteIntentError{Intents: intents}), &st.Lease,
+			kvpb.NewError(&kvpb.LockConflictError{Intents: intents}), &st.Lease,
 		)
 	}
 	// If there were no conflicts, then the request can drop its latches and

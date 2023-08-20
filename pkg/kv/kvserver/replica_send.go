@@ -417,7 +417,7 @@ var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
 // still needs to worry about coordinating with non-conflicting operations when
 // accessing shared data structures.
 //
-// If the execution function hits a concurrency error like a WriteIntentError or
+// If the execution function hits a concurrency error like a LockConflictError or
 // a TransactionPushError it will propagate the error back to this method, which
 // handles the process of retrying batch execution after addressing the error.
 func (r *Replica) executeBatchWithConcurrencyRetries(
@@ -546,10 +546,10 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		requestEvalKind = concurrency.PessimisticEval
 
 		switch t := pErr.GetDetail().(type) {
-		case *kvpb.WriteIntentError:
+		case *kvpb.LockConflictError:
 			// Drop latches, but retain lock wait-queues.
 			g.AssertLatches()
-			if g, pErr = r.handleWriteIntentError(ctx, ba, g, pErr, t); pErr != nil {
+			if g, pErr = r.handleLockConflictError(ctx, ba, g, pErr, t); pErr != nil {
 				return nil, nil, pErr
 			}
 		case *kvpb.TransactionPushError:
@@ -621,8 +621,8 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 // the request can immediately proceed to retrying pessimistically.
 func isConcurrencyRetryError(pErr *kvpb.Error) bool {
 	switch pErr.GetDetail().(type) {
-	case *kvpb.WriteIntentError:
-		// If a request hits a WriteIntentError, it adds the conflicting intent
+	case *kvpb.LockConflictError:
+		// If a request hits a LockConflictError, it adds the conflicting intent
 		// to the lockTable through a process called "lock discovery". It then
 		// waits in the lock's wait-queue during its next sequencing pass.
 	case *kvpb.TransactionPushError:
@@ -692,14 +692,14 @@ func isConcurrencyRetryError(pErr *kvpb.Error) bool {
 // operating under. If the operation was performed on a follower that does not
 // hold the lease (e.g. a follower read), the provided lease will be empty.
 func maybeAttachLease(pErr *kvpb.Error, lease *roachpb.Lease) *kvpb.Error {
-	if wiErr, ok := pErr.GetDetail().(*kvpb.WriteIntentError); ok {
+	if lcErr, ok := pErr.GetDetail().(*kvpb.LockConflictError); ok {
 		// If we hit an intent on the leaseholder, attach information about the
-		// lease to WriteIntentErrors, which is necessary to keep the lock-table
+		// lease to LockConflictErrors, which is necessary to keep the lock-table
 		// in sync with the applied state.
 		//
 		// However, if we hit an intent during a follower read, the lock-table will
 		// be disabled, so we won't be able to use it to wait for the resolution of
-		// the intent. Instead of waiting locally, we replace the WriteIntentError
+		// the intent. Instead of waiting locally, we replace the LockConflictError
 		// with an InvalidLeaseError so that the request will be redirected to the
 		// leaseholder. Beyond implementation constraints, waiting for conflicting
 		// intents on the leaseholder instead of on a follower is preferable
@@ -739,18 +739,18 @@ func maybeAttachLease(pErr *kvpb.Error, lease *roachpb.Lease) *kvpb.Error {
 		if lease.Empty() /* followerRead */ {
 			return kvpb.NewErrorWithTxn(&kvpb.InvalidLeaseError{}, pErr.GetTxn())
 		}
-		wiErr.LeaseSequence = lease.Sequence
-		return kvpb.NewErrorWithTxn(wiErr, pErr.GetTxn())
+		lcErr.LeaseSequence = lease.Sequence
+		return kvpb.NewErrorWithTxn(lcErr, pErr.GetTxn())
 	}
 	return pErr
 }
 
-func (r *Replica) handleWriteIntentError(
+func (r *Replica) handleLockConflictError(
 	ctx context.Context,
 	ba *kvpb.BatchRequest,
 	g *concurrency.Guard,
 	pErr *kvpb.Error,
-	t *kvpb.WriteIntentError,
+	t *kvpb.LockConflictError,
 ) (*concurrency.Guard, *kvpb.Error) {
 	if r.store.cfg.TestingKnobs.DontPushOnWriteIntentError {
 		return g, pErr

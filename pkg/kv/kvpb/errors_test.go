@@ -228,7 +228,7 @@ func TestErrorRedaction(t *testing.T) {
 			expect: "TransactionStatusError:  (REASON_UNKNOWN)",
 		},
 		{
-			err:    &WriteIntentError{},
+			err:    &LockConflictError{},
 			expect: "conflicting intents on ",
 		},
 		{

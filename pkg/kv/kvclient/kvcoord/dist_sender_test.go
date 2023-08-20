@@ -3661,7 +3661,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 	retryErr := kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "test err")
 	abortErr := kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 	conditionFailedErr := &kvpb.ConditionFailedError{}
-	writeIntentErr := &kvpb.WriteIntentError{}
+	lockConflictErr := &kvpb.LockConflictError{}
 	sendErr := &sendError{}
 	ambiguousErr := &kvpb.AmbiguousResultError{}
 	randomErr := &kvpb.IntegerOverflowError{}
@@ -3732,19 +3732,19 @@ func TestMultipleErrorsMerged(t *testing.T) {
 			err2:   randomErr,
 			expErr: "results in overflow",
 		},
-		// WriteIntentError also has a low score since it's "not ambiguous".
+		// LockConflictError also has a low score since it's "not ambiguous".
 		{
-			err1:   writeIntentErr,
+			err1:   lockConflictErr,
 			err2:   ambiguousErr,
 			expErr: "result is ambiguous",
 		},
 		{
-			err1:   writeIntentErr,
+			err1:   lockConflictErr,
 			err2:   sendErr,
 			expErr: "failed to send RPC",
 		},
 		{
-			err1:   writeIntentErr,
+			err1:   lockConflictErr,
 			err2:   randomErr,
 			expErr: "results in overflow",
 		},

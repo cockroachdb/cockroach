@@ -658,8 +658,8 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 		// locks, we ignore that request for the purposes of accounting for lock
 		// spans. This is important for transactions that only perform a single
 		// request and hit an unambiguous error like a ConditionFailedError, as it
-		// can allow them to avoid sending a rollback. It it also important for
-		// transactions that throw a WriteIntentError due to heavy contention on a
+		// can allow them to avoid sending a rollback. It is also important for
+		// transactions that throw a LockConflictError due to heavy contention on a
 		// certain key after either passing a Error wait policy or hitting a lock
 		// timeout / queue depth limit. In such cases, this optimization prevents
 		// these transactions from adding even more load to the contended key by

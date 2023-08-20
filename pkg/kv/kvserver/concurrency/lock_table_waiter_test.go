@@ -492,7 +492,7 @@ func testErrorWaitPush(
 	k waitKind,
 	makeReq func() Request,
 	expPushTS hlc.Timestamp,
-	errReason kvpb.WriteIntentError_Reason,
+	errReason kvpb.LockConflictError_Reason,
 ) {
 	ctx := context.Background()
 	keyA := roachpb.Key("keyA")
@@ -527,9 +527,9 @@ func testErrorWaitPush(
 					require.Nil(t, err)
 				} else {
 					require.NotNil(t, err)
-					wiErr := new(kvpb.WriteIntentError)
-					require.True(t, errors.As(err.GoError(), &wiErr))
-					require.Equal(t, errReason, wiErr.Reason)
+					lcErr := new(kvpb.LockConflictError)
+					require.True(t, errors.As(err.GoError(), &lcErr))
+					require.Equal(t, errReason, lcErr.Reason)
 				}
 				return
 			}
@@ -576,9 +576,9 @@ func testErrorWaitPush(
 			err := w.WaitOn(ctx, req, g)
 			if pusheeActive {
 				require.NotNil(t, err)
-				wiErr := new(kvpb.WriteIntentError)
-				require.True(t, errors.As(err.GoError(), &wiErr))
-				require.Equal(t, errReason, wiErr.Reason)
+				lcErr := new(kvpb.LockConflictError)
+				require.True(t, errors.As(err.GoError(), &lcErr))
+				require.Equal(t, errReason, lcErr.Reason)
 			} else {
 				require.Nil(t, err)
 			}
@@ -699,9 +699,9 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 				if !lockHeld && timeoutBeforePush {
 					err := w.WaitOn(ctx, req, g)
 					require.NotNil(t, err)
-					wiErr := new(kvpb.WriteIntentError)
-					require.True(t, errors.As(err.GoError(), &wiErr))
-					require.Equal(t, reasonLockTimeout, wiErr.Reason)
+					lcErr := new(kvpb.LockConflictError)
+					require.True(t, errors.As(err.GoError(), &lcErr))
+					require.Equal(t, reasonLockTimeout, lcErr.Reason)
 					return
 				}
 
@@ -765,9 +765,9 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 				err := w.WaitOn(ctx, req, g)
 				if pusheeActive {
 					require.NotNil(t, err)
-					wiErr := new(kvpb.WriteIntentError)
-					require.True(t, errors.As(err.GoError(), &wiErr))
-					require.Equal(t, reasonLockTimeout, wiErr.Reason)
+					lcErr := new(kvpb.LockConflictError)
+					require.True(t, errors.As(err.GoError(), &lcErr))
+					require.Equal(t, reasonLockTimeout, lcErr.Reason)
 				} else {
 					require.Nil(t, err)
 				}

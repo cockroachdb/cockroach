@@ -1753,7 +1753,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 
 	// Verify that the pushee's timestamp was moved forward on
-	// former read, since we have it available in write intent error.
+	// former read, since we have it available in lock conflict error.
 	minExpTS := getTS
 	minExpTS.Logical++
 	if txn.WriteTimestamp.Less(minExpTS) {
@@ -2307,7 +2307,7 @@ func TestStoreScanIntents(t *testing.T) {
 //
 // The test proceeds as follows: a writer lays down more than
 // `MaxIntentsPerWriteIntentErrorDefault` intents, and a reader is expected to
-// encounter these intents and raise a `WriteIntentError` with exactly
+// encounter these intents and raise a `LockConflictError` with exactly
 // `MaxIntentsPerWriteIntentErrorDefault` intents in the error.
 func TestStoreScanIntentsRespectsLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -2317,7 +2317,7 @@ func TestStoreScanIntentsRespectsLimit(t *testing.T) {
 		t, "this test writes a ton of intents and tries to clean them up, too slow under race",
 	)
 
-	var interceptWriteIntentErrors atomic.Value
+	var interceptLockConflictErrors atomic.Value
 	// `commitCh` is used to block the writer from committing until the reader has
 	// encountered the intents laid down by the writer.
 	commitCh := make(chan struct{})
@@ -2330,14 +2330,14 @@ func TestStoreScanIntentsRespectsLimit(t *testing.T) {
 					TestingConcurrencyRetryFilter: func(
 						ctx context.Context, ba *kvpb.BatchRequest, pErr *kvpb.Error,
 					) {
-						if errors.HasType(pErr.GoError(), (*kvpb.WriteIntentError)(nil)) {
-							// Assert that the WriteIntentError has MaxIntentsPerWriteIntentErrorIntents.
-							if trap := interceptWriteIntentErrors.Load(); trap != nil && trap.(bool) {
+						if errors.HasType(pErr.GoError(), (*kvpb.LockConflictError)(nil)) {
+							// Assert that the LockConflictError has MaxIntentsPerWriteIntentErrorIntents.
+							if trap := interceptLockConflictErrors.Load(); trap != nil && trap.(bool) {
 								require.Equal(
 									t, storage.MaxIntentsPerWriteIntentErrorDefault,
-									len(pErr.GetDetail().(*kvpb.WriteIntentError).Intents),
+									len(pErr.GetDetail().(*kvpb.LockConflictError).Intents),
 								)
-								interceptWriteIntentErrors.Store(false)
+								interceptLockConflictErrors.Store(false)
 								// Allow the writer to commit.
 								t.Logf("allowing writer to commit")
 								close(commitCh)
@@ -2385,7 +2385,7 @@ func TestStoreScanIntentsRespectsLimit(t *testing.T) {
 	}
 
 	// Now, expect a conflicting reader to encounter the intents and raise a
-	// WriteIntentError with exactly `MaxIntentsPerWriteIntentErrorDefault`
+	// LockConflictError with exactly `MaxIntentsPerWriteIntentErrorDefault`
 	// intents. See the TestingConcurrencyRetryFilter above.
 	var ba kv.Batch
 	for i := 0; i < storage.MaxIntentsPerWriteIntentErrorDefault+10; i += 10 {
@@ -2394,8 +2394,8 @@ func TestStoreScanIntentsRespectsLimit(t *testing.T) {
 			ba.AddRawRequest(&args)
 		}
 	}
-	t.Logf("issuing gets while intercepting WriteIntentErrors")
-	interceptWriteIntentErrors.Store(true)
+	t.Logf("issuing gets while intercepting LockConflictErrors")
+	interceptLockConflictErrors.Store(true)
 	go func() {
 		defer wg.Done()
 		err := store.DB().Run(ctx, &ba)
