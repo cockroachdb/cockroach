@@ -241,9 +241,11 @@ func (p *replicationFlowPlanner) makePlan(
 
 		// Setup a one-stage plan with one proc per input spec.
 		corePlacement := make([]physicalplan.ProcessorCorePlacement, len(streamIngestionSpecs))
-		for i := range streamIngestionSpecs {
-			corePlacement[i].SQLInstanceID = sqlInstanceIDs[i]
-			corePlacement[i].Core.StreamIngestionData = streamIngestionSpecs[i]
+		i := 0
+		for instanceID := range streamIngestionSpecs {
+			corePlacement[i].SQLInstanceID = instanceID
+			corePlacement[i].Core.StreamIngestionData = streamIngestionSpecs[instanceID]
+			i++
 		}
 
 		p := planCtx.NewPhysicalPlan()
@@ -440,11 +442,14 @@ func constructStreamIngestionPlanSpecs(
 	streamID streampb.StreamID,
 	sourceTenantID roachpb.TenantID,
 	destinationTenantID roachpb.TenantID,
-) ([]*execinfrapb.StreamIngestionDataSpec, *execinfrapb.StreamIngestionFrontierSpec, error) {
+) (
+	map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+	*execinfrapb.StreamIngestionFrontierSpec,
+	error,
+) {
 
-	streamIngestionSpecs := make([]*execinfrapb.StreamIngestionDataSpec, 0, len(destSQLInstances))
-	destSQLInstancesToIdx := make(map[base.SQLInstanceID]int, len(destSQLInstances))
-	for i, id := range destSQLInstances {
+	streamIngestionSpecs := make(map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec, len(destSQLInstances))
+	for _, id := range destSQLInstances {
 		spec := &execinfrapb.StreamIngestionDataSpec{
 			StreamID:                    uint64(streamID),
 			JobID:                       int64(jobID),
@@ -458,8 +463,7 @@ func constructStreamIngestionPlanSpecs(
 				NewID: destinationTenantID,
 			},
 		}
-		streamIngestionSpecs = append(streamIngestionSpecs, spec)
-		destSQLInstancesToIdx[id.GetInstanceID()] = i
+		streamIngestionSpecs[id.GetInstanceID()] = spec
 	}
 
 	trackedSpans := make([]roachpb.Span, 0)
@@ -478,19 +482,21 @@ func constructStreamIngestionPlanSpecs(
 		partition := candidate.partition
 		subscribingSQLInstances[partition.ID] = uint32(destID)
 
-		specIdx, ok := destSQLInstancesToIdx[destID]
-		if !ok {
-			return nil, nil, errors.AssertionFailedf(
-				"matched destination node id does not contain a stream ingestion spec")
-		}
-		streamIngestionSpecs[specIdx].PartitionSpecs[partition.ID] = execinfrapb.
-			StreamIngestionPartitionSpec{
+		partSpec := execinfrapb.StreamIngestionPartitionSpec{
 			PartitionID:       partition.ID,
 			SubscriptionToken: string(partition.SubscriptionToken),
 			Address:           string(partition.SrcAddr),
 			Spans:             partition.Spans,
 		}
+		streamIngestionSpecs[destID].PartitionSpecs[partition.ID] = partSpec
 		trackedSpans = append(trackedSpans, partition.Spans...)
+	}
+
+	// Remove any ingestion processors that haven't been assigned any work.
+	for key, spec := range streamIngestionSpecs {
+		if len(spec.PartitionSpecs) == 0 {
+			delete(streamIngestionSpecs, key)
+		}
 	}
 
 	// Create a spec for the StreamIngestionFrontier processor on the coordinator
