@@ -79,6 +79,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/keys",
+        "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql",

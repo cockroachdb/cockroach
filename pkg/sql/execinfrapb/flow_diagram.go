@@ -525,12 +525,49 @@ func (c *ReadImportDataSpec) summary() (string, []string) {
 
 // summary implements the diagramCellType interface.
 func (s *StreamIngestionDataSpec) summary() (string, []string) {
-	return "StreamIngestionData", []string{}
+	const (
+		specLimit = 3
+		spanLimit = 3
+	)
+
+	annotations := []string{
+		"Partitions",
+	}
+
+	// Sort partitions by ID for stable output.
+	srcIDs := make([]string, 0, len(s.PartitionSpecs))
+	for k := range s.PartitionSpecs {
+		srcIDs = append(srcIDs, k)
+	}
+	sort.Strings(srcIDs)
+
+	specCount := 0
+	for _, srcID := range srcIDs {
+		specCount++
+		if specCount > specLimit {
+			annotations = append(annotations, fmt.Sprintf("and %d more partitions", len(s.PartitionSpecs)-specLimit))
+			break
+		}
+		p := s.PartitionSpecs[srcID]
+		var spanDesc string
+		if len(p.Spans) <= spanLimit {
+			spanDesc = fmt.Sprintf("n%s: %v", srcID, p.Spans)
+		} else {
+			spanDesc = fmt.Sprintf("n%s: %v and %d more spans",
+				srcID, p.Spans[:spanLimit], len(p.Spans)-spanLimit)
+		}
+		annotations = append(annotations, spanDesc)
+	}
+
+	return "StreamIngestionData", annotations
 }
 
 // summary implements the diagramCellType interface.
 func (s *StreamIngestionFrontierSpec) summary() (string, []string) {
-	return "StreamIngestionFrontier", []string{}
+	annotations := []string{
+		fmt.Sprintf("streamID: %d", s.StreamID),
+	}
+	return "StreamIngestionFrontier", annotations
 }
 
 // summary implements the diagramCellType interface.
