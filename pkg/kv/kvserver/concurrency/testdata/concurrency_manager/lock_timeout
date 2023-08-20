@@ -185,10 +185,10 @@ sequence req=reqTimeout3
 [7] sequence reqTimeout3: scanning lock table for conflicting locks
 [7] sequence reqTimeout3: sequencing complete, returned guard
 
-handle-write-intent-error req=reqTimeout3 lease-seq=1
-  intent txn=txn2 key=k4
+handle-lock-conflict-error req=reqTimeout3 lease-seq=1
+  lock txn=txn2 key=k4
 ----
-[8] handle write intent error reqTimeout3: handled conflicting intents on ‹"k4"›, released latches
+[8] handle lock conflict error reqTimeout3: handled conflicting intents on ‹"k4"›, released latches
 
 sequence req=reqTimeout3
 ----
@@ -243,10 +243,10 @@ sequence req=reqTimeout4
 [10] sequence reqTimeout4: scanning lock table for conflicting locks
 [10] sequence reqTimeout4: sequencing complete, returned guard
 
-handle-write-intent-error req=reqTimeout4 lease-seq=1
-  intent txn=txn2 key=k5
+handle-lock-conflict-error req=reqTimeout4 lease-seq=1
+  lock txn=txn2 key=k5
 ----
-[11] handle write intent error reqTimeout4: handled conflicting intents on ‹"k5"›, released latches
+[11] handle lock conflict error reqTimeout4: handled conflicting intents on ‹"k5"›, released latches
 
 sequence req=reqTimeout4
 ----

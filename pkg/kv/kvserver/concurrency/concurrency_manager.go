@@ -450,8 +450,8 @@ func (m *managerImpl) FinishReq(g *Guard) {
 	releaseGuard(g)
 }
 
-// HandleWriterIntentError implements the ContentionHandler interface.
-func (m *managerImpl) HandleWriterIntentError(
+// HandleLockConflictError implements the ContentionHandler interface.
+func (m *managerImpl) HandleLockConflictError(
 	ctx context.Context, g *Guard, seq roachpb.LeaseSequence, t *kvpb.LockConflictError,
 ) (*Guard, *Error) {
 	if g.ltg == nil {
@@ -612,7 +612,7 @@ func (m *managerImpl) OnReplicaSnapshotApplied() {
 	// through LockManager listener methods. If there's a chance it missed a
 	// state transition, it is safer to simply clear the lockTable and rebuild
 	// it from persistent intent state by allowing requests to discover locks
-	// and inform the manager through calls to HandleWriterIntentError.
+	// and inform the manager through calls to HandleLockConflictError.
 	//
 	// A range only maintains locks in the lockTable of its leaseholder replica
 	// even thought it runs a concurrency manager on all replicas. Because of
