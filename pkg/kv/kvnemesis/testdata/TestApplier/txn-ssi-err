@@ -1,6 +1,6 @@
 echo
 ----
-db1.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.SetIsoLevel(isolation.Serializable)
   txn.DelRange(ctx, tk(2), tk(4), true /* @s1 */)
   return nil
