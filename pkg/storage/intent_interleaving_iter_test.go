@@ -294,7 +294,7 @@ func TestIntentInterleavingIter(t *testing.T) {
 								return err.Error()
 							}
 						} else {
-							ltKey := LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}
+							ltKey := LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID}
 							eKey, _ := ltKey.ToEngineKey(nil)
 							if err := batch.PutEngineKey(eKey, val); err != nil {
 								return err.Error()
@@ -521,7 +521,7 @@ func generateRandomData(
 			}
 			val, err := protoutil.Marshal(&meta)
 			require.NoError(t, err)
-			ltKey := LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}
+			ltKey := LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID}
 			lkv = append(lkv, lockKeyValue{
 				key: ltKey, val: val, liveIntent: hasIntent && i == 0})
 			mvcckv = append(mvcckv, MVCCKeyValue{
@@ -781,7 +781,7 @@ func writeBenchData(
 			require.NoError(b, err)
 			if separated {
 				eKey, _ :=
-					LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}.ToEngineKey(nil)
+					LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID}.ToEngineKey(nil)
 				require.NoError(b, batch.PutEngineKey(eKey, val))
 			} else {
 				require.NoError(b, batch.PutUnversioned(key, val))

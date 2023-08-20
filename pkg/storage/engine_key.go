@@ -177,7 +177,7 @@ func (k EngineKey) ToLockTableKey() (LockTableKey, error) {
 		if key.Strength < lock.None || key.Strength > lock.Exclusive {
 			return LockTableKey{}, errors.Errorf("unknown strength %d", key.Strength)
 		}
-		key.TxnUUID = k.Version[1:]
+		key.TxnUUID = *(*uuid.UUID)(k.Version[1:])
 	default:
 		return LockTableKey{}, errors.Errorf("version is not valid for a LockTableKey %x", k.Version)
 	}
@@ -252,18 +252,13 @@ func (m EngineKeyFormatter) Format(f fmt.State, c rune) {
 type LockTableKey struct {
 	Key      roachpb.Key
 	Strength lock.Strength
-	// Slice is of length uuid.Size. We use a slice instead of a byte array, to
-	// avoid copying a slice when decoding.
-	TxnUUID []byte
+	TxnUUID  uuid.UUID
 }
 
 // ToEngineKey converts a lock table key to an EngineKey. buf is used as
 // scratch-space to avoid allocations -- its contents will be overwritten and
 // not appended to.
 func (lk LockTableKey) ToEngineKey(buf []byte) (EngineKey, []byte) {
-	if len(lk.TxnUUID) != uuid.Size {
-		panic("invalid TxnUUID")
-	}
 	if lk.Strength != lock.Exclusive {
 		panic("unsupported lock strength")
 	}
@@ -283,7 +278,7 @@ func (lk LockTableKey) ToEngineKey(buf []byte) (EngineKey, []byte) {
 		k.Version = make([]byte, engineKeyVersionLockTableLen)
 	}
 	k.Version[0] = byte(lk.Strength)
-	copy(k.Version[1:], lk.TxnUUID)
+	copy(k.Version[1:], lk.TxnUUID[:])
 	return k, buf
 }
 

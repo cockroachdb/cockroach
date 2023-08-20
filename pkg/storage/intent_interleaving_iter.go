@@ -543,7 +543,7 @@ func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID
 	engineKey, i.intentKeyBuf = LockTableKey{
 		Key:      key,
 		Strength: lock.Exclusive,
-		TxnUUID:  txnUUID[:],
+		TxnUUID:  txnUUID,
 	}.ToEngineKey(i.intentKeyBuf)
 	var limitKey roachpb.Key
 	if i.iterValid && !i.prefix {
