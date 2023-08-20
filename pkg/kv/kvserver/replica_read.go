@@ -298,7 +298,7 @@ func (r *Replica) canDropLatchesBeforeEval(
 		ctx, 3, "can drop latches early for batch (%v); scanning lock table first to detect conflicts", ba,
 	)
 
-	maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&r.store.cfg.Settings.SV)
+	maxIntents := storage.MaxIntentsPerLockConflictError.Get(&r.store.cfg.Settings.SV)
 	var intents []roachpb.Intent
 	// Check if any of the requests within the batch need to resolve any intents
 	// or if any of them need to use an intent interleaving iterator.

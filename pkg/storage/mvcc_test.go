@@ -6637,7 +6637,7 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 				ExportAllRevisions: true,
 				TargetSize:         0,
 				MaxSize:            0,
-				MaxIntents:         uint64(MaxIntentsPerWriteIntentError.Default()),
+				MaxIntents:         uint64(MaxIntentsPerLockConflictError.Default()),
 				StopMidKey:         false,
 			}, &bytes.Buffer{})
 			if len(expectedIntentIndices) == 0 {
@@ -6657,7 +6657,7 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 	}
 
 	// Export range is fixed to k:["00010", "10000"), ts:(999, 2000] for all tests.
-	testDataCount := int(MaxIntentsPerWriteIntentError.Default() + 1)
+	testDataCount := int(MaxIntentsPerLockConflictError.Default() + 1)
 	testData := make([]testValue, testDataCount*2)
 	expectedErrors := make([]int, testDataCount)
 	for i := 0; i < testDataCount; i++ {
@@ -6665,7 +6665,7 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 		testData[i*2+1] = intent(key(i*2+12), "intent", ts(1001))
 		expectedErrors[i] = i*2 + 1
 	}
-	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:MaxIntentsPerWriteIntentError.Default()]))
+	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:MaxIntentsPerLockConflictError.Default()]))
 }
 
 // TestMVCCExportToSSTSplitMidKey verifies that split mid key in exports will
