@@ -185,10 +185,10 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	canContinue := make(chan struct{})
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 
-	replicationSpecs := make([]*execinfrapb.StreamIngestionDataSpec, 0)
+	replicationSpecs := make(map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec, 0)
 	frontier := &execinfrapb.StreamIngestionFrontierSpec{}
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		AfterReplicationFlowPlan: func(ingestionSpecs []*execinfrapb.StreamIngestionDataSpec,
+		AfterReplicationFlowPlan: func(ingestionSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
 			frontierSpec *execinfrapb.StreamIngestionFrontierSpec) {
 			replicationSpecs = ingestionSpecs
 			frontier = frontierSpec
