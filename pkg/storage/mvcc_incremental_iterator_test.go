@@ -195,7 +195,7 @@ func assertExportedErrs(
 		ExportAllRevisions: revisions,
 		TargetSize:         big,
 		MaxSize:            big,
-		MaxIntents:         uint64(MaxIntentsPerWriteIntentError.Default()),
+		MaxIntents:         uint64(MaxIntentsPerLockConflictError.Default()),
 		StopMidKey:         false,
 	}, &bytes.Buffer{})
 	require.Error(t, err)

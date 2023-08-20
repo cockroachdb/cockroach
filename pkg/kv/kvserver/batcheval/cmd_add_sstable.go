@@ -222,7 +222,7 @@ func EvalAddSSTable(
 	}
 
 	var statsDelta enginepb.MVCCStats
-	maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+	maxIntents := storage.MaxIntentsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 	checkConflicts := args.DisallowConflicts || args.DisallowShadowing ||
 		!args.DisallowShadowingBelow.IsEmpty()
 	if checkConflicts {
