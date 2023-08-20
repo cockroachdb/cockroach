@@ -2335,7 +2335,7 @@ func TestStoreScanIntentsRespectsLimit(t *testing.T) {
 							if trap := interceptLockConflictErrors.Load(); trap != nil && trap.(bool) {
 								require.Equal(
 									t, storage.MaxIntentsPerLockConflictErrorDefault,
-									len(pErr.GetDetail().(*kvpb.LockConflictError).Intents),
+									len(pErr.GetDetail().(*kvpb.LockConflictError).Locks),
 								)
 								interceptLockConflictErrors.Store(false)
 								// Allow the writer to commit.

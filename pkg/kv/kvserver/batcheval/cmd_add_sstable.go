@@ -273,7 +273,7 @@ func EvalAddSSTable(
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "scanning intents")
 		} else if len(intents) > 0 {
-			return result.Result{}, &kvpb.LockConflictError{Intents: intents}
+			return result.Result{}, &kvpb.LockConflictError{Locks: intents}
 		}
 	}
 

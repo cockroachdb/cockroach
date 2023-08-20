@@ -331,7 +331,9 @@ message TransactionStatusError {
 // there's no ambiguity; the error carries a WriteTimestamp that's the
 // upper bound of the timestamps intents were written at.
 message LockConflictError {
-  repeated roachpb.Intent intents = 1 [(gogoproto.nullable) = false];
+  // TODO(nvanbenschoten): rename roachpb.Intent to roachpb.Lock and add a
+  // lock.Strength field.
+  repeated roachpb.Intent locks = 1 [(gogoproto.nullable) = false];
   reserved 2;
   // The sequence of the lease that the operation which hit this error was
   // operating under. Used on the server to avoid adding discovered locks

@@ -324,7 +324,7 @@ func (r *Replica) canDropLatchesBeforeEval(
 	}
 	if len(intents) > 0 {
 		return false /* ok */, false /* stillNeedsIntentInterleaving */, maybeAttachLease(
-			kvpb.NewError(&kvpb.LockConflictError{Intents: intents}), &st.Lease,
+			kvpb.NewError(&kvpb.LockConflictError{Locks: intents}), &st.Lease,
 		)
 	}
 	// If there were no conflicts, then the request can drop its latches and

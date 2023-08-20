@@ -282,7 +282,7 @@ func CheckSSTConflicts(
 				// of scans.
 				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, extIter.UnsafeKey().Key.Clone()))
 				if int64(len(intents)) >= maxIntents {
-					return &kvpb.LockConflictError{Intents: intents}
+					return &kvpb.LockConflictError{Locks: intents}
 				}
 				return nil
 			}
@@ -532,7 +532,7 @@ func CheckSSTConflicts(
 				}
 				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, extIter.UnsafeKey().Key.Clone()))
 				if int64(len(intents)) >= maxIntents {
-					return statsDiff, &kvpb.LockConflictError{Intents: intents}
+					return statsDiff, &kvpb.LockConflictError{Locks: intents}
 				}
 				extIter.Next()
 				continue
@@ -1223,7 +1223,7 @@ func CheckSSTConflicts(
 		return enginepb.MVCCStats{}, sstErr
 	}
 	if len(intents) > 0 {
-		return enginepb.MVCCStats{}, &kvpb.LockConflictError{Intents: intents}
+		return enginepb.MVCCStats{}, &kvpb.LockConflictError{Locks: intents}
 	}
 
 	return statsDiff, nil

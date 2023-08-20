@@ -98,7 +98,7 @@ func TestCheckSSTConflictsMaxIntents(t *testing.T) {
 					require.ErrorAs(t, err, &lcErr)
 
 					actual := []string{}
-					for _, i := range lcErr.Intents {
+					for _, i := range lcErr.Locks {
 						actual = append(actual, string(i.Key))
 					}
 					require.Equal(t, tc.expectIntents, actual)
