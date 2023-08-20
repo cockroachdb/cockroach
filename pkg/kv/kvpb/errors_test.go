@@ -229,7 +229,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &LockConflictError{},
-			expect: "conflicting intents on ",
+			expect: "conflicting locks on ",
 		},
 		{
 			err:    &WriteTooOldError{},

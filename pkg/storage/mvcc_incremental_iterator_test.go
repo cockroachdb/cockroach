@@ -534,10 +534,10 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 	// ensuring that the SeekGE() doesn't encounter an intent.
 	t.Run("intents", func(t *testing.T) {
 		ignoreTimeExpectErr(t, e, testKey1, testKey2.PrefixEnd(), tsMin, tsMax,
-			"conflicting intents", false)
+			"conflicting locks", false)
 	})
 	t.Run("intents", func(t *testing.T) {
-		ignoreTimeExpectErr(t, e, localMax, keyMax, tsMin, ts4, "conflicting intents", false)
+		ignoreTimeExpectErr(t, e, localMax, keyMax, tsMin, ts4, "conflicting locks", false)
 	})
 	// Intents above the upper time bound or beneath the lower time bound must
 	// be ignored. Note that the lower time bound is exclusive while the upper
@@ -667,10 +667,10 @@ func TestMVCCIncrementalIteratorNextKeyIgnoringTime(t *testing.T) {
 	// ensuring that the SeekGE() doesn't encounter an intent.
 	t.Run("intents", func(t *testing.T) {
 		ignoreTimeExpectErr(t, e, testKey1, testKey2.PrefixEnd(), tsMin, tsMax,
-			"conflicting intents", true)
+			"conflicting locks", true)
 	})
 	t.Run("intents", func(t *testing.T) {
-		ignoreTimeExpectErr(t, e, localMax, keyMax, tsMin, ts4, "conflicting intents", true)
+		ignoreTimeExpectErr(t, e, localMax, keyMax, tsMin, ts4, "conflicting locks", true)
 	})
 	// Intents above the upper time bound or beneath the lower time bound must
 	// be ignored. Note that the lower time bound is exclusive while the upper
@@ -1177,7 +1177,7 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 		// observe and return nothing because there will be no committed or
 		// provisional keys in its time range.
 		if err != nil {
-			if !testutils.IsError(err, `conflicting intents on "kA"`) {
+			if !testutils.IsError(err, `conflicting locks on "kA"`) {
 				return err
 			}
 		} else {
@@ -1284,7 +1284,7 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	}, kvs)
 	// At ts3, we should see the new intent
 	_, err = slurpKVsInTimeRange(db, kA, ts0, ts3)
-	require.EqualError(t, err, `conflicting intents on "kA"`)
+	require.EqualError(t, err, `conflicting locks on "kA"`)
 
 	// Similar to the kA ts1 check, but there is no newer intent. We expect to
 	// pick up the intent deletion and it should cancel out the intent, leaving
@@ -1297,7 +1297,7 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 
 	// Sanity check that we see the still unresolved intent for kC ts1.
 	_, err = slurpKVsInTimeRange(db, kC, ts0, ts1)
-	require.EqualError(t, err, `conflicting intents on "kC"`)
+	require.EqualError(t, err, `conflicting locks on "kC"`)
 }
 
 func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {

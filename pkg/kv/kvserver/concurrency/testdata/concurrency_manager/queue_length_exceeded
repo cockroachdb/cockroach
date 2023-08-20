@@ -191,7 +191,7 @@ sequence req=req5w
 [6] sequence req5w: scanning lock table for conflicting locks
 [6] sequence req5w: waiting in lock wait-queues
 [6] sequence req5w: lock wait-queue event: wait-queue maximum length exceeded @ key ‹"k"› with length 2
-[6] sequence req5w: sequencing complete, returned error: conflicting intents on ‹"k"› [reason=lock_wait_queue_max_length_exceeded]
+[6] sequence req5w: sequencing complete, returned error: conflicting locks on ‹"k"› [reason=lock_wait_queue_max_length_exceeded]
 
 # -------------------------------------------------------------
 # Cleanup.

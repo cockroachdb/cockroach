@@ -52,7 +52,7 @@ sequence req=reqWaiter
 handle-lock-conflict-error req=reqWaiter lease-seq=1
   lock txn=txnWriter key=k
 ----
-[3] handle lock conflict error reqWaiter: handled conflicting intents on ‹"k"›, released latches
+[3] handle lock conflict error reqWaiter: handled conflicting locks on ‹"k"›, released latches
 
 sequence req=reqWaiter
 ----
@@ -194,7 +194,7 @@ handle-lock-conflict-error req=reqTwoKeyWaiter lease-seq=1
   lock txn=txnThreeKeyWriter key=k1
   lock txn=txnThreeKeyWriter key=k2
 ----
-[9] handle lock conflict error reqTwoKeyWaiter: handled conflicting intents on ‹"k1"›, ‹"k2"›, released latches
+[9] handle lock conflict error reqTwoKeyWaiter: handled conflicting locks on ‹"k1"›, ‹"k2"›, released latches
 
 sequence req=reqTwoKeyWaiter
 ----
@@ -225,7 +225,7 @@ handle-lock-conflict-error req=reqThreeKeyWaiter lease-seq=1
   lock txn=txnThreeKeyWriter key=k2
   lock txn=txnThreeKeyWriter key=k3
 ----
-[11] handle lock conflict error reqThreeKeyWaiter: handled conflicting intents on ‹"k1"›, ‹"k2"›, ‹"k3"›, released latches
+[11] handle lock conflict error reqThreeKeyWaiter: handled conflicting locks on ‹"k1"›, ‹"k2"›, ‹"k3"›, released latches
 
 sequence req=reqThreeKeyWaiter
 ----
