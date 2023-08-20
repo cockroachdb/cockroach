@@ -752,7 +752,7 @@ func (r *Replica) handleLockConflictError(
 	pErr *kvpb.Error,
 	t *kvpb.LockConflictError,
 ) (*concurrency.Guard, *kvpb.Error) {
-	if r.store.cfg.TestingKnobs.DontPushOnWriteIntentError {
+	if r.store.cfg.TestingKnobs.DontPushOnLockConflictError {
 		return g, pErr
 	}
 	// g's latches will be dropped, but it retains its spot in lock wait-queues.

@@ -116,7 +116,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 			IntentResolver:    store.intentResolver,
 			TxnWaitMetrics:    store.txnWaitMetrics,
 			SlowLatchGauge:    store.metrics.SlowLatchRequests,
-			DisableTxnPushing: store.TestingKnobs().DontPushOnWriteIntentError,
+			DisableTxnPushing: store.TestingKnobs().DontPushOnLockConflictError,
 			TxnWaitKnobs:      store.TestingKnobs().TxnWaitKnobs,
 		}),
 	}
