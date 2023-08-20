@@ -43,7 +43,7 @@ type streamIngestionResumer struct {
 }
 
 func connectToActiveClient(
-	ctx context.Context, ingestionJob *jobs.Job, db isql.DB,
+	ctx context.Context, ingestionJob *jobs.Job, db isql.DB, opts ...streamclient.Option,
 ) (streamclient.Client, error) {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	progress := ingestionJob.Progress()
@@ -51,7 +51,7 @@ func connectToActiveClient(
 
 	if len(streamAddresses) > 0 {
 		log.Infof(ctx, "attempting to connect to existing stream addresses")
-		client, err := streamclient.GetFirstActiveClient(ctx, streamAddresses)
+		client, err := streamclient.GetFirstActiveClient(ctx, streamAddresses, opts...)
 		if err == nil {
 			return client, err
 		}
@@ -63,7 +63,7 @@ func connectToActiveClient(
 	// Without a list of addresses from existing progress we use the stream
 	// address from the creation statement
 	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
-	client, err := streamclient.NewStreamClient(ctx, streamAddress, db)
+	client, err := streamclient.NewStreamClient(ctx, streamAddress, db, opts...)
 
 	return client, errors.Wrapf(err, "ingestion job %d failed to connect to stream address or existing topology for planning", ingestionJob.ID())
 }
@@ -133,15 +133,16 @@ func completeIngestion(
 func completeProducerJob(
 	ctx context.Context, ingestionJob *jobs.Job, internalDB *sql.InternalDB, successfulIngestion bool,
 ) {
-	streamID := ingestionJob.Details().(jobspb.StreamIngestionDetails).StreamID
+	streamID := streampb.StreamID(ingestionJob.Details().(jobspb.StreamIngestionDetails).StreamID)
 	if err := timeutil.RunWithTimeout(ctx, "complete producer job", 30*time.Second,
 		func(ctx context.Context) error {
-			client, err := connectToActiveClient(ctx, ingestionJob, internalDB)
+			client, err := connectToActiveClient(ctx, ingestionJob, internalDB,
+				streamclient.WithStreamID(streamID))
 			if err != nil {
 				return err
 			}
 			defer closeAndLog(ctx, client)
-			return client.Complete(ctx, streampb.StreamID(streamID), successfulIngestion)
+			return client.Complete(ctx, streamID, successfulIngestion)
 		},
 	); err != nil {
 		log.Warningf(ctx, `encountered error when completing the source cluster producer job %d: %s`, streamID, err.Error())
