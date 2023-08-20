@@ -452,10 +452,10 @@ func (m *managerImpl) FinishReq(g *Guard) {
 
 // HandleWriterIntentError implements the ContentionHandler interface.
 func (m *managerImpl) HandleWriterIntentError(
-	ctx context.Context, g *Guard, seq roachpb.LeaseSequence, t *kvpb.WriteIntentError,
+	ctx context.Context, g *Guard, seq roachpb.LeaseSequence, t *kvpb.LockConflictError,
 ) (*Guard, *Error) {
 	if g.ltg == nil {
-		log.Fatalf(ctx, "cannot handle WriteIntentError %v for request without "+
+		log.Fatalf(ctx, "cannot handle LockConflictError %v for request without "+
 			"lockTableGuard; were lock spans declared for this request?", t)
 	}
 
@@ -472,7 +472,7 @@ func (m *managerImpl) HandleWriterIntentError(
 	//    wait in the new leaseholder's lock table.
 	// 2) if the request can be served on this follower replica according to the
 	//    closed timestamp then it will likely re-encounter the same intent on its
-	//    next evaluation attempt. The WriteIntentError will then be mapped to an
+	//    next evaluation attempt. The LockConflictError will then be mapped to an
 	//    InvalidLeaseError in maybeAttachLease, which will indicate that the
 	//    request cannot be served as a follower read after all and cause the
 	//    request to be redirected to the leaseholder.

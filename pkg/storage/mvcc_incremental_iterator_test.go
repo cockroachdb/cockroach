@@ -122,9 +122,9 @@ func assertExpectErr(
 	}
 
 	_, err := iter.Valid()
-	if intentErr := (*kvpb.WriteIntentError)(nil); errors.As(err, &intentErr) {
-		if !expectedIntent.Key.Equal(intentErr.Intents[0].Key) {
-			t.Fatalf("Expected intent key %v, but got %v", expectedIntent.Key, intentErr.Intents[0].Key)
+	if lcErr := (*kvpb.LockConflictError)(nil); errors.As(err, &lcErr) {
+		if !expectedIntent.Key.Equal(lcErr.Intents[0].Key) {
+			t.Fatalf("Expected intent key %v, but got %v", expectedIntent.Key, lcErr.Intents[0].Key)
 		}
 	} else {
 		t.Fatalf("expected error with intent %v but got %v", expectedIntent, err)
@@ -163,17 +163,17 @@ func assertExpectErrs(
 		t.Fatalf("Expected %d intents but found %d", len(expectedIntents), iter.NumCollectedIntents())
 	}
 	err := iter.TryGetIntentError()
-	if intentErr := (*kvpb.WriteIntentError)(nil); errors.As(err, &intentErr) {
+	if lcErr := (*kvpb.LockConflictError)(nil); errors.As(err, &lcErr) {
 		for i := range expectedIntents {
-			if !expectedIntents[i].Key.Equal(intentErr.Intents[i].Key) {
-				t.Fatalf("%d intent key: got %v, expected %v", i, intentErr.Intents[i].Key, expectedIntents[i].Key)
+			if !expectedIntents[i].Key.Equal(lcErr.Intents[i].Key) {
+				t.Fatalf("%d intent key: got %v, expected %v", i, lcErr.Intents[i].Key, expectedIntents[i].Key)
 			}
-			if !expectedIntents[i].Txn.ID.Equal(intentErr.Intents[i].Txn.ID) {
-				t.Fatalf("%d intent key: got %v, expected %v", i, intentErr.Intents[i].Txn.ID, expectedIntents[i].Txn.ID)
+			if !expectedIntents[i].Txn.ID.Equal(lcErr.Intents[i].Txn.ID) {
+				t.Fatalf("%d intent key: got %v, expected %v", i, lcErr.Intents[i].Txn.ID, expectedIntents[i].Txn.ID)
 			}
 		}
 	} else {
-		t.Fatalf("Expected kvpb.WriteIntentError, found %T", err)
+		t.Fatalf("Expected kvpb.LockConflictError, found %T", err)
 	}
 }
 
@@ -200,17 +200,17 @@ func assertExportedErrs(
 	}, &bytes.Buffer{})
 	require.Error(t, err)
 
-	if intentErr := (*kvpb.WriteIntentError)(nil); errors.As(err, &intentErr) {
+	if lcErr := (*kvpb.LockConflictError)(nil); errors.As(err, &lcErr) {
 		for i := range expectedIntents {
-			if !expectedIntents[i].Key.Equal(intentErr.Intents[i].Key) {
-				t.Fatalf("%d intent key: got %v, expected %v", i, intentErr.Intents[i].Key, expectedIntents[i].Key)
+			if !expectedIntents[i].Key.Equal(lcErr.Intents[i].Key) {
+				t.Fatalf("%d intent key: got %v, expected %v", i, lcErr.Intents[i].Key, expectedIntents[i].Key)
 			}
-			if !expectedIntents[i].Txn.ID.Equal(intentErr.Intents[i].Txn.ID) {
-				t.Fatalf("%d intent key: got %v, expected %v", i, intentErr.Intents[i].Txn.ID, expectedIntents[i].Txn.ID)
+			if !expectedIntents[i].Txn.ID.Equal(lcErr.Intents[i].Txn.ID) {
+				t.Fatalf("%d intent key: got %v, expected %v", i, lcErr.Intents[i].Txn.ID, expectedIntents[i].Txn.ID)
 			}
 		}
 	} else {
-		t.Fatalf("Expected kvpb.WriteIntentError, found %T", err)
+		t.Fatalf("Expected kvpb.LockConflictError, found %T", err)
 	}
 }
 
@@ -787,7 +787,7 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 	kv2_2_2 := makeKVT(testKey2, testValue2, ts2)
 	txn, intent2_2_2 := makeKVTxn(testKey2, ts2)
 
-	intentErr := &kvpb.WriteIntentError{Intents: []roachpb.Intent{intent2_2_2}}
+	lcErr := &kvpb.LockConflictError{Intents: []roachpb.Intent{intent2_2_2}}
 
 	e := NewDefaultInMemForTesting()
 	defer e.Close()
@@ -815,14 +815,14 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 			}
 		}
 		_, err := iter.Valid()
-		assert.EqualError(t, err, intentErr.Error())
+		assert.EqualError(t, err, lcErr.Error())
 
 		iter.SeekGE(MakeMVCCMetadataKey(testKey1))
 		_, err = iter.Valid()
 		require.NoError(t, err)
 		for ; ; iter.NextIgnoringTime() {
 			if ok, err := iter.Valid(); !ok {
-				assert.EqualError(t, err, intentErr.Error())
+				assert.EqualError(t, err, lcErr.Error())
 				break
 			}
 		}
@@ -982,20 +982,20 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 		t.Run("del", assertEqualKVs(e, localMax, keyMax, ts1, tsMax, latest, kvs(kv1Deleted3, kv2_2_2)))
 
 		// Exercise intent handling.
-		txn1, intentErr1 := makeKVTxn(testKey1, ts4)
+		txn1, lcErr1 := makeKVTxn(testKey1, ts4)
 		if err := MVCCPut(ctx, e, txn1.TxnMeta.Key, txn1.ReadTimestamp, testValue4, MVCCWriteOptions{Txn: &txn1}); err != nil {
 			t.Fatal(err)
 		}
-		txn2, intentErr2 := makeKVTxn(testKey2, ts4)
+		txn2, lcErr2 := makeKVTxn(testKey2, ts4)
 		if err := MVCCPut(ctx, e, txn2.TxnMeta.Key, txn2.ReadTimestamp, testValue4, MVCCWriteOptions{Txn: &txn2}); err != nil {
 			t.Fatal(err)
 		}
 		t.Run("intents-1",
-			iterateExpectErr(e, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, latest, intents(intentErr1)))
+			iterateExpectErr(e, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, latest, intents(lcErr1)))
 		t.Run("intents-2",
-			iterateExpectErr(e, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, latest, intents(intentErr2)))
+			iterateExpectErr(e, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, latest, intents(lcErr2)))
 		t.Run("intents-multi",
-			iterateExpectErr(e, localMax, keyMax, tsMin, ts4, latest, intents(intentErr1, intentErr2)))
+			iterateExpectErr(e, localMax, keyMax, tsMin, ts4, latest, intents(lcErr1, lcErr2)))
 		// Intents above the upper time bound or beneath the lower time bound must
 		// be ignored (#28358). Note that the lower time bound is exclusive while
 		// the upper time bound is inclusive.
@@ -1048,21 +1048,21 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 		t.Run("del", assertEqualKVs(e, localMax, keyMax, ts1, tsMax, all, kvs(kv1Deleted3, kv1_2_2, kv2_2_2)))
 
 		// Exercise intent handling.
-		txn1, intentErr1 := makeKVTxn(testKey1, ts4)
+		txn1, lcErr1 := makeKVTxn(testKey1, ts4)
 		if err := MVCCPut(ctx, e, txn1.TxnMeta.Key, txn1.ReadTimestamp, testValue4, MVCCWriteOptions{Txn: &txn1}); err != nil {
 			t.Fatal(err)
 		}
-		txn2, intentErr2 := makeKVTxn(testKey2, ts4)
+		txn2, lcErr2 := makeKVTxn(testKey2, ts4)
 		if err := MVCCPut(ctx, e, txn2.TxnMeta.Key, txn2.ReadTimestamp, testValue4, MVCCWriteOptions{Txn: &txn2}); err != nil {
 			t.Fatal(err)
 		}
 		// Single intent tests are verifying behavior when intent collection is not enabled.
 		t.Run("intents-1",
-			iterateExpectErr(e, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, all, intents(intentErr1)))
+			iterateExpectErr(e, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, all, intents(lcErr1)))
 		t.Run("intents-2",
-			iterateExpectErr(e, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, all, intents(intentErr2)))
+			iterateExpectErr(e, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, all, intents(lcErr2)))
 		t.Run("intents-multi",
-			iterateExpectErr(e, localMax, keyMax, tsMin, ts4, all, intents(intentErr1, intentErr2)))
+			iterateExpectErr(e, localMax, keyMax, tsMin, ts4, all, intents(lcErr1, lcErr2)))
 		// Intents above the upper time bound or beneath the lower time bound must
 		// be ignored (#28358). Note that the lower time bound is exclusive while
 		// the upper time bound is inclusive.
@@ -1172,7 +1172,7 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 
 		// There are two permissible outcomes from the scan. If the iteration
 		// wins the race with the put that moves the intent then it should
-		// observe the intent and return a write intent error. If the iteration
+		// observe the intent and return a lock conflict error. If the iteration
 		// loses the race with the put that moves the intent then it should
 		// observe and return nothing because there will be no committed or
 		// provisional keys in its time range.
@@ -1401,8 +1401,8 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 		for it.SeekGE(MVCCKey{Key: keys.LocalMax}); ; it.Next() {
 			ok, err := it.Valid()
 			if err != nil {
-				if errors.HasType(err, (*kvpb.WriteIntentError)(nil)) {
-					// This is the write intent error we were expecting.
+				if errors.HasType(err, (*kvpb.LockConflictError)(nil)) {
+					// This is the lock conflict error we were expecting.
 					return
 				}
 				t.Fatalf("%T: %s", err, err)
@@ -1411,7 +1411,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 				break
 			}
 		}
-		t.Fatalf("expected write intent error, but found success")
+		t.Fatalf("expected lock conflict error, but found success")
 	}
 }
 

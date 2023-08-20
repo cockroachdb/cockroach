@@ -55,7 +55,7 @@ func CollectIntentRows(
 	for i := range intents {
 		kv, err := readProvisionalVal(ctx, reader, usePrefixIter, &intents[i])
 		if err != nil {
-			if errors.HasType(err, (*kvpb.WriteIntentError)(nil)) ||
+			if errors.HasType(err, (*kvpb.LockConflictError)(nil)) ||
 				errors.HasType(err, (*kvpb.ReadWithinUncertaintyIntervalError)(nil)) {
 				log.Fatalf(ctx, "unexpected %T in CollectIntentRows: %+v", err, err)
 			}

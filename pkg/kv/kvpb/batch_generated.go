@@ -28,8 +28,8 @@ func (ru ErrorDetail) GetInner() error {
 		return t.TransactionRetry
 	case *ErrorDetail_TransactionStatus:
 		return t.TransactionStatus
-	case *ErrorDetail_WriteIntent:
-		return t.WriteIntent
+	case *ErrorDetail_LockConflict:
+		return t.LockConflict
 	case *ErrorDetail_WriteTooOld:
 		return t.WriteTooOld
 	case *ErrorDetail_OpRequiresTxn:
@@ -310,8 +310,8 @@ func (ru *ErrorDetail) MustSetInner(r error) {
 		union = &ErrorDetail_TransactionRetry{t}
 	case *TransactionStatusError:
 		union = &ErrorDetail_TransactionStatus{t}
-	case *WriteIntentError:
-		union = &ErrorDetail_WriteIntent{t}
+	case *LockConflictError:
+		union = &ErrorDetail_LockConflict{t}
 	case *WriteTooOldError:
 		union = &ErrorDetail_WriteTooOld{t}
 	case *OpRequiresTxnError:

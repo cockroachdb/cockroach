@@ -100,7 +100,7 @@ const (
 	// written. We allow the transaction to continue after such errors; we also
 	// allow RollbackToSavepoint() to be called after such errors. In particular,
 	// this is useful for SQL which wants to allow rolling back to a savepoint
-	// after ConditionFailedErrors (uniqueness violations) and WriteIntentError
+	// after ConditionFailedErrors (uniqueness violations) and LockConflictError
 	// (lock not available errors). With continuing after errors it's important
 	// for the coordinator to track the timestamp at which intents might have been
 	// written.
@@ -152,10 +152,10 @@ func ErrPriority(err error) ErrorPriority {
 			return ErrorScoreTxnAbort
 		}
 		return ErrorScoreTxnRestart
-	case *ConditionFailedError, *WriteIntentError:
+	case *ConditionFailedError, *LockConflictError:
 		// We particularly care about returning the low ErrorScoreUnambiguousError
 		// because we don't want to transition a transaction that encounters a
-		// ConditionFailedError or a WriteIntentError to an error state. More
+		// ConditionFailedError or a LockConflictError to an error state. More
 		// specifically, we want to allow rollbacks to savepoint after one of these
 		// errors.
 		return ErrorScoreUnambiguousError
@@ -272,7 +272,7 @@ const (
 	TransactionPushErrType                  ErrorDetailType = 6
 	TransactionRetryErrType                 ErrorDetailType = 7
 	TransactionStatusErrType                ErrorDetailType = 8
-	WriteIntentErrType                      ErrorDetailType = 9
+	LockConflictErrType                     ErrorDetailType = 9
 	WriteTooOldErrType                      ErrorDetailType = 10
 	OpRequiresTxnErrType                    ErrorDetailType = 11
 	ConditionFailedErrType                  ErrorDetailType = 12
@@ -323,7 +323,7 @@ func init() {
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.TransactionPushError", &TransactionPushError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.TransactionRetryError", &TransactionRetryError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.TransactionStatusError", &TransactionStatusError{})
-	errors.RegisterTypeMigration(roachpbPath, "*roachpb.WriteIntentError", &WriteIntentError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.WriteIntentError", &LockConflictError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.WriteTooOldError", &WriteTooOldError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.OpRequiresTxnError", &OpRequiresTxnError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.ConditionFailedError", &ConditionFailedError{})
@@ -348,6 +348,10 @@ func init() {
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.RefreshFailedError", &RefreshFailedError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.MVCCHistoryMutationError", &MVCCHistoryMutationError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.InsufficientSpaceError", &InsufficientSpaceError{})
+	// TODO(nvanbenschoten): can we delete the migrations above now that we're
+	// developing towards v23.2? Discussing with knz and yahor.
+	// kvpbPath := reflect.TypeOf(Error{}).PkgPath()
+	// errors.RegisterTypeMigration(kvpbPath, "*kvpb.WriteIntentError", &LockConflictError{})
 }
 
 // GoError returns a Go error converted from Error. If the error is a transaction
@@ -912,16 +916,16 @@ func (e *TransactionStatusError) SafeFormatError(p errors.Printer) (next error) 
 
 var _ ErrorDetailInterface = &TransactionStatusError{}
 
-func (e *WriteIntentError) Error() string {
+func (e *LockConflictError) Error() string {
 	return redact.Sprint(e).StripMarkers()
 }
 
-func (e *WriteIntentError) SafeFormatError(p errors.Printer) (next error) {
+func (e *LockConflictError) SafeFormatError(p errors.Printer) (next error) {
 	e.printError(p)
 	return nil
 }
 
-func (e *WriteIntentError) printError(buf Printer) {
+func (e *LockConflictError) printError(buf Printer) {
 	buf.Printf("conflicting intents on ")
 
 	// If we have a lot of intents, we only want to show the first and the last.
@@ -952,13 +956,13 @@ func (e *WriteIntentError) printError(buf Printer) {
 	}
 
 	switch e.Reason {
-	case WriteIntentError_REASON_UNSPECIFIED:
+	case LockConflictError_REASON_UNSPECIFIED:
 		// Nothing to say.
-	case WriteIntentError_REASON_WAIT_POLICY:
+	case LockConflictError_REASON_WAIT_POLICY:
 		buf.Printf(" [reason=wait_policy]")
-	case WriteIntentError_REASON_LOCK_TIMEOUT:
+	case LockConflictError_REASON_LOCK_TIMEOUT:
 		buf.Printf(" [reason=lock_timeout]")
-	case WriteIntentError_REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED:
+	case LockConflictError_REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED:
 		buf.Printf(" [reason=lock_wait_queue_max_length_exceeded]")
 	default:
 		// Could panic, better to silently ignore in case new reasons are added.
@@ -966,11 +970,11 @@ func (e *WriteIntentError) printError(buf Printer) {
 }
 
 // Type is part of the ErrorDetailInterface.
-func (e *WriteIntentError) Type() ErrorDetailType {
-	return WriteIntentErrType
+func (e *LockConflictError) Type() ErrorDetailType {
+	return LockConflictErrType
 }
 
-var _ ErrorDetailInterface = &WriteIntentError{}
+var _ ErrorDetailInterface = &LockConflictError{}
 
 // NewWriteTooOldError creates a new write too old error. The function accepts
 // the timestamp of the operation that hit the error, along with the timestamp
@@ -1642,7 +1646,7 @@ var _ errors.SafeFormatter = &TransactionAbortedError{}
 var _ errors.SafeFormatter = &TransactionPushError{}
 var _ errors.SafeFormatter = &TransactionRetryError{}
 var _ errors.SafeFormatter = &TransactionStatusError{}
-var _ errors.SafeFormatter = &WriteIntentError{}
+var _ errors.SafeFormatter = &LockConflictError{}
 var _ errors.SafeFormatter = &WriteTooOldError{}
 var _ errors.SafeFormatter = &OpRequiresTxnError{}
 var _ errors.SafeFormatter = &ConditionFailedError{}

@@ -117,7 +117,7 @@ func ClearRange(
 	if err != nil {
 		return result.Result{}, err
 	} else if len(intents) > 0 {
-		return result.Result{}, &kvpb.WriteIntentError{Intents: intents}
+		return result.Result{}, &kvpb.LockConflictError{Intents: intents}
 	}
 
 	// Before clearing, compute the delta in MVCCStats.

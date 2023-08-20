@@ -3181,8 +3181,8 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	t3 := makeTS(3*time.Second.Nanoseconds(), 0)
 	tc.manualClock.MustAdvanceTo(t3.GoTime())
 	_, pErr = tc.SendWrapped(&cpArgs1)
-	if _, ok := pErr.GetDetail().(*kvpb.WriteIntentError); !ok {
-		t.Errorf("expected WriteIntentError; got %v", pErr)
+	if _, ok := pErr.GetDetail().(*kvpb.LockConflictError); !ok {
+		t.Errorf("expected LockConflictError; got %v", pErr)
 	}
 
 	// Abort the intent and try a transactional conditional put at
@@ -3274,8 +3274,8 @@ func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
 	t3 := makeTS(3*time.Second.Nanoseconds(), 0)
 	tc.manualClock.MustAdvanceTo(t3.GoTime())
 	_, pErr = tc.SendWrapped(&ipArgs2)
-	if _, ok := pErr.GetDetail().(*kvpb.WriteIntentError); !ok {
-		t.Errorf("expected WriteIntentError; got %v", pErr)
+	if _, ok := pErr.GetDetail().(*kvpb.LockConflictError); !ok {
+		t.Errorf("expected LockConflictError; got %v", pErr)
 	}
 
 	// Abort the intent and try a transactional init put at a later
@@ -3394,8 +3394,8 @@ func TestReplicaNoTSCacheUpdateOnFailure(t *testing.T) {
 		ts := tc.Clock().Now() // later timestamp
 
 		_, pErr = tc.SendWrappedWith(kvpb.Header{Timestamp: ts}, args)
-		if _, ok := pErr.GetDetail().(*kvpb.WriteIntentError); !ok {
-			t.Errorf("expected WriteIntentError; got %v", pErr)
+		if _, ok := pErr.GetDetail().(*kvpb.LockConflictError); !ok {
+			t.Errorf("expected LockConflictError; got %v", pErr)
 		}
 
 		// Write the intent again -- should not have its timestamp upgraded!
@@ -4696,8 +4696,8 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, pErr := tc.Sender().Send(ctx, ba)
-		if _, ok := pErr.GetDetail().(*kvpb.WriteIntentError); !ok {
-			t.Errorf("expected write intent error, but got %s", pErr)
+		if _, ok := pErr.GetDetail().(*kvpb.LockConflictError); !ok {
+			t.Errorf("expected lock conflict error, but got %s", pErr)
 		}
 
 		if populateAbortSpan {
@@ -4918,8 +4918,8 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	// Intent should have been created.
 	gArgs := getArgs(key)
 	_, pErr = tc.SendWrapped(&gArgs)
-	if _, ok := pErr.GetDetail().(*kvpb.WriteIntentError); !ok {
-		t.Errorf("expected WriteIntentError, got: %v", pErr)
+	if _, ok := pErr.GetDetail().(*kvpb.LockConflictError); !ok {
+		t.Errorf("expected LockConflictError, got: %v", pErr)
 	}
 
 	// Heartbeat should fail with a TransactionAbortedError.
@@ -4938,8 +4938,8 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	// Expect that the txn left behind an intent on key A.
 	gArgs = getArgs(key)
 	_, pErr = tc.SendWrapped(&gArgs)
-	if _, ok := pErr.GetDetail().(*kvpb.WriteIntentError); !ok {
-		t.Errorf("expected WriteIntentError, got: %v", pErr)
+	if _, ok := pErr.GetDetail().(*kvpb.LockConflictError); !ok {
+		t.Errorf("expected LockConflictError, got: %v", pErr)
 	}
 }
 
@@ -5089,8 +5089,8 @@ func TestEndTxnResolveOnlyLocalIntents(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, pErr := newRepl.Send(ctx, ba)
-		if _, ok := pErr.GetDetail().(*kvpb.WriteIntentError); !ok {
-			t.Errorf("expected write intent error, but got %s", pErr)
+		if _, ok := pErr.GetDetail().(*kvpb.LockConflictError); !ok {
+			t.Errorf("expected lock conflict error, but got %s", pErr)
 		}
 	}
 
@@ -6764,7 +6764,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 
 // TestReplicaDanglingMetaIntent creates a dangling intent on a meta2
 // record and verifies that RangeLookup scans behave
-// appropriately. Normally, the old value and a write intent error
+// appropriately. Normally, the old value and a lock conflict error
 // should be returned. If IgnoreIntents is specified, then a random
 // choice of old or new is returned with no error.
 // TODO(tschottdorf): add a test in which there is a dangling intent on a
@@ -6817,7 +6817,7 @@ func TestReplicaDanglingMetaIntent(t *testing.T) {
 		}
 
 		// Now lookup the range; should get the value. Since the lookup is
-		// not consistent, there's no WriteIntentError. It should return both
+		// not consistent, there's no LockConflictError. It should return both
 		// the committed descriptor and the intent descriptor.
 		//
 		// Note that 'A' < 'a'.
@@ -6838,8 +6838,8 @@ func TestReplicaDanglingMetaIntent(t *testing.T) {
 
 		// Switch to consistent lookups, which should run into the intent.
 		_, _, err = kv.RangeLookup(ctx, tc.Sender(), newKey, kvpb.CONSISTENT, 0, reverse)
-		if !errors.HasType(err, (*kvpb.WriteIntentError)(nil)) {
-			t.Fatalf("expected WriteIntentError, not %s", err)
+		if !errors.HasType(err, (*kvpb.LockConflictError)(nil)) {
+			t.Fatalf("expected LockConflictError, not %s", err)
 		}
 	})
 }

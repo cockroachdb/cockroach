@@ -1043,9 +1043,9 @@ func TestTxnContinueAfterCputError(t *testing.T) {
 }
 
 // Test that a transaction can be used after a locking request returns a
-// WriteIntentError. This is not generally allowed for other errors, but
-// WriteIntentError is special.
-func TestTxnContinueAfterWriteIntentError(t *testing.T) {
+// LockConflictError. This is not generally allowed for other errors, but
+// LockConflictError is special.
+func TestTxnContinueAfterLockConflictError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -1061,7 +1061,7 @@ func TestTxnContinueAfterWriteIntentError(t *testing.T) {
 	b.Header.WaitPolicy = lock.WaitPolicy_Error
 	b.Put("a", "c")
 	err := txn.Run(ctx, b)
-	require.IsType(t, &kvpb.WriteIntentError{}, err)
+	require.IsType(t, &kvpb.LockConflictError{}, err)
 
 	require.NoError(t, txn.Put(ctx, "a'", "c"))
 	require.NoError(t, txn.Commit(ctx))
@@ -1122,9 +1122,9 @@ func TestTxnWaitPolicies(t *testing.T) {
 		// Priority does not matter.
 		err := <-errorC
 		require.NotNil(t, err)
-		wiErr := new(kvpb.WriteIntentError)
-		require.True(t, errors.As(err, &wiErr))
-		require.Equal(t, kvpb.WriteIntentError_REASON_WAIT_POLICY, wiErr.Reason)
+		lcErr := new(kvpb.LockConflictError)
+		require.True(t, errors.As(err, &lcErr))
+		require.Equal(t, kvpb.LockConflictError_REASON_WAIT_POLICY, lcErr.Reason)
 
 		// SkipLocked wait policy.
 		type skipRes struct {
@@ -1174,9 +1174,9 @@ func TestTxnLockTimeout(t *testing.T) {
 	b.Get(key)
 	err := s.DB.Run(ctx, &b)
 	require.NotNil(t, err)
-	wiErr := new(kvpb.WriteIntentError)
-	require.True(t, errors.As(err, &wiErr))
-	require.Equal(t, kvpb.WriteIntentError_REASON_LOCK_TIMEOUT, wiErr.Reason)
+	lcErr := new(kvpb.LockConflictError)
+	require.True(t, errors.As(err, &lcErr))
+	require.Equal(t, kvpb.LockConflictError_REASON_LOCK_TIMEOUT, lcErr.Reason)
 }
 
 // TestTxnReturnsWriteTooOldErrorOnConflictingDeleteRange tests that if two

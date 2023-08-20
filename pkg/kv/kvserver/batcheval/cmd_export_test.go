@@ -539,7 +539,7 @@ func exportUsingGoIterator(
 	for iter.SeekGE(storage.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
 		ok, err := iter.Valid()
 		if err != nil {
-			// The error may be a WriteIntentError. In which case, returning it will
+			// The error may be a LockConflictError. In which case, returning it will
 			// cause this command to be retried.
 			return nil, err
 		}

@@ -399,7 +399,7 @@ func runBackupProcessor(
 	defer logClose(ctx, storage, "external storage")
 
 	// Start start a group of goroutines which each pull spans off of `todo` and
-	// send export requests. Any spans that encounter write intent errors during
+	// send export requests. Any spans that encounter lock conflict errors during
 	// Export are put back on the todo queue for later processing.
 	numSenders, release, err := reserveWorkerMemory(ctx, clusterSettings, memAcc)
 	if err != nil {
@@ -525,13 +525,13 @@ func runBackupProcessor(
 							return nil
 						})
 					if exportRequestErr != nil {
-						if intentErr, ok := pErr.GetDetail().(*kvpb.WriteIntentError); ok {
+						if lockErr, ok := pErr.GetDetail().(*kvpb.LockConflictError); ok {
 							span.lastTried = timeutil.Now()
 							span.attempts++
 							todo <- span
 							// TODO(dt): send a progress update to update job progress to note
 							// the intents being hit.
-							log.VEventf(ctx, 1, "retrying ExportRequest for span %s; encountered WriteIntentError: %s", span.span, intentErr.Error())
+							log.VEventf(ctx, 1, "retrying ExportRequest for span %s; encountered LockConflictError: %s", span.span, lockErr.Error())
 							span = spanAndTime{}
 							continue
 						}
