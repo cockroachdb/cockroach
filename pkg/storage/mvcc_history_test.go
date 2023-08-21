@@ -2683,7 +2683,7 @@ func (i *iterWithCloser) Close() {
 
 // noopCloseReader overrides Reader.Close() with a noop.
 type noopCloseReader struct {
-	storage.Reader
+	storage.ReaderWithMustIterators
 }
 
 func (noopCloseReader) Close() {}
