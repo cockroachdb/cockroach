@@ -1072,7 +1072,7 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
-	err = c.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
+	err = install.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 		res := &install.RunResultDetails{Node: node}
 		host := c.Host(node)
 		port, err := c.NodeUIPort(node)
@@ -1647,12 +1647,6 @@ func CreateSnapshot(
 		return nil, err
 	}
 
-	// 1-indexed node IDs.
-	statusByNodeID := make(map[int]install.NodeStatus)
-	for _, status := range nodesStatus {
-		statusByNodeID[status.NodeID] = status
-	}
-
 	// TODO(irfansharif): Add validation that we're using some released version,
 	// probably the predecessor one. Also ensure that any running CRDB processes
 	// have been stopped since we're taking raw disk snapshots cluster-wide.
@@ -1661,11 +1655,12 @@ func CreateSnapshot(
 		syncutil.Mutex
 		snapshots []vm.VolumeSnapshot
 	}{}
-	if err := c.Parallel(ctx, l, nodes, func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
+	if err := install.Parallel(ctx, l, nodesStatus, func(ctx context.Context, status install.NodeStatus) (*install.RunResultDetails, error) {
+		node := install.Node(status.NodeID)
 		res := &install.RunResultDetails{Node: node}
 
 		cVM := c.VMs[node-1]
-		crdbVersion := statusByNodeID[int(node)].Version
+		crdbVersion := status.Version
 		if crdbVersion == "" {
 			crdbVersion = "unknown"
 		}
@@ -1780,7 +1775,7 @@ func ApplySnapshots(
 	}
 
 	// Detach and delete existing volumes. This is destructive.
-	if err := c.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
+	if err := install.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 		res := &install.RunResultDetails{Node: node}
 
 		cVM := &c.VMs[node-1]
@@ -1804,7 +1799,7 @@ func ApplySnapshots(
 		return err
 	}
 
-	return c.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
+	return install.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 		res := &install.RunResultDetails{Node: node}
 
 		volumeOpts := opts // make a copy
@@ -1955,7 +1950,7 @@ func sendCaptureCommand(
 ) error {
 	nodes := c.TargetNodes()
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
-	_, _, err := c.ParallelE(ctx, l, nodes,
+	_, _, err := install.ParallelE(ctx, l, nodes,
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			port, err := c.NodeUIPort(node)
 			if err != nil {
