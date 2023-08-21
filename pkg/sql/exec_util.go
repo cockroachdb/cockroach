@@ -3138,6 +3138,10 @@ func (m *sessionDataMutator) SetDirectColumnarScansEnabled(b bool) {
 	m.data.DirectColumnarScansEnabled = b
 }
 
+func (m *sessionDataMutator) SetExposeObservabilitySchema(b bool) {
+	m.data.ExposeObservabilitySchema = b
+}
+
 func (m *sessionDataMutator) SetDisablePlanGists(val bool) {
 	m.data.DisablePlanGists = val
 }
