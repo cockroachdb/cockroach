@@ -583,6 +583,7 @@ func runTestRestoreMemoryMonitoring(t *testing.T, numSplits, numInc, restoreProc
 	const splitSize = 10
 	numAccounts := numSplits * splitSize
 	var expectedNumFiles int
+	var actualNumFiles int
 	restoreProcessorKnobCount := atomic.Uint32{}
 	args := base.TestServerArgs{
 		DefaultTestTenant: base.TODOTestTenantDisabled,
@@ -593,7 +594,7 @@ func runTestRestoreMemoryMonitoring(t *testing.T, numSplits, numInc, restoreProc
 					RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, entry *execinfrapb.RestoreSpanEntry) {
 						// The total size of the backup files should be less than the target
 						// SST size, thus should all fit in one import span.
-						require.Equal(t, expectedNumFiles, len(entry.Files))
+						require.Equal(t, actualNumFiles, len(entry.Files))
 						restoreProcessorKnobCount.Add(1)
 					},
 				},
@@ -631,11 +632,11 @@ func runTestRestoreMemoryMonitoring(t *testing.T, numSplits, numInc, restoreProc
 		numIncFiles += len(incSplitsWithFile)
 	}
 
+	// Verify the file counts in the backup is at least what's expected. The
+	// actual number can be more due to elastic CPU preempting export responses.
 	expectedNumFiles += numSplits + numIncFiles
-	// Verify the file counts in the backup.
-	var numFiles int
-	sqlDB.QueryRow(t, "SELECT count(*) FROM [SHOW BACKUP FILES FROM latest IN 'userfile:///backup']").Scan(&numFiles)
-	require.Equal(t, expectedNumFiles, numFiles)
+	sqlDB.QueryRow(t, "SELECT count(*) FROM [SHOW BACKUP FILES FROM latest IN 'userfile:///backup']").Scan(&actualNumFiles)
+	require.GreaterOrEqual(t, actualNumFiles, expectedNumFiles)
 
 	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.per_processor_memory_limit = $1", restoreProcessorMaxFiles*sstReaderOverheadBytesPerFile)
 
@@ -644,8 +645,8 @@ func runTestRestoreMemoryMonitoring(t *testing.T, numSplits, numInc, restoreProc
 
 	// Assert that the restore processor is processing the same span multiple
 	// times, and the count is based on what's expected from the memory budget.
-	// The expected number is just the ceiling of expectedNumFiles/restoreProcessorMaxFiles.
-	require.Equal(t, (expectedNumFiles-1)/restoreProcessorMaxFiles+1, int(restoreProcessorKnobCount.Load()))
+	// The expected number is just the ceiling of actualNumFiles/restoreProcessorMaxFiles.
+	require.Equal(t, (actualNumFiles-1)/restoreProcessorMaxFiles+1, int(restoreProcessorKnobCount.Load()))
 
 	// Verify data in the restored table.
 	expectedFingerprints := sqlDB.QueryStr(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE data.bank")
