@@ -26,14 +26,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newItem(s roachpb.Span) *lockState {
+func newItem(s roachpb.Span) *keyLocks {
 	i := nilT.New()
 	i.SetKey(s.Key)
 	i.SetEndKey(s.EndKey)
 	return i
 }
 
-func spanFromItem(i *lockState) roachpb.Span {
+func spanFromItem(i *keyLocks) roachpb.Span {
 	return roachpb.Span{Key: i.Key(), EndKey: i.EndKey()}
 }
 
@@ -515,7 +515,7 @@ func TestIterStack(t *testing.T) {
 //////////////////////////////////////////
 
 // perm returns a random permutation of items with spans in the range [0, n).
-func perm(n int) (out []*lockState) {
+func perm(n int) (out []*keyLocks) {
 	for _, i := range rand.Perm(n) {
 		out = append(out, newItem(spanWithEnd(i, i+1)))
 	}
@@ -523,7 +523,7 @@ func perm(n int) (out []*lockState) {
 }
 
 // rang returns an ordered list of items with spans in the range [m, n].
-func rang(m, n int) (out []*lockState) {
+func rang(m, n int) (out []*keyLocks) {
 	for i := m; i <= n; i++ {
 		out = append(out, newItem(spanWithEnd(i, i+1)))
 	}
@@ -531,7 +531,7 @@ func rang(m, n int) (out []*lockState) {
 }
 
 // all extracts all items from a tree in order as a slice.
-func all(tr *btree) (out []*lockState) {
+func all(tr *btree) (out []*keyLocks) {
 	it := tr.MakeIter()
 	it.First()
 	for it.Valid() {
@@ -743,10 +743,10 @@ func TestBTreeSeekOverlapRandom(t *testing.T) {
 		var tr btree
 
 		const count = 1000
-		items := make([]*lockState, count)
+		items := make([]*keyLocks, count)
 		itemSpans := make([]int, count)
 		for j := 0; j < count; j++ {
-			var item *lockState
+			var item *keyLocks
 			end := rng.Intn(count + 10)
 			if end <= j {
 				end = j
@@ -761,7 +761,7 @@ func TestBTreeSeekOverlapRandom(t *testing.T) {
 
 		const scanTrials = 100
 		for j := 0; j < scanTrials; j++ {
-			var scanItem *lockState
+			var scanItem *keyLocks
 			scanStart := rng.Intn(count)
 			scanEnd := rng.Intn(count + 10)
 			if scanEnd <= scanStart {
@@ -771,7 +771,7 @@ func TestBTreeSeekOverlapRandom(t *testing.T) {
 				scanItem = newItem(spanWithEnd(scanStart, scanEnd+1))
 			}
 
-			var exp, found []*lockState
+			var exp, found []*keyLocks
 			for startKey, endKey := range itemSpans {
 				if startKey <= scanEnd && endKey >= scanStart {
 					exp = append(exp, items[startKey])
@@ -853,7 +853,7 @@ func TestBTreeCloneConcurrentOperations(t *testing.T) {
 
 	t.Log("Checking all values again")
 	for i, tree := range trees {
-		var wantpart []*lockState
+		var wantpart []*keyLocks
 		if i < len(trees)/2 {
 			wantpart = want[:cloneTestSize/2]
 		} else {

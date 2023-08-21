@@ -1890,7 +1890,7 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 //     non-empty one has been inserted.
 
 func TestLockStateSafeFormat(t *testing.T) {
-	l := &lockState{
+	l := &keyLocks{
 		id:     1,
 		key:    []byte("KEY"),
 		endKey: []byte("END"),
