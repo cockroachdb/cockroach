@@ -200,7 +200,7 @@ func (c *SyncedCluster) maybeRegisterServices(
 
 	mu := syncutil.Mutex{}
 	servicesToRegister := make(ServiceDescriptors, 0)
-	err = c.Parallel(ctx, l, c.Nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
+	err = Parallel(ctx, l, c.Nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		services := make(ServiceDescriptors, 0)
 		res := &RunResultDetails{Node: node}
 		if _, ok := serviceMap[node][ServiceTypeSQL]; !ok {
@@ -306,7 +306,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	l.Printf("%s: starting nodes", c.Name)
 
 	// SSH retries are disabled by passing nil RunRetryOpts
-	if err := c.Parallel(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
+	if err := Parallel(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		// NB: if cockroach started successfully, we ignore the output as it is
 		// some harmless start messaging.
 		res, err := c.startNode(ctx, l, node, startOpts)
@@ -451,7 +451,7 @@ func (c *SyncedCluster) ExecSQL(
 	ctx context.Context, l *logger.Logger, nodes Nodes, tenantName string, args []string,
 ) error {
 	display := fmt.Sprintf("%s: executing sql", c.Name)
-	results, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
+	results, _, err := ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL)
 		if err != nil {
 			return nil, err
