@@ -2095,6 +2095,7 @@ GO_TARGETS = [
     "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil:sqlstatsutil_test",
     "//pkg/sql/sqlstats/persistedsqlstats:persistedsqlstats",
     "//pkg/sql/sqlstats/persistedsqlstats:persistedsqlstats_test",
+    "//pkg/sql/sqlstats/schema:schema",
     "//pkg/sql/sqlstats/sslocal:sslocal",
     "//pkg/sql/sqlstats/sslocal:sslocal_test",
     "//pkg/sql/sqlstats/ssmemstorage:ssmemstorage",

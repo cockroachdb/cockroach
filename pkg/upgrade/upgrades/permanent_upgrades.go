@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/constants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/schema"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -178,17 +180,45 @@ func updateSystemLocationData(
 func createDefaultDbs(
 	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
+	for _, dbName := range []string{catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName} {
+		if err := createDefaultDbsInternal(ctx, deps, dbName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func createDefaultDbsInternal(ctx context.Context, deps upgrade.TenantDeps, dbName string) error {
 	// Create the default databases. These are plain databases with
 	// default permissions. Nothing special happens if they exist
 	// already.
-	const createDbStmt = `CREATE DATABASE IF NOT EXISTS "%s"`
+	const createDbStmt = `CREATE DATABASE IF NOT EXISTS %s`
 
-	var err error
-	for _, dbName := range []string{catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName} {
-		stmt := fmt.Sprintf(createDbStmt, dbName)
-		_, err = deps.InternalExecutor.Exec(ctx, "create-default-DB", nil /* txn */, stmt)
+	stmt := fmt.Sprintf(createDbStmt, tree.NameString(dbName))
+	_, err := deps.InternalExecutor.Exec(ctx, "create-initial-database", nil /* txn */, stmt)
+	if err != nil {
+		log.Warningf(ctx, "failed attempt to add database %q: %s", dbName, err)
+		return err
+	}
+	return nil
+}
+
+func createObservabilityDatabase(
+	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+) error {
+	const obsDB = constants.ObservabilityDatabaseName
+	if err := createDefaultDbsInternal(ctx, deps, obsDB); err != nil {
+		return err
+	}
+	for _, stmt := range schema.InitialSQLStatsSchema {
+		_, err := deps.InternalExecutor.ExecEx(ctx, "init-obs-schema", nil, /* txn */
+			sessiondata.InternalExecutorOverride{
+				User:     username.RootUserName(),
+				Database: obsDB,
+			},
+			stmt)
 		if err != nil {
-			log.Warningf(ctx, "failed attempt to add database %q: %s", dbName, err)
+			log.Warningf(ctx, "failed to run %s: %v", stmt, err)
 			return err
 		}
 	}

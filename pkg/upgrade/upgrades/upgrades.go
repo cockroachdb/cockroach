@@ -318,6 +318,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		stmtDiagForPlanGistMigration,
 	),
+	upgrade.NewPermanentTenantUpgrade(
+		"create the observability database",
+		toCV(clusterversion.V23_2_CreateObsDB),
+		createObservabilityDatabase,
+		"create the observability database",
+	),
 }
 
 var (
