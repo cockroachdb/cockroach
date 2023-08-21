@@ -2336,7 +2336,8 @@ CREATE TABLE crdb_internal.cluster_settings (
   public        BOOL NOT NULL, -- whether the setting is documented, which implies the user can expect support.
   description   STRING NOT NULL,
   default_value STRING NOT NULL,
-  origin        STRING NOT NULL -- the origin of the value: 'default' , 'override' or 'external-override'
+  origin        STRING NOT NULL, -- the origin of the value: 'default' , 'override' or 'external-override'
+  key           STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		hasSqlModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING, p.User())
@@ -2388,6 +2389,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 				tree.NewDString(desc),
 				tree.NewDString(defaultVal),
 				tree.NewDString(origin),
+				tree.NewDString(string(setting.InternalKey())),
 			); err != nil {
 				return err
 			}
