@@ -100,6 +100,7 @@ var WebSessionTimeout = settings.RegisterDurationSetting(
 	"the duration that a newly created web session will be valid",
 	7*24*time.Hour,
 	settings.NonNegativeDuration,
+	settings.WithName("server.web_session.timeout"),
 	settings.WithPublic)
 
 type authenticationServer struct {

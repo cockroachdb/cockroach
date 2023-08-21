@@ -41,7 +41,7 @@ Beyond the obvious usability issues, there are important functional gaps:
 
  - in certain cases tenant code may need to consult values for cluster settings
    that apply to the host cluster: for example
-   `kv.closed_timestamp.follower_reads_enabled` applies to the KV subsystem but
+   `kv.closed_timestamp.follower_reads.enabled` applies to the KV subsystem but
    is read by the SQL code when serving queries.
 
 ### Note on SQL settings

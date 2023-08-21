@@ -82,7 +82,7 @@ timestamp for use with an `AS OF SYSTEM TIME` query, this RFC introduces a new
 SQL function `follower_read_timestamp()` which is effectively a syntactic
 short-hand for multiplying the above mentioned cluster settings then extends `AS
 OF SYSTEM TIME` to allow for a non-constant expression. After this change and
-the enabling of `kv.closed_timestamp.follower_reads_enabled` clients can
+the enabling of `kv.closed_timestamp.follower_reads.enabled` clients can
 trivially encourage their `SELECT` statements to be directed to physically close
 replicas. For example, imagine that the kv.kv table exists, the below query
 would perform a read against the nearest replica:

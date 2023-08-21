@@ -39,6 +39,7 @@ var StreamReplicationJobLivenessTimeout = settings.RegisterDurationSetting(
 	"stream_replication.job_liveness_timeout",
 	"controls how long we wait for to kill an inactive producer job",
 	3*24*time.Hour,
+	settings.WithName("stream_replication.job_liveness.timeout"),
 )
 
 // StreamReplicationConsumerHeartbeatFrequency controls frequency the stream replication

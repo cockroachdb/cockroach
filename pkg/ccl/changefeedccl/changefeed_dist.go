@@ -320,7 +320,8 @@ var enableBalancedRangeDistribution = settings.RegisterBoolSetting(
 	"changefeed.balance_range_distribution.enable",
 	"if enabled, the ranges are balanced equally among all nodes",
 	util.ConstantWithMetamorphicTestBool(
-		"changefeed.balance_range_distribution.enable", false),
+		"changefeed.balance_range_distribution.enabled", false),
+	settings.WithName("changefeed.balance_range_distribution.enabled"),
 	settings.WithPublic)
 
 func makePlan(

@@ -53,8 +53,9 @@ var replanRestoreFrequency = settings.RegisterDurationSetting(
 var memoryMonitorSSTs = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"bulkio.restore.memory_monitor_ssts",
-	"if true, restore will limit number of simultaneously open SSTs based on available memory",
+	"if true, restore will limit number of simultaneously open SSTs to keep memory usage under the configured memory fraction",
 	false,
+	settings.WithName("bulkio.restore.sst_memory_limit.enabled"),
 )
 
 // distRestore plans a 2 stage distSQL flow for a distributed restore. It

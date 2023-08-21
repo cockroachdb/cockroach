@@ -4262,7 +4262,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 		// Disable follower reads. When metamorphically enabling expiration-based
 		// leases, an expired lease will cause a follower read which bypasses the
 		// strict GC enforcement.
-		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = false")
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = false")
 
 		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10 ms'")
 		defer sqlDB.Exec(t, `SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = DEFAULT`)

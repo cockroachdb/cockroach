@@ -31,6 +31,7 @@ var FollowerReadsEnabled = settings.RegisterBoolSetting(
 	"kv.closed_timestamp.follower_reads_enabled",
 	"allow (all) replicas to serve consistent historical reads based on closed timestamp information",
 	true,
+	settings.WithName("kv.closed_timestamp.follower_reads.enabled"),
 	settings.WithPublic)
 
 // BatchCanBeEvaluatedOnFollower determines if a batch consists exclusively of

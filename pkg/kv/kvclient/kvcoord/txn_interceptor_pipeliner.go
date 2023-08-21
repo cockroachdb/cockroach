@@ -31,12 +31,13 @@ import (
 // The degree of the inFlightWrites btree.
 const txnPipelinerBtreeDegree = 32
 
-// PipelinedWritesEnabled is the kv.transaction.write_pipelining_enabled cluster setting.
+// PipelinedWritesEnabled is the kv.transaction.write_pipelining.enabled cluster setting.
 var PipelinedWritesEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.transaction.write_pipelining_enabled",
 	"if enabled, transactional writes are pipelined through Raft consensus",
 	true,
+	settings.WithName("kv.transaction.write_pipelining.enabled"),
 )
 var pipelinedWritesMaxBatchSize = settings.RegisterIntSetting(
 	settings.TenantWritable,
@@ -52,6 +53,7 @@ var pipelinedWritesMaxBatchSize = settings.RegisterIntSetting(
 	// hit the 1PC fast-path or should have batches which exceed this limit.
 	128,
 	settings.NonNegativeInt,
+	settings.WithName("kv.transaction.write_pipelining.max_batch_size"),
 )
 
 // TrackedWritesMaxSize is a byte threshold for the tracking of writes performed

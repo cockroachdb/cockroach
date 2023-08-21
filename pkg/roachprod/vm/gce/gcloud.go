@@ -55,7 +55,7 @@ func DefaultProject() string {
 }
 
 // projects for which a cron GC job exists.
-var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
+var projectsWithGC = []string{defaultProject}
 
 // Denotes if this provider was successfully initialized.
 var initialized = false

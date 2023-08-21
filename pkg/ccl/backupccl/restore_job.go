@@ -89,6 +89,7 @@ var useSimpleImportSpans = settings.RegisterBoolSetting(
 	"bulkio.restore.use_simple_import_spans",
 	"if set to true, restore will generate its import spans using the makeSimpleImportSpans algorithm",
 	false,
+	settings.WithName("bulkio.restore.simple_import_spans.enabled"),
 )
 
 var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(

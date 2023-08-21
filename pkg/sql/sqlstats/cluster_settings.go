@@ -57,6 +57,7 @@ var DumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
 	"sql.metrics.statement_details.dump_to_logs",
 	"dump collected statement statistics to node logs when periodically cleared",
 	false,
+	settings.WithName("sql.metrics.statement_details.dump_to_logs.enabled"),
 	settings.WithPublic)
 
 // SampleLogicalPlans specifies whether we periodically sample the logical plan

@@ -549,7 +549,7 @@ func BenchmarkTracing(b *testing.B) {
 						// more expensive.
 						sqlTraceRatio float64
 						// netTrace, if set, enables use of net.Traces. This is similar to
-						// the effects of the trace.debug.enable cluster setting.
+						// the effects of the trace.debug_http_endpoint.enabled cluster setting.
 						netTrace bool
 					}
 					for _, test := range []testSpec{

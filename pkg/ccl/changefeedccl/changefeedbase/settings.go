@@ -67,6 +67,7 @@ var IdleTimeout = settings.RegisterDurationSetting(
 	"a changefeed will mark itself idle if no changes have been emitted for greater than this duration; if 0, the changefeed will never be marked idle",
 	10*time.Minute,
 	settings.NonNegativeDuration,
+	settings.WithName("changefeed.auto_idle.timeout"),
 )
 
 // FrontierCheckpointFrequency controls the frequency of frontier checkpoints.
@@ -217,6 +218,7 @@ var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
 	"changefeed.batch_reduction_retry_enabled",
 	"if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes",
 	false,
+	settings.WithName("changefeed.batch_reduction_retry.enabled"),
 	settings.WithPublic)
 
 // UseMuxRangeFeed enables the use of MuxRangeFeed RPC.
@@ -280,6 +282,7 @@ var RequireExternalConnectionSink = settings.RegisterBoolSetting(
 		" to create changefeeds with external connection sinks only."+
 		" see https://www.cockroachlabs.com/docs/stable/create-external-connection.html",
 	false,
+	settings.WithName("changefeed.permissions.require_external_connection_sink.enabled"),
 )
 
 // SinkIOWorkers controls the number of IO workers used by sinks that use
