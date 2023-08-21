@@ -286,13 +286,15 @@ func verifyInMemoryStmtFingerprints(
 func verifyDiskStmtFingerprints(
 	t *testing.T, sqlRunner *sqlutils.SQLRunner, expectedStmtsNoConst map[string]int64,
 ) {
+	defer useObsDB(t, sqlRunner)()
+
 	require.NotEmpty(t, expectedStmtsNoConst)
 	expectedStmtsNoConstCopy := make(map[string]int64, len(expectedStmtsNoConst))
 	stmtQuery := `SELECT ss.metadata->>'query' as query,
        ss.statistics->'statistics'->>'cnt' as count,
        ts.execution_count
-FROM system.statement_statistics ss
-    LEFT JOIN system.transaction_statistics ts ON ss.transaction_fingerprint_id = ts.fingerprint_id
+FROM statement_statistics ss
+    LEFT JOIN transaction_statistics ts ON ss.transaction_fingerprint_id = ts.fingerprint_id
 WHERE ss.metadata->>'query' in ( `
 
 	for fingerprint, cnt := range expectedStmtsNoConst {

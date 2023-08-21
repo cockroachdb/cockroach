@@ -110,14 +110,14 @@ func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, er
 SELECT
     count(*)
 FROM
-    system.statement_statistics
+    statement_statistics
 `
 	readStmt += s.cfg.Knobs.GetAOSTClause()
 	row, err := s.cfg.DB.Executor().QueryRowEx(
 		ctx,
 		"fetch-stmt-count",
 		nil,
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		readStmt,
 	)
 
@@ -356,7 +356,7 @@ func (s *PersistedSQLStats) insertTransactionStats(
 	stats *appstatspb.CollectedTransactionStatistics,
 ) (rowsAffected int, err error) {
 	insertStmt := `
-INSERT INTO system.transaction_statistics
+INSERT INTO transaction_statistics
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id)
 DO NOTHING
@@ -382,7 +382,7 @@ DO NOTHING
 		ctx,
 		"insert-txn-stats",
 		txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		insertStmt,
 		aggregatedTs,            // aggregated_ts
 		serializedFingerprintID, // fingerprint_id
@@ -403,7 +403,7 @@ func (s *PersistedSQLStats) updateTransactionStats(
 	stats *appstatspb.CollectedTransactionStatistics,
 ) error {
 	updateStmt := `
-UPDATE system.transaction_statistics
+UPDATE transaction_statistics
 SET statistics = $1
 WHERE fingerprint_id = $2
 	AND aggregated_ts = $3
@@ -422,7 +422,7 @@ WHERE fingerprint_id = $2
 		ctx,
 		"update-stmt-stats",
 		txn.KV(), /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		updateStmt,
 		statistics,              // statistics
 		serializedFingerprintID, // fingerprint_id
@@ -453,7 +453,7 @@ func (s *PersistedSQLStats) updateStatementStats(
 	stats *appstatspb.CollectedStatementStatistics,
 ) error {
 	updateStmt := `
-UPDATE system.statement_statistics
+UPDATE statement_statistics
 SET statistics = $1,
 index_recommendations = $2
 WHERE fingerprint_id = $3
@@ -480,7 +480,7 @@ WHERE fingerprint_id = $3
 		ctx,
 		"update-stmt-stats",
 		txn.KV(), /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		updateStmt,
 		statistics,                         // statistics
 		indexRecommendations,               // index_recommendations
@@ -562,7 +562,7 @@ func (s *PersistedSQLStats) insertStatementStats(
 	)
 
 	insertStmt := fmt.Sprintf(`
-INSERT INTO system.statement_statistics
+INSERT INTO statement_statistics
 VALUES (%s)
 ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
              aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, plan_hash, node_id)
@@ -572,7 +572,7 @@ DO NOTHING
 		ctx,
 		"insert-stmt-stats",
 		txn.KV(), /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		insertStmt,
 		args...,
 	)
@@ -594,7 +594,7 @@ func (s *PersistedSQLStats) fetchPersistedTransactionStats(
 SELECT
     statistics
 FROM
-    system.transaction_statistics
+    transaction_statistics
 WHERE fingerprint_id = $1
     AND app_name = $2
 	  AND aggregated_ts = $3
@@ -607,7 +607,7 @@ FOR UPDATE
 		ctx,
 		"fetch-txn-stats",
 		txn.KV(), /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		readStmt,                // stmt
 		serializedFingerprintID, // fingerprint_id
 		appName,                 // app_name
@@ -649,7 +649,7 @@ func (s *PersistedSQLStats) fetchPersistedStatementStats(
 SELECT
     statistics
 FROM
-    system.statement_statistics
+    statement_statistics
 WHERE fingerprint_id = $1
     AND transaction_fingerprint_id = $2
     AND app_name = $3
@@ -663,7 +663,7 @@ FOR UPDATE
 		ctx,
 		"fetch-stmt-stats",
 		txn.KV(), /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		readStmt,                           // stmt
 		serializedFingerprintID,            // fingerprint_id
 		serializedTransactionFingerprintID, // transaction_fingerprint_id

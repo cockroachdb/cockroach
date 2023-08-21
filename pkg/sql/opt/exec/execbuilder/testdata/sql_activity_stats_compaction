@@ -1,7 +1,7 @@
 # LogicTest: local
 
-# Ensure we can run DELETE statement on system.statement_statistics and
-# system.transaction_statistics table.
+# Ensure we can run DELETE statement on statement_statistics and
+# transaction_statistics table.
 statement ok
 INSERT INTO system.users VALUES ('node', NULL, true, 3);
 
@@ -16,11 +16,14 @@ let $current_agg_ts
 SELECT concat('''', date_trunc('hour', '2022-05-04 16:10'::TIMESTAMPTZ)::STRING, '''::TIMESTAMPTZ')
 
 statement ok
-DELETE FROM system.table_statistics WHERE true;
+SET database = crdb_internal.current_observability_database()
+
+statement ok
+DELETE FROM table_statistics WHERE true;
 
 
 statement ok
-ALTER TABLE system.statement_statistics INJECT STATISTICS '[
+ALTER TABLE statement_statistics INJECT STATISTICS '[
     {
         "columns": [
             "aggregated_ts"
@@ -218,7 +221,7 @@ ALTER TABLE system.statement_statistics INJECT STATISTICS '[
 
 query T
 EXPLAIN (VERBOSE)
-DELETE FROM system.statement_statistics
+DELETE FROM statement_statistics
 WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = 0
   AND aggregated_ts < $current_agg_ts
 ORDER BY aggregated_ts ASC
@@ -266,7 +269,7 @@ vectorized: true
                   limit: 1024
 
 statement ok
-ALTER TABLE system.transaction_statistics INJECT STATISTICS '[
+ALTER TABLE transaction_statistics INJECT STATISTICS '[
     {
         "columns": [
             "aggregated_ts"
@@ -405,7 +408,7 @@ ALTER TABLE system.transaction_statistics INJECT STATISTICS '[
 
 query T
 EXPLAIN (VERBOSE)
-DELETE FROM system.transaction_statistics
+DELETE FROM transaction_statistics
   WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = 0
     AND aggregated_ts < $current_agg_ts
   ORDER BY aggregated_ts ASC
@@ -451,7 +454,7 @@ vectorized: true
 
 query T
 EXPLAIN (VERBOSE)
-DELETE FROM system.statement_statistics
+DELETE FROM statement_statistics
 WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = 0
 AND (
   (
@@ -510,7 +513,7 @@ vectorized: true
 
 query T
 EXPLAIN (VERBOSE)
-DELETE FROM system.transaction_statistics
+DELETE FROM transaction_statistics
       WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = 0
       AND (
         (

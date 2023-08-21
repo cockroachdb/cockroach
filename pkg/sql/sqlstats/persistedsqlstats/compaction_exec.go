@@ -114,7 +114,7 @@ func (c *StatsCompactor) getRowCountForShard(
 	row, err := c.db.Executor().QueryRowEx(ctx,
 		"scan-row-count",
 		nil,
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		stmt,
 		shardIdx,
 	)
@@ -209,13 +209,12 @@ func (c *StatsCompactor) executeDeleteStmt(
 	ctx context.Context, delStmt string, qargs []interface{},
 ) (lastRow tree.Datums, rowsDeleted int64, err error) {
 	qosLevel := sessiondatapb.UserLow
+	override := sessiondata.ObservabilitySessionDataOverride
+	override.QualityOfService = &qosLevel
 	it, err := c.db.Executor().QueryIteratorEx(ctx,
 		"delete-old-sql-stats",
 		nil, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User:             sessiondata.NodeUserSessionDataOverride.User,
-			QualityOfService: &qosLevel,
-		},
+		override,
 		delStmt,
 		qargs...,
 	)
@@ -279,18 +278,18 @@ var (
 	stmtStatsCleanupOps = &cleanupOperations{
 		initialScanStmtTemplate: `
       SELECT count(*)
-      FROM system.statement_statistics
+      FROM statement_statistics
       %s
       WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = $1`,
 		unconstrainedDeleteStmt: `
-      DELETE FROM system.statement_statistics
+      DELETE FROM statement_statistics
         WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = $1
           AND aggregated_ts < $3
         ORDER BY aggregated_ts ASC
         LIMIT $2
        RETURNING aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id`,
 		constrainedDeleteStmt: `
-    DELETE FROM system.statement_statistics
+    DELETE FROM statement_statistics
     WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = $1
     AND (
       (
@@ -310,18 +309,18 @@ var (
 	txnStatsCleanupOps = &cleanupOperations{
 		initialScanStmtTemplate: `
       SELECT count(*)
-      FROM system.transaction_statistics
+      FROM transaction_statistics
       %s
       WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = $1`,
 		unconstrainedDeleteStmt: `
-    DELETE FROM system.transaction_statistics
+    DELETE FROM transaction_statistics
       WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = $1
         AND aggregated_ts < $3
       ORDER BY aggregated_ts ASC
       LIMIT $2
      RETURNING aggregated_ts, fingerprint_id, app_name, node_id`,
 		constrainedDeleteStmt: `
-    DELETE FROM system.transaction_statistics
+    DELETE FROM transaction_statistics
       WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 = $1
       AND (
         (

@@ -250,18 +250,20 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 	sqlConn.Exec(t, "SET application_name = 'min_flush_test'")
 	sqlConn.Exec(t, "SELECT 1")
 
+	sqlConn.Exec(t, "SET database = crdb_internal.current_observability_database()")
+
 	s.SQLServer().(*sql.Server).
 		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
 
 	sqlConn.CheckQueryResults(t, `
 		SELECT count(*)
-		FROM system.statement_statistics
+		FROM statement_statistics
 		WHERE app_name = 'min_flush_test'
 		`, [][]string{{"1"}})
 
 	sqlConn.CheckQueryResults(t, `
 		SELECT count(*)
-		FROM system.transaction_statistics
+		FROM transaction_statistics
 		WHERE app_name = 'min_flush_test'
 		`, [][]string{{"1"}})
 
@@ -272,13 +274,13 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 
 	sqlConn.CheckQueryResults(t, `
 		SELECT count(*)
-		FROM system.statement_statistics
+		FROM statement_statistics
 		WHERE app_name = 'min_flush_test'
 		`, [][]string{{"1"}})
 
 	sqlConn.CheckQueryResults(t, `
 		SELECT count(*)
-		FROM system.transaction_statistics
+		FROM transaction_statistics
 		WHERE app_name = 'min_flush_test'
 		`, [][]string{{"1"}})
 
@@ -291,7 +293,7 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 
 	sqlConn.CheckQueryResults(t, `
 		SELECT count(*) > 1
-		FROM system.statement_statistics
+		FROM statement_statistics
 		WHERE app_name = 'min_flush_test'
 		`, [][]string{{"true"}})
 
@@ -307,11 +309,12 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 	s := srv.ApplicationLayer()
 
 	observer := s.SQLConn(t, "")
+	observerConn := sqlutils.MakeSQLRunner(observer)
+	observerConn.Exec(t, "SET database = crdb_internal.current_observability_database()")
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
 	sqlConn.Exec(t,
 		"SET CLUSTER SETTING sql.stats.flush.minimum_interval = '10m'")
-	observerConn := sqlutils.MakeSQLRunner(observer)
 
 	t.Run("flush_disabled", func(t *testing.T) {
 		sqlConn.Exec(t,
@@ -365,13 +368,13 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
-		FROM system.statement_statistics
+		FROM statement_statistics
 		WHERE app_name = 'flush_enabled_test'
 		`, [][]string{{"1"}})
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
-		FROM system.transaction_statistics
+		FROM transaction_statistics
 		WHERE app_name = 'flush_enabled_test'
 		`, [][]string{{"1"}})
 
@@ -384,25 +387,25 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
-		FROM system.statement_statistics
+		FROM statement_statistics
 		WHERE app_name = 'flush_enabled_test'
 		`, [][]string{{"1"}})
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
-		FROM system.transaction_statistics
+		FROM transaction_statistics
 		WHERE app_name = 'flush_enabled_test'
 		`, [][]string{{"1"}})
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
-		FROM crdb_internal.statement_statistics
+		FROM statement_statistics
 		WHERE app_name = 'flush_enabled_test'
 		`, [][]string{{"2"}})
 
 		observerConn.CheckQueryResults(t, `
 		SELECT count(*)
-		FROM crdb_internal.transaction_statistics
+		FROM transaction_statistics
 		WHERE app_name = 'flush_enabled_test'
 		`, [][]string{{"2"}})
 	})
@@ -440,13 +443,15 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 }
 
 func countStats(t *testing.T, sqlConn *sqlutils.SQLRunner) (numStmtStats int64, numTxnStats int64) {
-	sqlConn.QueryRow(t, `
-		SELECT count(*)
-		FROM system.statement_statistics`).Scan(&numStmtStats)
+	defer useObsDB(t, sqlConn)()
 
 	sqlConn.QueryRow(t, `
 		SELECT count(*)
-		FROM system.transaction_statistics`).Scan(&numTxnStats)
+		FROM statement_statistics`).Scan(&numStmtStats)
+
+	sqlConn.QueryRow(t, `
+		SELECT count(*)
+		FROM transaction_statistics`).Scan(&numTxnStats)
 
 	return numStmtStats, numTxnStats
 }
@@ -463,11 +468,16 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	s := srv.ApplicationLayer()
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
+
+	observer := s.SQLConn(t, "")
+	observerConn := sqlutils.MakeSQLRunner(observer)
+	observerConn.Exec(t, "SET database = crdb_internal.current_observability_database()")
+
 	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 
 	// 1. Flush then count to get the initial number of rows.
 	pss.Flush(ctx)
-	stmtStatsCount, txnStatsCount := countStats(t, sqlConn)
+	stmtStatsCount, txnStatsCount := countStats(t, observerConn)
 
 	const additionalStatements = int64(3)
 	sqlConn.Exec(t, "SELECT 1")
@@ -475,7 +485,7 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	sqlConn.Exec(t, "SELECT 1, 2, 3")
 
 	pss.Flush(ctx)
-	stmtStatsCountFlush2, txnStatsCountFlush2 := countStats(t, sqlConn)
+	stmtStatsCountFlush2, txnStatsCountFlush2 := countStats(t, observerConn)
 
 	// 2. After flushing and counting a second time, we should see at least 3 more rows.
 	require.GreaterOrEqual(t, stmtStatsCountFlush2-stmtStatsCount, additionalStatements)
@@ -509,7 +519,7 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 
 			pss.Flush(ctx)
 
-			stmtStatsCountFlush3, txnStatsCountFlush3 := countStats(t, sqlConn)
+			stmtStatsCountFlush3, txnStatsCountFlush3 := countStats(t, observerConn)
 
 			if enforceLimitEnabled {
 				// Assert that neither table has grown in length.
@@ -548,7 +558,7 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 	pss.Flush(ctx)
 	stmtStatsCountFlush, _ := countStats(t, sqlConn)
 
-	// Ensure we have some rows in system.statement_statistics
+	// Ensure we have some rows in statement_statistics
 	require.GreaterOrEqual(t, stmtStatsCountFlush, minNumExpectedStmts)
 
 	// Set sql.stats.persisted_rows.max
@@ -565,8 +575,9 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 
 	// Begin a transaction.
 	sqlConn.Exec(t, "BEGIN")
+	sqlConn.Exec(t, "SET database = crdb_internal.current_observability_database()")
 	// Lock the table. Create a state of contention.
-	sqlConn.Exec(t, "SELECT * FROM system.statement_statistics FOR UPDATE")
+	sqlConn.Exec(t, "SELECT * FROM statement_statistics FOR UPDATE")
 
 	// Ensure that we can read from the table despite it being locked, due to the follower read (AOST).
 	// Expect that the number of statements in the table exceeds sql.stats.persisted_rows.max * 1.5
@@ -733,14 +744,16 @@ func verifyInsertedFingerprintExecCount(
 	instanceID base.SQLInstanceID,
 	expectedCount int64,
 ) {
+	defer useObsDB(t, sqlConn)()
+
 	row := sqlConn.Query(t,
 		`
 SELECT
     (S.statistics -> 'statistics' ->> 'cnt')::INT  AS stmtCount,
     (T.statistics -> 'statistics' ->> 'cnt')::INT AS txnCount
 FROM
-    system.transaction_statistics T,
-    system.statement_statistics S
+    transaction_statistics T,
+    statement_statistics S
 WHERE S.metadata ->> 'query' = $1
 	  AND T.aggregated_ts = $2
     AND T.node_id = $3
@@ -763,6 +776,22 @@ WHERE S.metadata ->> 'query' = $1
 	require.NoError(t, row.Close())
 }
 
+func useObsDB(t *testing.T, sqlConn *sqlutils.SQLRunner) (cleanup func()) {
+	var origDB string
+	if err := sqlConn.DB.QueryRowContext(context.Background(), "SELECT current_database()").Scan(&origDB); err != nil {
+		t.Fatal(err)
+	}
+	cleanup = func() {
+		if _, err := sqlConn.DB.ExecContext(context.Background(), "SET database = $1", origDB); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := sqlConn.DB.ExecContext(context.Background(), "SET database = crdb_internal.current_observability_database()"); err != nil {
+		t.Fatal(err)
+	}
+	return cleanup
+}
+
 func verifyNumOfInsertedEntries(
 	t *testing.T,
 	sqlConn *sqlutils.SQLRunner,
@@ -770,13 +799,15 @@ func verifyNumOfInsertedEntries(
 	instanceID base.SQLInstanceID,
 	expectedStmtEntryCnt, expectedTxnEntryCnt int64,
 ) {
+	defer useObsDB(t, sqlConn)()
+
 	row2 := sqlConn.DB.QueryRowContext(context.Background(),
 		`
 SELECT
   encode(fingerprint_id, 'hex'),
 	count(*)
 FROM
-	system.statement_statistics
+	statement_statistics
 WHERE
 	metadata ->> 'query' = $1 AND
   node_id = $2 AND
@@ -797,7 +828,7 @@ GROUP BY
 SELECT
   count(*)
 FROM
-  system.transaction_statistics
+  transaction_statistics
 WHERE
   (metadata -> 'stmtFingerprintIDs' ->> 0) = '%s' AND
   node_id = $1 AND
@@ -861,6 +892,8 @@ func verifyNodeID(
 	gatewayEnabled bool,
 	appName string,
 ) {
+	defer useObsDB(t, sqlConn)()
+
 	row := sqlConn.DB.QueryRowContext(context.Background(),
 		`
 SELECT

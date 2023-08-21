@@ -79,7 +79,7 @@ var SQLStatsFlushJitter = settings.RegisterFloatSetting(
 )
 
 // SQLStatsMaxPersistedRows specifies maximum number of rows that will be
-// retained in system.statement_statistics and system.transaction_statistics.
+// retained in statement_statistics and transaction_statistics.
 var SQLStatsMaxPersistedRows = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"sql.stats.persisted_rows.max",

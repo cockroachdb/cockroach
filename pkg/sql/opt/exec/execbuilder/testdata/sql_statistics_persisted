@@ -1,7 +1,7 @@
 # LogicTest: local
 
-# Ensure we can run ALTER statements on the system.statement_statistics and
-# system.transaction_statistics tables.
+# Ensure we can run ALTER statements on the statement_statistics and
+# transaction_statistics tables.
 statement ok
 INSERT INTO system.users VALUES ('node', NULL, true, 3);
 
@@ -9,7 +9,11 @@ statement ok
 GRANT node TO root;
 
 statement ok
-ALTER TABLE system.statement_statistics INJECT STATISTICS '[
+SET database = crdb_internal.current_observability_database()
+
+
+statement ok
+ALTER TABLE statement_statistics INJECT STATISTICS '[
     {
         "columns": [
             "aggregated_ts"
@@ -365,7 +369,7 @@ SELECT * FROM ((SELECT
   p99_latency,
   metadata,
   statistics
-FROM system.statement_statistics
+FROM statement_statistics
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
 ORDER BY execution_count DESC LIMIT 500)
 UNION (SELECT
@@ -381,7 +385,7 @@ UNION (SELECT
   p99_latency,
   metadata,
   statistics
-FROM system.statement_statistics
+FROM statement_statistics
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
 ORDER BY service_latency DESC LIMIT 500)
 UNION (SELECT
@@ -397,7 +401,7 @@ UNION (SELECT
   p99_latency,
   metadata,
   statistics
-FROM system.statement_statistics
+FROM statement_statistics
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
 ORDER BY cpu_sql_nanos DESC LIMIT 500)
 UNION (SELECT
@@ -413,7 +417,7 @@ UNION (SELECT
   p99_latency,
   metadata,
   statistics
-FROM system.statement_statistics
+FROM statement_statistics
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
 ORDER BY contention_time DESC LIMIT 500)
 UNION (SELECT
@@ -429,7 +433,7 @@ UNION (SELECT
   p99_latency,
   metadata,
   statistics
-FROM system.statement_statistics
+FROM statement_statistics
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
 ORDER BY total_estimated_execution_time DESC LIMIT 500)
  UNION (SELECT
@@ -445,7 +449,7 @@ ORDER BY total_estimated_execution_time DESC LIMIT 500)
   p99_latency,
   metadata,
   statistics
-FROM system.statement_statistics
+FROM statement_statistics
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
 ORDER BY p99_latency DESC LIMIT 500))
 ----
@@ -823,7 +827,7 @@ vectorized: true
               spans: /2023-03-21T14:05:00.000001Z-
 
 statement ok
-ALTER TABLE system.transaction_statistics INJECT STATISTICS '[
+ALTER TABLE transaction_statistics INJECT STATISTICS '[
     {
         "columns": [
             "aggregated_ts"
@@ -1100,7 +1104,7 @@ SELECT * FROM ((SELECT
   p99_latency,
   metadata,
   statistics
-FROM system.transaction_statistics
+FROM transaction_statistics
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
 ORDER BY execution_count DESC LIMIT 500)
 UNION (SELECT
@@ -1115,7 +1119,7 @@ UNION (SELECT
   p99_latency,
   metadata,
   statistics
-FROM system.transaction_statistics
+FROM transaction_statistics
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
 ORDER BY service_latency DESC LIMIT 500)
 UNION (SELECT
@@ -1130,7 +1134,7 @@ UNION (SELECT
   p99_latency,
   metadata,
   statistics
-FROM system.transaction_statistics
+FROM transaction_statistics
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
 ORDER BY cpu_sql_nanos DESC LIMIT 500)
 UNION (SELECT
@@ -1145,7 +1149,7 @@ UNION (SELECT
   p99_latency,
   metadata,
   statistics
-FROM system.transaction_statistics
+FROM transaction_statistics
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ - INTERVAL '1 hour')
 ORDER BY contention_time DESC LIMIT 500)
 UNION (SELECT
@@ -1160,7 +1164,7 @@ UNION (SELECT
   p99_latency,
   metadata,
   statistics
-FROM system.transaction_statistics
+FROM transaction_statistics
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ- INTERVAL '1 hour')
 ORDER BY total_estimated_execution_time DESC LIMIT 500)
 UNION (SELECT
@@ -1175,7 +1179,7 @@ UNION (SELECT
   p99_latency,
   metadata,
   statistics
-FROM system.transaction_statistics
+FROM transaction_statistics
 WHERE app_name NOT LIKE '$ internal%' AND aggregated_ts > ('2023-03-21 15:05'::TIMESTAMPTZ- INTERVAL '1 hour')
 ORDER BY p99_latency DESC LIMIT 500))
 ----

@@ -185,9 +185,12 @@ func TestActivityTablesReset(t *testing.T) {
 	sqlDB.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
 	sqlDB.Exec(t, "GRANT node TO root")
 
-	// Insert into system.statement_activity table
-	sqlDB.Exec(t, `
-		INSERT INTO system.public.statement_activity (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name,
+	obsDB := sqlutils.MakeSQLRunner(s.SQLConn(t, ""))
+	obsDB.Exec(t, "SET database = crdb_internal.current_observability_database()")
+
+	// Insert into statement_activity table
+	obsDB.Exec(t, `
+		INSERT INTO statement_activity (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name,
                                        agg_interval, metadata, statistics, plan, index_recommendations, execution_count,
                                        execution_total_seconds, execution_total_cluster_seconds,
                                        contention_time_avg_seconds,
@@ -213,11 +216,11 @@ func TestActivityTablesReset(t *testing.T) {
 			1
 		)
 	`)
-	// Insert into system.transaction_activity table
-	sqlDB.Exec(t, `
-		INSERT INTO system.public.transaction_activity (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata,
+	// Insert into transaction_activity table.
+	obsDB.Exec(t, `
+		INSERT INTO transaction_activity (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata,
  statistics, query, execution_count, execution_total_seconds,
- execution_total_cluster_seconds, contention_time_avg_seconds, 
+ execution_total_cluster_seconds, contention_time_avg_seconds,
  cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
 		VALUES (
 			'2023-06-29 15:00:00+00',
@@ -237,20 +240,20 @@ func TestActivityTablesReset(t *testing.T) {
 		)
 	`)
 
-	// Check that system.{statement|transaction} activity tables both have 1 row.
+	// Check that {statement|transaction} activity tables both have 1 row.
 	var count int
-	sqlDB.QueryRow(t, "SELECT count(*) FROM system.statement_activity").Scan(&count)
+	obsDB.QueryRow(t, "SELECT count(*) FROM statement_activity").Scan(&count)
 	require.Equal(t, 1 /* expected */, count)
 
-	sqlDB.QueryRow(t, "SELECT count(*) FROM system.transaction_activity").Scan(&count)
+	obsDB.QueryRow(t, "SELECT count(*) FROM transaction_activity").Scan(&count)
 	require.Equal(t, 1 /* expected */, count)
 
 	// Flush the tables.
-	sqlDB.QueryRow(t, "SELECT crdb_internal.reset_activity_tables()")
+	obsDB.QueryRow(t, "SELECT crdb_internal.reset_activity_tables()")
 
-	sqlDB.QueryRow(t, "SELECT count(*) FROM system.statement_activity").Scan(&count)
+	obsDB.QueryRow(t, "SELECT count(*) FROM statement_activity").Scan(&count)
 	require.Equal(t, 0 /* expected */, count)
 
-	sqlDB.QueryRow(t, "SELECT count(*) FROM system.transaction_activity").Scan(&count)
+	obsDB.QueryRow(t, "SELECT count(*) FROM transaction_activity").Scan(&count)
 	require.Equal(t, 0 /* expected */, count)
 }

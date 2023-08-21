@@ -387,6 +387,13 @@ func (ep *DummyEvalPlanner) ResolveTableName(
 	return 0, errors.WithStack(errEvalPlanner)
 }
 
+// CurrentObservabilityDatabase is part of the eval.SessionAccessor interface.
+func (ep *DummyEvalPlanner) CurrentObservabilityDatabase(
+	ctx context.Context, tn *tree.TableName,
+) (string, error) {
+	return "", errors.WithStack(errEvalPlanner)
+}
+
 // GetTypeFromValidSQLSyntax is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
 	return nil, errors.WithStack(errEvalPlanner)
@@ -586,6 +593,11 @@ func (ep *DummySessionAccessor) HasViewActivityOrViewActivityRedactedRole(
 	context.Context,
 ) (bool, error) {
 	return false, errors.WithStack(errEvalSessionVar)
+}
+
+// currentObservabilityDatabase is part of the eval.SessionAccessor interface.
+func (so *DummySessionAccessor) CurrentObservabilityDatabase(ctx context.Context) (string, error) {
+	return "", errors.WithStack(errEvalSessionVar)
 }
 
 // DummyClientNoticeSender implements the eval.ClientNoticeSender interface.

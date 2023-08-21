@@ -1696,7 +1696,7 @@ var legacyAnonymizedStmt = tree.NewDString("")
 
 var crdbInternalNodeStmtStatsTable = virtualSchemaTable{
 	comment: `statement statistics. ` +
-		`The contents of this table are flushed to the system.statement_statistics table at the interval set by the ` +
+		`The contents of this table are flushed to the statement_statistics table at the interval set by the ` +
 		`cluster setting sql.stats.flush.interval (by default, 10m).`,
 	schema: `
 CREATE TABLE crdb_internal.node_statement_statistics (
@@ -1954,7 +1954,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 // StmtFingerprintID and TxnKey. Issue #55284
 var crdbInternalTransactionStatisticsTable = virtualSchemaTable{
 	comment: `finer-grained transaction statistics. ` +
-		`The contents of this table are flushed to the system.transaction_statistics table at the interval set by the ` +
+		`The contents of this table are flushed to the transaction_statistics table at the interval set by the ` +
 		`cluster setting sql.stats.flush.interval (by default, 10m).`,
 	schema: `
 CREATE TABLE crdb_internal.node_transaction_statistics (
@@ -6959,7 +6959,7 @@ CREATE VIEW crdb_internal.statement_statistics_persisted AS
 }
 
 // crdb_internal.statement_activity view to give permission to non-admins
-// to access the system.statement_activity table
+// to access the statement_activity table
 var crdbInternalStmtActivityView = virtualSchemaView{
 	schema: `
 CREATE VIEW crdb_internal.statement_activity AS
@@ -7005,7 +7005,7 @@ CREATE VIEW crdb_internal.statement_activity AS
 }
 
 // crdb_internal.transaction_activity is a view to give permission to non-admins
-// to access the system.transaction_activity table
+// to access the transaction_activity table
 var crdbInternalTxnActivityView = virtualSchemaView{
 	schema: `
 CREATE VIEW crdb_internal.transaction_activity AS

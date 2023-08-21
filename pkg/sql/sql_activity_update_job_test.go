@@ -63,36 +63,37 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 	defer sqlDB.Close()
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, "SET database = crdb_internal.current_observability_database()")
 
 	var count int
-	row := db.QueryRow(t, "SELECT count_rows() FROM system.public.transaction_activity")
+	row := db.QueryRow(t, "SELECT count_rows() FROM transaction_activity")
 	row.Scan(&count)
-	require.Equal(t, 0, count, "system.transaction_activity: expect:0, actual:%d", count)
+	require.Equal(t, 0, count, "transaction_activity: expect:0, actual:%d", count)
 
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.statement_activity")
+	row = db.QueryRow(t, "SELECT count_rows() FROM statement_activity")
 	row.Scan(&count)
-	require.Equal(t, 0, count, "system.statement_activity: expect:0, actual:%d", count)
+	require.Equal(t, 0, count, "statement_activity: expect:0, actual:%d", count)
 
 	row = db.QueryRow(t,
 		"SELECT count_rows() FROM system.public.jobs WHERE job_type = 'AUTO UPDATE SQL ACTIVITY' and id = 103")
 	row.Scan(&count)
 	require.Equal(t, 0, count, "jobs: expect:0, actual:%d", count)
 
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.transaction_statistics")
+	row = db.QueryRow(t, "SELECT count_rows() FROM transaction_statistics")
 	row.Scan(&count)
-	require.Equal(t, 0, count, "system.transaction_statistics: expect:0, actual:%d", count)
+	require.Equal(t, 0, count, "transaction_statistics: expect:0, actual:%d", count)
 
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.statement_statistics")
+	row = db.QueryRow(t, "SELECT count_rows() FROM statement_statistics")
 	row.Scan(&count)
-	require.Equal(t, 0, count, "system.statement_statistics: expect:0, actual:%d", count)
+	require.Equal(t, 0, count, "statement_statistics: expect:0, actual:%d", count)
 
 	row = db.QueryRow(t, "SELECT count_rows() FROM crdb_internal.transaction_activity")
 	row.Scan(&count)
-	require.Equal(t, 0, count, "crdb_internal.transaction_activity: expect:0, actual:%d", count)
+	require.Equal(t, 0, count, "transaction_activity: expect:0, actual:%d", count)
 
 	row = db.QueryRow(t, "SELECT count_rows() FROM crdb_internal.statement_activity")
 	row.Scan(&count)
-	require.Equal(t, 0, count, "crdb_internal.statement_activity: expect:0, actual:%d", count)
+	require.Equal(t, 0, count, "statement_activity: expect:0, actual:%d", count)
 
 	execCfg := srv.ExecutorConfig().(ExecutorConfig)
 	st := cluster.MakeTestingClusterSettings()
@@ -100,13 +101,13 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 
 	require.NoError(t, updater.TransferStatsToActivity(ctx))
 
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.transaction_activity")
+	row = db.QueryRow(t, "SELECT count_rows() FROM transaction_activity")
 	row.Scan(&count)
-	require.Equal(t, 0, count, "system.transaction_activity: expect:0, actual:%d", count)
+	require.Equal(t, 0, count, "transaction_activity: expect:0, actual:%d", count)
 
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.statement_activity")
+	row = db.QueryRow(t, "SELECT count_rows() FROM statement_activity")
 	row.Scan(&count)
-	require.Equal(t, 0, count, "system.statement_activity: expect:0, actual:%d", count)
+	require.Equal(t, 0, count, "statement_activity: expect:0, actual:%d", count)
 
 	appName := "TestSqlActivityUpdateJob"
 	db.Exec(t, "SET SESSION application_name=$1", appName)
@@ -121,13 +122,13 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 	// being a few rows.
 	require.NoError(t, updater.TransferStatsToActivity(ctx))
 
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.transaction_activity WHERE app_name = $1", appName)
+	row = db.QueryRow(t, "SELECT count_rows() FROM transaction_activity WHERE app_name = $1", appName)
 	row.Scan(&count)
-	require.Equal(t, count, 1, "system.transaction_activity after transfer: expect:1, actual:%d", count)
+	require.Equal(t, count, 1, "transaction_activity after transfer: expect:1, actual:%d", count)
 
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.statement_activity WHERE app_name = $1", appName)
+	row = db.QueryRow(t, "SELECT count_rows() FROM statement_activity WHERE app_name = $1", appName)
 	row.Scan(&count)
-	require.Equal(t, count, 1, "system.statement_activity after transfer: expect:1, actual:%d", count)
+	require.Equal(t, count, 1, "statement_activity after transfer: expect:1, actual:%d", count)
 
 	row = db.QueryRow(t, "SELECT count_rows() FROM crdb_internal.transaction_activity WHERE app_name = $1", appName)
 	row.Scan(&count)
@@ -140,13 +141,13 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 	// Reset the stats and verify all sql stats tables are empty.
 	db.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
 
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.transaction_activity")
+	row = db.QueryRow(t, "SELECT count_rows() FROM transaction_activity")
 	row.Scan(&count)
-	require.Zero(t, count, "system.transaction_activity after transfer: expect:0, actual:%d", count)
+	require.Zero(t, count, "transaction_activity after transfer: expect:0, actual:%d", count)
 
-	row = db.QueryRow(t, "SELECT count_rows() FROM system.public.statement_activity")
+	row = db.QueryRow(t, "SELECT count_rows() FROM statement_activity")
 	row.Scan(&count)
-	require.Zero(t, count, "system.statement_activity after transfer: expect:0, actual:%d", count)
+	require.Zero(t, count, "statement_activity after transfer: expect:0, actual:%d", count)
 
 	row = db.QueryRow(t, "SELECT count_rows() FROM crdb_internal.transaction_activity")
 	row.Scan(&count)
@@ -180,16 +181,17 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	defer sqlDB.Close()
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, "SET database = crdb_internal.current_observability_database()")
 
 	// Give permission to write to sys tables.
 	db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
 	db.Exec(t, "GRANT node TO root")
 
 	// Make sure all the tables are empty initially.
-	db.Exec(t, "DELETE FROM system.public.transaction_activity")
-	db.Exec(t, "DELETE FROM system.public.statement_activity")
-	db.Exec(t, "DELETE FROM system.public.transaction_statistics")
-	db.Exec(t, "DELETE FROM system.public.statement_statistics")
+	db.Exec(t, "DELETE FROM transaction_activity")
+	db.Exec(t, "DELETE FROM statement_activity")
+	db.Exec(t, "DELETE FROM transaction_statistics")
+	db.Exec(t, "DELETE FROM statement_statistics")
 
 	execCfg := srv.ExecutorConfig().(ExecutorConfig)
 	st := cluster.MakeTestingClusterSettings()
@@ -239,7 +241,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		// Execution count.
 		for j := 0; j < topLimit; j++ {
 			updateStatsCount++
-			db.Exec(t, `UPDATE system.public.statement_statistics
+			db.Exec(t, `UPDATE statement_statistics
 			SET statistics =  jsonb_set(jsonb_set(statistics, '{execution_statistics, cnt}', to_jsonb($1::INT)),
 			    '{statistics, svcLat, mean}', to_jsonb($2::FLOAT))
 			    WHERE app_name = $3;`, 10000+updateStatsCount, 0.0000001, getAppName(updateStatsCount))
@@ -248,7 +250,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		// Service latency time.
 		for j := 0; j < topLimit; j++ {
 			updateStatsCount++
-			db.Exec(t, `UPDATE system.public.statement_statistics
+			db.Exec(t, `UPDATE statement_statistics
 			SET statistics =  jsonb_set(jsonb_set(statistics, '{execution_statistics, cnt}', to_jsonb($1::INT)),
 			    '{statistics, svcLat, mean}', to_jsonb($2::FLOAT))
 			    WHERE app_name = $3;`, 1, 1000+updateStatsCount, getAppName(updateStatsCount))
@@ -258,7 +260,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		// and service latency, but greater when multiplied together.
 		for j := 0; j < topLimit; j++ {
 			updateStatsCount++
-			db.Exec(t, `UPDATE system.public.statement_statistics
+			db.Exec(t, `UPDATE statement_statistics
 			SET statistics =  jsonb_set(jsonb_set(statistics, '{execution_statistics, cnt}', to_jsonb($1::INT)),
 			    '{statistics, svcLat, mean}', to_jsonb($2::FLOAT))
 			    WHERE app_name = $3;`, 500+updateStatsCount, 500+updateStatsCount, getAppName(updateStatsCount))
@@ -269,7 +271,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		for _, updateField := range columnsToChangeValues {
 			for j := 0; j < topLimit; j++ {
 				updateStatsCount++
-				db.Exec(t, `UPDATE system.public.statement_statistics
+				db.Exec(t, `UPDATE statement_statistics
 			SET statistics =  jsonb_set(statistics, $1, to_jsonb($2::INT)) 
 			WHERE app_name = $3;`, updateField, 10000+updateStatsCount, getAppName(updateStatsCount))
 			}
@@ -283,17 +285,17 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 
 		maxRows := topLimit * 6 // Number of top columns to select from.
 		row := db.QueryRow(t,
-			`SELECT count_rows() FROM system.public.transaction_activity WHERE app_name LIKE 'TestSqlActivityUpdateJobLoop%'`)
+			`SELECT count_rows() FROM transaction_activity WHERE app_name LIKE 'TestSqlActivityUpdateJobLoop%'`)
 		var count int
 		row.Scan(&count)
 		require.LessOrEqual(t, count, maxRows, "transaction_activity after transfer: actual:%d, max:%d", count, maxRows)
 
 		row = db.QueryRow(t,
-			`SELECT count_rows() FROM system.public.statement_activity WHERE app_name LIKE 'TestSqlActivityUpdateJobLoop%'`)
+			`SELECT count_rows() FROM statement_activity WHERE app_name LIKE 'TestSqlActivityUpdateJobLoop%'`)
 		row.Scan(&count)
 		require.LessOrEqual(t, count, maxRows, "statement_activity after transfer: actual:%d, max:%d", count, maxRows)
 
-		row = db.QueryRow(t, `SELECT count_rows() FROM system.public.transaction_activity`)
+		row = db.QueryRow(t, `SELECT count_rows() FROM transaction_activity`)
 		row.Scan(&count)
 		require.LessOrEqual(t, count, maxRows, "transaction_activity after transfer: actual:%d, max:%d", count, maxRows)
 	}
@@ -317,6 +319,9 @@ func TestSqlActivityJobRunsAfterStatsFlush(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	defer db.Close()
 
+	_, err := db.ExecContext(ctx, "SET database = crdb_internal.current_observability_database()")
+	require.NoError(t, err)
+
 	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING sql.stats.flush.interval = '100ms'")
 	require.NoError(t, err)
 	appName := "TestScheduledSQLStatsCompaction"
@@ -328,7 +333,7 @@ func TestSqlActivityJobRunsAfterStatsFlush(t *testing.T) {
 		require.NoError(t, err)
 
 		row := db.QueryRowContext(ctx, "SELECT count_rows() "+
-			"FROM system.public.transaction_activity WHERE app_name = $1", appName)
+			"FROM transaction_activity WHERE app_name = $1", appName)
 		var count int
 		err = row.Scan(&count)
 		if err != nil {
@@ -339,7 +344,7 @@ func TestSqlActivityJobRunsAfterStatsFlush(t *testing.T) {
 		}
 
 		row = db.QueryRowContext(ctx, "SELECT count_rows() "+
-			"FROM system.public.statement_activity WHERE app_name = $1", appName)
+			"FROM statement_activity WHERE app_name = $1", appName)
 		err = row.Scan(&count)
 		if err != nil {
 			return err
@@ -352,7 +357,7 @@ func TestSqlActivityJobRunsAfterStatsFlush(t *testing.T) {
 	}, 1*time.Minute)
 }
 
-// TestTransactionActivityMetadata verifies the metadata JSON column of system.transaction_activity are
+// TestTransactionActivityMetadata verifies the metadata JSON column of transaction_activity are
 // what we expect it to be. This test was added to address #103618.
 func TestTransactionActivityMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -395,7 +400,7 @@ func TestTransactionActivityMetadata(t *testing.T) {
 	}
 
 	require.NoError(t, updater.TransferStatsToActivity(ctx))
-	db.QueryRow(t, "SELECT metadata FROM system.public.transaction_activity LIMIT 1").Scan(&metadataJSON)
+	db.QueryRow(t, "SELECT metadata FROM transaction_activity LIMIT 1").Scan(&metadataJSON)
 	require.NoError(t, json.Unmarshal([]byte(metadataJSON), &metadata))
 	require.NotEmpty(t, metadata.StmtFingerprintIDs)
 
@@ -408,7 +413,7 @@ func TestTransactionActivityMetadata(t *testing.T) {
 	require.NoError(t, updater.transferTopStats(ctx, stubTime, 100, 100, 100))
 
 	// Ensure that the metadata column contains the populated 'stmtFingerprintIDs' field.
-	db.QueryRow(t, "SELECT metadata FROM system.public.transaction_activity LIMIT 1").Scan(&metadataJSON)
+	db.QueryRow(t, "SELECT metadata FROM transaction_activity LIMIT 1").Scan(&metadataJSON)
 	require.NoError(t, json.Unmarshal([]byte(metadataJSON), &metadata))
 	require.NotEmpty(t, metadata.StmtFingerprintIDs)
 }
@@ -446,6 +451,8 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 	updater := newSqlActivityUpdater(st, execCfg.InternalDB, sqlStatsKnobs)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, "SET database = crdb_internal.current_observability_database()")
+
 	// Generate a random app name each time to avoid conflicts
 	appName := "test_status_api" + uuid.FastMakeV4().String()
 	db.Exec(t, "SET SESSION application_name = $1", appName)
@@ -466,7 +473,7 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 	}
 
 	require.NoError(t, updater.TransferStatsToActivity(ctx))
-	db.QueryRow(t, "SELECT metadata FROM system.public.transaction_activity LIMIT 1").Scan(&metadataJSON)
+	db.QueryRow(t, "SELECT metadata FROM transaction_activity LIMIT 1").Scan(&metadataJSON)
 	require.NoError(t, json.Unmarshal([]byte(metadataJSON), &metadata))
 	require.NotEmpty(t, metadata.StmtFingerprintIDs)
 
@@ -489,8 +496,8 @@ func TestActivityStatusCombineAPI(t *testing.T) {
 	// Grant permission and change the activity table info
 	db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
 	db.Exec(t, "GRANT node TO root")
-	db.Exec(t, "UPDATE system.public.statement_activity SET app_name = 'randomapp' where app_name = $1;", appName)
-	db.Exec(t, "UPDATE system.public.transaction_activity SET app_name = 'randomapp' where app_name = $1;", appName)
+	db.Exec(t, "UPDATE statement_activity SET app_name = 'randomapp' where app_name = $1;", appName)
+	db.Exec(t, "UPDATE transaction_activity SET app_name = 'randomapp' where app_name = $1;", appName)
 
 	if err := getStatusJSONProto(s, "combinedstmts", &resp, start, end); err != nil {
 		t.Fatal(err)

@@ -87,7 +87,7 @@ func (s *PersistedSQLStats) persistedStmtStatsIter(
 		ctx,
 		"read-stmt-stats",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		query,
 	)
 
@@ -120,7 +120,7 @@ func (s *PersistedSQLStats) getFetchQueryForStmtStatsTable(
 SELECT 
   %[1]s
 FROM
-	system.statement_statistics
+	statement_statistics
 %[2]s`
 
 	followerReadClause := s.cfg.Knobs.GetAOSTClause()

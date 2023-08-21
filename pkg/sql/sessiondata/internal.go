@@ -47,6 +47,11 @@ type InternalExecutorOverride struct {
 	// does **not** propagate further to "nested" executors that are spawned up
 	// by the "top" executor.
 	InjectRetryErrorsEnabled bool
+	// AutoSelectObservabilityDatabase, if true, automatically sets
+	// the Database session field to the currently active observability database.
+	// This will select between 'system.' and a yet-to-be defined
+	// observability database automatically.
+	AutoSelectObservabilityDatabase bool
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not
@@ -63,4 +68,12 @@ var NodeUserSessionDataOverride = InternalExecutorOverride{
 // the user to the RootUser.
 var RootUserSessionDataOverride = InternalExecutorOverride{
 	User: username.MakeSQLUsernameFromPreNormalizedString(username.RootUser),
+}
+
+// ObservabilitySessionDataOverride is an InternalExecutorOverride which
+// overrides the database to the observability database and accesses
+// the data using the NodeUser.
+var ObservabilitySessionDataOverride = InternalExecutorOverride{
+	User:                            username.MakeSQLUsernameFromPreNormalizedString(username.NodeUser),
+	AutoSelectObservabilityDatabase: true,
 }
