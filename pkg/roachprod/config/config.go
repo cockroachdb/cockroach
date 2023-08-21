@@ -71,6 +71,13 @@ const (
 	// ClustersDir is the directory where we cache information about clusters.
 	ClustersDir = "${HOME}/.roachprod/clusters"
 
+	// DefaultLockPath is the path to the lock file used to synchronize access to
+	// shared roachprod resources.
+	DefaultLockPath = "$HOME/.roachprod/LOCK"
+
+	// DNSDir is the directory where we cache local cluster DNS information.
+	DNSDir = "${HOME}/.roachprod/dns"
+
 	// SharedUser is the linux username for shared use on all vms.
 	SharedUser = "ubuntu"
 
@@ -85,6 +92,9 @@ const (
 	// DefaultAdminUIPort is the default port on which the cockroach process is
 	// listening for HTTP connections for the Admin UI.
 	DefaultAdminUIPort = 26258
+
+	// DefaultOpenPortStart is the default starting range used to find open ports.
+	DefaultOpenPortStart = 29000
 
 	// DefaultNumFilesLimit is the default limit on the number of files that can
 	// be opened by the process.

@@ -349,13 +349,9 @@ func runDecommission(
 			db := c.Conn(ctx, t.L(), pinnedNode)
 			defer db.Close()
 
-			internalAddrs, err := c.InternalAddr(ctx, t.L(), c.Node(pinnedNode))
-			if err != nil {
-				return err
-			}
 			startOpts := option.DefaultStartSingleNodeOpts()
+			startOpts.RoachprodOpts.JoinTargets = []int{pinnedNode}
 			extraArgs := []string{
-				"--join", internalAddrs[0],
 				fmt.Sprintf("--attrs=node%d", node),
 			}
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, extraArgs...)

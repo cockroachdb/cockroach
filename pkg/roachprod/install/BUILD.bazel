@@ -11,12 +11,14 @@ go_library(
         "install.go",
         "iterm2.go",
         "nodes.go",
+        "services.go",
         "session.go",
         "staging.go",
     ],
     embedsrcs = [
         "scripts/download.sh",
         "scripts/start.sh",
+        "scripts/open_ports.sh",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/install",
     visibility = ["//visibility:public"],
@@ -49,6 +51,7 @@ go_test(
     name = "install_test",
     srcs = [
         "cluster_synced_test.go",
+        "services_test.go",
         "staging_test.go",
         "start_template_test.go",
     ],
@@ -56,8 +59,10 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":install"],
     deps = [
+        "//pkg/roachprod/cloud",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/local",
         "//pkg/testutils/datapathutils",
         "//pkg/util/retry",
         "@com_github_cockroachdb_datadriven//:datadriven",

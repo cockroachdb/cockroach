@@ -23,8 +23,8 @@ import (
 var parameterRe = regexp.MustCompile(`{[^{}]*}`)
 var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+)?(:[a-z0-9\-]+)?}`)
 var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+)?}`)
-var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?}`)
-var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)?}`)
+var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?(:[a-z0-9\-]+)?}`)
+var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)}`)
 var storeDirRe = regexp.MustCompile(`{store-dir}`)
 var logDirRe = regexp.MustCompile(`{log-dir}`)
 var certsDirRe = regexp.MustCompile(`{certs-dir}`)
@@ -121,7 +121,7 @@ func (e *expander) maybeExpandPgURL(
 	if e.pgURLs == nil {
 		e.pgURLs = make(map[string]map[Node]string)
 	}
-	tenant := "system"
+	tenant := SystemTenantName
 	if m[2] != "" {
 		// Trim off the leading ':' in the capture group.
 		tenant = m[2][1:]
@@ -167,11 +167,20 @@ func (e *expander) maybeExpandPgPort(
 	if m == nil {
 		return s, false, nil
 	}
+	tenant := SystemTenantName
+	if m[2] != "" {
+		// Trim off the leading ':' in the capture group.
+		tenant = m[2][1:]
+	}
 
 	if e.pgPorts == nil {
 		e.pgPorts = make(map[Node]string, len(c.VMs))
 		for _, node := range allNodes(len(c.VMs)) {
-			e.pgPorts[node] = fmt.Sprint(c.NodePort(node))
+			desc, err := c.DiscoverService(node, tenant, ServiceTypeSQL)
+			if err != nil {
+				return s, false, err
+			}
+			e.pgPorts[node] = fmt.Sprint(desc.Port)
 		}
 	}
 
@@ -191,6 +200,7 @@ func (e *expander) maybeExpandUIPort(
 	if e.uiPorts == nil {
 		e.uiPorts = make(map[Node]string, len(c.VMs))
 		for _, node := range allNodes(len(c.VMs)) {
+			// TODO(herko): Add support for external tenants.
 			e.uiPorts[node] = fmt.Sprint(c.NodeUIPort(node))
 		}
 	}
