@@ -168,10 +168,10 @@ type treeMu struct {
 	// [1] Keys that are not locked and have an empty wait-queue.
 	btree
 
-	// For constraining memory consumption. We need better memory accounting
-	// than this.
-	// TODO(nvanbenschoten): use an atomic.Int64.
-	numLocks int64
+	// numKeysLocked tracks the number of keyLocks structs in the b-tree. It is
+	// primarily used for constraining memory consumption. Ideally, we should be
+	// doing better memory accounting than this.
+	numKeysLocked atomic.Int64
 
 	// For dampening the frequency with which we enforce lockTableImpl.maxLocks.
 	lockAddMaxLocksCheckInterval uint64
@@ -3566,7 +3566,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		l.holders.Init()
 		l.heldBy = make(map[uuid.UUID]*list.Element)
 		t.locks.Set(l)
-		atomic.AddInt64(&t.locks.numLocks, 1)
+		t.locks.numKeysLocked.Add(1)
 	} else {
 		l = iter.Cur()
 	}
@@ -3635,7 +3635,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 		l.holders.Init()
 		l.heldBy = make(map[uuid.UUID]*list.Element)
 		t.locks.Set(l)
-		atomic.AddInt64(&t.locks.numLocks, 1)
+		t.locks.numKeysLocked.Add(1)
 	} else {
 		l = iter.Cur()
 		if acq.Durability == lock.Replicated && l.tryFreeLockOnReplicatedAcquire() {
@@ -3648,7 +3648,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 			// preceding block about maxLocks.
 			t.locks.Delete(l)
 			t.locks.mu.Unlock()
-			atomic.AddInt64(&t.locks.numLocks, -1)
+			t.locks.numKeysLocked.Add(-1)
 			return nil
 		}
 	}
@@ -3662,7 +3662,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 }
 
 func (t *lockTableImpl) checkMaxLocksAndTryClear() {
-	totalLocks := atomic.LoadInt64(&t.locks.numLocks)
+	totalLocks := t.locks.numKeysLocked.Load()
 	if totalLocks > t.maxLocks {
 		numToClear := totalLocks - t.minLocks
 		t.tryClearLocks(false /* force */, int(numToClear))
@@ -3670,7 +3670,7 @@ func (t *lockTableImpl) checkMaxLocksAndTryClear() {
 }
 
 func (t *lockTableImpl) lockCountForTesting() int64 {
-	return atomic.LoadInt64(&t.locks.numLocks)
+	return t.locks.numKeysLocked.Load()
 }
 
 // tryClearLocks attempts to clear locks.
@@ -3695,7 +3695,7 @@ func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
 			}
 		}
 	}
-	atomic.AddInt64(&t.locks.numLocks, int64(-len(locksToClear)))
+	t.locks.numKeysLocked.Add(int64(-len(locksToClear)))
 	if t.locks.Len() == len(locksToClear) {
 		// Fast-path full clear.
 		t.locks.Reset()
@@ -3750,7 +3750,7 @@ func (t *lockTableImpl) tryGCLocks(tree *treeMu, locks []*keyLocks) {
 		l.mu.Unlock()
 		if empty {
 			tree.Delete(l)
-			atomic.AddInt64(&tree.numLocks, -1)
+			tree.numKeysLocked.Add(-1)
 		}
 	}
 }
@@ -3951,7 +3951,7 @@ func (t *lockTableImpl) Metrics() LockTableMetrics {
 func (t *lockTableImpl) String() string {
 	var sb redact.StringBuilder
 	t.locks.mu.RLock()
-	sb.Printf("num=%d\n", atomic.LoadInt64(&t.locks.numLocks))
+	sb.Printf("num=%d\n", t.locks.numKeysLocked.Load())
 	iter := t.locks.MakeIter()
 	for iter.First(); iter.Valid(); iter.Next() {
 		l := iter.Cur()
