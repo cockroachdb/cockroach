@@ -1751,7 +1751,7 @@ $$;
 query TT
 SELECT "🙏"('😊'), "🙏"(NULL:::"Emoji 😉")
 ----
-NULL  NULL
+NULL  mixed
 
 statement ok
 CREATE DATABASE "DB➕➕";
