@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"testing"
@@ -40,10 +41,28 @@ type testSettings struct {
 	randSource    *rand.Rand
 	assertions    []SimulationAssertion
 	randOptions   testRandOptions
+	rangeGen      rangeGenSettings
 }
 
 type randTestingFramework struct {
-	s testSettings
+	s                 testSettings
+	rangeGenerator    generator
+	keySpaceGenerator generator
+}
+
+func newRandTestingFramework(settings testSettings) randTestingFramework {
+	if int64(defaultMaxRange) > defaultMinKeySpace {
+		panic(fmt.Sprintf(
+			"Max number of ranges specified (%d) is greater than number of keys in key space (%d) ",
+			defaultMaxRange, defaultMinKeySpace))
+	}
+	rangeGenerator := newGenerator(settings.randSource, defaultMinRange, defaultMaxRange, settings.rangeGen.rangeKeyGenType)
+	keySpaceGenerator := newGenerator(settings.randSource, defaultMinKeySpace, defaultMaxKeySpace, settings.rangeGen.keySpaceGenType)
+	return randTestingFramework{
+		s:                 settings,
+		rangeGenerator:    rangeGenerator,
+		keySpaceGenerator: keySpaceGenerator,
+	}
 }
 
 func (f randTestingFramework) getCluster() gen.ClusterGen {
@@ -57,7 +76,7 @@ func (f randTestingFramework) getRanges() gen.RangeGen {
 	if !f.s.randOptions.ranges {
 		return defaultBasicRangesGen()
 	}
-	return gen.BasicRanges{}
+	return f.randomBasicRangesGen()
 }
 
 func (f randTestingFramework) getLoad() gen.LoadGen {
@@ -165,4 +184,47 @@ func checkAssertions(
 		return true, strings.Join(assertionFailures, "")
 	}
 	return false, ""
+}
+
+const (
+	defaultMinRange    = 1
+	defaultMaxRange    = 1000
+	defaultMinKeySpace = 1000
+	defaultMaxKeySpace = 200000
+)
+
+func convertInt64ToInt(num int64) int {
+	if num < math.MinInt32 || num > math.MaxUint32 {
+		// Theoretically, this should be impossible given that we have defined
+		// min and max boundaries for ranges and key space.
+		panic(fmt.Sprintf("num overflows the max value or min value of int32 %d", num))
+	}
+	return int(num)
+}
+
+func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
+	if len(f.s.rangeGen.weightedRand) == 0 {
+		return RandomizedBasicRanges{
+			BaseRanges: gen.BaseRanges{
+				Ranges:            convertInt64ToInt(f.rangeGenerator.key()),
+				KeySpace:          convertInt64ToInt(f.keySpaceGenerator.key()),
+				ReplicationFactor: defaultReplicationFactor,
+				Bytes:             defaultBytes,
+			},
+			placementType: gen.Random,
+			randSource:    f.s.randSource,
+		}
+	} else {
+		return WeightedRandomizedBasicRanges{
+			BaseRanges: gen.BaseRanges{
+				Ranges:            convertInt64ToInt(f.rangeGenerator.key()),
+				KeySpace:          convertInt64ToInt(f.keySpaceGenerator.key()),
+				ReplicationFactor: defaultReplicationFactor,
+				Bytes:             defaultBytes,
+			},
+			placementType: gen.WeightedRandom,
+			randSource:    f.s.randSource,
+			weightedRand:  f.s.rangeGen.weightedRand,
+		}
+	}
 }

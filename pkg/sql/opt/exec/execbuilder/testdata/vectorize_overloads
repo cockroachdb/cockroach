@@ -430,3 +430,13 @@ EXPLAIN (VEC) SELECT _int4 // _int FROM many_types WHERE _int <> 0
   └ *colexecproj.projFloorDivInt32Int64Op
     └ *colexecsel.selNEInt64Int64ConstOp
       └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (VEC) SELECT _interval + _timestamp FROM many_types WHERE _timestamp - _interval IS NOT NULL
+----
+│
+└ Node 1
+  └ *colexecproj.projPlusIntervalTimestampOp
+    └ *colexec.isNullSelOp
+      └ *colexecproj.projMinusTimestampIntervalOp
+        └ *colfetcher.ColBatchScan

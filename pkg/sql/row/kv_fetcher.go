@@ -87,8 +87,7 @@ func newTxnKVFetcher(
 			return br, nil
 		}
 	}
-
-	fetcherArgs := newTxnKVFetcherArgs{
+	return newTxnKVFetcherInternal(newTxnKVFetcherArgs{
 		sendFn:                     sendFn,
 		reverse:                    reverse,
 		lockStrength:               lockStrength,
@@ -98,15 +97,9 @@ func newTxnKVFetcher(
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
 		kvPairsRead:                new(int64),
 		batchRequestsIssued:        &batchRequestsIssued,
-	}
-	if txn != nil {
-		// In most cases, the txn is non-nil; however, in some code paths (e.g.
-		// when executing EXPLAIN (VEC)) it might be nil, so we need to have
-		// this check.
-		fetcherArgs.requestAdmissionHeader = txn.AdmissionHeader()
-		fetcherArgs.responseAdmissionQ = txn.DB().SQLKVResponseAdmissionQ
-	}
-	return newTxnKVFetcherInternal(fetcherArgs)
+		requestAdmissionHeader:     txn.AdmissionHeader(),
+		responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
+	})
 }
 
 // NewDirectKVBatchFetcher creates a new KVBatchFetcher that uses the

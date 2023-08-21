@@ -455,6 +455,7 @@ go_library(
         "//pkg/sql/pgwire/pgwirecancel",
         "//pkg/sql/physicalplan",
         "//pkg/sql/physicalplan/replicaoracle",
+        "//pkg/sql/plpgsql",
         "//pkg/sql/privilege",
         "//pkg/sql/protoreflect",
         "//pkg/sql/querycache",
@@ -734,7 +735,9 @@ go_test(
         "//pkg/sql/vtable:pg_catalog.go",
     ],
     embed = [":sql"],
+    exec_properties = {"Pool": "large"},
     shard_count = 16,
+    tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",

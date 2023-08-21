@@ -31,6 +31,11 @@ platform(
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
     ],
+    exec_properties = {
+        "container-image": "docker://cockroachdb/bazel@sha256:2fdff6a4a2c66bf01d6ad4c6973eb4b38acdb812d07a431a0471f2b6449bb653",
+        "dockerReuse": "True",
+        "Pool": "default",
+    },
 )
 
 toolchain(
@@ -131,6 +136,11 @@ platform(
         "@platforms//os:linux",
         "@platforms//cpu:arm64",
     ],
+    exec_properties = {
+        "container-image": "docker://cockroachdb/bazel@sha256:6acc131994de3e9adcdf05ddd0956a047cb7a7e07a939a76fa9cad11af3a1a8a",
+        "dockerReuse": "True",
+        "Pool": "default",
+    },
 )
 
 platform(

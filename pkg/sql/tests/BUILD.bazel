@@ -28,7 +28,7 @@ go_library(
 
 go_test(
     name = "tests_test",
-    size = "large",
+    size = "enormous",
     srcs = [
         "allow_role_memberships_to_change_during_transaction_test.go",
         "autocommit_extended_protocol_test.go",
@@ -44,6 +44,7 @@ go_test(
         "main_test.go",
         "monotonic_insert_test.go",
         "random_schema_test.go",
+        "read_committed_test.go",
         "rename_column_test.go",
         "repair_test.go",
         "rsg_test.go",
@@ -57,9 +58,13 @@ go_test(
         "truncate_test.go",
         "virtual_table_test.go",
     ],
-    args = ["-test.timeout=895s"],
+    args = select({
+        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
+        "//conditions:default": ["-test.timeout=3595s"],
+    }),
     data = glob(["testdata/**"]),
     embed = [":tests"],
+    exec_properties = {"Pool": "large"},
     shard_count = 16,
     deps = [
         "//pkg/base",
@@ -75,8 +80,10 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/concurrency",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

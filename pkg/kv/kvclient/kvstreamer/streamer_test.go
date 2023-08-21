@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvstreamer
+package kvstreamer_test
 
 import (
 	"context"
@@ -19,12 +19,15 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,13 +40,13 @@ import (
 
 func getStreamer(
 	ctx context.Context, s serverutils.TestServerInterface, limitBytes int64, acc *mon.BoundAccount,
-) *Streamer {
+) *kvstreamer.Streamer {
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
 	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
 	if err != nil {
 		panic(err)
 	}
-	return NewStreamer(
+	return kvstreamer.NewStreamer(
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.Stopper(),
 		kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState),
@@ -67,21 +70,21 @@ func TestStreamerLimitations(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	getStreamer := func() *Streamer {
+	getStreamer := func() *kvstreamer.Streamer {
 		return getStreamer(ctx, s, math.MaxInt64, nil /* acc */)
 	}
 
 	t.Run("non-unique requests unsupported", func(t *testing.T) {
 		require.Panics(t, func() {
 			streamer := getStreamer()
-			streamer.Init(OutOfOrder, Hints{UniqueRequests: false}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
+			streamer.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: false}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		})
 	})
 
 	t.Run("pipelining unsupported", func(t *testing.T) {
 		streamer := getStreamer()
 		defer streamer.Close(ctx)
-		streamer.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
+		streamer.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		get := kvpb.NewGet(roachpb.Key("key"), false /* forUpdate */)
 		reqs := []kvpb.RequestUnion{{
 			Value: &kvpb.RequestUnion_Get{
@@ -96,7 +99,7 @@ func TestStreamerLimitations(t *testing.T) {
 
 	t.Run("unexpected RootTxn", func(t *testing.T) {
 		require.Panics(t, func() {
-			NewStreamer(
+			kvstreamer.NewStreamer(
 				s.DistSenderI().(*kvcoord.DistSender),
 				s.Stopper(),
 				kv.NewTxn(ctx, s.DB(), s.NodeID()),
@@ -132,32 +135,31 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
+	codec := s.ApplicationLayer().Codec()
 
 	// Create a dummy table for which we know the encoding of valid keys.
 	_, err := db.Exec("CREATE TABLE foo (pk_blob STRING PRIMARY KEY, attribute INT, blob TEXT, INDEX(attribute))")
 	require.NoError(t, err)
 
-	const tableID = 104
-	// Sanity check that the table 'foo' has the expected TableID.
-	assertTableID(t, db, "foo" /* tableName */, tableID)
+	// Obtain the TableID.
+	r := db.QueryRow("SELECT 'foo'::regclass::oid")
+	var tableID int
+	require.NoError(t, r.Scan(&tableID))
 
 	// makeGetRequest returns a valid GetRequest that wants to lookup a key with
 	// value 'a' repeated keySize number of times in the primary index of table
-	// foo.
+	// 'foo'.
 	makeGetRequest := func(keySize int) kvpb.RequestUnion {
 		var res kvpb.RequestUnion
 		var get kvpb.GetRequest
 		var union kvpb.RequestUnion_Get
-		key := make([]byte, keySize+6)
-		key[0] = tableID + 136
-		key[1] = 137
-		key[2] = 18
+		var key []byte
+		key = append(key, codec.IndexPrefix(uint32(tableID), 1)...)
+		key = append(key, 18)
 		for i := 0; i < keySize; i++ {
-			key[i+3] = 97
+			key = append(key, 97)
 		}
-		key[keySize+3] = 0
-		key[keySize+4] = 1
-		key[keySize+5] = 136
+		key = append(key, []byte{0, 1, 136}...)
 		get.Key = key
 		union.Get = &get
 		res.Value = &union
@@ -182,10 +184,10 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	defer acc.Close(ctx)
 
 	const limitBytes = 30
-	getStreamer := func() *Streamer {
+	getStreamer := func() *kvstreamer.Streamer {
 		acc.Clear(ctx)
 		s := getStreamer(ctx, s, limitBytes, &acc)
-		s.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
+		s.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s
 	}
 
@@ -237,12 +239,13 @@ func TestStreamerCorrectlyDiscardsResponses(t *testing.T) {
 	})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
+	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ApplicationLayer().ClusterSettings().SV, true)
 
 	// The initial estimate for TargetBytes argument for each asynchronous
-	// request by the Streamer will be numRowsPerRange x initialAvgResponseSize,
+	// request by the Streamer will be numRowsPerRange x InitialAvgResponseSize,
 	// so we pick the blob size such that about half of rows are included in the
 	// partial responses.
-	const blobSize = 2 * initialAvgResponseSize
+	const blobSize = 2 * kvstreamer.InitialAvgResponseSize
 	const numRows = 20
 	const numRowsPerRange = 4
 
@@ -272,9 +275,9 @@ func TestStreamerCorrectlyDiscardsResponses(t *testing.T) {
 	// the budget. This includes 4/3 factor since the vectorized ColIndexJoin
 	// gives 3/4 of the workmem limit to the Streamer.
 	for _, workmem := range []int{
-		3 * initialAvgResponseSize * numRows / 2,
-		7 * initialAvgResponseSize * numRows / 4,
-		2 * initialAvgResponseSize * numRows,
+		3 * kvstreamer.InitialAvgResponseSize * numRows / 2,
+		7 * kvstreamer.InitialAvgResponseSize * numRows / 4,
+		2 * kvstreamer.InitialAvgResponseSize * numRows,
 	} {
 		t.Run(fmt.Sprintf("workmem=%s", humanize.Bytes(uint64(workmem))), func(t *testing.T) {
 			_, err = db.Exec(fmt.Sprintf("SET distsql_workmem = '%dB'", workmem))
@@ -301,8 +304,9 @@ func TestStreamerWideRows(t *testing.T) {
 	})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
+	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ApplicationLayer().ClusterSettings().SV, true)
 
-	const blobSize = 10 * initialAvgResponseSize
+	const blobSize = 10 * kvstreamer.InitialAvgResponseSize
 	const numRows = 2
 
 	_, err := db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob1 STRING, blob2 STRING, INDEX (k), FAMILY (pk, k, blob1), FAMILY (blob2))")
@@ -371,13 +375,13 @@ func TestStreamerWideRows(t *testing.T) {
 	}
 }
 
-func makeScanRequest(tableID byte, start, end int) kvpb.RequestUnion {
+func makeScanRequest(codec keys.SQLCodec, tableID uint32, start, end int) kvpb.RequestUnion {
 	var res kvpb.RequestUnion
 	var scan kvpb.ScanRequest
 	var union kvpb.RequestUnion_Scan
 	makeKey := func(pk int) []byte {
 		// These numbers essentially make a key like '/t/primary/pk'.
-		return []byte{tableID + 136, 137, byte(136 + pk)}
+		return append(codec.IndexPrefix(tableID, 1), byte(136+pk))
 	}
 	scan.Key = makeKey(start)
 	scan.EndKey = makeKey(end)
@@ -402,6 +406,10 @@ func TestStreamerEmptyScans(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
+	ts := s.ApplicationLayer()
+	codec := ts.Codec()
+	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
+
 	// Create a dummy table for which we know the encoding of valid keys.
 	// Although not strictly necessary, we set up two column families since with
 	// a single family in production a Get request would have been used.
@@ -420,10 +428,10 @@ func TestStreamerEmptyScans(t *testing.T) {
 	_, err = db.Exec("SELECT count(*) from t")
 	require.NoError(t, err)
 
-	getStreamer := func() *Streamer {
+	getStreamer := func() *kvstreamer.Streamer {
 		s := getStreamer(ctx, s, math.MaxInt64, nil /* acc */)
 		// There are two column families in the table.
-		s.Init(OutOfOrder, Hints{UniqueRequests: true}, 2 /* maxKeysPerRow */, nil /* diskBuffer */)
+		s.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 2 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s
 	}
 
@@ -433,7 +441,7 @@ func TestStreamerEmptyScans(t *testing.T) {
 
 		// Scan the row with pk=0.
 		reqs := make([]kvpb.RequestUnion, 1)
-		reqs[0] = makeScanRequest(tableID, 0, 1)
+		reqs[0] = makeScanRequest(codec, tableID, 0, 1)
 		require.NoError(t, streamer.Enqueue(ctx, reqs))
 		results, err := streamer.GetResults(ctx)
 		require.NoError(t, err)
@@ -447,7 +455,7 @@ func TestStreamerEmptyScans(t *testing.T) {
 
 		// Scan the rows with pk in range [1, 4).
 		reqs := make([]kvpb.RequestUnion, 1)
-		reqs[0] = makeScanRequest(tableID, 1, 4)
+		reqs[0] = makeScanRequest(codec, tableID, 1, 4)
 		require.NoError(t, streamer.Enqueue(ctx, reqs))
 		// We expect an empty response for each range.
 		var numResults int
@@ -472,6 +480,7 @@ func TestStreamerMultiRangeScan(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
+	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ApplicationLayer().ClusterSettings().SV, true)
 
 	rng, _ := randutil.NewTestRand()
 	numRows := rng.Intn(100) + 2
@@ -529,114 +538,4 @@ func TestStreamerMultiRangeScan(t *testing.T) {
 	}
 	expected += "}"
 	require.Equal(t, expected, result)
-}
-
-// TestStreamerMemoryAccounting performs sanity checking on the memory
-// accounting done by the streamer.
-func TestStreamerMemoryAccounting(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-
-	// Create a table (for which we know the encoding of valid keys) with a
-	// single row.
-	_, err := db.Exec("CREATE TABLE t (pk PRIMARY KEY, k) AS VALUES (0, 0)")
-	require.NoError(t, err)
-
-	const tableID = 104
-	// Sanity check that the table 't' has the expected TableID.
-	assertTableID(t, db, "t" /* tableName */, tableID)
-
-	makeGetRequest := func(key int) kvpb.RequestUnion {
-		var res kvpb.RequestUnion
-		var get kvpb.GetRequest
-		var union kvpb.RequestUnion_Get
-		makeKey := func(pk int) []byte {
-			// These numbers essentially make a key like '/t/primary/key/0'.
-			return []byte{tableID + 136, 137, byte(136 + pk), 136}
-		}
-		get.Key = makeKey(key)
-		union.Get = &get
-		res.Value = &union
-		return res
-	}
-
-	monitor := mon.NewMonitor(
-		"streamer", /* name */
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		cluster.MakeTestingClusterSettings(),
-	)
-	monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
-	defer monitor.Stop(ctx)
-	acc := monitor.MakeBoundAccount()
-	defer acc.Close(ctx)
-
-	getStreamer := func(singleRowLookup bool) *Streamer {
-		require.Zero(t, acc.Used())
-		s := getStreamer(ctx, s, math.MaxInt64, &acc)
-		s.Init(OutOfOrder, Hints{UniqueRequests: true, SingleRowLookup: singleRowLookup}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
-		return s
-	}
-
-	t.Run("get", func(t *testing.T) {
-		acc.Clear(ctx)
-		// SingleRowLookup hint only influences the accounting when at least
-		// one Scan request is present.
-		streamer := getStreamer(false /* singleRowLookup */)
-		defer streamer.Close(ctx)
-
-		// Get the row with pk=0.
-		reqs := make([]kvpb.RequestUnion, 1)
-		reqs[0] = makeGetRequest(0)
-		require.NoError(t, streamer.Enqueue(ctx, reqs))
-		results, err := streamer.GetResults(ctx)
-		require.NoError(t, err)
-		require.Equal(t, 1, len(results))
-		// 7 is the number of bytes in GetResponse.Value.RawBytes.
-		var expectedMemToken = getResponseOverhead + 7
-		require.Equal(t, expectedMemToken, results[0].memoryTok.toRelease)
-		var expectedUsed = expectedMemToken + resultSize
-		require.Equal(t, expectedUsed, acc.Used())
-	})
-
-	for _, singleRowLookup := range []bool{false, true} {
-		t.Run(fmt.Sprintf("scan/single_row_lookup=%t", singleRowLookup), func(t *testing.T) {
-			acc.Clear(ctx)
-			streamer := getStreamer(singleRowLookup)
-			defer streamer.Close(ctx)
-
-			// Scan the row with pk=0.
-			reqs := make([]kvpb.RequestUnion, 1)
-			reqs[0] = makeScanRequest(tableID, 0, 1)
-			require.NoError(t, streamer.Enqueue(ctx, reqs))
-			results, err := streamer.GetResults(ctx)
-			require.NoError(t, err)
-			require.Equal(t, 1, len(results))
-			// 29 is usually the number of bytes in
-			// ScanResponse.BatchResponse[0]. We choose to hard-code this number
-			// rather than consult NumBytes field directly as an additional
-			// sanity-check.
-			expectedMemToken := scanResponseOverhead + 29
-			if results[0].ScanResp.NumBytes == 33 {
-				// For some reason, sometimes it's not 29, but 33, and we do
-				// allow for this.
-				expectedMemToken += 4
-			}
-			require.Equal(t, expectedMemToken, results[0].memoryTok.toRelease)
-			expectedUsed := expectedMemToken + resultSize
-			if !singleRowLookup {
-				// This is streamer.numRangesPerScanRequestAccountedFor which is
-				// only non-zero when SingleRowLookup hint is false.
-				expectedUsed += 4
-			}
-			require.Equal(t, expectedUsed, acc.Used())
-		})
-	}
 }

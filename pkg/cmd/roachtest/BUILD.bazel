@@ -46,7 +46,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/version",
-        "@com_github_armon_circbuf//:circbuf",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_lib_pq//:pq",

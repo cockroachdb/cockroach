@@ -97,7 +97,10 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":streamingest"],
     shard_count = 16,
-    tags = ["ccl_test"],
+    tags = [
+        "ccl_test",
+        "no-remote-exec",
+    ],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

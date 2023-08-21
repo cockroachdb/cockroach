@@ -16,6 +16,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -714,23 +715,59 @@ func (e *TransactionAbortedError) SafeFormatError(p errors.Printer) (next error)
 	return nil
 }
 
-// NewTransactionRetryWithProtoRefreshError initializes a new TransactionRetryWithProtoRefreshError.
+type retryErrOptions struct {
+	conflictingTxn *enginepb.TxnMeta
+}
+
+// RetryErrOption is used to annotate optional fields in retry related errors.
+type RetryErrOption interface {
+	apply(*retryErrOptions)
+}
+
+type retryErrOptionFunc func(*retryErrOptions)
+
+func (f retryErrOptionFunc) apply(o *retryErrOptions) {
+	f(o)
+}
+
+// WithConflictingTxn is used to annotate a retry error with the conflicting
+// transaction metadata (optional). This is only used for cases where a refresh
+// fails with `REASON_INTENT`.
+func WithConflictingTxn(txn *enginepb.TxnMeta) RetryErrOption {
+	return retryErrOptionFunc(func(o *retryErrOptions) {
+		o.conflictingTxn = txn
+	})
+}
+
+// NewTransactionRetryWithProtoRefreshError initializes a new
+// TransactionRetryWithProtoRefreshError.
 //
-// txnID is the ID of the transaction being restarted.
-// txn is the transaction that the client should use for the next attempts.
+// prevTxnID is the ID of the transaction being retried.
+// prevTxnEpoch is the epoch of the transaction being retried.
+// nextTxn is the transaction that the client should use for the next attempts.
 //
 // TODO(tbg): the message passed here is usually pErr.String(), which is a bad
 // pattern (loses structure, thus redaction). We can leverage error chaining
 // to improve this: wrap `pErr.GoError()` with a barrier and then with the
 // TransactionRetryWithProtoRefreshError.
 func NewTransactionRetryWithProtoRefreshError(
-	msg redact.RedactableString, txnID uuid.UUID, txn roachpb.Transaction,
+	msg redact.RedactableString,
+	prevTxnID uuid.UUID,
+	prevTxnEpoch enginepb.TxnEpoch,
+	nextTxn roachpb.Transaction,
+	opts ...RetryErrOption,
 ) *TransactionRetryWithProtoRefreshError {
+	options := retryErrOptions{}
+	for _, o := range opts {
+		o.apply(&options)
+	}
 	return &TransactionRetryWithProtoRefreshError{
-		Msg:           msg.StripMarkers(),
-		MsgRedactable: msg,
-		TxnID:         txnID,
-		Transaction:   txn,
+		Msg:             msg.StripMarkers(),
+		MsgRedactable:   msg,
+		PrevTxnID:       prevTxnID,
+		PrevTxnEpoch:    prevTxnEpoch,
+		NextTransaction: nextTxn,
+		ConflictingTxn:  options.conflictingTxn,
 	}
 }
 
@@ -748,7 +785,28 @@ func (e *TransactionRetryWithProtoRefreshError) SafeFormatError(p errors.Printer
 // transaction, as opposed to continuing with the existing one at a bumped
 // epoch.
 func (e *TransactionRetryWithProtoRefreshError) PrevTxnAborted() bool {
-	return !e.TxnID.Equal(e.Transaction.ID)
+	return !e.PrevTxnID.Equal(e.NextTransaction.ID)
+}
+
+// PrevTxnEpochBumped returns true if the previous transaction was not aborted
+// but its epoch was bumped. In this case, the client can continue with the
+// existing transaction, but must restart from the beginning because its writes
+// were discarded.
+//
+// NOTE: the method panics if the previous transaction was aborted and the next
+// transaction has a different identity. Callers must first check PrevTxnAborted.
+func (e *TransactionRetryWithProtoRefreshError) PrevTxnEpochBumped() bool {
+	if e.PrevTxnAborted() {
+		panic("PrevTxnEpochBumped called on aborted txn")
+	}
+	return e.PrevTxnEpoch != e.NextTransaction.Epoch
+}
+
+// TxnMustRestartFromBeginning returns true if the previous transaction's writes
+// were discarded due to the retry error, meaning that it must restart from the
+// beginning.
+func (e *TransactionRetryWithProtoRefreshError) TxnMustRestartFromBeginning() bool {
+	return e.PrevTxnAborted() || e.PrevTxnEpochBumped()
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
@@ -781,12 +839,17 @@ var _ transactionRestartError = &TransactionPushError{}
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
 func NewTransactionRetryError(
-	reason TransactionRetryReason, extraMsg redact.RedactableString,
+	reason TransactionRetryReason, extraMsg redact.RedactableString, opts ...RetryErrOption,
 ) *TransactionRetryError {
+	options := retryErrOptions{}
+	for _, o := range opts {
+		o.apply(&options)
+	}
 	return &TransactionRetryError{
 		Reason:             reason,
 		ExtraMsg:           extraMsg.StripMarkers(),
 		ExtraMsgRedactable: extraMsg,
+		ConflictingTxn:     options.conflictingTxn,
 	}
 }
 
@@ -1440,12 +1503,27 @@ var _ ErrorDetailInterface = &MinTimestampBoundUnsatisfiableError{}
 // or 'intent' which caused the failed refresh, key is the key that we failed
 // refreshing, and ts is the timestamp of the committed value or intent that was written.
 func NewRefreshFailedError(
-	reason RefreshFailedError_Reason, key roachpb.Key, ts hlc.Timestamp,
+	ctx context.Context,
+	reason RefreshFailedError_Reason,
+	key roachpb.Key,
+	ts hlc.Timestamp,
+	opts ...RetryErrOption,
 ) *RefreshFailedError {
+	options := retryErrOptions{}
+	for _, o := range opts {
+		o.apply(&options)
+	}
+	if reason == RefreshFailedError_REASON_INTENT && options.conflictingTxn == nil {
+		log.Fatal(ctx, "conflictingTxn should be set if refresh failed with REASON_INTENT")
+	}
+	if reason != RefreshFailedError_REASON_INTENT && options.conflictingTxn != nil {
+		log.Fatal(ctx, "conflictingTxn should not be set if refresh failed without REASON_INTENT")
+	}
 	return &RefreshFailedError{
-		Reason:    reason,
-		Key:       key,
-		Timestamp: ts,
+		Reason:         reason,
+		Key:            key,
+		Timestamp:      ts,
+		ConflictingTxn: options.conflictingTxn,
 	}
 }
 

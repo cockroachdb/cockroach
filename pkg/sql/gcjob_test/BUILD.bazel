@@ -8,6 +8,7 @@ go_test(
         "main_test.go",
     ],
     args = ["-test.timeout=295s"],
+    shard_count = 2,
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",

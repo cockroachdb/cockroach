@@ -12,6 +12,7 @@ go_test(
         "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
         "//conditions:default": ["-test.timeout=3595s"],
     }),
+    exec_properties = {"Pool": "large"},
     shard_count = 14,
     tags = ["ccl_test"],
     deps = [

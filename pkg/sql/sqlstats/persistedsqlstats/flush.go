@@ -73,7 +73,13 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 	aggregatedTs := s.ComputeAggregatedTs()
 
 	// We only check the statement count as there should always be at least as many statements as transactions.
-	limitReached, err := s.StmtsLimitSizeReached(ctx)
+	limitReached := false
+
+	var err error
+	if sqlStatsLimitTableSizeEnabled.Get(&s.SQLStats.GetClusterSettings().SV) {
+		limitReached, err = s.StmtsLimitSizeReached(ctx)
+	}
+
 	if err != nil {
 		log.Errorf(ctx, "encountered an error at flush, checking for statement statistics size limit: %v", err)
 	}

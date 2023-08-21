@@ -751,7 +751,7 @@ func TestRetriableErrorDuringPrepare(t *testing.T) {
 				BeforePrepare: func(ctx context.Context, stmt string, txn *kv.Txn) error {
 					if strings.Contains(stmt, uniqueString) && atomic.AddInt64(&failed, 1) <= numToFail {
 						return kvpb.NewTransactionRetryWithProtoRefreshError("boom",
-							txn.ID(), *txn.TestingCloneTxn())
+							txn.ID(), txn.Epoch(), *txn.TestingCloneTxn())
 					}
 					return nil
 				},
@@ -1438,6 +1438,15 @@ func TestInjectRetryErrors(t *testing.T) {
 
 	ctx := context.Background()
 	params := base.TestServerArgs{}
+
+	var readCommittedStmtRetries atomic.Int64
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		OnReadCommittedStmtRetry: func(retryReason error) {
+			if strings.Contains(retryReason.Error(), "inject_retry_errors_enabled") {
+				readCommittedStmtRetries.Add(1)
+			}
+		},
+	}
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	defer db.Close()
@@ -1507,6 +1516,75 @@ func TestInjectRetryErrors(t *testing.T) {
 		require.Equal(t, 1, res)
 		_, err = db.ExecContext(ctx, "DROP TABLE t")
 		require.NoError(t, err)
+	})
+
+	t.Run("read_committed_txn", func(t *testing.T) {
+		readCommittedStmtRetries.Store(0)
+
+		tx, err := db.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
+		require.NoError(t, err)
+
+		var txRes int
+		err = tx.QueryRow("SELECT $1::int8", 3).Scan(&txRes)
+		require.NoError(t, err)
+		require.NoError(t, tx.Commit())
+		require.Equal(t, 3, txRes)
+		require.Equal(t, int64(3), readCommittedStmtRetries.Load())
+	})
+
+	t.Run("read_committed_txn_retries_exceeded", func(t *testing.T) {
+		readCommittedStmtRetries.Store(0)
+
+		// inject_retry_errors_enabled is hardcoded to always inject an error
+		// 3 times, so if we lower max_retries_for_read_committed,
+		// the error should bubble up to the client.
+		_, err := db.Exec("SET max_retries_for_read_committed = 2")
+		require.NoError(t, err)
+		tx, err := db.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
+		require.NoError(t, err)
+
+		var txRes int
+		err = tx.QueryRow("SELECT $1::int8", 3).Scan(&txRes)
+
+		require.Error(t, err)
+		pqErr := (*pq.Error)(nil)
+		require.ErrorAs(t, err, &pqErr)
+		require.Equal(t, "40001", string(pqErr.Code), "expected a transaction retry error code. got %v", pqErr)
+		require.ErrorContains(t, pqErr, "read committed retry limit exceeded")
+		require.NoError(t, tx.Rollback())
+		require.Equal(t, int64(2), readCommittedStmtRetries.Load())
+	})
+
+	t.Run("read_committed_txn_already_sent_results", func(t *testing.T) {
+		readCommittedStmtRetries.Store(0)
+
+		// Choose a small results_buffer_size and make sure the statement retry
+		// does not occur.
+		pgURL, cleanupFn := sqlutils.PGUrl(
+			t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+		defer cleanupFn()
+		q := pgURL.Query()
+		q.Add("results_buffer_size", "4")
+		pgURL.RawQuery = q.Encode()
+		smallBufferDB, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		defer smallBufferDB.Close()
+
+		_, err = smallBufferDB.Exec("SET inject_retry_errors_enabled = 'true'")
+		require.NoError(t, err)
+
+		tx, err := smallBufferDB.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
+		require.NoError(t, err)
+
+		var txRes int
+		err = tx.QueryRow("SELECT $1::int8", 3).Scan(&txRes)
+		require.Error(t, err)
+		pqErr := (*pq.Error)(nil)
+		require.ErrorAs(t, err, &pqErr)
+		require.Equal(t, "40001", string(pqErr.Code), "expected a transaction retry error code. got %v", pqErr)
+		require.ErrorContains(t, pqErr, "cannot automatically retry since some results were already sent to the client")
+		require.NoError(t, tx.Rollback())
+		require.Equal(t, int64(0), readCommittedStmtRetries.Load())
 	})
 }
 

@@ -325,8 +325,9 @@ Additionally, the following fields are conditionally present:
 |-------|-------|-------------|
 | `N` | `node_id` | The node ID where the event was generated, once known. Only reported for single-tenant or KV servers. |
 | `x` | `cluster_id` | The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers. |
-| `q` | `instance_id` | The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `T` | `tenant_id` | The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
+| `q` | `instance_id` | The SQL instance ID where the event was generated, once known. |
+| `T` | `tenant_id` | The SQL tenant ID where the event was generated, once known. |
+| `V` | `tenant_name` | The SQL virtual cluster where the event was generated, once known. |
 | `tags` | `tags` | The logging context tags for the entry, if there were context tags. |
 | `message` | `message` | For unstructured events, the flat text payload. |
 | `event`   | `event`   | The logging event, if structured (see below for details). |

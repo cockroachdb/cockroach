@@ -3,17 +3,32 @@ subtest single_line_no_tenant_tag
 log
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [-] 23  started with engine type ‹2›
 ----
-logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+
+log
+I210116 21:49:17.073282 14 server/node.go:464 ⋮ [unrelated] 23  started with engine type ‹2›
+----
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"unrelated", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T1] 23  started with engine type ‹2›
 ----
-logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T12345] 23  started with engine type ‹2›
 ----
-logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"12345"}
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"12345", TenantName:""}
+
+log
+I210116 21:49:17.073282 14 server/node.go:464 ⋮ [Vabc] 23  started with engine type ‹2›
+----
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"Vabc", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+
+log
+I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T123,Vabc] 23  started with engine type ‹2›
+----
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"123", TenantName:"abc"}
 
 subtest end
 
@@ -22,12 +37,12 @@ subtest single_line_unstructured_entry
 log
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T1] 23  started with engine type ‹2›
 ----
-logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I210116 21:49:17.073282 14 (gostd) server/node.go:464 ⋮ [T1] 23  started with engine type ‹2›
 ----
-logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 subtest end
 
@@ -37,14 +52,14 @@ log
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40  node startup completed:
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40 +CockroachDB node starting at 2021-01-16 21:49 (took 0.0s)
 ----
-logpb.Entry{Severity:1, Time:1610833757083093000, Goroutine:14, File:"cli/start.go", Line:690, Message:"node startup completed:\nCockroachDB node starting at 2021-01-16 21:49 (took 0.0s)", Tags:"", Counter:0x28, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757083093000, Goroutine:14, File:"cli/start.go", Line:690, Message:"node startup completed:\nCockroachDB node starting at 2021-01-16 21:49 (took 0.0s)", Tags:"", Counter:0x28, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40  node startup completed:
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40 +CockroachDB node starting at 2021-01-16 21:49 (took 0.0s)
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40 +build:               CCL v21.1.1 @ 2021/5/24 11:00:26 (go1.15.5) (go1.12.6)
 ----
-logpb.Entry{Severity:1, Time:1610833757083093000, Goroutine:14, File:"cli/start.go", Line:690, Message:"node startup completed:\nCockroachDB node starting at 2021-01-16 21:49 (took 0.0s)\nbuild:               CCL v21.1.1 @ 2021/5/24 11:00:26 (go1.15.5) (go1.12.6)", Tags:"", Counter:0x28, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757083093000, Goroutine:14, File:"cli/start.go", Line:690, Message:"node startup completed:\nCockroachDB node starting at 2021-01-16 21:49 (took 0.0s)\nbuild:               CCL v21.1.1 @ 2021/5/24 11:00:26 (go1.15.5) (go1.12.6)", Tags:"", Counter:0x28, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 subtest end
 
@@ -53,7 +68,7 @@ subtest structured_entry
 log
 I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [T1] 32 ={"Timestamp":1610833757080706620,"EventType":"node_restart"}
 ----
-logpb.Entry{Severity:1, Time:1610833757080713000, Goroutine:14, File:"util/log/event_log.go", Line:32, Message:"{\"Timestamp\":1610833757080706620,\"EventType\":\"node_restart\"}", Tags:"", Counter:0x20, Redactable:true, Channel:1, StructuredEnd:0x3c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757080713000, Goroutine:14, File:"util/log/event_log.go", Line:32, Message:"{\"Timestamp\":1610833757080706620,\"EventType\":\"node_restart\"}", Tags:"", Counter:0x20, Redactable:true, Channel:1, StructuredEnd:0x3c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 subtest end
 
@@ -63,14 +78,14 @@ log
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T1] 23  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T1] 23 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 ----
-logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T1] 23  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T1] 23 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T1] 23 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 ----
-logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40  node startup
@@ -78,13 +93,13 @@ I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40 | completed:
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40 +CockroachDB node starting at
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40 | 2021-01-16 21:49 (took 0.0s)
 ----
-logpb.Entry{Severity:1, Time:1610833757083093000, Goroutine:14, File:"cli/start.go", Line:690, Message:"node startup completed:\nCockroachDB node starting at 2021-01-16 21:49 (took 0.0s)", Tags:"", Counter:0x28, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757083093000, Goroutine:14, File:"cli/start.go", Line:690, Message:"node startup completed:\nCockroachDB node starting at 2021-01-16 21:49 (took 0.0s)", Tags:"", Counter:0x28, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [T1] 32 ={"Timestamp":1610833757080706620,"EventTy
 I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [T1] 32 |pe":"node_restart"}
 ----
-logpb.Entry{Severity:1, Time:1610833757080713000, Goroutine:14, File:"util/log/event_log.go", Line:32, Message:"{\"Timestamp\":1610833757080706620,\"EventType\":\"node_restart\"}", Tags:"", Counter:0x20, Redactable:true, Channel:1, StructuredEnd:0x3c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757080713000, Goroutine:14, File:"util/log/event_log.go", Line:32, Message:"{\"Timestamp\":1610833757080706620,\"EventType\":\"node_restart\"}", Tags:"", Counter:0x20, Redactable:true, Channel:1, StructuredEnd:0x3c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 subtest end
 
@@ -94,34 +109,34 @@ log
 E060102 15:04:05.654321 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23  hello ‹stack›
 E060102 15:04:05.654321 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23 !this is a fake stack
 ----
-logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹stack›\nstack trace:\nthis is a fake stack", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x12, TenantID:"1"}
+logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹stack›\nstack trace:\nthis is a fake stack", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x12, TenantID:"1", TenantName:""}
 
 log
 E060102 15:04:05.654321 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23  hello ‹stack›
 E060102 15:04:05.654321 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23 !this is a longer
 E060102 15:04:05.654321 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23 !fake stack
 ----
-logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹stack›\nstack trace:\nthis is a longer\nfake stack", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x12, TenantID:"1"}
+logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹stack›\nstack trace:\nthis is a longer\nfake stack", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x12, TenantID:"1", TenantName:""}
 
 log
 I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [T1] 32 ={"Timestamp":1610833757080706620,"EventType":"node_restart"}
 I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [T1] 32 !this is a fake stack
 ----
-logpb.Entry{Severity:1, Time:1610833757080713000, Goroutine:14, File:"util/log/event_log.go", Line:32, Message:"{\"Timestamp\":1610833757080706620,\"EventType\":\"node_restart\"}\nstack trace:\nthis is a fake stack", Tags:"", Counter:0x20, Redactable:true, Channel:1, StructuredEnd:0x3c, StructuredStart:0x0, StackTraceStart:0x3d, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757080713000, Goroutine:14, File:"util/log/event_log.go", Line:32, Message:"{\"Timestamp\":1610833757080706620,\"EventType\":\"node_restart\"}\nstack trace:\nthis is a fake stack", Tags:"", Counter:0x20, Redactable:true, Channel:1, StructuredEnd:0x3c, StructuredStart:0x0, StackTraceStart:0x3d, TenantID:"1", TenantName:""}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23  maybe ‹multi›
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23 +‹line with stack›
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23 !this is a fake stack
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"maybe ‹multi›\n‹line with stack›\nstack trace:\nthis is a fake stack", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x28, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"maybe ‹multi›\n‹line with stack›\nstack trace:\nthis is a fake stack", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x28, TenantID:"1", TenantName:""}
 
 log
 E060102 15:04:05.654321 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23  hello ‹stack›
 E060102 15:04:05.654321 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23 !this is aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 E060102 15:04:05.654321 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa fake stack
 ----
-logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹stack›\nstack trace:\nthis is aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa fake stack", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x12, TenantID:"1"}
+logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹stack›\nstack trace:\nthis is aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa fake stack", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x12, TenantID:"1", TenantName:""}
 
 subtest end
 
@@ -130,52 +145,52 @@ subtest empty_fields
 log
 E060102 15:04:05.654321 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]   hello ‹world›
 ----
-logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹world›", Tags:"noval,s‹1›,long=‹2›", Counter:0x0, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹world›", Tags:"noval,s‹1›,long=‹2›", Counter:0x0, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]   hello ‹world›
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹world›", Tags:"noval,s‹1›,long=‹2›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹world›", Tags:"noval,s‹1›,long=‹2›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]   maybe ‹multi›
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  +‹line›
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"maybe ‹multi›\n‹line›", Tags:"noval,s‹1›,long=‹2›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"maybe ‹multi›\n‹line›", Tags:"noval,s‹1›,long=‹2›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  ={"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹hello›","NewDatabaseName":"‹world›"}
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹hello›\",\"NewDatabaseName\":\"‹world›\"}", Tags:"noval,s‹1›,long=‹2›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x6c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹hello›\",\"NewDatabaseName\":\"‹world›\"}", Tags:"noval,s‹1›,long=‹2›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x6c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  ={"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  |‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›"}
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›\"}", Tags:"noval,s‹1›,long=‹2›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x91, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›\"}", Tags:"noval,s‹1›,long=‹2›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x91, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  ={"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹hello›","NewDatabaseName":"‹world›"}
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›]  !this is a fake stack
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹hello›\",\"NewDatabaseName\":\"‹world›\"}\nstack trace:\nthis is a fake stack", Tags:"noval,s‹1›,long=‹2›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x6c, StructuredStart:0x0, StackTraceStart:0x6d, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹hello›\",\"NewDatabaseName\":\"‹world›\"}\nstack trace:\nthis is a fake stack", Tags:"noval,s‹1›,long=‹2›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x6c, StructuredStart:0x0, StackTraceStart:0x6d, TenantID:"1", TenantName:""}
 
 log
 W060102 15:04:05.654321 11 1@util/log/format_crdb_v2_test.go:123  [T1,noval,s1,long=2]   hello world
 ----
-logpb.Entry{Severity:2, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"‹hello world›", Tags:"‹noval,s1,long=2›", Counter:0x0, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:2, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"‹hello world›", Tags:"‹noval,s1,long=2›", Counter:0x0, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123  [T1,noval,s1,long=2]   maybe multi
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123  [T1,noval,s1,long=2]  +line
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"‹maybe multi›\n‹line›", Tags:"‹noval,s1,long=2›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"‹maybe multi›\n‹line›", Tags:"‹noval,s1,long=2›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123  [T1,noval,s1,long=2]   aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123  [T1,noval,s1,long=2]  |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›", Tags:"‹noval,s1,long=2›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›", Tags:"‹noval,s1,long=2›", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 subtest end
 
@@ -185,16 +200,16 @@ log
 E060102 15:04:05.654321 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23  hello ‹world›
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 24 ={"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹hello›","NewDatabaseName":"‹world›"}
 ----
-logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹world›", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹hello›\",\"NewDatabaseName\":\"‹world›\"}", Tags:"noval,s‹1›,long=‹2›", Counter:0x18, Redactable:true, Channel:0, StructuredEnd:0x6c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹world›", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹hello›\",\"NewDatabaseName\":\"‹world›\"}", Tags:"noval,s‹1›,long=‹2›", Counter:0x18, Redactable:true, Channel:0, StructuredEnd:0x6c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23  maybe ‹multi›
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23 +‹line›
 E060102 15:04:05.654321 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 24  hello ‹world›
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"maybe ‹multi›\n‹line›", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
-logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹world›", Tags:"noval,s‹1›,long=‹2›", Counter:0x18, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"maybe ‹multi›\n‹line›", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹world›", Tags:"noval,s‹1›,long=‹2›", Counter:0x18, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23  maybe ‹multi›
@@ -202,16 +217,16 @@ I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s�
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 24 ={"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 24 |‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›"}
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"maybe ‹multi›\n‹line›", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›\"}", Tags:"noval,s‹1›,long=‹2›", Counter:0x18, Redactable:true, Channel:0, StructuredEnd:0x91, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"maybe ‹multi›\n‹line›", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›\"}", Tags:"noval,s‹1›,long=‹2›", Counter:0x18, Redactable:true, Channel:0, StructuredEnd:0x91, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23 ={"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23 |‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›"}
 E060102 15:04:05.654321 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 24  hello ‹world›
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›\"}", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x91, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
-logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹world›", Tags:"noval,s‹1›,long=‹2›", Counter:0x18, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›\"}", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x91, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹world›", Tags:"noval,s‹1›,long=‹2›", Counter:0x18, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23 ={"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›
@@ -219,8 +234,8 @@ I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s�
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 24  maybe ‹multi›
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 24 +‹line›
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›\"}", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x91, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"maybe ‹multi›\n‹line›", Tags:"noval,s‹1›,long=‹2›", Counter:0x18, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›\"}", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x91, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"maybe ‹multi›\n‹line›", Tags:"noval,s‹1›,long=‹2›", Counter:0x18, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23 ={"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›
@@ -228,8 +243,8 @@ I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s�
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23 !this is a fake stack
 E060102 15:04:05.654321 11 2@util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 24  hello ‹world›
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›\"}\nstack trace:\nthis is a fake stack", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x91, StructuredStart:0x0, StackTraceStart:0x92, TenantID:"1"}
-logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹world›", Tags:"noval,s‹1›,long=‹2›", Counter:0x18, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›\"}\nstack trace:\nthis is a fake stack", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x91, StructuredStart:0x0, StackTraceStart:0x92, TenantID:"1", TenantName:""}
+logpb.Entry{Severity:3, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"hello ‹world›", Tags:"noval,s‹1›,long=‹2›", Counter:0x18, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23 ={"Timestamp":123,"EventType":"rename_database","DatabaseName":"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›
@@ -238,8 +253,8 @@ I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s�
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 24  maybe ‹multi›
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 24 +‹line›
 ----
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›\"}\nstack trace:\nthis is a fake stack", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x91, StructuredStart:0x0, StackTraceStart:0x92, TenantID:"1"}
-logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"maybe ‹multi›\n‹line›", Tags:"noval,s‹1›,long=‹2›", Counter:0x18, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"{\"Timestamp\":123,\"EventType\":\"rename_database\",\"DatabaseName\":\"‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›‹aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa›\"}\nstack trace:\nthis is a fake stack", Tags:"noval,s‹1›,long=‹2›", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x91, StructuredStart:0x0, StackTraceStart:0x92, TenantID:"1", TenantName:""}
+logpb.Entry{Severity:1, Time:1136214245654321000, Goroutine:11, File:"util/log/format_crdb_v2_test.go", Line:123, Message:"maybe ‹multi›\n‹line›", Tags:"noval,s‹1›,long=‹2›", Counter:0x18, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 subtest end
 
@@ -252,10 +267,10 @@ I210116 21:49:17.073282+020000 14 server/node.go:464 ⋮ [-] 23  started with en
 I210116 19:49:17.073282+000000 14 server/node.go:464 ⋮ [-] 23  started with engine type ‹2›
 I210116 19:49:17.073282 14 server/node.go:464 ⋮ [-] 23  started with engine type ‹2›
 ----
-logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
-logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
-logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
-logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 
 subtest end

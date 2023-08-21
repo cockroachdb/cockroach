@@ -602,7 +602,8 @@ func TestBackupRestoreAppend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "test is too large to run under stress race")
+	skip.UnderStress(t, "test is too large to run under stress")
+	skip.UnderRace(t, "test is too large to run under race")
 
 	const numAccounts = 1000
 	ctx := context.Background()
@@ -806,7 +807,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	sqlDB.Exec(t, "BACKUP TO ($1,$2,$3) INCREMENTAL FROM $4", append(incrementals, backups[0])...)
 	sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3)", collections...)
 	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3)", collections...)
-	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) WITH OPTIONS (incremental_location = ($4, $5, $6))",
+	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) WITH incremental_location = ($4, $5, $6)",
 		append(collections, incrementals...)...)
 
 	sqlDB.ExpectErr(t, "the incremental_location option must contain the same number of locality",

@@ -1664,3 +1664,6 @@ DEALLOCATE ALL
 
 statement ok
 RESET prepared_statements_cache_size
+
+statement error EXPLAIN ANALYZE can only be used as a top-level statement
+PREPARE p AS EXPLAIN ANALYZE SELECT 1

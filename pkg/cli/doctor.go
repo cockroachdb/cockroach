@@ -650,8 +650,8 @@ func slurp(zipDirPath string, fileName string, tableMapFn func(row string) error
 func tableMap(in io.Reader, fn func(string) error) error {
 	firstLine := true
 	sc := bufio.NewScanner(in)
-	// Read lines up to 50 MB in size.
-	sc.Buffer(make([]byte, 64*1024), 50*1024*1024)
+	// Read lines up to 200 MB in size.
+	sc.Buffer(make([]byte, 64*1024), 200*1024*1024)
 	for sc.Scan() {
 		if firstLine {
 			firstLine = false

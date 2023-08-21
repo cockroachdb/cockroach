@@ -1142,10 +1142,10 @@ SELECT b > now() - interval '1 day'  FROM mixed_type_a
 ----
 false
 
-statement error .* dates and timestamp\(tz\) not supported in mixed-type expressions in the vectorized engine
+statement error .* dates and timestamptz not supported in mixed-type binary expressions
 SELECT * FROM mixed_type_a AS a INNER MERGE JOIN mixed_type_b AS b ON a.a = b.a AND a.b < (now() - b.b)
 
-statement error .* dates and timestamp\(tz\) not supported in mixed-type expressions in the vectorized engine
+statement error .* dates and timestamptz not supported in mixed-type binary expressions
 SELECT * FROM mixed_type_a AS a JOIN mixed_type_b AS b ON a.a = b.a AND a.b < (now() - b.b)
 
 # Regression for #46183.

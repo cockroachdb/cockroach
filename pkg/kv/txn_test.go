@@ -310,7 +310,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 								// HACK ALERT: to do without a TxnCoordSender, we jump through
 								// hoops to get the retryable error expected by db.Txn().
 								return nil, kvpb.NewError(kvpb.NewTransactionRetryWithProtoRefreshError(
-									"foo", ba.Txn.ID, *ba.Txn))
+									"foo", ba.Txn.ID, ba.Txn.Epoch, *ba.Txn))
 							}
 							return nil, pErr
 						}
@@ -464,7 +464,7 @@ func TestWrongTxnRetry(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Simulate an inner txn by generating an error with a bogus txn id.
-		return kvpb.NewTransactionRetryWithProtoRefreshError("test error", uuid.MakeV4(), roachpb.Transaction{})
+		return kvpb.NewTransactionRetryWithProtoRefreshError("test error", uuid.MakeV4(), 0, roachpb.Transaction{})
 	}
 
 	if err := db.Txn(context.Background(), txnClosure); !testutils.IsError(err, "test error") {

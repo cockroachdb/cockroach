@@ -162,6 +162,10 @@ func (rwg *RandomGenerator) Tick(maxTime time.Time) LoadBatch {
 	return ret
 }
 
+// TODO(wenyihu6): Instead of duplicating the key generator logic in simulators,
+// we should directly reuse the code from the repo pkg/workload/(kv|ycsb) to
+// ensure consistent testing.
+
 // KeyGenerator generates read and write keys.
 type KeyGenerator interface {
 	writeKey() int64

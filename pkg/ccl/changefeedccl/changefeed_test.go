@@ -196,7 +196,7 @@ func TestChangefeedBasicQueryWrapped(t *testing.T) {
 		// Currently, parquet format (which may be injected by feed() call),  doesn't
 		// know how to handle tuple types (cdc_prev); so, force JSON format.
 		foo := feed(t, f, `
-CREATE CHANGEFEED WITH envelope='wrapped', format='parquet', diff
+CREATE CHANGEFEED WITH envelope='wrapped', format='json', diff
 AS SELECT b||a AS ba, event_op() AS op  FROM foo`)
 		defer closeFeed(t, foo)
 
@@ -225,7 +225,7 @@ AS SELECT b||a AS ba, event_op() AS op  FROM foo`)
 		})
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+	cdcTest(t, testFn, feedTestForceSink("webhook"))
 }
 
 // Same test as TestChangefeedBasicQueryWrapped, but this time using AVRO.
@@ -459,7 +459,7 @@ func TestChangefeedDiff(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH diff, format=parquet`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH diff`)
 		defer closeFeed(t, foo)
 
 		// 'initial' is skipped because only the latest value ('updated') is
@@ -491,7 +491,7 @@ func TestChangefeedDiff(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+	cdcTest(t, testFn)
 }
 
 func TestChangefeedTenants(t *testing.T) {
@@ -6822,7 +6822,7 @@ func TestChangefeedEndTime(t *testing.T) {
 		sqlDB.Exec(t, "INSERT INTO foo VALUES (1), (2), (3)")
 
 		fakeEndTime := s.Server.Clock().Now().Add(int64(time.Hour), 0).AsOfSystemTime()
-		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH end_time = $1, format=parquet", fakeEndTime)
+		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH end_time = $1", fakeEndTime)
 		defer closeFeed(t, feed)
 
 		assertPayloads(t, feed, []string{
@@ -6839,7 +6839,7 @@ func TestChangefeedEndTime(t *testing.T) {
 		}))
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestChangefeedEndTimeWithCursor(t *testing.T) {

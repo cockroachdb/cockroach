@@ -74,6 +74,9 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 		ValueBlocksEnabled.Get(&cs.SV) {
 		format = sstable.TableFormatPebblev3
 	}
+	if cs.Version.IsActive(ctx, clusterversion.V23_2_PebbleFormatVirtualSSTables) && ValueBlocksEnabled.Get(&cs.SV) {
+		format = sstable.TableFormatPebblev4
+	}
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
 	opts.MergerName = "nullptr"
 	return opts

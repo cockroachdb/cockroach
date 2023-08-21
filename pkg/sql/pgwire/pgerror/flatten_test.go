@@ -105,6 +105,7 @@ func TestFlatten(t *testing.T) {
 				kvpb.NewTransactionRetryWithProtoRefreshError(
 					"test",
 					uuid.MakeV4(),
+					0,
 					roachpb.Transaction{},
 				),
 				"",
@@ -118,6 +119,7 @@ func TestFlatten(t *testing.T) {
 				kvpb.NewTransactionRetryWithProtoRefreshError(
 					redact.Sprint(kvpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, hlc.Timestamp{}, hlc.ClockTimestamp{})),
 					uuid.MakeV4(),
+					0,
 					roachpb.Transaction{},
 				),
 				"",
@@ -131,6 +133,7 @@ func TestFlatten(t *testing.T) {
 				kvpb.NewTransactionRetryWithProtoRefreshError(
 					redact.Sprint(kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "")),
 					uuid.MakeV4(),
+					0,
 					roachpb.Transaction{},
 				),
 				"",
@@ -144,6 +147,7 @@ func TestFlatten(t *testing.T) {
 				kvpb.NewTransactionRetryWithProtoRefreshError(
 					redact.Sprint(kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_PUSHER_ABORTED)),
 					uuid.MakeV4(),
+					0,
 					roachpb.Transaction{},
 				),
 				"",

@@ -413,6 +413,7 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 //  4. Its arguments are only Variable or Const expressions.
 //  5. It is not a record-returning function.
 //  6. It does not recursively call itself.
+//  7. It does not have an exception-handling block.
 //
 // UDFs with mutations (INSERT, UPDATE, UPSERT, DELETE) cannot be inlined, but
 // we do not need an explicit check for this because immutable UDFs cannot
@@ -446,7 +447,8 @@ func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFCal
 		panic(errors.AssertionFailedf("expected non-nil UDF definition"))
 	}
 	if udfp.Def.IsRecursive || udfp.Def.Volatility == volatility.Volatile ||
-		len(udfp.Def.Body) != 1 || udfp.Def.SetReturning || udfp.Def.MultiColDataSource {
+		len(udfp.Def.Body) != 1 || udfp.Def.SetReturning || udfp.Def.MultiColDataSource ||
+		udfp.Def.ExceptionBlock != nil {
 		return false
 	}
 	if !args.IsConstantsAndPlaceholdersAndVariables() {

@@ -13,6 +13,7 @@ package tree
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -118,6 +119,10 @@ type RoutineExpr struct {
 	// changes. For routines in a tail-call position we implement an optimization
 	// to avoid nesting execution. This is necessary for performant PLpgSQL loops.
 	TailCall bool
+
+	// ExceptionHandler holds the information needed to handle errors if an
+	// exception block was defined.
+	ExceptionHandler *RoutineExceptionHandler
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
@@ -131,6 +136,7 @@ func NewTypedRoutineExpr(
 	multiColOutput bool,
 	generator bool,
 	tailCall bool,
+	exceptionHandler *RoutineExceptionHandler,
 ) *RoutineExpr {
 	return &RoutineExpr{
 		Args:              args,
@@ -142,6 +148,7 @@ func NewTypedRoutineExpr(
 		MultiColOutput:    multiColOutput,
 		Generator:         generator,
 		TailCall:          tailCall,
+		ExceptionHandler:  exceptionHandler,
 	}
 }
 
@@ -168,4 +175,14 @@ func (node *RoutineExpr) Format(ctx *FmtCtx) {
 func (node *RoutineExpr) Walk(v Visitor) Expr {
 	// Cannot walk into a routine, so this is a no-op.
 	return node
+}
+
+// RoutineExceptionHandler encapsulates the information needed to match and
+// handle errors for the exception block of a routine defined with PLpgSQL.
+type RoutineExceptionHandler struct {
+	// Codes is a list of pgcode strings used to match exceptions.
+	Codes []pgcode.Code
+
+	// Actions contains a routine to handle each error code.
+	Actions []*RoutineExpr
 }

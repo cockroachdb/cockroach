@@ -252,13 +252,13 @@ func excludeReallyEnormousTargets(targets []string) []string {
 		// Answer the following questions before adding a test target to this list:
 		//  1. Does this target run in Bazel Essential CI? If it does and you need
 		//     timeout to be > 1 hour then you need to talk to dev-inf. This is not
-		//	   expected.
+		//     expected.
 		//  2. Are you increasing the timeout for stress-testing purposes in CI? Make
-		// 	   your change in `pkg/cmd/teamcity-trigger` by updating `customTimeouts`.
-		//	3. You should only add a test target here if it's for stand-alone testing.
-		//	   For example: `/pkg/sql/sqlitelogictest` is only tested in a nightly in
-		//	   `build/teamcity/cockroach/nightlies/sqlite_logic_test_impl.sh`. If this is
-		//	   the case, you should tag your test as `integration`.
+		//     your change in `pkg/cmd/teamcity-trigger` by updating `customTimeouts`.
+		//  3. You should only add a test target here if it's for stand-alone testing.
+		//     For example: `/pkg/sql/sqlitelogictest` is only tested in a nightly in
+		//     `build/teamcity/cockroach/nightlies/sqlite_logic_test_impl.sh`. If this is
+		//     the case, you should tag your test as `integration`.
 		//  4. If you are not sure, please ask the dev-inf team for help.
 		for _, toExclude := range []string{
 			"//pkg/ccl/sqlitelogictestccl",
@@ -288,6 +288,7 @@ func generateTestsTimeouts() {
 	}
 	for size, defaultTimeout := range testSizeToDefaultTimeout {
 		if size == "enormous" {
+			runBuildozer(append([]string{`dict_set exec_properties Pool:large`}, targets[size]...))
 			// Exclude really enormous targets since they have a custom timeout that
 			// exceeds the default 1h.
 			targets[size] = excludeReallyEnormousTargets(targets[size])

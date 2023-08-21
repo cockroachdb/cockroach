@@ -15,6 +15,9 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -131,6 +134,15 @@ func (g *routineGenerator) init(p *planner, expr *tree.RoutineExpr, args tree.Da
 	}
 }
 
+// reset closes and re-initializes a routineGenerator for reuse.
+// TODO(drewk): we should hold on to memory for the row container.
+func (g *routineGenerator) reset(
+	ctx context.Context, p *planner, expr *tree.RoutineExpr, args tree.Datums,
+) {
+	g.Close(ctx)
+	g.init(p, expr, args)
+}
+
 // ResolvedType is part of the ValueGenerator interface.
 func (g *routineGenerator) ResolvedType() *types.T {
 	return g.expr.ResolvedType()
@@ -147,9 +159,7 @@ func (g *routineGenerator) Start(ctx context.Context, txn *kv.Txn) (err error) {
 		// A nested routine in tail-call position deferred its execution until now.
 		// Since it's in tail-call position, evaluating it will give the result of
 		// this routine as well.
-		p, expr, args := g.p, g.deferredRoutine.expr, g.deferredRoutine.args
-		g.Close(ctx)
-		g.init(p, expr, args)
+		g.reset(ctx, g.p, g.deferredRoutine.expr, g.deferredRoutine.args)
 	}
 }
 
@@ -220,15 +230,47 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 		if err != nil {
 			return err
 		}
-
 		return nil
 	})
 	if err != nil {
-		return err
+		return g.handleException(ctx, err)
 	}
 
 	g.rci = newRowContainerIterator(ctx, g.rch)
 	return nil
+}
+
+// handleException attempts to match the code of the given error to an exception
+// handler for the routine. If the error finds a match, the corresponding branch
+// for the exception handler is executed as a routine.
+// TODO(drewk): When there is an exception block, we need to nest the body of
+// the routine in a sub-transaction, probably using savepoints. If an error
+// occurs in the body of a block with an exception handler, changes to the
+// database that happened within the block should be rolled back, but not those
+// that occurred outside the block.
+func (g *routineGenerator) handleException(ctx context.Context, err error) error {
+	if plpgsql.IsCaughtRoutineException(err) {
+		// This error has already been through handleException in a nested call.
+		return err
+	}
+	caughtCode := pgerror.GetPGCode(err)
+	if caughtCode == pgcode.Uncategorized {
+		return err
+	}
+	if handler := g.expr.ExceptionHandler; handler != nil {
+		for i, code := range handler.Codes {
+			if code == caughtCode {
+				g.reset(ctx, g.p, handler.Actions[i], g.args)
+				err = g.startInternal(ctx, g.p.Txn())
+				break
+			}
+		}
+		if err != nil {
+			return plpgsql.NewCaughtRoutineException(err)
+		}
+	}
+	// No exception handler matched.
+	return err
 }
 
 // Next is part of the ValueGenerator interface.

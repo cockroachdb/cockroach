@@ -3804,10 +3804,10 @@ func (t *logicTest) validateAfterTestCompletion() error {
 		if user == username.RootUser {
 			continue
 		}
-		for i, c := range userClients {
-			if err := c.Close(); err != nil {
-				t.Fatalf("failed to close connection to node %d for user %s: %v", i, user, err)
-			}
+		for _, c := range userClients {
+			// Ignore the error from closing the connection. This may not succeed if,
+			// for example, CANCEL SESSION was called on one of the sessions.
+			_ = c.Close()
 		}
 		delete(t.clients, user)
 	}

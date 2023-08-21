@@ -885,9 +885,6 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 			sinkWeights[sinkType] = 0
 		}
 	}
-	if weight, ok := sinkWeights["cloudstorage"]; ok && weight != 0 {
-		sinkWeights = map[string]int{"cloudstorage": 1}
-	}
 	weightTotal := 0
 	for _, weight := range sinkWeights {
 		weightTotal += weight
