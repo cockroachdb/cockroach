@@ -342,6 +342,12 @@ type replicationSpec struct {
 	// maxLatency override the maxAcceptedLatencyDefault.
 	maxAcceptedLatency time.Duration
 
+	// skipNodeDistributionCheck relaxes the requirement that multiple source and
+	// destination nodes must participate in the replication stream. This should
+	// be checked if the roachtest runs on single node clusters or if the
+	// roachtest completes before the auto replanner distributes the workload.
+	skipNodeDistributionCheck bool
+
 	// If non-empty, the test will be skipped with the supplied reason.
 	skip string
 
@@ -651,28 +657,28 @@ AS OF SYSTEM TIME '%s'`, startTime.AsOfSystemTime(), endTime.AsOfSystemTime())
 }
 
 // checkParticipatingNodes asserts that multiple nodes in the source and dest cluster are
-// participating in the replication stream, if the test is running on multi node clusters.
+// participating in the replication stream.
 //
 // Note: this isn't a strict requirement of all physical replication streams,
 // rather we check this here because we expect a distributed physical
 // replication stream in a healthy pair of multinode clusters.
 func (rd *replicationDriver) checkParticipatingNodes(ingestionJobId int) {
+	if rd.rs.skipNodeDistributionCheck {
+		return
+	}
 	progress := getJobProgress(rd.t, rd.setup.dst.sysSQL, jobspb.JobID(ingestionJobId)).GetStreamIngest()
-	if rd.rs.srcNodes > 1 {
-		require.Greater(rd.t, len(progress.StreamAddresses), 1, "only 1 src node participating")
-	}
-	if rd.rs.dstNodes > 1 {
-		var destNodeCount int
-		destNodes := make(map[int]struct{})
-		for _, dstNode := range progress.PartitionProgress {
-			dstNodeID := int(dstNode.DestSQLInstanceID)
-			if _, ok := destNodes[dstNodeID]; !ok {
-				destNodes[dstNodeID] = struct{}{}
-				destNodeCount++
-			}
+	require.Greater(rd.t, len(progress.StreamAddresses), 1, "only 1 src node participating")
+
+	var destNodeCount int
+	destNodes := make(map[int]struct{})
+	for _, dstNode := range progress.PartitionProgress {
+		dstNodeID := int(dstNode.DestSQLInstanceID)
+		if _, ok := destNodes[dstNodeID]; !ok {
+			destNodes[dstNodeID] = struct{}{}
+			destNodeCount++
 		}
-		require.Greater(rd.t, destNodeCount, 1, "only 1 dst node participating")
 	}
+	require.Greater(rd.t, destNodeCount, 1, "only 1 dst node participating")
 }
 
 func (rd *replicationDriver) main(ctx context.Context) {
@@ -825,10 +831,11 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 		srcNodes: 1,
 		dstNodes: 1,
 		// The timeout field ensures the c2c roachtest driver behaves properly.
-		timeout:            10 * time.Minute,
-		workload:           replicateKV{readPercent: 0, debugRunDuration: 1 * time.Minute, maxBlockBytes: 1},
-		additionalDuration: 0 * time.Minute,
-		cutover:            30 * time.Second,
+		timeout:                   10 * time.Minute,
+		workload:                  replicateKV{readPercent: 0, debugRunDuration: 1 * time.Minute, maxBlockBytes: 1},
+		additionalDuration:        0 * time.Minute,
+		cutover:                   30 * time.Second,
+		skipNodeDistributionCheck: true,
 	}
 	rd := makeReplicationDriver(t, c, sp)
 	rd.setupC2C(ctx, t, c)
@@ -898,10 +905,11 @@ func registerClusterToCluster(r registry.Registry) {
 			pdSize:   10,
 			workload: replicateKV{readPercent: 0, debugRunDuration: 1 * time.Minute,
 				maxBlockBytes: 1024},
-			timeout:            5 * time.Minute,
-			additionalDuration: 0 * time.Minute,
-			cutover:            30 * time.Second,
-			skip:               "for local ad hoc testing",
+			timeout:                   5 * time.Minute,
+			additionalDuration:        0 * time.Minute,
+			cutover:                   30 * time.Second,
+			skipNodeDistributionCheck: true,
+			skip:                      "for local ad hoc testing",
 		},
 		{
 			name:               "c2c/BulkOps/full",
@@ -929,6 +937,10 @@ func registerClusterToCluster(r registry.Registry) {
 			additionalDuration: 0,
 			cutover:            1 * time.Minute,
 			maxAcceptedLatency: 1 * time.Hour,
+
+			// skipNodeDistributionCheck is set to true because the roachtest
+			// completes before the automatic replanner can run.
+			skipNodeDistributionCheck: true,
 		},
 	} {
 		sp := sp
