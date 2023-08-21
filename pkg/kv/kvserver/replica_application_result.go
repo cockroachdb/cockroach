@@ -266,22 +266,21 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	}
 }
 
-func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *replicatedCmd) error {
-	// NB: `origCmd` remains "Local". It's just not going to signal anyone
+// makeReproposal returns a new re-proposal of the given proposal, and a
+// function that must be called if this re-proposal is successfully proposed.
+//
+// We want to move a few items from origP to the new command, but only if we
+// managed to propose the new command. For example, if we move the latches over
+// too early but then fail to actually get the new proposal started, the old
+// proposal will not release the latches. This would result in a lost latch.
+func (r *Replica) makeReproposal(origP *ProposalData) (reproposal *ProposalData, success func()) {
+	// NB: original command remains "Local". It's just not going to signal anyone
 	// or release any latches.
 
-	origP := origCmd.proposal
 	seedP := origP.seedProposal
 	if seedP == nil {
 		seedP = origP
 	}
-
-	// We want to move a few items from origCmd to the new command, but only if we
-	// managed to propose the new command. For example, if we move the latches
-	// over too early but then fail to actually get the new proposal started, the
-	// old proposal will not release the latches. This would result in a lost
-	// latch.
-	var success bool
 
 	// Go through the original proposal field by field and decide what transfers
 	// to the new proposal (and how that affects the old proposal). The overall
@@ -356,10 +355,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		seedProposal: seedP,
 	}
 
-	defer func() {
-		if !success {
-			return
-		}
+	return newProposal, func() {
 		// If the original proposal had an explicit span, it's an async consensus
 		// proposal and the span would be finished momentarily (when we return to
 		// the caller) if we didn't unlink it here, but we want it to continue
@@ -390,7 +386,11 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 		// We'd need to make sure the span is finished eventually.
 		origP.ctx = r.AnnotateCtx(context.TODO())
 		seedP.lastReproposal = newProposal
-	}()
+	}
+}
+
+func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *replicatedCmd) error {
+	newProposal, onSuccess := r.makeReproposal(origCmd.proposal)
 
 	// We need to track the request again in order to protect its timestamp until
 	// it gets reproposed.
@@ -424,7 +424,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(ctx context.Context, origCmd *re
 	}
 	log.VEventf(ctx, 2, "reproposed command %x", newProposal.idKey)
 
-	success = true
+	onSuccess()
 	return nil
 }
 
