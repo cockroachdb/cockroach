@@ -29,7 +29,9 @@ export function QueriesCell(
     (transactionQueries.length === 1 &&
       transactionQueries[0]?.length < textLimit)
   ) {
-    const query = transactionQueries?.length ? transactionQueries[0] : "";
+    const query = transactionQueries?.length
+      ? transactionQueries[0]
+      : "Query not available.";
     return <div>{query}</div>;
   }
 
