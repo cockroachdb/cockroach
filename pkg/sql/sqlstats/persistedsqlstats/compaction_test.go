@@ -183,16 +183,16 @@ func TestSQLStatsCompactor(t *testing.T) {
 				ctx,
 				"truncate-stmt-stats",
 				nil,
-				sessiondata.NodeUserSessionDataOverride,
-				"TRUNCATE system.statement_statistics",
+				sessiondata.ObservabilitySessionDataOverride,
+				"TRUNCATE statement_statistics",
 			)
 			require.NoError(t, err)
 			_, err = internalExecutor.ExecEx(
 				ctx,
 				"truncate-txn-stats",
 				nil,
-				sessiondata.NodeUserSessionDataOverride,
-				"TRUNCATE system.transaction_statistics",
+				sessiondata.ObservabilitySessionDataOverride,
+				"TRUNCATE transaction_statistics",
 			)
 			require.NoError(t, err)
 			serverSQLStats :=
@@ -332,12 +332,14 @@ func launchSQLStatsCompactionJob(
 func getPersistedStatsEntry(
 	t *testing.T, sqlConn *sqlutils.SQLRunner,
 ) (stmtStatsCnt, txnStatsCnt int) {
+	defer useObsDB(t, sqlConn)()
+
 	stmt := "SELECT count(*) FROM %s"
 
-	row := sqlConn.QueryRow(t, fmt.Sprintf(stmt, "system.statement_statistics"))
+	row := sqlConn.QueryRow(t, fmt.Sprintf(stmt, "statement_statistics"))
 	row.Scan(&stmtStatsCnt)
 
-	row = sqlConn.QueryRow(t, fmt.Sprintf(stmt, "system.transaction_statistics"))
+	row = sqlConn.QueryRow(t, fmt.Sprintf(stmt, "transaction_statistics"))
 	row.Scan(&txnStatsCnt)
 
 	return stmtStatsCnt, txnStatsCnt
@@ -346,6 +348,8 @@ func getPersistedStatsEntry(
 func getTopSortedFingerprints(
 	t *testing.T, sqlDb *sqlutils.SQLRunner, limit int,
 ) (stmtFingerprints, txnFingerprints []uint64) {
+	defer useObsDB(t, sqlDb)()
+
 	query := `
 SELECT fingerprint_id
 FROM %s
@@ -359,7 +363,7 @@ ORDER BY aggregated_ts`
 	txnFingerprints = make([]uint64, 0)
 
 	fingerprintIDBuffer := make([]byte, 0, 8)
-	rows := sqlDb.Query(t, fmt.Sprintf(query, "system.statement_statistics"))
+	rows := sqlDb.Query(t, fmt.Sprintf(query, "statement_statistics"))
 	for rows.Next() {
 		fingerprintIDBuffer = fingerprintIDBuffer[:0]
 		require.NoError(t, rows.Scan(&fingerprintIDBuffer))
@@ -369,7 +373,7 @@ ORDER BY aggregated_ts`
 	}
 	require.NoError(t, rows.Close())
 
-	rows = sqlDb.Query(t, fmt.Sprintf(query, "system.transaction_statistics"))
+	rows = sqlDb.Query(t, fmt.Sprintf(query, "transaction_statistics"))
 	for rows.Next() {
 		fingerprintIDBuffer = fingerprintIDBuffer[:0]
 		require.NoError(t, rows.Scan(&fingerprintIDBuffer))

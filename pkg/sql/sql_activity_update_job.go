@@ -50,7 +50,7 @@ var sqlStatsActivityTopCount = settings.RegisterIntSetting(
 )
 
 // sqlStatsActivityMaxPersistedRows specifies maximum number of rows that will be
-// retained in system.statement_activity and system.transaction_activity.
+// retained in statement_activity and transaction_activity.
 // Defaults computed 500(top limit)*6(num columns)*24(hrs)*3(days)=216000
 // to give a minimum of 3 days of history. It was rounded down to 200k to
 // give an even number. The top 500(controlled by sql.stats.activity.top.max)
@@ -218,8 +218,8 @@ func (u *sqlActivityUpdater) TransferStatsToActivity(ctx context.Context) error 
 }
 
 // transferAllStats is used to transfer all the stats FROM
-// system.statement_statistics and system.transaction_statistics
-// to system.statement_activity and system.transaction_activity
+// statement_statistics and transaction_statistics
+// to statement_activity and transaction_activity
 func (u *sqlActivityUpdater) transferAllStats(
 	ctx context.Context,
 	aggTs time.Time,
@@ -229,9 +229,9 @@ func (u *sqlActivityUpdater) transferAllStats(
 	_, err := u.db.Executor().ExecEx(ctx,
 		"activity-flush-txn-transfer-all",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		`
-			UPSERT INTO system.public.transaction_activity 
+			UPSERT INTO transaction_activity 
 (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata,
  statistics, query, execution_count, execution_total_seconds,
  execution_total_cluster_seconds, contention_time_avg_seconds, 
@@ -257,7 +257,7 @@ func (u *sqlActivityUpdater) transferAllStats(
                   agg_interval,
                   max(metadata) as metadata,
                   crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
-           FROM system.public.transaction_statistics
+           FROM transaction_statistics
            WHERE aggregated_ts = $2
              and app_name not like '$ internal%'
            GROUP BY app_name,
@@ -275,10 +275,10 @@ func (u *sqlActivityUpdater) transferAllStats(
 	_, err = u.db.Executor().ExecEx(ctx,
 		"activity-flush-stmt-transfer-all",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		`
 			UPSERT
-INTO system.public.statement_activity (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name,
+INTO statement_activity (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name,
                                        agg_interval, metadata, statistics, plan, index_recommendations, execution_count,
                                        execution_total_seconds, execution_total_cluster_seconds,
                                        contention_time_avg_seconds,
@@ -312,7 +312,7 @@ INTO system.public.statement_activity (aggregated_ts, fingerprint_id, transactio
                   crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
                   plan,
                   index_recommendations
-           FROM system.public.statement_statistics
+           FROM statement_statistics
            WHERE aggregated_ts = $2
              and app_name not like '$ internal%'
            GROUP BY app_name,
@@ -331,8 +331,8 @@ INTO system.public.statement_activity (aggregated_ts, fingerprint_id, transactio
 }
 
 // transferTopStats is used to transfer top N stats FROM
-// system.statement_statistics and system.transaction_statistics
-// to system.statement_activity and system.transaction_activity
+// statement_statistics and transaction_statistics
+// to statement_activity and transaction_activity
 func (u *sqlActivityUpdater) transferTopStats(
 	ctx context.Context,
 	aggTs time.Time,
@@ -354,8 +354,8 @@ func (u *sqlActivityUpdater) transferTopStats(
 		_, err := txn.ExecEx(ctx,
 			"activity-flush-txn-transfer-tops",
 			txn.KV(), /* txn */
-			sessiondata.NodeUserSessionDataOverride,
-			`DELETE FROM system.public.transaction_activity WHERE aggregated_ts = $1;`,
+			sessiondata.ObservabilitySessionDataOverride,
+			`DELETE FROM transaction_activity WHERE aggregated_ts = $1;`,
 			aggTs)
 
 		if err != nil {
@@ -370,10 +370,10 @@ func (u *sqlActivityUpdater) transferTopStats(
 		_, err = txn.ExecEx(ctx,
 			"activity-flush-txn-transfer-tops",
 			txn.KV(), /* txn */
-			sessiondata.NodeUserSessionDataOverride,
+			sessiondata.ObservabilitySessionDataOverride,
 			`
 UPSERT
-INTO system.public.transaction_activity
+INTO transaction_activity
 (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata,
  statistics, query, execution_count, execution_total_seconds,
  execution_total_cluster_seconds, contention_time_avg_seconds,
@@ -399,7 +399,7 @@ INTO system.public.transaction_activity
                   ts.agg_interval,
                   max(ts.metadata) AS metadata,
                   crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
-           FROM system.public.transaction_statistics ts
+           FROM transaction_statistics ts
                     inner join (SELECT fingerprint_id, app_name, agg_interval
                                 FROM (SELECT fingerprint_id, app_name, agg_interval,
                                              row_number()
@@ -420,7 +420,7 @@ INTO system.public.transaction_activity
                                                      0) desc)                                                                  AS lPos
                                       FROM (SELECT fingerprint_id, app_name, agg_interval,
                                                    crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
-                                            FROM system.public.transaction_statistics
+                                            FROM transaction_statistics
                                             WHERE aggregated_ts = $2 and
                                                   app_name not like '$ internal%'
                                             GROUP BY app_name,
@@ -460,8 +460,8 @@ INTO system.public.transaction_activity
 		_, err := txn.ExecEx(ctx,
 			"activity-flush-txn-transfer-tops",
 			txn.KV(), /* txn */
-			sessiondata.NodeUserSessionDataOverride,
-			`DELETE FROM system.public.statement_activity WHERE aggregated_ts = $1;`,
+			sessiondata.ObservabilitySessionDataOverride,
+			`DELETE FROM statement_activity WHERE aggregated_ts = $1;`,
 			aggTs)
 
 		if err != nil {
@@ -476,10 +476,10 @@ INTO system.public.transaction_activity
 		_, err = txn.ExecEx(ctx,
 			"activity-flush-stmt-transfer-tops",
 			txn.KV(), /* txn */
-			sessiondata.NodeUserSessionDataOverride,
+			sessiondata.ObservabilitySessionDataOverride,
 			`
 UPSERT
-INTO system.public.statement_activity
+INTO statement_activity
 (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name,
  agg_interval, metadata, statistics, plan, index_recommendations, execution_count,
  execution_total_seconds, execution_total_cluster_seconds,
@@ -514,7 +514,7 @@ INTO system.public.statement_activity
                   crdb_internal.merge_statement_stats(array_agg(ss.statistics)) AS statistics,
                   ss.plan,
                   ss.index_recommendations
-           FROM system.public.statement_statistics ss
+           FROM statement_statistics ss
            inner join (SELECT fingerprint_id, app_name
                                     FROM (SELECT fingerprint_id, app_name,
                                                  row_number()
@@ -536,7 +536,7 @@ INTO system.public.statement_activity
                                           FROM (SELECT fingerprint_id,
                                                        app_name,
                                                        crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
-                                                FROM system.public.statement_statistics
+                                                FROM statement_statistics
                                                 WHERE aggregated_ts = $2 and
                                                       app_name not like '$ internal%'
                                                 GROUP BY app_name,
@@ -568,7 +568,7 @@ INTO system.public.statement_activity
 }
 
 // getAostExecutionCount is used to get the row counts of both the
-// system.statement_statistics and system.transaction_statistics.
+// statement_statistics and transaction_statistics.
 // It also gets the total execution count for the specified aggregated
 // timestamp.
 func (u *sqlActivityUpdater) getAostExecutionCount(
@@ -586,12 +586,12 @@ SELECT row_count,
        ex_sum
 FROM (SELECT count_rows():::int                     AS row_count,
              COALESCE(sum(execution_count)::int, 0) AS ex_sum
-      FROM system.statement_statistics AS OF SYSTEM TIME follower_read_timestamp()
+      FROM statement_statistics AS OF SYSTEM TIME follower_read_timestamp()
       WHERE app_name not like '$ internal%' and aggregated_ts = $1
       union all
       SELECT
           count_rows():::int AS row_count, COALESCE (sum(execution_count)::int, 0) AS ex_sum
-      FROM system.transaction_statistics AS OF SYSTEM TIME follower_read_timestamp()
+      FROM transaction_statistics AS OF SYSTEM TIME follower_read_timestamp()
       WHERE app_name not like '$ internal%' and aggregated_ts = $1) AS OF SYSTEM TIME follower_read_timestamp()`
 
 	if u.testingKnobs != nil {
@@ -602,19 +602,19 @@ SELECT row_count,
        ex_sum
 FROM (SELECT count_rows():::int                     AS row_count,
              COALESCE(sum(execution_count)::int, 0) AS ex_sum
-      FROM system.statement_statistics %[1]s
+      FROM statement_statistics %[1]s
       WHERE app_name not like '$ internal%%' and aggregated_ts = $1
       union all
       SELECT
           count_rows():::int AS row_count, COALESCE (sum(execution_count)::int, 0) AS ex_sum
-      FROM system.transaction_statistics %[1]s
+      FROM transaction_statistics %[1]s
       WHERE app_name not like '$ internal%%' and aggregated_ts = $1) %[1]s`, aost)
 	}
 
 	it, err := u.db.Executor().QueryIteratorEx(ctx,
 		"activity-flush-count",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		query,
 		aggTs,
 	)
@@ -673,7 +673,7 @@ func (u *sqlActivityUpdater) computeAggregatedTs(sv *settings.Values) time.Time 
 // compactActivityTables is used delete rows FROM the activity tables
 // to keep the tables under the specified config limit.
 func (u *sqlActivityUpdater) compactActivityTables(ctx context.Context, maxRowCount int64) error {
-	rowCount, err := u.getTableRowCount(ctx, "system.statement_activity")
+	rowCount, err := u.getTableRowCount(ctx, "statement_activity")
 	if err != nil {
 		return err
 	}
@@ -687,11 +687,11 @@ func (u *sqlActivityUpdater) compactActivityTables(ctx context.Context, maxRowCo
 	_, err = u.db.Executor().ExecEx(ctx,
 		"activity-stmt-compaction",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		`
 				DELETE
-FROM system.statement_activity
-WHERE aggregated_ts IN (SELECT DISTINCT aggregated_ts FROM (SELECT aggregated_ts FROM system.statement_activity ORDER BY aggregated_ts ASC limit $1));`,
+FROM statement_activity
+WHERE aggregated_ts IN (SELECT DISTINCT aggregated_ts FROM (SELECT aggregated_ts FROM statement_activity ORDER BY aggregated_ts ASC limit $1));`,
 		rowCount-maxRowCount,
 	)
 
@@ -704,18 +704,18 @@ WHERE aggregated_ts IN (SELECT DISTINCT aggregated_ts FROM (SELECT aggregated_ts
 	_, err = u.db.Executor().ExecEx(ctx,
 		"activity-txn-compaction",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		`
 				DELETE
-FROM system.transaction_activity
-WHERE aggregated_ts not in (SELECT distinct aggregated_ts FROM system.statement_activity);`,
+FROM transaction_activity
+WHERE aggregated_ts not in (SELECT distinct aggregated_ts FROM statement_activity);`,
 	)
 
 	return err
 }
 
 // getTableRowCount is used to get the row counts of both the
-// system.statement_statistics and system.transaction_statistics.
+// statement_statistics and transaction_statistics.
 // It also gets the total execution count for the specified aggregated
 // timestamp.
 func (u *sqlActivityUpdater) getTableRowCount(
@@ -729,7 +729,7 @@ func (u *sqlActivityUpdater) getTableRowCount(
 	datums, err := u.db.Executor().QueryRowEx(ctx,
 		"activity-total-count",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		query,
 	)
 

@@ -978,6 +978,9 @@ func (ie *InternalExecutor) execInternal(
 
 	applyInternalExecutorSessionExceptions(sd)
 	applyOverrides(sessionDataOverride, sd)
+	if err := ie.maybeSelectObservabilityDB(ctx, opName, txn, sessionDataOverride, sd); err != nil {
+		return nil, err
+	}
 	sd.Internal = true
 	if sd.User().Undefined() {
 		return nil, errors.AssertionFailedf("no user specified for internal query")

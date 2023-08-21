@@ -64,15 +64,15 @@ func FindWorkloadRecs(
 }
 
 // collectIndexRecs collects all the index recommendations stored in the
-// system.statement_statistics with the time later than ts.
+// statement_statistics with the time later than ts.
 func collectIndexRecs(
 	ctx context.Context, evalCtx *eval.Context, ts *tree.DTimestampTZ,
 ) ([]tree.CreateIndex, []tree.DropIndex, error) {
-	query := `SELECT index_recommendations FROM system.statement_statistics
+	query := `SELECT index_recommendations FROM statement_statistics
 						 WHERE (statistics -> 'statistics' ->> 'lastExecAt')::TIMESTAMPTZ > $1
 						 AND array_length(index_recommendations, 1) > 0;`
 	indexRecs, err := evalCtx.Planner.QueryIteratorEx(ctx, "get-candidates-for-workload-indexrecs",
-		sessiondata.NoSessionDataOverride, query, ts.Time)
+		sessiondata.ObservabilitySessionDataOverride, query, ts.Time)
 	if err != nil {
 		return nil, nil, err
 	}

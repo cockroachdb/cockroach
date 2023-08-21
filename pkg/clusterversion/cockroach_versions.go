@@ -315,7 +315,7 @@ const (
 	V23_1BackfillTypeColumnInJobsTable
 
 	// V23_1_AlterSystemStatementStatisticsAddIndexesUsage creates indexes usage virtual column
-	// based on (statistics->>'indexes') with inverted index on table system.statement_statistics.
+	// based on (statistics->>'indexes') with inverted index on table statement_statistics.
 	V23_1_AlterSystemStatementStatisticsAddIndexesUsage
 
 	// V23_1EnsurePebbleFormatSSTableValueBlocks upgrades the Pebble format major

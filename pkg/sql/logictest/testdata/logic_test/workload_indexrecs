@@ -5,12 +5,15 @@ INSERT INTO system.users VALUES  ('node', NULL, true, 3);
 GRANT NODE TO root;
 
 statement ok
-CREATE TABLE t1 (k INT, i INT, f FLOAT, s STRING)
+SET database = crdb_internal.current_observability_database()
+
+statement ok
+CREATE TABLE test.t1 (k INT, i INT, f FLOAT, s STRING)
 
 
 # Basic tests for creation
 statement ok
-INSERT INTO system.statement_statistics (
+INSERT INTO statement_statistics (
   index_recommendations,
   aggregated_ts,
   fingerprint_id,
@@ -53,10 +56,10 @@ CREATE INDEX ON t1 (k);
 
 # Basic tests for replacement
 statement ok
-CREATE INDEX t1_i ON t1(i);
+CREATE INDEX t1_i ON test.t1(i);
 
 statement ok
-INSERT INTO system.statement_statistics (
+INSERT INTO statement_statistics (
   index_recommendations,
   aggregated_ts,
   fingerprint_id,
@@ -102,7 +105,7 @@ CREATE INDEX ON t1 (k);
 
 # Basic tests for alteration to show it is skipped
 statement ok
-INSERT INTO system.statement_statistics (
+INSERT INTO statement_statistics (
   index_recommendations,
   aggregated_ts,
   fingerprint_id,
@@ -148,7 +151,7 @@ CREATE INDEX ON t1 (k);
 
 # Test for the new index "t1(k, i)" covering the previous one "t1(k)"
 statement ok
-INSERT INTO system.statement_statistics (
+INSERT INTO statement_statistics (
   index_recommendations,
   aggregated_ts,
   fingerprint_id,
@@ -194,7 +197,7 @@ CREATE INDEX ON t1 (k, i);
 
 # Test for the storing part "t1(i) storing (k)" covered by one index "t1(i, k)"
 statement ok
-INSERT INTO system.statement_statistics (
+INSERT INTO statement_statistics (
   index_recommendations,
   aggregated_ts,
   fingerprint_id,
@@ -241,7 +244,7 @@ CREATE INDEX ON t1 (k, i);
 
 # Test for duplicate DROP INDEX t1_i
 statement ok
-INSERT INTO system.statement_statistics (
+INSERT INTO statement_statistics (
   index_recommendations,
   aggregated_ts,
   fingerprint_id,
@@ -288,12 +291,12 @@ DROP INDEX t1_i;
 
 
 statement ok
-CREATE TABLE t2 (k INT, i INT, f FLOAT, s STRING)
+CREATE TABLE test.t2 (k INT, i INT, f FLOAT, s STRING)
 
 
 # Test for multi-table (t1, t2)
 statement ok
-INSERT INTO system.statement_statistics (
+INSERT INTO statement_statistics (
   index_recommendations,
   aggregated_ts,
   fingerprint_id,
@@ -344,12 +347,12 @@ DROP INDEX t1_i;
 
 
 statement ok
-CREATE TABLE t3 (k INT, i INT, f FLOAT, s STRING)
+CREATE TABLE test.t3 (k INT, i INT, f FLOAT, s STRING)
 
 
 # Test for multi-table (t1, t2, t3)
 statement ok
-INSERT INTO system.statement_statistics (
+INSERT INTO statement_statistics (
   index_recommendations,
   aggregated_ts,
   fingerprint_id,

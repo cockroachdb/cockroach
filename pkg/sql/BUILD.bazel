@@ -26,6 +26,7 @@ go_library(
         "apply_join.go",
         "audit_logging.go",
         "authorization.go",
+        "auto_obs_db.go",
         "backfill.go",
         "buffer.go",
         "buffer_util.go",

@@ -2452,6 +2452,7 @@ var builtinOidsArray = []string{
 	2481: `bitmask_xor(a: string, b: string) -> varbit`,
 	2482: `bitmask_xor(a: varbit, b: string) -> varbit`,
 	2483: `bitmask_xor(a: string, b: varbit) -> varbit`,
+	2484: `crdb_internal.current_observability_database() -> string`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

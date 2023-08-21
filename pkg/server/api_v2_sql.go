@@ -207,6 +207,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 		Execute         bool   `json:"execute"`
 		SeparateTxns    bool   `json:"separate_txns"`
 		StopOnError     bool   `json:"stop_on_error"`
+		AutoObsDB       bool   `json:"auto_obs_db"`
 		Statements      []struct {
 			SQL       string                               `json:"sql"`
 			stmt      statements.Statement[tree.Statement] `json:"-"`
@@ -466,6 +467,8 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 							User:            username,
 							Database:        requestPayload.Database,
 							ApplicationName: requestPayload.ApplicationName,
+
+							AutoSelectObservabilityDatabase: requestPayload.AutoObsDB,
 						},
 						stmt.SQL, stmt.Arguments...)
 					if err != nil {

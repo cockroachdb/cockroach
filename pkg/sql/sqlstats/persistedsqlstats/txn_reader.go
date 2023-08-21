@@ -86,7 +86,7 @@ func (s *PersistedSQLStats) persistedTxnStatsIter(
 		ctx,
 		"read-txn-stats",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		query,
 	); err != nil {
 		return nil /* iter */, 0 /* expectedColCnt */, err
@@ -113,7 +113,7 @@ func (s *PersistedSQLStats) getFetchQueryForTxnStatsTable(
 SELECT 
   %[1]s
 FROM
-	system.transaction_statistics
+	transaction_statistics
 %[2]s`
 
 	followerReadClause := s.cfg.Knobs.GetAOSTClause()

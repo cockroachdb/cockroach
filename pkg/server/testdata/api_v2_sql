@@ -8,6 +8,7 @@ sql admin
  "num_statements": 1,
  "request": {
   "application_name": "$ api-v2-sql",
+  "auto_obs_db": false,
   "database": "system",
   "execute": false,
   "max_result_size": 10000,
@@ -904,4 +905,40 @@ sql admin
   ]
  },
  "num_statements": 4
+}
+
+# Test the automatic selection of an o11y database.
+sql admin
+{
+  "database": "defaultdb",
+  "auto_obs_db": true,
+  "execute": true,
+  "statements": [{"sql": "SELECT current_database()"}]
+}
+----
+{
+ "execution": {
+  "txn_results": [
+   {
+    "columns": [
+     {
+      "name": "current_database",
+      "oid": 25,
+      "type": "STRING"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "current_database": "system"
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "SELECT"
+   }
+  ]
+ },
+ "num_statements": 1
 }

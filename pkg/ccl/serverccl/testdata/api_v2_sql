@@ -10,6 +10,7 @@ sql admin
  "num_statements": 1,
  "request": {
   "application_name": "$ api-v2-sql",
+  "auto_obs_db": false,
   "database": "system",
   "execute": false,
   "max_result_size": 10000,
