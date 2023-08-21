@@ -11,7 +11,10 @@
 package enginepb
 
 import (
+	"bytes"
+	"fmt"
 	"math"
+	"regexp"
 	"sort"
 
 	"github.com/cockroachdb/redact"
@@ -217,6 +220,58 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.SysBytes -= oms.SysBytes
 	ms.SysCount -= oms.SysCount
 	ms.AbortSpanBytes -= oms.AbortSpanBytes
+}
+
+var mvccStatsRegexp = regexp.MustCompile(`(\w+):(-?\d+)`)
+
+// Formatted formats MVCC stats, returning a string.
+func (ms MVCCStats) Formatted(delta bool) string {
+	// Split stats into field pairs. Subindex 1 is key, 2 is value.
+	fields := mvccStatsRegexp.FindAllStringSubmatch(ms.String(), -1)
+
+	// Sort some fields in preferred order, keeping the rest as-is at the end.
+	//
+	// TODO(erikgrinaker): Consider just reordering the MVCCStats struct fields
+	// instead, which determines the order of MVCCStats.String().
+	order := []string{"key_count", "key_bytes", "val_count", "val_bytes",
+		"range_key_count", "range_key_bytes", "range_val_count", "range_val_bytes",
+		"live_count", "live_bytes", "gc_bytes_age",
+		"intent_count", "intent_bytes", "separated_intent_count", "intent_age"}
+	sort.SliceStable(fields, func(i, j int) bool {
+		for _, name := range order {
+			if fields[i][1] == name {
+				return true
+			} else if fields[j][1] == name {
+				return false
+			}
+		}
+		return false
+	})
+
+	// Format and output fields.
+	var buf bytes.Buffer
+	for _, field := range fields {
+		key, value := field[1], field[2]
+
+		// Always skip zero-valued fields and LastUpdateNanos.
+		if value == "0" || key == "last_update_nanos" {
+			continue
+		}
+
+		if buf.Len() > 0 {
+			fmt.Fprint(&buf, " ")
+		}
+		fmt.Fprint(&buf, key, "=")
+		if delta && value[0] != '-' {
+			// prefix unsigned deltas with +
+			fmt.Fprint(&buf, "+")
+		}
+		fmt.Fprint(&buf, value)
+	}
+	if buf.Len() == 0 && delta {
+		return "no change"
+	}
+	return buf.String()
 }
 
 // IsInline returns true if the value is inlined in the metadata.
