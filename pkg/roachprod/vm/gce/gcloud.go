@@ -36,7 +36,6 @@ import (
 )
 
 const (
-	defaultProject = "cockroach-ephemeral"
 	// ProviderName is gce.
 	ProviderName        = "gce"
 	DefaultImage        = "ubuntu-2004-focal-v20210603"
@@ -51,11 +50,11 @@ var providerInstance = &Provider{}
 
 // DefaultProject returns the default GCE project.
 func DefaultProject() string {
-	return defaultProject
+	return config.DefaultGCloudProject
 }
 
 // projects for which a cron GC job exists.
-var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
+var projectsWithGC = []string{config.DefaultGCloudProject, "andrei-jepsen"}
 
 // Denotes if this provider was successfully initialized.
 var initialized = false
@@ -65,7 +64,7 @@ var initialized = false
 // If the gcloud tool is not available on the local path, the provider is a
 // stub.
 func Init() error {
-	providerInstance.Projects = []string{defaultProject}
+	providerInstance.Projects = []string{config.DefaultGCloudProject}
 	projectFromEnv := os.Getenv("GCE_PROJECT")
 	if projectFromEnv != "" {
 		providerInstance.Projects = []string{projectFromEnv}
@@ -1000,7 +999,7 @@ func (p *Provider) Create(
 		"--boot-disk-type", "pd-ssd",
 	}
 
-	if project == defaultProject && p.ServiceAccount == "" {
+	if project == config.DefaultGCloudProject && p.ServiceAccount == "" {
 		p.ServiceAccount = "21965078311-compute@developer.gserviceaccount.com"
 
 	}

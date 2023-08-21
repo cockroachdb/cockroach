@@ -20,14 +20,10 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
-)
-
-const (
-	dnsProject = "cockroach-shared"
-	dnsZone    = "roachprod"
 )
 
 // Subdomain is the DNS subdomain to in which to maintain cluster node names.
@@ -297,8 +293,8 @@ func SyncDNS(l *logger.Logger, vms vm.List) error {
 	fmt.Fprint(f, zoneBuilder.String())
 	f.Close()
 
-	args := []string{"--project", dnsProject, "dns", "record-sets", "import",
-		f.Name(), "-z", dnsZone, "--delete-all-existing", "--zone-file-format"}
+	args := []string{"--project", config.DNSGCloudProject, "dns", "record-sets", "import",
+		f.Name(), "-z", config.DNSZone, "--delete-all-existing", "--zone-file-format"}
 	cmd := exec.Command("gcloud", args...)
 	output, err := cmd.CombinedOutput()
 
@@ -312,7 +308,7 @@ func GetUserAuthorizedKeys(l *logger.Logger) (authorizedKeys []byte, err error) 
 	var outBuf bytes.Buffer
 	// The below command will return a stream of user:pubkey as text.
 	cmd := exec.Command("gcloud", "compute", "project-info", "describe",
-		"--project=cockroach-ephemeral",
+		"--project="+config.KeysGCloudProject,
 		"--format=value(commonInstanceMetadata.ssh-keys)")
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = &outBuf

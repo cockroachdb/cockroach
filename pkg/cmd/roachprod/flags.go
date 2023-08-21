@@ -89,6 +89,8 @@ func initFlags() {
 	rootCmd.PersistentFlags().IntVarP(&config.MaxConcurrency, "max-concurrency", "", 32,
 		"maximum number of operations to execute on nodes concurrently, set to zero for infinite",
 	)
+	rootCmd.PersistentFlags().StringVarP(&config.EmailDomain, "email-domain", "",
+		config.DefaultEmailDomain, "email domain for users")
 
 	createCmd.Flags().DurationVarP(&createVMOpts.Lifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
@@ -357,6 +359,27 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd} {
 		cmd.Flags().StringVar(&tenantName,
 			"tenant-name", "", "specific tenant to connect to")
+	}
+
+	for _, cmd := range []*cobra.Command{listCmd, createCmd, setupSSHCmd} {
+		cmd.Flags().StringVar(
+			&config.DNSGCloudProject, "dns-gcloud-project",
+			config.DefaultGCloudProject,
+			"google cloud project to use to set up DNS",
+		)
+		cmd.Flags().StringVar(
+			&config.DNSZone, "dns-zone",
+			config.DefaultDNSZone,
+			"zone file in gcloud project to use to set up DNS",
+		)
+	}
+
+	for _, cmd := range []*cobra.Command{createCmd, setupSSHCmd} {
+		cmd.Flags().StringVar(
+			&config.KeysGCloudProject, "keys-gcloud-project",
+			config.DefaultGCloudProject,
+			"google cloud project to use to store and fetch SSH keys",
+		)
 	}
 
 }
