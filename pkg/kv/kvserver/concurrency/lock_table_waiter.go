@@ -251,8 +251,9 @@ func (w *lockTableWaiterImpl) WaitOn(
 
 				log.VEventf(ctx, 3, "pushing after %s for: "+
 					"liveness detection = %t, deadlock detection = %t, "+
-					"timeout enforcement = %t, priority enforcement = %t",
-					delay, livenessPush, deadlockPush, timeoutPush, priorityPush)
+					"timeout enforcement = %t, priority enforcement = %t, "+
+					"wait policy error = %t",
+					delay, livenessPush, deadlockPush, timeoutPush, priorityPush, waitPolicyPush)
 
 				if delay > 0 {
 					if timer == nil {
