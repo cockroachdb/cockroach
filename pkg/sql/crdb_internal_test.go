@@ -1891,3 +1891,62 @@ func TestVirtualPTSTable(t *testing.T) {
 		require.Equal(t, 302, virtualRow.numRanges)
 	})
 }
+
+func TestEventsTableAccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	rootRunner := sqlutils.MakeSQLRunner(db)
+	testUserDb := s.ApplicationLayer().SQLConnForUser(t, username.TestUser, "")
+	testRunner := sqlutils.MakeSQLRunner(testUserDb)
+	rootRunner.Exec(t, `CREATE USER testuser`)
+
+	var rootNumEvents int
+	var testNumEvents int
+
+	// Get the current number of events.
+	rootRunner.QueryRow(t, "SELECT count(*) FROM crdb_internal.eventlog").Scan(&rootNumEvents)
+
+	// Query as non-admin, expect "no admin role" error.
+	testRunner.ExpectErr(t, "only users with the admin role are allowed to access crdb_internal.eventlog", "SELECT count(*) FROM crdb_internal.eventlog")
+
+	// Allow non-admin access to the crdb_internal.eventlog table.
+	rootRunner.Exec(t, `SET CLUSTER SETTING sql.eventlog.non_admin_accessible = true`)
+
+	// Non-admin users need VIEWACTIVITY/VIEWACTIVITYREDACTED + VIEWCLUSTERMETADATA + VIEWCLUSTERSETTING to
+	// access crdb_internal.eventlog.
+
+	// Query with none of the required permissions, expect error.
+	testRunner.ExpectErr(t, "user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege", "SELECT count(*) FROM crdb_internal.eventlog")
+
+	// Query with only VIEWACTIVITY, expect error.
+	rootRunner.Exec(t, "GRANT SYSTEM VIEWACTIVITY to testuser")
+	testRunner.ExpectErr(t, "user testuser does not have VIEWCLUSTERMETADATA privilege", "SELECT count(*) FROM crdb_internal.eventlog")
+
+	// Query with only VIEWACTIVITY + VIEWCLUSTERMETADATA, expect error.
+	rootRunner.Exec(t, "GRANT SYSTEM VIEWCLUSTERMETADATA to testuser")
+	testRunner.ExpectErr(t, "user testuser does not have VIEWCLUSTERSETTING or MODIFYCLUSTERSETTING privilege", "SELECT count(*) FROM crdb_internal.eventlog")
+
+	// Query with all required permissions.
+	rootRunner.Exec(t, "GRANT SYSTEM VIEWCLUSTERSETTING to testuser")
+	testRunner.QueryRow(t, "SELECT count(*) FROM crdb_internal.eventlog").Scan(&testNumEvents)
+	// Check that the number of events is at least the number of events we saw before.
+	require.GreaterOrEqual(t, testNumEvents, rootNumEvents)
+
+	// Test with VIEWACTIVITYREDACTED instead of VIEWACTIVITY.
+	rootRunner.Exec(t, "REVOKE SYSTEM VIEWACTIVITY from testuser")
+	rootRunner.Exec(t, "GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser")
+	testRunner.QueryRow(t, "SELECT count(*) FROM crdb_internal.eventlog").Scan(&testNumEvents)
+	// Check that the number of events is at least the number of events we saw before.
+	require.GreaterOrEqual(t, testNumEvents, rootNumEvents)
+
+	// Test with MODIFYCLUSTERSETTING instead of VIEWCLUSTERSETTING.
+	rootRunner.Exec(t, "REVOKE SYSTEM VIEWCLUSTERSETTING from testuser")
+	rootRunner.Exec(t, "GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser")
+	testRunner.QueryRow(t, "SELECT count(*) FROM crdb_internal.eventlog").Scan(&testNumEvents)
+	// Check that the number of events is at least the number of events we saw before.
+	require.GreaterOrEqual(t, testNumEvents, rootNumEvents)
+}

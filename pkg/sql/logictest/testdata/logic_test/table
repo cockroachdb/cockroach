@@ -578,6 +578,7 @@ create_type_statements                  NULL
 cross_db_references                     NULL
 databases                               NULL
 default_privileges                      NULL
+eventlog                                NULL
 feature_usage                           NULL
 forward_dependencies                    NULL
 gossip_alerts                           NULL

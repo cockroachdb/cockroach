@@ -232,6 +232,7 @@ sql.defaults.zigzag_join.enabled	boolean	true	"default value for enable_zigzag_j
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
 sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in bytes a processor can use before falling back to temp storage	tenant-rw
+sql.eventlog.non_admin_accessible	boolean	false	set to true to allow non-admin users access to the crdb_internal.eventlog table.Non-admin users will need a confluence of the VIEWACTIVITY/VIEWACTIVITYREDACTED permission, VIEWCLUSTERDMETADATA permission, and VIEWCLUSTERSETTING/MODIFYCLUSTERSETTING permission.	tenant-rw
 sql.guardrails.max_row_size_err	byte size	512 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an error is returned; use 0 to disable	tenant-rw
 sql.guardrails.max_row_size_log	byte size	64 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use 0 to disable	tenant-rw
 sql.insights.anomaly_detection.enabled	boolean	true	enable per-fingerprint latency recording and anomaly detection	tenant-rw
