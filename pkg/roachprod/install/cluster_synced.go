@@ -834,6 +834,16 @@ done
 			// pipe. Otherwise it can be closed under us, causing the reader to loop
 			// infinitely receiving a non-`io.EOF` error.
 			if err := sess.Wait(); err != nil {
+				// If we got an error waiting for the session but the context
+				// is already canceled, do not send an error through the
+				// channel; context cancelation happens at the user's request
+				// or when the test finishes. In either case, the monitor
+				// should quiesce. Reporting the error is confusing and can be
+				// spammy in the case of multiple monitors.
+				if monitorCtx.Err() != nil {
+					return
+				}
+
 				err := errors.Wrap(err, "failed to wait for session")
 				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
 				return
