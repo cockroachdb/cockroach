@@ -2378,26 +2378,6 @@ func (c *clusterImpl) adminUIAddr(
 	return addrs, nil
 }
 
-// InternalAddr returns the internal address in the form host:port for the
-// specified nodes.
-func (c *clusterImpl) InternalAddr(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption,
-) ([]string, error) {
-	var addrs []string
-	urls, err := c.pgURLErr(ctx, l, node, false, "")
-	if err != nil {
-		return nil, err
-	}
-	for _, u := range urls {
-		addr, err := urlToAddr(u)
-		if err != nil {
-			return nil, err
-		}
-		addrs = append(addrs, addr)
-	}
-	return addrs, nil
-}
-
 // InternalIP returns the internal IP addresses for the specified nodes.
 func (c *clusterImpl) InternalIP(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption,
@@ -2405,13 +2385,27 @@ func (c *clusterImpl) InternalIP(
 	return roachprod.IP(l, c.MakeNodes(node), false)
 }
 
+// InternalAddr returns the internal address in the form host:port for the
+// specified nodes.
+func (c *clusterImpl) InternalAddr(
+	ctx context.Context, l *logger.Logger, node option.NodeListOption,
+) ([]string, error) {
+	return c.addr(ctx, l, node, false)
+}
+
 // ExternalAddr returns the external address in the form host:port for the
 // specified node.
 func (c *clusterImpl) ExternalAddr(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption,
 ) ([]string, error) {
+	return c.addr(ctx, l, node, true)
+}
+
+func (c *clusterImpl) addr(
+	ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool,
+) ([]string, error) {
 	var addrs []string
-	urls, err := c.pgURLErr(ctx, l, node, true, "")
+	urls, err := c.pgURLErr(ctx, l, node, external, "")
 	if err != nil {
 		return nil, err
 	}
