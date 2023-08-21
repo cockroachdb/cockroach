@@ -173,7 +173,8 @@ type treeMu struct {
 	// doing better memory accounting than this.
 	numKeysLocked atomic.Int64
 
-	// For dampening the frequency with which we enforce lockTableImpl.maxLocks.
+	// For dampening the frequency with which we enforce
+	// lockTableImpl.maxKeysLocked.
 	lockAddMaxLocksCheckInterval uint64
 }
 
@@ -256,13 +257,15 @@ type lockTableImpl struct {
 	// table. Locks on both Global and Local keys are stored in the same btree.
 	locks treeMu
 
-	// maxLocks is a soft maximum on number of locks. When it is exceeded, and
-	// subject to the dampening in lockAddMaxLocksCheckInterval, locks will be
-	// cleared.
-	maxLocks int64
-	// When maxLocks is exceeded, will attempt to clear down to minLocks,
+	// maxKeysLocked is a soft maximum on amount of per-key lock information
+	// tracking[1]. When it is exceeded, and subject to the dampening in
+	// lockAddMaxLocksCheckInterval, locks will be cleared.
+	//
+	// [1] Simply put, the number of keyLocks objects in the lockTable btree.
+	maxKeysLocked int64
+	// When maxKeysLocked is exceeded, will attempt to clear down to minKeysLocked,
 	// instead of clearing everything.
-	minLocks int64
+	minKeysLocked int64
 
 	// txnStatusCache is a small LRU cache that tracks the status of
 	// transactions that have been successfully pushed.
@@ -290,18 +293,18 @@ func newLockTable(
 		clock:    clock,
 		settings: settings,
 	}
-	lt.setMaxLocks(maxLocks)
+	lt.setMaxKeysLocked(maxLocks)
 	return lt
 }
 
-func (t *lockTableImpl) setMaxLocks(maxLocks int64) {
+func (t *lockTableImpl) setMaxKeysLocked(maxKeysLocked int64) {
 	// Check at 5% intervals of the max count.
-	lockAddMaxLocksCheckInterval := maxLocks / int64(20)
+	lockAddMaxLocksCheckInterval := maxKeysLocked / int64(20)
 	if lockAddMaxLocksCheckInterval == 0 {
 		lockAddMaxLocksCheckInterval = 1
 	}
-	t.maxLocks = maxLocks
-	t.minLocks = maxLocks / 2
+	t.maxKeysLocked = maxKeysLocked
+	t.minKeysLocked = maxKeysLocked / 2
 	t.locks.lockAddMaxLocksCheckInterval = uint64(lockAddMaxLocksCheckInterval)
 }
 
@@ -3584,7 +3587,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 	// find an empty lock and remove it from the tree.
 	t.locks.mu.Unlock()
 	if checkMaxLocks {
-		t.checkMaxLocksAndTryClear()
+		t.checkMaxKeysLockedAndTryClear()
 	}
 	return true, err
 }
@@ -3621,7 +3624,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 			// Don't remember uncontended replicated locks. The downside is that
 			// sometimes contention won't be noticed until when the request
 			// evaluates. Remembering here would be better, but our behavior when
-			// running into the maxLocks limit is somewhat crude. Treating the
+			// running into the maxKeysLocked limit is somewhat crude. Treating the
 			// data-structure as a bounded cache with eviction guided by contention
 			// would be better.
 			t.locks.mu.Unlock()
@@ -3645,7 +3648,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 			// Unreplicated to Replicated, whenever possible.
 			// TODO(sumeer): now that limited scans evaluate optimistically, we
 			// should consider removing this hack. But see the comment in the
-			// preceding block about maxLocks.
+			// preceding block about maxKeysLocked.
 			t.locks.Delete(l)
 			t.locks.mu.Unlock()
 			t.locks.numKeysLocked.Add(-1)
@@ -3656,15 +3659,19 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	t.locks.mu.Unlock()
 
 	if checkMaxLocks {
-		t.checkMaxLocksAndTryClear()
+		t.checkMaxKeysLockedAndTryClear()
 	}
 	return err
 }
 
-func (t *lockTableImpl) checkMaxLocksAndTryClear() {
+// checkMaxKeysLockedAndTryClear checks if the request is tracking more lock
+// information on keys in its lock table snapshot than it should. If it is, this
+// method relieves memory pressure by clearing as much per-key tracking as it
+// can to bring things under budget.
+func (t *lockTableImpl) checkMaxKeysLockedAndTryClear() {
 	totalLocks := t.locks.numKeysLocked.Load()
-	if totalLocks > t.maxLocks {
-		numToClear := totalLocks - t.minLocks
+	if totalLocks > t.maxKeysLocked {
+		numToClear := totalLocks - t.minKeysLocked
 		t.tryClearLocks(false /* force */, int(numToClear))
 	}
 }

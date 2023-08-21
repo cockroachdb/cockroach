@@ -645,7 +645,7 @@ func (m *managerImpl) TestingTxnWaitQueue() *txnwait.Queue {
 
 // TestingSetMaxLocks implements the TestingAccessor interface.
 func (m *managerImpl) TestingSetMaxLocks(maxLocks int64) {
-	m.lt.(*lockTableImpl).setMaxLocks(maxLocks)
+	m.lt.(*lockTableImpl).setMaxKeysLocked(maxLocks)
 }
 
 func (r *Request) isSingle(m kvpb.Method) bool {
