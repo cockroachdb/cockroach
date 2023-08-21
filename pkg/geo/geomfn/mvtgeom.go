@@ -144,7 +144,7 @@ func clipAndValidateMVTOutput(
 	g geo.Geometry, inputBasicType geopb.ShapeType, extent int, buffer int, clipGeometry bool,
 ) (geo.Geometry, error) {
 	var err error
-	if clipGeometry {
+	if clipGeometry && !g.Empty() {
 		bbox := *g.CartesianBoundingBox()
 		bbox.HiX = overwriteMinusZero(float64(extent) + float64(buffer))
 		bbox.HiY = overwriteMinusZero(float64(extent) + float64(buffer))
