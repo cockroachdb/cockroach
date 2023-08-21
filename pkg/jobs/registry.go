@@ -651,18 +651,6 @@ func (r *Registry) CreateJobWithTxn(
 		override := sessiondata.RootUserSessionDataOverride
 		override.Database = catconstants.SystemDatabaseName
 		hasJobTypeColumn := r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable)
-		if hasJobTypeColumn {
-			// Relying on the version gate may not be sufficient.
-			const pgAttributeStmt = `
-			SELECT * FROM system.pg_catalog.pg_attribute
-			         WHERE attrelid = 'system.public.jobs'::REGCLASS
-			         AND attname = 'job_type'`
-			row, err := txn.QueryRowEx(ctx, "job-columns-get", txn.KV(), override, pgAttributeStmt)
-			if err != nil {
-				return err
-			}
-			hasJobTypeColumn = row != nil
-		}
 		if !hasJobTypeColumn {
 			numCols -= 1
 		}
