@@ -762,7 +762,14 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 	}
 	rd := makeReplicationDriver(t, c, sp)
 	rd.setupC2C(ctx, t, c)
-	rd.main(ctx)
+
+	// Spin up a monitor to capture any node deaths.
+	m := rd.newMonitor(ctx)
+	m.Go(func(ctx context.Context) error {
+		rd.main(ctx)
+		return nil
+	})
+	m.Wait()
 }
 
 func registerClusterToCluster(r registry.Registry) {
@@ -839,18 +846,13 @@ func registerClusterToCluster(r registry.Registry) {
 			func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rd := makeReplicationDriver(t, c, sp)
 				rd.setupC2C(ctx, t, c)
+				// Spin up a monitor to capture any node deaths.
 				m := rd.newMonitor(ctx)
-
-				hc := roachtestutil.NewHealthChecker(t, c, rd.crdbNodes())
 				m.Go(func(ctx context.Context) error {
-					require.NoError(t, hc.Runner(ctx))
+					rd.main(ctx)
 					return nil
 				})
-				defer func() {
-					hc.Done()
-					m.Wait()
-				}()
-				rd.main(ctx)
+				m.Wait()
 			})
 	}
 }
