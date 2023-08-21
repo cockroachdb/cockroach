@@ -375,12 +375,15 @@ import (
 //  - sleep <duration>
 //    Introduces a sleep period. Example: sleep 2s
 //
-//  - user <username> [nodeidx=N]
+//  - user <username> [nodeidx=N] [forcenew]
 //    Changes the user for subsequent statements or queries.
 //    If nodeidx is specified, this user will connect to the node
 //    in the cluster with index N (note this is 0-indexed, while
 //    node IDs themselves are 1-indexed). Otherwise, it will connect
 //    to the node with index 0 (node ID 1).
+//    A new session is created only on the first invocation for a distinct
+//    (username, nodeidx) pair, unless forcenew is specified, in which case
+//    the existing session (if one exists) is closed and a new one is created.
 //    A "host-cluster-" prefix can be prepended to the user, which will force
 //    the user session to be against the host cluster (useful for multi-tenant
 //    configurations).
@@ -1170,19 +1173,27 @@ func (t *logicTest) outf(format string, args ...interface{}) {
 }
 
 // setSessionUser sets the DB client to the specified user and connects
-// to the node in the cluster at index nodeIdx.
-func (t *logicTest) setSessionUser(user string, nodeIdx int) {
-	db := t.getOrOpenClient(user, nodeIdx)
+// to the node in the cluster at index nodeIdx. If forceNew is specified,
+// the current client for the (user, nodeIdx) combination (if one exists)
+// will be closed and a new one will be created.
+func (t *logicTest) setSessionUser(user string, nodeIdx int, forceNew bool) {
+	db := t.getOrOpenClient(user, nodeIdx, forceNew)
 	t.db = db
 	t.user = user
 	t.nodeIdx = nodeIdx
 }
 
 // getOrOpenClient returns the existing client for the given user and nodeIdx,
-// if one exists. Otherwise, it opens and returns a new client.
-func (t *logicTest) getOrOpenClient(user string, nodeIdx int) *gosql.DB {
+// if one exists. Otherwise, it opens and returns a new client. If forceNew is
+// specified, the existing client (if exists) will be closed and a new one will
+// be opened.
+func (t *logicTest) getOrOpenClient(user string, nodeIdx int, forceNew bool) *gosql.DB {
 	if db, ok := t.clients[user][nodeIdx]; ok {
-		return db
+		if !forceNew {
+			return db
+		}
+		_ = db.Close()
+		delete(t.clients[user], nodeIdx)
 	}
 
 	var pgURL url.URL
@@ -1309,7 +1320,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 	t.testserverCluster = ts
 	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop, cleanupLogsDir)
 
-	t.setSessionUser(username.RootUser, 0 /* nodeIdx */)
+	t.setSessionUser(username.RootUser, 0 /* nodeIdx */, false /* forceNew */)
 
 	// These tests involve stopping and starting nodes, so to reduce flakiness,
 	// we increase the lease Transfer timeout.
@@ -1757,7 +1768,7 @@ func (t *logicTest) newCluster(
 		)
 	}
 
-	t.setSessionUser(username.RootUser, 0 /* nodeIdx */)
+	t.setSessionUser(username.RootUser, 0 /* nodeIdx */, false /* forceNew */)
 }
 
 // waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal waits until all tenant
@@ -2249,7 +2260,7 @@ func (t *logicTest) maybeBackupRestore(
 	oldUser := t.user
 	oldNodeIdx := t.nodeIdx
 	defer func() {
-		t.setSessionUser(oldUser, oldNodeIdx)
+		t.setSessionUser(oldUser, oldNodeIdx, false /* forceNew */)
 	}()
 
 	log.Info(context.Background(), "Running cluster backup and restore")
@@ -2269,7 +2280,7 @@ func (t *logicTest) maybeBackupRestore(
 		userToSessionVars[user] = make(map[int]map[string]string)
 		for nodeIdx := range userClients {
 			users[user] = append(users[user], nodeIdx)
-			t.setSessionUser(user, nodeIdx)
+			t.setSessionUser(user, nodeIdx, false /* forceNew */)
 
 			// Serialize session variables.
 			var userSession string
@@ -2311,7 +2322,7 @@ func (t *logicTest) maybeBackupRestore(
 		bucket, strconv.FormatInt(timeutil.Now().UnixNano(), 10))
 
 	// Perform the backup and restore as root.
-	t.setSessionUser(username.RootUser, 0 /* nodeIdx */)
+	t.setSessionUser(username.RootUser, 0 /* nodeIdx */, false /* forceNew */)
 
 	if _, err := t.db.Exec(fmt.Sprintf("BACKUP INTO '%s'", backupLocation)); err != nil {
 		return errors.Wrap(err, "backing up cluster")
@@ -2322,7 +2333,7 @@ func (t *logicTest) maybeBackupRestore(
 	t.resetCluster()
 
 	// Run the restore as root.
-	t.setSessionUser(username.RootUser, 0 /* nodeIdx */)
+	t.setSessionUser(username.RootUser, 0 /* nodeIdx */, false /* forceNew */)
 	if _, err := t.db.Exec(fmt.Sprintf("RESTORE FROM LATEST IN '%s'", backupLocation)); err != nil {
 		return errors.Wrap(err, "restoring cluster")
 	}
@@ -2334,7 +2345,7 @@ func (t *logicTest) maybeBackupRestore(
 	for user, userNodeIdxs := range users {
 		for _, nodeIdx := range userNodeIdxs {
 			// Call setUser for every user to create the connection for that user.
-			t.setSessionUser(user, nodeIdx)
+			t.setSessionUser(user, nodeIdx, false /* forceNew */)
 
 			if userSession, ok := userToHexSession[user][nodeIdx]; ok {
 				if _, err := t.db.Exec(fmt.Sprintf(`SELECT crdb_internal.deserialize_session(decode('%s', 'hex'))`, userSession)); err != nil {
@@ -2981,7 +2992,14 @@ func (t *logicTest) processSubtest(
 					nodeIdx = int(idx)
 				}
 			}
-			t.setSessionUser(fields[1], nodeIdx)
+			var forceNew bool
+			if len(fields) >= 4 {
+				if fields[3] != "forcenew" {
+					return errors.Errorf("unknown user option: %s", fields[3])
+				}
+				forceNew = true
+			}
+			t.setSessionUser(fields[1], nodeIdx, forceNew)
 			// In multi-tenant tests, we may need to also create database test when
 			// we switch to a different tenant.
 			//
@@ -3111,7 +3129,7 @@ func (t *logicTest) processSubtest(
 			// If we upgraded the node we are currently on, we need to open a new
 			// connection since the previous one might now be invalid.
 			if t.nodeIdx == nodeIdx {
-				t.setSessionUser(t.user, nodeIdx)
+				t.setSessionUser(t.user, nodeIdx, false /* forceNew */)
 			}
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",
@@ -3350,7 +3368,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 
 	db := t.db
 	if query.nodeIdx != t.nodeIdx {
-		db = t.getOrOpenClient(t.user, query.nodeIdx)
+		db = t.getOrOpenClient(t.user, query.nodeIdx, false /* forceNew */)
 	}
 
 	if query.expectAsync {
@@ -3810,7 +3828,7 @@ func (t *logicTest) validateAfterTestCompletion() error {
 		}
 		delete(t.clients, user)
 	}
-	t.setSessionUser(username.RootUser, 0 /* nodeIdx */)
+	t.setSessionUser(username.RootUser, 0 /* nodeIdx */, false /* forceNew */)
 
 	// Some cleanup to make sure the following validation queries can run
 	// successfully. First we rollback in case the logic test had an uncommitted
