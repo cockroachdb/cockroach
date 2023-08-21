@@ -87,7 +87,7 @@ import (
 //	|         +---------------------------------------------------+  |  |
 //	|         | [ lockTable ]                                     |  |  |
 //	|         | [    key1   ]    -------------+-----------------+ |  ^  |
-//	|         | [    key2   ]  /  lockState:  | lockWaitQueue:  |----<---<---<----+
+//	|         | [    key2   ]  /  keyLocks:   | lockWaitQueue:  |----<---<---<----+
 //	|         | [    key3   ]-{   - lock type | +-[a]<-[b]<-[c] | |  |  |         |
 //	|         | [    key4   ]  \  - txn  meta | |  (no latches) |-->-^  |         |
 //	|         | [    key5   ]    -------------+-|---------------+ |     |         |
@@ -529,7 +529,7 @@ type latchGuard interface{}
 //	+---------------------------------------------------+
 //	| [ lockTable ]                                     |
 //	| [    key1   ]    -------------+-----------------+ |
-//	| [    key2   ]  /  lockState:  | lockWaitQueue:  | |
+//	| [    key2   ]  /  keyLocks:  | lockWaitQueue:   | |
 //	| [    key3   ]-{   - lock type | <-[a]<-[b]<-[c] | |
 //	| [    key4   ]  \  - txn meta  |                 | |
 //	| [    key5   ]    -------------+-----------------+ |
