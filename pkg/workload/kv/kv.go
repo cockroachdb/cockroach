@@ -95,6 +95,7 @@ type kv struct {
 	enum                                 bool
 	keySize                              int
 	insertCount                          int
+	useBackgroundTxnQoS                  bool
 }
 
 func init() {
@@ -178,6 +179,8 @@ var kvMeta = workload.Meta{
 			`Use string key of appropriate size instead of int`)
 		g.flags.DurationVar(&g.sfuDelay, `sfu-wait-delay`, 10*time.Millisecond,
 			`Delay before sfu write transaction commits or aborts`)
+		g.flags.BoolVar(&g.useBackgroundTxnQoS, `background-qos`, false,
+			`Set default_transaction_quality_of_service session variable to "background".`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -533,6 +536,10 @@ func (w *kv) Ops(
 			op.sfuStmt = op.sr.Define(sfuStmtStr)
 		}
 		op.spanStmt = op.sr.Define(spanStmtStr)
+		if w.useBackgroundTxnQoS {
+			stmt := op.sr.Define(" SET default_transaction_quality_of_service = background")
+			op.qosStmt = &stmt
+		}
 		op.delStmt = op.sr.Define(delStmtStr)
 		if err := op.sr.Init(ctx, "kv", mcp); err != nil {
 			return workload.QueryLoad{}, err
@@ -551,6 +558,7 @@ type kvOp struct {
 	hists           *histogram.Histograms
 	sr              workload.SQLRunner
 	mcp             *workload.MultiConnPool
+	qosStmt         *workload.StmtHandle
 	readStmt        workload.StmtHandle
 	writeStmt       workload.StmtHandle
 	spanStmt        workload.StmtHandle
@@ -568,6 +576,12 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		defer cancel()
 	}
 
+	if o.qosStmt != nil {
+		_, err := o.qosStmt.Exec(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	statementProbability := o.g.rand().Intn(100) // Determines what statement is executed.
 	if statementProbability < o.config.readPercent {
 		args := make([]interface{}, o.config.batchSize)
