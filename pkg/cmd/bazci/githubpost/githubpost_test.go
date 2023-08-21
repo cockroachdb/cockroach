@@ -23,13 +23,14 @@ import (
 )
 
 type issue struct {
-	testName    string
-	title       string
-	message     string
-	expRepro    string
-	mention     []string
-	extraLabels []string
-	hasProject  bool
+	testName             string
+	title                string
+	message              string
+	expRepro             string
+	mention              []string
+	extraLabels          []string
+	hasProject           bool
+	skiplabelTestFailure bool
 }
 
 func init() {
@@ -90,6 +91,7 @@ func TestListFailuresFromJSON(t *testing.T) {
 	// Each test case expects a number of issues.
 	testCases := []struct {
 		pkgEnv    string
+		extraEnv  map[string]string
 		fileName  string
 		expPkg    string
 		expIssues []issue
@@ -106,6 +108,24 @@ func TestListFailuresFromJSON(t *testing.T) {
 				mention:     []string{"@cockroachdb/kv"},
 				extraLabels: []string{"T-kv"},
 				hasProject:  true,
+			}},
+			formatter: defaultFormatter,
+		},
+		{
+			// A clone of the above but configured to set SkipTestLabelTestFailure to
+			// true.
+			pkgEnv:   "",
+			extraEnv: map[string]string{"SKIP_LABEL_TEST_FAILURE": "1"},
+			fileName: "implicit-pkg.json",
+			expPkg:   "github.com/cockroachdb/cockroach/pkg/util/stop",
+			expIssues: []issue{{
+				testName:             "TestStopperWithCancelConcurrent",
+				title:                "util/stop: TestStopperWithCancelConcurrent failed",
+				message:              "this is just a testing issue",
+				mention:              []string{"@cockroachdb/kv"},
+				extraLabels:          []string{"T-kv"},
+				hasProject:           true,
+				skiplabelTestFailure: true,
 			}},
 			formatter: defaultFormatter,
 		},
@@ -323,8 +343,14 @@ TestXXA - 1.00s
 	}
 	for _, c := range testCases {
 		t.Run(c.fileName, func(t *testing.T) {
-			if err := os.Setenv("PKG", c.pkgEnv); err != nil {
-				t.Fatal(err)
+			if c.extraEnv == nil {
+				c.extraEnv = make(map[string]string)
+			}
+
+			c.extraEnv["PKG"] = c.pkgEnv
+
+			for k, v := range c.extraEnv {
+				t.Setenv(k, v)
 			}
 
 			file, err := os.Open(datapathutils.TestDataPath(t, c.fileName))
@@ -374,6 +400,7 @@ TestXXA - 1.00s
 				assert.Equal(t, c.expIssues[curIssue].mention, req.MentionOnCreate)
 				assert.Equal(t, c.expIssues[curIssue].hasProject, req.ProjectColumnID != 0)
 				assert.Equal(t, c.expIssues[curIssue].extraLabels, req.ExtraLabels)
+				assert.Equal(t, c.expIssues[curIssue].skiplabelTestFailure, req.SkipLabelTestFailure)
 				// On next invocation, we'll check the next expected issue.
 				curIssue++
 				return nil
