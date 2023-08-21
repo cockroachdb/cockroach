@@ -74,33 +74,36 @@ func (g *githubIssues) createPostRequest(
 	var mention []string
 	var projColID int
 
-	issueOwner := t.Spec().(*registry.TestSpec).Owner
+	spec := t.Spec().(*registry.TestSpec)
+	issueOwner := spec.Owner
 	issueName := t.Name()
 
 	messagePrefix := ""
+	var infraFlake bool
 	// Overrides to shield eng teams from potential flakes
 	if cat == clusterCreationErr {
 		issueOwner = registry.OwnerDevInf
 		issueName = "cluster_creation"
 		messagePrefix = fmt.Sprintf("test %s was skipped due to ", t.Name())
+		infraFlake = true
 	} else if cat == sshErr {
 		issueOwner = registry.OwnerTestEng
 		issueName = "ssh_problem"
 		messagePrefix = fmt.Sprintf("test %s failed due to ", t.Name())
-	}
-
-	teams, err := g.teamLoader()
-	if err != nil {
-		t.Fatalf("could not load teams: %v", err)
+		infraFlake = true
 	}
 
 	// Issues posted from roachtest are identifiable as such and
 	// they are also release blockers (this label may be removed
 	// by a human upon closer investigation).
-	spec := t.Spec().(*registry.TestSpec)
 	labels := []string{"O-roachtest"}
-	if !spec.NonReleaseBlocker {
+	if !spec.NonReleaseBlocker && !infraFlake {
 		labels = append(labels, "release-blocker")
+	}
+
+	teams, err := g.teamLoader()
+	if err != nil {
+		t.Fatalf("could not load teams: %v", err)
 	}
 
 	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(issueOwner), team.PurposeRoachtest); ok {
@@ -146,14 +149,15 @@ func (g *githubIssues) createPostRequest(
 	}
 
 	return issues.PostRequest{
-		MentionOnCreate: mention,
-		ProjectColumnID: projColID,
-		PackageName:     "roachtest",
-		TestName:        issueName,
-		Message:         messagePrefix + message,
-		Artifacts:       artifacts,
-		ExtraLabels:     labels,
-		ExtraParams:     clusterParams,
+		MentionOnCreate:      mention,
+		ProjectColumnID:      projColID,
+		PackageName:          "roachtest",
+		TestName:             issueName,
+		Message:              messagePrefix + message,
+		SkipLabelTestFailure: infraFlake, // infra-flakes are not marked as C-test-failure
+		Artifacts:            artifacts,
+		ExtraLabels:          labels,
+		ExtraParams:          clusterParams,
 		HelpCommand: func(renderer *issues.Renderer) {
 			issues.HelpCommandAsLink(
 				"roachtest README",
