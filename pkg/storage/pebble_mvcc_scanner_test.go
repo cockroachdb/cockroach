@@ -76,8 +76,9 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 
 	reader := eng.NewReadOnly(StandardDurability)
 	defer reader.Close()
-	iter := reader.NewMVCCIterator(
+	iter, err := reader.NewMVCCIterator(
 		MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("d")})
+	require.NoError(t, err)
 	defer iter.Close()
 
 	// Look for older versions that come after the scanner has exhausted its
@@ -142,8 +143,9 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 
 	reader := eng.NewReadOnly(StandardDurability)
 	defer reader.Close()
-	iter := reader.NewMVCCIterator(
+	iter, err := reader.NewMVCCIterator(
 		MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("e")})
+	require.NoError(t, err)
 	defer iter.Close()
 
 	ts := hlc.Timestamp{WallTime: 2}
@@ -156,7 +158,7 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 	}
 	var results pebbleResults
 	mvccScanner.init(nil /* txn */, uncertainty.Interval{}, &results)
-	_, _, _, err := mvccScanner.scan(context.Background())
+	_, _, _, err = mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
 	kvData := results.finish()
@@ -221,8 +223,9 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 	}()
 
 	// iterator that can span over all the written keys.
-	iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
+	iter, err := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
 		IterOptions{LowerBound: makeKey(nil, 0), UpperBound: makeKey(nil, 11)})
+	require.NoError(t, err)
 	defer iter.Close()
 
 	// Narrow scan succeeds with a budget of 6000.

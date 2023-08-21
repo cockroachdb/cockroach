@@ -32,7 +32,7 @@ type storageIter interface {
 // The raft log is a contiguous sequence of indexes (i.e. no holes) which may be
 // empty.
 type Reader interface {
-	NewMVCCIterator(storage.MVCCIterKind, storage.IterOptions) storage.MVCCIterator
+	NewMVCCIterator(storage.MVCCIterKind, storage.IterOptions) (storage.MVCCIterator, error)
 }
 
 // An Iterator inspects the raft log. After creation, SeekGE should be invoked,
@@ -68,7 +68,7 @@ type IterOptions struct {
 // RangeID from the provided Reader.
 //
 // Callers that can afford allocating a closure may prefer using Visit.
-func NewIterator(rangeID roachpb.RangeID, eng Reader, opts IterOptions) *Iterator {
+func NewIterator(rangeID roachpb.RangeID, eng Reader, opts IterOptions) (*Iterator, error) {
 	// TODO(tbg): can pool these most of the things below, incl. the *Iterator.
 	prefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
 	var upperBound roachpb.Key
@@ -77,13 +77,17 @@ func NewIterator(rangeID roachpb.RangeID, eng Reader, opts IterOptions) *Iterato
 	} else {
 		upperBound = prefixBuf.RaftLogKey(opts.Hi)
 	}
+	iter, err := eng.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		UpperBound: upperBound,
+	})
+	if err != nil {
+		return nil, err
+	}
 	return &Iterator{
 		eng:       eng,
 		prefixBuf: prefixBuf,
-		iter: eng.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-			UpperBound: upperBound,
-		}),
-	}
+		iter:      iter,
+	}, nil
 }
 
 // Close releases the resources associated with this Iterator.
@@ -138,7 +142,10 @@ func (it *Iterator) Entry() raftpb.Entry {
 func Visit(
 	eng Reader, rangeID roachpb.RangeID, lo, hi kvpb.RaftIndex, fn func(raftpb.Entry) error,
 ) error {
-	it := NewIterator(rangeID, eng, IterOptions{Hi: hi})
+	it, err := NewIterator(rangeID, eng, IterOptions{Hi: hi})
+	if err != nil {
+		return err
+	}
 	defer it.Close()
 	ok, err := it.SeekGE(lo)
 	if err != nil {

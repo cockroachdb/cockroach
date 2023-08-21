@@ -530,7 +530,7 @@ func exportUsingGoIterator(
 		return nil, nil
 	}
 
-	iter := storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
+	iter := storage.NewMVCCIncrementalIterator(reader.(storage.ReaderWithMustIterators), storage.MVCCIncrementalIterOptions{
 		EndKey:    endKey,
 		StartTime: startTime,
 		EndTime:   endTime,

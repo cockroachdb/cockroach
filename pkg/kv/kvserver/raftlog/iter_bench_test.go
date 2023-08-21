@@ -56,8 +56,8 @@ type mockReader struct {
 
 func (m *mockReader) NewMVCCIterator(
 	storage.MVCCIterKind, storage.IterOptions,
-) storage.MVCCIterator {
-	return m.iter
+) (storage.MVCCIterator, error) {
+	return m.iter, nil
 }
 
 func mkRaftCommand(keySize, valSize, writeBatchSize int) *kvserverpb.RaftCommand {
@@ -138,14 +138,20 @@ func BenchmarkIterator(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			it := NewIterator(rangeID, &mockReader{}, IterOptions{Hi: 123456})
+			it, err := NewIterator(rangeID, &mockReader{}, IterOptions{Hi: 123456})
+			if err != nil {
+				b.Fatal(err)
+			}
 			setMockIter(it)
 			it.Close()
 		}
 	})
 
 	benchForOp := func(b *testing.B, method func(*Iterator) (bool, error)) {
-		it := NewIterator(rangeID, &mockReader{}, IterOptions{Hi: 123456})
+		it, err := NewIterator(rangeID, &mockReader{}, IterOptions{Hi: 123456})
+		if err != nil {
+			b.Fatal(err)
+		}
 		setMockIter(it)
 
 		b.ReportAllocs()

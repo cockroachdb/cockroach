@@ -430,23 +430,25 @@ func assertLiveData(
 		GCTTL:     gcTTL,
 		Threshold: gcThreshold,
 	}
-	pointIt := before.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind,
+	pointIt, err := before.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind,
 		storage.IterOptions{
 			LowerBound: desc.StartKey.AsRawKey(),
 			UpperBound: desc.EndKey.AsRawKey(),
 			KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		})
+	require.NoError(t, err)
 	defer pointIt.Close()
 	pointIt.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 	pointExpectationsGenerator := getExpectationsGenerator(t, pointIt, gcThreshold, intentThreshold,
 		&expInfo)
 
-	rangeIt := before.NewMVCCIterator(storage.MVCCKeyIterKind,
+	rangeIt, err := before.NewMVCCIterator(storage.MVCCKeyIterKind,
 		storage.IterOptions{
 			LowerBound: desc.StartKey.AsRawKey(),
 			UpperBound: desc.EndKey.AsRawKey(),
 			KeyTypes:   storage.IterKeyTypeRangesOnly,
 		})
+	require.NoError(t, err)
 	defer rangeIt.Close()
 	rangeIt.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 	expectedRanges := mergeRanges(filterRangeFragments(rangeFragmentsFromIt(t, rangeIt), gcThreshold,
@@ -454,11 +456,12 @@ func assertLiveData(
 
 	// Loop over engine data after applying GCer requests and compare with
 	// expected point keys.
-	itAfter := after.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	itAfter, err := after.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound: desc.StartKey.AsRawKey(),
 		UpperBound: desc.EndKey.AsRawKey(),
 		KeyTypes:   storage.IterKeyTypePointsOnly,
 	})
+	require.NoError(t, err)
 	defer itAfter.Close()
 
 	itAfter.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
@@ -491,12 +494,13 @@ func assertLiveData(
 		}
 	}
 
-	rangeItAfter := after.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	rangeItAfter, err := after.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound:           desc.StartKey.AsRawKey(),
 		UpperBound:           desc.EndKey.AsRawKey(),
 		KeyTypes:             storage.IterKeyTypeRangesOnly,
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
+	require.NoError(t, err)
 	defer rangeItAfter.Close()
 	rangeItAfter.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 	actualRanges := mergeRanges(rangeFragmentsFromIt(t, rangeItAfter))
@@ -666,12 +670,13 @@ func getExpectationsGenerator(
 func getKeyHistory(t *testing.T, r storage.Reader, key roachpb.Key) string {
 	var result []string
 
-	it := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	it, err := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound:           key,
 		UpperBound:           key.Next(),
 		KeyTypes:             storage.IterKeyTypePointsAndRanges,
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
+	require.NoError(t, err)
 	defer it.Close()
 
 	it.SeekGE(storage.MVCCKey{Key: key})

@@ -57,7 +57,11 @@ func printLTKey(k LockTableKey) string {
 }
 
 func printEngContents(b *strings.Builder, eng Engine) {
-	iter := eng.NewEngineIterator(IterOptions{UpperBound: roachpb.KeyMax})
+	iter, err := eng.NewEngineIterator(IterOptions{UpperBound: roachpb.KeyMax})
+	if err != nil {
+		fmt.Fprintf(b, "error: %s\n", err.Error())
+		return
+	}
 	defer iter.Close()
 	fmt.Fprintf(b, "=== Storage contents ===\n")
 	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: []byte("")})

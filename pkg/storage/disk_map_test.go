@@ -44,7 +44,10 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 			// a type switch with implementation-specific code instead.
 			switch e := engine.(type) {
 			case *pebbleTempEngine:
-				iter := e.db.NewIter(&pebble.IterOptions{UpperBound: roachpb.KeyMax})
+				iter, err := e.db.NewIter(&pebble.IterOptions{UpperBound: roachpb.KeyMax})
+				if err != nil {
+					t.Fatal(err)
+				}
 
 				defer func() {
 					if err := iter.Close(); err != nil {

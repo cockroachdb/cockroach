@@ -84,7 +84,7 @@ func NewCatchUpIterator(
 	pacer *admission.Pacer,
 ) *CatchUpIterator {
 	return &CatchUpIterator{
-		simpleCatchupIter: storage.NewMVCCIncrementalIterator(reader,
+		simpleCatchupIter: storage.NewMVCCIncrementalIterator(reader.(storage.ReaderWithMustIterators),
 			storage.MVCCIncrementalIterOptions{
 				KeyTypes:  storage.IterKeyTypePointsAndRanges,
 				StartKey:  span.Key,

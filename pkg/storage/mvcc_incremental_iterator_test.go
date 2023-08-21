@@ -1088,7 +1088,7 @@ func slurpKVsInTimeRange(
 	reader Reader, prefix roachpb.Key, startTime, endTime hlc.Timestamp,
 ) ([]MVCCKeyValue, error) {
 	endKey := prefix.PrefixEnd()
-	iter := NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
+	iter := NewMVCCIncrementalIterator(reader.(ReaderWithMustIterators), MVCCIncrementalIterOptions{
 		EndKey:    endKey,
 		StartTime: startTime,
 		EndTime:   endTime,
@@ -1379,7 +1379,8 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	{
 		// Iterate over the entries in the first DB, ingesting them into SSTables
 		// in the second DB.
-		it := db1.NewEngineIterator(IterOptions{UpperBound: keys.MaxKey})
+		it, err := db1.NewEngineIterator(IterOptions{UpperBound: keys.MaxKey})
+		require.NoError(t, err)
 		defer it.Close()
 		valid, err := it.SeekEngineKeyGE(EngineKey{Key: keys.LocalRangeLockTablePrefix})
 		ingest(it, valid, err, 1)
@@ -1472,7 +1473,8 @@ func collectMatchingWithMVCCIterator(
 	t *testing.T, eng Engine, start, end hlc.Timestamp,
 ) []MVCCKeyValue {
 	var expectedKVs []MVCCKeyValue
-	iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+	iter, err := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+	require.NoError(t, err)
 	defer iter.Close()
 	iter.SeekGE(MVCCKey{Key: localMax})
 	for {

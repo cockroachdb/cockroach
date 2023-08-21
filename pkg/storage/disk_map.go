@@ -114,13 +114,18 @@ func (r *pebbleMap) makeKeyWithSequence(k []byte) []byte {
 
 // NewIterator implements the SortedDiskMap interface.
 func (r *pebbleMap) NewIterator() diskmap.SortedDiskMapIterator {
+	iter, err := r.store.NewIter(&pebble.IterOptions{
+		UpperBound: roachpb.Key(r.prefix).PrefixEnd(),
+	})
+	if err != nil {
+		// TODO(bilal): Update all diskMap interfaces to allow returning errors here.
+		panic(err)
+	}
 	return &pebbleMapIterator{
 		allowDuplicates: r.allowDuplicates,
-		iter: r.store.NewIter(&pebble.IterOptions{
-			UpperBound: roachpb.Key(r.prefix).PrefixEnd(),
-		}),
-		prefixLen:      len(r.prefix),
-		makeKeyScratch: append([]byte{}, r.prefix...),
+		iter:            iter,
+		prefixLen:       len(r.prefix),
+		makeKeyScratch:  append([]byte{}, r.prefix...),
 	}
 }
 

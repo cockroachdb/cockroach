@@ -47,7 +47,7 @@ import (
 // mutating the original requests).
 func optimizePuts(
 	reader storage.Reader, origReqs []kvpb.RequestUnion, distinctSpans bool,
-) []kvpb.RequestUnion {
+) ([]kvpb.RequestUnion, error) {
 	var minKey, maxKey roachpb.Key
 	var unique map[string]struct{}
 	if !distinctSpans {
@@ -95,17 +95,20 @@ func optimizePuts(
 	}
 
 	if firstUnoptimizedIndex < optimizePutThreshold { // don't bother if below this threshold
-		return origReqs
+		return origReqs, nil
 	}
 	// iter is being used to find the parts of the key range that is empty. We
 	// don't need to see intents for this purpose since intents also have
 	// provisional values that we will see.
-	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	iter, err := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 		KeyTypes: storage.IterKeyTypePointsAndRanges,
 		// We want to include maxKey in our scan. Since UpperBound is exclusive, we
 		// need to set it to the key after maxKey.
 		UpperBound: maxKey.Next(),
 	})
+	if err != nil {
+		return nil, err
+	}
 	defer iter.Close()
 
 	// If there are enough puts in the run to justify calling seek,
@@ -118,7 +121,7 @@ func optimizePuts(
 		// TODO(bdarnell): return an error here instead of silently
 		// running without the optimization?
 		log.Errorf(context.TODO(), "Seek returned error; disabling blind-put optimization: %+v", err)
-		return origReqs
+		return origReqs, nil
 	} else if ok && bytes.Compare(iter.UnsafeKey().Key, maxKey) <= 0 {
 		iterKey = iter.UnsafeKey().Key.Clone()
 	}
@@ -146,7 +149,7 @@ func optimizePuts(
 			}
 		}
 	}
-	return reqs
+	return reqs, nil
 }
 
 // evaluateBatch evaluates a batch request by splitting it up into its
@@ -183,10 +186,15 @@ func evaluateBatch(
 	baHeader := ba.Header
 
 	br := ba.CreateReply()
+	var err error
 
 	// Optimize any contiguous sequences of put and conditional put ops.
 	if len(baReqs) >= optimizePutThreshold && evalPath == readWrite {
-		baReqs = optimizePuts(readWriter, baReqs, baHeader.DistinctSpans)
+		baReqs, err = optimizePuts(readWriter, baReqs, baHeader.DistinctSpans)
+	}
+	if err != nil {
+		pErr := kvpb.NewErrorWithTxn(err, baHeader.Txn)
+		return nil, result.Result{}, pErr
 	}
 
 	// Create a clone of the transaction to store the new txn state produced on

@@ -404,13 +404,16 @@ func EvalAddSSTable(
 	// addition, and instead just use this key-only iterator. If a caller actually
 	// needs to know what data is there, it must issue its own real Scan.
 	if args.ReturnFollowingLikelyNonEmptySpanStart {
-		existingIter := spanset.DisableReaderAssertions(readWriter).NewMVCCIterator(
+		existingIter, err := spanset.DisableReaderAssertions(readWriter).NewMVCCIterator(
 			storage.MVCCKeyIterKind, // don't care if it is committed or not, just that it isn't empty.
 			storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypePointsAndRanges,
 				UpperBound: reply.RangeSpan.EndKey,
 			},
 		)
+		if err != nil {
+			return result.Result{}, errors.Wrap(err, "error when creating iterator for non-empty span")
+		}
 		defer existingIter.Close()
 		existingIter.SeekGE(end)
 		if ok, err := existingIter.Valid(); err != nil {

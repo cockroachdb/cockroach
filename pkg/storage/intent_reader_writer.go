@@ -128,7 +128,7 @@ var intentInterleavingReaderPool = sync.Pool{
 // intentInterleavingReader can be freed once this method returns.
 func (imr *intentInterleavingReader) NewMVCCIterator(
 	iterKind MVCCIterKind, opts IterOptions,
-) MVCCIterator {
+) (MVCCIterator, error) {
 	if (!opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty()) &&
 		iterKind == MVCCKeyAndIntentsIterKind {
 		panic("cannot ask for interleaved intents when specifying timestamp hints")

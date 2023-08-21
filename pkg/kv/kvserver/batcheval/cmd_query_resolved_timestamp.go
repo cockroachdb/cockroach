@@ -104,7 +104,10 @@ func computeMinIntentTimestamp(
 ) (hlc.Timestamp, []roachpb.Intent, error) {
 	ltStart, _ := keys.LockTableSingleKey(span.Key, nil)
 	ltEnd, _ := keys.LockTableSingleKey(span.EndKey, nil)
-	iter := reader.NewEngineIterator(storage.IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
+	iter, err := reader.NewEngineIterator(storage.IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
+	if err != nil {
+		return hlc.Timestamp{}, nil, err
+	}
 	defer iter.Close()
 
 	var meta enginepb.MVCCMetadata

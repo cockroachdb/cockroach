@@ -337,7 +337,11 @@ func TestIntentInterleavingIter(t *testing.T) {
 				if d.HasArg("prefix") {
 					d.ScanArgs(t, "prefix", &opts.Prefix)
 				}
-				iter := maybeWrapInUnsafeIter(newIntentInterleavingIterator(eng, opts))
+				iiter, err := newIntentInterleavingIterator(eng, opts)
+				if err != nil {
+					t.Fatal(err)
+				}
+				iter := maybeWrapInUnsafeIter(iiter)
 				var b strings.Builder
 				defer iter.Close()
 				// pos is the original <file>:<lineno> prefix computed by
@@ -404,33 +408,53 @@ func TestIntentInterleavingIterBoundaries(t *testing.T) {
 	// Boundary cases for constrainedToLocal.
 	func() {
 		opts := IterOptions{LowerBound: keys.MinKey}
-		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		iiiter, err := newIntentInterleavingIterator(eng, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		iter := iiiter.(*intentInterleavingIter)
 		defer iter.Close()
 		require.Equal(t, constrainedToLocal, iter.constraint)
 		iter.SeekLT(MVCCKey{Key: keys.LocalMax})
 	}()
 	func() {
 		opts := IterOptions{UpperBound: keys.LocalMax}
-		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		iiiter, err := newIntentInterleavingIterator(eng, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		iter := iiiter.(*intentInterleavingIter)
 		defer iter.Close()
 		require.Equal(t, constrainedToLocal, iter.constraint)
 	}()
 	require.Panics(t, func() {
 		opts := IterOptions{UpperBound: keys.LocalMax}
-		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		iiiter, err := newIntentInterleavingIterator(eng, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		iter := iiiter.(*intentInterleavingIter)
 		defer iter.Close()
 		iter.SeekLT(MVCCKey{Key: keys.MaxKey})
 	})
 	// Boundary cases for constrainedToGlobal.
 	func() {
 		opts := IterOptions{LowerBound: keys.LocalMax}
-		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		iiiter, err := newIntentInterleavingIterator(eng, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		iter := iiiter.(*intentInterleavingIter)
 		defer iter.Close()
 		require.Equal(t, constrainedToGlobal, iter.constraint)
 	}()
 	func() {
 		opts := IterOptions{LowerBound: keys.LocalMax}
-		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		iiiter, err := newIntentInterleavingIterator(eng, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		iter := iiiter.(*intentInterleavingIter)
 		defer iter.Close()
 		require.Equal(t, constrainedToGlobal, iter.constraint)
 		iter.SeekLT(MVCCKey{Key: keys.LocalMax})
@@ -438,14 +462,22 @@ func TestIntentInterleavingIterBoundaries(t *testing.T) {
 	// Panics for using a local key that is above the lock table.
 	require.Panics(t, func() {
 		opts := IterOptions{UpperBound: keys.LocalMax}
-		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		iiiter, err := newIntentInterleavingIterator(eng, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		iter := iiiter.(*intentInterleavingIter)
 		defer iter.Close()
 		require.Equal(t, constrainedToLocal, iter.constraint)
 		iter.SeekLT(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()})
 	})
 	require.Panics(t, func() {
 		opts := IterOptions{UpperBound: keys.LocalMax}
-		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		iiiter, err := newIntentInterleavingIterator(eng, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		iter := iiiter.(*intentInterleavingIter)
 		defer iter.Close()
 		require.Equal(t, constrainedToLocal, iter.constraint)
 		iter.SeekGE(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()})
@@ -454,13 +486,21 @@ func TestIntentInterleavingIterBoundaries(t *testing.T) {
 	// specified.
 	func() {
 		opts := IterOptions{Prefix: true, LowerBound: keys.LocalMax}
-		iter := newIntentInterleavingIterator(eng, opts).(*intentInterleavingIter)
+		iiiter, err := newIntentInterleavingIterator(eng, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		iter := iiiter.(*intentInterleavingIter)
 		defer iter.Close()
 		require.Equal(t, constrainedToGlobal, iter.constraint)
 	}()
 	// Prefix iteration with no bounds.
 	func() {
-		iter := newIntentInterleavingIterator(eng, IterOptions{Prefix: true}).(*intentInterleavingIter)
+		iiiter, err := newIntentInterleavingIterator(eng, IterOptions{Prefix: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		iter := iiiter.(*intentInterleavingIter)
 		defer iter.Close()
 		require.Equal(t, notConstrained, iter.constraint)
 	}()
@@ -668,11 +708,13 @@ func doOps(t *testing.T, ops []string, eng Engine, interleave bool, out *strings
 			if d.HasArg("upper") {
 				opts.UpperBound = scanRoachKey(t, &d, "upper")
 			}
+			var err error
 			if interleave {
-				iter = newIntentInterleavingIterator(eng, opts)
+				iter, err = newIntentInterleavingIterator(eng, opts)
 			} else {
-				iter = eng.NewMVCCIterator(MVCCKeyIterKind, opts)
+				iter, err = eng.NewMVCCIterator(MVCCKeyIterKind, opts)
 			}
+			require.NoError(t, err)
 			lowerStr := "nil"
 			if opts.LowerBound != nil {
 				lowerStr = string(makePrintableRoachpbKey(opts.LowerBound))
@@ -843,10 +885,14 @@ func BenchmarkIntentInterleavingIterNext(b *testing.B) {
 			func(b *testing.B) {
 				var iter MVCCIterator
 				opts := IterOptions{LowerBound: state.keyPrefix, UpperBound: state.keyPrefix.PrefixEnd()}
+				var err error
 				if state.separated {
-					iter = newIntentInterleavingIterator(state.eng, opts)
+					iter, err = newIntentInterleavingIterator(state.eng, opts)
 				} else {
-					iter = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
+					iter, err = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
+				}
+				if err != nil {
+					b.Fatal(err)
 				}
 				defer iter.Close()
 				startKey := MVCCKey{Key: state.keyPrefix}
@@ -882,10 +928,14 @@ func BenchmarkIntentInterleavingIterPrev(b *testing.B) {
 				var iter MVCCIterator
 				endKey := MVCCKey{Key: state.keyPrefix.PrefixEnd()}
 				opts := IterOptions{LowerBound: state.keyPrefix, UpperBound: endKey.Key}
+				var err error
 				if state.separated {
-					iter = newIntentInterleavingIterator(state.eng, opts)
+					iter, err = newIntentInterleavingIterator(state.eng, opts)
 				} else {
-					iter = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
+					iter, err = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
+				}
+				if err != nil {
+					b.Fatal(err)
 				}
 				defer iter.Close()
 				iter.SeekLT(endKey)
@@ -925,10 +975,14 @@ func BenchmarkIntentInterleavingSeekGEAndIter(b *testing.B) {
 					var iter MVCCIterator
 					endKey := state.keyPrefix.PrefixEnd()
 					opts := IterOptions{LowerBound: state.keyPrefix, UpperBound: endKey}
+					var err error
 					if state.separated {
-						iter = newIntentInterleavingIterator(state.eng, opts)
+						iter, err = newIntentInterleavingIterator(state.eng, opts)
 					} else {
-						iter = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
+						iter, err = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
+					}
+					if err != nil {
+						b.Fatal(err)
 					}
 					defer iter.Close()
 					b.ResetTimer()
