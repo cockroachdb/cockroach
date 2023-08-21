@@ -137,16 +137,19 @@ func (g *githubIssues) createPostRequest(
 	issueClusterName := ""
 
 	messagePrefix := ""
+	var infraFlake bool
 	// Overrides to shield eng teams from potential flakes
 	switch {
 	case failureContainsError(firstFailure, errClusterProvisioningFailed):
 		issueOwner = registry.OwnerDevInf
 		issueName = "cluster_creation"
 		messagePrefix = fmt.Sprintf("test %s was skipped due to ", testName)
+		infraFlake = true
 	case failureContainsError(firstFailure, rperrors.ErrSSH255):
 		issueOwner = registry.OwnerTestEng
 		issueName = "ssh_problem"
 		messagePrefix = fmt.Sprintf("test %s failed due to ", testName)
+		infraFlake = true
 	case failureContainsError(firstFailure, errDuringPostAssertions):
 		messagePrefix = fmt.Sprintf("test %s failed during post test assertions (see test-post-assertions.log) due to ", testName)
 	}
@@ -154,7 +157,7 @@ func (g *githubIssues) createPostRequest(
 	// Issues posted from roachtest are identifiable as such, and they are also release blockers
 	// (this label may be removed by a human upon closer investigation).
 	labels := []string{"O-roachtest"}
-	if !spec.NonReleaseBlocker {
+	if !spec.NonReleaseBlocker && !infraFlake {
 		labels = append(labels, "release-blocker")
 	}
 
@@ -207,15 +210,16 @@ func (g *githubIssues) createPostRequest(
 	}
 
 	return issues.PostRequest{
-		MentionOnCreate: mention,
-		ProjectColumnID: projColID,
-		PackageName:     "roachtest",
-		TestName:        issueName,
-		Message:         messagePrefix + message,
-		Artifacts:       artifacts,
-		ExtraLabels:     labels,
-		ExtraParams:     clusterParams,
-		HelpCommand:     generateHelpCommand(issueClusterName, start, end),
+		MentionOnCreate:      mention,
+		ProjectColumnID:      projColID,
+		PackageName:          "roachtest",
+		TestName:             issueName,
+		Message:              messagePrefix + message,
+		SkipLabelTestFailure: infraFlake, // infra-flakes are not marked as C-test-failure
+		Artifacts:            artifacts,
+		ExtraLabels:          labels,
+		ExtraParams:          clusterParams,
+		HelpCommand:          generateHelpCommand(issueClusterName, start, end),
 	}, nil
 }
 
