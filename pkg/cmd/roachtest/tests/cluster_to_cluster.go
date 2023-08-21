@@ -362,6 +362,9 @@ type replicationDriver struct {
 	// beforeWorkloadHook is called before the main workload begins.
 	beforeWorkloadHook func()
 
+	// cutoverStarted closes once the driver issues a cutover commmand.
+	cutoverStarted chan struct{}
+
 	// replicationStartHook is called as soon as the replication job begins.
 	replicationStartHook func(ctx context.Context, sp *replicationDriver)
 
@@ -456,6 +459,7 @@ func (rd *replicationDriver) setupC2C(ctx context.Context, t test.Test, c cluste
 	rd.metrics = &c2cMetrics{}
 	rd.replicationStartHook = func(ctx context.Context, sp *replicationDriver) {}
 	rd.beforeWorkloadHook = func() {}
+	rd.cutoverStarted = make(chan struct{})
 
 	if !c.IsLocal() {
 		// TODO(msbutler): pass a proper cluster replication dashboard and figure out why we need to
@@ -590,6 +594,7 @@ func (rd *replicationDriver) stopReplicationStream(
 			rd.setup.dst.name, cutoverTime).Scan(&cutoverStr)
 	}
 	actualCutoverTime = DecimalTimeToHLC(rd.t, cutoverStr)
+	close(rd.cutoverStarted)
 	err := retry.ForDuration(rd.rs.cutoverTimeout, func() error {
 		var status string
 		var payloadBytes []byte
@@ -1118,28 +1123,45 @@ func getPhase(rd *replicationDriver, dstJobID jobspb.JobID) c2cPhase {
 	return phaseCutover
 }
 
-func waitForTargetPhase(rd *replicationDriver, dstJobID jobspb.JobID, targetPhase c2cPhase) error {
+func waitForTargetPhase(
+	ctx context.Context, rd *replicationDriver, dstJobID jobspb.JobID, targetPhase c2cPhase,
+) error {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	var currentPhase c2cPhase
 	for {
-		currentPhase := getPhase(rd, dstJobID)
-		rd.t.L().Printf("Current Phase %s", currentPhase.String())
-		switch {
-		case currentPhase < targetPhase:
-			time.Sleep(5 * time.Second)
-		case currentPhase == targetPhase:
-			rd.t.L().Printf("In target phase %s", currentPhase.String())
+		currentPhase = getPhase(rd, dstJobID)
+		rd.t.L().Printf("current Phase %s", currentPhase.String())
+		select {
+		case <-rd.cutoverStarted:
+			require.Equal(rd.t, phaseCutover, getPhase(rd, dstJobID), "the replication job is not yet in the cutover phase")
+			rd.t.L().Printf("cutover phase discovered via channel")
 			return nil
-		default:
-			return errors.New("c2c job past target phase")
+		case <-ticker.C:
+			switch {
+			case currentPhase < targetPhase:
+			case currentPhase == targetPhase:
+				return nil
+			default:
+				return errors.New("c2c job past target phase")
+			}
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 }
 
-func sleepBeforeResiliencyEvent(rd *replicationDriver) {
+func sleepBeforeResiliencyEvent(rd *replicationDriver, phase c2cPhase) {
 	// Assuming every C2C phase lasts at least 10 seconds, introduce some waiting
 	// before a resiliency event (e.g. a node shutdown) to ensure the event occurs
 	// once we're fully settled into the target phase (e.g. the stream ingestion
 	// processors have observed the cutover signal).
-	randomSleep := time.Duration(1+rd.rng.Intn(2)) * time.Second
+	baseSleep := 1
+	if phase == phaseCutover {
+		// Cutover can sometimes be fast, so sleep for less time.
+		baseSleep = 0
+	}
+	randomSleep := time.Duration(baseSleep+rd.rng.Intn(2)) * time.Second
 	rd.t.L().Printf("Take a %s power nap", randomSleep)
 	time.Sleep(randomSleep)
 }
@@ -1253,10 +1275,10 @@ func registerClusterReplicationResilience(r registry.Registry) {
 				// DR scenario the src cluster may have gone belly up during a
 				// successful c2c replication execution.
 				shutdownStarter := func() jobStarter {
-					return func(c cluster.Cluster, t test.Test) (string, error) {
-						require.NoError(t, waitForTargetPhase(rrd.replicationDriver, rrd.dstJobID, rrd.phase))
-						sleepBeforeResiliencyEvent(rrd.replicationDriver)
-						return fmt.Sprintf("%d", rrd.dstJobID), nil
+					return func(c cluster.Cluster, t test.Test) (jobspb.JobID, error) {
+						require.NoError(t, waitForTargetPhase(ctx, rrd.replicationDriver, rrd.dstJobID, rrd.phase))
+						sleepBeforeResiliencyEvent(rrd.replicationDriver, rrd.phase)
+						return rrd.dstJobID, nil
 					}
 				}
 				destinationWatcherNode := rrd.watcherNode
@@ -1317,8 +1339,8 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		dstJobID := jobspb.JobID(getIngestionJobID(t, rd.setup.dst.sysSQL, rd.setup.dst.name))
 
 		// TODO(msbutler): disconnect nodes during a random phase
-		require.NoError(t, waitForTargetPhase(rd, dstJobID, phaseSteadyState))
-		sleepBeforeResiliencyEvent(rd)
+		require.NoError(t, waitForTargetPhase(ctx, rd, dstJobID, phaseSteadyState))
+		sleepBeforeResiliencyEvent(rd, phaseSteadyState)
 		ingestionProgress := getJobProgress(t, rd.setup.dst.sysSQL, dstJobID).GetStreamIngest()
 
 		srcDestConnections := getSrcDestNodePairs(rd, ingestionProgress)
