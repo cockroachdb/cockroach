@@ -316,14 +316,14 @@ func (inconsistentSQLServersError) Error() string {
 
 var InconsistentSQLServersError = inconsistentSQLServersError{}
 
-func (t *TenantCluster) ValidateAfterUpdateSystemVersion(ctx context.Context) error {
+func (t *TenantCluster) ValidateAfterUpdateSystemVersion(ctx context.Context, txn *kv.Txn) error {
 	if len(t.instancesAtBump) == 0 {
 		// We should never get here with an empty slice, since bump must be
 		// called before validation.
 		return errors.AssertionFailedf("call to validate with empty instances slice")
 	}
 
-	instances, err := t.InstanceReader.GetAllInstancesNoCache(ctx)
+	instances, err := t.InstanceReader.GetAllInstancesUsingTxn(ctx, txn)
 	if err != nil {
 		return err
 	}
