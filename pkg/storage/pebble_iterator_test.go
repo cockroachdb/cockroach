@@ -73,7 +73,8 @@ func TestPebbleIterator_Corruption(t *testing.T) {
 		LowerBound: []byte("a"),
 		UpperBound: []byte("z"),
 	}
-	iter := newPebbleIterator(p.db, iterOpts, StandardDurability, p)
+	iter, err := newPebbleIterator(p.db, iterOpts, StandardDurability, p)
+	require.NoError(t, err)
 
 	// Seeking into the table catches the corruption.
 	ok, err := iter.SeekEngineKeyGE(ek)

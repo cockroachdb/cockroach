@@ -587,10 +587,13 @@ func assertEnginesEmpty(engines []storage.Engine) error {
 
 	for _, engine := range engines {
 		err := func() error {
-			iter := engine.NewEngineIterator(storage.IterOptions{
+			iter, err := engine.NewEngineIterator(storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypePointsAndRanges,
 				UpperBound: roachpb.KeyMax,
 			})
+			if err != nil {
+				return err
+			}
 			defer iter.Close()
 
 			valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
