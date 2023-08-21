@@ -59,6 +59,9 @@ go_test(
     ],
     args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
+    exec_properties = {
+        "dockerNetwork": "standard",
+    },
     deps = [
         ":base",
         "//pkg/roachpb",

@@ -58,7 +58,7 @@ build:cibase --lintonbuild
 # Ref: https://github.com/bazelbuild/rules_go/pull/2456
 test:cibase --test_env=GO_TEST_WRAP_TESTV=1
 # Dump all output for failed tests to the build log.
-test:cibase --test_output=errors
+test:ci --test_output=errors
 # Put all tmp artifacts in /artifacts/tmp.
 test:ci --test_tmpdir=/artifacts/tmp
 build:ci --config=cibase
