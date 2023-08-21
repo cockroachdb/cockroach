@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import _, { isUndefined } from "lodash";
 import Long from "long";
 import moment from "moment-timezone";
 import React from "react";
@@ -88,12 +88,25 @@ function queryFromProps(
   return {
     name: metricProps.name,
     sources: metricProps.sources || graphProps.sources || undefined,
-    tenant_id: tenantSource ? { id: Long.fromString(tenantSource) } : undefined,
+    tenant_id: determineTenantID(tenantSource),
     downsampler: downsampler,
     source_aggregator: sourceAggregator,
     derivative: derivative,
   };
 }
+
+// determineTenantID receives a string and returns an ITenantID
+// based on the contents of the string. tenantSource is determined
+// from either the metrics specific tenant dropdown or the global
+// tenant dropdown.
+const determineTenantID = (
+  tenantSource: string,
+): protos.cockroach.roachpb.ITenantID => {
+  if (isUndefined(tenantSource) || isNaN(+tenantSource)) {
+    return undefined;
+  }
+  return { id: Long.fromString(tenantSource) };
+};
 
 /**
  * MetricsDataProviderConnectProps are the properties provided to a
