@@ -421,3 +421,44 @@ WHERE c.relname = 'from_other_session'
 from_other_session  i
 
 subtest end
+
+# The descriptor for a temp view should not persist after the session creating
+# the temp view ends.
+subtest regression_108751
+
+user root nodeidx=0
+
+statement ok
+CREATE DATABASE database_108751
+
+statement ok
+USE database_108751
+
+statement ok
+SET experimental_enable_temp_tables TO on
+
+statement ok
+CREATE TABLE t_108751 (x int)
+
+statement ok
+CREATE TEMP VIEW t_108751_view (x) AS SELECT x FROM t_108751
+
+let $t_108751_view_id
+SELECT id FROM system.namespace WHERE name = 't_108751_view'
+
+user root nodeidx=0 newsession
+
+statement ok
+USE database_108751
+
+# There should be no descriptor returned here since the session that
+# created the temp view has ended.
+# We retry because dropping a descriptor is not instantaneous.
+query T retry
+SELECT descriptor FROM system.descriptor WHERE id = $t_108751_view_id
+----
+
+statement ok
+DROP DATABASE database_108751 CASCADE
+
+subtest end
