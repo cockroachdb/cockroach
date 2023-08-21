@@ -21,9 +21,22 @@ import (
 
 // randomClusterInfoGen returns a randomly picked predefined configuration.
 func (f randTestingFramework) randomClusterInfoGen(randSource *rand.Rand) gen.LoadedCluster {
-	chosenIndex := randSource.Intn(len(state.ClusterOptions))
-	chosenType := state.ClusterOptions[chosenIndex]
-	return loadClusterInfo(chosenType)
+	switch t := f.s.clusterGen.clusterGenType; t {
+	case singleRegion:
+		chosenIndex := randSource.Intn(len(state.SingleRegionClusterOptions))
+		chosenType := state.SingleRegionClusterOptions[chosenIndex]
+		return loadClusterInfo(chosenType)
+	case multiRegion:
+		chosenIndex := randSource.Intn(len(state.MultiRegionClusterOptions))
+		chosenType := state.MultiRegionClusterOptions[chosenIndex]
+		return loadClusterInfo(chosenType)
+	case anyRegion:
+		chosenIndex := randSource.Intn(len(state.AllClusterOptions))
+		chosenType := state.AllClusterOptions[chosenIndex]
+		return loadClusterInfo(chosenType)
+	default:
+		panic("unknown cluster gen type")
+	}
 }
 
 // RandomizedBasicRanges implements the RangeGen interface, supporting random
@@ -132,8 +145,30 @@ const (
 	zipfGenerator
 )
 
-// newGenerator returns a generator that generates number ∈[min, max] following
-// a distribution based on gType.
+func (g generatorType) String() string {
+	switch g {
+	case uniformGenerator:
+		return "uniform"
+	case zipfGenerator:
+		return "zipf"
+	default:
+		panic("unknown cluster type")
+	}
+}
+
+func getGeneratorType(s string) generatorType {
+	switch s {
+	case "uniform":
+		return uniformGenerator
+	case "zipf":
+		return zipfGenerator
+	default:
+		panic(fmt.Sprintf("unknown generator type: %s", s))
+	}
+}
+
+// newGenerator returns a generator that generates a number ∈[min, max]
+// following a distribution based on gType.
 func newGenerator(randSource *rand.Rand, iMin int64, iMax int64, gType generatorType) generator {
 	switch gType {
 	case uniformGenerator:
@@ -144,3 +179,73 @@ func newGenerator(randSource *rand.Rand, iMin int64, iMax int64, gType generator
 		panic(fmt.Sprintf("unexpected generator type %v", gType))
 	}
 }
+
+type clusterConfigType int
+
+const (
+	singleRegion clusterConfigType = iota
+	multiRegion
+	anyRegion
+)
+
+func (c clusterConfigType) String() string {
+	switch c {
+	case singleRegion:
+		return "single_region"
+	case multiRegion:
+		return "multi_region"
+	case anyRegion:
+		return "any_region"
+	default:
+		panic("unknown cluster type")
+	}
+}
+
+func getClusterConfigType(s string) clusterConfigType {
+	switch s {
+	case "single_region":
+		return singleRegion
+	case "multi_region":
+		return multiRegion
+	case "any_region":
+		return anyRegion
+	default:
+		panic(fmt.Sprintf("unknown cluster type: %s", s))
+	}
+}
+
+// These settings apply only to randomized generations and are NOT used if the
+// there are no randomization configured for that particular aspect of
+// generation. For instance, rangeGenSettings is only used if randOption.range
+// is true.
+type rangeGenSettings struct {
+	placementType     gen.PlacementType
+	replicationFactor int
+	rangeGenType      generatorType
+	keySpaceGenType   generatorType
+	weightedRand      []float64
+}
+
+func (t rangeGenSettings) String() string {
+	return fmt.Sprintf("placement_type=%v, range_gen_type=%v, key_space=%v, replication_factor=%v, weightedRand=%v",
+		t.placementType, t.rangeGenType, t.keySpaceGenType, t.replicationFactor, t.weightedRand)
+}
+
+const (
+	defaultRangeGenType    = uniformGenerator
+	defaultKeySpaceGenType = uniformGenerator
+)
+
+var defaultWeightedRand []float64
+
+type clusterGenSettings struct {
+	clusterGenType clusterConfigType
+}
+
+func (c clusterGenSettings) String() string {
+	return fmt.Sprintf("cluster_gen_type=%v", c.clusterGenType)
+}
+
+const (
+	defaultClusterGenType = multiRegion
+)

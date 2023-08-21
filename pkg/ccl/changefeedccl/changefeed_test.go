@@ -517,7 +517,7 @@ func TestChangefeedTenants(t *testing.T) {
 
 	tenantServer, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
 	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
-	tenantSQL.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
+	tenantSQL.ExecMultiple(t, strings.Split(tenantSetupStatements, ";")...)
 	tenantSQL.Exec(t, `CREATE TABLE foo_in_tenant (pk INT PRIMARY KEY)`)
 	t.Run("changefeed on non-tenant table fails", func(t *testing.T) {
 		kvSQL := sqlutils.MakeSQLRunner(kvSQLdb)
@@ -1512,6 +1512,7 @@ func TestChangefeedExternalIODisabled(t *testing.T) {
 		}
 		ctx := context.Background()
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			ExternalIODirConfig: base.ExternalIODirConfig{
 				DisableOutbound: true,
 			},
@@ -3313,9 +3314,11 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 	}))
 	defer dataSrv.Close()
 
-	cdcTestNamed(t, "import fails changefeed", func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+	cdcTestNamedWithSystem(t, "import fails changefeed", func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t, ""))
+		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
 		sqlDB.Exec(t, `CREATE TABLE for_import (a INT PRIMARY KEY, b INT)`)
 		defer sqlDB.Exec(t, `DROP TABLE for_import`)
 		sqlDB.Exec(t, `INSERT INTO for_import VALUES (0, NULL)`)
@@ -3478,9 +3481,11 @@ func TestChangefeedWorksOnRBRChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFnJSON := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+	testFnJSON := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t, ""))
+		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
 		t.Run("regional by row change works", func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY, b INT)`)
 			defer sqlDB.Exec(t, `DROP TABLE rbr`)
@@ -3555,7 +3560,7 @@ func TestChangefeedWorksOnRBRChange(t *testing.T) {
 		feedTestEnterpriseSinks,
 		withArgsFn(withTestServerRegion),
 	}
-	cdcTestNamed(t, "format=json", testFnJSON, opts...)
+	cdcTestNamedWithSystem(t, "format=json", testFnJSON, opts...)
 	cdcTestNamed(t, "format=avro", testFnAvro, append(opts, feedTestForceSink("kafka"))...)
 }
 
@@ -3620,13 +3625,17 @@ func TestChangefeedStopOnSchemaChange(t *testing.T) {
 			}
 		}
 	}
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t, ""))
 		// Shorten the intervals so this test doesn't take so long. We need to wait
 		// for timestamps to get resolved.
-		sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.experimental_poll_interval = '200ms'")
-		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
-		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'")
+		sysDB.Exec(t, "SET CLUSTER SETTING changefeed.experimental_poll_interval = '200ms'")
+		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING changefeed.experimental_poll_interval = '200ms'")
+		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'")
+		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'")
 
 		t.Run("add column not null", func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_column_not_null (a INT PRIMARY KEY)`)
@@ -3739,7 +3748,7 @@ func TestChangefeedStopOnSchemaChange(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn)
+	cdcTestWithSystem(t, testFn)
 }
 
 func TestChangefeedNoBackfill(t *testing.T) {
@@ -3748,16 +3757,20 @@ func TestChangefeedNoBackfill(t *testing.T) {
 
 	skip.UnderRace(t)
 	skip.UnderShort(t)
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t, ""))
 
 		usingLegacySchemaChanger := maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
 
 		// Shorten the intervals so this test doesn't take so long. We need to wait
 		// for timestamps to get resolved.
-		sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.experimental_poll_interval = '200ms'")
-		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
-		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'")
+		sysDB.Exec(t, "SET CLUSTER SETTING changefeed.experimental_poll_interval = '200ms'")
+		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING changefeed.experimental_poll_interval = '200ms'")
+		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'")
+		sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'")
 
 		t.Run("add column not null", func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_column_not_null (a INT PRIMARY KEY)`)
@@ -3868,7 +3881,7 @@ func TestChangefeedNoBackfill(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn)
+	cdcTestWithSystem(t, testFn)
 }
 
 func TestChangefeedStoredComputedColumn(t *testing.T) {
@@ -4071,8 +4084,9 @@ func TestChangefeedMonitoring(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t, ""))
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
@@ -4143,7 +4157,8 @@ func TestChangefeedMonitoring(t *testing.T) {
 
 		// Check that two changefeeds add correctly.
 		// Set cluster settings back so we don't interfere with schema changes.
-		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
+		sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
+		sysDB.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 		fooCopy := feed(t, f, `CREATE CHANGEFEED FOR foo`)
 		_, _ = fooCopy.Next()
 		_, _ = fooCopy.Next()
@@ -4174,7 +4189,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("sinkless"))
+	cdcTestWithSystem(t, testFn, feedTestForceSink("sinkless"))
 }
 
 func TestChangefeedRetryableError(t *testing.T) {
@@ -6742,7 +6757,6 @@ func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
 	defer cleanup()
 
 	sqlDB := sqlutils.MakeSQLRunner(s.DB)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled='true';`)
 	sqlDB.Exec(t, `CREATE TABLE tbl (a INT, b STRING);`)
 	sqlDB.Exec(t, `INSERT INTO tbl VALUES (1, 'one'), (2, 'two'), (3, 'three');`)
 	sqlDB.Exec(t, `CREATE CHANGEFEED FOR tbl INTO 'null://';`)
@@ -7672,7 +7686,7 @@ func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
 	}
 	tenant1Server, tenant1DB := serverutils.StartTenant(t, tc.Server(0), tenant1Args)
 	tenantRunner := sqlutils.MakeSQLRunner(tenant1DB)
-	tenantRunner.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
+	tenantRunner.ExecMultiple(t, strings.Split(tenantSetupStatements, ";")...)
 	sql1 := sqlutils.MakeSQLRunner(tenant1DB)
 	defer tenant1DB.Close()
 
@@ -8193,7 +8207,6 @@ func TestPubsubValidationErrors(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(s.DB)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	enableEnterprise := utilccl.TestingDisableEnterprise()
 	enableEnterprise()
 

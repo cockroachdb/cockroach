@@ -763,11 +763,6 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(jackson): It's unclear if this test can be refactor to omit the
-	// ReuseEnginesDeprecated option.
-	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
-	defer stickyVFSRegistry.CloseAllEngines()
-
 	const numServers int = 5
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	var maintainStreamsForBehindFollowers atomic.Bool
@@ -796,7 +791,7 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: stickyVFSRegistry,
+					StickyVFSRegistry: server.NewStickyVFSRegistry(),
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
@@ -965,7 +960,7 @@ ORDER BY name ASC;
 	   FROM crdb_internal.kv_flow_control_handles
 	`, "range_id", "store_id", "total_tracked_tokens")
 
-	tc.WaitForValues(t, k, []int64{incAB, incA, incA, incAB, incAB})
+	tc.WaitForValues(t, k, []int64{incAB, 0 /* stopped */, 0 /* stopped */, incAB, incAB})
 
 	index := repl.GetLastIndex()
 	h.comment(`-- (Truncating raft log.)`)
