@@ -6455,6 +6455,16 @@ func computeStatsForIterWithVisitors(
 	return ms, nil
 }
 
+// MVCCIsSpanEmptyOptions configures the MVCCIsSpanEmpty function.
+type MVCCIsSpanEmptyOptions struct {
+	// StartKey determines start of the checked span.
+	StartKey roachpb.Key
+	// EndKey determines the end of exported interval (exclusive).
+	EndKey roachpb.Key
+	// StartTS and EndTS determine the scanned time range as (startTS, endTS].
+	StartTS, EndTS hlc.Timestamp
+}
+
 // MVCCIsSpanEmpty returns true if there are no MVCC keys whatsoever in the key
 // span in the requested time interval. If a time interval is given and any
 // inline values are encountered, an error may be returned.
@@ -7035,16 +7045,6 @@ type MVCCExportFingerprintOptions struct {
 	StripIndexPrefixAndTimestamp bool
 }
 
-// MVCCIsSpanEmptyOptions configures the MVCCIsSpanEmpty function.
-type MVCCIsSpanEmptyOptions struct {
-	// StartKey determines start of the checked span.
-	StartKey roachpb.Key
-	// EndKey determines the end of exported interval (exclusive).
-	EndKey roachpb.Key
-	// StartTS and EndTS determine the scanned time range as (startTS, endTS].
-	StartTS, EndTS hlc.Timestamp
-}
-
 // PeekRangeKeysLeft peeks for any range keys to the left of the given key.
 // It returns the relative position of any range keys to the peek key, along
 // with the (unsafe) range key stack:
@@ -7245,7 +7245,7 @@ func ReplacePointTombstonesWithRangeTombstones(
 
 // In order to test the correctness of range deletion tombstones, we added a
 // testing knob to replace point deletions with range deletion tombstones in
-// some tests. Unfortuantely, doing so affects the correctness of rangefeeds.
+// some tests. Unfortunately, doing so affects the correctness of rangefeeds.
 // The tests in question do not use rangefeeds, but some system functionality
 // does use rangefeeds internally. The primary impact is that catch-up scans
 // will miss deletes. That makes these issues rare and hard to detect. In order

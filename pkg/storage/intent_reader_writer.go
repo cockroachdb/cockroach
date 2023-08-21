@@ -43,7 +43,7 @@ func (idw intentDemuxWriter) ClearIntent(
 	engineKey, buf = LockTableKey{
 		Key:      key,
 		Strength: lock.Exclusive,
-		TxnUUID:  txnUUID[:],
+		TxnUUID:  txnUUID,
 	}.ToEngineKey(buf)
 	if txnDidNotUpdateMeta {
 		return buf, idw.w.SingleClearEngineKey(engineKey)
@@ -61,7 +61,7 @@ func (idw intentDemuxWriter) PutIntent(
 	engineKey, buf = LockTableKey{
 		Key:      key,
 		Strength: lock.Exclusive,
-		TxnUUID:  txnUUID[:],
+		TxnUUID:  txnUUID,
 	}.ToEngineKey(buf)
 	return buf, idw.w.PutEngineKey(engineKey, value)
 }
