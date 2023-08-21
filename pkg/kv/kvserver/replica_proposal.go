@@ -200,6 +200,23 @@ type ProposalData struct {
 	// application is). This flag makes sure that the proposal buffer won't
 	// accidentally reinsert a finished proposal into the map.
 	v2SeenDuringApplication bool
+
+	// seedProposal points at the seed proposal in the chain of (re-)proposals, if
+	// this ProposalData is a reproposal. The field is nil for the seed proposal.
+	seedProposal *ProposalData
+	// lastReproposal is the last proposal that superseded the seed proposal.
+	// Superseding proposals form a chain starting from the seed proposal. This
+	// field is set only on the seed proposal, and is updated every time a new
+	// reproposal is cast.
+	//
+	// See Replica.mu.proposals comment for more details.
+	//
+	// TODO(pavelkalinnikov): We are referencing only the last reproposal in the
+	// chain, so that the intermediate ones can be GCed in case the chain is very
+	// long. This chain reasoning is subtle, we should decompose ProposalData in
+	// such a way that the "common" parts of the (re-)proposals are shared and
+	// chaining isn't necessary.
+	lastReproposal *ProposalData
 }
 
 // useReplicationAdmissionControl indicates whether this raft command should
