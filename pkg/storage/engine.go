@@ -951,6 +951,15 @@ type ReadWriter interface {
 	Writer
 }
 
+// ReadWriterWithMustIterators is a version of ReadWriter that supports iterator
+// creation without errors.
+//
+// TODO(bilal): Move away from this interface and onto ReadWriter.
+type ReadWriterWithMustIterators interface {
+	ReaderWithMustIterators
+	Writer
+}
+
 // DurabilityRequirement is an advanced option. If in doubt, use
 // StandardDurability.
 //

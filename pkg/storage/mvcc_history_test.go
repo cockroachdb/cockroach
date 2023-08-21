@@ -877,7 +877,7 @@ func cmdTxnUpdate(e *evalCtx) error {
 }
 
 type intentPrintingReadWriter struct {
-	storage.ReadWriter
+	storage.ReadWriterWithMustIterators
 	buf *redact.StringBuilder
 }
 
@@ -886,7 +886,7 @@ func (rw intentPrintingReadWriter) PutIntent(
 ) error {
 	rw.buf.Printf("called PutIntent(%v, _, %v)\n",
 		key, txnUUID)
-	return rw.ReadWriter.PutIntent(ctx, key, value, txnUUID)
+	return rw.ReadWriterWithMustIterators.PutIntent(ctx, key, value, txnUUID)
 }
 
 func (rw intentPrintingReadWriter) ClearIntent(
@@ -894,12 +894,12 @@ func (rw intentPrintingReadWriter) ClearIntent(
 ) error {
 	rw.buf.Printf("called ClearIntent(%v, TDNUM(%t), %v)\n",
 		key, txnDidNotUpdateMeta, txnUUID)
-	return rw.ReadWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, opts)
+	return rw.ReadWriterWithMustIterators.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, opts)
 }
 
-func (e *evalCtx) tryWrapForIntentPrinting(rw storage.ReadWriter) storage.ReadWriter {
+func (e *evalCtx) tryWrapForIntentPrinting(rw storage.ReadWriterWithMustIterators) storage.ReadWriterWithMustIterators {
 	if e.results.traceIntentWrites {
-		return intentPrintingReadWriter{ReadWriter: rw, buf: e.results.buf}
+		return intentPrintingReadWriter{ReadWriterWithMustIterators: rw, buf: e.results.buf}
 	}
 	return rw
 }
@@ -2335,7 +2335,7 @@ func (e *evalCtx) withReader(fn func(storage.Reader) error) error {
 // metamorphically chosen to be a batch, which will be committed and closed when
 // done.
 func (e *evalCtx) withWriter(cmd string, fn func(_ storage.ReadWriter) error) error {
-	var rw storage.ReadWriter
+	var rw storage.ReadWriterWithMustIterators
 	rw = e.engine
 	var batch storage.Batch
 	if e.hasArg("batched") || mvccHistoriesUseBatch {
