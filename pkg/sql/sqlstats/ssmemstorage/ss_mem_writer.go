@@ -231,9 +231,32 @@ func (s *Container) observeInsightStatement(
 
 	var contention *time.Duration
 	var cpuSQLNanos int64
+	var stats = &insights.ExecStats{}
+	var mvccStats = &insights.MVCCStats{}
 	if value.ExecStats != nil {
 		contention = &value.ExecStats.ContentionTime
 		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
+		stats = &insights.ExecStats{
+			NetworkBytesSent:    value.ExecStats.NetworkBytesSent,
+			MaxMemUsage:         value.ExecStats.MaxMemUsage,
+			NetworkMessagesSent: value.ExecStats.NetworkMessages,
+			MaxDiskUsage:        value.ExecStats.MaxDiskUsage,
+		}
+		mvccStats = &insights.MVCCStats{
+			StepCount:                      value.ExecStats.MvccSteps,
+			StepCountInternal:              value.ExecStats.MvccStepsInternal,
+			SeekCount:                      value.ExecStats.MvccSeeks,
+			SeekCountInternal:              value.ExecStats.MvccSeeksInternal,
+			BlockBytes:                     value.ExecStats.MvccBlockBytes,
+			BlockBytesInCache:              value.ExecStats.MvccBlockBytesInCache,
+			KeyBytes:                       value.ExecStats.MvccKeyBytes,
+			ValueBytes:                     value.ExecStats.MvccValueBytes,
+			PointCount:                     value.ExecStats.MvccPointCount,
+			PointsCoveredByRangeTombstones: value.ExecStats.MvccPointsCoveredByRangeTombstones,
+			RangeKeyCount:                  value.ExecStats.MvccRangeKeyCount,
+			RangeKeyContainedPoints:        value.ExecStats.MvccRangeKeyContainedPoints,
+			RangeKeySkippedPoints:          value.ExecStats.MvccRangeKeySkippedPoints,
+		}
 	}
 
 	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
@@ -256,6 +279,14 @@ func (s *Container) observeInsightStatement(
 		Database:             value.Database,
 		CPUSQLNanos:          cpuSQLNanos,
 		ErrorCode:            errorCode,
+		IdleLat:              value.IdleLatencySec,
+		ParseLat:             value.ParseLatencySec,
+		PlanLat:              value.PlanLatencySec,
+		RunLat:               value.RunLatencySec,
+		ServiceLat:           value.ServiceLatencySec,
+		BytesRead:            value.BytesRead,
+		Stats:                stats,
+		MvccStats:            mvccStats,
 	})
 }
 
@@ -421,6 +452,32 @@ func (s *Container) observerInsightTransaction(
 		RetryCount:      value.RetryCount,
 		AutoRetryReason: retryReason,
 		CPUSQLNanos:     cpuSQLNanos,
+		ServiceLat:      &value.ServiceLatency,
+		RetryLat:        &value.RetryLatency,
+		CommitLat:       &value.CommitLatency,
+		IdleLat:         &value.IdleLatency,
+		BytesRead:       value.BytesRead,
+		Stats: &insights.ExecStats{
+			NetworkBytesSent:    value.ExecStats.NetworkBytesSent,
+			MaxMemUsage:         value.ExecStats.MaxMemUsage,
+			NetworkMessagesSent: value.ExecStats.NetworkMessages,
+			MaxDiskUsage:        value.ExecStats.MaxDiskUsage,
+		},
+		MvccStats: &insights.MVCCStats{
+			StepCount:                      value.ExecStats.MvccSteps,
+			StepCountInternal:              value.ExecStats.MvccStepsInternal,
+			SeekCount:                      value.ExecStats.MvccSeeks,
+			SeekCountInternal:              value.ExecStats.MvccSeeksInternal,
+			BlockBytes:                     value.ExecStats.MvccBlockBytes,
+			BlockBytesInCache:              value.ExecStats.MvccBlockBytesInCache,
+			KeyBytes:                       value.ExecStats.MvccKeyBytes,
+			ValueBytes:                     value.ExecStats.MvccValueBytes,
+			PointCount:                     value.ExecStats.MvccPointCount,
+			PointsCoveredByRangeTombstones: value.ExecStats.MvccPointsCoveredByRangeTombstones,
+			RangeKeyCount:                  value.ExecStats.MvccRangeKeyCount,
+			RangeKeyContainedPoints:        value.ExecStats.MvccRangeKeyContainedPoints,
+			RangeKeySkippedPoints:          value.ExecStats.MvccRangeKeySkippedPoints,
+		},
 	})
 }
 

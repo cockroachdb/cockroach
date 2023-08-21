@@ -92,6 +92,23 @@ message Transaction {
   // The error code of the last failed statement in the transaction.
   string last_error_code = 18; 
   Status status = 19;
+  // ServiceLat is the time in seconds to service the transaction, from the time a
+  // transaction was received to end of execution.
+  google.protobuf.Duration  service_lat = 20 [(gogoproto.stdduration) = true];
+  // RetryLat is the amount of time in seconds spent retrying the transaction.
+  google.protobuf.Duration  retry_lat = 21 [(gogoproto.stdduration) = true];
+  // CommitLat is the amount of time in seconds required to commit the transaction after
+  // all statement operations have been applied.
+  google.protobuf.Duration  commit_lat = 22 [(gogoproto.stdduration) = true];
+  // IdleLat is the cumulative amount of time spent in seconds waiting for
+  // the client to send statements while holding the transaction open.
+  google.protobuf.Duration  idle_lat = 23 [(gogoproto.stdduration) = true];
+  // BytesRead collects the number of bytes read from disk.
+  int64 bytes_read = 24;
+  // Stats contains extended execution stats for current transaction.
+  ExecStats stats = 25;
+  // MVCCStats contains MVCC specific stats for current transaction.
+  MVCCStats mvcc_stats = 26;
 }
 
 message Statement {
@@ -105,7 +122,7 @@ message Statement {
     (gogoproto.nullable) = false];
   uint64 fingerprint_id = 2 [(gogoproto.customname) = "FingerprintID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.StmtFingerprintID"];
-  double latency_in_seconds = 3;
+  double latency_in_seconds = 3; // DEPRECATED. Use service_lat instead
   string query = 4;
   Status status = 5;
   google.protobuf.Timestamp start_time = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
@@ -128,6 +145,23 @@ message Statement {
   repeated Cause causes = 22;
   int64 cpu_sql_nanos = 23 [(gogoproto.customname) = "CPUSQLNanos"];
   string error_code = 24;
+  // IdleLat is the time spent in seconds in an open transaction waiting
+  // for the client to send the statement.
+  double idle_lat = 25;
+  // ParseLat is the time in seconds to transform the SQL string into an AST.
+  double parse_lat = 26;
+  // PlanLat is the time spent in seconds to transform the AST into a logical query plan.
+  double plan_lat = 27;
+  // RunLat is the time in seconds to run the query and fetch/compute the result rows.
+  double run_lat = 28;
+  // ServiceLat is the time in seconds to service the query, from start of parse to end of execute.
+  double service_lat = 29;
+  // BytesRead collects the number of bytes read from disk.
+  int64 bytes_read = 30;
+  // Stats contains extended execution stats for current statement.
+  ExecStats stats = 31;
+  // MVCCStats contains MVCC specific stats for current statement.
+  MVCCStats mvcc_stats = 32;
 }
 
 
@@ -145,4 +179,83 @@ message Insight {
 
   reserved  4; // Previously problem.
   reserved 5; // Previously causes.
+}
+
+message ExecStats {
+  // NetworkBytesSent collects the number of bytes sent over the network.
+  int64 network_bytes_sent = 1;
+  // MaxMemUsage collects the maximum memory usage that occurred on a node.
+  int64 max_mem_usage = 2;
+  // NetworkMessagesSent collects the number of messages that were sent over the
+  // network.
+  int64 network_messages_sent = 3;
+  // MaxDiskUsage collects the maximum temporary disk usage that occurred. This
+  // is set in cases where a query had to spill to disk, e.g. when performing a
+  // large sort where not all of the tuples fit in memory.
+  int64 max_disk_usage = 4;
+}
+
+message MVCCStats {
+  // StepCount collects the number of times the iterator moved forward or backward over the
+  // DB's underlying storage keyspace.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 step_count = 1;
+
+  // StepCountInternal collects the number of times the iterator moved forward or backward
+  // over LSM internal keys.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 step_count_internal = 2;
+
+  // SeekCount collects the number of times the iterator moved to a specific key/value pair
+  // in the DB's underlying storage keyspace.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 seek_count = 3;
+
+  // SeekCountInternal collects the number of times the iterator moved to a specific LSM
+  // internal key.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  int64 seek_count_internal = 4;
+
+  // BlockBytes collects the bytes in the loaded SSTable data blocks.
+  // For details, see pebble.InternalIteratorStats.
+  int64 block_bytes = 5;
+
+  // BlockBytesInCache collects the subset of BlockBytes in the block cache.
+  // For details, see pebble.InternalIteratorStats.
+  int64 block_bytes_in_cache = 6;
+
+  // KeyBytes collects the bytes in keys that were iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  int64 key_bytes = 7;
+
+  // ValueBytes collects the bytes in values that were iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  int64 value_bytes = 8;
+
+  // PointCount collects the count of point keys iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  int64 point_count = 9;
+
+  // PointsCoveredByRangeTombstones collects the count of point keys that were iterated over that
+  // were covered by range tombstones.
+  // For details, see pebble.InternalIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 points_covered_by_range_tombstones = 10;
+
+  // RangeKeyCount collects the count of range keys encountered during iteration.
+  // For details, see pebble.RangeKeyIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 range_key_count = 11;
+
+  // RangeKeyContainedPoints collects the count of point keys encountered within the bounds of
+  // a range key.
+  // For details, see pebble.RangeKeyIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 range_key_contained_points = 12;
+
+  // RangeKeySkippedPoints collects the count of the subset of ContainedPoints point keys that
+  // were skipped during iteration due to range-key masking.
+  // For details, see pkg/storage/engine.go, pebble.RangeKeyIteratorStats, and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  int64 range_key_skipped_points = 13;
 }
