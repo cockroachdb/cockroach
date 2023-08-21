@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
@@ -334,6 +335,10 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	// Generate expensive checkpoint only after we ran for a while.
 	ca.lastSpanFlush = timeutil.Now()
+
+	if ca.knobs.AggregatorStarted != nil {
+		ca.knobs.AggregatorStarted(limit)
+	}
 }
 
 func (ca *changeAggregator) startKVFeed(
@@ -1192,8 +1197,19 @@ func (cf *changeFrontier) closeMetrics() {
 	cf.metrics.mu.Unlock()
 }
 
+// makeMemoryLimitWatcher returns an atomic bool which is set to true
+// if the memory limit setting is changed.
+func (cf *changeFrontier) makeMemoryLimitWatcher() *atomic.Bool {
+	var memoryLimitChanged atomic.Bool
+	changefeedbase.PerChangefeedMemLimit.SetOnChange(&cf.flowCtx.Cfg.Settings.SV, func(ctx context.Context) {
+		memoryLimitChanged.Store(true)
+	})
+	return &memoryLimitChanged
+}
+
 // Next is part of the RowSource interface.
 func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	memLimitWatcher := cf.makeMemoryLimitWatcher()
 	for cf.State == execinfra.StateRunning {
 		if !cf.passthroughBuf.IsEmpty() {
 			return cf.ProcessRowHelper(cf.passthroughBuf.Pop()), nil
@@ -1258,6 +1274,12 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 
 		if err := cf.noteAggregatorProgress(row[0]); err != nil {
 			cf.MoveToDraining(err)
+			break
+		}
+
+		// We need to restart all aggregators if the memory limits change.
+		if memLimitWatcher.Load() {
+			cf.MoveToDraining(changefeedbase.MarkRetryableError(errors.New("memory limit changed")))
 			break
 		}
 	}

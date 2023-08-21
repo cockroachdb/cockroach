@@ -8497,3 +8497,47 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 	}
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
+
+// TestChangefeedRetryWithMemoryLimits asserts that an aggregator will restart
+// with the new memory limit when the setting
+// `changefeed.memory.per_changefeed_limit` is changed.
+func TestChangefeedRetryWithMemoryLimits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		var memLimit atomic.Int64
+		knobs.AggregatorStarted = func(m int64) {
+			memLimit.Store(m)
+		}
+
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.memory.per_changefeed_limit = '10MB'`)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT)`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 0)`)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": 0}}`,
+		})
+
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.memory.per_changefeed_limit = '1MB'`)
+
+		testutils.SucceedsSoon(t, func() error {
+			limit := memLimit.Load()
+			if limit != 1000000 {
+				return errors.AssertionFailedf("expected memory limit to be %d, found %d", 1<<20, limit)
+			}
+			return nil
+		})
+	}
+
+	cdcTest(t, testFn)
+}

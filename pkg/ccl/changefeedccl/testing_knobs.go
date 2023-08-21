@@ -77,6 +77,9 @@ type TestingKnobs struct {
 
 	// OnDrain returns the channel to select on to detect node drain
 	OnDrain func() <-chan struct{}
+
+	// AggregatorStarted is called when `(*changeAggregator) Start` completes.
+	AggregatorStarted func(memLimit int64)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
