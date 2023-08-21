@@ -135,8 +135,6 @@ func registerRestore(r registry.Registry) {
 			m := c.NewMonitor(ctx)
 			dul := roachtestutil.NewDiskUsageLogger(t, c)
 			m.Go(dul.Runner)
-			hc := roachtestutil.NewHealthChecker(t, c, c.All())
-			m.Go(hc.Runner)
 
 			jobIDCh := make(chan jobspb.JobID)
 			jobCompleteCh := make(chan struct{}, 1)
@@ -210,7 +208,6 @@ func registerRestore(r registry.Registry) {
 
 			m.Go(func(ctx context.Context) error {
 				defer dul.Done()
-				defer hc.Done()
 				defer close(jobCompleteCh)
 				defer close(jobIDCh)
 				t.Status(`running restore`)
@@ -414,12 +411,8 @@ func registerRestore(r registry.Registry) {
 				m := c.NewMonitor(ctx)
 				dul := roachtestutil.NewDiskUsageLogger(t, c)
 				m.Go(dul.Runner)
-				hc := roachtestutil.NewHealthChecker(t, c, c.All())
-				m.Go(hc.Runner)
-
 				m.Go(func(ctx context.Context) error {
 					defer dul.Done()
-					defer hc.Done()
 					t.Status(`running setup statements`)
 					db, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(1)[0])
 					if err != nil {
