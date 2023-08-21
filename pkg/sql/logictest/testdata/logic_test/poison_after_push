@@ -18,7 +18,7 @@
 # the limitation described in #24798. Variants that do not use DistSQL
 # transparently refresh this error away.
 statement ok
-SET CLUSTER SETTING kv.transaction.write_pipelining_enabled = false
+SET CLUSTER SETTING kv.transaction.write_pipelining.enabled = false
 
 statement ok
 CREATE TABLE t (id INT PRIMARY KEY)

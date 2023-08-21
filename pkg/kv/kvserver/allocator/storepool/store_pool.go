@@ -42,6 +42,7 @@ var FailedReservationsTimeout = settings.RegisterDurationSetting(
 	"the amount of time to consider the store throttled for up-replication after a failed reservation call",
 	5*time.Second,
 	settings.NonNegativeDuration,
+	settings.WithName("server.failed_reservation.timeout"),
 )
 
 // The NodeCountFunc returns a count of the total number of nodes the user

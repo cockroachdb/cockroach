@@ -6988,7 +6988,7 @@ func TestBackupRestoreCreatedAndDroppedTenant(t *testing.T) {
 	systemDB.Exec(t, "DROP TENANT baz")
 
 	// Make GC job scheduled by DROP TENANT run in 1 second.
-	systemDB.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+	systemDB.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue.enabled = false")
 	systemDB.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
 	// Wait for tenant GC job to complete.
 	systemDB.CheckQueryResultsRetry(
@@ -7187,7 +7187,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		// Make GC job scheduled by DROP TENANT run in 1 second.
-		restoreDB.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+		restoreDB.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue.enabled = false")
 		restoreDB.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
 		// Wait for tenant GC job to complete.
 		restoreDB.CheckQueryResultsRetry(
@@ -11299,7 +11299,7 @@ func TestRestoreMemoryMonitoringWithShadowing(t *testing.T) {
 	defer cleanupFn()
 
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.bulk_io_write.restore_node_concurrency = 1")
-	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.memory_monitor_ssts=true")
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.sst_memory_limit.enabled=true")
 	sqlDB.Exec(t, "BACKUP data.bank INTO 'userfile:///backup'")
 
 	// Repeatedly alter a single row and do an incremental backup.
@@ -11340,7 +11340,7 @@ func TestRestoreMemoryMonitoringMinWorkerMemory(t *testing.T) {
 
 	// 4 restore workers means we need minimum 2 workers to start restore.
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.bulk_io_write.restore_node_concurrency=4")
-	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.memory_monitor_ssts=true")
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.sst_memory_limit.enabled=true")
 
 	sqlDB.Exec(t, "BACKUP data.bank INTO 'userfile:///backup'")
 
