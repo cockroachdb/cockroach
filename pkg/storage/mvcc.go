@@ -2547,6 +2547,7 @@ func MVCCMerge(
 	metaKey := MakeMVCCMetadataKey(key)
 
 	buf := newPutBuffer()
+	defer buf.release()
 
 	// Every type flows through here, so we can't use the typed getters.
 	rawBytes := value.RawBytes
@@ -2566,7 +2567,6 @@ func MVCCMerge(
 				key, int64(len(rawBytes)), timestamp.WallTime))
 		}
 	}
-	buf.release()
 	return err
 }
 
@@ -4342,6 +4342,7 @@ func MVCCResolveWriteIntent(
 		return false, 0, nil, err
 	}
 	iterAndBuf := GetBufUsingIter(iter)
+	defer iterAndBuf.Cleanup()
 	iterAndBuf.iter.SeekIntentGE(intent.Key, intent.Txn.ID)
 	// Production code will use a buffered writer, which makes the numBytes
 	// calculation accurate. Note that an inaccurate numBytes (e.g. 0 in the
@@ -4350,8 +4351,6 @@ func MVCCResolveWriteIntent(
 	beforeBytes := rw.BufferedSize()
 	ok, err = mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
 	numBytes = int64(rw.BufferedSize() - beforeBytes)
-	// Using defer would be more convenient, but it is measurably slower.
-	iterAndBuf.Cleanup()
 	return ok, numBytes, nil, err
 }
 
@@ -5164,6 +5163,7 @@ func MVCCResolveWriteIntentRange(
 	if err != nil {
 		return 0, 0, nil, 0, err
 	}
+	defer engineIter.Close()
 	var mvccIter MVCCIterator
 	iterOpts := IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
@@ -5181,10 +5181,7 @@ func MVCCResolveWriteIntentRange(
 		mvccIter = newPebbleIteratorByCloning(engineIter.CloneContext(), iterOpts, StandardDurability)
 	}
 	iterAndBuf := GetBufUsingIter(mvccIter)
-	defer func() {
-		engineIter.Close()
-		iterAndBuf.Cleanup()
-	}()
+	defer iterAndBuf.Cleanup()
 	putBuf := iterAndBuf.buf
 	sepIter := &separatedIntentAndVersionIter{
 		engineIter: engineIter,

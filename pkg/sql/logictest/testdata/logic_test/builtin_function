@@ -4197,3 +4197,19 @@ query T
 SELECT bitmask_xor(B'001'::VARBIT, '101'::STRING);
 ----
 100
+
+# Query `percentile_disc_impl(arg1: float, arg2: bool) -> bool` from pg_proc
+query T rowsort
+SELECT oidvectortypes(proargtypes) FROM pg_proc WHERE oid=263
+----
+float, bool
+
+# Query a custom type and function.
+statement ok
+CREATE TYPE custom_typ AS ENUM ('good', 'bad');
+CREATE OR REPLACE FUNCTION custom_fn(c custom_typ) RETURNS custom_typ AS 'SELECT c' LANGUAGE SQL;
+
+query T rowsort
+SELECT oidvectortypes(proargtypes) FROM pg_proc WHERE proname='custom_fn'
+----
+custom_typ

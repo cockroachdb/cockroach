@@ -1,0 +1,11 @@
+diff -urN a/BUILD.bazel b/BUILD.bazel
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -533,6 +533,7 @@
+         "serializers.go",
+         "validators.go",
+     ],
++    exec_properties = { "Pool": "large" },
+     importpath = "github.com/aws/aws-sdk-go-v2/service/ec2",
+     visibility = ["//visibility:public"],
+     deps = [

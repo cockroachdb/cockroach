@@ -306,9 +306,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	}
 
 	onDiskCheckpointPaths := func(nodeIdx int) []string {
-		fs, err := stickyVFSRegistry.Get(
-			base.StoreSpec{StickyVFSID: strconv.FormatInt(int64(nodeIdx), 10)})
-		require.NoError(t, err)
+		fs := stickyVFSRegistry.Get(strconv.FormatInt(int64(nodeIdx), 10))
 		store := tc.GetFirstStoreFromServer(t, nodeIdx)
 		checkpointPath := filepath.Join(store.TODOEngine().GetAuxiliaryDir(), "checkpoints")
 		checkpoints, _ := fs.List(checkpointPath)
@@ -387,8 +385,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 		// Create a new store on top of checkpoint location inside existing in-mem
 		// VFS to verify its contents.
-		fs, err := stickyVFSRegistry.Get(base.StoreSpec{StickyVFSID: strconv.FormatInt(int64(i), 10)})
-		require.NoError(t, err)
+		fs := stickyVFSRegistry.Get(strconv.FormatInt(int64(i), 10))
 		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], cluster.MakeClusterSettings(),
 			storage.ForTesting, storage.MustExist, storage.ReadOnly, storage.CacheSize(1<<20))
 		defer cpEng.Close()

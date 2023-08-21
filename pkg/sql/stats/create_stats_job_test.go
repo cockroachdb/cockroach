@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -128,7 +127,6 @@ func TestCreateStatsControlJob(t *testing.T) {
 func TestCreateStatisticsCanBeCancelled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStress(t, "test can be slow to quiesce because of filter")
 
 	var allowRequest chan struct{}
 
@@ -145,13 +143,13 @@ func TestCreateStatisticsCanBeCancelled(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)  WITH (sql_stats_automatic_collection_enabled = false)`)
 	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
 	var tID descpb.ID
 	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int`).Scan(&tID)
 	setTableID(tID)
 
-	// Run CREATE STATISTICS and wait for to create the job.
+	// Run CREATE STATISTICS and wait for it to create the job.
 	allowRequest = make(chan struct{})
 	errCh := make(chan error)
 	go func() {
@@ -159,6 +157,7 @@ func TestCreateStatisticsCanBeCancelled(t *testing.T) {
 		errCh <- err
 	}()
 	allowRequest <- struct{}{}
+	setTableID(descpb.InvalidID)
 	testutils.SucceedsSoon(t, func() error {
 		row := conn.QueryRow("SELECT query_id FROM [SHOW CLUSTER STATEMENTS] WHERE query LIKE 'CREATE STATISTICS%';")
 		var queryID string
@@ -168,9 +167,22 @@ func TestCreateStatisticsCanBeCancelled(t *testing.T) {
 		_, err := conn.Exec("CANCEL QUERIES VALUES ((SELECT query_id FROM [SHOW CLUSTER STATEMENTS] WHERE query LIKE 'CREATE STATISTICS%'));")
 		return err
 	})
-	err := <-errCh
-	allowRequest <- struct{}{}
-
+	// Allow the filter to pass everything until an error is received.
+	var err error
+	testutils.SucceedsSoon(t, func() error {
+		// Assume something will fail.
+		err = errors.AssertionFailedf("failed for create stats to cancel")
+		for {
+			select {
+			case err = <-errCh:
+				return nil
+			case allowRequest <- struct{}{}:
+			default:
+				return err
+			}
+		}
+	})
+	close(allowRequest)
 	require.ErrorContains(t, err, "pq: query execution canceled")
 }
 
@@ -214,7 +226,6 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	case err := <-errCh:
 		t.Fatal(err)
 	}
-
 	autoStatsRunShouldFail := func() {
 		_, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.t`)
 		expected := "another CREATE STATISTICS job is already running"
@@ -534,7 +545,7 @@ func createStatsRequestFilter(
 		if req, ok := ba.GetArg(kvpb.Scan); ok {
 			_, tableID, _ := encoding.DecodeUvarintAscending(req.(*kvpb.ScanRequest).Key)
 			// Ensure that the tableID is what we expect it to be.
-			if tableID > 0 && descpb.ID(tableID) == tableToBlock.Load().(descpb.ID) {
+			if tableID > 0 && descpb.ID(tableID) == tableToBlock.Load() {
 				// Read from the channel twice to allow jobutils.RunJob to complete
 				// even though there is only one ScanRequest.
 				<-*allowProgressIota

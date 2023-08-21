@@ -16,10 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 )
 
-// This file defines the default parameters for allocator simulator testing,
-// including configurations for the cluster, ranges, load, static settings,
-// static events, assertions, and plot settings.
-
+// This file defines settings for default generations where randomization is
+// disabled. For instance, defaultBasicRangesGen is only used if
+// randOption.range is false.
 const (
 	defaultNodes         = 3
 	defaultStoresPerNode = 1
@@ -106,26 +105,5 @@ func defaultPlotSettings() plotSettings {
 		stat:   defaultStat,
 		height: defaultHeight,
 		width:  defaultWidth,
-	}
-}
-
-type rangeGenSettings struct {
-	rangeKeyGenType generatorType
-	keySpaceGenType generatorType
-	weightedRand    []float64
-}
-
-const (
-	defaultRangeKeyGenType = uniformGenerator
-	defaultKeySpaceGenType = uniformGenerator
-)
-
-var defaultWeightedRand []float64
-
-func defaultRangeGenSettings() rangeGenSettings {
-	return rangeGenSettings{
-		rangeKeyGenType: defaultRangeKeyGenType,
-		keySpaceGenType: defaultKeySpaceGenType,
-		weightedRand:    defaultWeightedRand,
 	}
 }
