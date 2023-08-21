@@ -106,7 +106,7 @@ func checkExistingCompactionSchedule(ctx context.Context, txn isql.Txn) (exists 
 	query := "SELECT count(*) FROM system.scheduled_jobs WHERE schedule_name = $1"
 
 	row, err := txn.QueryRowEx(ctx, "check-existing-sql-stats-schedule", txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		query, compactionScheduleName,
 	)
 

@@ -16,7 +16,7 @@ import "github.com/cockroachdb/cockroach/pkg/settings"
 // per-statment statistics by transaction fingerprint. While enabled by
 // default, it may be useful to disable for workloads that run the same
 // statements across many (ad-hoc) transaction fingerprints, producing
-// higher-cardinality data in the system.statement_statistics table than
+// higher-cardinality data in the statement_statistics table than
 // the cleanup job is able to keep up with. See #78338.
 var AssociateStmtWithTxnFingerprint = settings.RegisterBoolSetting(
 	settings.TenantWritable,

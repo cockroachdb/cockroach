@@ -486,6 +486,9 @@ type SessionAccessor interface {
 	// HasViewActivityOrViewActivityRedactedRole returns true iff the current session user has the
 	// VIEWACTIVITY or VIEWACTIVITYREDACTED permission.
 	HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, error)
+
+	// CurrentObservabilityDatabase returns the name of the currently active obs database.
+	CurrentObservabilityDatabase(ctx context.Context) (string, error)
 }
 
 // PreparedStatementState is a limited interface that exposes metadata about

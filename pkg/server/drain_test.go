@@ -144,6 +144,8 @@ INSERT INTO t.test VALUES (3);
 		"expected to find in-memory stats",
 	)
 
+	sqlDB.Exec(t, "SET database = crdb_internal.current_observability_database()")
+
 	// Sanity check: verify that the statement statistics system table is empty.
 	sqlDB.CheckQueryResults(t,
 		`SELECT count(*) FROM system.statement_statistics WHERE node_id = 1`,

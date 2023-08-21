@@ -62,11 +62,11 @@ func (s *Controller) ResetClusterSQLStats(ctx context.Context) error {
 		return err
 	}
 
-	if err := s.resetSysTableStats(ctx, "system.statement_statistics"); err != nil {
+	if err := s.resetSysTableStats(ctx, "statement_statistics"); err != nil {
 		return err
 	}
 
-	if err := s.resetSysTableStats(ctx, "system.transaction_statistics"); err != nil {
+	if err := s.resetSysTableStats(ctx, "transaction_statistics"); err != nil {
 		return err
 	}
 
@@ -80,11 +80,11 @@ func (s *Controller) ResetActivityTables(ctx context.Context) error {
 		return nil
 	}
 
-	if err := s.resetSysTableStats(ctx, "system.statement_activity"); err != nil {
+	if err := s.resetSysTableStats(ctx, "statement_activity"); err != nil {
 		return err
 	}
 
-	return s.resetSysTableStats(ctx, "system.transaction_activity")
+	return s.resetSysTableStats(ctx, "transaction_activity")
 }
 
 func (s *Controller) resetSysTableStats(ctx context.Context, tableName string) (err error) {
@@ -93,7 +93,7 @@ func (s *Controller) resetSysTableStats(ctx context.Context, tableName string) (
 		ctx,
 		"reset-sql-stats",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		"TRUNCATE "+tableName)
 	return err
 }

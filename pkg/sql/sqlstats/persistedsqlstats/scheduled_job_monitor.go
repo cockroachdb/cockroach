@@ -134,7 +134,7 @@ func (j *jobMonitor) getSchedule(
 		ctx,
 		"load-sql-stats-scheduled-job",
 		txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.ObservabilitySessionDataOverride,
 		"SELECT schedule_id FROM system.scheduled_jobs WHERE schedule_name = $1",
 		compactionScheduleName,
 	)

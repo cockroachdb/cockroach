@@ -47,7 +47,7 @@ func ExplainTreePlanNodeToJSON(node *appstatspb.ExplainTreePlanNode) json.JSON {
 //
 //	{
 //	  "$schema": "https://json-schema.org/draft/2020-12/schema",
-//	  "title": "system.statement_statistics.metadata",
+//	  "title": "statement_statistics.metadata",
 //	  "type": "object",
 //	  "properties": {
 //	    "stmtType":             { "type": "string" },
@@ -71,7 +71,7 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //
 //		{
 //		  "$schema": "https://json-schema.org/draft/2020-12/schema",
-//		  "title": "system.statement_statistics.statistics",
+//		  "title": "statement_statistics.statistics",
 //		  "type": "object",
 //
 //		  "definitions": {
@@ -241,7 +241,7 @@ func BuildStmtStatisticsJSON(statistics *appstatspb.StatementStatistics) (json.J
 //
 //	{
 //	  "$schema": "https://json-schema.org/draft/2020-12/schema",
-//	  "title": "system.transaction_statistics.metadata",
+//	  "title": "transaction_statistics.metadata",
 //	  "type": "object",
 //	  "properties": {
 //	    "stmtFingerprintIDs": {
@@ -271,7 +271,7 @@ func BuildTxnMetadataJSON(
 //
 //	{
 //	  "$schema": "https://json-schema.org/draft/2020-12/schema",
-//	  "title": "system.statement_statistics.statistics",
+//	  "title": "statement_statistics.statistics",
 //	  "type": "object",
 //
 //	  "definitions": {
@@ -409,7 +409,7 @@ func BuildTxnStatisticsJSON(
 //
 //	{
 //	  "$schema": "https://json-schema.org/draft/2020-12/schema",
-//	  "title": "system.statement_statistics.aggregated_metadata",
+//	  "title": "statement_statistics.aggregated_metadata",
 //	  "type": "object",
 //
 //	  "properties": {
