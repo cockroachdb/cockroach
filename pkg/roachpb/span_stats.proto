@@ -51,4 +51,6 @@ message SpanStatsResponse {
   int32 range_count = 2;
   uint64 approximate_disk_bytes = 3;
   map<string, SpanStats> span_to_stats = 4;
+  repeated string errors = 5;
+  // NEXT ID: 6.
 }

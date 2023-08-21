@@ -11,6 +11,7 @@
 package server
 
 import (
+	"context"
 	"net"
 	"time"
 
@@ -142,6 +143,15 @@ type TestingKnobs struct {
 	// DrainReportCh, if set, is a channel that will be notified when
 	// the SQL service shuts down.
 	DrainReportCh chan struct{}
+
+	// IterateNodesDialCallback is used to mock dial errors in a cluster
+	// fan-out. It is invoked by the dialFn argument of server.iterateNodes.
+	IterateNodesDialCallback func(nodeID roachpb.NodeID) error
+
+	// IterateNodesNodeCallback is used to mock errors of the rpc invoked
+	// on a remote node in a cluster fan-out. It is invoked by the nodeFn argument
+	// of server.iterateNodes.
+	IterateNodesNodeCallback func(ctx context.Context, nodeID roachpb.NodeID) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
