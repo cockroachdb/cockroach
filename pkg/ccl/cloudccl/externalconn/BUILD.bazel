@@ -8,6 +8,9 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
+    exec_properties = {
+        "dockerNetwork": "standard",
+    },
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",
