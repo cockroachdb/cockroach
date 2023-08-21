@@ -60,7 +60,6 @@ go_test(
     ],
     args = ["-test.timeout=55s"],
     embed = [":catalog"],
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/dbdesc",
