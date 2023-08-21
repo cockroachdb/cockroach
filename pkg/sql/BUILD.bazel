@@ -737,7 +737,6 @@ go_test(
     embed = [":sql"],
     exec_properties = {"Pool": "large"},
     shard_count = 16,
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",

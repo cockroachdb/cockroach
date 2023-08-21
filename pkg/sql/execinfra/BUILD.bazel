@@ -92,7 +92,6 @@ go_test(
     ],
     args = ["-test.timeout=55s"],
     embed = [":execinfra"],
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

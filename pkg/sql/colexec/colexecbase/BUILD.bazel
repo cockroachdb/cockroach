@@ -54,7 +54,6 @@ go_test(
         "simple_project_test.go",
     ],
     args = ["-test.timeout=295s"],
-    tags = ["no-remote-exec"],
     deps = [
         ":colexecbase",
         "//pkg/col/coldata",
