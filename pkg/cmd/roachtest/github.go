@@ -222,7 +222,7 @@ func (g *githubIssues) createPostRequest(
 		PackageName:          "roachtest",
 		TestName:             issueName,
 		Message:              issueMessage,
-		SkipLabelTestFailure: infraFlake, // infra-flakes are not marked as C-test-failure
+		SkipLabelTestFailure: defaultOpts.SkipTestFailureLabel || infraFlake, // infra-flakes or opted-out configurations are not marked as C-test-failure
 		Artifacts:            artifacts,
 		ExtraLabels:          labels,
 		ExtraParams:          clusterParams,

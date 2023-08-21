@@ -168,17 +168,18 @@ func (p *poster) parameters(extraParams map[string]string) map[string]string {
 
 // Options configures the issue poster.
 type Options struct {
-	Token            string // GitHub API token
-	Org              string
-	Repo             string
-	SHA              string
-	BuildTypeID      string
-	BuildID          string
-	ServerURL        string
-	Branch           string
-	Tags             string
-	Goflags          string
-	getBinaryVersion func() string
+	Token                string // GitHub API token
+	Org                  string
+	Repo                 string
+	SHA                  string
+	BuildTypeID          string
+	BuildID              string
+	ServerURL            string
+	Branch               string
+	Tags                 string
+	Goflags              string
+	SkipTestFailureLabel bool
+	getBinaryVersion     func() string
 }
 
 // DefaultOptionsFromEnv initializes the Options from the environment variables,
@@ -188,16 +189,17 @@ func DefaultOptionsFromEnv() *Options {
 	// NB: these are hidden here as "proof" that nobody uses them directly
 	// outside of this method.
 	const (
-		githubOrgEnv           = "GITHUB_ORG"
-		githubRepoEnv          = "GITHUB_REPO"
-		githubAPITokenEnv      = "GITHUB_API_TOKEN"
-		teamcityVCSNumberEnv   = "BUILD_VCS_NUMBER"
-		teamcityBuildTypeIDEnv = "TC_BUILDTYPE_ID"
-		teamcityBuildIDEnv     = "TC_BUILD_ID"
-		teamcityServerURLEnv   = "TC_SERVER_URL"
-		teamcityBuildBranchEnv = "TC_BUILD_BRANCH"
-		tagsEnv                = "TAGS"
-		goFlagsEnv             = "GOFLAGS"
+		githubOrgEnv            = "GITHUB_ORG"
+		githubRepoEnv           = "GITHUB_REPO"
+		githubAPITokenEnv       = "GITHUB_API_TOKEN"
+		teamcityVCSNumberEnv    = "BUILD_VCS_NUMBER"
+		teamcityBuildTypeIDEnv  = "TC_BUILDTYPE_ID"
+		teamcityBuildIDEnv      = "TC_BUILD_ID"
+		teamcityServerURLEnv    = "TC_SERVER_URL"
+		teamcityBuildBranchEnv  = "TC_BUILD_BRANCH"
+		tagsEnv                 = "TAGS"
+		goFlagsEnv              = "GOFLAGS"
+		skipTestFailureLabelEnv = "NO_C_TEST_FAILURE"
 	)
 
 	return &Options{
@@ -208,14 +210,15 @@ func DefaultOptionsFromEnv() *Options {
 		// This was chosen simply because it exists and while surprising,
 		// at least it'll be obvious that something went wrong (as an
 		// issue will be posted pointing at that SHA).
-		SHA:              maybeEnv(teamcityVCSNumberEnv, "8548987813ff9e1b8a9878023d3abfc6911c16db"),
-		BuildTypeID:      maybeEnv(teamcityBuildTypeIDEnv, "BUILDTYPE_ID-not-found-in-env"),
-		BuildID:          maybeEnv(teamcityBuildIDEnv, "NOTFOUNDINENV"),
-		ServerURL:        maybeEnv(teamcityServerURLEnv, "https://server-url-not-found-in-env.com"),
-		Branch:           maybeEnv(teamcityBuildBranchEnv, "branch-not-found-in-env"),
-		Tags:             maybeEnv(tagsEnv, ""),
-		Goflags:          maybeEnv(goFlagsEnv, ""),
-		getBinaryVersion: build.BinaryVersion,
+		SHA:                  maybeEnv(teamcityVCSNumberEnv, "8548987813ff9e1b8a9878023d3abfc6911c16db"),
+		BuildTypeID:          maybeEnv(teamcityBuildTypeIDEnv, "BUILDTYPE_ID-not-found-in-env"),
+		BuildID:              maybeEnv(teamcityBuildIDEnv, "NOTFOUNDINENV"),
+		ServerURL:            maybeEnv(teamcityServerURLEnv, "https://server-url-not-found-in-env.com"),
+		Branch:               maybeEnv(teamcityBuildBranchEnv, "branch-not-found-in-env"),
+		Tags:                 maybeEnv(tagsEnv, ""),
+		Goflags:              maybeEnv(goFlagsEnv, ""),
+		SkipTestFailureLabel: maybeEnv(skipTestFailureLabelEnv, "") != "",
+		getBinaryVersion:     build.BinaryVersion,
 	}
 }
 
