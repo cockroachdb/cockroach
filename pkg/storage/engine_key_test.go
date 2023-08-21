@@ -36,13 +36,13 @@ func TestLockTableKeyEncodeDecode(t *testing.T) {
 	testCases := []struct {
 		key LockTableKey
 	}{
-		{key: LockTableKey{Key: roachpb.Key("foo"), Strength: lock.Exclusive, TxnUUID: uuid1[:]}},
-		{key: LockTableKey{Key: roachpb.Key("a"), Strength: lock.Exclusive, TxnUUID: uuid2[:]}},
+		{key: LockTableKey{Key: roachpb.Key("foo"), Strength: lock.Exclusive, TxnUUID: uuid1}},
+		{key: LockTableKey{Key: roachpb.Key("a"), Strength: lock.Exclusive, TxnUUID: uuid2}},
 		// Causes a doubly-local range local key.
 		{key: LockTableKey{
 			Key:      keys.RangeDescriptorKey(roachpb.RKey("baz")),
 			Strength: lock.Exclusive,
-			TxnUUID:  uuid1[:]}},
+			TxnUUID:  uuid1}},
 	}
 	buf := make([]byte, 100)
 	for i, test := range testCases {
@@ -177,14 +177,14 @@ func TestEngineKeyValidate(t *testing.T) {
 			key: LockTableKey{
 				Key:      roachpb.Key("foo"),
 				Strength: lock.Exclusive,
-				TxnUUID:  uuid1[:],
+				TxnUUID:  uuid1,
 			},
 		},
 		{
 			key: LockTableKey{
 				Key:      keys.RangeDescriptorKey(roachpb.RKey("bar")),
 				Strength: lock.Exclusive,
-				TxnUUID:  uuid1[:],
+				TxnUUID:  uuid1,
 			},
 		},
 
@@ -272,7 +272,7 @@ func randomLockTableKey(r *rand.Rand) LockTableKey {
 	}
 	var txnID uuid.UUID
 	txnID.DeterministicV4(r.Uint64(), math.MaxUint64)
-	k.TxnUUID = txnID[:]
+	k.TxnUUID = txnID
 	return k
 }
 
