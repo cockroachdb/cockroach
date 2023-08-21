@@ -703,9 +703,9 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 		for e := l.holders.Front(); e != nil; e = e.Next() {
 			tl := e.Value.(*txnLock)
 			lockHolderTxn, _ := tl.getLockHolder()
-			if !g.isSameTxn(lockHolderTxn) &&
+			if !g.isSameTxn(&lockHolderTxn) &&
 				lock.Conflicts(tl.getLockMode(), makeLockMode(str, g.txn, g.ts), &g.lt.settings.SV) {
-				return true, tl.txn, nil // the key is locked by some other transaction; return it
+				return true, &tl.txn, nil // the key is locked by some other transaction; return it
 			}
 		}
 		// We can be in either of 2 cases at this point:
@@ -1197,10 +1197,7 @@ type txnLock struct {
 	// As a result, the TxnMeta stored here may not correspond to the latest
 	// call to acquire/update the lock (if the call was made using a TxnMeta
 	// with an older epoch).
-	//
-	// TODO(arul): Now that we expect this to always be set, let's store the
-	// entire txnMeta here instead of storing it by reference.
-	txn *enginepb.TxnMeta
+	txn enginepb.TxnMeta
 
 	// INVARIANT: At least one of (and possibly both of) unreplicatedInfo and
 	// replicatedInfo must be set to track lock holder information.
@@ -1222,7 +1219,7 @@ type txnLock struct {
 }
 
 // newTxnLock constructs and returns a new txnLock.
-func newTxnLock(txn *enginepb.TxnMeta, clock *hlc.Clock) *txnLock {
+func newTxnLock(txn enginepb.TxnMeta, clock *hlc.Clock) *txnLock {
 	tl := &txnLock{}
 	tl.txn = txn
 	tl.unreplicatedInfo.init()
@@ -1233,7 +1230,7 @@ func newTxnLock(txn *enginepb.TxnMeta, clock *hlc.Clock) *txnLock {
 // getLockHolder returns information about the lock's holder.
 //
 // REQUIRES: l.mu is locked.
-func (tl *txnLock) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
+func (tl *txnLock) getLockHolder() (enginepb.TxnMeta, hlc.Timestamp) {
 	assert(
 		tl.isHeldReplicated() || tl.isHeldUnreplicated(),
 		"lock held, but no replicated or unreplicated lock holder info",
@@ -1433,9 +1430,9 @@ func (tl *txnLock) reacquireLock(acq *roachpb.LockAcquisition) error {
 		// unreplicatedLockInfo.
 		assert(acq.Durability == lock.Replicated, "the unreplicated case should have been handled above")
 	case tl.txn.Epoch == acq.Txn.Epoch: // lock is being acquired at the same epoch
-		tl.txn = &acq.Txn
+		tl.txn = acq.Txn
 	case tl.txn.Epoch < acq.Txn.Epoch: // lock is being acquired at a newer epoch
-		tl.txn = &acq.Txn
+		tl.txn = acq.Txn
 		// The txn meta tracked here corresponds to unreplicated locks. When we
 		// learn about a newer epoch during lock acquisition of a replicated lock,
 		// we clear out the unreplicatedLockInfo state being tracked from the
@@ -1714,10 +1711,10 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 
 	durability := lock.Unreplicated
 	if l.isLocked() {
-		// TODO(arul): This doesn't work with multiple lock holders; file an issue
-		// about this observability gap.
+		// This doesn't work with multiple lock holders. See
+		// https://github.com/cockroachdb/cockroach/issues/109081.
 		tl := l.holders.Front().Value.(*txnLock)
-		txnHolder = tl.txn
+		txnHolder = &tl.txn
 		if tl.isHeldReplicated() {
 			durability = lock.Replicated
 		}
@@ -1916,7 +1913,7 @@ func (l *lockState) claimantTxn() (_ *enginepb.TxnMeta, held bool) {
 		// necessitates it to change. So we always return the first lock holder,
 		// ensuring all requests consider the same transaction to have claimed a
 		// key.
-		return l.holders.Front().Value.(*txnLock).txn, true
+		return &l.holders.Front().Value.(*txnLock).txn, true
 	}
 	if l.queuedWriters.Len() == 0 {
 		panic("no queued writers or lock holder; no one should be waiting on the lock")
@@ -1927,14 +1924,15 @@ func (l *lockState) claimantTxn() (_ *enginepb.TxnMeta, held bool) {
 
 // releaseWritersFromTxn removes all waiting writers for the lockState that are
 // part of the specified transaction.
+//
 // REQUIRES: l.mu is locked.
-func (l *lockState) releaseWritersFromTxn(txn *enginepb.TxnMeta) {
+func (l *lockState) releaseWritersFromTxn(txn enginepb.TxnMeta) {
 	for e := l.queuedWriters.Front(); e != nil; {
 		qg := e.Value.(*queuedGuard)
 		curr := e
 		e = e.Next()
 		g := qg.guard
-		if g.isSameTxn(txn) {
+		if g.isSameTxn(&txn) {
 			l.removeWriter(curr)
 		}
 	}
@@ -2030,7 +2028,7 @@ func (l *lockState) isAnyLockHeldReplicated() (bool, *enginepb.TxnMeta) {
 	for e := l.holders.Front(); e != nil; e = e.Next() {
 		tl := e.Value.(*txnLock)
 		if tl.isHeldReplicated() {
-			return true, tl.txn
+			return true, &tl.txn
 		}
 	}
 	return false, nil
@@ -2307,7 +2305,7 @@ func (l *lockState) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 		// equal to what this guy wants); this should already be checked in
 		// alreadyHoldLockAndIsAllowedToProceed.
 		assert(
-			!g.isSameTxn(lockHolderTxn) || g.curStrength() > tl.getLockMode().Strength,
+			!g.isSameTxn(&lockHolderTxn) || g.curStrength() > tl.getLockMode().Strength,
 			"lock already held by the request's transaction with sufficient strength",
 		)
 
@@ -2665,7 +2663,7 @@ func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl) bool {
 
 	for e := l.holders.Front(); e != nil; e = e.Next() {
 		tl := e.Value.(*txnLock)
-		if g.isSameTxn(tl.txn) {
+		if g.isSameTxn(&tl.txn) {
 			// NB: Unlike the pessimistic (normal) evaluation code path, we do
 			// not need to check the lock's strength if it is already held by
 			// this transaction -- it's non-conflicting. There's two cases to
@@ -2757,7 +2755,7 @@ func (l *lockState) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 	// inserted itself) was evaluating while holding latches and calls into this
 	// function once it finishes evaluation to actually acquire the lock.
 
-	l.releaseWritersFromTxn(&acq.Txn)
+	l.releaseWritersFromTxn(acq.Txn)
 
 	// Sanity check that there aren't any waiting readers on this lock. There
 	// shouldn't be any, as the lock wasn't held.
@@ -2765,7 +2763,7 @@ func (l *lockState) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 		panic("lockTable bug")
 	}
 
-	tl := newTxnLock(&acq.Txn, clock)
+	tl := newTxnLock(acq.Txn, clock)
 	switch acq.Durability {
 	case lock.Unreplicated:
 		tl.unreplicatedInfo.ts = acq.Txn.WriteTimestamp
@@ -2788,7 +2786,7 @@ func (l *lockState) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 // where g is trying to access this key with strength accessStrength.
 // Acquires l.mu.
 func (l *lockState) discoveredLock(
-	txn *enginepb.TxnMeta,
+	txn enginepb.TxnMeta,
 	ts hlc.Timestamp,
 	g *lockTableGuardImpl,
 	accessStrength lock.Strength,
@@ -2992,7 +2990,7 @@ func (l *lockState) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 
 	e := l.heldBy[up.Txn.ID]
 	tl := e.Value.(*txnLock)
-	txn := &up.Txn
+	txn := up.Txn
 	ts := up.Txn.WriteTimestamp
 	_, beforeTs := tl.getLockHolder()
 	advancedTs := beforeTs.Less(ts)
@@ -3579,7 +3577,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		g.notRemovableLock = l
 		notRemovableLock = true
 	}
-	err = l.discoveredLock(&intent.Txn, intent.Txn.WriteTimestamp, g, str, notRemovableLock, g.lt.clock)
+	err = l.discoveredLock(intent.Txn, intent.Txn.WriteTimestamp, g, str, notRemovableLock, g.lt.clock)
 	// Can't release tree.mu until call l.discoveredLock() since someone may
 	// find an empty lock and remove it from the tree.
 	t.locks.mu.Unlock()
