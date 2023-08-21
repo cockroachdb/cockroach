@@ -78,14 +78,15 @@ func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, is
 		}
 	}
 	return issues.UnitTestFormatter, issues.PostRequest{
-		TestName:        f.testName,
-		PackageName:     f.packageName,
-		Message:         f.testMessage,
-		Artifacts:       "/", // best we can do for unit tests
-		HelpCommand:     issues.UnitTestHelpCommand(repro),
-		MentionOnCreate: mentions,
-		ProjectColumnID: projColID,
-		ExtraLabels:     extraLabels,
+		TestName:             f.testName,
+		PackageName:          f.packageName,
+		Message:              f.testMessage,
+		Artifacts:            "/", // best we can do for unit tests
+		HelpCommand:          issues.UnitTestHelpCommand(repro),
+		MentionOnCreate:      mentions,
+		ProjectColumnID:      projColID,
+		ExtraLabels:          extraLabels,
+		SkipLabelTestFailure: os.Getenv("SKIP_LABEL_TEST_FAILURE") != "",
 	}
 }
 
