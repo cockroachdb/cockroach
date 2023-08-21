@@ -70,7 +70,6 @@ go_test(
     ],
     args = ["-test.timeout=55s"],
     embed = [":roachpb"],
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/cli/exit",
         "//pkg/keys",

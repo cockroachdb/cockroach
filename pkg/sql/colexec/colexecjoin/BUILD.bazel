@@ -49,7 +49,6 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":colexecjoin"],
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

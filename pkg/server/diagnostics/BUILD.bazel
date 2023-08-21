@@ -59,7 +59,6 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     embed = [":diagnostics"],
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
         "//pkg/build",
