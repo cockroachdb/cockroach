@@ -114,7 +114,7 @@ func registerDisaggRebalance(r registry.Registry) {
 			}
 			var bytesSnapshotted int64
 			if err := db.QueryRow(
-				"SELECT metrics['range.snapshots.rcvd-bytes'] FROM crdb_internal.kv_store_status WHERE node_id = $1 LIMIT 1",
+				"SELECT metrics['range.snapshots.rcvd-bytes']::DECIMAL FROM crdb_internal.kv_store_status WHERE node_id = $1 LIMIT 1",
 				4,
 			).Scan(&bytesSnapshotted); err != nil {
 				t.Fatal(err)
