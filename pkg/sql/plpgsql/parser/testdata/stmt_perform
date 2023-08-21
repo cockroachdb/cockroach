@@ -4,7 +4,7 @@ BEGIN
   PERFORM 1+1;
 END
 ----
-expected parse error: at or near ";": syntax error: unimplemented: this syntax
+at or near ";": syntax error: unimplemented: this syntax
 
 parse
 DECLARE
@@ -12,4 +12,4 @@ BEGIN
   PERFORM SELECT * FROM generate_series(1,10,1) AS y_(y);
 END
 ----
-expected parse error: at or near ";": syntax error: unimplemented: this syntax
+at or near ";": syntax error: unimplemented: this syntax

@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -60,23 +59,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	const serverType redact.SafeString = "SQL server"
 
 	initConfig := func(ctx context.Context) error {
-		if err := serverCfg.InitSQLServer(ctx); err != nil {
-			return err
-		}
-
-		// We need a value in the version setting prior to the update
-		// coming from the system.settings table. This value must be valid
-		// and compatible with the state of the tenant's keyspace.
-		//
-		// Since we don't know at which binary version the tenant
-		// keyspace was initialized, we must be conservative and
-		// assume it was created a long time ago; and that we may
-		// have to run all known migrations since then. So initialize
-		// the version setting to the minimum supported version.
-		st := serverCfg.BaseConfig.Settings
-		return clusterversion.Initialize(
-			ctx, st.Version.BinaryMinSupportedVersion(), &st.SV,
-		)
+		return serverCfg.InitSQLServer(ctx)
 	}
 
 	newServerFn := func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverctl.ServerStartupInterface, error) {
