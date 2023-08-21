@@ -52,7 +52,7 @@ func DefaultProject() string {
 }
 
 // projects for which a cron GC job exists.
-var projectsWithGC = []string{defaultProject, "andrei-jepsen"}
+var projectsWithGC = []string{defaultProject}
 
 // Init registers the GCE provider into vm.Providers.
 //
