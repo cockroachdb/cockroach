@@ -44,7 +44,6 @@ import {
 } from "../queryFilter";
 import { merge } from "lodash";
 import { UIConfigState } from "src/store";
-import { TableStatistics } from "../tableStatistics";
 import {
   DatabaseNameCell,
   IndexRecCell,
@@ -59,6 +58,7 @@ import {
 } from "../api";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import {checkInfoAvailable} from "../databases";
+
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
