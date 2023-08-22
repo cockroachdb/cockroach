@@ -28,7 +28,10 @@ func init() {
 	for k, v := range tsearchBuiltins {
 		v.props.Category = builtinconstants.CategoryFullTextSearch
 		v.props.AvailableOnPublicSchema = true
-		registerBuiltin(k, v)
+		// Most builtins in this file are of the Normal class, but there is one
+		// (at the time of writing) of the Generator class.
+		const enforceClass = false
+		registerBuiltin(k, v, tree.NormalClass, enforceClass)
 	}
 }
 

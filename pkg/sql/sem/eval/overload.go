@@ -13,8 +13,10 @@ package eval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // AggregateOverload is the concrete type for the tree.Overload.Aggregate field.
@@ -94,3 +96,100 @@ type WindowOverload func([]*types.T, *Context) WindowFunc
 
 // Window is a marker to indicate that this is a tree.WindowOverload.
 func (wo WindowOverload) Window() {}
+
+// Sanity check all builtin overloads.
+func init() {
+	builtinsregistry.AddSubscription(func(name string, _ *tree.FunctionProperties, overloads []tree.Overload) {
+		for _, fn := range overloads {
+			if fn.IsUDF {
+				panic(errors.AssertionFailedf("%s: IsUDF is set for a builtin in the registry: %v", name, fn))
+			}
+			var numSet int
+			if fn.AggregateFunc != nil {
+				numSet++
+			}
+			if fn.WindowFunc != nil {
+				numSet++
+			}
+			if fn.Fn != nil {
+				numSet++
+				// Verify that Fn has the correct signature. All other functions
+				// are checked via the marker interfaces, but Fn isn't checked
+				// at compile time.
+				if _, ok := fn.Fn.(FnOverload); !ok {
+					panic(errors.AssertionFailedf("%s: Fn is not FnOverload: %v", name, fn))
+				}
+			}
+			if fn.FnWithExprs != nil {
+				numSet++
+			}
+			if fn.Generator != nil {
+				numSet++
+			}
+			if fn.GeneratorWithExprs != nil {
+				numSet++
+			}
+			if fn.SQLFn != nil {
+				numSet++
+			}
+			if fn.Body != "" {
+				numSet++
+			}
+			var numSetExpected int
+			switch fn.Class {
+			case tree.NormalClass:
+				if fn.Fn == nil && fn.FnWithExprs == nil && fn.Body == "" {
+					panic(errors.AssertionFailedf(
+						"%s: normal builtins should have Fn, FnWithExprs, or Body set: %v", name, fn,
+					))
+				}
+				numSetExpected = 1
+
+			case tree.AggregateClass:
+				if fn.AggregateFunc == nil || fn.WindowFunc == nil {
+					panic(errors.AssertionFailedf(
+						"%s: aggregate builtins should have AggregateFunc "+
+							"and WindowFunc set: %v", name, fn,
+					))
+				}
+				numSetExpected = 2
+
+			case tree.WindowClass:
+				if fn.WindowFunc == nil {
+					panic(errors.AssertionFailedf(
+						"%s: window builtins should have WindowFunc set: %v", name, fn,
+					))
+				}
+				numSetExpected = 1
+
+			case tree.GeneratorClass:
+				if fn.Generator == nil && fn.GeneratorWithExprs == nil {
+					panic(errors.AssertionFailedf(
+						"%s: generator builtins should have Generator or "+
+							"GeneratorWithExprs set: %v", name, fn,
+					))
+				}
+				// Generator builtins have Fn and FnWithExprs set to
+				// implementations that return assertion errors.
+				numSetExpected = 3
+
+			case tree.SQLClass:
+				if fn.Fn == nil || fn.SQLFn == nil {
+					panic(errors.AssertionFailedf(
+						"%s: SQL builtins should have Fn and SQLFn set: %v", name, fn,
+					))
+				}
+				numSetExpected = 2
+
+			default:
+				panic(errors.AssertionFailedf("%s: unexpected class %d: %v", name, fn.Class, fn))
+			}
+
+			if numSet != numSetExpected {
+				panic(errors.AssertionFailedf(
+					"%s: overload specified %d functions, %d expected: %v", name, numSet, numSetExpected, fn,
+				))
+			}
+		}
+	})
+}

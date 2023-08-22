@@ -47,9 +47,9 @@ var (
 )
 
 func init() {
-	// Add all overlapsBuiltins to the builtins map after a sanity check.
 	for k, v := range overlapsBuiltins {
-		registerBuiltin(k, v)
+		const enforceClass = true
+		registerBuiltin(k, v, tree.NormalClass, enforceClass)
 	}
 }
 

@@ -102,9 +102,10 @@ func PGIOBuiltinPrefix(typ *types.T) string {
 
 // initPGBuiltins adds all of the postgres builtins to the builtins map.
 func init() {
+	const enforceClass = true
 	for k, v := range pgBuiltins {
 		v.props.Category = builtinconstants.CategoryCompatibility
-		registerBuiltin(k, v)
+		registerBuiltin(k, v, tree.NormalClass, enforceClass)
 	}
 
 	// Make non-array type i/o builtins.
@@ -119,19 +120,19 @@ func init() {
 		}
 		builtinPrefix := PGIOBuiltinPrefix(typ)
 		for name, builtin := range makeTypeIOBuiltins(builtinPrefix, typ) {
-			registerBuiltin(name, builtin)
+			registerBuiltin(name, builtin, tree.NormalClass, enforceClass)
 		}
 	}
 	// Make array type i/o builtins.
 	for name, builtin := range makeTypeIOBuiltins("array_", types.AnyArray) {
-		registerBuiltin(name, builtin)
+		registerBuiltin(name, builtin, tree.NormalClass, enforceClass)
 	}
 	for name, builtin := range makeTypeIOBuiltins("anyarray_", types.AnyArray) {
-		registerBuiltin(name, builtin)
+		registerBuiltin(name, builtin, tree.NormalClass, enforceClass)
 	}
 	// Make enum type i/o builtins.
 	for name, builtin := range makeTypeIOBuiltins("enum_", types.AnyEnum) {
-		registerBuiltin(name, builtin)
+		registerBuiltin(name, builtin, tree.NormalClass, enforceClass)
 	}
 
 	// Make type cast builtins.
@@ -203,7 +204,7 @@ func init() {
 	for toOID, def := range castBuiltins {
 		n := cast.CastTypeName(types.OidToType[toOID])
 		CastBuiltinNames[n] = struct{}{}
-		registerBuiltin(n, *def)
+		registerBuiltin(n, *def, tree.NormalClass, enforceClass)
 	}
 
 	// Make crdb_internal.create_regfoo and to_regfoo builtins.
@@ -219,8 +220,8 @@ func init() {
 		{"Translates a textual type name to its OID", types.RegType},
 	} {
 		typName := b.typ.SQLStandardName()
-		registerBuiltin("crdb_internal.create_"+typName, makeCreateRegDef(b.typ))
-		registerBuiltin("to_"+typName, makeToRegOverload(b.typ, b.toRegOverloadHelpText))
+		registerBuiltin("crdb_internal.create_"+typName, makeCreateRegDef(b.typ), tree.NormalClass, enforceClass)
+		registerBuiltin("to_"+typName, makeToRegOverload(b.typ, b.toRegOverloadHelpText), tree.NormalClass, enforceClass)
 	}
 }
 

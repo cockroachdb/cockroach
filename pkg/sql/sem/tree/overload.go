@@ -112,6 +112,24 @@ const (
 	SQLClass
 )
 
+// String returns the string representation of the function class.
+func (c FunctionClass) String() string {
+	switch c {
+	case NormalClass:
+		return "normal"
+	case AggregateClass:
+		return "aggregate"
+	case WindowClass:
+		return "window"
+	case GeneratorClass:
+		return "generator"
+	case SQLClass:
+		return "SQL"
+	default:
+		panic(errors.AssertionFailedf("unexpected class %d", c))
+	}
+}
+
 // Overload is one of the overloads of a built-in function.
 // Each FunctionDefinition may contain one or more overloads.
 type Overload struct {

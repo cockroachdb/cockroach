@@ -27,9 +27,11 @@ import (
 )
 
 func init() {
-	// Add all replicationBuiltins to the builtins map after a sanity check.
 	for k, v := range replicationBuiltins {
-		registerBuiltin(k, v)
+		// Most builtins in this file are of the Normal class, but there are a
+		// couple of the Generator class.
+		const enforceClass = false
+		registerBuiltin(k, v, tree.NormalClass, enforceClass)
 	}
 }
 
