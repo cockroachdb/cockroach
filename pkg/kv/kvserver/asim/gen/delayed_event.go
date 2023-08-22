@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package event
+package gen
 
 import (
 	"context"
@@ -16,8 +16,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -60,7 +60,7 @@ func (del delayedEventList) Swap(i, j int) {
 // event -> register the event (get ID) -> register assertion event
 
 type eventFunction func(context.Context, time.Time, *state.State)
-type assertionFunction func(context.Context, time.Time, asim.History) (allHolds bool)
+type assertionFunction func(context.Context, time.Time, history.History) (allHolds bool)
 
 type delayedEventInterface interface {
 	getAt() time.Time
@@ -109,7 +109,7 @@ func (e *Executor) Start() {
 }
 
 func (e *Executor) TickEvents(
-	ctx context.Context, tick time.Time, state *state.State, history asim.History,
+	ctx context.Context, tick time.Time, state *state.State, history history.History,
 ) (failureExists bool) {
 	var idx int
 	// Assume the events are in sorted order and the event list is never added
@@ -256,7 +256,7 @@ type assertionsEvent struct {
 
 func (ag AssertionsGen) generate() assertionsEvent {
 	assertionResults := make([]assertionResult, 0, len(ag.Assertions))
-	var eventFn assertionFunction = func(ctx context.Context, t time.Time, h asim.History) bool {
+	var eventFn assertionFunction = func(ctx context.Context, t time.Time, h history.History) bool {
 		allHolds := true
 		for _, assertion := range ag.Assertions {
 			holds, reason := assertion.Assert(ctx, h)

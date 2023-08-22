@@ -15,8 +15,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/queue"
@@ -39,7 +40,7 @@ type Simulator struct {
 
 	// The simulator can run multiple workload Generators in parallel.
 	generators    []workload.Generator
-	eventExecutor *event.Executor
+	eventExecutor *gen.Executor
 	pacers        map[state.StoreID]queue.ReplicaPacer
 
 	// Store replicate queues.
@@ -59,7 +60,7 @@ type Simulator struct {
 	settings *config.SimulationSettings
 
 	metrics *metrics.Tracker
-	history History
+	history history.History
 }
 
 func (s *Simulator) GetCurrTime() time.Time {
@@ -70,19 +71,6 @@ func (s *Simulator) GetState() state.State {
 	return s.state
 }
 
-// History contains recorded information that summarizes a simulation run.
-// Currently it only contains the store metrics of the run.
-// TODO(kvoli): Add a range log like structure to the history.
-type History struct {
-	Recorded [][]metrics.StoreMetrics
-	S        state.State
-}
-
-// Listen implements the metrics.StoreMetricListener interface.
-func (h *History) Listen(ctx context.Context, sms []metrics.StoreMetrics) {
-	h.Recorded = append(h.Recorded, sms)
-}
-
 // NewSimulator constructs a valid Simulator.
 func NewSimulator(
 	duration time.Duration,
@@ -90,7 +78,7 @@ func NewSimulator(
 	initialState state.State,
 	settings *config.SimulationSettings,
 	m *metrics.Tracker,
-	eventExecutor *event.Executor,
+	eventExecutor *gen.Executor,
 ) *Simulator {
 	pacers := make(map[state.StoreID]queue.ReplicaPacer)
 	rqs := make(map[state.StoreID]queue.RangeQueue)
@@ -117,7 +105,7 @@ func NewSimulator(
 		shuffler:       state.NewShuffler(settings.Seed),
 		// TODO(kvoli): Keeping the state around is a bit hacky, find a better
 		// method of reporting the ranges.
-		history:       History{Recorded: [][]metrics.StoreMetrics{}, S: initialState},
+		history:       history.History{Recorded: [][]metrics.StoreMetrics{}, S: initialState},
 		eventExecutor: eventExecutor,
 		settings:      settings,
 	}
@@ -189,7 +177,7 @@ func (s *Simulator) GetNextTickTime() (done bool, tick time.Time) {
 
 // History returns the current recorded history of a simulation run. Calling
 // this on a Simulator that has not begun will return an empty history.
-func (s *Simulator) History() History {
+func (s *Simulator) History() history.History {
 	return s.history
 }
 
