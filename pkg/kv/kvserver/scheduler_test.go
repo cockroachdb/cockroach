@@ -151,7 +151,6 @@ func newTestProcessor() *testProcessor {
 func (p *testProcessor) onReady(f func(roachpb.RangeID)) {
 	p.mu.Lock()
 	p.mu.ready = f
-	// nolint:deferunlock
 	p.mu.Unlock()
 }
 
@@ -160,7 +159,6 @@ func (p *testProcessor) processReady(rangeID roachpb.RangeID) {
 	p.mu.raftReady[rangeID]++
 	onReady := p.mu.ready
 	p.mu.ready = nil
-	// nolint:deferunlock
 	p.mu.Unlock()
 	if onReady != nil {
 		onReady(rangeID)
@@ -170,7 +168,6 @@ func (p *testProcessor) processReady(rangeID roachpb.RangeID) {
 func (p *testProcessor) processRequestQueue(_ context.Context, rangeID roachpb.RangeID) bool {
 	p.mu.Lock()
 	p.mu.raftRequest[rangeID]++
-	// nolint:deferunlock
 	p.mu.Unlock()
 	return false
 }
@@ -178,7 +175,6 @@ func (p *testProcessor) processRequestQueue(_ context.Context, rangeID roachpb.R
 func (p *testProcessor) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 	p.mu.Lock()
 	p.mu.raftTick[rangeID]++
-	// nolint:deferunlock
 	p.mu.Unlock()
 	return false
 }

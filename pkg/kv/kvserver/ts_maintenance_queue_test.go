@@ -171,7 +171,6 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	if a, e := model.pruneSeenEndKeys, expectedEndKeys; !reflect.DeepEqual(a, e) {
 		t.Errorf("end keys seen by MaintainTimeSeries did not match expectation: %s", pretty.Diff(a, e))
 	}
-	// nolint:deferunlock
 	model.Unlock()
 
 	testutils.SucceedsSoon(t, func() error {
@@ -200,7 +199,6 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	if a, e := model.pruneCalled, len(expectedStartKeys); a != e {
 		t.Errorf("MaintainTimeSeries called %d times; expected %d", a, e)
 	}
-	// nolint:deferunlock
 	model.Unlock()
 
 	// Move clock forward and force to scan again.

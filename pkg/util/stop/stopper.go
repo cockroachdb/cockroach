@@ -46,7 +46,6 @@ func register(s *Stopper) {
 	trackedStoppers.Lock()
 	trackedStoppers.stoppers = append(trackedStoppers.stoppers,
 		stopperWithStack{s: s, createdAt: string(debug.Stack())})
-	// nolint:deferunlock
 	trackedStoppers.Unlock()
 }
 
@@ -525,7 +524,6 @@ func (s *Stopper) Stop(ctx context.Context) {
 	s.mu.Lock()
 	stopCalled := s.mu.stopping
 	s.mu.stopping = true
-	// nolint:deferunlock
 	s.mu.Unlock()
 
 	if stopCalled {

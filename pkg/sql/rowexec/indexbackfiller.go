@@ -218,7 +218,6 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 		prog.CompletedSpans = append(prog.CompletedSpans, mu.completedSpans...)
 		mu.completedSpans = nil
-		// nolint:deferunlock
 		mu.Unlock()
 
 		progCh <- prog
@@ -258,7 +257,6 @@ func (ib *indexBackfiller) ingestIndexEntries(
 			// the set of completed spans on the next bulk adder flush.
 			mu.Lock()
 			mu.addedSpans = append(mu.addedSpans, indexBatch.completedSpan)
-			// nolint:deferunlock
 			mu.Unlock()
 
 			// After the index KVs have been copied to the underlying BulkAdder, we can

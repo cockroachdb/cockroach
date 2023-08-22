@@ -129,7 +129,6 @@ func (d *TestStaticDirectoryServer) WatchPods(
 ) error {
 	d.process.Lock()
 	stopper := d.process.stopper
-	// nolint:deferunlock
 	d.process.Unlock()
 
 	// This cannot happen unless WatchPods was called directly, which we
@@ -242,7 +241,6 @@ func (d *TestStaticDirectoryServer) WatchTenants(
 ) error {
 	d.process.Lock()
 	stopper := d.process.stopper
-	// nolint:deferunlock
 	d.process.Unlock()
 
 	// This cannot happen unless WatchTenants was called directly, which we
@@ -513,7 +511,6 @@ func (d *TestStaticDirectoryServer) Stop(ctx context.Context) {
 func (d *TestStaticDirectoryServer) DialerFunc(ctx context.Context, addr string) (net.Conn, error) {
 	d.process.Lock()
 	listener := d.process.ln
-	// nolint:deferunlock
 	d.process.Unlock()
 
 	if listener == nil {

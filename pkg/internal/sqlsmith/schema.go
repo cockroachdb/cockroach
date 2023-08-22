@@ -115,7 +115,6 @@ func (s *Smither) getRandTableIndex(
 ) (*tree.TableIndexName, *tree.CreateIndex, colRefs, bool) {
 	s.lock.RLock()
 	indexes := s.indexes[table]
-	// nolint:deferunlock
 	s.lock.RUnlock()
 	if len(indexes) == 0 {
 		return nil, nil, nil, false

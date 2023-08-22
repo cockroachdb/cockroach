@@ -36,7 +36,6 @@ func (m *Mutex) Lock() {
 // Unlock unlocks m.
 func (m *Mutex) Unlock() {
 	atomic.StoreInt32(&m.wLocked, 0)
-	// nolint:deferunlock
 	m.mu.Unlock()
 }
 
@@ -70,7 +69,6 @@ func (rw *RWMutex) Lock() {
 // Unlock unlocks rw for writing.
 func (rw *RWMutex) Unlock() {
 	atomic.StoreInt32(&rw.wLocked, 0)
-	// nolint:deferunlock
 	rw.RWMutex.Unlock()
 }
 
@@ -83,7 +81,6 @@ func (rw *RWMutex) RLock() {
 // RUnlock undoes a single RLock call.
 func (rw *RWMutex) RUnlock() {
 	atomic.AddInt32(&rw.rLocked, -1)
-	// nolint:deferunlock
 	rw.RWMutex.RUnlock()
 }
 
@@ -95,9 +92,7 @@ func (rw *RWMutex) RLocker() sync.Locker {
 
 type rlocker RWMutex
 
-func (r *rlocker) Lock() { (*RWMutex)(r).RLock() }
-
-// nolint:deferunlock
+func (r *rlocker) Lock()   { (*RWMutex)(r).RLock() }
 func (r *rlocker) Unlock() { (*RWMutex)(r).RUnlock() }
 
 // AssertHeld may panic if the mutex is not locked for writing (but it is not

@@ -207,7 +207,6 @@ func (r *SchemaRegistry) EncodedAvroToNative(b []byte) (interface{}, error) {
 
 	r.mu.Lock()
 	jsonSchema := r.mu.schemas[id]
-	// nolint:deferunlock
 	r.mu.Unlock()
 	codec, err := goavro.NewCodec(jsonSchema)
 	if err != nil {

@@ -63,7 +63,6 @@ type statementSampler struct {
 func (w *statementSampler) Next() statement {
 	w.mu.Lock()
 	v := w.samples[w.rnd.Intn(len(w.samples))]
-	// nolint:deferunlock
 	w.mu.Unlock()
 	return v
 }
@@ -121,7 +120,6 @@ type tableExprSampler struct {
 func (w *tableExprSampler) Next() tableExpr {
 	w.mu.Lock()
 	v := w.samples[w.rnd.Intn(len(w.samples))]
-	// nolint:deferunlock
 	w.mu.Unlock()
 	return v
 }
@@ -181,7 +179,6 @@ type selectStatementSampler struct {
 func (w *selectStatementSampler) Next() selectStatement {
 	w.mu.Lock()
 	v := w.samples[w.rnd.Intn(len(w.samples))]
-	// nolint:deferunlock
 	w.mu.Unlock()
 	return v
 }
@@ -239,7 +236,6 @@ type scalarExprSampler struct {
 func (w *scalarExprSampler) Next() scalarExpr {
 	w.mu.Lock()
 	v := w.samples[w.rnd.Intn(len(w.samples))]
-	// nolint:deferunlock
 	w.mu.Unlock()
 	return v
 }

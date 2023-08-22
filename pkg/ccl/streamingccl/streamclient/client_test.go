@@ -221,7 +221,6 @@ func ExampleClient() {
 			case <-ticker.C:
 				ingested.Lock()
 				ts := ingested.ts
-				// nolint:deferunlock
 				ingested.Unlock()
 
 				if _, err := client.Heartbeat(ctx, id, ts); err != nil {
@@ -235,7 +234,6 @@ func ExampleClient() {
 		defer close(done)
 		ingested.Lock()
 		ts := ingested.ts
-		// nolint:deferunlock
 		ingested.Unlock()
 
 		topology, err := client.Plan(ctx, id)
@@ -273,7 +271,6 @@ func ExampleClient() {
 						}
 					}
 					ingested.ts.Forward(minTS)
-					// nolint:deferunlock
 					ingested.Unlock()
 					fmt.Printf("resolved %d\n", minTS.WallTime)
 				default:

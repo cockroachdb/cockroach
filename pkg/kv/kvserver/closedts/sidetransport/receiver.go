@@ -102,7 +102,6 @@ func (s *Receiver) GetClosedTimestamp(
 ) (hlc.Timestamp, kvpb.LeaseAppliedIndex) {
 	s.mu.RLock()
 	conn, ok := s.mu.conns[leaseholderNode]
-	// nolint:deferunlock
 	s.mu.RUnlock()
 	if !ok {
 		return hlc.Timestamp{}, 0
@@ -158,7 +157,6 @@ func (s *Receiver) onRecvErr(ctx context.Context, nodeID roachpb.NodeID, err err
 			closeErr:  err,
 			closeTime: timeutil.Now(),
 		}
-		// nolint:deferunlock
 		s.historyMu.Unlock()
 	}
 }
@@ -255,7 +253,6 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 			r.stores.ForwardSideTransportClosedTimestampForRange(
 				ctx, rangeID, r.mu.lastClosed[info.policy], info.lai)
 		}
-		// nolint:deferunlock
 		r.mu.RUnlock()
 	}
 

@@ -358,6 +358,12 @@ func (bs *bufferedSink) runFlusher(stopC <-chan struct{}) {
 					return logging.mu.exitOverride.f
 				}()
 				code := bs.exitCode()
+				if f != nil {
+					f(code, err)
+				} else {
+					exit.WithCode(code)
+				}
+			}
 		}
 		if done {
 			return

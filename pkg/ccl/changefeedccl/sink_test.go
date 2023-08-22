@@ -177,7 +177,6 @@ func (p *asyncProducerMock) consume() (cleanup func()) {
 			case m := <-p.inputCh:
 				p.mu.Lock()
 				p.mu.outstanding = append(p.mu.outstanding, m)
-				// nolint:deferunlock
 				p.mu.Unlock()
 			}
 		}
@@ -196,7 +195,6 @@ func (p *asyncProducerMock) acknowledge(n int, ch chan *sarama.ProducerMessage) 
 		p.mu.Lock()
 		outstanding = append(outstanding, p.mu.outstanding...)
 		p.mu.outstanding = p.mu.outstanding[:0]
-		// nolint:deferunlock
 		p.mu.Unlock()
 
 		for _, m := range outstanding {

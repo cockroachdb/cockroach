@@ -926,7 +926,6 @@ func (hv *historyVerifier) runCmd(
 	cmdStr := fmt.Sprintf(fmtStr, txnIdx+1, retry)
 	hv.mu.Lock()
 	hv.mu.actual = append(hv.mu.actual, cmdStr)
-	// nolint:deferunlock
 	hv.mu.Unlock()
 	return cmdStr, err
 }

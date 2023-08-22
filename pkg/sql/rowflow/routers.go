@@ -419,7 +419,6 @@ func (rb *routerBase) ProducerDone() {
 		o := &rb.outputs[i]
 		o.mu.Lock()
 		o.mu.producerDone = true
-		// nolint:deferunlock
 		o.mu.Unlock()
 		o.mu.cond.Signal()
 	}
@@ -474,12 +473,10 @@ func (rb *routerBase) fwdMetadata(meta *execinfrapb.ProducerMetadata) {
 			ro.mu.Lock()
 			if ro.mu.streamStatus != execinfra.ConsumerClosed {
 				ro.addMetadataLocked(meta)
-				// nolint:deferunlock
 				ro.mu.Unlock()
 				ro.mu.cond.Signal()
 				return
 			}
-			// nolint:deferunlock
 			ro.mu.Unlock()
 		}
 	}
@@ -500,12 +497,10 @@ func (rb *routerBase) fwdErrMetadata(err error) bool {
 		if ro.mu.streamStatus != execinfra.ConsumerClosed {
 			meta := &execinfrapb.ProducerMetadata{Err: err}
 			ro.addMetadataLocked(meta)
-			// nolint:deferunlock
 			ro.mu.Unlock()
 			ro.mu.cond.Signal()
 			forwarded = true
 		} else {
-			// nolint:deferunlock
 			ro.mu.Unlock()
 		}
 	}
@@ -586,7 +581,6 @@ func (mr *mirrorRouter) Push(
 		ro := &mr.outputs[i]
 		ro.mu.Lock()
 		err := ro.addRowLocked(context.TODO(), row)
-		// nolint:deferunlock
 		ro.mu.Unlock()
 		if err != nil {
 			if useSema {
@@ -643,7 +637,6 @@ func (hr *hashRouter) Push(
 		ro := &hr.outputs[streamIdx]
 		ro.mu.Lock()
 		err = ro.addRowLocked(context.TODO(), row)
-		// nolint:deferunlock
 		ro.mu.Unlock()
 		ro.mu.cond.Signal()
 	}
@@ -729,7 +722,6 @@ func (rr *rangeRouter) Push(
 		ro := &rr.outputs[streamIdx]
 		ro.mu.Lock()
 		err = ro.addRowLocked(context.TODO(), row)
-		// nolint:deferunlock
 		ro.mu.Unlock()
 		ro.mu.cond.Signal()
 	}

@@ -247,7 +247,6 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			}
 			s.mu.Lock()
 			s.mu.rowsRead += int64(n)
-			// nolint:deferunlock
 			s.mu.Unlock()
 			return batch
 		case indexJoinDone:

@@ -51,7 +51,6 @@ func (ss *SequenceState) RecordValue(seqID uint32, val int64) {
 	ss.mu.Lock()
 	ss.mu.lastSequenceIncremented = seqID
 	ss.mu.latestValues[seqID] = val
-	// nolint:deferunlock
 	ss.mu.Unlock()
 }
 
@@ -60,7 +59,6 @@ func (ss *SequenceState) RecordValue(seqID uint32, val int64) {
 func (ss *SequenceState) SetLastSequenceIncremented(seqID uint32) {
 	ss.mu.Lock()
 	ss.mu.lastSequenceIncremented = seqID
-	// nolint:deferunlock
 	ss.mu.Unlock()
 }
 

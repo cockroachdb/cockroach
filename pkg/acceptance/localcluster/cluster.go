@@ -475,7 +475,6 @@ func (n *Node) Alive() bool {
 func (n *Node) StatusClient(ctx context.Context) serverpb.StatusClient {
 	n.Lock()
 	existingClient := n.statusClient
-	// nolint:deferunlock
 	n.Unlock()
 
 	if existingClient != nil {
@@ -589,7 +588,6 @@ func (n *Node) startAsyncInnerLocked(ctx context.Context, joins ...string) error
 		_ = errors.As(waitErr, &execErr)
 		n.Lock()
 		n.setNotRunningLocked(execErr)
-		// nolint:deferunlock
 		n.Unlock()
 	}(n.cmd)
 
@@ -697,7 +695,6 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		if n.cmd != nil {
 			pid = n.cmd.Process.Pid
 		}
-		// nolint:deferunlock
 		n.Unlock()
 		if pid == 0 {
 			log.Info(ctx, "process already quit")
@@ -720,14 +717,12 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		if n.Cfg.RPCPort == 0 {
 			n.Lock()
 			n.rpcPort = pgURL.Port()
-			// nolint:deferunlock
 			n.Unlock()
 		}
 
 		pgURL.Path = n.Cfg.DB
 		n.Lock()
 		n.pgURL = pgURL.String()
-		// nolint:deferunlock
 		n.Unlock()
 
 		var uiURL *url.URL
@@ -744,7 +739,6 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		// http port is required but isn't initialized yet.
 		n.Lock()
 		n.db = makeDB(n.pgURL, n.Cfg.NumWorkers, n.Cfg.DB)
-		// nolint:deferunlock
 		n.Unlock()
 
 		{
@@ -775,7 +769,6 @@ func (n *Node) Kill() {
 	for ok := false; !ok; {
 		n.Lock()
 		ok = n.cmd == nil
-		// nolint:deferunlock
 		n.Unlock()
 	}
 }
@@ -811,7 +804,6 @@ func (n *Node) Signal(s os.Signal) {
 func (n *Node) Wait() *exec.ExitError {
 	n.Lock()
 	ch := n.notRunning
-	// nolint:deferunlock
 	n.Unlock()
 	if ch == nil {
 		log.Warning(context.Background(), "(*Node).Wait called when node was not running")

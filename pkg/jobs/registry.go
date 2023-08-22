@@ -2044,7 +2044,6 @@ func (r *Registry) DrainRequested(ctx context.Context) {
 	alreadyDraining := r.mu.draining
 	numWait := r.mu.numDrainWait
 	r.mu.draining = true
-	// nolint:deferunlock
 	r.mu.Unlock()
 
 	if alreadyDraining {
@@ -2067,7 +2066,6 @@ func (r *Registry) DrainRequested(ctx context.Context) {
 		case <-r.jobDrained:
 			r.mu.Lock()
 			numWait = r.mu.numDrainWait
-			// nolint:deferunlock
 			r.mu.Unlock()
 		}
 	}
@@ -2079,13 +2077,11 @@ func (r *Registry) DrainRequested(ctx context.Context) {
 func (r *Registry) OnDrain() (<-chan struct{}, func()) {
 	r.mu.Lock()
 	r.mu.numDrainWait++
-	// nolint:deferunlock
 	r.mu.Unlock()
 
 	return r.drainRequested, func() {
 		r.mu.Lock()
 		r.mu.numDrainWait--
-		// nolint:deferunlock
 		r.mu.Unlock()
 
 		select {

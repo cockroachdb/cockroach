@@ -237,7 +237,6 @@ func (r *Replica) RangeFeed(
 	// the registration doesn't miss any events.
 	r.raftMu.Lock()
 	if err := r.checkExecutionCanProceedForRangeFeed(ctx, rSpan, checkTS); err != nil {
-		// nolint:deferunlock
 		r.raftMu.Unlock()
 		iterSemRelease()
 		return future.MakeCompletedErrorFuture(err)
@@ -370,7 +369,6 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 			// Update the rangefeed filter to avoid filtering ops
 			// that this new registration might be interested in.
 			r.setRangefeedFilterLocked(filter)
-			// nolint:deferunlock
 			r.rangefeedMu.Unlock()
 			return p
 		}
@@ -452,7 +450,6 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	r.setRangefeedProcessor(p)
 	r.rangefeedMu.Lock()
 	r.setRangefeedFilterLocked(filter)
-	// nolint:deferunlock
 	r.rangefeedMu.Unlock()
 
 	// Check for an initial closed timestamp update immediately to help

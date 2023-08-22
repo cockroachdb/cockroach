@@ -1753,7 +1753,6 @@ func newMuxRangeFeedCompletionWatcher(
 				var toSend []*kvpb.MuxRangeFeedEvent
 				fin.Lock()
 				toSend, fin.completed = fin.completed, nil
-				// nolint:deferunlock
 				fin.Unlock()
 				for _, e := range toSend {
 					if err := send(e); err != nil {
@@ -1785,7 +1784,6 @@ func newMuxRangeFeedCompletionWatcher(
 	addCompleted := func(event *kvpb.MuxRangeFeedEvent) {
 		fin.Lock()
 		fin.completed = append(fin.completed, event)
-		// nolint:deferunlock
 		fin.Unlock()
 		select {
 		case fin.signalC <- struct{}{}:

@@ -150,7 +150,6 @@ func (p *ProgressUpdateBatcher) Add(ctx context.Context, delta float32) error {
 		p.reported = p.completed
 		p.lastReported = timeutil.Now()
 	}
-	// nolint:deferunlock
 	p.Unlock()
 
 	if shouldReport {
@@ -165,7 +164,6 @@ func (p *ProgressUpdateBatcher) Done(ctx context.Context) error {
 	p.Lock()
 	completed := p.completed
 	shouldReport := completed-p.reported > progressFractionThreshold
-	// nolint:deferunlock
 	p.Unlock()
 
 	if shouldReport {

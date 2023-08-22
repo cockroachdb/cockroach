@@ -837,7 +837,6 @@ func TestRouterDiskSpill(t *testing.T) {
 			for _, row := range rows {
 				output.mu.Lock()
 				err := output.addRowLocked(ctx, row)
-				// nolint:deferunlock
 				output.mu.Unlock()
 				if err != nil {
 					errChan <- err
@@ -851,7 +850,6 @@ func TestRouterDiskSpill(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			output.mu.Lock()
 			spilled := output.mu.rowContainer.Spilled()
-			// nolint:deferunlock
 			output.mu.Unlock()
 			if !spilled {
 				return errors.New("did not spill to disk")

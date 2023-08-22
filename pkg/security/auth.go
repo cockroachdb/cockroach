@@ -77,7 +77,6 @@ func SetCertPrincipalMap(mappings []string) error {
 	}
 	certPrincipalMap.Lock()
 	certPrincipalMap.m = m
-	// nolint:deferunlock
 	certPrincipalMap.Unlock()
 	return nil
 }
@@ -85,7 +84,6 @@ func SetCertPrincipalMap(mappings []string) error {
 func transformPrincipal(commonName string) string {
 	certPrincipalMap.RLock()
 	mappedName, ok := certPrincipalMap.m[commonName]
-	// nolint:deferunlock
 	certPrincipalMap.RUnlock()
 	if !ok {
 		return commonName

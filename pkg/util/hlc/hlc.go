@@ -138,7 +138,6 @@ func (m *HybridManualClock) UnixNano() int64 {
 	m.mu.RLock()
 	nanosAtPause := m.mu.nanosAtPause
 	nanos := m.mu.nanos
-	// nolint:deferunlock
 	m.mu.RUnlock()
 	if nanosAtPause > 0 {
 		return nanos + nanosAtPause
@@ -150,7 +149,6 @@ func (m *HybridManualClock) UnixNano() int64 {
 func (m *HybridManualClock) Increment(nanos int64) {
 	m.mu.Lock()
 	m.mu.nanos += nanos
-	// nolint:deferunlock
 	m.mu.Unlock()
 }
 
@@ -175,7 +173,6 @@ func (m *HybridManualClock) Forward(tsNanos int64) {
 func (m *HybridManualClock) Pause() {
 	m.mu.Lock()
 	m.mu.nanosAtPause = timeutil.Now().UnixNano()
-	// nolint:deferunlock
 	m.mu.Unlock()
 }
 
@@ -184,7 +181,6 @@ func (m *HybridManualClock) Pause() {
 func (m *HybridManualClock) Resume() {
 	m.mu.Lock()
 	m.mu.nanosAtPause = 0
-	// nolint:deferunlock
 	m.mu.Unlock()
 }
 

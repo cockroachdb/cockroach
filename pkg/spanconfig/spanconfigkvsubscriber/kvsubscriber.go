@@ -419,7 +419,6 @@ func (s *KVSubscriber) handleCompleteUpdate(
 	s.mu.internal = freshStore
 	s.setLastUpdatedLocked(ts)
 	handlers := s.mu.handlers
-	// nolint:deferunlock
 	s.mu.Unlock()
 	for i := range handlers {
 		handler := &handlers[i] // mutated by invoke
@@ -445,7 +444,6 @@ func (s *KVSubscriber) handlePartialUpdate(
 	}
 	s.setLastUpdatedLocked(ts)
 	handlers := s.mu.handlers
-	// nolint:deferunlock
 	s.mu.Unlock()
 
 	for i := range handlers {

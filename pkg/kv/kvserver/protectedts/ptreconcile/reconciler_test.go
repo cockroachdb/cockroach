@@ -104,7 +104,6 @@ func TestReconciler(t *testing.T) {
 		t.Run("reconcile", func(t *testing.T) {
 			state.mu.Lock()
 			state.toRemove[recMeta] = struct{}{}
-			// nolint:deferunlock
 			state.mu.Unlock()
 
 			ptreconcile.ReconcileInterval.Override(ctx, &settings.SV, time.Millisecond)

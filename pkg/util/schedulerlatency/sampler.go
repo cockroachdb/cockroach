@@ -149,7 +149,6 @@ func StartSampler(
 			case <-ticker.C:
 				settingsValuesMu.Lock()
 				period := settingsValuesMu.period
-				// nolint:deferunlock
 				settingsValuesMu.Unlock()
 				s.sampleOnTickAndInvokeCallbacks(period)
 			}
@@ -183,7 +182,6 @@ func (s *sampler) setPeriodAndDuration(period, duration time.Duration) {
 	}
 	s.mu.ringBuffer.Resize(numSamples)
 	s.mu.lastIntervalHistogram = nil
-	// nolint:deferunlock
 	s.mu.Unlock()
 }
 

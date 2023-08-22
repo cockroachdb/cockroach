@@ -141,7 +141,6 @@ func (rb *RowBuffer) Push(
 func (rb *RowBuffer) ProducerClosed() bool {
 	rb.Mu.Lock()
 	c := rb.Mu.producerClosed
-	// nolint:deferunlock
 	rb.Mu.Unlock()
 	return c
 }

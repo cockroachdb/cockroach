@@ -910,7 +910,6 @@ func (c *connector) getClient(ctx context.Context) (*client, error) {
 	ctx = c.AnnotateCtx(ctx)
 	c.mu.RLock()
 	if client := c.mu.client; client != nil {
-		// nolint:deferunlock
 		c.mu.RUnlock()
 		return client, nil
 	}
@@ -936,7 +935,6 @@ func (c *connector) getClient(ctx context.Context) (*client, error) {
 			c.mu.client = client
 			return client, nil
 		})
-	// nolint:deferunlock
 	c.mu.RUnlock()
 
 	res := future.WaitForResult(ctx)

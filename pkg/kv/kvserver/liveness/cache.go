@@ -129,7 +129,6 @@ func (c *cache) storeGossipUpdate(_ string, content roachpb.Value) {
 	}
 	previousRec.lastUpdateTime = c.clock.Now()
 	c.mu.lastNodeUpdate[nodeID] = previousRec
-	// nolint:deferunlock
 	c.mu.Unlock()
 }
 

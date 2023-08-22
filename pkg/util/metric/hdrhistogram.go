@@ -119,7 +119,6 @@ func (h *HdrHistogram) Min() int64 {
 func (h *HdrHistogram) Inspect(f func(interface{})) {
 	h.mu.Lock()
 	maybeTick(h.mu.tickHelper)
-	// nolint:deferunlock
 	h.mu.Unlock()
 	f(h)
 }

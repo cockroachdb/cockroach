@@ -207,7 +207,6 @@ func NewPartitionableConn(serverConn net.Conn) *PartitionableConn {
 			})
 		c.mu.Lock()
 		c.mu.err = err
-		// nolint:deferunlock
 		c.mu.Unlock()
 		if err := c.clientConn.Close(); err != nil {
 			log.Errorf(context.TODO(), "unexpected error closing internal pipe: %s", err)
@@ -230,7 +229,6 @@ func NewPartitionableConn(serverConn net.Conn) *PartitionableConn {
 			})
 		c.mu.Lock()
 		c.mu.err = err
-		// nolint:deferunlock
 		c.mu.Unlock()
 		if err := c.clientConn.Close(); err != nil {
 			log.Fatalf(context.TODO(), "unexpected error closing internal pipe: %s", err)
@@ -306,7 +304,6 @@ func (c *PartitionableConn) UnpartitionS2C() {
 func (c *PartitionableConn) Read(b []byte) (n int, err error) {
 	c.mu.Lock()
 	err = c.mu.err
-	// nolint:deferunlock
 	c.mu.Unlock()
 	if err != nil {
 		return 0, err
@@ -320,7 +317,6 @@ func (c *PartitionableConn) Read(b []byte) (n int, err error) {
 func (c *PartitionableConn) Write(b []byte) (n int, err error) {
 	c.mu.Lock()
 	err = c.mu.err
-	// nolint:deferunlock
 	c.mu.Unlock()
 	if err != nil {
 		return 0, err
@@ -374,7 +370,6 @@ func (c *PartitionableConn) copyFromBuffer(
 		src.Mutex.Lock()
 		waitForNoPartitionLocked()
 		data, err := src.readLocked(1024 * 1024)
-		// nolint:deferunlock
 		src.Mutex.Unlock()
 
 		if len(data) > 0 {

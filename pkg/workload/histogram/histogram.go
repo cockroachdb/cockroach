@@ -98,7 +98,6 @@ func (w *NamedHistogram) RecordValue(value int64) {
 	w.mu.Lock()
 	// This value may be outside the range, in which case it will be dropped.
 	_ = w.mu.current.RecordValue(value)
-	// nolint:deferunlock
 	w.mu.Unlock()
 }
 
@@ -110,7 +109,6 @@ func (w *NamedHistogram) tick(
 	w.mu.Lock()
 	h := w.mu.current
 	w.mu.current = newHistogram
-	// nolint:deferunlock
 	w.mu.Unlock()
 	fn(h)
 }
@@ -298,11 +296,9 @@ func (w *Histograms) Get(name string) *NamedHistogram {
 	w.mu.RLock()
 	hist, ok := w.mu.hists[name]
 	if ok {
-		// nolint:deferunlock
 		w.mu.RUnlock()
 		return hist
 	}
-	// nolint:deferunlock
 	w.mu.RUnlock()
 
 	w.mu.Lock()

@@ -130,7 +130,6 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		if addrStr := addr.String(); addrStr != expAddresses[i] {
 			t.Errorf("%d: expected addr %s; got %s", i, expAddresses[i], addrStr)
 		}
-		// nolint:deferunlock
 		g.mu.Unlock()
 	}
 }
@@ -234,7 +233,6 @@ func TestGossipRaceLogStatus(t *testing.T) {
 	local.mu.Lock()
 	peer, _ := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
 	local.startClientLocked(peer.mu.is.NodeAddr, localCtx)
-	// nolint:deferunlock
 	local.mu.Unlock()
 
 	// Race gossiping against LogStatus.
@@ -283,7 +281,6 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 	local, localCtx := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
 	local.mu.Lock()
 	localAddr := local.mu.is.NodeAddr
-	// nolint:deferunlock
 	local.mu.Unlock()
 	var peers []*Gossip
 	for i := 0; i < 4; i++ {
@@ -293,7 +290,6 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 		newPeer, peerCtx := startGossip(clusterID, roachpb.NodeID(i+2), stopper, t, metric.NewRegistry())
 		newPeer.mu.Lock()
 		newPeer.startClientLocked(localAddr, peerCtx)
-		// nolint:deferunlock
 		newPeer.mu.Unlock()
 		peers = append(peers, newPeer)
 	}
@@ -318,7 +314,6 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 		copy.Value.Timestamp.WallTime++
 		return local.mu.is.addInfo(key, &copy)
 	}, true /* deleteExpired */)
-	// nolint:deferunlock
 	local.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -334,7 +329,6 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 	if numClients := len(local.clientsMu.clients); numClients > maxPeers {
 		t.Errorf("local gossip has %d clients; the max should be %d", numClients, maxPeers)
 	}
-	// nolint:deferunlock
 	local.clientsMu.Unlock()
 }
 
@@ -347,11 +341,9 @@ func TestGossipMostDistant(t *testing.T) {
 	connect := func(from, to *Gossip, fromCtx *rpc.Context) {
 		to.mu.Lock()
 		addr := to.mu.is.NodeAddr
-		// nolint:deferunlock
 		to.mu.Unlock()
 		from.mu.Lock()
 		from.startClientLocked(addr, fromCtx)
-		// nolint:deferunlock
 		from.mu.Unlock()
 	}
 
@@ -360,7 +352,6 @@ func TestGossipMostDistant(t *testing.T) {
 		distantNodeID, distantHops := g.mu.is.mostDistant(func(roachpb.NodeID) bool {
 			return false
 		})
-		// nolint:deferunlock
 		g.mu.Unlock()
 		return distantNodeID, distantHops
 	}
@@ -434,7 +425,6 @@ func TestGossipMostDistant(t *testing.T) {
 					}
 					return nil
 				}, true /* deleteExpired */)
-				// nolint:deferunlock
 				g.mu.Unlock()
 
 				distantNodeID, distantHops := mostDistant(g)
@@ -485,7 +475,6 @@ func TestGossipNoForwardSelf(t *testing.T) {
 
 	local.server.mu.Lock()
 	maxSize := local.server.mu.incoming.maxSize
-	// nolint:deferunlock
 	local.server.mu.Unlock()
 	for i := 0; i < maxSize; i++ {
 		g, gCtx := startGossip(clusterID, roachpb.NodeID(i+2), stopper, t, metric.NewRegistry())
@@ -525,7 +514,6 @@ func TestGossipNoForwardSelf(t *testing.T) {
 	for i := 0; i < numClients; i++ {
 		local.server.mu.Lock()
 		maxSize := local.server.mu.incoming.maxSize
-		// nolint:deferunlock
 		local.server.mu.Unlock()
 		peer, peerCtx := startGossip(clusterID, roachpb.NodeID(i+maxSize+2), stopper, t, metric.NewRegistry())
 
@@ -534,7 +522,6 @@ func TestGossipNoForwardSelf(t *testing.T) {
 			c := newClient(log.MakeTestingAmbientCtxWithNewTracer(), localAddr, makeMetrics())
 			peer.mu.Lock()
 			c.startLocked(peer, disconnectedCh, peerCtx, stopper)
-			// nolint:deferunlock
 			peer.mu.Unlock()
 
 			disconnectedClient := <-disconnectedCh
@@ -573,7 +560,6 @@ func TestGossipCullNetwork(t *testing.T) {
 		peer, peerCtx := startGossip(clusterID, roachpb.NodeID(i+2), stopper, t, metric.NewRegistry())
 		local.startClientLocked(*peer.GetNodeAddr(), peerCtx)
 	}
-	// nolint:deferunlock
 	local.mu.Unlock()
 
 	const slowGossipDuration = time.Minute
@@ -628,7 +614,6 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 
 	local.mu.Lock()
 	local.startClientLocked(*peerAddr, localCtx)
-	// nolint:deferunlock
 	local.mu.Unlock()
 
 	testutils.SucceedsSoon(t, func() error {
@@ -776,7 +761,6 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 	if a, e := len(g[1].mu.nodeMap), 0; a != e {
 		t.Errorf("expected %v to contain %d nodes, got %d", g[1].mu.nodeMap, e, a)
 	}
-	// nolint:deferunlock
 	g[1].mu.Unlock()
 }
 
@@ -795,7 +779,6 @@ func TestGossipPropagation(t *testing.T) {
 	remote, remoteCtx := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
 	remote.mu.Lock()
 	rAddr := remote.mu.is.NodeAddr
-	// nolint:deferunlock
 	remote.mu.Unlock()
 	local.manage(localCtx)
 	remote.manage(remoteCtx)
@@ -816,7 +799,6 @@ func TestGossipPropagation(t *testing.T) {
 			// a heartbeat timeout.
 			local.mu.Lock()
 			local.startClientLocked(rAddr, localCtx)
-			// nolint:deferunlock
 			local.mu.Unlock()
 			return fmt.Errorf("unable to find local to remote client")
 		}
@@ -913,7 +895,6 @@ func TestGossipLoopbackInfoPropagation(t *testing.T) {
 	remote, remoteCtx := startGossip(clusterID, 2, stopper, t, metric.NewRegistry())
 	remote.mu.Lock()
 	rAddr := remote.mu.is.NodeAddr
-	// nolint:deferunlock
 	remote.mu.Unlock()
 	local.manage(localCtx)
 	remote.manage(remoteCtx)
@@ -943,7 +924,6 @@ func TestGossipLoopbackInfoPropagation(t *testing.T) {
 	// Start a client connection to the remote node.
 	local.mu.Lock()
 	local.startClientLocked(rAddr, localCtx)
-	// nolint:deferunlock
 	local.mu.Unlock()
 
 	getInfo := func(g *Gossip, key string) *Info {

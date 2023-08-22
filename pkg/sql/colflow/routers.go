@@ -280,7 +280,6 @@ func (o *routerOutputOp) DrainMeta() []execinfrapb.ProducerMetadata {
 	// The call to DrainMeta() indicates that the caller will no longer need any
 	// more data from this output, so we can close it.
 	o.closeLocked(o.Ctx)
-	// nolint:deferunlock
 	o.mu.Unlock()
 	return o.drainCoordinator.drainMeta()
 }

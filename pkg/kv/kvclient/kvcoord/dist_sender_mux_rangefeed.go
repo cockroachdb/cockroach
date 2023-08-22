@@ -594,7 +594,6 @@ func (c *muxStream) startRangeFeed(
 func (c *muxStream) lookupStream(streamID int64) (a *activeMuxRangeFeed) {
 	c.mu.Lock()
 	a = c.mu.streams[streamID]
-	// nolint:deferunlock
 	c.mu.Unlock()
 	return a
 }
@@ -602,7 +601,6 @@ func (c *muxStream) lookupStream(streamID int64) (a *activeMuxRangeFeed) {
 func (c *muxStream) deleteStream(streamID int64) {
 	c.mu.Lock()
 	delete(c.mu.streams, streamID)
-	// nolint:deferunlock
 	c.mu.Unlock()
 }
 
@@ -615,7 +613,6 @@ func (c *muxStream) close() []*activeMuxRangeFeed {
 		toRestart = append(toRestart, a)
 	}
 	c.mu.streams = nil
-	// nolint:deferunlock
 	c.mu.Unlock()
 
 	return toRestart

@@ -292,12 +292,10 @@ func TestEnumMemberTransitionIsolation(t *testing.T) {
 			if blocker != nil {
 				unblocker = blocker
 				blocker = nil
-				// nolint:deferunlock
 				mu.Unlock()
 				<-unblocker
 				return nil
 			}
-			// nolint:deferunlock
 			mu.Unlock()
 			return errors.New("boom")
 		},
@@ -331,11 +329,9 @@ CREATE TYPE ab AS ENUM ('a', 'b')`,
 		for {
 			mu.Lock()
 			if blocker == nil {
-				// nolint:deferunlock
 				mu.Unlock()
 				break
 			}
-			// nolint:deferunlock
 			mu.Unlock()
 		}
 		_, err := sqlDB.Exec(`BEGIN; ALTER TYPE ab DROP VALUE 'b'; ALTER TYPE ab ADD VALUE 'd'; COMMIT`)

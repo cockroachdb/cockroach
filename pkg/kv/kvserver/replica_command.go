@@ -1001,7 +1001,6 @@ func (r *Replica) ChangeReplicas(
 		bq := r.store.replicateQueue.baseQueue
 		bq.mu.Lock()
 		disabled := bq.mu.disabled
-		// nolint:deferunlock
 		bq.mu.Unlock()
 		if !disabled {
 			return nil, errors.New("must disable replicate queue to use ChangeReplicas manually")
@@ -2789,7 +2788,6 @@ func (r *Replica) sendSnapshotUsingDelegate(
 	r.mu.RLock()
 	sender, err := r.getReplicaDescriptorRLocked()
 	_, destPaused := r.mu.pausedFollowers[recipient.ReplicaID]
-	// nolint:deferunlock
 	r.mu.RUnlock()
 
 	if err != nil {
@@ -2972,7 +2970,6 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	r.mu.RLock()
 	replIdx := r.mu.state.RaftAppliedIndex + 1
 	status := r.raftStatusRLocked()
-	// nolint:deferunlock
 	r.mu.RUnlock()
 
 	if status == nil {

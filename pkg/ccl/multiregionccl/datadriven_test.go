@@ -249,12 +249,10 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = 5m
 					// Setup tracing for the input.
 					mu.Lock()
 					traceStmt = d.Input
-					// nolint:deferunlock
 					mu.Unlock()
 					defer func() {
 						mu.Lock()
 						traceStmt = ""
-						// nolint:deferunlock
 						mu.Unlock()
 					}()
 

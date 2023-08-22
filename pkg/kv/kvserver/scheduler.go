@@ -291,7 +291,6 @@ func (s *raftScheduler) Start(stopper *stop.Stopper) {
 		for _, shard := range s.shards {
 			shard.Lock()
 			shard.stopped = true
-			// nolint:deferunlock
 			shard.Unlock()
 			shard.cond.Broadcast()
 		}
@@ -369,7 +368,6 @@ func (ss *raftSchedulerShard) worker(
 		var id roachpb.RangeID
 		for {
 			if ss.stopped {
-				// nolint:deferunlock
 				ss.Unlock()
 				return
 			}
@@ -495,7 +493,6 @@ func (s *raftScheduler) enqueue1(addFlags raftScheduleFlags, id roachpb.RangeID)
 	shard := s.shards[shardIdx]
 	shard.Lock()
 	n := shard.enqueue1Locked(addFlags, id, now)
-	// nolint:deferunlock
 	shard.Unlock()
 	shard.signal(n)
 }
@@ -515,13 +512,11 @@ func (ss *raftSchedulerShard) enqueueN(addFlags raftScheduleFlags, ids ...roachp
 	for i, id := range ids {
 		count += ss.enqueue1Locked(addFlags, id, now)
 		if (i+1)%enqueueChunkSize == 0 {
-			// nolint:deferunlock
 			ss.Unlock()
 			now = nowNanos()
 			ss.Lock()
 		}
 	}
-	// nolint:deferunlock
 	ss.Unlock()
 	return count
 }

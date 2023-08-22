@@ -351,14 +351,12 @@ func TestReconciliationJobErrorAndRecovery(t *testing.T) {
 
 	mu.Lock()
 	mu.err = errors.New("injected")
-	// nolint:deferunlock
 	mu.Unlock()
 
 	waitForJobStatus(t, tdb, jobID, jobs.StatusFailed)
 
 	mu.Lock()
 	mu.err = nil
-	// nolint:deferunlock
 	mu.Unlock()
 
 	started, err = manager.TestingCreateAndStartJobIfNoneExists(ctx)
@@ -369,7 +367,6 @@ func TestReconciliationJobErrorAndRecovery(t *testing.T) {
 
 	mu.Lock()
 	require.True(t, mu.lastStartTS.IsEmpty(), "expected reconciler to start with empty checkpoint")
-	// nolint:deferunlock
 	mu.Unlock()
 }
 
@@ -437,7 +434,6 @@ func TestReconciliationUsesRightCheckpoint(t *testing.T) {
 
 	mu.Lock()
 	require.True(t, mu.lastStartTS.IsEmpty())
-	// nolint:deferunlock
 	mu.Unlock()
 
 	// Force an internal retry.
