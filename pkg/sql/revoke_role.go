@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -47,7 +47,7 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 	var allowedToRevokeWithoutAdminOption bool
 	var err error
 	if createRoleAllowsGrantRoleMembership.Get(&p.ExecCfg().Settings.SV) {
-		allowedToRevokeWithoutAdminOption, err = p.HasRoleOption(ctx, roleoption.CREATEROLE)
+		allowedToRevokeWithoutAdminOption, err = p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE)
 		if err != nil {
 			return nil, err
 		}
