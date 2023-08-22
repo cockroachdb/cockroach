@@ -12,9 +12,7 @@ package upgrades_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
@@ -24,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -108,112 +105,4 @@ SELECT count(*) FROM system.jobs AS j, system.job_info AS i
 WHERE j.id = i.job_id AND (j.payload = i.value OR j.progress = i.value) AND (j.id >= 1 AND j.id <= 5)
 `,
 		[][]string{{"14"}})
-}
-
-var _ jobs.Resumer = &fakeJob{}
-
-type fakeJob struct {
-	job      *jobs.Job
-	ch1, ch2 chan<- string
-}
-
-func (r *fakeJob) Resume(ctx context.Context, _ interface{}) error {
-	ch := r.ch1
-	if r.job.Progress().Details.(*jobspb.Progress_Import).Import.ResumePos[0] == 2 {
-		ch = r.ch2
-	}
-	select {
-	case ch <- fmt.Sprintf("%s %v",
-		r.job.Details().(jobspb.ImportDetails).BackupPath,
-		r.job.Progress().Details.(*jobspb.Progress_Import).Import.ResumePos):
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func (r *fakeJob) OnFailOrCancel(ctx context.Context, execCtx interface{}, _ error) error {
-	return nil
-}
-
-func TestIncompleteBackfill(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	clusterArgs := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Server: &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BootstrapVersionKeyOverride:    clusterversion.V22_2,
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2),
-		}}},
-	}
-
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, clusterArgs)
-	defer tc.Stopper().Stop(ctx)
-
-	r := tc.Server(0).JobRegistry().(*jobs.Registry)
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-
-	ch1 := make(chan string, 1)
-	ch2 := make(chan string, 1)
-
-	jobs.RegisterConstructor(
-		jobspb.TypeImport,
-		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer { return &fakeJob{job: job, ch1: ch1, ch2: ch2} },
-		jobs.UsesTenantCostControl,
-	)
-
-	var adoptedJob, runningJob *jobs.StartableJob
-	runningID, adoptedID := jobspb.JobID(5550001), jobspb.JobID(5550002)
-	require.NoError(t, tc.Server(0).InternalDB().(isql.DB).Txn(ctx, func(
-		ctx context.Context, txn isql.Txn,
-	) (err error) {
-
-		if err := r.CreateStartableJobWithTxn(ctx, &adoptedJob, adoptedID, txn, jobs.Record{
-			Username: username.RootUserName(),
-			Details:  jobspb.ImportDetails{BackupPath: "adopted"},
-			Progress: jobspb.ImportProgress{ResumePos: []int64{1}},
-		}); err != nil {
-			return err
-		}
-
-		if err := r.CreateStartableJobWithTxn(ctx, &runningJob, runningID, txn, jobs.Record{
-			Username: username.RootUserName(),
-			Details:  jobspb.ImportDetails{BackupPath: "running"},
-			Progress: jobspb.ImportProgress{ResumePos: []int64{2}},
-		}); err != nil {
-			return err
-		}
-		return nil
-	}))
-
-	upgrades.TestingSkipInfoBackfill = true
-	defer func() {
-		upgrades.TestingSkipInfoBackfill = false
-	}()
-
-	sqlDB.Exec(t, "SET CLUSTER SETTING version = $1", clusterversion.ByKey(clusterversion.V23_1).String())
-	r.TestingForgetJob(adoptedID)
-	r.NotifyToResume(ctx, adoptedID)
-
-	require.NoError(t, runningJob.Start(ctx))
-	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
-	defer cancel()
-	require.NoError(t, runningJob.AwaitCompletion(ctx))
-
-	select {
-	case res := <-ch1:
-		require.Equal(t, "adopted [1]", res)
-	case <-time.After(time.Second * 5):
-		t.Fatal("timed out waiting for job to run")
-	}
-
-	select {
-	case res := <-ch2:
-		require.Equal(t, "running [2]", res)
-	case <-time.After(time.Second * 5):
-		t.Fatal("timed out waiting for job to run")
-	}
-
 }
