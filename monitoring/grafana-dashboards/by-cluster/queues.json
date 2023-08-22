@@ -1539,8 +1539,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "CRDB Console: Queues by Test Run and Name",
-  "uid": "crdb-console-queues-byname",
+  "title": "CRDB Console: Queues ",
+  "uid": "crdb-console-queues",
   "version": 3,
   "weekStart": ""
 }
