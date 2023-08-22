@@ -10,7 +10,7 @@ go_library(
         "lock_table.go",
         "lock_table_waiter.go",
         "metrics.go",
-        ":lockstate_interval_btree.go",  # keep
+        ":keylocks_interval_btree.go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency",
     visibility = ["//visibility:public"],
@@ -53,7 +53,7 @@ go_test(
         "datadriven_util_test.go",
         "lock_table_test.go",
         "lock_table_waiter_test.go",
-        ":lockstate_interval_btree_test.go",  # keep
+        ":keylocks_interval_btree_test.go",  # keep
     ],
     args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
@@ -101,7 +101,7 @@ go_test(
 )
 
 gen_interval_btree(
-    name = "lockstate_interval_btree",
+    name = "keylocks_interval_btree",
     package = "concurrency",
-    type = "*lockState",
+    type = "*keyLocks",
 )

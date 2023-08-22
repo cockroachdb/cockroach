@@ -51,37 +51,18 @@ const (
 	MaxTxnPriority TxnPriority = math.MaxInt32
 )
 
-// TxnSeqIsIgnored returns true iff the sequence number overlaps with
-// any range in the ignored array.
+// TxnSeqIsIgnored returns true iff the supplied sequence number overlaps with
+// any range in the ignored array. The caller should ensure that the ignored
+// array is non-overlapping, non-contiguous, and sorted in (increasing) sequence
+// number order.
 func TxnSeqIsIgnored(seq TxnSeq, ignored []IgnoredSeqNumRange) bool {
-	// The ignored seqnum ranges are guaranteed to be
-	// non-overlapping, non-contiguous, and guaranteed to be
-	// sorted in seqnum order. We're going to look from the end to
-	// see if the current intent seqnum is ignored.
-	for i := len(ignored) - 1; i >= 0; i-- {
-		if seq < ignored[i].Start {
-			// The history entry's sequence number is lower/older than
-			// the current ignored range. Go to the previous range
-			// and try again.
-			continue
-		}
-
-		// Here we have a range where the start seqnum is lower than the current
-		// intent seqnum. Does it include it?
-		if seq > ignored[i].End {
-			// Here we have a range where the current history entry's seqnum
-			// is higher than the range's end seqnum. Given that the
-			// ranges are sorted, we're guaranteed that there won't
-			// be any further overlapping range at a lower value of i.
-			return false
-		}
-		// Yes, it's included. We're going to skip over this
-		// intent seqnum and retry the search above.
-		return true
-	}
-
-	// Exhausted the ignore list. Not ignored.
-	return false
+	i := sort.Search(len(ignored), func(i int) bool {
+		return seq <= ignored[i].End
+	})
+	// Did we find the smallest index i, such that seq <= ignored[i].End?
+	return i != len(ignored) &&
+		// AND does seq lie within with the range [start, end] at index i?
+		ignored[i].Start <= seq
 }
 
 // Short returns a prefix of the transaction's ID.

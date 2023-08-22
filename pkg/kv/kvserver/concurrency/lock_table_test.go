@@ -204,7 +204,7 @@ func TestLockTableBasic(t *testing.T) {
 				)
 				ltImpl.enabled = true
 				ltImpl.enabledSeq = 1
-				ltImpl.minLocks = 0
+				ltImpl.minKeysLocked = 0
 				lt = ltImpl
 				txnsByName = make(map[string]*enginepb.TxnMeta)
 				txnCounter = uint128.FromInts(0, 0)
@@ -825,7 +825,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 	lt := newLockTable(
 		5, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
 	)
-	lt.minLocks = 0
+	lt.minKeysLocked = 0
 	lt.enabled = true
 	var keys []roachpb.Key
 	var guards []lockTableGuard
@@ -927,9 +927,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.NoError(t, err)
 	// Now enforcement is done, so only 4 remain.
 	require.Equal(t, int64(4), lt.lockCountForTesting())
-	// Bump down the enforcement interval manually, and bump up minLocks
+	// Bump down the enforcement interval manually, and bump up minKeysLocked.
 	lt.locks.lockAddMaxLocksCheckInterval = 1
-	lt.minLocks = 2
+	lt.minKeysLocked = 2
 	// Three more guards dequeued.
 	lt.Dequeue(guards[6])
 	lt.Dequeue(guards[7])
@@ -952,10 +952,11 @@ func TestLockTableMaxLocks(t *testing.T) {
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
-	// Enforcement keeps the 1 notRemovable lock, and another, since minLocks=2.
+	// Enforcement keeps the 1 notRemovable lock, and another, since
+	// minKeysLocked=2.
 	require.Equal(t, int64(2), lt.lockCountForTesting())
-	// Restore minLocks to 0.
-	lt.minLocks = 0
+	// Restore minKeysLocked to 0.
+	lt.minKeysLocked = 0
 	// Add locks to push us over 5 locks.
 	for i := 16; i < 20; i++ {
 		added, err = lt.AddDiscoveredLock(
@@ -976,7 +977,7 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 	lt := newLockTable(
 		2, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
 	)
-	lt.minLocks = 0
+	lt.minKeysLocked = 0
 	lt.enabled = true
 	var keys []roachpb.Key
 	var guards []lockTableGuard
@@ -1890,14 +1891,14 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 //     non-empty one has been inserted.
 
 func TestLockStateSafeFormat(t *testing.T) {
-	l := &lockState{
+	l := &keyLocks{
 		id:     1,
 		key:    []byte("KEY"),
 		endKey: []byte("END"),
 	}
 	holder := &txnLock{}
 	l.holders.PushFront(holder)
-	holder.txn = &enginepb.TxnMeta{ID: uuid.NamespaceDNS}
+	holder.txn = enginepb.TxnMeta{ID: uuid.NamespaceDNS}
 	// TODO(arul): add something about replicated locks here too.
 	holder.unreplicatedInfo.init()
 	holder.unreplicatedInfo.ts = hlc.Timestamp{WallTime: 123, Logical: 7}
