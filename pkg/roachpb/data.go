@@ -1973,8 +1973,7 @@ func MakeLock(txn *enginepb.TxnMeta, key Key, str lock.Strength) Lock {
 	var l Lock
 	l.Txn = *txn
 	l.Key = key
-	// TODO(nvanbenschoten): add this field.
-	// l.Strength = str
+	l.Strength = str
 	return l
 }
 

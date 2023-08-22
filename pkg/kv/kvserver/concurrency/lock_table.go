@@ -3525,6 +3525,8 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		// higher lease sequence than the current value of enabledSeq.
 		return false, errors.AssertionFailedf("unexpected lease sequence: %d > %d", seq, t.enabledSeq)
 	}
+	// TODO(arul): lift this limitation.
+	assert(foundLock.Strength == lock.Intent, "unsupported lock strength")
 	g := guard.(*lockTableGuardImpl)
 	key := foundLock.Key
 	str, err := findHighestLockStrengthInSpans(key, g.spans)
