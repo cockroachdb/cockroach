@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -184,6 +185,7 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 
 	closedts.TargetDuration.Override(context.Background(), &settings.SV, 10*time.Millisecond)
 	closedts.SideTransportCloseInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
+	kvserver.RangeFeedRefreshInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
 	sql.TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Millisecond)
 	params.ServerArgs.Settings = settings
 
