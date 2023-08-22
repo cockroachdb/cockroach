@@ -792,9 +792,10 @@ FROM (
      WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
 )
 WHERE ((pl->'migration')->'clusterVersion') = $1::JSONB`
-	// postJobInfoQuery avoids the crdb_internal.system_jobs table
+	// PostJobInfoQuery avoids the crdb_internal.system_jobs table
 	// to avoid expensive full scans.
-	postJobInfoTableQuery = `
+	// Exported for testing.
+	PostJobInfoTableQuery = `
 WITH
 running_migration_jobs AS (
     SELECT id, status
@@ -810,7 +811,7 @@ payloads AS (
     ORDER BY written DESC
 )
 SELECT id, status FROM (
-    SELECT id, status, crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payloads.value, false) AS pl
+    SELECT distinct(id), status, crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payloads.value, false) AS pl
     FROM running_migration_jobs AS j
     INNER JOIN payloads ON j.id = payloads.job_id
 ) WHERE ((pl->'migration')->'clusterVersion') = $1::JSONB`
@@ -824,7 +825,7 @@ func (m *Manager) getRunningMigrationJob(
 	cv := clusterversion.ClusterVersion{Version: version}
 	var query string
 	if m.settings.Version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
-		query = postJobInfoTableQuery
+		query = PostJobInfoTableQuery
 	} else {
 		query = preJobInfoTableQuery
 	}
