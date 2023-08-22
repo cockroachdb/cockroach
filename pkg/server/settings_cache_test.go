@@ -81,6 +81,7 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	ts := serverutils.StartServerOnly(t, serverArgs)
 	closedts.TargetDuration.Override(ctx, &ts.ClusterSettings().SV, 10*time.Millisecond)
 	closedts.SideTransportCloseInterval.Override(ctx, &ts.ClusterSettings().SV, 10*time.Millisecond)
+	kvserver.RangeFeedRefreshInterval.Override(ctx, &ts.ClusterSettings().SV, 10*time.Millisecond)
 	testutils.SucceedsSoon(t, func() error {
 		store, err := ts.GetStores().(*kvserver.Stores).GetStore(1)
 		if err != nil {

@@ -737,11 +737,12 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 			tc, _, _ := setupClusterForClosedTSTesting(ctx, t, 5*time.Second, 100*time.Millisecond, clusterArgs, "cttest", "kv")
 			defer tc.Stopper().Stop(ctx)
 			sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-			sqlDB.ExecMultiple(t, strings.Split(fmt.Sprintf(`
-SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
-SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s';
+			sqlDB.ExecMultiple(t, strings.Split(`
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '5s';
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '100ms';
+SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '100ms';
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = true;
-`, 5*time.Second, 100*time.Millisecond), ";")...)
+`, ";")...)
 			leftDesc, rightDesc := splitDummyRangeInTestCluster(t, tc, "cttest", "kv", hlc.Timestamp{} /* splitExpirationTime */)
 
 			leftLeaseholder := getCurrentLeaseholder(t, tc, leftDesc)
@@ -1130,6 +1131,8 @@ const testingTargetDuration = 300 * time.Millisecond
 
 const testingSideTransportInterval = 100 * time.Millisecond
 
+const testingRangeFeedInterval = 100 * time.Millisecond
+
 func replsForRange(
 	ctx context.Context,
 	t *testing.T,
@@ -1226,9 +1229,10 @@ func setupClusterForClosedTSTesting(
 	sqlRunner.ExecMultiple(t, strings.Split(fmt.Sprintf(`
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s';
+SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = true;
 SET CLUSTER SETTING kv.allocator.load_based_rebalancing = 'off';
-`, targetDuration, sideTransportInterval),
+`, targetDuration, sideTransportInterval, sideTransportInterval),
 		";")...)
 
 	desc = tc.AddVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
