@@ -51,7 +51,8 @@ const mapStateToProps = (state: AppState): DatabasesPageData => {
   return {
     loading: !!databasesListState?.inFlight,
     loaded: !!databasesListState?.valid,
-    lastError: databasesListState?.lastError,
+    requestError: databasesListState?.lastError,
+    queryError: databasesListState?.data?.error,
     databases: deriveDatabaseDetailsMemoized({
       dbListResp: databasesListState?.data,
       databaseDetails: state.adminUI?.databaseDetails,
