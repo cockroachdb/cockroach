@@ -487,6 +487,161 @@ func TestStatusAPIStatements(t *testing.T) {
 	testPath(fmt.Sprintf("statements?combined=true&start=%d", aggregatedTs+60), nil)
 }
 
+func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Skip under stress until we extend the timeout for the http client.
+	skip.UnderStressWithIssue(t, 109184)
+
+	// Aug 30 2021 19:50:00 GMT+0000
+	aggregatedTs := int64(1630353000)
+	oneMinAfterAggregatedTs := aggregatedTs + 60
+	statsKnobs := sqlstats.CreateTestingKnobs()
+	statsKnobs.StubTimeNow = func() time.Time { return timeutil.Unix(aggregatedTs, 0) }
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: statsKnobs,
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true,
+				},
+			},
+		},
+	})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	endpoint := fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs)
+	findJobQuery := "SELECT status FROM [SHOW JOBS] WHERE statement = 'CREATE INDEX idx_age ON football.public.players (age) STORING (name)';"
+
+	firstServerProto := testCluster.Server(0)
+	sqlSB := testCluster.ServerConn(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	var resp serverpb.StatementsResponse
+	// Test that non-admin without VIEWACTIVITY privileges cannot access.
+	err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, endpoint, &resp, false)
+	if !testutils.IsError(err, "status: 403") {
+		t.Fatalf("expected privilege error, got %v", err)
+	}
+
+	thirdServerSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWACTIVITY TO %s", apiconstants.TestingUserNameNoAdmin().Normalized()))
+
+	type TestCases struct {
+		stmt      string
+		respQuery string
+		fullScan  bool
+		distSQL   bool
+		failed    bool
+		count     int
+	}
+
+	// These test statements are executed before any indexes are introduced.
+	statementsBeforeIndex := []TestCases{
+		{stmt: `CREATE DATABASE football`, respQuery: `CREATE DATABASE football`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `SET database = football`, respQuery: `SET database = football`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `CREATE TABLE players (id INT PRIMARY KEY, name TEXT, position TEXT, age INT,goals INT)`, respQuery: `CREATE TABLE players (id INT8 PRIMARY KEY, name STRING, "position" STRING, age INT8, goals INT8)`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `INSERT INTO players (id, name, position, age, goals) VALUES (1, 'Lionel Messi', 'Forward', 34, 672), (2, 'Cristiano Ronaldo', 'Forward', 36, 674)`, respQuery: `INSERT INTO players(id, name, "position", age, goals) VALUES (_, '_', __more1_10__), (__more1_10__)`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `SELECT avg(goals) FROM players`, respQuery: `SELECT avg(goals) FROM players`, fullScan: true, distSQL: true, failed: false, count: 1},
+		{stmt: `SELECT name FROM players WHERE age >= 32`, respQuery: `SELECT name FROM players WHERE age >= _`, fullScan: true, distSQL: true, failed: false, count: 1},
+	}
+
+	statementsCreateIndex := []TestCases{
+		// Drop the index, if it exists. Then, create the index.
+		{stmt: `DROP INDEX IF EXISTS idx_age`, respQuery: `DROP INDEX IF EXISTS idx_age`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `CREATE INDEX idx_age ON players (age) STORING (name)`, respQuery: `CREATE INDEX idx_age ON players (age) STORING (name)`, fullScan: false, distSQL: false, failed: false, count: 1},
+	}
+
+	// These test statements are executed after an index is created on the players table.
+	statementsAfterIndex := []TestCases{
+		// Since the index is created, the fullScan value should be false.
+		{stmt: `SELECT name FROM players WHERE age < 32`, respQuery: `SELECT name FROM players WHERE age < _`, fullScan: false, distSQL: false, failed: false, count: 1},
+		// Although the index is created, the fullScan value should be true because the previous query was not using the index. Its count should also be 2.
+		{stmt: `SELECT name FROM players WHERE age >= 32`, respQuery: `SELECT name FROM players WHERE age >= _`, fullScan: true, distSQL: true, failed: false, count: 2},
+	}
+
+	type StatementData struct {
+		count    int
+		fullScan bool
+		distSQL  bool
+		failed   bool
+	}
+
+	// Declare the map outside of the executeStatements function.
+	statementDataMap := make(map[string]StatementData)
+
+	executeStatements := func(statements []TestCases) {
+		// For each statement in the test case, execute the statement and store the
+		// expected statement data in a map.
+		for _, stmt := range statements {
+			thirdServerSQL.Exec(t, stmt.stmt)
+			statementDataMap[stmt.respQuery] = StatementData{
+				fullScan: stmt.fullScan,
+				distSQL:  stmt.distSQL,
+				failed:   stmt.failed,
+				count:    stmt.count,
+			}
+		}
+	}
+
+	verifyCombinedStmtStats := func() {
+		err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, endpoint, &resp, false)
+		require.NoError(t, err)
+
+		for _, respStatement := range resp.Statements {
+			respQuery := respStatement.Key.KeyData.Query
+			actualCount := respStatement.Stats.Count
+			actualFullScan := respStatement.Key.KeyData.FullScan
+			actualDistSQL := respStatement.Key.KeyData.DistSQL
+			actualFailed := respStatement.Key.KeyData.Failed
+			// If the response has a query that isn't in our map, it means that it's
+			// not part of our test, so we ignore it.
+			expectedData, ok := statementDataMap[respQuery]
+			if !ok {
+				continue
+			}
+
+			require.Equal(t, expectedData.fullScan, actualFullScan)
+			require.Equal(t, expectedData.distSQL, actualDistSQL)
+			require.Equal(t, expectedData.failed, actualFailed)
+			require.Equal(t, expectedData.count, int(actualCount))
+		}
+	}
+
+	// Execute the queries that will be executed before the index is created.
+	executeStatements(statementsBeforeIndex)
+
+	// Test the statements that will be executed before the index is created.
+	verifyCombinedStmtStats()
+
+	// Execute the queries that will create the index.
+	executeStatements(statementsCreateIndex)
+
+	// Wait for the job which creates the index to complete.
+	testutils.SucceedsWithin(t, func() error {
+		var status string
+		for {
+			row := sqlSB.QueryRow(findJobQuery)
+			err = row.Scan(&status)
+			if err != nil {
+				return err
+			}
+			if status == "succeeded" {
+				break
+			}
+			// sleep for a fraction of a second
+			time.Sleep(100 * time.Millisecond)
+		}
+		return nil
+	}, 3*time.Second)
+
+	// Execute the queries that will be executed after the index is created.
+	executeStatements(statementsAfterIndex)
+
+	// Test the statements that will be executed after the index is created.
+	verifyCombinedStmtStats()
+}
+
 func TestStatusAPICombinedStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
