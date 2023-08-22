@@ -1063,11 +1063,7 @@ func (ulh *unreplicatedLockHolderInfo) rollbackIgnoredSeqNumbers(
 		if minSeqNumber == -1 {
 			continue
 		}
-		i := sort.Search(len(ignoredSeqNums), func(i int) bool {
-			return ignoredSeqNums[i].End >= minSeqNumber
-		})
-		shouldIgnore := i != len(ignoredSeqNums) && minSeqNumber >= ignoredSeqNums[i].Start
-		if shouldIgnore {
+		if enginepb.TxnSeqIsIgnored(minSeqNumber, ignoredSeqNums) {
 			ulh.strengths[strIdx] = -1
 		}
 	}
