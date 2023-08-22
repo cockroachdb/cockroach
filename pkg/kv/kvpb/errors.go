@@ -927,7 +927,7 @@ func (e *LockConflictError) printError(buf Printer) {
 	// If we have a lot of locks, we only want to show the first and the last.
 	const maxBegin = 5
 	const maxEnd = 5
-	var begin, end []roachpb.Intent
+	var begin, end []roachpb.Lock
 	if len(e.Locks) <= maxBegin+maxEnd {
 		begin = e.Locks
 	} else {
@@ -1344,7 +1344,7 @@ var _ ErrorDetailInterface = &MVCCHistoryMutationError{}
 func NewIntentMissingError(key roachpb.Key, wrongIntent *roachpb.Intent) *IntentMissingError {
 	return &IntentMissingError{
 		Key:         key,
-		WrongIntent: wrongIntent,
+		WrongIntent: wrongIntent.AsLockPtr(),
 	}
 }
 

@@ -438,8 +438,8 @@ func (i *MVCCIncrementalIterator) updateMeta() error {
 		switch i.intentPolicy {
 		case MVCCIncrementalIterIntentPolicyError:
 			i.err = &kvpb.LockConflictError{
-				Locks: []roachpb.Intent{
-					roachpb.MakeIntent(i.meta.Txn, i.iter.UnsafeKey().Key.Clone()),
+				Locks: []roachpb.Lock{
+					roachpb.MakeIntent(i.meta.Txn, i.iter.UnsafeKey().Key.Clone()).AsLock(),
 				},
 			}
 			i.valid = false
@@ -772,7 +772,7 @@ func (i *MVCCIncrementalIterator) TryGetIntentError() error {
 		return nil
 	}
 	return &kvpb.LockConflictError{
-		Locks: i.intents,
+		Locks: roachpb.AsLocks(i.intents),
 	}
 }
 

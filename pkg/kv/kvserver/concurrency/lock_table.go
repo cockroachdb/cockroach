@@ -3503,7 +3503,7 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 // each of the locks. At that point a decision is made whether to consult the
 // txnStatusCache eagerly when adding discovered locks.
 func (t *lockTableImpl) AddDiscoveredLock(
-	intent *roachpb.Intent,
+	foundLock *roachpb.Lock,
 	seq roachpb.LeaseSequence,
 	consultTxnStatusCache bool,
 	guard lockTableGuard,
@@ -3524,14 +3524,16 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		// higher lease sequence than the current value of enabledSeq.
 		return false, errors.AssertionFailedf("unexpected lease sequence: %d > %d", seq, t.enabledSeq)
 	}
+	// TODO(arul): lift this limitation.
+	assert(foundLock.Strength == lock.Intent, "unsupported lock strength")
 	g := guard.(*lockTableGuardImpl)
-	key := intent.Key
+	key := foundLock.Key
 	str, err := findHighestLockStrengthInSpans(key, g.spans)
 	if err != nil {
 		return false, err
 	}
 	if consultTxnStatusCache {
-		finalizedTxn, ok := t.txnStatusCache.finalizedTxns.get(intent.Txn.ID)
+		finalizedTxn, ok := t.txnStatusCache.finalizedTxns.get(foundLock.Txn.ID)
 		if ok {
 			g.toResolve = append(
 				g.toResolve, roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: key}))
@@ -3543,7 +3545,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		// comment in scanAndMaybeEnqueue for more details, including why we include
 		// the hasUncertaintyInterval condition.
 		if str == lock.None && !g.hasUncertaintyInterval() && t.batchPushedLockResolution() {
-			pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(intent.Txn.ID)
+			pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(foundLock.Txn.ID)
 			if ok && g.ts.Less(pushedTxn.WriteTimestamp) {
 				g.toResolve = append(
 					g.toResolve, roachpb.MakeLockUpdate(pushedTxn, roachpb.Span{Key: key}))
@@ -3578,7 +3580,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		g.notRemovableLock = l
 		notRemovableLock = true
 	}
-	err = l.discoveredLock(&intent.Txn, intent.Txn.WriteTimestamp, g, str, notRemovableLock, g.lt.clock)
+	err = l.discoveredLock(&foundLock.Txn, foundLock.Txn.WriteTimestamp, g, str, notRemovableLock, g.lt.clock)
 	// Can't release tree.mu until call l.discoveredLock() since someone may
 	// find an empty lock and remove it from the tree.
 	t.locks.mu.Unlock()

@@ -608,18 +608,19 @@ func TestMVCCScanLockConflictError(t *testing.T) {
 				t.Fatalf("expected lock conflict error; got %s", err)
 			}
 
-			intents := res.Intents
+			locks := roachpb.AsLocks(res.Intents)
 			kvs := res.KVs
-			if len(intents) > 0 != !scan.consistent {
-				t.Fatalf("expected different intents slice; got %+v", intents)
+			if len(locks) > 0 != !scan.consistent {
+				t.Fatalf("expected different intents slice; got %+v", locks)
 			}
 
 			if scan.consistent {
-				intents = lcErr.Locks
+				locks = lcErr.Locks
 			}
 
-			if !reflect.DeepEqual(intents, scan.expIntents) {
-				t.Fatalf("expected intents:\n%+v;\n got\n%+v", scan.expIntents, intents)
+			expLocks := roachpb.AsLocks(scan.expIntents)
+			if !reflect.DeepEqual(locks, expLocks) {
+				t.Fatalf("expected locks:\n%+v;\n got\n%+v", expLocks, locks)
 			}
 
 			if !reflect.DeepEqual(kvs, scan.expValues) {
@@ -6646,11 +6647,11 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 				require.Error(t, err)
 				e := (*kvpb.LockConflictError)(nil)
 				if !errors.As(err, &e) {
-					require.Fail(t, "Expected WriteIntentFailure, got %T", err)
+					require.Fail(t, "Expected LockConflictError, got %T", err)
 				}
 				require.Equal(t, len(expectedIntentIndices), len(e.Locks))
 				for i, dataIdx := range expectedIntentIndices {
-					requireTxnForValue(t, data[dataIdx], e.Locks[i])
+					require.Equal(t, data[dataIdx].txn.ID, e.Locks[i].Txn.ID)
 				}
 			}
 		}
