@@ -73,12 +73,11 @@ func (n dnsProvider) CreateRecords(records ...vm.DNSRecord) error {
 		}
 
 		// Add the new record data.
-		// TODO(Herko): Warn if the same record has been added twice
 		for _, record := range recordGroup {
 			dataSet[record.Data] = struct{}{}
 		}
 		// We assume that all records in a group have the same name, type, and ttl.
-		// TODO(herko): We should add error checking to ensure that the above is the case.
+		// TODO(herko): Add error checking to ensure that the above is the case.
 		firstRecord := recordGroup[0]
 		data := maps.Keys(dataSet)
 		sort.Strings(data)
@@ -143,9 +142,9 @@ func (n dnsProvider) Domain() string {
 // preferable when service information is being queried regularly.
 func (n dnsProvider) lookupSRVRecords(service, proto, name string) ([]vm.DNSRecord, error) {
 	cName, srvRecords, err := n.resolver.LookupSRV(context.Background(), service, proto, name)
-	// TODO(herko): Ignore only specific errors. If the record is not found we
-	// seem to get a variety of errors including "server misbehaving" and "no such
-	// host". We do not wish to fail when nothing is found.
+	// If the record is not found we tend to get a variety of errors including
+	// "server misbehaving" and "no such host". We do not wish to fail when
+	// nothing is found.
 	if err != nil {
 		//nolint:returnerrcheck
 		return nil, nil
