@@ -1106,7 +1106,6 @@ func (ac *AdvancingClock) Now() time.Time {
 	ac.Lock()
 	now := ac.time
 	ac.time = now.Add(ac.getAdvancementInterval())
-	// nolint:deferunlock
 	ac.Unlock()
 	return now
 }

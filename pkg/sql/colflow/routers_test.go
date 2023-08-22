@@ -1156,7 +1156,6 @@ func TestHashRouterRandom(t *testing.T) {
 								if meta := outputsAsOps[i].DrainMeta(); meta != nil {
 									metadataMu.metadata = append(metadataMu.metadata, meta)
 								}
-								// nolint:deferunlock
 								metadataMu.Unlock()
 								break
 							}

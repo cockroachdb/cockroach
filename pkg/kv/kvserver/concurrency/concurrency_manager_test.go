@@ -242,7 +242,6 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				c.mu.Lock()
 				prev := c.guardsByReqName[reqName]
 				delete(c.guardsByReqName, reqName)
-				// nolint:deferunlock
 				c.mu.Unlock()
 
 				opName := fmt.Sprintf("sequence %s", reqName)
@@ -256,7 +255,6 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 						log.Event(ctx, "sequencing complete, returned guard")
 						c.mu.Lock()
 						c.guardsByReqName[reqName] = guard
-						// nolint:deferunlock
 						c.mu.Unlock()
 					} else {
 						log.Event(ctx, "sequencing complete, returned no guard")
@@ -278,7 +276,6 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					m.FinishReq(guard)
 					c.mu.Lock()
 					delete(c.guardsByReqName, reqName)
-					// nolint:deferunlock
 					c.mu.Unlock()
 				})
 				return c.waitAndCollect(t, mon)
@@ -344,13 +341,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 						log.Eventf(ctx, "handled %v, returned error: %v", wiErr, err)
 						c.mu.Lock()
 						delete(c.guardsByReqName, reqName)
-						// nolint:deferunlock
 						c.mu.Unlock()
 					} else {
 						log.Eventf(ctx, "handled %v, released latches", wiErr)
 						c.mu.Lock()
 						c.guardsByReqName[reqName] = guard
-						// nolint:deferunlock
 						c.mu.Unlock()
 					}
 				})
@@ -1002,7 +997,6 @@ func (c *cluster) reset() error {
 		r.mu.Lock()
 		r.updatedStatus = roachpb.PENDING
 		r.updatedTimestamp = hlc.Timestamp{}
-		// nolint:deferunlock
 		r.mu.Unlock()
 	}
 	// There should be no remaining concurrency guards.

@@ -97,7 +97,6 @@ func (h *Handle) Admit(ctx context.Context, pri admissionpb.WorkPriority, ct tim
 
 	h.mu.Lock()
 	if h.mu.closed {
-		// nolint:deferunlock
 		h.mu.Unlock()
 		log.Errorf(ctx, "operating on a closed handle")
 		return nil
@@ -396,7 +395,6 @@ func (h *Handle) TestingNonBlockingAdmit(
 		log.Fatalf(ctx, "operating on a closed handle")
 	}
 	connections := h.mu.connections
-	// nolint:deferunlock
 	h.mu.Unlock()
 
 	type testingNonBlockingController interface {

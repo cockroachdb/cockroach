@@ -202,7 +202,6 @@ func TestDataDriven(t *testing.T) {
 			case "start":
 				mu.Lock()
 				require.False(t, mu.subscriberRunning, "subscriber already running")
-				// nolint:deferunlock
 				mu.Unlock()
 
 				go func() {
@@ -243,7 +242,6 @@ func TestDataDriven(t *testing.T) {
 				mu.Lock()
 				receivedUpdates := mu.receivedUpdates
 				mu.receivedUpdates = mu.receivedUpdates[:0] // clear out buffer
-				// nolint:deferunlock
 				mu.Unlock()
 
 				var output strings.Builder

@@ -51,14 +51,12 @@ func (f *FreeList) newNode() (n *node) {
 	f.mu.Lock()
 	index := len(f.freelist) - 1
 	if index < 0 {
-		// nolint:deferunlock
 		f.mu.Unlock()
 		return new(node)
 	}
 	n = f.freelist[index]
 	f.freelist[index] = nil
 	f.freelist = f.freelist[:index]
-	// nolint:deferunlock
 	f.mu.Unlock()
 	return
 }
@@ -71,7 +69,6 @@ func (f *FreeList) freeNode(n *node) (out bool) {
 		f.freelist = append(f.freelist, n)
 		out = true
 	}
-	// nolint:deferunlock
 	f.mu.Unlock()
 	return
 }

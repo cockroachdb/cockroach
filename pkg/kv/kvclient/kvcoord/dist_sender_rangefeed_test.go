@@ -752,7 +752,6 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 								// Return transient error for this range, but do this only once per range.
 								skipSet.Lock()
 								skipSet.retry.Add(checkpoint.Span)
-								// nolint:deferunlock
 								skipSet.Unlock()
 								log.Infof(ctx, "skipping span %s", checkpoint.Span)
 								*event = transientErrEvent
@@ -770,7 +769,6 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 									// and arrange for other events belonging to this range to be skipped as well.
 									skipSet.Lock()
 									skipSet.stuck.Add(checkpoint.Span)
-									// nolint:deferunlock
 									skipSet.Unlock()
 									log.Infof(ctx, "skipping stuck span %s", checkpoint.Span)
 									return true /* skip */, nil

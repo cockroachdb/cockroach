@@ -453,13 +453,11 @@ func (sp *StorePool) storeDescriptorUpdate(storeDesc roachpb.StoreDescriptor) {
 	}
 	detail.Desc = &storeDesc
 	detail.LastUpdatedTime = now
-	// nolint:deferunlock
 	sp.DetailsMu.Unlock()
 
 	sp.localitiesMu.Lock()
 	sp.localitiesMu.nodeLocalities[storeDesc.Node.NodeID] =
 		localityWithString{storeDesc.Node.Locality, storeDesc.Node.Locality.String()}
-		// nolint:deferunlock
 	sp.localitiesMu.Unlock()
 
 	if oldCapacity != curCapacity {

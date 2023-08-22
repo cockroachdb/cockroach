@@ -28,7 +28,6 @@ import (
 func (p *Provider) getAuthorizer() (ret autorest.Authorizer, err error) {
 	p.mu.Lock()
 	ret = p.mu.authorizer
-	// nolint:deferunlock
 	p.mu.Unlock()
 	if ret != nil {
 		return
@@ -40,7 +39,6 @@ func (p *Provider) getAuthorizer() (ret autorest.Authorizer, err error) {
 	if err == nil {
 		p.mu.Lock()
 		p.mu.authorizer = ret
-		// nolint:deferunlock
 		p.mu.Unlock()
 	} else {
 		err = errors.Wrap(err, "could got get Azure auth token")

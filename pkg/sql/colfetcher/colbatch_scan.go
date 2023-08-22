@@ -264,7 +264,6 @@ func (s *ColBatchScan) Next() coldata.Batch {
 	}
 	s.mu.Lock()
 	s.mu.rowsRead += int64(bat.Length())
-	// nolint:deferunlock
 	s.mu.Unlock()
 	return bat
 }

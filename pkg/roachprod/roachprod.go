@@ -1141,7 +1141,6 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 
 		mu.Lock()
 		outputFiles = append(outputFiles, outputFile)
-		// nolint:deferunlock
 		mu.Unlock()
 		return res, nil
 	}, install.WithDisplay(description))
@@ -1722,7 +1721,6 @@ func CreateSnapshot(
 					volumeSnapshot.Name, volumeSnapshot.ID, volume.Name, volume.ProviderResourceID, node)
 				volumesSnapshotMu.Lock()
 				volumesSnapshotMu.snapshots = append(volumesSnapshotMu.snapshots, volumeSnapshot)
-				// nolint:deferunlock
 				volumesSnapshotMu.Unlock()
 			}
 			return nil

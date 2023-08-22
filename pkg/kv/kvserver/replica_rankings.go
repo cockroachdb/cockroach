@@ -122,7 +122,6 @@ func NewReplicaAccumulator(dims ...load.Dimension) *RRAccumulator {
 func (rr *ReplicaRankings) Update(acc *RRAccumulator) {
 	rr.mu.Lock()
 	rr.mu.dimAccumulator = acc
-	// nolint:deferunlock
 	rr.mu.Unlock()
 }
 
@@ -252,7 +251,6 @@ func NewTenantReplicaAccumulator(dims ...load.Dimension) *RRAccumulatorByTenant 
 func (rr *ReplicaRankingMap) Update(acc *RRAccumulatorByTenant) {
 	rr.mu.Lock()
 	rr.mu.dimAccumulators = acc
-	// nolint:deferunlock
 	rr.mu.Unlock()
 }
 

@@ -277,12 +277,10 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 				}
 				rts.mu.Lock()
 				rts.mu.a.ResumeStart = true
-				// nolint:deferunlock
 				rts.mu.Unlock()
 				defer func() {
 					rts.mu.Lock()
 					rts.mu.a.ResumeExit++
-					// nolint:deferunlock
 					rts.mu.Unlock()
 					t.Log("Exiting resume")
 				}()
@@ -292,7 +290,6 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 					case <-ctx.Done():
 						rts.mu.Lock()
 						rts.mu.a.ResumeExit--
-						// nolint:deferunlock
 						rts.mu.Unlock()
 						return ctx.Err()
 					case err := <-rts.resumeCh:
@@ -314,20 +311,17 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 				}
 				rts.mu.Lock()
 				rts.mu.a.OnFailOrCancelStart = true
-				// nolint:deferunlock
 				rts.mu.Unlock()
 				<-rts.failOrCancelCheckCh
 				select {
 				case <-ctx.Done():
 					rts.mu.Lock()
 					rts.mu.a.OnFailOrCancelExit = false
-					// nolint:deferunlock
 					rts.mu.Unlock()
 					return ctx.Err()
 				case err := <-rts.failOrCancelCh:
 					rts.mu.Lock()
 					rts.mu.a.OnFailOrCancelExit = true
-					// nolint:deferunlock
 					rts.mu.Unlock()
 					t.Log("Exiting FailOrCancel")
 					return err
@@ -338,7 +332,6 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 				t.Log("Starting success")
 				rts.mu.Lock()
 				defer func() {
-					// nolint:deferunlock
 					rts.mu.Unlock()
 					t.Log("Exiting success")
 				}()
@@ -3180,7 +3173,6 @@ func (r *resumeStartedSignaler) SignalResumeStarted() {
 	r.Lock()
 	r.isStarted = true
 	r.cond.Signal()
-	// nolint:deferunlock
 	r.Unlock()
 }
 
@@ -3190,7 +3182,6 @@ func (r *resumeStartedSignaler) WaitForResumeStarted() {
 		r.cond.Wait()
 	}
 	r.isStarted = false
-	// nolint:deferunlock
 	r.Unlock()
 }
 

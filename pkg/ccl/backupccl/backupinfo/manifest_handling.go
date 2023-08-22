@@ -1541,7 +1541,6 @@ func GetBackupManifests(
 				manifests[i] = desc
 			}
 			subMem.Shrink(ctx, size)
-			// nolint:deferunlock
 			memMu.Unlock()
 
 			return err

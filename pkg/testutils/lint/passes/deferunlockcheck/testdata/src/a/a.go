@@ -17,42 +17,132 @@ import (
 type TestUnlockLint struct {
 	mu struct {
 		syncutil.Mutex
+		foo string
+		too bool
 	}
+	amended bool
 }
 
-func init() {
-	var mut syncutil.Mutex
-	var rwmut syncutil.RWMutex
-	testUnlock := &TestUnlockLint{}
+func testFnCall() bool {
+	return true
+}
 
-	// Test the main use case.
-	// Should only capture Unlock()
-	testUnlock.mu.Lock()
-	testUnlock.mu.Unlock() // want `Mutex Unlock not deferred`
-	// This should pass.
-	defer testUnlock.mu.Unlock()
+func basicCases() {
+	t := &TestUnlockLint{}
 
-	// Test within a function.
-	okFn := func() {
-		testUnlock.mu.Lock()
-		defer testUnlock.mu.Unlock()
-	}
-	failFn := func() {
-		testUnlock.mu.Lock()
-		testUnlock.mu.Unlock() // want `Mutex Unlock not deferred`
-	}
-	okFn()
-	failFn()
+	// Less than or equal to 5 lines.
+	t.mu.Lock()
+	t.mu.foo = "a"
+	t.mu.Unlock()
 
-	// Test mut variation.
-	defer mut.Unlock()
-	mut.Unlock() // want `Mutex Unlock not deferred`
+	// Unlock is too far away.
+	t.mu.Lock()
+	// Lines
+	// Lines
+	// Lines
+	// Lines
+	// Lines
+	t.mu.Unlock() // want `{RW}Mutex {R}Unlock is >5 lines away from matching {R}Lock`
 
-	// Test RUnlock
-	defer rwmut.RUnlock()
-	rwmut.RUnlock() // want `Mutex RUnlock not deferred`
+	// nolint exception inline.
+	t.mu.Lock()
+	// Lines
+	// Lines
+	// Lines
+	// Lines
+	// Lines
+	t.mu.Unlock() // nolint:deferunlock
 
-	// Test the no lint rule.
+	// nolint exception above.
+	t.mu.Lock()
+	// Lines
+	// Lines
+	// Lines
+	// Lines
+	// Lines
 	// nolint:deferunlock
-	testUnlock.mu.Unlock()
+	t.mu.Unlock()
+
+	// If statement between lock/unlock pair.
+	someVar := "foo"
+	t.mu.Lock()
+	if someVar != "" { // want `Non linear control flow: if statement between {RW}Mutex {R}Lock and {R}Unlock`
+		t.mu.foo = "bar"
+	}
+	t.mu.Unlock()
+
+	// For statement between lock/unlock pair.
+	someArr := []string{
+		"a",
+		"b",
+		"c",
+	}
+	t.mu.Lock()
+	for i := len(someArr); i < len(someArr); i++ { // want `Non linear control flow: for loop between {RW}Mutex {R}Lock and {R}Unlock`
+		t.mu.foo = someArr[i]
+	}
+	t.mu.Unlock()
+
+	// Range statement between lock/unlock pair.
+	t.mu.Lock()
+	for _, v := range someArr { // want `Non linear control flow: for loop between {RW}Mutex {R}Lock and {R}Unlock`
+		t.mu.foo = v
+	}
+	t.mu.Unlock()
+
+	// Function calls between lock/unlock pair.
+	t.mu.Lock()
+	testFnCall() // want `Non linear control flow: function call between {RW}Mutex {R}Lock and {R}Unlock`
+	t.mu.Unlock()
+
+	t.mu.Lock()
+	t.mu.too = testFnCall() // want `Non linear control flow: function call between {RW}Mutex {R}Lock and {R}Unlock`
+	t.mu.Unlock()
+
+	// Allow deferring unlocks.
+	t.mu.Lock()
+	defer t.mu.Unlock()
+}
+
+func deferFunc() {
+	t := &TestUnlockLint{}
+	// Having an unlock in a defer function w/out non linear control flow is ok.
+	t.mu.Lock()
+	defer func() {
+		t.mu.Unlock()
+	}()
+
+	// Still catches if Unlock is too far.
+	t.mu.Lock()
+	defer func() {
+		// Lines
+		// Lines
+		// Lines
+		// Lines
+		// Lines
+		t.mu.Unlock() // want `{RW}Mutex {R}Unlock is >5 lines away from matching {R}Lock`
+	}()
+}
+
+func inlineFunc() {
+	t := &TestUnlockLint{}
+	// Inline function with deferred unlock is ok.
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		t.mu.foo = "a"
+		t.mu.too = true
+	}()
+	// Same with inline function and no non linear control flow in between.
+	func() {
+		t.mu.Lock()
+		t.mu.foo = "a"
+		t.mu.Unlock()
+	}()
+	// This will produce a non linear control flow error.
+	func() {
+		t.mu.Lock()
+		testFnCall() // want `Non linear control flow: function call between {RW}Mutex {R}Lock and {R}Unlock`
+		t.mu.Unlock()
+	}()
 }

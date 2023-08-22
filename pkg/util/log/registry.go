@@ -23,7 +23,6 @@ type loggerRegistry struct {
 func (r *loggerRegistry) clear() {
 	r.mu.Lock()
 	r.mu.loggers = nil
-	// nolint:deferunlock
 	r.mu.Unlock()
 }
 
@@ -31,7 +30,6 @@ func (r *loggerRegistry) clear() {
 func (r *loggerRegistry) put(l *loggerT) {
 	r.mu.Lock()
 	r.mu.loggers = append(r.mu.loggers, l)
-	// nolint:deferunlock
 	r.mu.Unlock()
 }
 
@@ -62,7 +60,6 @@ type sinkInfoRegistry struct {
 func (r *sinkInfoRegistry) clear() {
 	r.mu.Lock()
 	r.mu.sinkInfos = nil
-	// nolint:deferunlock
 	r.mu.Unlock()
 }
 
@@ -96,7 +93,6 @@ func (r *sinkInfoRegistry) iterFileSinks(fn func(l *fileSink) error) error {
 func (r *sinkInfoRegistry) put(l *sinkInfo) {
 	r.mu.Lock()
 	r.mu.sinkInfos = append(r.mu.sinkInfos, l)
-	// nolint:deferunlock
 	r.mu.Unlock()
 }
 

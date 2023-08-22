@@ -108,7 +108,6 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 			test: func(t *testing.T, r *Replica, mp *manualPTSReader) {
 				r.mu.Lock()
 				th := *r.mu.state.GCThreshold
-				// nolint:deferunlock
 				r.mu.Unlock()
 				mp.asOf = r.store.Clock().Now().Next()
 				mp.protections = append(mp.protections, manualPTSReaderProtection{
@@ -174,7 +173,6 @@ func TestCheckProtectedTimestampsForGC(t *testing.T) {
 				r.mu.Lock()
 				r.mu.state.GCThreshold = &tsMinus60s
 				r.mu.state.Lease.Start = ts.UnsafeToClockTimestamp()
-				// nolint:deferunlock
 				r.mu.Unlock()
 
 				canGC, readAt, gcTimestamp, oldThreshold, newThreshold, err := r.checkProtectedTimestampsForGC(ctx, makeTTLDuration(gcTTLSec))

@@ -412,7 +412,6 @@ func TestImportHonorsResumePosition(t *testing.T) {
 				pkBulkAdder.onKeyAdd = func(k roachpb.Key) {
 					keys.Lock()
 					keys.keys = append(keys.keys, k)
-					// nolint:deferunlock
 					keys.Unlock()
 				}
 			} else {
@@ -433,7 +432,6 @@ func TestImportHonorsResumePosition(t *testing.T) {
 					if idx < maxKeyIdx {
 						t.Errorf("failed to skip key[%d]=%s", idx, k)
 					}
-					// nolint:deferunlock
 					keys.Unlock()
 				}
 			}
@@ -470,7 +468,6 @@ func TestImportHonorsResumePosition(t *testing.T) {
 					return keys.keys[i].Compare(keys.keys[j]) < 0
 				})
 				numKeys = len(keys.keys)
-				// nolint:deferunlock
 				keys.Unlock()
 			}
 		}

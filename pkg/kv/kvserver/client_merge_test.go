@@ -451,7 +451,6 @@ func mergeCheckingTimestampCaches(
 		filterMu.Lock()
 		mergeCommitFilterCopy := filterMu.mergeCommitFilter
 		blockHBAndGCsCopy := filterMu.blockHBAndGCs
-		// nolint:deferunlock
 		filterMu.Unlock()
 		for _, req := range ba.Requests {
 			switch v := req.GetInner().(type) {
@@ -479,7 +478,6 @@ func mergeCheckingTimestampCaches(
 	) error {
 		filterMu.Lock()
 		snapshotFilterCopy := snapshotFilter
-		// nolint:deferunlock
 		filterMu.Unlock()
 		if snapshotFilterCopy != nil {
 			snapshotFilterCopy(inSnap)
@@ -817,7 +815,6 @@ func mergeCheckingTimestampCaches(
 		close(filterMu.blockHBAndGCs)
 		filterMu.Lock()
 		filterMu.blockHBAndGCs = nil
-		// nolint:deferunlock
 		filterMu.Unlock()
 
 		t.Logf("waiting for snapshot to LHS leaseholder")
@@ -3231,7 +3228,6 @@ func (h *slowSnapRaftHandler) unblock() {
 		close(h.waitCh)
 		h.waitCh = nil
 	}
-	// nolint:deferunlock
 	h.Unlock()
 }
 
@@ -3243,7 +3239,6 @@ func (h *slowSnapRaftHandler) HandleSnapshot(
 	if header.RaftMessageRequest.RangeID == h.rangeID {
 		h.Lock()
 		waitCh := h.waitCh
-		// nolint:deferunlock
 		h.Unlock()
 		if waitCh != nil {
 			<-waitCh
@@ -4137,7 +4132,6 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 			// task from launching. This error path would previously fatal a node
 			// incorrectly (#27552).
 			state.stopping = true
-			// nolint:deferunlock
 			state.Unlock()
 			go s.Stopper().Stop(ctx)
 			// Sleep to give the shutdown time to propagate. The test appeared to work
@@ -4173,7 +4167,6 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 	rhsDesc := store.LookupReplica(roachpb.RKey(key)).Desc()
 	state.Lock()
 	state.rhsDesc = rhsDesc
-	// nolint:deferunlock
 	state.Unlock()
 
 	// Simulate a merge transaction by launching a transaction that lays down
@@ -4190,7 +4183,6 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 	// acquisition for the RHS should trigger a shutdown.
 	state.Lock()
 	state.stop = true
-	// nolint:deferunlock
 	state.Unlock()
 
 	// Expire all leases.

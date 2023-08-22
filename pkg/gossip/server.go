@@ -330,7 +330,6 @@ func (s *server) gossipReceiver(
 			cycler.Wait()
 		}
 
-		// nolint:deferunlock
 		s.mu.Unlock()
 		recvArgs, err := receiverFn()
 		s.mu.Lock()
@@ -390,7 +389,6 @@ func (s *server) start(addr net.Addr) {
 
 		s.mu.Lock()
 		unregister()
-		// nolint:deferunlock
 		s.mu.Unlock()
 
 		broadcast()

@@ -83,7 +83,6 @@ func UpdateAuditConfigOnChange(
 	}
 	acl.Lock()
 	acl.Config = config
-	// nolint:deferunlock
 	acl.Unlock()
 }
 

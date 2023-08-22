@@ -657,7 +657,6 @@ func (r *clusterRegistry) countForTag(tag string) int {
 func (r *clusterRegistry) markClusterAsSaved(c *clusterImpl, msg string) {
 	r.mu.Lock()
 	r.mu.savedClusters[c] = msg
-	// nolint:deferunlock
 	r.mu.Unlock()
 }
 
@@ -705,7 +704,6 @@ func (r *clusterRegistry) destroyAllClusters(ctx context.Context, l *logger.Logg
 		for c := range r.mu.savedClusters {
 			savedClusters[c] = struct{}{}
 		}
-		// nolint:deferunlock
 		r.mu.Unlock()
 
 		var wg sync.WaitGroup
@@ -1263,7 +1261,6 @@ func (c *clusterImpl) Save(ctx context.Context, msg string, l *logger.Logger) {
 	c.destroyState.mu.Lock()
 	c.destroyState.mu.saved = true
 	c.destroyState.mu.savedMsg = msg
-	// nolint:deferunlock
 	c.destroyState.mu.Unlock()
 }
 
@@ -1823,7 +1820,6 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 	c.destroyState.mu.Lock()
 	if c.destroyState.mu.saved {
 		// Nothing to do. Short-circuit.
-		// nolint:deferunlock
 		c.destroyState.mu.Unlock()
 		ch := make(chan struct{})
 		close(ch)
@@ -1878,7 +1874,6 @@ func (c *clusterImpl) doDestroy(ctx context.Context, l *logger.Logger) <-chan st
 	c.destroyState.mu.Lock()
 	ch := c.destroyState.mu.destroyed
 	close(ch)
-	// nolint:deferunlock
 	c.destroyState.mu.Unlock()
 	return ch
 }

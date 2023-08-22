@@ -925,7 +925,6 @@ func (r *testRunner) runTest(
 
 	r.status.Lock()
 	r.status.running[t] = struct{}{}
-	// nolint:deferunlock
 	r.status.Unlock()
 
 	t.runner = callerName()
@@ -949,7 +948,6 @@ func (r *testRunner) runTest(
 
 		t.mu.Lock()
 		t.mu.done = true
-		// nolint:deferunlock
 		t.mu.Unlock()
 
 		if s.Skip != "" {
@@ -1062,7 +1060,6 @@ func (r *testRunner) runTest(
 	t.mu.Lock()
 	// t.Fatal() will cancel this context.
 	t.mu.cancel = cancel
-	// nolint:deferunlock
 	t.mu.Unlock()
 
 	// We run the actual test in a different goroutine because it might call
@@ -1447,7 +1444,6 @@ func (r *testRunner) addWorker(ctx context.Context, name string) *workerStatus {
 func (r *testRunner) removeWorker(ctx context.Context, name string) {
 	r.workersMu.Lock()
 	delete(r.workersMu.workers, name)
-	// nolint:deferunlock
 	r.workersMu.Unlock()
 }
 
@@ -1502,7 +1498,6 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 		workers[i] = w
 		i++
 	}
-	// nolint:deferunlock
 	r.workersMu.Unlock()
 	sort.Slice(workers, func(i int, j int) bool {
 		l := workers[i]
@@ -1592,7 +1587,6 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 func (r *testRunner) recordTestFinish(info completedTestInfo) {
 	r.completedTestsMu.Lock()
 	r.completedTestsMu.completed = append(r.completedTestsMu.completed, info)
-	// nolint:deferunlock
 	r.completedTestsMu.Unlock()
 }
 

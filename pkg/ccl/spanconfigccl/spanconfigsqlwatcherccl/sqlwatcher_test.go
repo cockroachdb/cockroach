@@ -354,7 +354,6 @@ func TestSQLWatcherMultiple(t *testing.T) {
 		go f(watcher1Ctx, func() { wg.Done() }, func(ts hlc.Timestamp) {
 			mu.Lock()
 			mu.w1LastCheckpoint = ts
-			// nolint:deferunlock
 			mu.Unlock()
 		})
 
@@ -380,7 +379,6 @@ func TestSQLWatcherMultiple(t *testing.T) {
 		go f(watcher2Ctx, func() { wg.Done() }, func(ts hlc.Timestamp) {
 			mu.Lock()
 			mu.w2LastCheckpoint = ts
-			// nolint:deferunlock
 			mu.Unlock()
 		})
 
@@ -389,7 +387,6 @@ func TestSQLWatcherMultiple(t *testing.T) {
 		go f(watcher3Ctx, func() { wg.Done() }, func(ts hlc.Timestamp) {
 			mu.Lock()
 			mu.w3LastCheckpoint = ts
-			// nolint:deferunlock
 			mu.Unlock()
 		})
 
@@ -617,7 +614,6 @@ func TestWatcherReceivesNoopCheckpoints(t *testing.T) {
 			mu.Lock()
 			mu.lastCheckpoint = ts
 			mu.numCheckpoints++
-			// nolint:deferunlock
 			mu.Unlock()
 		})
 

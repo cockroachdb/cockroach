@@ -465,7 +465,6 @@ func (r *Replica) handleTruncatedStateResult(
 	expectedFirstIndexWasAccurate =
 		r.mu.state.TruncatedState.Index+1 == expectedFirstIndexPreTruncation
 	r.mu.state.TruncatedState = t
-	// nolint:deferunlock
 	r.mu.Unlock()
 
 	// Clear any entries in the Raft log entry cache for this range up
@@ -494,14 +493,12 @@ func (r *Replica) handleGCThresholdResult(ctx context.Context, thresh *hlc.Times
 	}
 	r.mu.Lock()
 	r.mu.state.GCThreshold = thresh
-	// nolint:deferunlock
 	r.mu.Unlock()
 }
 
 func (r *Replica) handleGCHintResult(ctx context.Context, hint *roachpb.GCHint) {
 	r.mu.Lock()
 	r.mu.state.GCHint = hint
-	// nolint:deferunlock
 	r.mu.Unlock()
 }
 
@@ -511,7 +508,6 @@ func (r *Replica) handleVersionResult(ctx context.Context, version *roachpb.Vers
 	}
 	r.mu.Lock()
 	r.mu.state.Version = version
-	// nolint:deferunlock
 	r.mu.Unlock()
 }
 

@@ -80,7 +80,6 @@ func (f *pgConnReplicationFeedSource) Close(ctx context.Context) {
 
 	f.mu.Lock()
 	f.mu.rows.Close()
-	// nolint:deferunlock
 	f.mu.Unlock()
 	require.NoError(f.t, f.conn.Close(ctx))
 }
@@ -156,7 +155,6 @@ func (f *pgConnReplicationFeedSource) Error() error {
 	var err error
 	f.mu.Lock()
 	err = f.mu.rows.Err()
-	// nolint:deferunlock
 	f.mu.Unlock()
 	return err
 }
@@ -747,7 +745,6 @@ USE d;
 				require.NoError(t, err)
 			}
 		}
-		// nolint:deferunlock
 		source.mu.Unlock()
 	}
 	t.Logf("frontier advanced to a %s", f.Frontier())
@@ -779,7 +776,6 @@ USE d;
 				receivedDelRanges[dr.Span.String()] = struct{}{}
 			}
 		}
-		// nolint:deferunlock
 		source.mu.Unlock()
 		if len(receivedDelRanges) >= 3 {
 			break
@@ -828,7 +824,6 @@ USE d;
 				receivedDelRanges[dr.Span.String()] = struct{}{}
 			}
 		}
-		// nolint:deferunlock
 		source.mu.Unlock()
 
 		if len(receivedDelRanges) >= 2 && len(receivedKVs) >= 1 {
