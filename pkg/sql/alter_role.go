@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
@@ -182,7 +181,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		// CockroachDB does not support the superuser role option right now, but we
 		// make it so any member of the ADMIN role can only be edited by another ADMIN
 		// (done after checking for existence of the role).
-		if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEROLE); err != nil {
+		if err := params.p.CheckGlobalPrivilegeOrRoleOption(params.ctx, privilege.CREATEROLE); err != nil {
 			return err
 		}
 		// Check that the requested combination of password options is
@@ -278,7 +277,7 @@ func (*alterRoleNode) Values() tree.Datums          { return tree.Datums{} }
 func (*alterRoleNode) Close(context.Context)        {}
 
 // AlterRoleSet represents a `ALTER ROLE ... SET` statement.
-// Privileges: CREATEROLE privilege; or admin-only if `ALTER ROLE ALL`.
+// Privileges: CREATEROLE, MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING privilege; or admin-only if `ALTER ROLE ALL`.
 func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planNode, error) {
 	// Note that for Postgres, only superuser can ALTER another superuser.
 	// CockroachDB does not support the superuser role option right now.
@@ -292,41 +291,23 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 			return nil, err
 		}
 	} else {
-		hasModify := false
-		hasSqlModify := false
-		hasCreateRole := false
-		// TODO(109258): Refactor this to use HasGlobalPrivilegeOrRoleOption.
-		// Check system privileges.
-		if ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING, p.User()); err != nil {
+		canAlterRoleSet, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE)
+		if err != nil {
 			return nil, err
-		} else if ok {
-			hasModify = true
-			hasSqlModify = true
 		}
-		if !hasModify {
-			if ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING, p.User()); err != nil {
+		if !canAlterRoleSet {
+			canAlterRoleSet, err = p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
+			if err != nil {
 				return nil, err
-			} else if ok {
-				hasSqlModify = true
 			}
 		}
-		// Check role options.
-		if !hasSqlModify {
-			if ok, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING); err != nil {
+		if !canAlterRoleSet {
+			canAlterRoleSet, err = p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYSQLCLUSTERSETTING)
+			if err != nil {
 				return nil, err
-			} else if ok {
-				hasModify = true
-				hasSqlModify = true
 			}
 		}
-		if !hasModify && !hasSqlModify {
-			if ok, err := p.HasRoleOption(ctx, roleoption.CREATEROLE); err != nil {
-				return nil, err
-			} else if ok {
-				hasCreateRole = true
-			}
-		}
-		if !hasModify && !hasSqlModify && !hasCreateRole {
+		if !canAlterRoleSet {
 			return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "ALTER ROLE ... SET requires %s, %s or %s", privilege.MODIFYCLUSTERSETTING, privilege.MODIFYSQLCLUSTERSETTING, roleoption.CREATEROLE)
 		}
 	}
