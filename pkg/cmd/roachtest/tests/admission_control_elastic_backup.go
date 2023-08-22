@@ -70,9 +70,9 @@ func registerElasticControlForBackups(r registry.Registry) {
 				)
 
 			if t.SkipInit() {
-				t.Status(fmt.Sprintf("running tpcc for %s (<%s)", workloadDuration, time.Minute))
+				t.Status(fmt.Sprintf("running tpcc for %s (<%s)", workloadDuration, estimatedSetupTime))
 			} else {
-				t.Status(fmt.Sprintf("initializing + running tpcc for %s (<%s)", workloadDuration, 10*time.Minute))
+				t.Status(fmt.Sprintf("initializing + running tpcc for %s (<%s)", workloadDuration, estimatedSetupTime))
 			}
 
 			runTPCC(ctx, t, c, tpccOptions{
