@@ -91,7 +91,6 @@ func TestDataDriven(t *testing.T) {
 			for !allowGC {
 				gcWaiter.Wait()
 			}
-			// nolint:deferunlock
 			gcWaiter.L.Unlock()
 			return nil
 		},
@@ -291,14 +290,12 @@ func TestDataDriven(t *testing.T) {
 			case "block-gc-jobs":
 				gcWaiter.L.Lock()
 				allowGC = false
-				// nolint:deferunlock
 				gcWaiter.L.Unlock()
 
 			case "unblock-gc-jobs":
 				gcWaiter.L.Lock()
 				allowGC = true
 				gcWaiter.Signal()
-				// nolint:deferunlock
 				gcWaiter.L.Unlock()
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)

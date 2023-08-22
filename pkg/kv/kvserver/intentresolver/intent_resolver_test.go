@@ -375,7 +375,6 @@ func TestCleanupMultipleIntentsAsync(t *testing.T) {
 			for _, ru := range ba.Requests {
 				reqs.Lock()
 				reqs.pushed = append(reqs.pushed, string(ru.GetPushTxn().Key))
-				// nolint:deferunlock
 				reqs.Unlock()
 			}
 			return pushTxnSendFunc(t, len(ba.Requests))(ctx, ba)
@@ -383,7 +382,6 @@ func TestCleanupMultipleIntentsAsync(t *testing.T) {
 			for _, ru := range ba.Requests {
 				reqs.Lock()
 				reqs.resolved = append(reqs.resolved, string(ru.GetResolveIntent().Key))
-				// nolint:deferunlock
 				reqs.Unlock()
 			}
 			return resolveIntentsSendFunc(t)(ctx, ba)
@@ -642,7 +640,6 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 		case kvpb.ResolveIntent:
 			reqs.Lock()
 			reqs.resolved = append(reqs.resolved, string(ru.GetResolveIntent().Key))
-			// nolint:deferunlock
 			reqs.Unlock()
 			return resolveIntentsSendFunc(t)(ctx, ba)
 		case kvpb.ResolveIntentRange:
@@ -650,13 +647,11 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 			req := ru.GetResolveIntentRange()
 			reqs.resolved = append(reqs.resolved,
 				fmt.Sprintf("%s-%s", string(req.Key), string(req.EndKey)))
-			// nolint:deferunlock
 			reqs.Unlock()
 			return resolveIntentsSendFunc(t)(ctx, ba)
 		case kvpb.GC:
 			reqs.Lock()
 			reqs.gced = append(reqs.gced, string(ru.GetGc().Key))
-			// nolint:deferunlock
 			reqs.Unlock()
 			return gcSendFunc(t)(ctx, ba)
 		default:
@@ -879,7 +874,6 @@ func newIntentResolverWithSendFuncsConcurrentSend(
 			sf.mu.Lock()
 			f := sf.popLocked()
 			if allowConcurrentSend {
-				// nolint:deferunlock
 				sf.mu.Unlock()
 			} else {
 				defer sf.mu.Unlock()

@@ -48,7 +48,6 @@ func (e *EveryN) ShouldProcess(now time.Time) bool {
 		shouldProcess = true
 		e.lastProcessed = now
 	}
-	// nolint:deferunlock
 	e.Unlock()
 	return shouldProcess
 }

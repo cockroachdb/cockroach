@@ -81,7 +81,6 @@ func (c *Cache) Iterate(
 ) (asOf hlc.Timestamp) {
 	c.mu.RLock()
 	state, lastUpdate := c.mu.state, c.mu.lastUpdate
-	// nolint:deferunlock
 	c.mu.RUnlock()
 
 	sp := roachpb.Span{

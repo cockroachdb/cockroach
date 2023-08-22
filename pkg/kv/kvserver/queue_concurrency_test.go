@@ -128,7 +128,6 @@ func TestBaseQueueConcurrent(t *testing.T) {
 	for done := false; !done; {
 		bq.mu.Lock()
 		done = len(bq.mu.replicas) == 0
-		// nolint:deferunlock
 		bq.mu.Unlock()
 		runtime.Gosched()
 	}

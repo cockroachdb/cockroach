@@ -91,7 +91,6 @@ func TestForward(t *testing.T) {
 
 		f.mu.Lock()
 		requestProc := f.mu.request
-		// nolint:deferunlock
 		f.mu.Unlock()
 
 		initialClock := requestProc.logicalClockFn()
@@ -105,7 +104,6 @@ func TestForward(t *testing.T) {
 
 		requestProc.mu.Lock()
 		require.True(t, requestProc.mu.resumed)
-		// nolint:deferunlock
 		requestProc.mu.Unlock()
 
 		// Client writes some pgwire messages.
@@ -149,7 +147,6 @@ func TestForward(t *testing.T) {
 		requestProc.mu.Lock()
 		require.Equal(t, byte(pgwirebase.ClientMsgSimpleQuery), requestProc.mu.lastMessageType)
 		require.Equal(t, initialClock+1, requestProc.mu.lastMessageTransferredAt)
-		// nolint:deferunlock
 		requestProc.mu.Unlock()
 		require.False(t, f.IsIdle())
 		barrierEnd <- struct{}{}
@@ -171,7 +168,6 @@ func TestForward(t *testing.T) {
 		requestProc.mu.Lock()
 		require.Equal(t, byte(pgwirebase.ClientMsgExecute), requestProc.mu.lastMessageType)
 		require.Equal(t, initialClock+2, requestProc.mu.lastMessageTransferredAt)
-		// nolint:deferunlock
 		requestProc.mu.Unlock()
 		require.False(t, f.IsIdle())
 		barrierEnd <- struct{}{}
@@ -194,7 +190,6 @@ func TestForward(t *testing.T) {
 		requestProc.mu.Lock()
 		require.Equal(t, byte(pgwirebase.ClientMsgClose), requestProc.mu.lastMessageType)
 		require.Equal(t, initialClock+3, requestProc.mu.lastMessageTransferredAt)
-		// nolint:deferunlock
 		requestProc.mu.Unlock()
 		require.False(t, f.IsIdle())
 		barrierEnd <- struct{}{}
@@ -241,7 +236,6 @@ func TestForward(t *testing.T) {
 
 		f.mu.Lock()
 		responseProc := f.mu.response
-		// nolint:deferunlock
 		f.mu.Unlock()
 
 		initialClock := responseProc.logicalClockFn()
@@ -255,7 +249,6 @@ func TestForward(t *testing.T) {
 
 		responseProc.mu.Lock()
 		require.True(t, responseProc.mu.resumed)
-		// nolint:deferunlock
 		responseProc.mu.Unlock()
 
 		// Server writes some pgwire messages.
@@ -292,7 +285,6 @@ func TestForward(t *testing.T) {
 		responseProc.mu.Lock()
 		require.Equal(t, byte(pgwirebase.ServerMsgErrorResponse), responseProc.mu.lastMessageType)
 		require.Equal(t, initialClock+1, responseProc.mu.lastMessageTransferredAt)
-		// nolint:deferunlock
 		responseProc.mu.Unlock()
 		require.False(t, f.IsIdle())
 		barrierEnd <- struct{}{}
@@ -315,7 +307,6 @@ func TestForward(t *testing.T) {
 		responseProc.mu.Lock()
 		require.Equal(t, byte(pgwirebase.ServerMsgReady), responseProc.mu.lastMessageType)
 		require.Equal(t, initialClock+2, responseProc.mu.lastMessageTransferredAt)
-		// nolint:deferunlock
 		responseProc.mu.Unlock()
 		require.False(t, f.IsIdle())
 		barrierEnd <- struct{}{}
@@ -558,13 +549,11 @@ func TestSuspendResumeProcessor(t *testing.T) {
 		require.EqualError(t, p.resume(ctx), context.Canceled.Error())
 		p.mu.Lock()
 		require.True(t, p.mu.closed)
-		// nolint:deferunlock
 		p.mu.Unlock()
 
 		// Set resumed to true to simulate suspend loop.
 		p.mu.Lock()
 		p.mu.resumed = true
-		// nolint:deferunlock
 		p.mu.Unlock()
 		require.EqualError(t, p.suspend(ctx), errProcessorClosed.Error())
 	})
@@ -649,7 +638,6 @@ func TestSuspendResumeProcessor(t *testing.T) {
 		require.False(t, p.mu.resumed)
 		require.False(t, p.mu.inPeek)
 		require.False(t, p.mu.suspendReq)
-		// nolint:deferunlock
 		p.mu.Unlock()
 
 		// Suspend a second time.
@@ -661,7 +649,6 @@ func TestSuspendResumeProcessor(t *testing.T) {
 		require.False(t, p.mu.resumed)
 		require.False(t, p.mu.inPeek)
 		require.False(t, p.mu.suspendReq)
-		// nolint:deferunlock
 		p.mu.Unlock()
 	})
 

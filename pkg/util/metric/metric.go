@@ -446,7 +446,6 @@ func (h *Histogram) GetMetadata() Metadata {
 func (h *Histogram) Inspect(f func(interface{})) {
 	h.windowed.Lock()
 	maybeTick(&h.windowed)
-	// nolint:deferunlock
 	h.windowed.Unlock()
 	f(h)
 }

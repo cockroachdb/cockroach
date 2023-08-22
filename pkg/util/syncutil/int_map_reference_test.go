@@ -41,7 +41,6 @@ type RWMutexMap struct {
 func (m *RWMutexMap) Load(key int64) (value unsafe.Pointer, ok bool) {
 	m.mu.RLock()
 	value, ok = m.dirty[key]
-	// nolint:deferunlock
 	m.mu.RUnlock()
 	return
 }
@@ -52,7 +51,6 @@ func (m *RWMutexMap) Store(key int64, value unsafe.Pointer) {
 		m.dirty = make(map[int64]unsafe.Pointer)
 	}
 	m.dirty[key] = value
-	// nolint:deferunlock
 	m.mu.Unlock()
 }
 
@@ -68,7 +66,6 @@ func (m *RWMutexMap) LoadOrStore(
 		}
 		m.dirty[key] = value
 	}
-	// nolint:deferunlock
 	m.mu.Unlock()
 	return actual, loaded
 }
@@ -76,7 +73,6 @@ func (m *RWMutexMap) LoadOrStore(
 func (m *RWMutexMap) Delete(key int64) {
 	m.mu.Lock()
 	delete(m.dirty, key)
-	// nolint:deferunlock
 	m.mu.Unlock()
 }
 
@@ -86,7 +82,6 @@ func (m *RWMutexMap) Range(f func(key int64, value unsafe.Pointer) (shouldContin
 	for k := range m.dirty {
 		keys = append(keys, k)
 	}
-	// nolint:deferunlock
 	m.mu.RUnlock()
 
 	for _, k := range keys {
@@ -119,7 +114,6 @@ func (m *DeepCopyMap) Store(key int64, value unsafe.Pointer) {
 	dirty := m.dirty()
 	dirty[key] = value
 	m.clean.Store(dirty)
-	// nolint:deferunlock
 	m.mu.Unlock()
 }
 
@@ -142,7 +136,6 @@ func (m *DeepCopyMap) LoadOrStore(
 		actual = value
 		m.clean.Store(dirty)
 	}
-	// nolint:deferunlock
 	m.mu.Unlock()
 	return actual, loaded
 }
@@ -152,7 +145,6 @@ func (m *DeepCopyMap) Delete(key int64) {
 	dirty := m.dirty()
 	delete(dirty, key)
 	m.clean.Store(dirty)
-	// nolint:deferunlock
 	m.mu.Unlock()
 }
 

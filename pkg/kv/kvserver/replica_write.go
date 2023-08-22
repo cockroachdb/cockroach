@@ -101,7 +101,6 @@ func (r *Replica) executeWriteBatch(
 	readOnlyCmdMu.RLock()
 	defer func() {
 		if readOnlyCmdMu != nil {
-			// nolint:deferunlock
 			readOnlyCmdMu.RUnlock()
 		}
 	}()

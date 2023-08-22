@@ -225,7 +225,6 @@ func (pt *pendingTxn) getDependentsSet() map[uuid.UUID]struct{} {
 			for txnID := range push.mu.dependents {
 				set[txnID] = struct{}{}
 			}
-			// nolint:deferunlock
 			push.mu.Unlock()
 		}
 	}
@@ -403,7 +402,6 @@ func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 
 	if q.mu.txns == nil {
 		// Not enabled; do nothing.
-		// nolint:deferunlock
 		q.mu.Unlock()
 		return
 	}
@@ -500,7 +498,6 @@ func (q *Queue) MaybeWaitForPush(
 	// ContainsKey check is done under the txn wait queue's lock to
 	// ensure that it's not cleared before an incorrect insertion happens.
 	if q.mu.txns == nil || !q.RangeContainsKeyLocked(req.Key) {
-		// nolint:deferunlock
 		q.mu.Unlock()
 		return nil, nil
 	}
@@ -542,7 +539,6 @@ func (q *Queue) MaybeWaitForPush(
 	defer func() {
 		q.mu.Lock()
 		pending.waitingPushes.Remove(pushElem)
-		// nolint:deferunlock
 		q.mu.Unlock()
 	}()
 
@@ -752,7 +748,6 @@ func (q *Queue) waitForPush(
 			// so that they continue with a query of new dependents added here.
 			q.mu.Lock()
 			q.releaseWaitingQueriesLocked(ctx, req.PusheeTxn.ID)
-			// nolint:deferunlock
 			q.mu.Unlock()
 
 			if haveDependency {
@@ -797,7 +792,6 @@ func (q *Queue) MaybeWaitForQuery(ctx context.Context, req *kvpb.QueryTxnRequest
 	// ContainsKey check is done under the txn wait queue's lock to
 	// ensure that it's not cleared before an incorrect insertion happens.
 	if q.mu.txns == nil || !q.RangeContainsKeyLocked(req.Key) {
-		// nolint:deferunlock
 		q.mu.Unlock()
 		return nil
 	}
@@ -842,7 +836,6 @@ func (q *Queue) MaybeWaitForQuery(ctx context.Context, req *kvpb.QueryTxnRequest
 		if query.count == 0 && query == q.mu.queries[req.Txn.ID] {
 			delete(q.mu.queries, req.Txn.ID)
 		}
-		// nolint:deferunlock
 		q.mu.Unlock()
 	}()
 
@@ -892,7 +885,6 @@ func (q *Queue) startQueryPusherTxn(
 		}
 	}
 	pusher := push.req.PusherTxn.Clone()
-	// nolint:deferunlock
 	push.mu.Unlock()
 
 	if err := q.cfg.Stopper.RunAsyncTask(
@@ -931,7 +923,6 @@ func (q *Queue) startQueryPusherTxn(
 				for _, txnID := range waitingTxns {
 					push.mu.dependents[txnID] = struct{}{}
 				}
-				// nolint:deferunlock
 				push.mu.Unlock()
 
 				// Send an update of the pusher txn.
@@ -1044,7 +1035,6 @@ func (q *Queue) TrackedTxns() map[uuid.UUID]struct{} {
 	for k := range q.mu.txns {
 		m[k] = struct{}{}
 	}
-	// nolint:deferunlock
 	q.mu.RUnlock()
 	return m
 }
