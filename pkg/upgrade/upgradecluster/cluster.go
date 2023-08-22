@@ -143,6 +143,6 @@ func (c *Cluster) IterateRangeDescriptors(
 }
 
 // ValidateAfterUpdateSystemVersion is part of the upgrade.Cluster interface.
-func (c *Cluster) ValidateAfterUpdateSystemVersion(_ context.Context) error {
+func (c *Cluster) ValidateAfterUpdateSystemVersion(_ context.Context, _ *kv.Txn) error {
 	return nil
 }
