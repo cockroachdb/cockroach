@@ -39,6 +39,7 @@ go_test(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
