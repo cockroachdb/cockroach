@@ -226,7 +226,7 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedMessagePrefix := ""
 
 			if c.category == clusterCreationErr {
-				expectedTeam = "@cockroachdb/dev-inf"
+				expectedTeam = "@cockroachdb/test-eng"
 				expectedName = "cluster_creation"
 				expectedMessagePrefix = "test github_test was skipped due to "
 			} else if c.category == sshErr {
