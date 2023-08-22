@@ -1,0 +1,8 @@
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
+
+statement ok
+PREPARE p AS SELECT $1::INT
+
+statement error pgcode 0A000 cannot evaluate function in this context
+EXECUTE p(f())
