@@ -49,10 +49,10 @@ sequence req=reqWaiter
 
 # Simulate that the replicated lock was discovered, so it's added to the lock
 # table.
-handle-write-intent-error req=reqWaiter lease-seq=1
- intent txn=txnWriter key=k
+handle-lock-conflict-error req=reqWaiter lease-seq=1
+  lock txn=txnWriter key=k
 ----
-[3] handle write intent error reqWaiter: handled conflicting intents on ‹"k"›, released latches
+[3] handle lock conflict error reqWaiter: handled conflicting locks on ‹"k"›, released latches
 
 sequence req=reqWaiter
 ----
@@ -190,11 +190,11 @@ sequence req=reqThreeKeyWaiter
 
 # Simulate that the replicated locks were discovered, so they are added to the
 # lock table.
-handle-write-intent-error req=reqTwoKeyWaiter lease-seq=1
- intent txn=txnThreeKeyWriter key=k1
- intent txn=txnThreeKeyWriter key=k2
+handle-lock-conflict-error req=reqTwoKeyWaiter lease-seq=1
+  lock txn=txnThreeKeyWriter key=k1
+  lock txn=txnThreeKeyWriter key=k2
 ----
-[9] handle write intent error reqTwoKeyWaiter: handled conflicting intents on ‹"k1"›, ‹"k2"›, released latches
+[9] handle lock conflict error reqTwoKeyWaiter: handled conflicting locks on ‹"k1"›, ‹"k2"›, released latches
 
 sequence req=reqTwoKeyWaiter
 ----
@@ -220,12 +220,12 @@ num=2
 
 # Simulate that the replicated locks were discovered, so they are added to the
 # lock table. Keys "k1" and "k2" were previously discovered, but "k3" is new.
-handle-write-intent-error req=reqThreeKeyWaiter lease-seq=1
- intent txn=txnThreeKeyWriter key=k1
- intent txn=txnThreeKeyWriter key=k2
- intent txn=txnThreeKeyWriter key=k3
+handle-lock-conflict-error req=reqThreeKeyWaiter lease-seq=1
+  lock txn=txnThreeKeyWriter key=k1
+  lock txn=txnThreeKeyWriter key=k2
+  lock txn=txnThreeKeyWriter key=k3
 ----
-[11] handle write intent error reqThreeKeyWaiter: handled conflicting intents on ‹"k1"›, ‹"k2"›, ‹"k3"›, released latches
+[11] handle lock conflict error reqThreeKeyWaiter: handled conflicting locks on ‹"k1"›, ‹"k2"›, ‹"k3"›, released latches
 
 sequence req=reqThreeKeyWaiter
 ----

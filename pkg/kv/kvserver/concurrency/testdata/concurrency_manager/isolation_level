@@ -191,25 +191,25 @@ sequence req=reqDiscoverInitial
 [5] sequence reqDiscoverInitial: scanning lock table for conflicting locks
 [5] sequence reqDiscoverInitial: sequencing complete, returned guard
 
-handle-write-intent-error req=reqDiscoverInitial lease-seq=1
-  intent txn=txnRCHighPushee key=kRCHigh1
-  intent txn=txnRCHighPushee key=kRCHigh2
-  intent txn=txnRCHighPushee key=kRCHigh3
-  intent txn=txnRCHighPushee key=kRCHigh4
-  intent txn=txnRCNormalPushee key=kRCNormal1
-  intent txn=txnRCNormalPushee key=kRCNormal2
-  intent txn=txnRCNormalPushee key=kRCNormal3
-  intent txn=txnRCNormalPushee key=kRCNormal4
-  intent txn=txnSSIHighPushee key=kSSIHigh1
-  intent txn=txnSSIHighPushee key=kSSIHigh2
-  intent txn=txnSSIHighPushee key=kSSIHigh3
-  intent txn=txnSSIHighPushee key=kSSIHigh4
-  intent txn=txnSSINormalPushee  key=kSSINormal1
-  intent txn=txnSSINormalPushee  key=kSSINormal2
-  intent txn=txnSSINormalPushee  key=kSSINormal3
-  intent txn=txnSSINormalPushee  key=kSSINormal4
+handle-lock-conflict-error req=reqDiscoverInitial lease-seq=1
+  lock txn=txnRCHighPushee key=kRCHigh1
+  lock txn=txnRCHighPushee key=kRCHigh2
+  lock txn=txnRCHighPushee key=kRCHigh3
+  lock txn=txnRCHighPushee key=kRCHigh4
+  lock txn=txnRCNormalPushee key=kRCNormal1
+  lock txn=txnRCNormalPushee key=kRCNormal2
+  lock txn=txnRCNormalPushee key=kRCNormal3
+  lock txn=txnRCNormalPushee key=kRCNormal4
+  lock txn=txnSSIHighPushee key=kSSIHigh1
+  lock txn=txnSSIHighPushee key=kSSIHigh2
+  lock txn=txnSSIHighPushee key=kSSIHigh3
+  lock txn=txnSSIHighPushee key=kSSIHigh4
+  lock txn=txnSSINormalPushee  key=kSSINormal1
+  lock txn=txnSSINormalPushee  key=kSSINormal2
+  lock txn=txnSSINormalPushee  key=kSSINormal3
+  lock txn=txnSSINormalPushee  key=kSSINormal4
 ----
-[6] handle write intent error reqDiscoverInitial: handled conflicting intents on ‹"kRCHigh1"›, ‹"kRCHigh2"›, ‹"kRCHigh3"›, ‹"kRCHigh4"›, ‹"kRCNormal1"› ... ‹"kSSIHigh4"›, ‹"kSSINormal1"›, ‹"kSSINormal2"›, ‹"kSSINormal3"›, ‹"kSSINormal4"›, released latches
+[6] handle lock conflict error reqDiscoverInitial: handled conflicting locks on ‹"kRCHigh1"›, ‹"kRCHigh2"›, ‹"kRCHigh3"›, ‹"kRCHigh4"›, ‹"kRCNormal1"› ... ‹"kSSIHigh4"›, ‹"kSSINormal1"›, ‹"kSSINormal2"›, ‹"kSSINormal3"›, ‹"kSSINormal4"›, released latches
 
 finish req=reqDiscoverInitial
 ----

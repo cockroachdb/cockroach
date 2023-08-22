@@ -177,7 +177,7 @@ data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
 data: "n"/3.000000000,0 -> /<empty>
 meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
-error: (*kvpb.WriteIntentError:) conflicting intents on "i"
+error: (*kvpb.LockConflictError:) conflicting locks on "i"
 
 # Idempotent writes: exact, left, right, subset.
 run stats ok

@@ -450,12 +450,12 @@ func (m *managerImpl) FinishReq(g *Guard) {
 	releaseGuard(g)
 }
 
-// HandleWriterIntentError implements the ContentionHandler interface.
-func (m *managerImpl) HandleWriterIntentError(
-	ctx context.Context, g *Guard, seq roachpb.LeaseSequence, t *kvpb.WriteIntentError,
+// HandleLockConflictError implements the ContentionHandler interface.
+func (m *managerImpl) HandleLockConflictError(
+	ctx context.Context, g *Guard, seq roachpb.LeaseSequence, t *kvpb.LockConflictError,
 ) (*Guard, *Error) {
 	if g.ltg == nil {
-		log.Fatalf(ctx, "cannot handle WriteIntentError %v for request without "+
+		log.Fatalf(ctx, "cannot handle LockConflictError %v for request without "+
 			"lockTableGuard; were lock spans declared for this request?", t)
 	}
 
@@ -472,7 +472,7 @@ func (m *managerImpl) HandleWriterIntentError(
 	//    wait in the new leaseholder's lock table.
 	// 2) if the request can be served on this follower replica according to the
 	//    closed timestamp then it will likely re-encounter the same intent on its
-	//    next evaluation attempt. The WriteIntentError will then be mapped to an
+	//    next evaluation attempt. The LockConflictError will then be mapped to an
 	//    InvalidLeaseError in maybeAttachLease, which will indicate that the
 	//    request cannot be served as a follower read after all and cause the
 	//    request to be redirected to the leaseholder.
@@ -480,9 +480,9 @@ func (m *managerImpl) HandleWriterIntentError(
 	// Either way, there is no possibility of the request entering an infinite
 	// loop without making progress.
 	consultTxnStatusCache :=
-		int64(len(t.Intents)) > DiscoveredLocksThresholdToConsultTxnStatusCache.Get(&m.st.SV)
-	for i := range t.Intents {
-		intent := &t.Intents[i]
+		int64(len(t.Locks)) > DiscoveredLocksThresholdToConsultTxnStatusCache.Get(&m.st.SV)
+	for i := range t.Locks {
+		intent := &t.Locks[i]
 		added, err := m.lt.AddDiscoveredLock(intent, seq, consultTxnStatusCache, g.ltg)
 		if err != nil {
 			log.Fatalf(ctx, "%v", err)
@@ -612,7 +612,7 @@ func (m *managerImpl) OnReplicaSnapshotApplied() {
 	// through LockManager listener methods. If there's a chance it missed a
 	// state transition, it is safer to simply clear the lockTable and rebuild
 	// it from persistent intent state by allowing requests to discover locks
-	// and inform the manager through calls to HandleWriterIntentError.
+	// and inform the manager through calls to HandleLockConflictError.
 	//
 	// A range only maintains locks in the lockTable of its leaseholder replica
 	// even thought it runs a concurrency manager on all replicas. Because of

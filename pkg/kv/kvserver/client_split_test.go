@@ -3243,7 +3243,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	store.DB().NonTransactionalSender().(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender).RangeDescriptorCache().Clear()
 
 	// Now send a request, forcing the RangeLookup. Since the lookup is
-	// inconsistent, there's no WriteIntentError, but we'll try to resolve any
+	// inconsistent, there's no LockConflictError, but we'll try to resolve any
 	// intents that are found. If the RangeLookup op attempts to resolve the
 	// intents synchronously, the operation will block forever.
 	//

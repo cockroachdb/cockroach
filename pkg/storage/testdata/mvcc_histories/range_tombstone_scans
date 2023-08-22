@@ -431,19 +431,19 @@ run error
 scan k=e end=f ts=3 failOnMoreRecent
 ----
 scan: "e"-"f" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "e"
+error: (*kvpb.LockConflictError:) conflicting locks on "e"
 
 run error
 scan k=e end=f ts=4 failOnMoreRecent
 ----
 scan: "e"-"f" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "e"
+error: (*kvpb.LockConflictError:) conflicting locks on "e"
 
 run error
 scan k=e end=f ts=5 failOnMoreRecent
 ----
 scan: "e"-"f" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "e"
+error: (*kvpb.LockConflictError:) conflicting locks on "e"
 
 # failOnMoreRecent: g-h
 run error

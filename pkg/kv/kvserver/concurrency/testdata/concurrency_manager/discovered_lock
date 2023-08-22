@@ -20,10 +20,10 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1 lease-seq=1
-  intent txn=txn1 key=k
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn1 key=k
 ----
-[2] handle write intent error req1: handled conflicting intents on ‹"k"›, released latches
+[2] handle lock conflict error req1: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
@@ -87,11 +87,11 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1 lease-seq=2
-  intent txn=txn1 key=k
+handle-lock-conflict-error req=req1 lease-seq=2
+  lock txn=txn1 key=k
 ----
-[2] handle write intent error req1: intent on ‹"k"› discovered but not added to disabled lock table
-[2] handle write intent error req1: handled conflicting intents on ‹"k"›, released latches
+[2] handle lock conflict error req1: intent on ‹"k"› discovered but not added to disabled lock table
+[2] handle lock conflict error req1: handled conflicting locks on ‹"k"›, released latches
 
 sequence req=req1
 ----
@@ -136,11 +136,11 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1 lease-seq=2
-  intent txn=txn1 key=k
+handle-lock-conflict-error req=req1 lease-seq=2
+  lock txn=txn1 key=k
 ----
-[2] handle write intent error req1: intent on ‹"k"› discovered but not added to disabled lock table
-[2] handle write intent error req1: handled conflicting intents on ‹"k"›, released latches
+[2] handle lock conflict error req1: intent on ‹"k"› discovered but not added to disabled lock table
+[2] handle lock conflict error req1: handled conflicting locks on ‹"k"›, released latches
 
 sequence req=req1
 ----

@@ -69,8 +69,8 @@ import (
 // poison       req=<req-name>
 // finish       req=<req-name>
 //
-// handle-write-intent-error  req=<req-name> txn=<txn-name> key=<key> lease-seq=<seq>
-// handle-txn-push-error      req=<req-name> txn=<txn-name> key=<key>  TODO(nvanbenschoten): implement this
+// handle-lock-conflict-error  req=<req-name> txn=<txn-name> key=<key> lease-seq=<seq>
+// handle-txn-push-error       req=<req-name> txn=<txn-name> key=<key>  TODO(nvanbenschoten): implement this
 //
 // check-opt-no-conflicts            req=<req-name>
 // is-key-locked-by-conflicting-txn  req=<req-name> key=<key> strength=<strength>
@@ -295,7 +295,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				})
 				return c.waitAndCollect(t, mon)
 
-			case "handle-write-intent-error":
+			case "handle-lock-conflict-error":
 				var reqName string
 				d.ScanArgs(t, "req", &reqName)
 				prev, ok := c.guardsByReqName[reqName]
@@ -313,10 +313,10 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					var err error
 					d.Cmd, d.CmdArgs, err = datadriven.ParseLine(line)
 					if err != nil {
-						d.Fatalf(t, "error parsing single intent: %v", err)
+						d.Fatalf(t, "error parsing single lock: %v", err)
 					}
-					if d.Cmd != "intent" {
-						d.Fatalf(t, "expected \"intent\", found %s", d.Cmd)
+					if d.Cmd != "lock" {
+						d.Fatalf(t, "expected \"lock\", found %s", d.Cmd)
 					}
 
 					var txnName string
@@ -332,18 +332,18 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					intents = append(intents, roachpb.MakeIntent(&txn.TxnMeta, roachpb.Key(key)))
 				}
 
-				opName := fmt.Sprintf("handle write intent error %s", reqName)
+				opName := fmt.Sprintf("handle lock conflict error %s", reqName)
 				mon.runAsync(opName, func(ctx context.Context) {
 					seq := roachpb.LeaseSequence(leaseSeq)
-					wiErr := &kvpb.WriteIntentError{Intents: intents}
-					guard, err := m.HandleWriterIntentError(ctx, prev, seq, wiErr)
+					lcErr := &kvpb.LockConflictError{Locks: intents}
+					guard, err := m.HandleLockConflictError(ctx, prev, seq, lcErr)
 					if err != nil {
-						log.Eventf(ctx, "handled %v, returned error: %v", wiErr, err)
+						log.Eventf(ctx, "handled %v, returned error: %v", lcErr, err)
 						c.mu.Lock()
 						delete(c.guardsByReqName, reqName)
 						c.mu.Unlock()
 					} else {
-						log.Eventf(ctx, "handled %v, released latches", wiErr)
+						log.Eventf(ctx, "handled %v, released latches", lcErr)
 						c.mu.Lock()
 						c.guardsByReqName[reqName] = guard
 						c.mu.Unlock()

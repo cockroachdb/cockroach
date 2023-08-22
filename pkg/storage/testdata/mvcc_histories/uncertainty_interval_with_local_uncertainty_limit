@@ -2095,49 +2095,49 @@ run error
 get t=txn20 k=k5 localUncertaintyLimit=20,0
 ----
 get: "k5" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k5"
+error: (*kvpb.LockConflictError:) conflicting locks on "k5"
 
 run error
 scan t=txn20 k=k5 localUncertaintyLimit=20,0
 ----
 scan: "k5"-"k5\x00" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k5"
+error: (*kvpb.LockConflictError:) conflicting locks on "k5"
 
 run error
 get t=txn20 k=k6 localUncertaintyLimit=20,0
 ----
 get: "k6" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k6"
+error: (*kvpb.LockConflictError:) conflicting locks on "k6"
 
 run error
 scan t=txn20 k=k6 localUncertaintyLimit=20,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k6"
+error: (*kvpb.LockConflictError:) conflicting locks on "k6"
 
 run error
 get t=txn20 k=k7 localUncertaintyLimit=20,0
 ----
 get: "k7" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k7"
+error: (*kvpb.LockConflictError:) conflicting locks on "k7"
 
 run error
 scan t=txn20 k=k7 localUncertaintyLimit=20,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k7"
+error: (*kvpb.LockConflictError:) conflicting locks on "k7"
 
 run error
 get t=txn20 k=k8 localUncertaintyLimit=20,0
 ----
 get: "k8" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k8"
+error: (*kvpb.LockConflictError:) conflicting locks on "k8"
 
 run error
 scan t=txn20 k=k8 localUncertaintyLimit=20,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k8"
+error: (*kvpb.LockConflictError:) conflicting locks on "k8"
 
 # A subset of the previous test cases, but with non-transactional reads:
 #
@@ -3004,46 +3004,46 @@ run error
 get k=k5 ts=25,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 get: "k5" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k5"
+error: (*kvpb.LockConflictError:) conflicting locks on "k5"
 
 run error
 scan k=k5 ts=25,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 scan: "k5"-"k5\x00" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k5"
+error: (*kvpb.LockConflictError:) conflicting locks on "k5"
 
 run error
 get k=k6 ts=25,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 get: "k6" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k6"
+error: (*kvpb.LockConflictError:) conflicting locks on "k6"
 
 run error
 scan k=k6 ts=25,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 scan: "k6"-"k6\x00" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k6"
+error: (*kvpb.LockConflictError:) conflicting locks on "k6"
 
 run error
 get k=k7 ts=25,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 get: "k7" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k7"
+error: (*kvpb.LockConflictError:) conflicting locks on "k7"
 
 run error
 scan k=k7 ts=25,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 scan: "k7"-"k7\x00" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k7"
+error: (*kvpb.LockConflictError:) conflicting locks on "k7"
 
 run error
 get k=k8 ts=25,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 get: "k8" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k8"
+error: (*kvpb.LockConflictError:) conflicting locks on "k8"
 
 run error
 scan k=k8 ts=25,0 localUncertaintyLimit=25,0 globalUncertaintyLimit=25,0
 ----
 scan: "k8"-"k8\x00" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k8"
+error: (*kvpb.LockConflictError:) conflicting locks on "k8"
