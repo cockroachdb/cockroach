@@ -3120,6 +3120,7 @@ message TenantConsumption {
   uint64 pgwire_egress_bytes = 7 [(gogoproto.customname) = "PGWireEgressBytes"];
   uint64 external_io_ingress_bytes = 9 [(gogoproto.customname) = "ExternalIOIngressBytes"];
   uint64 external_io_egress_bytes = 10 [(gogoproto.customname) = "ExternalIOEgressBytes"];
+  double cross_region_network_r_u = 13;
   // Note: if any fields are changed, the Sub and Add methods must be updated.
 }
 

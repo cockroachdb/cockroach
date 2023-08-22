@@ -788,9 +788,9 @@ func (c *tenantSideCostController) OnResponseWait(
 
 	// Account for the cost of write requests and read responses.
 	costCfg := c.costCfg.Load()
-	writeRU := costCfg.RequestCost(req)
-	readRU := costCfg.ResponseCost(resp)
-	totalRU := writeRU + readRU
+	writeKVRU, writeNetworkRU := costCfg.RequestCost(req)
+	readKVRU, readNetworkRU := costCfg.ResponseCost(resp)
+	totalRU := writeKVRU + readKVRU + writeNetworkRU + readNetworkRU
 
 	// TODO(andyk): Consider breaking up huge acquisition requests into chunks
 	// that can be fulfilled separately and reported separately. This would make
@@ -816,14 +816,16 @@ func (c *tenantSideCostController) OnResponseWait(
 		c.mu.consumption.WriteBatches += uint64(req.WriteReplicas())
 		c.mu.consumption.WriteRequests += uint64(req.WriteReplicas() * req.WriteCount())
 		c.mu.consumption.WriteBytes += uint64(req.WriteReplicas() * req.WriteBytes())
-		c.mu.consumption.KVRU += float64(writeRU)
-		c.mu.consumption.RU += float64(writeRU)
+		c.mu.consumption.KVRU += float64(writeKVRU)
+		c.mu.consumption.RU += float64(writeKVRU + writeNetworkRU)
+		c.mu.consumption.CrossRegionNetworkRU += float64(writeNetworkRU)
 	} else if resp.IsRead() {
 		c.mu.consumption.ReadBatches++
 		c.mu.consumption.ReadRequests += uint64(resp.ReadCount())
 		c.mu.consumption.ReadBytes += uint64(resp.ReadBytes())
-		c.mu.consumption.KVRU += float64(readRU)
-		c.mu.consumption.RU += float64(readRU)
+		c.mu.consumption.KVRU += float64(readKVRU)
+		c.mu.consumption.RU += float64(readKVRU + readNetworkRU)
+		c.mu.consumption.CrossRegionNetworkRU += float64(readNetworkRU)
 	}
 
 	return nil
