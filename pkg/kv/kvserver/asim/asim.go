@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/events"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
@@ -40,7 +40,7 @@ type Simulator struct {
 
 	// The simulator can run multiple workload Generators in parallel.
 	generators    []workload.Generator
-	eventExecutor *gen.Executor
+	eventExecutor *events.Executor
 	pacers        map[state.StoreID]queue.ReplicaPacer
 
 	// Store replicate queues.
@@ -78,7 +78,7 @@ func NewSimulator(
 	initialState state.State,
 	settings *config.SimulationSettings,
 	m *metrics.Tracker,
-	eventExecutor *gen.Executor,
+	eventExecutor *events.Executor,
 ) *Simulator {
 	pacers := make(map[state.StoreID]queue.ReplicaPacer)
 	rqs := make(map[state.StoreID]queue.RangeQueue)

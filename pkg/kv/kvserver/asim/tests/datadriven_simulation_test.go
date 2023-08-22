@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/events"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
@@ -167,7 +168,7 @@ func TestDataDriven(t *testing.T) {
 			},
 		}
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
-		eventGen := gen.EmptyStaticEvents()
+		eventGen := events.EmptyStaticEvents()
 		assertions := []assertion.SimulationAssertion{}
 		runs := []asim.History{}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -248,7 +249,7 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "delay", &delay)
 				scanIfExists(t, d, "stores", &numStores)
 				scanIfExists(t, d, "locality", &localityString)
-				eventGen.AddStateChangeEventGen(gen.AddNodeEvent{
+				eventGen.AddStateChangeEventGen(events.AddNodeEvent{
 					Delay:          delay,
 					NumStores:      numStores,
 					LocalityString: localityString,
@@ -267,7 +268,7 @@ func TestDataDriven(t *testing.T) {
 					tag, data = strings.TrimSpace(tag), strings.TrimSpace(data)
 					span := spanconfigtestutils.ParseSpan(t, tag)
 					conf := spanconfigtestutils.ParseZoneConfig(t, data).AsSpanConfig()
-					eventGen.AddStateChangeEventGen(gen.SetSpanConfigEvent{
+					eventGen.AddStateChangeEventGen(events.SetSpanConfigEvent{
 						Delay:  delay,
 						Span:   span,
 						Config: conf,
@@ -283,7 +284,7 @@ func TestDataDriven(t *testing.T) {
 				scanArg(t, d, "node", &nodeID)
 				scanArg(t, d, "liveness", &liveness)
 				scanIfExists(t, d, "delay", &delay)
-				eventGen.AddStateChangeEventGen(gen.SetNodeLivenessEvent{
+				eventGen.AddStateChangeEventGen(events.SetNodeLivenessEvent{
 					Delay:          delay,
 					NodeId:         state.NodeID(nodeID),
 					LivenessStatus: livenessStatus,
@@ -307,7 +308,7 @@ func TestDataDriven(t *testing.T) {
 				if ioThreshold != -1 {
 					capacityOverride.IOThreshold = allocatorimpl.TestingIOThresholdWithScore(ioThreshold)
 				}
-				eventGen.AddStateChangeEventGen(gen.SetCapacityOverrideEvent{
+				eventGen.AddStateChangeEventGen(events.SetCapacityOverrideEvent{
 					Delay:            delay,
 					StoreID:          state.StoreID(store),
 					CapacityOverride: capacityOverride,

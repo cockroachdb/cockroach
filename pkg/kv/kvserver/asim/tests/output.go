@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/events"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 )
@@ -68,7 +69,7 @@ type testResult struct {
 	clusterGen   gen.ClusterGen
 	rangeGen     gen.RangeGen
 	loadGen      gen.LoadGen
-	eventGen     gen.EventGen
+	eventGen     events.EventGen
 	initialTime  time.Time
 	initialState state.State
 }

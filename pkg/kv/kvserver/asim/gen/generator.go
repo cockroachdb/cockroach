@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/events"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -66,7 +67,7 @@ func GenerateSimulation(
 	rangeGen RangeGen,
 	loadGen LoadGen,
 	settingsGen SettingsGen,
-	eventGen EventGen,
+	eventGen events.EventGen,
 	seed int64,
 ) *asim.Simulator {
 	settings := settingsGen.Generate(seed)

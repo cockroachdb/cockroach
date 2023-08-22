@@ -1299,6 +1299,7 @@ GO_TARGETS = [
     "//pkg/kv/kvserver/asim/assertion:assertion",
     "//pkg/kv/kvserver/asim/assertion:assertions",
     "//pkg/kv/kvserver/asim/config:config",
+    "//pkg/kv/kvserver/asim/events:events",
     "//pkg/kv/kvserver/asim/gen:gen",
     "//pkg/kv/kvserver/asim/gossip:gossip",
     "//pkg/kv/kvserver/asim/gossip:gossip_test",
