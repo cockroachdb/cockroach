@@ -685,17 +685,28 @@ FROM (SELECT fingerprint_id,
 		app := string(tree.MustBeDString(row[2]))
 
 		aggregatedTs := tree.MustBeDTimestampTZ(row[3]).Time
-
-		var metadata appstatspb.CollectedStatementStatistics
-		metadataJSON := tree.MustBeDJSON(row[4]).JSON
-		if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &metadata); err != nil {
+		// The metadata is aggregated across all the statements with the same fingerprint.
+		aggregateMetadataJSON := tree.MustBeDJSON(row[4]).JSON
+		var aggregateMetadata appstatspb.AggregatedStatementMetadata
+		if err = sqlstatsutil.DecodeAggregatedMetadataJSON(aggregateMetadataJSON, &aggregateMetadata); err != nil {
 			return nil, serverError(ctx, err)
 		}
 
-		metadata.Key.App = app
+		metadata := appstatspb.CollectedStatementStatistics{
+			Key: appstatspb.StatementStatisticsKey{
+				App:          app,
+				DistSQL:      aggregateMetadata.DistSQLCount > 0,
+				FullScan:     aggregateMetadata.FullScanCount > 0,
+				Failed:       aggregateMetadata.FailedCount > 0,
+				Query:        aggregateMetadata.Query,
+				QuerySummary: aggregateMetadata.QuerySummary,
+				Database:     strings.Join(aggregateMetadata.Databases, ","),
+			},
+		}
 
+		var stats appstatspb.StatementStatistics
 		statsJSON := tree.MustBeDJSON(row[5]).JSON
-		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
+		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &stats); err != nil {
 			return nil, serverError(ctx, err)
 		}
 
@@ -705,12 +716,11 @@ FROM (SELECT fingerprint_id,
 				AggregatedTs: aggregatedTs,
 			},
 			ID:                appstatspb.StmtFingerprintID(statementFingerprintID),
-			Stats:             metadata.Stats,
+			Stats:             stats,
 			TxnFingerprintIDs: txnFingerprintIDs,
 		}
 
 		statements = append(statements, stmt)
-
 	}
 
 	if err != nil {
