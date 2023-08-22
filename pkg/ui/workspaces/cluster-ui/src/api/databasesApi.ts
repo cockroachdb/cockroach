@@ -42,30 +42,25 @@ export const databasesRequest: SqlExecutionRequest = {
 // getDatabasesList from cluster-ui will need to pass a timeout argument for
 // promise timeout handling (callers from db-console already have promise
 // timeout handling as part of the cacheDataReducer).
-export function getDatabasesList(
+export async function getDatabasesList(
   timeout?: moment.Duration,
 ): Promise<DatabasesListResponse> {
-  return withTimeout(
+  const resp = await withTimeout(
     executeInternalSql<DatabasesColumns>(databasesRequest),
     timeout,
-  ).then(result => {
-    // If there is an error and there are no result throw error.
-    const noTxnResultsExist = result?.execution?.txn_results?.length === 0;
-    if (
-      result.error &&
-      (noTxnResultsExist || result.execution.txn_results[0].rows.length === 0)
-    ) {
-      throw result.error;
-    }
+  );
+  // Encountered a response level error, or empty response.
+  if (resp.error || sqlResultsAreEmpty(resp)) {
+    return { databases: [], error: resp.error };
+  }
 
-    if (sqlResultsAreEmpty(result)) {
-      return { databases: [], error: result.error };
-    }
+  // Get database names.
+  const dbNames: string[] = resp.execution.txn_results[0].rows.map(
+    row => row.database_name,
+  );
 
-    const dbNames: string[] = result.execution.txn_results[0].rows.map(
-      row => row.database_name,
-    );
-
-    return { databases: dbNames, error: result.error };
-  });
+  // Note that we do not surface the txn_result error in the returned payload.
+  // This request only contains a single txn_result, any error encountered by the txn_result
+  // will be surfaced at the response level by the sql api.
+  return { databases: dbNames, error: resp.error };
 }
