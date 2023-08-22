@@ -1906,6 +1906,12 @@ func (kl *keyLocks) informActiveWaiters() {
 // they use the concept of the transaction that has claimed a particular key as
 // the transaction to push.
 //
+// This function will never return a nil claimant transaction. However, it may
+// panic if no lock is held on the key and there are no inactive, waiting
+// locking requests. As such, this method is only intended to be called on
+// behalf of a request that is deciding to wait at this key -- in which case,
+// either or both of the above conditions need to be true.
+//
 // REQUIRES: l.mu to be locked.
 func (kl *keyLocks) claimantTxn() (_ *enginepb.TxnMeta, held bool) {
 	if kl.isLocked() {
@@ -1920,6 +1926,21 @@ func (kl *keyLocks) claimantTxn() (_ *enginepb.TxnMeta, held bool) {
 		panic("no queued writers or lock holder; no one should be waiting on the lock")
 	}
 	qg := kl.queuedWriters.Front().Value.(*queuedGuard)
+	// If no lock is held on this key, and there are waiting locking requests
+	// in the waitQueue, then the head of the wait queue should be comprised of
+	// inactive waiters (length >= 1). All the inactive waiters at the head of the
+	// queue should be compatible with each other. Moreover, these inactive
+	// waiters should all be transactional locking requests. While
+	// non-transactional writers are allowed to be inactive waiters, the
+	// conditions under which that can happen aren't possible here[1]. In
+	// particular, if a lock was discovered, then we would never be in this unheld
+	// case here. Similarly, if a transaction was finalized, any non-transactional
+	// writers would have been removed from the wait queue.
+	//
+	// [1] See the comment above queuedGuard for when non-transactional writers
+	// can wait inactively.
+	assert(qg.guard.txnMeta() != nil, "unexpected non-transactional writer at the front of the queue")
+	assert(!qg.active, "expected first waiter to be inactive")
 	return qg.guard.txnMeta(), false
 }
 
