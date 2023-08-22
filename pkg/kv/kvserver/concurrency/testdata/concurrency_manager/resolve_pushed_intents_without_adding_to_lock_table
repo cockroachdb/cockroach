@@ -25,10 +25,10 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1 lease-seq=1
-  intent txn=txn2 key=a
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn2 key=a
 ----
-[2] handle write intent error req1: handled conflicting intents on ‹"a"›, released latches
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, released latches
 
 debug-lock-table
 ----
@@ -72,29 +72,29 @@ sequence req=req2
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: sequencing complete, returned guard
 
-# The intents get resolved instead of being added to the lock table.
-handle-write-intent-error req=req2 lease-seq=1
-  intent txn=txn2 key=b
-  intent txn=txn2 key=c
-  intent txn=txn2 key=d
-  intent txn=txn2 key=e
-  intent txn=txn2 key=f
-  intent txn=txn2 key=g
-  intent txn=txn2 key=h
-  intent txn=txn2 key=i
-  intent txn=txn2 key=j
+# The locks get resolved instead of being added to the lock table.
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn2 key=b
+  lock txn=txn2 key=c
+  lock txn=txn2 key=d
+  lock txn=txn2 key=e
+  lock txn=txn2 key=f
+  lock txn=txn2 key=g
+  lock txn=txn2 key=h
+  lock txn=txn2 key=i
+  lock txn=txn2 key=j
 ----
-[5] handle write intent error req2: resolving a batch of 9 intent(s)
-[5] handle write intent error req2: resolving intent ‹"b"› for txn 00000002 with PENDING status
-[5] handle write intent error req2: resolving intent ‹"c"› for txn 00000002 with PENDING status
-[5] handle write intent error req2: resolving intent ‹"d"› for txn 00000002 with PENDING status
-[5] handle write intent error req2: resolving intent ‹"e"› for txn 00000002 with PENDING status
-[5] handle write intent error req2: resolving intent ‹"f"› for txn 00000002 with PENDING status
-[5] handle write intent error req2: resolving intent ‹"g"› for txn 00000002 with PENDING status
-[5] handle write intent error req2: resolving intent ‹"h"› for txn 00000002 with PENDING status
-[5] handle write intent error req2: resolving intent ‹"i"› for txn 00000002 with PENDING status
-[5] handle write intent error req2: resolving intent ‹"j"› for txn 00000002 with PENDING status
-[5] handle write intent error req2: handled conflicting intents on ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
+[5] handle lock conflict error req2: resolving a batch of 9 intent(s)
+[5] handle lock conflict error req2: resolving intent ‹"b"› for txn 00000002 with PENDING status
+[5] handle lock conflict error req2: resolving intent ‹"c"› for txn 00000002 with PENDING status
+[5] handle lock conflict error req2: resolving intent ‹"d"› for txn 00000002 with PENDING status
+[5] handle lock conflict error req2: resolving intent ‹"e"› for txn 00000002 with PENDING status
+[5] handle lock conflict error req2: resolving intent ‹"f"› for txn 00000002 with PENDING status
+[5] handle lock conflict error req2: resolving intent ‹"g"› for txn 00000002 with PENDING status
+[5] handle lock conflict error req2: resolving intent ‹"h"› for txn 00000002 with PENDING status
+[5] handle lock conflict error req2: resolving intent ‹"i"› for txn 00000002 with PENDING status
+[5] handle lock conflict error req2: resolving intent ‹"j"› for txn 00000002 with PENDING status
+[5] handle lock conflict error req2: handled conflicting locks on ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
 
 debug-lock-table
 ----
@@ -137,10 +137,10 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1 lease-seq=1
-  intent txn=txn2 key=a
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn2 key=a
 ----
-[2] handle write intent error req1: handled conflicting intents on ‹"a"›, released latches
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, released latches
 
 debug-lock-table
 ----
@@ -184,19 +184,19 @@ sequence req=req2
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: sequencing complete, returned guard
 
-# The intents get resolved instead of being added to the lock table.
-handle-write-intent-error req=req2 lease-seq=1
-  intent txn=txn2 key=b
-  intent txn=txn2 key=c
-  intent txn=txn2 key=d
-  intent txn=txn2 key=e
-  intent txn=txn2 key=f
-  intent txn=txn2 key=g
-  intent txn=txn2 key=h
-  intent txn=txn2 key=i
-  intent txn=txn2 key=j
+# The locks get resolved instead of being added to the lock table.
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn2 key=b
+  lock txn=txn2 key=c
+  lock txn=txn2 key=d
+  lock txn=txn2 key=e
+  lock txn=txn2 key=f
+  lock txn=txn2 key=g
+  lock txn=txn2 key=h
+  lock txn=txn2 key=i
+  lock txn=txn2 key=j
 ----
-[5] handle write intent error req2: handled conflicting intents on ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
+[5] handle lock conflict error req2: handled conflicting locks on ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
 
 debug-lock-table
 ----
@@ -308,10 +308,10 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1 lease-seq=1
-  intent txn=txn2 key=a
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn2 key=a
 ----
-[2] handle write intent error req1: handled conflicting intents on ‹"a"›, released latches
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, released latches
 
 debug-lock-table
 ----
@@ -355,19 +355,19 @@ sequence req=req2
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: sequencing complete, returned guard
 
-# The intents get resolved instead of being added to the lock table.
-handle-write-intent-error req=req2 lease-seq=1
-  intent txn=txn2 key=b
-  intent txn=txn2 key=c
-  intent txn=txn2 key=d
-  intent txn=txn2 key=e
-  intent txn=txn2 key=f
-  intent txn=txn2 key=g
-  intent txn=txn2 key=h
-  intent txn=txn2 key=i
-  intent txn=txn2 key=j
+# The locks get resolved instead of being added to the lock table.
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn2 key=b
+  lock txn=txn2 key=c
+  lock txn=txn2 key=d
+  lock txn=txn2 key=e
+  lock txn=txn2 key=f
+  lock txn=txn2 key=g
+  lock txn=txn2 key=h
+  lock txn=txn2 key=i
+  lock txn=txn2 key=j
 ----
-[5] handle write intent error req2: handled conflicting intents on ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
+[5] handle lock conflict error req2: handled conflicting locks on ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
 
 debug-lock-table
 ----

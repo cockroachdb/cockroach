@@ -222,13 +222,13 @@ func EvalAddSSTable(
 	}
 
 	var statsDelta enginepb.MVCCStats
-	maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+	maxIntents := storage.MaxIntentsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 	checkConflicts := args.DisallowConflicts || args.DisallowShadowing ||
 		!args.DisallowShadowingBelow.IsEmpty()
 	if checkConflicts {
 		// If requested, check for MVCC conflicts with existing keys. This enforces
 		// all MVCC invariants by returning WriteTooOldError for any existing
-		// values at or above the SST timestamp, returning WriteIntentError to
+		// values at or above the SST timestamp, returning LockConflictError to
 		// resolve any encountered intents, and accurately updating MVCC stats.
 		//
 		// Additionally, if DisallowShadowing or DisallowShadowingBelow is set, it
@@ -273,7 +273,7 @@ func EvalAddSSTable(
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "scanning intents")
 		} else if len(intents) > 0 {
-			return result.Result{}, &kvpb.WriteIntentError{Intents: intents}
+			return result.Result{}, &kvpb.LockConflictError{Locks: intents}
 		}
 	}
 

@@ -16,7 +16,7 @@ func _() {
 	_ = x[TransactionPushErrType-6]
 	_ = x[TransactionRetryErrType-7]
 	_ = x[TransactionStatusErrType-8]
-	_ = x[WriteIntentErrType-9]
+	_ = x[LockConflictErrType-9]
 	_ = x[WriteTooOldErrType-10]
 	_ = x[OpRequiresTxnErrType-11]
 	_ = x[ConditionFailedErrType-12]
@@ -63,8 +63,8 @@ func (i ErrorDetailType) String() string {
 		return "TransactionRetryErrType"
 	case TransactionStatusErrType:
 		return "TransactionStatusErrType"
-	case WriteIntentErrType:
-		return "WriteIntentErrType"
+	case LockConflictErrType:
+		return "LockConflictErrType"
 	case WriteTooOldErrType:
 		return "WriteTooOldErrType"
 	case OpRequiresTxnErrType:

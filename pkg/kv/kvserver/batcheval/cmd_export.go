@@ -155,7 +155,7 @@ func evalExport(
 	}
 
 	var maxIntents uint64
-	if m := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV); m > 0 {
+	if m := storage.MaxIntentsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV); m > 0 {
 		maxIntents = uint64(m)
 	}
 

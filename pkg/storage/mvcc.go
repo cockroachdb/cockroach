@@ -61,12 +61,12 @@ const (
 	// minimum total for a single store node must be under 2048 for Windows
 	// compatibility.
 	MinimumMaxOpenFiles = 1700
-	// MaxIntentsPerWriteIntentErrorDefault is the default value for maximum
+	// MaxIntentsPerLockConflictErrorDefault is the default value for maximum
 	// number of intents reported by ExportToSST and Scan operations in
-	// WriteIntentError is set to half of the maximum lock table size.
-	// This value is subject to tuning in real environment as we have more data
+	// LockConflictError is set to half of the maximum lock table size. This
+	// value is subject to tuning in real environment as we have more data
 	// available.
-	MaxIntentsPerWriteIntentErrorDefault = 5000
+	MaxIntentsPerLockConflictErrorDefault = 5000
 )
 
 var minWALSyncInterval = settings.RegisterDurationSetting(
@@ -108,14 +108,14 @@ func CanUseMVCCRangeTombstones(ctx context.Context, st *cluster.Settings) bool {
 		MVCCRangeTombstonesEnabledInMixedClusters.Get(&st.SV)
 }
 
-// MaxIntentsPerWriteIntentError sets maximum number of intents returned in
-// WriteIntentError in operations that return multiple intents per error.
+// MaxIntentsPerLockConflictError sets maximum number of intents returned in
+// LockConflictError in operations that return multiple intents per error.
 // Currently it is used in Scan, ReverseScan, and ExportToSST.
-var MaxIntentsPerWriteIntentError = settings.RegisterIntSetting(
+var MaxIntentsPerLockConflictError = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"storage.mvcc.max_intents_per_error",
 	"maximum number of intents returned in error during export of scan requests",
-	MaxIntentsPerWriteIntentErrorDefault,
+	MaxIntentsPerLockConflictErrorDefault,
 )
 
 var rocksdbConcurrency = envutil.EnvOrDefaultInt(
@@ -819,7 +819,7 @@ func MVCCGetProto(
 	// If we found a result, parse it regardless of the error returned by MVCCGet.
 	if found && msg != nil {
 		// If the unmarshal failed, return its result. Otherwise, pass
-		// through the underlying error (which may be a WriteIntentError
+		// through the underlying error (which may be a LockConflictError
 		// to be handled specially alongside the returned value).
 		if err := valueRes.Value.GetProto(msg); err != nil {
 			return found, err
@@ -986,7 +986,7 @@ type MVCCGetResult struct {
 	// returned instead.
 	Value *roachpb.Value
 	// In inconsistent mode, the intent if an intent is encountered. In
-	// consistent mode, an intent will generate a WriteIntentError with the
+	// consistent mode, an intent will generate a LockConflictError with the
 	// intent embedded within and the intent parameter will be nil.
 	Intent *roachpb.Intent
 	// See the documentation for kvpb.ResponseHeader for information on
@@ -1083,7 +1083,7 @@ func newMVCCIterator(
 //
 // In inconsistent mode, if an intent is encountered, it will be placed in the
 // intent field. By contrast, in consistent mode, an intent will generate a
-// WriteIntentError with the intent embedded within, and the intent result
+// LockConflictError with the intent embedded within, and the intent result
 // parameter will be nil.
 //
 // Note that transactional gets must be consistent. Put another way, only
@@ -1094,14 +1094,14 @@ func newMVCCIterator(
 //
 // When reading in "skip locked" mode, a key that is locked by a transaction
 // other than the reader is not included in the result set and does not result
-// in a WriteIntentError. Instead, the key is included in the encountered intent
+// in a LockConflictError. Instead, the key is included in the encountered intent
 // result parameter so that it can be resolved asynchronously. In this mode, the
 // LockTableView provided in the options is consulted any observed key to
 // determine whether it is locked with an unreplicated lock.
 //
 // When reading in "fail on more recent" mode, a WriteTooOldError will be
 // returned if the read observes a version with a timestamp above the read
-// timestamp. Similarly, a WriteIntentError will be returned if the read
+// timestamp. Similarly, a LockConflictError will be returned if the read
 // observes another transaction's intent, even if it has a timestamp above
 // the read timestamp.
 func MVCCGet(
@@ -1231,7 +1231,7 @@ func mvccGetWithValueHeader(
 		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, err
 	}
 	if opts.errOnIntents() && len(intents) > 0 {
-		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, &kvpb.WriteIntentError{Intents: intents}
+		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, &kvpb.LockConflictError{Locks: intents}
 	}
 
 	if len(intents) > 1 {
@@ -1643,7 +1643,7 @@ func mvccPutUsingIter(
 // result of calling valueFn on the data read at readTimestamp. The
 // function uses a non-transactional read, so uncertainty does not apply
 // and any intents (even the caller's own if the caller is operating on
-// behalf of a transaction), will result in a WriteIntentError. Because
+// behalf of a transaction), will result in a LockConflictError. Because
 // of this, the function is only called from places where intents have
 // already been considered.
 func maybeGetValue(
@@ -1954,7 +1954,7 @@ func mvccPutInternal(
 			if opts.Txn == nil || meta.Txn.ID != opts.Txn.ID {
 				// The current Put operation does not come from the same
 				// transaction.
-				return false, &kvpb.WriteIntentError{Intents: []roachpb.Intent{
+				return false, &kvpb.LockConflictError{Locks: []roachpb.Intent{
 					roachpb.MakeIntent(meta.Txn, key),
 				}}
 			} else if opts.Txn.Epoch < meta.Txn.Epoch {
@@ -3154,7 +3154,7 @@ func MVCCDeleteRange(
 // The keyspaces of each run do not overlap.
 //
 // This operation is non-transactional, but will check for existing intents in
-// the target key span, regardless of timestamp, and return a WriteIntentError
+// the target key span, regardless of timestamp, and return a LockConflictError
 // containing up to maxIntents intents.
 //
 // MVCCPredicateDeleteRange will return with a resumeSpan if the number of tombstones
@@ -3221,7 +3221,7 @@ func MVCCPredicateDeleteRange(
 	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
 		return nil, err
 	} else if len(intents) > 0 {
-		return nil, &kvpb.WriteIntentError{Intents: intents}
+		return nil, &kvpb.LockConflictError{Locks: intents}
 	}
 
 	// continueRun returns three bools: the first is true if the current run
@@ -3447,7 +3447,7 @@ func MVCCPredicateDeleteRange(
 // MVCCDeleteRangeUsingTombstone deletes the given MVCC keyspan at the given
 // timestamp using an MVCC range tombstone (rather than MVCC point tombstones).
 // This operation is non-transactional, but will check for existing intents and
-// return a WriteIntentError containing up to maxIntents intents. Can't be used
+// return a LockConflictError containing up to maxIntents intents. Can't be used
 // across local keyspace.
 //
 // The leftPeekBound and rightPeekBound parameters are used when looking for
@@ -3516,7 +3516,7 @@ func MVCCDeleteRangeUsingTombstone(
 	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
 		return err
 	} else if len(intents) > 0 {
-		return &kvpb.WriteIntentError{Intents: intents}
+		return &kvpb.LockConflictError{Locks: intents}
 	}
 
 	// If requested, check if there are any point keys/tombstones in the span that
@@ -3900,7 +3900,7 @@ func finalizeScanResult(
 	}
 
 	if opts.errOnIntents() && len(res.Intents) > 0 {
-		return &kvpb.WriteIntentError{Intents: res.Intents}
+		return &kvpb.LockConflictError{Locks: res.Intents}
 	}
 	return nil
 }
@@ -4015,7 +4015,7 @@ type MVCCScanOptions struct {
 	// will be fetched and returned too.
 	WholeRowsOfSize int32
 	// MaxIntents is a maximum number of intents collected by scanner in
-	// consistent mode before returning WriteIntentError.
+	// consistent mode before returning LockConflictError.
 	//
 	// Not used in inconsistent scans.
 	// The zero value indicates no limit.
@@ -4100,7 +4100,7 @@ type MVCCScanResult struct {
 //
 // When scanning inconsistently, any encountered intents will be placed in the
 // dedicated result parameter. By contrast, when scanning consistently, any
-// encountered intents will cause the scan to return a WriteIntentError with the
+// encountered intents will cause the scan to return a LockConflictError with the
 // intents embedded within.
 //
 // Note that transactional scans must be consistent. Put another way, only
@@ -4108,7 +4108,7 @@ type MVCCScanResult struct {
 //
 // When scanning in "skip locked" mode, keys that are locked by transactions
 // other than the reader are not included in the result set and do not result in
-// a WriteIntentError. Instead, these keys are included in the encountered
+// a LockConflictError. Instead, these keys are included in the encountered
 // intents result parameter so that they can be resolved asynchronously. In this
 // mode, the LockTableView provided in the options is consulted for each key to
 // determine whether it is locked with an unreplicated lock.
@@ -4117,7 +4117,7 @@ type MVCCScanResult struct {
 // returned if the scan observes a version with a timestamp at or above the read
 // timestamp. If the scan observes multiple versions with timestamp at or above
 // the read timestamp, the maximum will be returned in the WriteTooOldError.
-// Similarly, a WriteIntentError will be returned if the scan observes another
+// Similarly, a LockConflictError will be returned if the scan observes another
 // transaction's intent, even if it has a timestamp above the read timestamp.
 func MVCCScan(
 	ctx context.Context,
@@ -4191,7 +4191,7 @@ func MVCCScanAsTxn(
 // the reverse flag is set, the iterator will be moved in reverse order. If the
 // scan options specify an inconsistent scan, all "ignored" intents will be
 // returned. In consistent mode, intents are only ever returned as part of a
-// WriteIntentError. In Tombstones mode, MVCC range tombstones are emitted as
+// LockConflictError. In Tombstones mode, MVCC range tombstones are emitted as
 // synthetic point tombstones above existing point keys.
 func MVCCIterate(
 	ctx context.Context,
@@ -6666,7 +6666,7 @@ type ExportRequestResumeInfo struct {
 // and overlapping [StartKey, EndKey) are returned. If only the latest revision
 // is requested, only the most recent matching tombstone is returned.
 //
-// Intents within the time and span bounds will return a WriteIntentError, while
+// Intents within the time and span bounds will return a LockConflictError, while
 // intents outside are ignored.
 //
 // Returns an export summary and a resume key that allows resuming the export if
@@ -7043,7 +7043,7 @@ type MVCCExportOptions struct {
 	// exists to prevent creating SSTs which are too large to be used.
 	MaxSize uint64
 	// MaxIntents specifies the number of intents to collect and return in a
-	// WriteIntentError. The caller will likely resolve the returned intents and
+	// LockConflictError. The caller will likely resolve the returned intents and
 	// retry the call, which would be quadratic, so this significantly reduces the
 	// overall number of scans. 0 disables batching and returns the first intent,
 	// pass math.MaxUint64 to collect all.

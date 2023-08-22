@@ -396,7 +396,7 @@ savepoint x
 
 get conflict-key locking nowait
 ----
-(*kvpb.WriteIntentError) conflicting intents on "conflict-key" [reason=wait_policy]
+(*kvpb.LockConflictError) conflicting locks on "conflict-key" [reason=wait_policy]
 
 rollback x
 ----
@@ -404,7 +404,7 @@ rollback x
 
 put conflict-key b nowait
 ----
-(*kvpb.WriteIntentError) conflicting intents on "conflict-key" [reason=wait_policy]
+(*kvpb.LockConflictError) conflicting locks on "conflict-key" [reason=wait_policy]
 
 rollback x
 ----
@@ -437,7 +437,7 @@ savepoint x
 
 get conflict-key-2 lock-timeout
 ----
-(*kvpb.WriteIntentError) conflicting intents on "conflict-key-2" [reason=lock_timeout]
+(*kvpb.LockConflictError) conflicting locks on "conflict-key-2" [reason=lock_timeout]
 
 rollback x
 ----
@@ -445,7 +445,7 @@ rollback x
 
 put conflict-key-2 b lock-timeout
 ----
-(*kvpb.WriteIntentError) conflicting intents on "conflict-key-2" [reason=lock_timeout]
+(*kvpb.LockConflictError) conflicting locks on "conflict-key-2" [reason=lock_timeout]
 
 rollback x
 ----

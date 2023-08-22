@@ -978,7 +978,7 @@ func (q *Queue) queryTxnStatus(
 		//
 		// Scenario:
 		// - we're aborted and don't know if we have a read-write conflict
-		// - the push above fails and we get a WriteIntentError
+		// - the push above fails and we get a LockConflictError
 		// - we try to update our transaction (right here, and if we don't we might
 		// be stuck in a race, that's why we do this - the txn proto we're using
 		// might be outdated)

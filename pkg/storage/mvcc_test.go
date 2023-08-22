@@ -477,7 +477,7 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 	}
 }
 
-func TestMVCCGetWriteIntentError(t *testing.T) {
+func TestMVCCGetLockConflictError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -506,7 +506,7 @@ func mkVal(s string, ts hlc.Timestamp) roachpb.Value {
 	return v
 }
 
-func TestMVCCScanWriteIntentError(t *testing.T) {
+func TestMVCCScanLockConflictError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -558,7 +558,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 				roachpb.MakeIntent(&txn1ts.TxnMeta, testKey1),
 				roachpb.MakeIntent(&txn2ts.TxnMeta, testKey4),
 			},
-			// would be []roachpb.KeyValue{fixtureKVs[3], fixtureKVs[4]} without WriteIntentError
+			// would be []roachpb.KeyValue{fixtureKVs[3], fixtureKVs[4]} without LockConflictError
 			expValues: nil,
 		},
 		{
@@ -598,14 +598,14 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		t.Run(scan.name, func(t *testing.T) {
 			res, err := MVCCScan(ctx, engine, testKey1, testKey6.Next(),
 				hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Inconsistent: !scan.consistent, Txn: scan.txn, MaxIntents: 2})
-			var wiErr *kvpb.WriteIntentError
-			_ = errors.As(err, &wiErr)
-			if (err == nil) != (wiErr == nil) {
+			var lcErr *kvpb.LockConflictError
+			_ = errors.As(err, &lcErr)
+			if (err == nil) != (lcErr == nil) {
 				t.Errorf("unexpected error: %+v", err)
 			}
 
-			if wiErr == nil != !scan.consistent {
-				t.Fatalf("expected write intent error; got %s", err)
+			if lcErr == nil != !scan.consistent {
+				t.Fatalf("expected lock conflict error; got %s", err)
 			}
 
 			intents := res.Intents
@@ -615,7 +615,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			}
 
 			if scan.consistent {
-				intents = wiErr.Intents
+				intents = lcErr.Locks
 			}
 
 			if !reflect.DeepEqual(intents, scan.expIntents) {
@@ -725,8 +725,8 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 		Txn:          txn1,
 	}); err == nil {
 		t.Error("expected an error getting inconsistently in txn")
-	} else if errors.HasType(err, (*kvpb.WriteIntentError)(nil)) {
-		t.Error("expected non-WriteIntentError with inconsistent read in txn")
+	} else if errors.HasType(err, (*kvpb.LockConflictError)(nil)) {
+		t.Error("expected non-LockConflictError with inconsistent read in txn")
 	}
 
 	// Inconsistent get will fetch value1 for any timestamp.
@@ -2019,7 +2019,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		defer b.Close()
 		addIntent(t, b)
 		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts0, ts5, nil, nil, 64, 10, 1<<10)
-		require.EqualError(t, err, "conflicting intents on \"/db3\"")
+		require.EqualError(t, err, "conflicting locks on \"/db3\"")
 	})
 
 	t.Run("clear exactly hitting intent fails", func(t *testing.T) {
@@ -2027,7 +2027,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 		defer b.Close()
 		addIntent(t, b)
 		_, err := MVCCClearTimeRange(ctx, b, nil, testKey3, testKey4, ts2, ts3, nil, nil, 64, 10, 1<<10)
-		require.EqualError(t, err, "conflicting intents on \"/db3\"")
+		require.EqualError(t, err, "conflicting locks on \"/db3\"")
 	})
 
 	t.Run("clear everything above intent", func(t *testing.T) {
@@ -2807,8 +2807,8 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 		{hlc.MaxTimestamp, true},
 	} {
 		_, err := MVCCGet(ctx, engine, testKey1, test.Timestamp, MVCCGetOptions{})
-		if errors.HasType(err, (*kvpb.WriteIntentError)(nil)) != test.found {
-			t.Fatalf("%d: expected write intent error: %t, got %v", i, test.found, err)
+		if errors.HasType(err, (*kvpb.LockConflictError)(nil)) != test.found {
+			t.Fatalf("%d: expected lock conflict error: %t, got %v", i, test.found, err)
 		}
 	}
 }
@@ -3130,8 +3130,8 @@ func TestMVCCGetWithDiffEpochs(t *testing.T) {
 			if test.expErr {
 				if err == nil {
 					t.Errorf("test %d: unexpected success", i)
-				} else if !errors.HasType(err, (*kvpb.WriteIntentError)(nil)) {
-					t.Errorf("test %d: expected write intent error; got %v", i, err)
+				} else if !errors.HasType(err, (*kvpb.LockConflictError)(nil)) {
+					t.Errorf("test %d: expected lock conflict error; got %v", i, err)
 				}
 			} else if err != nil || valueRes.Value == nil || !bytes.Equal(test.expValue.RawBytes, valueRes.Value.RawBytes) {
 				t.Errorf("test %d: expected value %q, err nil; got %+v, %v", i, test.expValue.RawBytes, valueRes.Value, err)
@@ -3452,7 +3452,7 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 
 	valueRes, err = MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 1}, MVCCGetOptions{})
 	if valueRes.Value != nil || err == nil {
-		t.Fatalf("expected both value nil and err to be a writeIntentError: %+v", valueRes.Value)
+		t.Fatalf("expected both value nil and err to be a LockConflictError: %+v", valueRes.Value)
 	}
 
 	// Can still fetch the value using txn1.
@@ -6637,27 +6637,27 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 				ExportAllRevisions: true,
 				TargetSize:         0,
 				MaxSize:            0,
-				MaxIntents:         uint64(MaxIntentsPerWriteIntentError.Default()),
+				MaxIntents:         uint64(MaxIntentsPerLockConflictError.Default()),
 				StopMidKey:         false,
 			}, &bytes.Buffer{})
 			if len(expectedIntentIndices) == 0 {
 				require.NoError(t, err)
 			} else {
 				require.Error(t, err)
-				e := (*kvpb.WriteIntentError)(nil)
+				e := (*kvpb.LockConflictError)(nil)
 				if !errors.As(err, &e) {
 					require.Fail(t, "Expected WriteIntentFailure, got %T", err)
 				}
-				require.Equal(t, len(expectedIntentIndices), len(e.Intents))
+				require.Equal(t, len(expectedIntentIndices), len(e.Locks))
 				for i, dataIdx := range expectedIntentIndices {
-					requireTxnForValue(t, data[dataIdx], e.Intents[i])
+					requireTxnForValue(t, data[dataIdx], e.Locks[i])
 				}
 			}
 		}
 	}
 
 	// Export range is fixed to k:["00010", "10000"), ts:(999, 2000] for all tests.
-	testDataCount := int(MaxIntentsPerWriteIntentError.Default() + 1)
+	testDataCount := int(MaxIntentsPerLockConflictError.Default() + 1)
 	testData := make([]testValue, testDataCount*2)
 	expectedErrors := make([]int, testDataCount)
 	for i := 0; i < testDataCount; i++ {
@@ -6665,7 +6665,7 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 		testData[i*2+1] = intent(key(i*2+12), "intent", ts(1001))
 		expectedErrors[i] = i*2 + 1
 	}
-	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:MaxIntentsPerWriteIntentError.Default()]))
+	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:MaxIntentsPerLockConflictError.Default()]))
 }
 
 // TestMVCCExportToSSTSplitMidKey verifies that split mid key in exports will

@@ -145,11 +145,11 @@ func TestDeleteRangeTombstone(t *testing.T) {
 			returnKeys: true,
 			expectErr:  "ReturnKeys can't be used with range tombstones",
 		},
-		"intent errors with WriteIntentError": {
+		"intent errors with LockConflictError": {
 			start:     "i",
 			end:       "j",
 			ts:        10e9,
-			expectErr: &kvpb.WriteIntentError{},
+			expectErr: &kvpb.LockConflictError{},
 		},
 		"below point errors with WriteTooOldError": {
 			start:     "a",

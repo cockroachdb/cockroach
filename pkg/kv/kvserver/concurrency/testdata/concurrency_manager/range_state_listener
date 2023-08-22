@@ -122,11 +122,11 @@ debug-lock-table
 ----
 num=0
 
-handle-write-intent-error req=req2 lease-seq=1
-  intent txn=txn1 key=k
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn1 key=k
 ----
-[3] handle write intent error req2: intent on ‹"k"› discovered but not added to disabled lock table
-[3] handle write intent error req2: handled conflicting intents on ‹"k"›, released latches
+[3] handle lock conflict error req2: intent on ‹"k"› discovered but not added to disabled lock table
+[3] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
@@ -155,10 +155,10 @@ sequence req=req2
 [5] sequence req2: scanning lock table for conflicting locks
 [5] sequence req2: sequencing complete, returned guard
 
-handle-write-intent-error req=req2 lease-seq=2
-  intent txn=txn1 key=k
+handle-lock-conflict-error req=req2 lease-seq=2
+  lock txn=txn1 key=k
 ----
-[6] handle write intent error req2: handled conflicting intents on ‹"k"›, released latches
+[6] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
@@ -253,11 +253,11 @@ sequence req=req3
 # this entire time. This isn't quite realistic, given the setup of this
 # test, but it is possible (see discover_lock_after_lease_race) and the
 # discovery should be ignored.
-handle-write-intent-error req=req3 lease-seq=2
-  intent txn=txn1 key=k
+handle-lock-conflict-error req=req3 lease-seq=2
+  lock txn=txn1 key=k
 ----
-[10] handle write intent error req3: intent on ‹"k"› discovered but not added to disabled lock table
-[10] handle write intent error req3: handled conflicting intents on ‹"k"›, released latches
+[10] handle lock conflict error req3: intent on ‹"k"› discovered but not added to disabled lock table
+[10] handle lock conflict error req3: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
@@ -270,10 +270,10 @@ sequence req=req3
 [11] sequence req3: scanning lock table for conflicting locks
 [11] sequence req3: sequencing complete, returned guard
 
-handle-write-intent-error req=req3 lease-seq=4
-  intent txn=txn2 key=k
+handle-lock-conflict-error req=req3 lease-seq=4
+  lock txn=txn2 key=k
 ----
-[12] handle write intent error req3: handled conflicting intents on ‹"k"›, released latches
+[12] handle lock conflict error req3: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
@@ -428,10 +428,10 @@ debug-lock-table
 ----
 num=0
 
-handle-write-intent-error req=req2 lease-seq=1
-  intent txn=txn1 key=k
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn1 key=k
 ----
-[3] handle write intent error req2: handled conflicting intents on ‹"k"›, released latches
+[3] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
@@ -619,11 +619,11 @@ finish req=req3
 ----
 [-] finish req3: finishing request
 
-handle-write-intent-error req=req2 lease-seq=1
-  intent txn=txn1 key=k
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn1 key=k
 ----
-[4] handle write intent error req2: intent on ‹"k"› discovered but not added to disabled lock table
-[4] handle write intent error req2: handled conflicting intents on ‹"k"›, released latches
+[4] handle lock conflict error req2: intent on ‹"k"› discovered but not added to disabled lock table
+[4] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
 
 sequence req=req2
 ----
@@ -648,10 +648,10 @@ sequence req=req2
 [6] sequence req2: scanning lock table for conflicting locks
 [6] sequence req2: sequencing complete, returned guard
 
-handle-write-intent-error req=req2 lease-seq=2
-  intent txn=txn1 key=k
+handle-lock-conflict-error req=req2 lease-seq=2
+  lock txn=txn1 key=k
 ----
-[7] handle write intent error req2: handled conflicting intents on ‹"k"›, released latches
+[7] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
@@ -806,10 +806,10 @@ debug-lock-table
 ----
 num=0
 
-handle-write-intent-error req=req2 lease-seq=1
-  intent txn=txn1 key=k
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn1 key=k
 ----
-[3] handle write intent error req2: handled conflicting intents on ‹"k"›, released latches
+[3] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----

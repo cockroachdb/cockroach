@@ -107,7 +107,7 @@ sequence req=reqNoWait1
 [4] sequence reqNoWait1: pushing txn 00000001 to check if abandoned
 [4] sequence reqNoWait1: pushee not abandoned
 [4] sequence reqNoWait1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
-[4] sequence reqNoWait1: sequencing complete, returned error: conflicting intents on ‹"k"› [reason=wait_policy]
+[4] sequence reqNoWait1: sequencing complete, returned error: conflicting locks on ‹"k"› [reason=wait_policy]
 
 # -------------------------------------------------------------
 # Read-only request with WaitPolicy_Error hits abandoned lock.
@@ -168,7 +168,7 @@ sequence req=reqNoWait2
 [6] sequence reqNoWait2: waiting in lock wait-queues
 [6] sequence reqNoWait2: lock wait-queue event: wait for (distinguished) txn 00000003 running request @ key ‹"k2"› (queuedWriters: 2, queuedReaders: 0)
 [6] sequence reqNoWait2: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k2"› for 0.000s
-[6] sequence reqNoWait2: sequencing complete, returned error: conflicting intents on ‹"k2"› [reason=wait_policy]
+[6] sequence reqNoWait2: sequencing complete, returned error: conflicting locks on ‹"k2"› [reason=wait_policy]
 
 # -------------------------------------------------------------
 # Read-only request with WaitPolicy_Error discovers lock. The
@@ -186,10 +186,10 @@ sequence req=reqNoWait3
 [7] sequence reqNoWait3: scanning lock table for conflicting locks
 [7] sequence reqNoWait3: sequencing complete, returned guard
 
-handle-write-intent-error req=reqNoWait3 lease-seq=1
-  intent txn=txn2 key=k4
+handle-lock-conflict-error req=reqNoWait3 lease-seq=1
+  lock txn=txn2 key=k4
 ----
-[8] handle write intent error reqNoWait3: handled conflicting intents on ‹"k4"›, released latches
+[8] handle lock conflict error reqNoWait3: handled conflicting locks on ‹"k4"›, released latches
 
 sequence req=reqNoWait3
 ----
@@ -201,7 +201,7 @@ sequence req=reqNoWait3
 [9] sequence reqNoWait3: pushing txn 00000002 to check if abandoned
 [9] sequence reqNoWait3: pushee not abandoned
 [9] sequence reqNoWait3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k4"› for 0.000s
-[9] sequence reqNoWait3: sequencing complete, returned error: conflicting intents on ‹"k4"› [reason=wait_policy]
+[9] sequence reqNoWait3: sequencing complete, returned error: conflicting locks on ‹"k4"› [reason=wait_policy]
 
 debug-lock-table
 ----
@@ -246,10 +246,10 @@ sequence req=reqNoWait4
 [10] sequence reqNoWait4: scanning lock table for conflicting locks
 [10] sequence reqNoWait4: sequencing complete, returned guard
 
-handle-write-intent-error req=reqNoWait4 lease-seq=1
-  intent txn=txn2 key=k5
+handle-lock-conflict-error req=reqNoWait4 lease-seq=1
+  lock txn=txn2 key=k5
 ----
-[11] handle write intent error reqNoWait4: handled conflicting intents on ‹"k5"›, released latches
+[11] handle lock conflict error reqNoWait4: handled conflicting locks on ‹"k5"›, released latches
 
 sequence req=reqNoWait4
 ----

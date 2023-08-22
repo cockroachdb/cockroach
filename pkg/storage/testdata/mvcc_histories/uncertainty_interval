@@ -416,13 +416,13 @@ run error
 get t=txn13 k=k2
 ----
 get: "k2" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.LockConflictError:) conflicting locks on "k2"
 
 run error
 scan t=txn13 k=k2
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.LockConflictError:) conflicting locks on "k2"
 
 
 run ok
@@ -445,13 +445,13 @@ run error
 get t=txn14 k=k2
 ----
 get: "k2" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.LockConflictError:) conflicting locks on "k2"
 
 run error
 scan t=txn14 k=k2
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.LockConflictError:) conflicting locks on "k2"
 
 
 run ok
@@ -474,10 +474,10 @@ run error
 get t=txn15 k=k2
 ----
 get: "k2" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.LockConflictError:) conflicting locks on "k2"
 
 run error
 scan t=txn15 k=k2
 ----
 scan: "k2"-"k2\x00" -> <no data>
-error: (*kvpb.WriteIntentError:) conflicting intents on "k2"
+error: (*kvpb.LockConflictError:) conflicting locks on "k2"

@@ -1474,16 +1474,16 @@ func TestTxnPipelinerIgnoresLocksOnUnambiguousFailure(t *testing.T) {
 	expLocks = append(expLocks, roachpb.Span{Key: keyC, EndKey: keyC.Next()})
 	require.Equal(t, expLocks, tp.lockFootprint.asSlice())
 
-	// Return a WriteIntentError for a Scan. The lock spans correspond to the Scan
-	// are not added to the lock footprint, but the lock spans for all other
-	// requests in the batch are.
+	// Return a LockConflictError for a Scan. The lock spans correspond to the
+	// Scan are not added to the lock footprint, but the lock spans for all
+	// other requests in the batch are.
 	ba.Requests = nil
 	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyD}})
 	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyE, EndKey: keyE.Next()}})
 	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyF, EndKey: keyF.Next()}, KeyLocking: lock.Exclusive})
 
-	writeIntentErr := kvpb.NewError(&kvpb.WriteIntentError{})
-	writeIntentErr.SetErrorIndex(2)
+	lockConflictErr := kvpb.NewError(&kvpb.LockConflictError{})
+	lockConflictErr.SetErrorIndex(2)
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 3)
 		require.False(t, ba.AsyncConsensus)
@@ -1491,12 +1491,12 @@ func TestTxnPipelinerIgnoresLocksOnUnambiguousFailure(t *testing.T) {
 		require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[1].GetInner())
 		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[2].GetInner())
 
-		return nil, writeIntentErr
+		return nil, lockConflictErr
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.Nil(t, br)
-	require.Equal(t, writeIntentErr, pErr)
+	require.Equal(t, lockConflictErr, pErr)
 	require.Equal(t, 0, tp.ifWrites.len())
 
 	expLocks = append(expLocks, roachpb.Span{Key: keyD})

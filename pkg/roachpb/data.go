@@ -1968,7 +1968,7 @@ func (l *Lease) Equal(that interface{}) bool {
 }
 
 // MakeIntent makes an intent with the given txn and key.
-// This is suitable for use when constructing WriteIntentError.
+// This is suitable for use when constructing LockConflictError.
 func MakeIntent(txn *enginepb.TxnMeta, key Key) Intent {
 	var i Intent
 	i.Key = key

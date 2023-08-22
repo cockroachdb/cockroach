@@ -54,7 +54,7 @@ import (
 // Specifically, write intents (replicated, exclusive locks) are stored inline
 // in the MVCC keyspace, so they are not detectable until request evaluation
 // time. To accommodate this form of lock storage, the manager exposes a
-// HandleWriterIntentError method, which can be used in conjunction with a retry
+// HandleLockConflictError method, which can be used in conjunction with a retry
 // loop around evaluation to integrate external locks with the concurrency
 // manager structure. In the future, we intend to pull all locks, including
 // those associated with write intents, into the concurrency manager directly
@@ -92,7 +92,7 @@ import (
 //	|         | [    key4   ]  \  - txn  meta | |  (no latches) |-->-^  |         |
 //	|         | [    key5   ]    -------------+-|---------------+ |     |         |
 //	|         | [    ...    ]                   v                 |     |         ^
-//	|         +---------------------------------|-----------------+     |         | if lock found, HandleWriterIntentError()
+//	|         +---------------------------------|-----------------+     |         | if lock found, HandleLockConflictError()
 //	|                 |                         |                       |         |  - enter lockWaitQueue
 //	|                 |       +- may be remote -+--+                    |         |  - drop latches
 //	|                 |       |                    |                    |         |  - wait for lock update / release
@@ -212,7 +212,7 @@ type RequestSequencer interface {
 // typically involves preparing the request to be queued upon a retry. It is one
 // of the roles of Manager.
 type ContentionHandler interface {
-	// HandleWriterIntentError consumes a WriteIntentError by informing the
+	// HandleLockConflictError consumes a LockConflictError by informing the
 	// concurrency manager about the replicated write intent that was missing
 	// from its lock table which was found during request evaluation (while
 	// holding latches) under the provided lease sequence. After doing so, it
@@ -225,12 +225,12 @@ type ContentionHandler interface {
 	// Example usage: Txn A scans the lock table and does not see an intent on
 	// key K from txn B because the intent is not being tracked in the lock
 	// table. Txn A moves on to evaluation. While scanning, it notices the
-	// intent on key K. It throws a WriteIntentError which is consumed by this
+	// intent on key K. It throws a LockConflictError which is consumed by this
 	// method before txn A retries its scan. During the retry, txn A scans the
 	// lock table and observes the lock on key K, so it enters the lock's
 	// wait-queue and waits for it to be resolved.
-	HandleWriterIntentError(
-		context.Context, *Guard, roachpb.LeaseSequence, *kvpb.WriteIntentError,
+	HandleLockConflictError(
+		context.Context, *Guard, roachpb.LeaseSequence, *kvpb.LockConflictError,
 	) (*Guard, *Error)
 
 	// HandleTransactionPushError consumes a TransactionPushError thrown by a
@@ -402,7 +402,7 @@ type Request struct {
 	// level of quality-of-service under severe per-key contention. If set
 	// to a non-zero value and an existing lock wait-queue is already equal
 	// to or exceeding this length, the request will be rejected eagerly
-	// with a WriteIntentError instead of entering the queue and waiting.
+	// with a LockConflictError instead of entering the queue and waiting.
 	MaxLockWaitQueueLength int
 
 	// The poison.Policy to use for this Request.
