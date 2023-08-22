@@ -925,7 +925,7 @@ func PgURL(
 
 	var urls []string
 	for i, ip := range ips {
-		desc, err := c.DiscoverService(nodes[i], opts.TenantName, install.ServiceTypeSQL, opts.TenantInstance)
+		desc, err := c.DiscoverService(ctx, nodes[i], opts.TenantName, install.ServiceTypeSQL, opts.TenantInstance)
 		if err != nil {
 			return nil, err
 		}
@@ -951,7 +951,11 @@ type urlConfig struct {
 }
 
 func urlGenerator(
-	c *install.SyncedCluster, l *logger.Logger, nodes install.Nodes, uConfig urlConfig,
+	ctx context.Context,
+	c *install.SyncedCluster,
+	l *logger.Logger,
+	nodes install.Nodes,
+	uConfig urlConfig,
 ) ([]string, error) {
 	var urls []string
 	for i, node := range nodes {
@@ -970,7 +974,7 @@ func urlGenerator(
 		}
 		port := uConfig.port
 		if port == 0 {
-			desc, err := c.DiscoverService(node, uConfig.tenantName, install.ServiceTypeUI, uConfig.tenantInstance)
+			desc, err := c.DiscoverService(ctx, node, uConfig.tenantName, install.ServiceTypeUI, uConfig.tenantInstance)
 			if err != nil {
 				return nil, err
 			}
@@ -998,6 +1002,7 @@ func urlGenerator(
 
 // AdminURL generates admin UI URLs for the nodes in a cluster.
 func AdminURL(
+	ctx context.Context,
 	l *logger.Logger,
 	clusterName, tenantName string,
 	tenantInstance int,
@@ -1019,7 +1024,7 @@ func AdminURL(
 		tenantName:     tenantName,
 		tenantInstance: tenantInstance,
 	}
-	return urlGenerator(c, l, c.TargetNodes(), uConfig)
+	return urlGenerator(ctx, c, l, c.TargetNodes(), uConfig)
 }
 
 // PprofOpts specifies the options needed by Pprof().
@@ -1065,7 +1070,7 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 	err = c.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 		res := &install.RunResultDetails{Node: node}
 		host := c.Host(node)
-		port, err := c.NodeUIPort(node)
+		port, err := c.NodeUIPort(ctx, node)
 		if err != nil {
 			return nil, err
 		}
@@ -1582,7 +1587,7 @@ func GrafanaURL(
 		secure:        false,
 		port:          3000,
 	}
-	urls, err := urlGenerator(c, l, grafanaNode, uConfig)
+	urls, err := urlGenerator(ctx, c, l, grafanaNode, uConfig)
 	if err != nil {
 		return "", err
 	}
@@ -1765,7 +1770,7 @@ func sendCaptureCommand(
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
 	_, _, err := c.ParallelE(ctx, l, nodes,
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
-			port, err := c.NodeUIPort(node)
+			port, err := c.NodeUIPort(ctx, node)
 			if err != nil {
 				return nil, err
 			}
