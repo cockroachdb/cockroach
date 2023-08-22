@@ -188,7 +188,7 @@ func (so StartOpts) GetJoinTargets() []Node {
 func (c *SyncedCluster) maybeRegisterServices(
 	ctx context.Context, l *logger.Logger, startOpts StartOpts,
 ) error {
-	serviceMap, err := c.MapServices(startOpts.TenantName, startOpts.TenantInstance)
+	serviceMap, err := c.MapServices(ctx, startOpts.TenantName, startOpts.TenantInstance)
 	if err != nil {
 		return err
 	}
@@ -256,7 +256,7 @@ func (c *SyncedCluster) maybeRegisterServices(
 	if err != nil {
 		return err
 	}
-	return c.RegisterServices(servicesToRegister)
+	return c.RegisterServices(ctx, servicesToRegister)
 }
 
 // Start the cockroach process on the cluster.
@@ -401,8 +401,8 @@ func (c *SyncedCluster) NodeURL(host string, port int, sharedTenantName string) 
 }
 
 // NodePort returns the system tenant's SQL port for the given node.
-func (c *SyncedCluster) NodePort(node Node) (int, error) {
-	desc, err := c.DiscoverService(node, SystemTenantName, ServiceTypeSQL, 0)
+func (c *SyncedCluster) NodePort(ctx context.Context, node Node) (int, error) {
+	desc, err := c.DiscoverService(ctx, node, SystemTenantName, ServiceTypeSQL, 0)
 	if err != nil {
 		return 0, err
 	}
@@ -410,8 +410,8 @@ func (c *SyncedCluster) NodePort(node Node) (int, error) {
 }
 
 // NodeUIPort returns the system tenant's AdminUI port for the given node.
-func (c *SyncedCluster) NodeUIPort(node Node) (int, error) {
-	desc, err := c.DiscoverService(node, SystemTenantName, ServiceTypeUI, 0)
+func (c *SyncedCluster) NodeUIPort(ctx context.Context, node Node) (int, error) {
+	desc, err := c.DiscoverService(ctx, node, SystemTenantName, ServiceTypeUI, 0)
 	if err != nil {
 		return 0, err
 	}
@@ -430,7 +430,7 @@ func (c *SyncedCluster) ExecOrInteractiveSQL(
 	if len(c.Nodes) != 1 {
 		return fmt.Errorf("invalid number of nodes for interactive sql: %d", len(c.Nodes))
 	}
-	desc, err := c.DiscoverService(c.Nodes[0], tenantName, ServiceTypeSQL, tenantInstance)
+	desc, err := c.DiscoverService(ctx, c.Nodes[0], tenantName, ServiceTypeSQL, tenantInstance)
 	if err != nil {
 		return err
 	}
@@ -460,7 +460,7 @@ func (c *SyncedCluster) ExecSQL(
 ) error {
 	display := fmt.Sprintf("%s: executing sql", c.Name)
 	results, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
-		desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL, tenantInstance)
+		desc, err := c.DiscoverService(ctx, node, tenantName, ServiceTypeSQL, tenantInstance)
 		if err != nil {
 			return nil, err
 		}
@@ -629,7 +629,7 @@ func (c *SyncedCluster) generateStartArgs(
 	instance := startOpts.TenantInstance
 	var sqlPort int
 	if startOpts.Target == StartTenantSQL {
-		desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL, instance)
+		desc, err := c.DiscoverService(ctx, node, tenantName, ServiceTypeSQL, instance)
 		if err != nil {
 			return nil, err
 		}
@@ -639,14 +639,14 @@ func (c *SyncedCluster) generateStartArgs(
 		tenantName = SystemTenantName
 		// System tenant instance is always 0.
 		instance = 0
-		desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL, instance)
+		desc, err := c.DiscoverService(ctx, node, tenantName, ServiceTypeSQL, instance)
 		if err != nil {
 			return nil, err
 		}
 		sqlPort = desc.Port
 		args = append(args, fmt.Sprintf("--listen-addr=%s:%d", listenHost, sqlPort))
 	}
-	desc, err := c.DiscoverService(node, tenantName, ServiceTypeUI, instance)
+	desc, err := c.DiscoverService(ctx, node, tenantName, ServiceTypeUI, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -669,7 +669,7 @@ func (c *SyncedCluster) generateStartArgs(
 		joinTargets := startOpts.GetJoinTargets()
 		addresses := make([]string, len(joinTargets))
 		for i, joinNode := range startOpts.GetJoinTargets() {
-			desc, err := c.DiscoverService(joinNode, SystemTenantName, ServiceTypeSQL, 0)
+			desc, err := c.DiscoverService(ctx, joinNode, SystemTenantName, ServiceTypeSQL, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -780,7 +780,7 @@ func (c *SyncedCluster) initializeCluster(
 	ctx context.Context, l *logger.Logger, node Node,
 ) (*RunResultDetails, error) {
 	l.Printf("%s: initializing cluster\n", c.Name)
-	cmd, err := c.generateInitCmd(node)
+	cmd, err := c.generateInitCmd(ctx, node)
 	if err != nil {
 		return nil, err
 	}
@@ -799,7 +799,7 @@ func (c *SyncedCluster) setClusterSettings(
 	ctx context.Context, l *logger.Logger, node Node,
 ) (*RunResultDetails, error) {
 	l.Printf("%s: setting cluster settings", c.Name)
-	cmd, err := c.generateClusterSettingCmd(l, node)
+	cmd, err := c.generateClusterSettingCmd(ctx, l, node)
 	if err != nil {
 		return nil, err
 	}
@@ -814,7 +814,9 @@ func (c *SyncedCluster) setClusterSettings(
 	return res, err
 }
 
-func (c *SyncedCluster) generateClusterSettingCmd(l *logger.Logger, node Node) (string, error) {
+func (c *SyncedCluster) generateClusterSettingCmd(
+	ctx context.Context, l *logger.Logger, node Node,
+) (string, error) {
 	if config.CockroachDevLicense == "" {
 		l.Printf("%s: COCKROACH_DEV_LICENSE unset: enterprise features will be unavailable\n",
 			c.Name)
@@ -839,7 +841,7 @@ func (c *SyncedCluster) generateClusterSettingCmd(l *logger.Logger, node Node) (
 
 	binary := cockroachNodeBinary(c, node)
 	path := fmt.Sprintf("%s/%s", c.NodeDir(node, 1 /* storeIndex */), "settings-initialized")
-	port, err := c.NodePort(node)
+	port, err := c.NodePort(ctx, node)
 	if err != nil {
 		return "", err
 	}
@@ -852,14 +854,14 @@ func (c *SyncedCluster) generateClusterSettingCmd(l *logger.Logger, node Node) (
 	return clusterSettingsCmd, nil
 }
 
-func (c *SyncedCluster) generateInitCmd(node Node) (string, error) {
+func (c *SyncedCluster) generateInitCmd(ctx context.Context, node Node) (string, error) {
 	var initCmd string
 	if c.IsLocal() {
 		initCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
 
 	path := fmt.Sprintf("%s/%s", c.NodeDir(node, 1 /* storeIndex */), "cluster-bootstrapped")
-	port, err := c.NodePort(node)
+	port, err := c.NodePort(ctx, node)
 	if err != nil {
 		return "", err
 	}
@@ -985,7 +987,7 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 
 	node := c.Nodes[0]
 	binary := cockroachNodeBinary(c, node)
-	port, err := c.NodePort(node)
+	port, err := c.NodePort(ctx, node)
 	if err != nil {
 		return err
 	}
