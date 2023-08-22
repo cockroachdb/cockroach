@@ -77,7 +77,8 @@ export const mapStateToProps = (state: AdminUIState): DatabasesPageData => {
   return {
     loading: selectLoading(state),
     loaded: selectLoaded(state),
-    lastError: selectLastError(state),
+    requestError: selectLastError(state),
+    queryError: dbListResp?.error,
     databases: deriveDatabaseDetailsMemoized({
       dbListResp,
       databaseDetails,
