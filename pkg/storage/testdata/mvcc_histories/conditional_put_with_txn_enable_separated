@@ -120,7 +120,6 @@ txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=3.0
 >> txn_step t=A
 txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=3.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
 >> cput k=c v=cput cond=value t=A
-called PutIntent("c", _, 00000000-0000-0000-0000-000000000002)
 meta: "c"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=3.000000000,0 min=0,0 seq=1} ts=3.000000000,0 del=false klen=12 vlen=9 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "c"/3.000000000,0 -> /BYTES/cput
 data: "c"/1.000000000,0 -> /BYTES/value
