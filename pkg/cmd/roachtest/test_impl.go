@@ -528,7 +528,6 @@ func (w *workerStatus) Status() string {
 func (w *workerStatus) SetStatus(status string) {
 	w.mu.Lock()
 	w.mu.status = status
-	// nolint:deferunlock
 	w.mu.Unlock()
 }
 
@@ -541,7 +540,6 @@ func (w *workerStatus) Cluster() *clusterImpl {
 func (w *workerStatus) SetCluster(c *clusterImpl) {
 	w.mu.Lock()
 	w.mu.c = c
-	// nolint:deferunlock
 	w.mu.Unlock()
 }
 
@@ -561,7 +559,6 @@ func (w *workerStatus) SetTest(t *testImpl, ttr testToRunRes) {
 	w.mu.Lock()
 	w.mu.t = t
 	w.mu.ttr = ttr
-	// nolint:deferunlock
 	w.mu.Unlock()
 }
 

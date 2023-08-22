@@ -1937,7 +1937,6 @@ func (c *SyncedCluster) Put(
 				} else {
 					lines[r.index] = "done"
 				}
-				// nolint:deferunlock
 				linesMu.Unlock()
 			}
 		}
@@ -1952,7 +1951,6 @@ func (c *SyncedCluster) Put(
 				}
 				fmt.Fprintf(&writer, "\n")
 			}
-			// nolint:deferunlock
 			linesMu.Unlock()
 			_ = writer.Flush(l.Stdout)
 			spinnerIdx++
@@ -1965,7 +1963,6 @@ func (c *SyncedCluster) Put(
 		for i := range lines {
 			l.Printf("  %2d: %s", nodes[i], lines[i])
 		}
-		// nolint:deferunlock
 		linesMu.Unlock()
 	}
 
@@ -2311,7 +2308,6 @@ func (c *SyncedCluster) Get(
 				} else {
 					lines[r.index] = "done"
 				}
-				// nolint:deferunlock
 				linesMu.Unlock()
 			}
 		}
@@ -2326,7 +2322,6 @@ func (c *SyncedCluster) Get(
 				}
 				fmt.Fprintf(&writer, "\n")
 			}
-			// nolint:deferunlock
 			linesMu.Unlock()
 			_ = writer.Flush(l.Stdout)
 			spinnerIdx++
@@ -2338,7 +2333,6 @@ func (c *SyncedCluster) Get(
 		for i := range lines {
 			l.Printf("  %2d: %s", nodes[i], lines[i])
 		}
-		// nolint:deferunlock
 		linesMu.Unlock()
 	}
 

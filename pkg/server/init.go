@@ -414,7 +414,6 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 		// We mark ourselves as bootstrapped to prevent future bootstrap attempts.
 		s.mu.Lock()
 		s.mu.bootstrapped = true
-		// nolint:deferunlock
 		s.mu.Unlock()
 
 		return state, nil
@@ -463,7 +462,6 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 			// We mark ourselves as bootstrapped to prevent future bootstrap attempts.
 			s.mu.Lock()
 			s.mu.bootstrapped = true
-			// nolint:deferunlock
 			s.mu.Unlock()
 
 			return state, nil

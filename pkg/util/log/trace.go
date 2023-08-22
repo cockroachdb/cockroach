@@ -38,7 +38,6 @@ func (el *ctxEventLog) finish() {
 		el.eventLog.Finish()
 		el.eventLog = nil
 	}
-	// nolint:deferunlock
 	el.Unlock()
 }
 

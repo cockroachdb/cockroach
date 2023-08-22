@@ -177,7 +177,6 @@ func Begin(ctx context.Context) func() {
 	return func() {
 		startupGoroutineIDs.Lock()
 		delete(startupGoroutineIDs.ids, startupID)
-		// nolint:deferunlock
 		startupGoroutineIDs.Unlock()
 		runningStartup.Add(-1)
 	}

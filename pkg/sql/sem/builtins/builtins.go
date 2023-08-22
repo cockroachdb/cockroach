@@ -6588,7 +6588,6 @@ SELECT
 					// We do TryLock() as a best-effort guard against this, but it will be
 					// racey. The caller is expected to have locked the mutex first.
 					replicaMu.TryLock()
-					// nolint:deferunlock
 					replicaMu.Unlock()
 				}
 				return tree.DBoolTrue, nil
@@ -10064,7 +10063,6 @@ func GenerateUniqueInt(instanceID ProcessUniqueID) tree.DInt {
 		timestamp = uniqueIntState.timestamp + 1
 	}
 	uniqueIntState.timestamp = timestamp
-	// nolint:deferunlock
 	uniqueIntState.Unlock()
 
 	return GenerateUniqueID(int32(instanceID), timestamp)

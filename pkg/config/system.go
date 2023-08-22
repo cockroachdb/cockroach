@@ -141,7 +141,6 @@ func (s *SystemConfig) getSystemTenantDesc(key roachpb.Key) *roachpb.Value {
 
 	testingLock.Lock()
 	_, ok := testingZoneConfig[ObjectID(id)]
-	// nolint:deferunlock
 	testingLock.Unlock()
 
 	if ok {
@@ -206,7 +205,6 @@ func (s *SystemConfig) GetLargestObjectID(
 ) (ObjectID, error) {
 	testingLock.Lock()
 	hook := testingLargestIDHook
-	// nolint:deferunlock
 	testingLock.Unlock()
 	if hook != nil {
 		return hook(maxReservedDescID), nil
@@ -428,14 +426,12 @@ func (s *SystemConfig) PurgeZoneConfigCache() {
 func (s *SystemConfig) getZoneEntry(codec keys.SQLCodec, id ObjectID) (zoneEntry, error) {
 	s.mu.RLock()
 	entry, ok := s.mu.zoneCache[id]
-	// nolint:deferunlock
 	s.mu.RUnlock()
 	if ok {
 		return entry, nil
 	}
 	testingLock.Lock()
 	hook := ZoneConfigHook
-	// nolint:deferunlock
 	testingLock.Unlock()
 	zone, placeholder, cache, err := hook(s, codec, id)
 	if err != nil {
@@ -455,7 +451,6 @@ func (s *SystemConfig) getZoneEntry(codec keys.SQLCodec, id ObjectID) (zoneEntry
 		if cache {
 			s.mu.Lock()
 			s.mu.zoneCache[id] = entry
-			// nolint:deferunlock
 			s.mu.Unlock()
 		}
 		return entry, nil
@@ -724,7 +719,6 @@ func (s *SystemConfig) shouldSplitOnSystemTenantObject(id ObjectID) bool {
 	{
 		s.mu.RLock()
 		shouldSplit, ok := s.mu.shouldSplitCache[id]
-		// nolint:deferunlock
 		s.mu.RUnlock()
 		if ok {
 			return shouldSplit
@@ -746,7 +740,6 @@ func (s *SystemConfig) shouldSplitOnSystemTenantObject(id ObjectID) bool {
 	// Populate the cache.
 	s.mu.Lock()
 	s.mu.shouldSplitCache[id] = shouldSplit
-	// nolint:deferunlock
 	s.mu.Unlock()
 	return shouldSplit
 }

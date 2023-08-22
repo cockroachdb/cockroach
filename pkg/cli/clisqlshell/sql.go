@@ -2575,7 +2575,6 @@ func (c *cliState) maybeHandleInterrupt() func() {
 			case <-intCh:
 				c.iCtx.mu.Lock()
 				cancelFn, doneCh := c.iCtx.mu.cancelFn, c.iCtx.mu.doneCh
-				// nolint:deferunlock
 				c.iCtx.mu.Unlock()
 				if cancelFn == nil {
 					// No query currently executing.
@@ -2642,14 +2641,12 @@ func (c *cliState) runWithInterruptableCtx(fn func(ctx context.Context) error) e
 	c.iCtx.mu.Lock()
 	c.iCtx.mu.cancelFn = c.conn.Cancel
 	c.iCtx.mu.doneCh = doneCh
-	// nolint:deferunlock
 	c.iCtx.mu.Unlock()
 	defer func() {
 		c.iCtx.mu.Lock()
 		cancel()
 		c.iCtx.mu.cancelFn = nil
 		c.iCtx.mu.doneCh = nil
-		// nolint:deferunlock
 		c.iCtx.mu.Unlock()
 	}()
 

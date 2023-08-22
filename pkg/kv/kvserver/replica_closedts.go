@@ -287,7 +287,6 @@ func (st *sidetransportAccess) get(
 ) hlc.Timestamp {
 	st.mu.RLock()
 	cur, next := st.mu.cur, st.mu.next
-	// nolint:deferunlock
 	st.mu.RUnlock()
 
 	// If the current info is enough to satisfy sufficient, we're done.

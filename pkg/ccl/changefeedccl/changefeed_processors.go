@@ -1168,7 +1168,6 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	cf.metricsID = cf.metrics.mu.id
 	cf.metrics.mu.id++
 	sli.RunningCount.Inc(1)
-	// nolint:deferunlock
 	cf.metrics.mu.Unlock()
 	// TODO(dan): It's very important that we de-register from the metric because
 	// if we orphan an entry in there, our monitoring will lie (say the changefeed
@@ -1208,7 +1207,6 @@ func (cf *changeFrontier) closeMetrics() {
 	}
 	delete(cf.metrics.mu.resolved, cf.metricsID)
 	cf.metricsID = -1
-	// nolint:deferunlock
 	cf.metrics.mu.Unlock()
 }
 
@@ -1352,7 +1350,6 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 		if cf.metricsID != -1 {
 			cf.metrics.mu.resolved[cf.metricsID] = newResolved
 		}
-		// nolint:deferunlock
 		cf.metrics.mu.Unlock()
 
 		return cf.maybeEmitResolved(newResolved)

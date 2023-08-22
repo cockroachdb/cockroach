@@ -41,7 +41,6 @@ func NewLockedSource(seed int64) rand.Source {
 func (rng *lockedSource) Int63() (n int64) {
 	rng.mu.Lock()
 	n = rng.src.Int63()
-	// nolint:deferunlock
 	rng.mu.Unlock()
 	return
 }
@@ -49,7 +48,6 @@ func (rng *lockedSource) Int63() (n int64) {
 func (rng *lockedSource) Uint64() (n uint64) {
 	rng.mu.Lock()
 	n = rng.src.Uint64()
-	// nolint:deferunlock
 	rng.mu.Unlock()
 	return
 }
@@ -57,7 +55,6 @@ func (rng *lockedSource) Uint64() (n uint64) {
 func (rng *lockedSource) Seed(seed int64) {
 	rng.mu.Lock()
 	rng.src.Seed(seed)
-	// nolint:deferunlock
 	rng.mu.Unlock()
 }
 

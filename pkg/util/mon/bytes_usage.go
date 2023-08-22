@@ -311,7 +311,6 @@ func (mm *BytesMonitor) traverseTree(level int, monitorStateCb func(MonitorState
 	mm.mu.Lock()
 	if mm.mu.stopped {
 		// The monitor has been stopped, so it should be ignored.
-		// nolint:deferunlock
 		mm.mu.Unlock()
 		return nil
 	}
@@ -505,7 +504,6 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 		}
 		pool.mu.head = mm
 		pool.mu.numChildren++
-		// nolint:deferunlock
 		pool.mu.Unlock()
 		effectiveLimit = pool.limit
 	}

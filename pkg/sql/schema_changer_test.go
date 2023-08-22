@@ -6629,7 +6629,6 @@ func TestCheckConstraintDropAndColumn(t *testing.T) {
 				jobControlMu.Lock()
 				scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
 				if err != nil {
-					// nolint:deferunlock
 					jobControlMu.Unlock()
 					return err
 				}
@@ -6675,7 +6674,6 @@ SET use_declarative_schema_changer = off;
 		delayJobList = []string{"ALTER TABLE defaultdb.public.t ADD CHECK (i > 0)",
 			"ALTER TABLE defaultdb.public.t DROP COLUMN j"}
 		delayJobChannels = []chan struct{}{make(chan struct{}), make(chan struct{})}
-		// nolint:deferunlock
 		jobControlMu.Unlock()
 
 		go func() {

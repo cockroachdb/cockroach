@@ -446,7 +446,6 @@ func ingestKvs(
 			atomic.StoreInt64(&pkFlushedRow[i], emitted)
 			bulkSummaryMu.Lock()
 			bulkSummaryMu.summary.Add(summary)
-			// nolint:deferunlock
 			bulkSummaryMu.Unlock()
 		}
 		if indexAdder.IsEmpty() {
@@ -460,7 +459,6 @@ func ingestKvs(
 			atomic.StoreInt64(&idxFlushedRow[i], emitted)
 			bulkSummaryMu.Lock()
 			bulkSummaryMu.summary.Add(summary)
-			// nolint:deferunlock
 			bulkSummaryMu.Unlock()
 		}
 	})
@@ -492,7 +490,6 @@ func ingestKvs(
 			bulkSummaryMu.Lock()
 			prog.BulkSummary = bulkSummaryMu.summary
 			bulkSummaryMu.summary.Reset()
-			// nolint:deferunlock
 			bulkSummaryMu.Unlock()
 		}
 		select {

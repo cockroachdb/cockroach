@@ -646,7 +646,6 @@ func (c *parallelEventConsumer) incInFlight() {
 	c.mu.Lock()
 	c.mu.inFlight++
 	c.metrics.ParallelConsumerInFlightEvents.Update(int64(c.mu.inFlight))
-	// nolint:deferunlock
 	c.mu.Unlock()
 }
 
@@ -654,7 +653,6 @@ func (c *parallelEventConsumer) decInFlight() {
 	c.mu.Lock()
 	c.mu.inFlight--
 	notifyFlush := c.mu.waiting && c.mu.inFlight == 0
-	// nolint:deferunlock
 	c.mu.Unlock()
 
 	// If someone is waiting on a flush, signal to them
@@ -708,7 +706,6 @@ func (c *parallelEventConsumer) Flush(ctx context.Context) error {
 		c.mu.Lock()
 		c.mu.waiting = false
 		c.mu.flushFrontier = c.spanFrontier.Frontier()
-		// nolint:deferunlock
 		c.mu.Unlock()
 		return nil
 	}

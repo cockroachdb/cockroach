@@ -179,7 +179,6 @@ func (s *LocalIndexUsageStats) ForEach(options IteratorOptions, visitor StatsVis
 	for tableID := range s.mu.usageStats {
 		tableIDLists = append(tableIDLists, tableID)
 	}
-	// nolint:deferunlock
 	s.mu.RUnlock()
 
 	if options.SortedTableID {
@@ -324,12 +323,10 @@ func (t *tableIndexStats) getStatsForIndexID(
 	t.RLock()
 
 	if stats, ok := t.stats[id]; ok || !createIfNotExists {
-		// nolint:deferunlock
 		t.RUnlock()
 		return stats
 	}
 
-	// nolint:deferunlock
 	t.RUnlock()
 	t.Lock()
 	defer t.Unlock()
@@ -378,7 +375,6 @@ func (t *tableIndexStats) iterateIndexStats(
 		indexIDs = append(indexIDs, indexID)
 		iterLimit--
 	}
-	// nolint:deferunlock
 	t.RUnlock()
 
 	if orderedIndexID {
@@ -399,7 +395,6 @@ func (t *tableIndexStats) iterateIndexStats(
 		indexStats.RLock()
 		// Copy out the stats while holding read lock.
 		statsCopy := indexStats.IndexUsageStatistics
-		// nolint:deferunlock
 		indexStats.RUnlock()
 
 		if err := visitor(&roachpb.IndexUsageKey{

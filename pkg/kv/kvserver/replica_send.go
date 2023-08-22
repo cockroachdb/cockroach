@@ -1117,7 +1117,6 @@ func (r *Replica) collectSpans(
 	r.mu.RLock()
 	desc := r.descRLocked()
 	liveCount := r.mu.state.Stats.LiveCount
-	// nolint:deferunlock
 	r.mu.RUnlock()
 	// TODO(bdarnell): need to make this less global when local
 	// latches are used more heavily. For example, a split will

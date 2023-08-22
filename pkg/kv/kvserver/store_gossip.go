@@ -364,7 +364,6 @@ func (s *StoreGossip) GossipStore(ctx context.Context, useCached bool) error {
 	// was required.
 	s.cachedCapacity.Lock()
 	s.cachedCapacity.lastGossiped = storeDesc.Capacity
-	// nolint:deferunlock
 	s.cachedCapacity.Unlock()
 
 	// Unique gossip key per store.
@@ -425,7 +424,6 @@ func (s *StoreGossip) RecordNewPerSecondStats(newQPS, newWPS float64) {
 	s.cachedCapacity.Lock()
 	s.cachedCapacity.cached.QueriesPerSecond = newQPS
 	s.cachedCapacity.cached.WritesPerSecond = newWPS
-	// nolint:deferunlock
 	s.cachedCapacity.Unlock()
 
 	if shouldGossip, reason := s.shouldGossipOnCapacityDelta(); shouldGossip {

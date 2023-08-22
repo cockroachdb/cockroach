@@ -89,7 +89,6 @@ func (s *StmtStatsIterator) Next() bool {
 	fullScan := statementStats.mu.fullScan
 	database := statementStats.mu.database
 	querySummary := statementStats.mu.querySummary
-	// nolint:deferunlock
 	statementStats.mu.Unlock()
 
 	s.currentValue = &appstatspb.CollectedStatementStatistics{
@@ -134,7 +133,6 @@ func NewTxnStatsIterator(container *Container, options sqlstats.IteratorOptions)
 	for k := range container.mu.txns {
 		txnKeys = append(txnKeys, k)
 	}
-	// nolint:deferunlock
 	container.mu.Unlock()
 	if options.SortedKey {
 		sort.Sort(txnKeys)
