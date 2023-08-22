@@ -1052,8 +1052,16 @@ func TestInsecureProxy(t *testing.T) {
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.NoError(t, runTestQuery(ctx, conn))
 	})
-	require.Equal(t, int64(1), s.metrics.AuthFailedCount.Count())
-	require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
+	testutils.SucceedsSoon(t, func() error {
+		if s.metrics.AuthFailedCount.Count() != 1 ||
+			s.metrics.SuccessfulConnCount.Count() != 1 {
+			return errors.Newf("expected metrics to update, got: "+
+				"AuthFailedCount=%d, SuccessfulConnCount=%d",
+				s.metrics.AuthFailedCount.Count(), s.metrics.SuccessfulConnCount.Count(),
+			)
+		}
+		return nil
+	})
 	count, _ := s.metrics.ConnectionLatency.Total()
 	require.Equal(t, int64(1), count)
 }
