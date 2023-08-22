@@ -84,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
@@ -8025,49 +8026,49 @@ func populateClusterLocksWithFilter(
 // This is the table structure for both {cluster,node}_txn_execution_insights.
 const txnExecutionInsightsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
-  txn_id                     UUID NOT NULL,
-  txn_fingerprint_id         BYTES NOT NULL,
-  query                      STRING NOT NULL,
-  implicit_txn               BOOL NOT NULL,
-  session_id                 STRING NOT NULL,
-  start_time                 TIMESTAMP NOT NULL,
-  end_time                   TIMESTAMP NOT NULL,
-  user_name                  STRING NOT NULL,
-  app_name                   STRING NOT NULL,
-  rows_read                  INT8 NOT NULL,
-  rows_written               INT8 NOT NULL,
-  priority                   STRING NOT NULL,
-  retries                    INT8 NOT NULL,
-  last_retry_reason          STRING,
-  contention                 INTERVAL,
-  problems                   STRING[] NOT NULL,
-  causes                     STRING[] NOT NULL,
-  stmt_execution_ids         STRING[] NOT NULL,
-  cpu_sql_nanos              INT8,
-  last_error_code            STRING,
-  status                     STRING NOT NULL,
-  service_lat                FLOAT,
-  retry_lat                  FLOAT,
-  commit_lat                 FLOAT,
-  idle_lat                   FLOAT,
-  bytes_read                 INT,
-  network_bytes_sent         INT,
-  max_mem_usage              INT,
-  network_messages_sent      INT,
-  max_disk_usage             INT,
-  step_count                 INT,
-  step_count_internal        INT,
-  seek_count                 INT,
-  seek_count_internal        INT,
-  block_bytes                INT,
-  block_bytes_in_cache       INT,
-  key_bytes                  INT,
-  value_bytes                INT,
-  point_count                INT,
-  points_covered_by_range_tombstones INT,
-  range_key_count            INT,
-  range_key_contained_points INT,
-  range_key_skipped_points   INT
+  txn_id                                  UUID NOT NULL,
+  txn_fingerprint_id                      BYTES NOT NULL,
+  query                                   STRING NOT NULL,
+  implicit_txn                            BOOL NOT NULL,
+  session_id                              STRING NOT NULL,
+  start_time                              TIMESTAMP NOT NULL,
+  end_time                                TIMESTAMP NOT NULL,
+  user_name                               STRING NOT NULL,
+  app_name                                STRING NOT NULL,
+  rows_read                               INT8 NOT NULL,
+  rows_written                            INT8 NOT NULL,
+  priority                                STRING NOT NULL,
+  retries                                 INT8 NOT NULL,
+  last_retry_reason                       STRING,
+  contention                              INTERVAL,
+  problems                                STRING[] NOT NULL,
+  causes                                  STRING[] NOT NULL,
+  stmt_execution_ids                      STRING[] NOT NULL,
+  cpu_sql_nanos                           INT8,
+  last_error_code                         STRING,
+  status                                  STRING NOT NULL,
+  service_lat_seconds                     FLOAT,
+  retry_lat_seconds                       FLOAT,
+  commit_lat_seconds                      FLOAT,
+  idle_lat_seconds                        FLOAT,
+  bytes_read_seconds                      INT,
+  network_bytes_sent                      INT,
+  max_mem_usage                           INT,
+  network_messages_sent                   INT,
+  max_disk_usage                          INT,
+  mvcc_step_count                         INT,
+  mvcc_step_count_internal                INT,
+  mvcc_seek_count                         INT,
+  mvcc_seek_count_internal                INT,
+  mvcc_block_bytes                        INT,
+  mvcc_block_bytes_in_cache               INT,
+  mvcc_key_bytes                          INT,
+  mvcc_value_bytes                        INT,
+  mvcc_point_count                        INT,
+  mvcc_points_covered_by_range_tombstones INT,
+  mvcc_range_key_count                    INT,
+  mvcc_range_key_contained_points         INT,
+  mvcc_range_key_skipped_points           INT
 )`
 
 var crdbInternalClusterTxnExecutionInsightsTable = virtualSchemaTable{
@@ -8179,6 +8180,17 @@ func populateTxnExecutionInsights(
 			}
 		}
 
+		// Old versions don't have Stats and MvccStats objects so fall down
+		// to empty objects for mixed version clusters.
+		var stats = &insights.ExecStats{}
+		if insight.Transaction.Stats != nil {
+			stats = insight.Transaction.Stats
+		}
+		var mvccStats = &insights.MVCCStats{}
+		if insight.Transaction.MvccStats != nil {
+			mvccStats = insight.Transaction.MvccStats
+		}
+
 		err = errors.CombineErrors(err, addRow(
 			tree.NewDUuid(tree.DUuid{UUID: insight.Transaction.ID}),
 			tree.NewDBytes(tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(insight.Transaction.FingerprintID)))),
@@ -8201,30 +8213,30 @@ func populateTxnExecutionInsights(
 			tree.NewDInt(tree.DInt(insight.Transaction.CPUSQLNanos)),
 			tree.NewDString(errorCode),
 			tree.NewDString(insight.Transaction.Status.String()),
-			tree.NewDFloat(tree.DFloat(insight.Transaction.ServiceLat.Seconds())),
-			tree.NewDFloat(tree.DFloat(insight.Transaction.RetryLat.Seconds())),
-			tree.NewDFloat(tree.DFloat(insight.Transaction.CommitLat.Seconds())),
-			tree.NewDFloat(tree.DFloat(insight.Transaction.IdleLat.Seconds())),
+			tree.NewDFloat(tree.DFloat(insight.Transaction.ServiceLatSeconds.Seconds())),
+			tree.NewDFloat(tree.DFloat(insight.Transaction.RetryLatSeconds.Seconds())),
+			tree.NewDFloat(tree.DFloat(insight.Transaction.CommitLatSeconds.Seconds())),
+			tree.NewDFloat(tree.DFloat(insight.Transaction.IdleLatSeconds.Seconds())),
 			tree.NewDInt(tree.DInt(insight.Transaction.BytesRead)),
 			// Stats
-			tree.NewDInt(tree.DInt(insight.Transaction.Stats.NetworkBytesSent)),
-			tree.NewDInt(tree.DInt(insight.Transaction.Stats.MaxMemUsage)),
-			tree.NewDInt(tree.DInt(insight.Transaction.Stats.NetworkMessagesSent)),
-			tree.NewDInt(tree.DInt(insight.Transaction.Stats.MaxDiskUsage)),
+			tree.NewDInt(tree.DInt(stats.NetworkBytesSent)),
+			tree.NewDInt(tree.DInt(stats.MaxMemUsage)),
+			tree.NewDInt(tree.DInt(stats.NetworkMessagesSent)),
+			tree.NewDInt(tree.DInt(stats.MaxDiskUsage)),
 			// MVCC Stats
-			tree.NewDInt(tree.DInt(insight.Transaction.MvccStats.StepCount)),
-			tree.NewDInt(tree.DInt(insight.Transaction.MvccStats.StepCountInternal)),
-			tree.NewDInt(tree.DInt(insight.Transaction.MvccStats.SeekCount)),
-			tree.NewDInt(tree.DInt(insight.Transaction.MvccStats.SeekCountInternal)),
-			tree.NewDInt(tree.DInt(insight.Transaction.MvccStats.BlockBytes)),
-			tree.NewDInt(tree.DInt(insight.Transaction.MvccStats.BlockBytesInCache)),
-			tree.NewDInt(tree.DInt(insight.Transaction.MvccStats.KeyBytes)),
-			tree.NewDInt(tree.DInt(insight.Transaction.MvccStats.ValueBytes)),
-			tree.NewDInt(tree.DInt(insight.Transaction.MvccStats.PointCount)),
-			tree.NewDInt(tree.DInt(insight.Transaction.MvccStats.PointsCoveredByRangeTombstones)),
-			tree.NewDInt(tree.DInt(insight.Transaction.MvccStats.RangeKeyCount)),
-			tree.NewDInt(tree.DInt(insight.Transaction.MvccStats.RangeKeyContainedPoints)),
-			tree.NewDInt(tree.DInt(insight.Transaction.MvccStats.RangeKeySkippedPoints)),
+			tree.NewDInt(tree.DInt(mvccStats.StepCount)),
+			tree.NewDInt(tree.DInt(mvccStats.StepCountInternal)),
+			tree.NewDInt(tree.DInt(mvccStats.SeekCount)),
+			tree.NewDInt(tree.DInt(mvccStats.SeekCountInternal)),
+			tree.NewDInt(tree.DInt(mvccStats.BlockBytes)),
+			tree.NewDInt(tree.DInt(mvccStats.BlockBytesInCache)),
+			tree.NewDInt(tree.DInt(mvccStats.KeyBytes)),
+			tree.NewDInt(tree.DInt(mvccStats.ValueBytes)),
+			tree.NewDInt(tree.DInt(mvccStats.PointCount)),
+			tree.NewDInt(tree.DInt(mvccStats.PointsCoveredByRangeTombstones)),
+			tree.NewDInt(tree.DInt(mvccStats.RangeKeyCount)),
+			tree.NewDInt(tree.DInt(mvccStats.RangeKeyContainedPoints)),
+			tree.NewDInt(tree.DInt(mvccStats.RangeKeySkippedPoints)),
 		))
 
 		if err != nil {
@@ -8238,56 +8250,56 @@ func populateTxnExecutionInsights(
 // Both contain statement execution insights.
 const executionInsightsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
-	session_id                 STRING NOT NULL,
-	txn_id                     UUID NOT NULL,
-	txn_fingerprint_id         BYTES NOT NULL,
-	stmt_id                    STRING NOT NULL,
-	stmt_fingerprint_id        BYTES NOT NULL,
-	problem                    STRING NOT NULL,
-	causes                     STRING[] NOT NULL,
-	query                      STRING NOT NULL,
-	status                     STRING NOT NULL,
-	start_time                 TIMESTAMP NOT NULL,
-	end_time                   TIMESTAMP NOT NULL,
-	full_scan                  BOOL NOT NULL,
-	user_name                  STRING NOT NULL,
-	app_name                   STRING NOT NULL,
-	database_name              STRING NOT NULL,
-	plan_gist                  STRING NOT NULL,
-	rows_read                  INT8 NOT NULL,
-	rows_written               INT8 NOT NULL,
-	priority                   STRING NOT NULL,
-	retries                    INT8 NOT NULL,
-	last_retry_reason          STRING,
-	exec_node_ids              INT[] NOT NULL,
-	contention                 INTERVAL,
-	index_recommendations      STRING[] NOT NULL,
-	implicit_txn               BOOL NOT NULL,
-	cpu_sql_nanos              INT8,
-    error_code                 STRING,
-    idle_lat                   FLOAT,
-    parse_lat                  FLOAT,
-    plan_lat                   FLOAT,
-    run_lat                    FLOAT,
-    service_lat                FLOAT,
-    bytes_read                 INT,
-    network_bytes_sent         INT,
-    max_mem_usage              INT,
-    network_messages_sent      INT,
-  	max_disk_usage             INT,
-  	step_count                 INT,
-  	step_count_internal        INT,
-  	seek_count                 INT,
-  	seek_count_internal        INT,
-  	block_bytes                INT,
-  	block_bytes_in_cache       INT,
-  	key_bytes                  INT,
-  	value_bytes                INT,
-  	point_count                INT,
-  	points_covered_by_range_tombstones INT,
-  	range_key_count            INT,
-  	range_key_contained_points INT,
-  	range_key_skipped_points   INT
+	session_id                              STRING NOT NULL,
+	txn_id                                  UUID NOT NULL,
+	txn_fingerprint_id                      BYTES NOT NULL,
+	stmt_id                                 STRING NOT NULL,
+	stmt_fingerprint_id                     BYTES NOT NULL,
+	problem                                 STRING NOT NULL,
+	causes                                  STRING[] NOT NULL,
+	query                                   STRING NOT NULL,
+	status                                  STRING NOT NULL,
+	start_time                              TIMESTAMP NOT NULL,
+	end_time                                TIMESTAMP NOT NULL,
+	full_scan                               BOOL NOT NULL,
+	user_name                               STRING NOT NULL,
+	app_name                                STRING NOT NULL,
+	database_name                           STRING NOT NULL,
+	plan_gist                               STRING NOT NULL,
+	rows_read                               INT8 NOT NULL,
+	rows_written                            INT8 NOT NULL,
+	priority                                STRING NOT NULL,
+	retries                                 INT8 NOT NULL,
+	last_retry_reason                       STRING,
+	exec_node_ids                           INT[] NOT NULL,
+	contention                              INTERVAL,
+	index_recommendations                   STRING[] NOT NULL,
+	implicit_txn                            BOOL NOT NULL,
+	cpu_sql_nanos                           INT8,
+    error_code                              STRING,
+    idle_lat_seconds                        FLOAT,
+    parse_lat_seconds                       FLOAT,
+    plan_lat_seconds                        FLOAT,
+    run_lat_seconds                         FLOAT,
+    service_lat_seconds                     FLOAT,
+    bytes_read                              INT,
+    network_bytes_sent                      INT,
+    max_mem_usage                           INT,
+    network_messages_sent                   INT,
+  	max_disk_usage                          INT,
+  	mvcc_step_count                         INT,
+  	mvcc_step_count_internal                INT,
+  	mvcc_seek_count                         INT,
+  	mvcc_seek_count_internal                INT,
+  	mvcc_block_bytes                        INT,
+  	mvcc_block_bytes_in_cache               INT,
+  	mvcc_key_bytes                          INT,
+  	mvcc_value_bytes                        INT,
+  	mvcc_point_count                        INT,
+  	mvcc_points_covered_by_range_tombstones INT,
+  	mvcc_range_key_count                    INT,
+  	mvcc_range_key_contained_points         INT,
+  	mvcc_range_key_skipped_points           INT
 )`
 
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
@@ -8389,6 +8401,17 @@ func populateStmtInsights(
 				}
 			}
 
+			// Old versions don't have Stats and MvccStats objects so fall down
+			// to empty objects for mixed version clusters.
+			var stats = &insights.ExecStats{}
+			if s.Stats != nil {
+				stats = s.Stats
+			}
+			var mvccStats = &insights.MVCCStats{}
+			if s.MvccStats != nil {
+				mvccStats = s.MvccStats
+			}
+
 			err = errors.CombineErrors(err, addRow(
 				tree.NewDString(hex.EncodeToString(insight.Session.ID.GetBytes())),
 				tree.NewDUuid(tree.DUuid{UUID: insight.Transaction.ID}),
@@ -8417,31 +8440,31 @@ func populateStmtInsights(
 				tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
 				tree.NewDInt(tree.DInt(s.CPUSQLNanos)),
 				tree.NewDString(s.ErrorCode),
-				tree.NewDFloat(tree.DFloat(s.IdleLat)),
-				tree.NewDFloat(tree.DFloat(s.ParseLat)),
-				tree.NewDFloat(tree.DFloat(s.PlanLat)),
-				tree.NewDFloat(tree.DFloat(s.RunLat)),
-				tree.NewDFloat(tree.DFloat(s.ServiceLat)),
+				tree.NewDFloat(tree.DFloat(s.IdleLatSeconds)),
+				tree.NewDFloat(tree.DFloat(s.ParseLatSeconds)),
+				tree.NewDFloat(tree.DFloat(s.PlanLatSeconds)),
+				tree.NewDFloat(tree.DFloat(s.RunLatSeconds)),
+				tree.NewDFloat(tree.DFloat(s.ServiceLatSeconds)),
 				tree.NewDInt(tree.DInt(s.BytesRead)),
 				// Stats
-				tree.NewDInt(tree.DInt(s.Stats.NetworkBytesSent)),
-				tree.NewDInt(tree.DInt(s.Stats.MaxMemUsage)),
-				tree.NewDInt(tree.DInt(s.Stats.NetworkMessagesSent)),
-				tree.NewDInt(tree.DInt(s.Stats.MaxDiskUsage)),
+				tree.NewDInt(tree.DInt(stats.NetworkBytesSent)),
+				tree.NewDInt(tree.DInt(stats.MaxMemUsage)),
+				tree.NewDInt(tree.DInt(stats.NetworkMessagesSent)),
+				tree.NewDInt(tree.DInt(stats.MaxDiskUsage)),
 				// MVCC Stats
-				tree.NewDInt(tree.DInt(s.MvccStats.StepCount)),
-				tree.NewDInt(tree.DInt(s.MvccStats.StepCountInternal)),
-				tree.NewDInt(tree.DInt(s.MvccStats.SeekCount)),
-				tree.NewDInt(tree.DInt(s.MvccStats.SeekCountInternal)),
-				tree.NewDInt(tree.DInt(s.MvccStats.BlockBytes)),
-				tree.NewDInt(tree.DInt(s.MvccStats.BlockBytesInCache)),
-				tree.NewDInt(tree.DInt(s.MvccStats.KeyBytes)),
-				tree.NewDInt(tree.DInt(s.MvccStats.ValueBytes)),
-				tree.NewDInt(tree.DInt(s.MvccStats.PointCount)),
-				tree.NewDInt(tree.DInt(s.MvccStats.PointsCoveredByRangeTombstones)),
-				tree.NewDInt(tree.DInt(s.MvccStats.RangeKeyCount)),
-				tree.NewDInt(tree.DInt(s.MvccStats.RangeKeyContainedPoints)),
-				tree.NewDInt(tree.DInt(s.MvccStats.RangeKeySkippedPoints)),
+				tree.NewDInt(tree.DInt(mvccStats.StepCount)),
+				tree.NewDInt(tree.DInt(mvccStats.StepCountInternal)),
+				tree.NewDInt(tree.DInt(mvccStats.SeekCount)),
+				tree.NewDInt(tree.DInt(mvccStats.SeekCountInternal)),
+				tree.NewDInt(tree.DInt(mvccStats.BlockBytes)),
+				tree.NewDInt(tree.DInt(mvccStats.BlockBytesInCache)),
+				tree.NewDInt(tree.DInt(mvccStats.KeyBytes)),
+				tree.NewDInt(tree.DInt(mvccStats.ValueBytes)),
+				tree.NewDInt(tree.DInt(mvccStats.PointCount)),
+				tree.NewDInt(tree.DInt(mvccStats.PointsCoveredByRangeTombstones)),
+				tree.NewDInt(tree.DInt(mvccStats.RangeKeyCount)),
+				tree.NewDInt(tree.DInt(mvccStats.RangeKeyContainedPoints)),
+				tree.NewDInt(tree.DInt(mvccStats.RangeKeySkippedPoints)),
 			))
 		}
 	}
