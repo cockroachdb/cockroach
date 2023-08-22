@@ -37,6 +37,7 @@ type Metrics struct {
 	TotalPGWireEgressBytes      *aggmetric.AggGauge
 	TotalExternalIOEgressBytes  *aggmetric.AggGauge
 	TotalExternalIOIngressBytes *aggmetric.AggGauge
+	TotalCrossRegionNetworkRU   *aggmetric.AggCounterFloat64
 
 	mu struct {
 		syncutil.Mutex
@@ -125,6 +126,12 @@ var (
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaTotalCrossRegionNetworkRU = metric.Metadata{
+		Name:        "tenant.consumption.cross_region_network_ru",
+		Help:        "Total number of RUs charged for cross-region network traffic",
+		Measurement: "Request Units",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 func (m *Metrics) init() {
@@ -142,6 +149,7 @@ func (m *Metrics) init() {
 		TotalPGWireEgressBytes:      b.Gauge(metaTotalPGWireEgressBytes),
 		TotalExternalIOEgressBytes:  b.Gauge(metaTotalExternalIOEgressBytes),
 		TotalExternalIOIngressBytes: b.Gauge(metaTotalExternalIOIngressBytes),
+		TotalCrossRegionNetworkRU:   b.CounterFloat64(metaTotalCrossRegionNetworkRU),
 	}
 	m.mu.tenantMetrics = make(map[roachpb.TenantID]tenantMetrics)
 }
@@ -160,6 +168,7 @@ type tenantMetrics struct {
 	totalPGWireEgressBytes      *aggmetric.Gauge
 	totalExternalIOEgressBytes  *aggmetric.Gauge
 	totalExternalIOIngressBytes *aggmetric.Gauge
+	totalCrossRegionNetworkRU   *aggmetric.CounterFloat64
 
 	// Mutex is used to atomically update metrics together with a corresponding
 	// change to the system table.
@@ -186,6 +195,7 @@ func (m *Metrics) getTenantMetrics(tenantID roachpb.TenantID) tenantMetrics {
 			totalPGWireEgressBytes:      m.TotalPGWireEgressBytes.AddChild(tid),
 			totalExternalIOEgressBytes:  m.TotalExternalIOEgressBytes.AddChild(tid),
 			totalExternalIOIngressBytes: m.TotalExternalIOIngressBytes.AddChild(tid),
+			totalCrossRegionNetworkRU:   m.TotalCrossRegionNetworkRU.AddChild(tid),
 			mutex:                       &syncutil.Mutex{},
 		}
 		m.mu.tenantMetrics[tenantID] = tm

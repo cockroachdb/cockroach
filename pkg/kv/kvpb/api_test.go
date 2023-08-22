@@ -317,32 +317,34 @@ func TestContentionEvent_SafeFormat(t *testing.T) {
 
 func TestTenantConsumptionAddSub(t *testing.T) {
 	a := TenantConsumption{
-		RU:                1,
-		ReadBatches:       2,
-		ReadRequests:      3,
-		ReadBytes:         4,
-		WriteBatches:      5,
-		WriteRequests:     6,
-		WriteBytes:        7,
-		SQLPodsCPUSeconds: 8,
-		PGWireEgressBytes: 9,
-		KVRU:              10,
+		RU:                   1,
+		ReadBatches:          2,
+		ReadRequests:         3,
+		ReadBytes:            4,
+		WriteBatches:         5,
+		WriteRequests:        6,
+		WriteBytes:           7,
+		SQLPodsCPUSeconds:    8,
+		PGWireEgressBytes:    9,
+		KVRU:                 10,
+		CrossRegionNetworkRU: 11,
 	}
 	var b TenantConsumption
 	for i := 0; i < 10; i++ {
 		b.Add(&a)
 	}
 	if exp := (TenantConsumption{
-		RU:                10,
-		ReadBatches:       20,
-		ReadRequests:      30,
-		ReadBytes:         40,
-		WriteBatches:      50,
-		WriteRequests:     60,
-		WriteBytes:        70,
-		SQLPodsCPUSeconds: 80,
-		PGWireEgressBytes: 90,
-		KVRU:              100,
+		RU:                   10,
+		ReadBatches:          20,
+		ReadRequests:         30,
+		ReadBytes:            40,
+		WriteBatches:         50,
+		WriteRequests:        60,
+		WriteBytes:           70,
+		SQLPodsCPUSeconds:    80,
+		PGWireEgressBytes:    90,
+		KVRU:                 100,
+		CrossRegionNetworkRU: 110,
 	}); b != exp {
 		t.Errorf("expected\n%#v\ngot\n%#v", exp, b)
 	}
@@ -350,16 +352,17 @@ func TestTenantConsumptionAddSub(t *testing.T) {
 	c := b
 	c.Sub(&a)
 	if exp := (TenantConsumption{
-		RU:                9,
-		ReadBatches:       18,
-		ReadRequests:      27,
-		ReadBytes:         36,
-		WriteBatches:      45,
-		WriteRequests:     54,
-		WriteBytes:        63,
-		SQLPodsCPUSeconds: 72,
-		PGWireEgressBytes: 81,
-		KVRU:              90,
+		RU:                   9,
+		ReadBatches:          18,
+		ReadRequests:         27,
+		ReadBytes:            36,
+		WriteBatches:         45,
+		WriteRequests:        54,
+		WriteBytes:           63,
+		SQLPodsCPUSeconds:    72,
+		PGWireEgressBytes:    81,
+		KVRU:                 90,
+		CrossRegionNetworkRU: 99,
 	}); c != exp {
 		t.Errorf("expected\n%#v\ngot\n%#v", exp, c)
 	}

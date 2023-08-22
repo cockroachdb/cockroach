@@ -154,6 +154,7 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 			PGWireEgressBytes      uint64  `yaml:"pgwire_egress_bytes"`
 			ExternalIOIngressBytes uint64  `yaml:"external_io_ingress_bytes"`
 			ExternalIOEgressBytes  uint64  `yaml:"external_io_egress_bytes"`
+			CrossRegionNetworkRU   float64 `yaml:"cross_region_network_ru"`
 		}
 		RU     float64 `yaml:"ru"`
 		Period string  `yaml:"period"`
@@ -192,6 +193,7 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 			PGWireEgressBytes:      args.Consumption.PGWireEgressBytes,
 			ExternalIOIngressBytes: args.Consumption.ExternalIOIngressBytes,
 			ExternalIOEgressBytes:  args.Consumption.ExternalIOEgressBytes,
+			CrossRegionNetworkRU:   args.Consumption.CrossRegionNetworkRU,
 		},
 		RequestedRU:         args.RU,
 		TargetRequestPeriod: period,
