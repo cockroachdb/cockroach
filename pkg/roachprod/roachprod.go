@@ -359,6 +359,14 @@ func List(l *logger.Logger, listMine bool, clusterNamePattern string) (cloud.Clo
 	return filteredCloud, nil
 }
 
+// TruncateString truncates a string to maxLength and adds "..." to the end.
+func TruncateString(s string, maxLength int) string {
+	if len(s) > maxLength {
+		return s[:maxLength-3] + "..."
+	}
+	return s
+}
+
 // Run runs a command on the nodes in a cluster.
 func Run(
 	ctx context.Context,
@@ -384,11 +392,7 @@ func Run(
 	}
 
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
-	title := cmd
-	if len(title) > 30 {
-		title = title[:27] + "..."
-	}
-	return c.Run(ctx, l, stdout, stderr, c.Nodes, title, cmd, opts...)
+	return c.Run(ctx, l, stdout, stderr, c.Nodes, TruncateString(cmd, 30), cmd, opts...)
 }
 
 // RunWithDetails runs a command on the nodes in a cluster.
@@ -414,11 +418,7 @@ func RunWithDetails(
 	}
 
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
-	title := cmd
-	if len(title) > 30 {
-		title = title[:27] + "..."
-	}
-	return c.RunWithDetails(ctx, l, c.Nodes, title, cmd)
+	return c.RunWithDetails(ctx, l, c.Nodes, TruncateString(cmd, 30), cmd)
 }
 
 // SQL runs `cockroach sql` on a remote cluster. If a single node is passed,
@@ -929,14 +929,11 @@ func PgURL(
 			ips[i] = c.VMs[nodes[i]-1].PublicIP
 		}
 	} else {
-		if err := c.Parallel(ctx, l, len(nodes), func(ctx context.Context, i int) (*install.RunResultDetails, error) {
-			node := nodes[i]
-			res := &install.RunResultDetails{Node: node}
-			res.Stdout, res.Err = c.GetInternalIP(node)
-			ips[i] = res.Stdout
-			return res, nil
-		}); err != nil {
-			return nil, err
+		for i := 0; i < len(nodes); i++ {
+			ip, err := c.GetInternalIP(nodes[i])
+			if err == nil {
+				ips[i] = ip
+			}
 		}
 	}
 
@@ -1062,9 +1059,7 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
-	nodes := c.TargetNodes()
-	err = c.Parallel(ctx, l, len(nodes), func(ctx context.Context, i int) (*install.RunResultDetails, error) {
-		node := nodes[i]
+	err = c.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 		res := &install.RunResultDetails{Node: node}
 		host := c.Host(node)
 		port := c.NodeUIPort(node)
@@ -1620,12 +1615,15 @@ func SnapshotVolume(
 	if err := LoadClusters(); err != nil {
 		return err
 	}
+
 	c, err := newCluster(l, clusterName)
 	if err != nil {
 		return err
 	}
+
 	nodes := c.TargetNodes()
 	nodesStatus, err := c.Status(ctx, l)
+
 	if err != nil {
 		return err
 	}
@@ -1754,9 +1752,8 @@ func sendCaptureCommand(
 ) error {
 	nodes := c.TargetNodes()
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
-	_, err := c.ParallelE(ctx, l, len(nodes),
-		func(ctx context.Context, i int) (*install.RunResultDetails, error) {
-			node := nodes[i]
+	_, _, err := c.ParallelE(ctx, l, nodes,
+		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 			host := c.Host(node)
 			port := c.NodeUIPort(node)
