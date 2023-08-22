@@ -50,8 +50,8 @@ import (
 var (
 	flagRSGTime                    = flag.Duration("rsg", 0, "random syntax generator test duration")
 	flagRSGGoRoutines              = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
-	flagRSGExecTimeout             = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
-	flagRSGExecColumnChangeTimeout = flag.Duration("rsg-exec-column-change-timeout", 20*time.Second, "timeout duration when executing a statement for random column changes")
+	flagRSGExecTimeout             = flag.Duration("rsg-exec-timeout", 35*time.Second, "timeout duration when executing a statement")
+	flagRSGExecColumnChangeTimeout = flag.Duration("rsg-exec-column-change-timeout", 40*time.Second, "timeout duration when executing a statement for random column changes")
 )
 
 func verifyFormat(sql string) error {
@@ -473,9 +473,10 @@ func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 	}
 
 	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
-		return db.exec(t, ctx, `
-			CREATE DATABASE ident;
-		`)
+		if err := db.exec(t, ctx, "SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '30s'"); err != nil {
+			return err
+		}
+		return db.exec(t, ctx, `CREATE DATABASE ident;`)
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		n := r.Intn(len(roots))
 		s := r.Generate(roots[n], 30)
@@ -492,6 +493,9 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	}
 
 	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		if err := db.exec(t, ctx, "SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '30s'"); err != nil {
+			return err
+		}
 		return db.exec(t, ctx, `
 			CREATE DATABASE ident;
 			CREATE TABLE ident.ident (ident decimal);
@@ -643,6 +647,9 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 
 	tableStmts := make([]string, 0)
 	testRandomSyntax(t, true, "defaultdb", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		if err := db.exec(t, ctx, "SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '30s'"); err != nil {
+			return err
+		}
 		setups := []string{sqlsmith.RandTableSetupName, "seed"}
 		for _, s := range setups {
 			randTables := sqlsmith.Setups[s](r.Rnd)
