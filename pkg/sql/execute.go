@@ -35,7 +35,6 @@ func (p *planner) fillInPlaceholders(
 	}
 
 	qArgs := make(tree.QueryArguments, len(params))
-	var semaCtx tree.SemaContext
 	for i, e := range params {
 		idx := tree.PlaceholderIdx(i)
 
@@ -54,7 +53,7 @@ func (p *planner) fillInPlaceholders(
 			}
 		}
 		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-			ctx, e, typ, "EXECUTE parameter" /* context */, &semaCtx, volatility.Volatile, true, /*allowAssignmentCast*/
+			ctx, e, typ, "EXECUTE parameter" /* context */, p.SemaCtx(), volatility.Volatile, true, /*allowAssignmentCast*/
 		)
 		if err != nil {
 			return nil, pgerror.WithCandidateCode(err, pgcode.WrongObjectType)
