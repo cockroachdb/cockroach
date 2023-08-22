@@ -532,16 +532,15 @@ message TransactionRecord {
   reserved 2, 3, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16;
 }
 
-// A Intent is a Span together with a Transaction metadata. Intents messages
-// are used to reference persistent on-disk write intents. They are used on
-// the return path of e.g. scans, to report the existence of a write intent
-// on a key.
+// A Lock is a Key together with a Transaction metadata (the lock holder) and a
+// strength. They are used on the return path of e.g. scans, to report the
+// existence of a locks on a key.
 //
-// Note: avoid constructing Intent directly; consider using MakeIntent() instead.
-message Intent {
+// Note: avoid constructing Lock directly; use MakeLock or MakeIntent instead.
+message Lock {
   // SingleKeySpan preserves wire compatibility with an earlier version of this
-  // proto which used a Span. An Intent never spans keys, so there was no need
-  // for this to contain an EndKey.
+  // proto which used a Span. A Lock never spans keys, so there was no need for
+  // this to contain an EndKey.
   message SingleKeySpan {
     reserved 1, 2, 4;
     // The start key of the key range.

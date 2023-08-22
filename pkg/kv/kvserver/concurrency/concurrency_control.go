@@ -637,8 +637,9 @@ type lockTable interface {
 	// true) or whether it was ignored because the lockTable is currently
 	// disabled (false).
 	AddDiscoveredLock(
-		intent *roachpb.Intent, seq roachpb.LeaseSequence, consultTxnStatusCache bool,
-		guard lockTableGuard) (bool, error)
+		foundLock *roachpb.Lock, seq roachpb.LeaseSequence,
+		consultTxnStatusCache bool, guard lockTableGuard,
+	) (bool, error)
 
 	// AcquireLock informs the lockTable that a new lock was acquired or an
 	// existing lock was updated.

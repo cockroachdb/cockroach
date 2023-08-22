@@ -500,10 +500,6 @@ func key(k int) roachpb.Key {
 	return []byte(fmt.Sprintf("%05d", k))
 }
 
-func requireTxnForValue(t *testing.T, val testValue, intent roachpb.Intent) {
-	require.Equal(t, val.txn.Key, intent.Txn.Key)
-}
-
 // nonFatalLogger implements pebble.Logger by recording that a fatal log event
 // was encountered at least once. Fatal log events are downgraded to Info level.
 type nonFatalLogger struct {

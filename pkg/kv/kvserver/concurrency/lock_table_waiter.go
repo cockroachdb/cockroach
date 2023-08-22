@@ -1258,8 +1258,10 @@ const (
 )
 
 func newLockConflictErr(req Request, ws waitingState, reason kvpb.LockConflictError_Reason) *Error {
+	// TODO(nvanbenschoten): we should use the correct Lock strength of the lock
+	// holder, once we have it.
 	err := kvpb.NewError(&kvpb.LockConflictError{
-		Locks:  []roachpb.Intent{roachpb.MakeIntent(ws.txn, ws.key)},
+		Locks:  []roachpb.Lock{roachpb.MakeIntent(ws.txn, ws.key).AsLock()},
 		Reason: reason,
 	})
 	// TODO(nvanbenschoten): setting an error index can assist the KV client in

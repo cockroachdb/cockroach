@@ -482,15 +482,15 @@ func (m *managerImpl) HandleLockConflictError(
 	consultTxnStatusCache :=
 		int64(len(t.Locks)) > DiscoveredLocksThresholdToConsultTxnStatusCache.Get(&m.st.SV)
 	for i := range t.Locks {
-		intent := &t.Locks[i]
-		added, err := m.lt.AddDiscoveredLock(intent, seq, consultTxnStatusCache, g.ltg)
+		foundLock := &t.Locks[i]
+		added, err := m.lt.AddDiscoveredLock(foundLock, seq, consultTxnStatusCache, g.ltg)
 		if err != nil {
 			log.Fatalf(ctx, "%v", err)
 		}
 		if !added {
 			log.VEventf(ctx, 2,
 				"intent on %s discovered but not added to disabled lock table",
-				intent.Key.String())
+				foundLock.Key.String())
 		}
 	}
 
