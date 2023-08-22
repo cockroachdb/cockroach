@@ -6,5 +6,5 @@
 statement error pq: unimplemented: operation is unsupported in multi-tenancy mode
 ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
 
-statement error setting sql.zone_configs.allow_for_secondary_tenant.enabled is only settable by the operator
-SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true
+statement error setting sql.virtual_cluster.feature_access.zone_configs.enabled is only settable by the operator
+SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true

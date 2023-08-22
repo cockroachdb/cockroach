@@ -83,15 +83,15 @@ var virtClusterInitTasks = []autoconfigpb.Task{
 	makeTask("initial cluster config",
 		/* nonTxnSQL */ []string{
 			// Disable trace redaction (this ought to be configurable per-tenant, but is not possible yet in v23.1).
-			"SET CLUSTER SETTING server.secondary_tenants.redact_trace.enabled = false",
+			"SET CLUSTER SETTING trace.redact_at_virtual_cluster_boundary.enabled = false",
 			// Enable zone config changes in secondary tenants  (this ought to be configurable per-tenant, but is not possible yet in v23.1).
-			"SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
+			"SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true",
 			// Enable multi-region abstractions in secondary tenants.
-			"SET CLUSTER SETTING sql.multi_region.allow_abstractions_for_secondary_tenants.enabled = true",
+			"SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled = true",
 			// Disable range coalescing (as long as the problems related
 			// to range coalescing have not been solved yet).
-			"SET CLUSTER SETTING spanconfig.storage_coalesce_adjacent.enabled = false",
-			"SET CLUSTER SETTING spanconfig.tenant_coalesce_adjacent.enabled = false",
+			"SET CLUSTER SETTING spanconfig.range_coalescing.system.enabled = false",
+			"SET CLUSTER SETTING spanconfig.range_coalescing.application.enabled = false",
 			// Make the operator double-check virtual cluster deletions.
 			"SET CLUSTER SETTING sql.drop_virtual_cluster.enabled = false",
 		},
@@ -106,14 +106,14 @@ var virtClusterInitTasks = []autoconfigpb.Task{
 			"ALTER VIRTUAL CLUSTER template GRANT ALL CAPABILITIES",
 			// Enable admin scatter/split in tenant SQL.
 			// TODO(knz): Move this to in-tenant config task.
-			"ALTER VIRTUAL CLUSTER template SET CLUSTER SETTING sql.scatter.allow_for_secondary_tenant.enabled = true",
-			"ALTER VIRTUAL CLUSTER template SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled = true",
+			"ALTER VIRTUAL CLUSTER template SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_scatter.enabled = true",
+			"ALTER VIRTUAL CLUSTER template SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_split.enabled = true",
 		},
 	),
 	// Finally.
 	makeTask("use the application virtual cluster template by default in CREATE VIRTUAL CLSUTER",
 		/* nonTxnSQL */ []string{
-			"SET CLUSTER SETTING sql.create_tenant.default_template = 'template'",
+			"SET CLUSTER SETTING sql.create_virtual_cluster.default_template = 'template'",
 		},
 		nil, /* txnSQL */
 	),
@@ -133,7 +133,7 @@ var virtClusterWithAppServiceInitTasks = append(
 	makeTask("activate application virtual cluster",
 		/* nonTxnSQL */ []string{
 			// Make the app tenant receive SQL connections by default.
-			"SET CLUSTER SETTING server.controller.default_tenant = 'application'",
+			"SET CLUSTER SETTING server.controller.default_target_cluster = 'application'",
 		},
 		nil, /* txnSQL */
 	),

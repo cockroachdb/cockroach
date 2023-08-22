@@ -101,7 +101,7 @@ var KVTenantWeightsEnabled = settings.RegisterBoolSetting(
 	"admission.kv.tenant_weights.enabled",
 	"when true, tenant weights are enabled for KV admission control",
 	false,
-	settings.WithPublic)
+)
 
 // KVStoresTenantWeightsEnabled controls whether tenant weights are enabled
 // for KV-stores admission control. This setting has no effect if
@@ -111,7 +111,7 @@ var KVStoresTenantWeightsEnabled = settings.RegisterBoolSetting(
 	"admission.kv.stores.tenant_weights.enabled",
 	"when true, tenant weights are enabled for KV-stores admission control",
 	false,
-	settings.WithPublic)
+)
 
 // EpochLIFOEnabled controls whether the adaptive epoch-LIFO scheme is enabled
 // for admission control. Is only relevant when the above admission control
