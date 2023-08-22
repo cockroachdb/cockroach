@@ -601,9 +601,10 @@ func TestLargeDynamicRows(t *testing.T) {
 	err = conn.Exec(ctx, "RESET CLUSTER SETTING kv.raft.command.max_size")
 	require.NoError(t, err)
 
-	// This won't work if the batch size gets set to less than 4.
-	if sql.CopyBatchRowSize < 4 {
-		sql.SetCopyFromBatchSize(4)
+	// This won't work if the batch size gets set to less than 5. When the batch
+	// size is 4, the test hook will count an extra empty batch.
+	if sql.CopyBatchRowSize < 5 {
+		sql.SetCopyFromBatchSize(5)
 	}
 
 	_, err = conn.GetDriverConn().CopyFrom(ctx, strings.NewReader(sb.String()), "COPY t FROM STDIN")
