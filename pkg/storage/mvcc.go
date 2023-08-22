@@ -1475,7 +1475,7 @@ func (b *putBuffer) putIntentMeta(
 		return 0, 0, errors.AssertionFailedf(
 			"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
 	}
-	lockTableKey := b.lockTableKey(key.Key, lock.Exclusive, meta.Txn.ID)
+	lockTableKey := b.lockTableKey(key.Key, lock.Intent, meta.Txn.ID)
 	if alreadyExists {
 		// Absence represents false.
 		meta.TxnDidNotUpdateMeta = nil
@@ -1504,7 +1504,7 @@ func (b *putBuffer) putIntentMeta(
 func (b *putBuffer) clearIntentMeta(
 	writer Writer, key MVCCKey, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts ClearOptions,
 ) (keyBytes, valBytes int64, err error) {
-	lockTableKey := b.lockTableKey(key.Key, lock.Exclusive, txnUUID)
+	lockTableKey := b.lockTableKey(key.Key, lock.Intent, txnUUID)
 	if txnDidNotUpdateMeta {
 		err = writer.SingleClearEngineKey(lockTableKey)
 	} else {
