@@ -108,33 +108,7 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 		return err
 	}
 	if row == nil {
-		// Maybe try to fix a row missed by 23.1.3 backfill and re-read. #104798.
-		if u.j.registry.settings.Version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
-			i := j.InfoStorage(u.txn)
-
-			_, err := i.BackfillLegacyPayload(ctx)
-			if err != nil {
-				return errors.Wrap(err, "failed to backfill job info payload during update")
-			}
-
-			_, err = i.BackfillLegacyProgress(ctx)
-			if err != nil {
-				return errors.Wrap(err, "failed to backfill job info progress during update")
-			}
-
-			row, err = u.txn.QueryRowEx(
-				ctx, "select-job", u.txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
-				getSelectStmtForJobUpdate(ctx, j.session != nil, useReadLock, u.j.registry.settings.Version), j.ID(),
-			)
-
-			if err != nil {
-				return err
-			}
-		}
-		if row == nil {
-			return errors.Errorf("not found in system.jobs table")
-		}
+		return errors.Errorf("not found in system.jobs table")
 	}
 
 	if status, err = unmarshalStatus(row[0]); err != nil {
