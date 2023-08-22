@@ -1967,17 +1967,43 @@ func (l *Lease) Equal(that interface{}) bool {
 	return true
 }
 
-// MakeIntent makes an intent with the given txn and key.
+// MakeLock makes a lock with the given txn, key, and strength.
 // This is suitable for use when constructing LockConflictError.
-func MakeIntent(txn *enginepb.TxnMeta, key Key) Intent {
-	var i Intent
-	i.Key = key
-	i.Txn = *txn
-	return i
+func MakeLock(txn *enginepb.TxnMeta, key Key, str lock.Strength) Lock {
+	var l Lock
+	l.Txn = *txn
+	l.Key = key
+	// TODO(nvanbenschoten): add this field.
+	// l.Strength = str
+	return l
 }
 
-// AsIntents takes a transaction and a slice of keys and
-// returns it as a slice of intents.
+// Intent is an intent-strength lock. The type is a specialization of Lock and
+// should be constructed using MakeIntent.
+type Intent Lock
+
+// MakeIntent makes an intent-strength lock with the given txn and key.
+func MakeIntent(txn *enginepb.TxnMeta, key Key) Intent {
+	return Intent(MakeLock(txn, key, lock.Intent))
+}
+
+// AsLock casts an Intent to a Lock.
+func (i Intent) AsLock() Lock {
+	return Lock(i)
+}
+
+// AsLockPtr casts a *Intent to a *Lock.
+func (i *Intent) AsLockPtr() *Lock {
+	return (*Lock)(i)
+}
+
+// AsLocks casts a slice of Intents to a slice of Locks.
+func AsLocks(s []Intent) []Lock {
+	return *(*[]Lock)(unsafe.Pointer(&s))
+}
+
+// AsIntents takes a transaction and a slice of keys and returns it as a slice
+// of intent-strength locks.
 func AsIntents(txn *enginepb.TxnMeta, keys []Key) []Intent {
 	ret := make([]Intent, len(keys))
 	for i := range keys {
