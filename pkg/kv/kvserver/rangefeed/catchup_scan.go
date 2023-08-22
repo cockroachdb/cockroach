@@ -82,26 +82,30 @@ func NewCatchUpIterator(
 	startTime hlc.Timestamp,
 	closer func(),
 	pacer *admission.Pacer,
-) *CatchUpIterator {
-	return &CatchUpIterator{
-		simpleCatchupIter: storage.NewMVCCIncrementalIterator(reader.(storage.ReaderWithMustIterators),
-			storage.MVCCIncrementalIterOptions{
-				KeyTypes:  storage.IterKeyTypePointsAndRanges,
-				StartKey:  span.Key,
-				EndKey:    span.EndKey,
-				StartTime: startTime,
-				EndTime:   hlc.MaxTimestamp,
-				// We want to emit intents rather than error
-				// (the default behavior) so that we can skip
-				// over the provisional values during
-				// iteration.
-				IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
-			}),
-		close:     closer,
-		span:      span,
-		startTime: startTime,
-		pacer:     pacer,
+) (*CatchUpIterator, error) {
+	iter, err := storage.NewMVCCIncrementalIterator(reader,
+		storage.MVCCIncrementalIterOptions{
+			KeyTypes:  storage.IterKeyTypePointsAndRanges,
+			StartKey:  span.Key,
+			EndKey:    span.EndKey,
+			StartTime: startTime,
+			EndTime:   hlc.MaxTimestamp,
+			// We want to emit intents rather than error
+			// (the default behavior) so that we can skip
+			// over the provisional values during
+			// iteration.
+			IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
+		})
+	if err != nil {
+		return nil, err
 	}
+	return &CatchUpIterator{
+		simpleCatchupIter: iter,
+		close:             closer,
+		span:              span,
+		startTime:         startTime,
+		pacer:             pacer,
+	}, nil
 }
 
 // Close closes the iterator and calls the instantiator-supplied close

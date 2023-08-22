@@ -304,7 +304,7 @@ type IntentScannerConstructor func() IntentScanner
 // for catchup-scans. Takes the key span and exclusive start time to run the
 // catchup scan for. It should be called from underneath a stopper task to
 // ensure that the engine has not been closed.
-type CatchUpIteratorConstructor func(roachpb.Span, hlc.Timestamp) *CatchUpIterator
+type CatchUpIteratorConstructor func(roachpb.Span, hlc.Timestamp) (*CatchUpIterator, error)
 
 // Start implements Processor interface.
 //
@@ -379,7 +379,10 @@ func (p *LegacyProcessor) run(
 			// Construct the catchUpIter before notifying the registration that it
 			// has been registered. Note that if the catchUpScan is never run, then
 			// the iterator constructed here will be closed in disconnect.
-			r.maybeConstructCatchUpIter()
+			if err := r.maybeConstructCatchUpIter(); err != nil {
+				r.disconnect(kvpb.NewError(err))
+				return
+			}
 
 			// Add the new registration to the registry.
 			p.reg.Register(&r)
