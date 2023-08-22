@@ -549,6 +549,7 @@ message Lock {
   }
   SingleKeySpan single_key_span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  kv.kvserver.concurrency.lock.Strength strength = 3;
 }
 
 // A LockAcquisition represents the action of a Transaction acquiring a lock
