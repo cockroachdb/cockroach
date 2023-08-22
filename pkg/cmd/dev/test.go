@@ -257,6 +257,26 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		testTargets = append(testTargets, target)
 	}
 
+	// List of bazel integration tests that will fail when running `dev test pkg/...`
+	var integrationTests = map[string][2]string{
+		"pkg/acceptance":              {"acceptance_test", "`dev acceptance`"},
+		"pkg/compose":                 {"compose_test", "`dev compose`"},
+		"pkg/compose/compare/compare": {"compare_test", "`dev compose`"},
+		"pkg/testutils/docker":        {"docker_test", "N/A: docker_test has no dev command corresponding to it"},
+		"pkg/testutils/lint":          {"lint_test", "`dev lint`"},
+	}
+
+	for _, target := range testTargets {
+		testTarget := strings.Split(target, ":")
+		arr, ok := integrationTests[testTarget[0]]
+		if ok {
+			// If the test targets all tests in the package or the individual test, warn the user
+			if testTarget[1] == "all" || testTarget[1] == arr[0] {
+				return fmt.Errorf("%s:%s will fail since it is an integration test.\n To run this test, run %s", testTarget[0], arr[0], arr[1])
+			}
+		}
+	}
+
 	args = append(args, testTargets...)
 	if ignoreCache {
 		args = append(args, "--nocache_test_results")
