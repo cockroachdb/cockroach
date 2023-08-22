@@ -423,3 +423,47 @@ statement error user testuser does not have INSERT privilege on relation users
 INSERT INTO system.users VALUES ('cat', null, true, 200)
 
 subtest end
+
+subtest create_role_priv
+
+user testuser
+
+statement error user testuser does not have CREATEROLE privilege
+CREATE ROLE u_create_role_priv
+
+user root
+
+statement ok
+GRANT SYSTEM CREATEROLE TO testuser
+
+user testuser
+
+statement ok
+CREATE ROLE u_create_role_priv
+
+user root
+
+statement ok
+REVOKE SYSTEM CREATEROLE FROM testuser
+
+user testuser
+
+statement error user testuser does not have CREATEROLE privilege
+DROP ROLE u_create_role_priv
+
+user root
+
+statement ok
+GRANT SYSTEM CREATEROLE TO testuser
+
+user testuser
+
+statement ok
+DROP ROLE u_create_role_priv
+
+user root
+
+statement ok
+REVOKE SYSTEM CREATEROLE FROM testuser
+
+subtest end

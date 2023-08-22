@@ -816,6 +816,8 @@ func privilegeToLegacyRoleOption(priv privilege.Kind) roleoption.Option {
 	switch priv {
 	case privilege.CANCELQUERY:
 		return roleoption.CANCELQUERY
+	case privilege.CREATEROLE:
+		return roleoption.CREATEROLE
 	case privilege.CHANGEFEED:
 		return roleoption.CONTROLCHANGEFEED
 	case privilege.MODIFYCLUSTERSETTING:
