@@ -30,6 +30,7 @@ public  privileges                       table     node  NULL
 public  protected_ts_meta                table     node  NULL
 public  protected_ts_records             table     node  NULL
 public  rangelog                         table     node  NULL
+public  region_liveness                  table     node  NULL
 public  replication_constraint_stats     table     node  NULL
 public  replication_critical_localities  table     node  NULL
 public  replication_stats                table     node  NULL
@@ -86,6 +87,7 @@ public  privileges                       table     node  NULL
 public  protected_ts_meta                table     node  NULL
 public  protected_ts_records             table     node  NULL
 public  rangelog                         table     node  NULL
+public  region_liveness                  table     node  NULL
 public  replication_constraint_stats     table     node  NULL
 public  replication_critical_localities  table     node  NULL
 public  replication_stats                table     node  NULL
@@ -130,6 +132,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 6
 7
 8
+9
 11
 12
 13
@@ -192,6 +195,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 5
 6
 7
+9
 11
 12
 13
@@ -504,6 +508,14 @@ system  public  rangelog                         root    DELETE  true
 system  public  rangelog                         root    INSERT  true
 system  public  rangelog                         root    SELECT  true
 system  public  rangelog                         root    UPDATE  true
+system  public  region_liveness                  admin   DELETE  true
+system  public  region_liveness                  admin   INSERT  true
+system  public  region_liveness                  admin   SELECT  true
+system  public  region_liveness                  admin   UPDATE  true
+system  public  region_liveness                  root    DELETE  true
+system  public  region_liveness                  root    INSERT  true
+system  public  region_liveness                  root    SELECT  true
+system  public  region_liveness                  root    UPDATE  true
 system  public  replication_constraint_stats     admin   DELETE  true
 system  public  replication_constraint_stats     admin   INSERT  true
 system  public  replication_constraint_stats     admin   SELECT  true
@@ -850,6 +862,14 @@ system  public  rangelog                         root    DELETE  true
 system  public  rangelog                         root    INSERT  true
 system  public  rangelog                         root    SELECT  true
 system  public  rangelog                         root    UPDATE  true
+system  public  region_liveness                  admin   DELETE  true
+system  public  region_liveness                  admin   INSERT  true
+system  public  region_liveness                  admin   SELECT  true
+system  public  region_liveness                  admin   UPDATE  true
+system  public  region_liveness                  root    DELETE  true
+system  public  region_liveness                  root    INSERT  true
+system  public  region_liveness                  root    SELECT  true
+system  public  region_liveness                  root    UPDATE  true
 system  public  replication_constraint_stats     admin   DELETE  true
 system  public  replication_constraint_stats     admin   INSERT  true
 system  public  replication_constraint_stats     admin   SELECT  true

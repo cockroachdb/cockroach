@@ -254,7 +254,7 @@ SELECT range_id, start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FR
 ORDER BY lease_holder, start_key
 ----
 range_id  start_key           end_key                                   replicas  lease_holder
-63        <before:/Table/62>  <after:/Table/106/2/1152921574000000000>  {2}       2
+64        <before:/Table/62>  <after:/Table/106/2/1152921574000000000>  {2}       2
 
 # We should see a distributed execution (though need to retry to purge possibly
 # stale dist sender caches).

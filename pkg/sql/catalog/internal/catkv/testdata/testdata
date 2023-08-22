@@ -221,6 +221,9 @@ catalog:
   "008":
     descriptor: relation
     namespace: (1, 29, "tenants")
+  "009":
+    descriptor: relation
+    namespace: (1, 29, "region_liveness")
   "011":
     descriptor: relation
     namespace: (1, 29, "lease")
@@ -483,6 +486,8 @@ catalog:
     namespace: (1, 29, "descriptor_id_seq")
   "008":
     namespace: (1, 29, "tenants")
+  "009":
+    namespace: (1, 29, "region_liveness")
   "011":
     namespace: (1, 29, "lease")
   "012":

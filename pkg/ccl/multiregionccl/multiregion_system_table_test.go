@@ -218,6 +218,7 @@ func TestMrSystemDatabase(t *testing.T) {
 			{"TABLE system.public.descriptor"},
 			{"TABLE system.public.namespace"},
 			{"TABLE system.public.privileges"},
+			{"TABLE system.public.region_liveness"},
 			{"TABLE system.public.role_members"},
 			{"TABLE system.public.role_options"},
 			{"TABLE system.public.settings"},

@@ -2441,6 +2441,7 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 		"namespace",
 		"table_statistics",
 		"web_sessions",
+		"region_liveness",
 	}
 
 	rbrTables := []string{
@@ -2533,11 +2534,36 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 		return nil
 	}
 
+	// Transforms the crdb_region type into a proper enum.
+	setCrdbRegionColumnType := func(descriptor *tabledesc.Mutable) (tree.Name, error) {
+		// Change crdb_region type to the multi-region enum
+		column, err := getMutableColumn(descriptor, "crdb_region")
+		if err != nil {
+			return "", err
+		}
+		column.Type = enumType
+
+		// Add a back reference to the table
+		backReferenceJob := fmt.Sprintf("add back ref on mr-enum for system table %s", descriptor.GetName())
+		if err = p.addTypeBackReference(ctx, regionEnumID, descriptor.GetID(), backReferenceJob); err != nil {
+			return "", err
+		}
+		return tree.Name(column.Name), nil
+	}
+
 	// Configure global system tables
 	for _, tableName := range globalTables {
 		descriptor, err := getDescriptor(tableName)
 		if err != nil {
 			return err
+		}
+
+		// Set the type of crdb_region column for the liveness table.
+		if tableName == "region_liveness" {
+			_, err = setCrdbRegionColumnType(descriptor)
+			if err != nil {
+				return err
+			}
 		}
 
 		descriptor.SetTableLocalityGlobal()
@@ -2555,19 +2581,11 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 		}
 
 		// Change crdb_region type to the multi-region enum
-		column, err := getMutableColumn(descriptor, "crdb_region")
+		columName, err := setCrdbRegionColumnType(descriptor)
 		if err != nil {
 			return err
 		}
-		column.Type = enumType
-
-		// Add a back reference to the table
-		backReferenceJob := fmt.Sprintf("add back ref on mr-enum for system table %s", tableName)
-		if err = p.addTypeBackReference(ctx, regionEnumID, descriptor.GetID(), backReferenceJob); err != nil {
-			return err
-		}
-
-		descriptor.SetTableLocalityRegionalByRow(tree.Name(column.Name))
+		descriptor.SetTableLocalityRegionalByRow(columName)
 		if err := partitionByRegion(descriptor); err != nil {
 			return err
 		}

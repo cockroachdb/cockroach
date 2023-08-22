@@ -557,6 +557,10 @@ const (
 	// the bundle for particular plan gist.
 	V23_2_StmtDiagForPlanGist
 
+	// V23_2_RegionaLivenessTable guarantees the regional liveness table exists
+	// and its ready for use.
+	V23_2_RegionaLivenessTable
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -969,6 +973,11 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_StmtDiagForPlanGist,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 18},
+	},
+
+	{
+		Key:     V23_2_RegionaLivenessTable,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 20},
 	},
 
 	// *************************************************
