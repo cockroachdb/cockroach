@@ -1403,6 +1403,7 @@ system         public              rangelog                                BASE 
 system         crdb_internal       ranges                                  SYSTEM VIEW  NO                  1
 system         crdb_internal       ranges_no_leases                        SYSTEM VIEW  NO                  1
 system         information_schema  referential_constraints                 SYSTEM VIEW  NO                  1
+system         public              region_liveness                         BASE TABLE   YES                 1
 system         crdb_internal       regions                                 SYSTEM VIEW  NO                  1
 system         public              replication_constraint_stats            BASE TABLE   YES                 1
 system         public              replication_critical_localities         BASE TABLE   YES                 1
@@ -1652,6 +1653,8 @@ system              public             29_13_3_not_null                         
 system              public             29_13_4_not_null                                                                                                system         public        rangelog                         CHECK            NO             NO
 system              public             29_13_7_not_null                                                                                                system         public        rangelog                         CHECK            NO             NO
 system              public             primary                                                                                                         system         public        rangelog                         PRIMARY KEY      NO             NO
+system              public             29_9_1_not_null                                                                                                 system         public        region_liveness                  CHECK            NO             NO
+system              public             region_liveness_pkey                                                                                            system         public        region_liveness                  PRIMARY KEY      NO             NO
 system              public             29_25_1_not_null                                                                                                system         public        replication_constraint_stats     CHECK            NO             NO
 system              public             29_25_2_not_null                                                                                                system         public        replication_constraint_stats     CHECK            NO             NO
 system              public             29_25_3_not_null                                                                                                system         public        replication_constraint_stats     CHECK            NO             NO
@@ -2108,6 +2111,7 @@ system              public             29_6_2_not_null                          
 system              public             29_6_3_not_null                                                                                                 lastUpdated IS NOT NULL
 system              public             29_7_1_not_null                                                                                                 value IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
+system              public             29_9_1_not_null                                                                                                 crdb_region IS NOT NULL
 system              public             check_bounds                                                                                                    ((start_key < end_key))
 system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8  ((crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)))
 system              public             check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8                                       ((crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)))
@@ -2163,6 +2167,7 @@ system         public        protected_ts_meta                singleton         
 system         public        protected_ts_records             id                                                                                                        system              public             primary
 system         public        rangelog                         timestamp                                                                                                 system              public             primary
 system         public        rangelog                         uniqueID                                                                                                  system              public             primary
+system         public        region_liveness                  crdb_region                                                                                               system              public             region_liveness_pkey
 system         public        replication_constraint_stats     config                                                                                                    system              public             primary
 system         public        replication_constraint_stats     subzone_id                                                                                                system              public             primary
 system         public        replication_constraint_stats     type                                                                                                      system              public             primary
@@ -2436,6 +2441,8 @@ system         public        rangelog                         rangeID           
 system         public        rangelog                         storeID                                                                                                   3
 system         public        rangelog                         timestamp                                                                                                 1
 system         public        rangelog                         uniqueID                                                                                                  7
+system         public        region_liveness                  crdb_region                                                                                               1
+system         public        region_liveness                  unavailable_at                                                                                            2
 system         public        replication_constraint_stats     config                                                                                                    4
 system         public        replication_constraint_stats     report_id                                                                                                 5
 system         public        replication_constraint_stats     subzone_id                                                                                                2
@@ -3558,6 +3565,14 @@ NULL     root     system         public              rangelog                   
 NULL     root     system         public              rangelog                                INSERT          YES           NO
 NULL     root     system         public              rangelog                                SELECT          YES           YES
 NULL     root     system         public              rangelog                                UPDATE          YES           NO
+NULL     admin    system         public              region_liveness                         DELETE          YES           NO
+NULL     admin    system         public              region_liveness                         INSERT          YES           NO
+NULL     admin    system         public              region_liveness                         SELECT          YES           YES
+NULL     admin    system         public              region_liveness                         UPDATE          YES           NO
+NULL     root     system         public              region_liveness                         DELETE          YES           NO
+NULL     root     system         public              region_liveness                         INSERT          YES           NO
+NULL     root     system         public              region_liveness                         SELECT          YES           YES
+NULL     root     system         public              region_liveness                         UPDATE          YES           NO
 NULL     admin    system         public              replication_constraint_stats            DELETE          YES           NO
 NULL     admin    system         public              replication_constraint_stats            INSERT          YES           NO
 NULL     admin    system         public              replication_constraint_stats            SELECT          YES           YES
@@ -4143,6 +4158,14 @@ NULL     admin    system         public              descriptor_id_seq          
 NULL     root     system         public              descriptor_id_seq                       SELECT          YES           YES
 NULL     admin    system         public              tenants                                 SELECT          YES           YES
 NULL     root     system         public              tenants                                 SELECT          YES           YES
+NULL     admin    system         public              region_liveness                         DELETE          YES           NO
+NULL     admin    system         public              region_liveness                         INSERT          YES           NO
+NULL     admin    system         public              region_liveness                         SELECT          YES           YES
+NULL     admin    system         public              region_liveness                         UPDATE          YES           NO
+NULL     root     system         public              region_liveness                         DELETE          YES           NO
+NULL     root     system         public              region_liveness                         INSERT          YES           NO
+NULL     root     system         public              region_liveness                         SELECT          YES           YES
+NULL     root     system         public              region_liveness                         UPDATE          YES           NO
 NULL     admin    system         public              lease                                   DELETE          YES           NO
 NULL     admin    system         public              lease                                   INSERT          YES           NO
 NULL     admin    system         public              lease                                   SELECT          YES           YES

@@ -180,16 +180,16 @@ SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
 comments
-database_role_sett               ings
-eventlog
-jo\\x86bs
-join_tokens
-priVileges
+join_tok\\x86ens
+lease
+protecte😠d_ts_records
+ra  ngelog
 replication_critical_localities
-role_id_seq
 statement_bundle_chunks
 sta😣tement_statistics
-ten  ant_set                     tings
+table_statistics
+tenant_id_seq
+🙁role_members
 
 # Again, the column names are randomized.
 query TTT
@@ -198,26 +198,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-comments             comment             text
-comments             obj😹ect_id          bigint
-comments             rowid               bigint
-comments             "sub'_id"           bigint
-comments             type                bigint
-"database_role_sett  ings"               databasḙ_id                  oid
-"database_role_sett  ings"               "ro*le_id"                   oid
-"database_role_sett  ings"               role_name                    text
-"database_role_sett  ings"               rowid                        bigint
-"database_role_sett  ings"               "se t"" tings"""             ARRAY
-eventlog             "eventType"         text
-eventlog             info                text
-eventlog             "reportingID"       bigint
-eventlog             rowid               bigint
-eventlog             "targetID"          bigint
-eventlog             "tỉ  mestamp"       timestamp without time zone
-eventlog             "uniq""ueID"        bytea
-"jo\\x86bs"          "Claim_session_id"  bytea
-"jo\\x86bs"          claim_instance_id   bigint
-"jo\\x86bs"          "crea ted_by_id"    bigint
+comments               "comm😷eNt"          text
+comments               object_id           bigint
+comments               rowid               bigint
+comments               sub_id              bigint
+comments               "type%q"            bigint
+"join_tok\\x86ens"     " expiration"       timestamp with time zone
+"join_tok\\x86ens"     rowid               bigint
+"join_tok\\x86ens"     "secre%pt%q"        bytea
+"join_tok\\x86ens"     "😺id                "                            uuid
+lease                  "crd%qb_region"     bytea
+lease                  "des\fcID"          bigint
+lease                  "expir(at\\xb6ion"  timestamp without time zone
+lease                  "nodeID̸"           bigint
+lease                  rowid               bigint
+lease                  version             bigint
+protecte😠d_ts_records  _ts                 numeric
+protecte😠d_ts_records  "i'd"               uuid
+protecte😠d_ts_records  "meta_type"        text
+protecte😠d_ts_records  met😹a               bytea
+protecte😠d_ts_records  num_spans           bigint
 
 subtest templates/different_templates_in_each_db
 
@@ -235,15 +235,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt1"  public  external_connections
-"d%qbt1"  public  "le)as e"
-"d%qbt1"  public  statement_activity
-"d%qbt2"  public  tena😿nt_id_seq
-"d%qbt2"  public  ui
-"d%qbt2"  public  w😤eb_sessions
-dbt3      public  "descrip tor_id_seq"
-dbt3      public  "span                   _stats_tenant_boundaries"
-dbt3      public  "sta""tement_activity"
+"d%qbt1"  public  privileges
+"d%qbt1"  public  replication_stats
+"d%qbt1"  public  "stat ement_diagnostics"
+"d%qbt2"  public  eventlog
+"d%qbt2"  public  "role_option's"
+"d%qbt2"  public  "web_seSsions"
+dbt3      public  "%0eusers"
+dbt3      public  span_configurations
+dbt3      public  "transaction_ac'tivity"
 
 
 statement ok
