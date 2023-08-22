@@ -381,10 +381,10 @@ func (m *Manager) Migrate(
 	// tenant upgrade case to ensure that no new SQL servers were started
 	// mid-upgrade, with versions that are incompatible with the attempted
 	// upgrade (because their binary version is too low).
-	validate := func(ctx context.Context) error {
-		return m.deps.Cluster.ValidateAfterUpdateSystemVersion(ctx)
+	validate := func(ctx context.Context, txn *kv.Txn) error {
+		return m.deps.Cluster.ValidateAfterUpdateSystemVersion(ctx, txn)
 	}
-	skipValidation := func(ctx context.Context) error {
+	skipValidation := func(ctx context.Context, txn *kv.Txn) error {
 		return nil
 	}
 
