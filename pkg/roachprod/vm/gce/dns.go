@@ -80,12 +80,11 @@ func (n dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord)
 		}
 
 		// Add the new record data.
-		// TODO(Herko): Warn if the same record has been added twice
 		for _, record := range recordGroup {
 			dataSet[record.Data] = struct{}{}
 		}
 		// We assume that all records in a group have the same name, type, and ttl.
-		// TODO(herko): We should add error checking to ensure that the above is the case.
+		// TODO(herko): Add error checking to ensure that the above is the case.
 		firstRecord := recordGroup[0]
 		data := maps.Keys(dataSet)
 		sort.Strings(data)
