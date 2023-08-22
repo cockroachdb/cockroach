@@ -787,7 +787,7 @@ func TestMVCCIncrementalIteratorIntentPolicy(t *testing.T) {
 	kv2_2_2 := makeKVT(testKey2, testValue2, ts2)
 	txn, intent2_2_2 := makeKVTxn(testKey2, ts2)
 
-	lcErr := &kvpb.LockConflictError{Locks: []roachpb.Intent{intent2_2_2}}
+	lcErr := &kvpb.LockConflictError{Locks: []roachpb.Lock{intent2_2_2.AsLock()}}
 
 	e := NewDefaultInMemForTesting()
 	defer e.Close()

@@ -331,9 +331,7 @@ message TransactionStatusError {
 // there's no ambiguity; the error carries a WriteTimestamp that's the
 // upper bound of the timestamps intents were written at.
 message LockConflictError {
-  // TODO(nvanbenschoten): rename roachpb.Intent to roachpb.Lock and add a
-  // lock.Strength field.
-  repeated roachpb.Intent locks = 1 [(gogoproto.nullable) = false];
+  repeated roachpb.Lock locks = 1 [(gogoproto.nullable) = false];
   reserved 2;
   // The sequence of the lease that the operation which hit this error was
   // operating under. Used on the server to avoid adding discovered locks
@@ -577,7 +575,7 @@ message MVCCHistoryMutationError {
 // not there.
 message IntentMissingError {
   // The non-matching intent that was found at that key, if any.
-  optional roachpb.Intent wrong_intent = 1;
+  optional roachpb.Lock wrong_intent = 1;
   // The key where the intent was expected.
   optional bytes key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 }
