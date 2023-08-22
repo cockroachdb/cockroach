@@ -1,0 +1,8 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "constants",
+    srcs = ["constants.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/constants",
+    visibility = ["//visibility:public"],
+)
