@@ -17,11 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -44,10 +46,18 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 	ctx, span := tracing.ChildSpan(ctx, n.StatementTag())
 	defer span.Finish()
 
-	hasCreateRolePriv, err := p.HasRoleOption(ctx, roleoption.CREATEROLE)
+	hasCreateRolePriv, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.CREATEROLE, p.User())
 	if err != nil {
 		return nil, err
 	}
+
+	if !hasCreateRolePriv {
+		hasCreateRolePriv, err = p.HasRoleOption(ctx, roleoption.CREATEROLE)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// check permissions on each role.
 	allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
 	if err != nil {

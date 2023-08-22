@@ -38,6 +38,7 @@ func _() {
 	_ = x[MODIFYSQLCLUSTERSETTING-28]
 	_ = x[REPLICATION-29]
 	_ = x[MANAGETENANT-30]
+	_ = x[CREATEROLE-31]
 }
 
 func (i Kind) String() string {
@@ -102,6 +103,8 @@ func (i Kind) String() string {
 		return "REPLICATION"
 	case MANAGETENANT:
 		return "MANAGETENANT"
+	case CREATEROLE:
+		return "CREATEROLE"
 	default:
 		return "Kind(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
