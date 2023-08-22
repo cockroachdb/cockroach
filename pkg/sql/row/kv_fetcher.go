@@ -87,7 +87,8 @@ func newTxnKVFetcher(
 			return br, nil
 		}
 	}
-	return newTxnKVFetcherInternal(newTxnKVFetcherArgs{
+
+	fetcherArgs := newTxnKVFetcherArgs{
 		sendFn:                     sendFn,
 		reverse:                    reverse,
 		lockStrength:               lockStrength,
@@ -97,9 +98,13 @@ func newTxnKVFetcher(
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
 		kvPairsRead:                new(int64),
 		batchRequestsIssued:        &batchRequestsIssued,
-		requestAdmissionHeader:     txn.AdmissionHeader(),
-		responseAdmissionQ:         txn.DB().SQLKVResponseAdmissionQ,
-	})
+	}
+	fetcherArgs.admission.requestHeader = txn.AdmissionHeader()
+	fetcherArgs.admission.responseQ = txn.DB().SQLKVResponseAdmissionQ
+	fetcherArgs.admission.pacerFactory = txn.DB().AdmissionPacerFactory
+	fetcherArgs.admission.settingsValues = txn.DB().SettingsValues
+
+	return newTxnKVFetcherInternal(fetcherArgs)
 }
 
 // NewDirectKVBatchFetcher creates a new KVBatchFetcher that uses the
