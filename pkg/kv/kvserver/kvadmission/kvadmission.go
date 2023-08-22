@@ -375,7 +375,7 @@ func (n *controllerImpl) AdmitKVWork(
 			var admitDuration time.Duration
 			if ba.IsSingleExportRequest() {
 				admitDuration = elasticCPUDurationPerExportRequest.Get(&n.settings.SV)
-			} else if isInternalLowPriRead {
+			} else { // isInternalLowPriRead
 				admitDuration = elasticCPUDurationPerInternalLowPriRead.Get(&n.settings.SV)
 			}
 
