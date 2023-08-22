@@ -176,7 +176,7 @@ func (d Date) Format(buf *bytes.Buffer) {
 		year, month, day := t.Date()
 		bc := year <= 0
 		if bc {
-			year = -year + 1
+			year = -year
 		}
 		fmt.Fprintf(buf, "%04d-%02d-%02d", year, month, day)
 		if bc {

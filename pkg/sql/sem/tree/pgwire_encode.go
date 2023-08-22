@@ -354,7 +354,7 @@ func PGWireFormatTimestamp(t time.Time, offset *time.Location, tmp []byte) (b []
 	bc := false
 	if t.Year() <= 0 {
 		// flip year sign, and add 1, e.g: "0" will be "1", and "-10" will be "11"
-		t = t.AddDate((-t.Year())*2+1, 0, 0)
+		t = t.AddDate((-t.Year())*2, 0, 0)
 		bc = true
 	}
 
