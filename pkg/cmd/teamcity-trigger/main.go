@@ -157,7 +157,9 @@ func runTC(queueBuild func(string, map[string]string)) {
 			opts["env.EXTRA_BAZEL_FLAGS"] = "--test_env COCKROACH_KVNEMESIS_STEPS=1000"
 		}
 
-		if testTarget == "//pkg/sql/logictest:logictest_test" || testTarget == "//pkg/kv/kvserver:kvserver_test" {
+		if testTarget == "//pkg/sql/logictest:logictest_test" ||
+			testTarget == "//pkg/kv/kvserver:kvserver_test" ||
+			testTarget == "//pkg/ccl/backupccl:backupccl_test" {
 			// Stress heavy with reduced parallelism (to avoid overloading the
 			// machine, see https://github.com/cockroachdb/cockroach/pull/10966).
 			parallelism /= 2
