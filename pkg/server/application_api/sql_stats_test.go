@@ -96,6 +96,7 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 			count:         1,
 			numRows:       2,
 		},
+		{query: `SELECT * FROM posts WHERE id = 1`, fingerprinted: `SELECT * FROM posts WHERE id = _`, count: 1, numRows: 1},
 	}
 
 	appNameToTestCase := make(map[string]testCase)
@@ -677,6 +678,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 			fingerprinted: `INSERT INTO posts VALUES (_, '_')`,
 		},
 		{stmt: `SELECT * FROM posts`},
+		{stmt: `SELECT body FROM posts`},
 	}
 
 	for _, stmt := range statements {
