@@ -11,6 +11,7 @@ package streamproducer
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -207,6 +209,10 @@ func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
 	pacer := makeCheckpointPacer(s.spec.Config.MinCheckpointFrequency)
 	bufferedEvents := make([]streampb.StreamedSpanConfigEntry, 0)
 	batcher := makeStreamEventBatcher()
+	frontier, err := makeSpanConfigFrontier(s.spec.Spans)
+	if err != nil {
+		return err
+	}
 
 	for {
 		select {
@@ -237,14 +243,43 @@ func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
 			}
 			batcher.addSpanConfigs(bufferedEvents)
 			bufferedEvents = bufferedEvents[:0]
-			if pacer.shouldCheckpoint(update.Timestamp, true) {
+			// Why if I gate the flushing with length of the span configs in the batch, no span config updates ever surface?
+			if pacer.shouldCheckpoint(update.Timestamp, true) /*&& len(batcher.batch.SpanConfigs)>0*/ {
 				if err := s.flushEvent(ctx, &streampb.StreamEvent{Batch: &batcher.batch}); err != nil {
 					return err
 				}
+				frontier.update(update.Timestamp)
+				if err := s.flushEvent(ctx, &streampb.StreamEvent{Checkpoint: &frontier.checkpoint}); err != nil {
+					return err
+				}
+
 				batcher.reset()
 			}
 		}
 	}
+}
+
+func makeSpanConfigFrontier(spans roachpb.Spans) (*spanConfigFrontier, error) {
+	if len(spans) != 1 {
+		return nil, errors.Newf("unexpected input span length %d", len(spans))
+	}
+	checkpoint := streampb.StreamEvent_StreamCheckpoint{
+		ResolvedSpans: []jobspb.ResolvedSpan{{
+			Span: spans[0],
+		},
+		},
+	}
+	return &spanConfigFrontier{
+		checkpoint: checkpoint,
+	}, nil
+}
+
+type spanConfigFrontier struct {
+	checkpoint streampb.StreamEvent_StreamCheckpoint
+}
+
+func (spf *spanConfigFrontier) update(frontier hlc.Timestamp) {
+	spf.checkpoint.ResolvedSpans[0].Timestamp = frontier
 }
 
 func streamSpanConfigPartition(

@@ -949,6 +949,12 @@ USE d;`)
 			}
 		}
 		source.mu.Unlock()
+		if codec.e.Checkpoint != nil {
+			require.Equal(t, 1, len(codec.e.Checkpoint.ResolvedSpans))
+			// The frontier in the checkpoint must be greater or equal to the commit
+			// timestamp associated with the latest event.
+			require.LessOrEqual(t, receivedSpanConfigs.latestTime, codec.e.Checkpoint.ResolvedSpans[0].Timestamp.WallTime)
+		}
 		if updateCount == len(expectedSpanConfigs.allUpdates) {
 			break
 		}
