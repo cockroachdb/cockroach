@@ -13,6 +13,7 @@ go_test(
     deps = [
         "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/kv/kvserver/asim",
+        "//pkg/kv/kvserver/asim/assertion",
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/event",
         "//pkg/kv/kvserver/asim/gen",
@@ -30,7 +31,6 @@ go_test(
 go_library(
     name = "tests",
     srcs = [
-        "assert.go",
         "default_settings.go",
         "output.go",
         "rand_framework.go",
@@ -40,14 +40,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/asim",
+        "//pkg/kv/kvserver/asim/assertion",
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/gen",
-        "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/liveness/livenesspb",
-        "//pkg/roachpb",
-        "//pkg/spanconfig/spanconfigtestutils",
-        "//pkg/util/log",
-        "@com_github_montanaflynn_stats//:stats",
     ],
 )

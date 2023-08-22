@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
+	assertions2 "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 )
@@ -36,7 +38,7 @@ type testSettings struct {
 	duration      time.Duration
 	verbose       OutputFlags
 	randSource    *rand.Rand
-	assertions    []SimulationAssertion
+	assertions    []assertion.SimulationAssertion
 	randOptions   testRandOptions
 	clusterGen    clusterGenSettings
 	rangeGen      rangeGenSettings
@@ -167,7 +169,7 @@ func loadClusterInfo(configName string) gen.LoadedCluster {
 // checkAssertions checks the given history and assertions, returning (bool,
 // reason) indicating any failures and reasons if any assertions fail.
 func checkAssertions(
-	ctx context.Context, history asim.History, assertions []SimulationAssertion,
+	ctx context.Context, history asim.History, assertions []assertions2.SimulationAssertion,
 ) (bool, string) {
 	assertionFailures := []string{}
 	failureExists := false

@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/tests"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -230,18 +230,18 @@ func (sce SetCapacityOverrideEvent) generate(start time.Time) delayedEvent {
 
 type SetSpanConfigEventWithAssertions struct {
 	SetSpanConfigEvent
-	assertions []tests.SimulationAssertion
+	assertions []assertion.SimulationAssertion
 }
 
 type AssertionsGen struct {
 	At         time.Time
-	Assertions []tests.SimulationAssertion
+	Assertions []assertion.SimulationAssertion
 }
 
 type StateChangeEventWithAssertionGen struct {
 	StateChangeEvent StateChangeEventGen
 	DurationToAssert time.Duration
-	Assertions       []tests.SimulationAssertion
+	Assertions       []assertion.SimulationAssertion
 }
 
 type assertionResult struct {
