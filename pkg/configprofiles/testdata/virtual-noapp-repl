@@ -7,15 +7,15 @@ server started
 system-sql
 SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
 WHERE variable IN (
-'server.secondary_tenants.redact_trace.enabled',
-'sql.zone_configs.allow_for_secondary_tenant.enabled',
-'sql.multi_region.allow_abstractions_for_secondary_tenants.enabled',
-'sql.multi_region.allow_abstractions_for_secondary_tenants.enabled',
-'spanconfig.storage_coalesce_adjacent.enabled',
-'spanconfig.tenant_coalesce_adjacent.enabled',
+'trace.redact_at_virtual_cluster_boundary.enabled',
+'sql.virtual_cluster.feature_access.zone_configs.enabled',
+'sql.virtual_cluster.feature_access.multiregion.enabled',
+'sql.virtual_cluster.feature_access.multiregion.enabled',
+'spanconfig.range_coalescing.system.enabled',
+'spanconfig.range_coalescing.application.enabled',
 'sql.drop_virtual_cluster.enabled',
-'sql.create_tenant.default_template',
-'server.controller.default_tenant',
+'sql.create_virtual_cluster.default_template',
+'server.controller.default_target_cluster',
 'kv.rangefeed.enabled',
 'cross_cluster_replication.enabled'
 )
@@ -23,14 +23,14 @@ ORDER BY variable
 ----
 cross_cluster_replication.enabled true
 kv.rangefeed.enabled true
-server.controller.default_tenant system
-server.secondary_tenants.redact_trace.enabled false
-spanconfig.storage_coalesce_adjacent.enabled false
-spanconfig.tenant_coalesce_adjacent.enabled false
-sql.create_tenant.default_template template
+server.controller.default_target_cluster system
+spanconfig.range_coalescing.application.enabled false
+spanconfig.range_coalescing.system.enabled false
+sql.create_virtual_cluster.default_template template
 sql.drop_virtual_cluster.enabled false
-sql.multi_region.allow_abstractions_for_secondary_tenants.enabled true
-sql.zone_configs.allow_for_secondary_tenant.enabled true
+sql.virtual_cluster.feature_access.multiregion.enabled true
+sql.virtual_cluster.feature_access.zone_configs.enabled true
+trace.redact_at_virtual_cluster_boundary.enabled false
 
 system-sql
 SELECT tenant_id, name, value FROM system.tenant_settings

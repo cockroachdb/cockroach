@@ -308,7 +308,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	// Report tracked cluster settings via telemetry.
 	// TODO(justin): implement a more general mechanism for tracking these.
 	switch n.name {
-	case multitenant.DefaultTenantSelectSettingName:
+	case multitenant.DefaultClusterSelectSettingName:
 		if multitenant.VerifyTenantService.Get(&n.st.SV) && expectedEncodedValue != "" {
 			tr, err := GetTenantRecordByName(params.ctx, n.st, params.p.InternalSQLTxn(), roachpb.TenantName(expectedEncodedValue))
 			if err != nil {

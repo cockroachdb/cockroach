@@ -20,6 +20,7 @@ go_library(
         "//pkg/server",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/execinfra",
         "//pkg/sql/sqlliveness",
         "//pkg/util/log",
         "//pkg/util/quotapool",

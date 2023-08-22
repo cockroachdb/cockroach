@@ -224,8 +224,8 @@ WHERE 'kv' IN (
 				execOrFatal(t, appSqlDb, `SET CLUSTER SETTING kv.protectedts.poll_interval = '5s'`)
 
 				// Ensure that each table gets its own range.
-				execOrFatal(t, systemSqlDb, `SET CLUSTER SETTING spanconfig.tenant_coalesce_adjacent.enabled = 'false'`)
-				execOrFatal(t, systemSqlDb, `SET CLUSTER SETTING spanconfig.storage_coalesce_adjacent.enabled = 'false'`)
+				execOrFatal(t, systemSqlDb, `SET CLUSTER SETTING spanconfig.range_coalescing.application.enabled = 'false'`)
+				execOrFatal(t, systemSqlDb, `SET CLUSTER SETTING spanconfig.range_coalescing.system.enabled = 'false'`)
 
 				if d.clearRange {
 					execOrFatal(t, systemSqlDb, `SET CLUSTER SETTING kv.gc.clear_range_min_keys = 5`)

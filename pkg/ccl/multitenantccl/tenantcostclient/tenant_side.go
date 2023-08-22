@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -37,8 +38,9 @@ import (
 var TargetPeriodSetting = settings.RegisterDurationSetting(
 	settings.TenantReadOnly,
 	"tenant_cost_control_period",
-	"target duration between token bucket requests from tenants (requires restart)",
+	"target duration between token bucket requests (requires restart)",
 	10*time.Second,
+	settings.WithName("tenant_cost_control.token_request_period"),
 	settings.DurationInRange(5*time.Second, 120*time.Second),
 )
 
@@ -50,6 +52,7 @@ var CPUUsageAllowance = settings.RegisterDurationSetting(
 		"doesn't contribute to consumption; for example, if it is set to 10ms, "+
 		"that corresponds to 1% of a CPU",
 	10*time.Millisecond,
+	settings.WithName("tenant_cost_control.cpu_usage_allowance"),
 	settings.DurationInRange(0, 1000*time.Millisecond),
 )
 
@@ -62,6 +65,7 @@ var ExternalIORUAccountingMode = *settings.RegisterStringSetting(
 		"'nowait' (external IO RUs are accounted for but callers do not wait for RUs), "+
 		"and 'off' (no external IO RU accounting)",
 	"on",
+	settings.WithName("tenant_cost_control.external_io.ru_accounting_mode"),
 	settings.WithValidateString(func(_ *settings.Values, s string) error {
 		switch s {
 		case "on", "off", "nowait":
@@ -787,7 +791,7 @@ func (c *tenantSideCostController) OnResponseWait(
 	}
 
 	// Record the number of RUs consumed by the IO request.
-	if multitenant.TenantRUEstimateEnabled.Get(&c.settings.SV) {
+	if execinfra.IncludeRUEstimateInExplainAnalyze.Get(&c.settings.SV) {
 		if sp := tracing.SpanFromContext(ctx); sp != nil &&
 			sp.RecordingType() != tracingpb.RecordingOff {
 			sp.RecordStructured(&kvpb.TenantConsumption{

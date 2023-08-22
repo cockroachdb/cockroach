@@ -1301,11 +1301,10 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 	nullsink.NullRequiresExternalIOAccounting = true
 
 	setRUAccountingMode := func(b *testing.B, mode string) {
-		_, err := hostSQL.Exec(fmt.Sprintf("SET CLUSTER SETTING tenant_external_io_ru_accounting_mode = '%s'", mode))
+		_, err := hostSQL.Exec(fmt.Sprintf("SET CLUSTER SETTING tenant_cost_control.external_io.ru_accounting_mode = '%s'", mode))
 		require.NoError(b, err)
 
-		_, err = hostSQL.Exec(`UPSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES ($1, $2, $3, $4)`,
-			0, "tenant_external_io_ru_accounting_mode", mode, "s")
+		_, err = hostSQL.Exec(fmt.Sprintf("ALTER TENANT ALL SET CLUSTER SETTING tenant_cost_control.external_io.ru_accounting_mode = '%s'", mode))
 		require.NoError(b, err)
 	}
 

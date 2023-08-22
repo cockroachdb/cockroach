@@ -13,6 +13,7 @@ package execinfra
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -50,3 +51,17 @@ func HydrateTypesInDatumInfo(
 	}
 	return nil
 }
+
+// IncludeRUEstimateInExplainAnalyze determines whether EXPLAIN
+// ANALYZE should return an estimate for the number of RUs consumed by
+// tenants.
+//
+// This setting is defined here instead of in package 'sql' to avoid
+// a dependency cycle.
+var IncludeRUEstimateInExplainAnalyze = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.tenant_ru_estimation.enabled",
+	"determines whether EXPLAIN ANALYZE should return an estimate for the query's RU consumption",
+	true,
+	settings.WithName("sql.explain_analyze.include_ru_estimation.enabled"),
+)

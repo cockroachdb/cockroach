@@ -15,19 +15,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 )
 
-// DefaultTenantSelectSettingName is the name of the setting that
+// DefaultClusterSelectSettingName is the name of the setting that
 // configures the default tenant to use when a client does not specify
 // a specific tenant.
-const DefaultTenantSelectSettingName = "server.controller.default_tenant"
+const DefaultClusterSelectSettingName = "server.controller.default_target_cluster"
 
 // DefaultTenantSelect determines which tenant serves requests from
 // clients that do not specify explicitly the tenant they want to use.
 var DefaultTenantSelect = settings.RegisterStringSetting(
 	settings.SystemOnly,
-	DefaultTenantSelectSettingName,
-	"name of the tenant to use to serve requests when clients don't specify a tenant",
+	"server.controller.default_tenant",
+	"name of the virtual cluster to use when SQL or HTTP clients don't specify a target cluster",
 	catconstants.SystemTenantName,
-	settings.WithPublic)
+	settings.WithName(DefaultClusterSelectSettingName),
+)
 
 // VerifyTenantService determines whether there should be an advisory
 // interlock between changes to the tenant service and changes to the
@@ -35,6 +36,7 @@ var DefaultTenantSelect = settings.RegisterStringSetting(
 var VerifyTenantService = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"server.controller.default_tenant.check_service.enabled",
-	"verify that a tenant's service is coherently set with the value of "+DefaultTenantSelectSettingName,
+	"verify that the service mode is coherently set with the value of "+DefaultClusterSelectSettingName,
 	true,
+	settings.WithName(DefaultClusterSelectSettingName+".check_service.enabled"),
 )

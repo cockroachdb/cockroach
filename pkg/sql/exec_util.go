@@ -212,8 +212,9 @@ var allowCrossDatabaseSeqReferences = settings.RegisterBoolSetting(
 var SecondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
 	settings.TenantReadOnly,
 	"sql.zone_configs.allow_for_secondary_tenant.enabled",
-	"allow secondary tenants to set zone configurations; does not affect the system tenant",
+	"enable the use of ALTER CONFIGURE ZONE in virtual clusters",
 	false,
+	settings.WithName("sql.virtual_cluster.feature_access.zone_configs.enabled"),
 )
 
 // SecondaryTenantSplitAtEnabled controls if secondary tenants are allowed to
@@ -222,8 +223,9 @@ var SecondaryTenantZoneConfigsEnabled = settings.RegisterBoolSetting(
 var SecondaryTenantSplitAtEnabled = settings.RegisterBoolSetting(
 	settings.TenantReadOnly,
 	"sql.split_at.allow_for_secondary_tenant.enabled",
-	"allow secondary tenants to run ALTER TABLE/INDEX ... SPLIT AT commands; does not affect the system tenant",
+	"enable the use of ALTER TABLE/INDEX ... SPLIT AT in virtual clusters",
 	false,
+	settings.WithName("sql.virtual_cluster.feature_access.manual_range_split.enabled"),
 )
 
 // SecondaryTenantScatterEnabled controls if secondary tenants are allowed to
@@ -232,8 +234,9 @@ var SecondaryTenantSplitAtEnabled = settings.RegisterBoolSetting(
 var SecondaryTenantScatterEnabled = settings.RegisterBoolSetting(
 	settings.TenantReadOnly,
 	"sql.scatter.allow_for_secondary_tenant.enabled",
-	"allow secondary tenants to run ALTER TABLE/INDEX ... SCATTER commands; does not affect the system tenant",
+	"enable the use of ALTER TABLE/INDEX ... SCATTER in virtual clusters",
 	false,
+	settings.WithName("sql.virtual_cluster.feature_access.manual_range_scatter.enabled"),
 )
 
 // traceTxnThreshold can be used to log SQL transactions that take
