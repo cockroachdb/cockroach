@@ -182,8 +182,18 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		// CockroachDB does not support the superuser role option right now, but we
 		// make it so any member of the ADMIN role can only be edited by another ADMIN
 		// (done after checking for existence of the role).
-		if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEROLE); err != nil {
+		hasCreateRolePriv, err := params.p.HasPrivilege(
+			params.ctx,
+			syntheticprivilege.GlobalPrivilegeObject,
+			privilege.CREATEROLE, params.p.User(),
+		)
+		if err != nil {
 			return err
+		}
+		if !hasCreateRolePriv {
+			if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEROLE); err != nil {
+				return err
+			}
 		}
 		// Check that the requested combination of password options is
 		// compatible with the user's own CREATELOGIN privilege.
@@ -309,6 +319,13 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 				hasSqlModify = true
 			}
 		}
+		if !hasSqlModify {
+			if ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.CREATEROLE, p.User()); err != nil {
+				return nil, err
+			} else if ok {
+				hasCreateRole = true
+			}
+		}
 		// Check role options.
 		if !hasSqlModify {
 			if ok, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING); err != nil {
@@ -318,7 +335,7 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 				hasSqlModify = true
 			}
 		}
-		if !hasModify && !hasSqlModify {
+		if !hasModify && !hasSqlModify && !hasCreateRole {
 			if ok, err := p.HasRoleOption(ctx, roleoption.CREATEROLE); err != nil {
 				return nil, err
 			} else if ok {

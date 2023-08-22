@@ -23,11 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -62,8 +64,15 @@ func (p *planner) CreateRoleNode(
 	opName string,
 	kvOptions tree.KVOptions,
 ) (*CreateRoleNode, error) {
-	if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
+	hasCreateRolePriv, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.CREATEROLE, p.User())
+	if err != nil {
 		return nil, err
+	}
+
+	if !hasCreateRolePriv {
+		if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
+			return nil, err
+		}
 	}
 
 	if roleSpec.RoleSpecType != tree.RoleName {
