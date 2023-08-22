@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrademanager"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -230,6 +232,139 @@ RETURNING id;`, firstID).Scan(&secondID))
 	close(unblock)
 	require.NoError(t, <-upgrade1Err)
 	require.NoError(t, <-upgrade2Err)
+}
+
+// TestPostJobInfoTableQueryDuplicateJobInfo tests that the
+// PostJobInfoTableQuery returns 1 row for a migration even when the
+// job_info table has 2 payloads for the relevant migration.
+//
+// This condition shouldn't really be possible for the migrations that
+// this query will be used against since it is only possible for jobs
+// that exist during the job_info backfill. By definition, any job we
+// are looking for with this query should be ones started after the
+// query.
+//
+// But, in case we are wrong about that reasoning, we handle it and
+// test it here.
+func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	targetCV := clusterversion.V23_1StopWritingPayloadAndProgressToSystemJobs + 1
+	targetCVJSON, err := protoreflect.MessageToJSON(&clusterversion.ClusterVersion{Version: clusterversion.ByKey(targetCV)},
+		protoreflect.FmtFlags{EmitDefaults: false})
+	require.NoError(t, err)
+
+	settingsForUpgrade := func() *cluster.Settings {
+		settings := cluster.MakeTestingClusterSettingsWithVersions(
+			clusterversion.TestingBinaryVersion,
+			clusterversion.TestingBinaryMinSupportedVersion,
+			false, // initializeVersion
+		)
+		require.NoError(t, clusterversion.Initialize(ctx,
+			clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey), &settings.SV))
+		return settings
+	}
+
+	upgradeStarted := make(chan chan struct{})
+	registryOverrideHook := func(v roachpb.Version) (upgradebase.Upgrade, bool) {
+		if v != clusterversion.ByKey(targetCV) {
+			return nil, false
+		}
+		return upgrade.NewTenantUpgrade("test", v, upgrade.NoPrecondition, func(
+			ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
+		) error {
+			canResume := make(chan struct{})
+			upgradeStarted <- canResume
+			select {
+			case <-canResume:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}), true
+	}
+
+	ts, systemSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Settings:          settingsForUpgrade(),
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			Server: &server.TestingKnobs{
+				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+			},
+			UpgradeManager: &upgradebase.TestingKnobs{
+				RegistryOverride: registryOverrideHook,
+			},
+		},
+	})
+	defer ts.Stopper().Stop(ctx)
+
+	runTestForDB := func(t *testing.T, sqlDB *gosql.DB) {
+		upgradeErr := make(chan error, 1)
+		go func() {
+			t.Logf("setting cluster version to %s", targetCV.String())
+			_, err := sqlDB.ExecContext(ctx, `SET CLUSTER SETTING version = $1`, targetCV.String())
+			upgradeErr <- err
+		}()
+		canResume := <-upgradeStarted
+
+		var jobID jobspb.JobID
+		require.NoError(t,
+			sqlDB.QueryRow(`
+SELECT id
+FROM system.jobs WHERE job_type = 'MIGRATION' AND status = 'running'`).Scan(&jobID))
+
+		verifyJobInfoQuery := func() {
+			rows, err := sqlDB.Query(upgrademanager.PostJobInfoTableQuery, targetCVJSON.String())
+			require.NoError(t, err)
+			defer rows.Close()
+
+			require.True(t, rows.Next(), "one row required")
+			require.False(t, rows.Next(), "more than one row returned")
+			require.NoError(t, rows.Err())
+		}
+		verifyJobInfoQuery()
+		t.Logf("inserting row")
+		res, err := sqlDB.Exec(`
+INSERT INTO system.job_info (
+SELECT job_id, info_key, now(), value
+FROM system.job_info WHERE job_id = $1 AND info_key = 'legacy_payload')`, jobID)
+		require.NoError(t, err)
+		rowsInserted, err := res.RowsAffected()
+		require.NoError(t, err)
+		require.Equal(t, int64(1), rowsInserted)
+
+		verifyJobInfoQuery()
+
+		close(canResume)
+		require.NoError(t, <-upgradeErr)
+	}
+
+	t.Run("system", func(t *testing.T) {
+		runTestForDB(t, systemSQLDB)
+	})
+	t.Run("tenant", func(t *testing.T) {
+		tenant, err := ts.StartTenant(ctx, base.TestTenantArgs{
+			TenantID: roachpb.MustMakeTenantID(10),
+			TestingKnobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				UpgradeManager: &upgradebase.TestingKnobs{
+					RegistryOverride: registryOverrideHook,
+				},
+			},
+			Settings: settingsForUpgrade(),
+		})
+		require.NoError(t, err)
+		tenantSQLDB := tenant.SQLConn(t, "")
+		runTestForDB(t, tenantSQLDB)
+	})
 }
 
 func TestMigrateUpdatesReplicaVersion(t *testing.T) {
