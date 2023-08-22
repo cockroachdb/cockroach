@@ -119,6 +119,7 @@ func TestValidationWithProtectedTS(t *testing.T) {
 		rSys.Exec(t, sql)
 	}
 	for _, sql := range []string{
+		"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
 		"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1",
 		"CREATE TABLE t(n int)",
 		"ALTER TABLE t CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 67108864, gc.ttlseconds = 1",

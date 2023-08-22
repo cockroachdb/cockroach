@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/objstorage"
@@ -346,16 +345,6 @@ func (fw *SSTWriter) PutUnversioned(key roachpb.Key, value []byte) error {
 	return fw.put(MVCCKey{Key: key}, value)
 }
 
-// PutIntent implements the Writer interface.
-// An error is returned if it is not greater than any previously added entry
-// (according to the comparator configured during writer creation). `Close`
-// cannot have been called.
-func (fw *SSTWriter) PutIntent(
-	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
-) error {
-	return fw.put(MVCCKey{Key: key}, value)
-}
-
 // PutEngineKey implements the Writer interface.
 // An error is returned if it is not greater than any previously added entry
 // (according to the comparator configured during writer creation). `Close`
@@ -403,16 +392,6 @@ func (fw *SSTWriter) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 // cannot have been called.
 func (fw *SSTWriter) ClearUnversioned(key roachpb.Key, opts ClearOptions) error {
 	return fw.clear(MVCCKey{Key: key}, opts)
-}
-
-// ClearIntent implements the Writer interface. An error is returned if it is
-// not greater than any previous point key passed to this Writer (according to
-// the comparator configured during writer creation). `Close` cannot have been
-// called.
-func (fw *SSTWriter) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts ClearOptions,
-) error {
-	panic("ClearIntent is unsupported")
 }
 
 // ClearEngineKey implements the Writer interface. An error is returned if it is
