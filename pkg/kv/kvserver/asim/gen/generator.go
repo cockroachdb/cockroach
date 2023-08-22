@@ -59,16 +59,6 @@ type RangeGen interface {
 	String() string
 }
 
-// EventGen provides a  method to generate a list of events that will apply to
-// the simulated cluster. Currently, only delayed (fixed time) events are
-// supported.
-type EventGen interface {
-	// Generate returns a list of events, which should be exectued at the delay specified.
-	// TODO: figure out what seed is needed in gen here
-	Generate(settings *config.SimulationSettings) *event.Executor
-	String() string /**/
-}
-
 // GenerateSimulation is a utility function that creates a new allocation
 // simulation using the provided state, workload, settings generators and seed.
 func GenerateSimulation(
@@ -77,7 +67,7 @@ func GenerateSimulation(
 	rangeGen RangeGen,
 	loadGen LoadGen,
 	settingsGen SettingsGen,
-	eventGen EventGen,
+	eventGen event.EventGen,
 	seed int64,
 ) *asim.Simulator {
 	settings := settingsGen.Generate(seed)
@@ -313,4 +303,11 @@ func (br BasicRanges) Generate(
 	rangesInfo := br.GetRangesInfo(br.PlacementType, len(s.Stores()), nil, []float64{})
 	br.LoadRangeInfo(s, rangesInfo)
 	return s
+}
+
+type EventGen interface {
+	// Generate returns a list of events, which should be exectued at the delay specified.
+	// TODO: figure out what seed is needed in gen here
+	Generate(settings *config.SimulationSettings) *event.Executor
+	String() string /**/
 }

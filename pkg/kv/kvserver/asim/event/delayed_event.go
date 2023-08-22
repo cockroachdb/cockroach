@@ -348,3 +348,7 @@ func (e *Executor) RegisterStateChangeEventWithAssertions(
 // Event maps to all of its assertion during registration referencing the slice (map)
 // Each assertion event should populate the output result later on/
 // Store one list of delayed events which mix events and assertions
+
+// EventGen provides a  method to generate a list of events that will apply to
+// the simulated cluster. Currently, only delayed (fixed time) events are
+// supported.
