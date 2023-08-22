@@ -3,32 +3,41 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": "-- Grafana --",
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
         "type": "dashboard"
       }
     ]
   },
   "editable": true,
-  "gnetId": null,
+  "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "iteration": 1623959942178,
+  "id": 7,
   "links": [],
+  "liveNow": false,
   "panels": [
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "The total number of open SQL Sessions.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The total number of open SQL Sessions.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -55,7 +64,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -65,6 +74,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sql_conns{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}",
           "interval": "",
           "intervalFactor": 2,
@@ -73,9 +86,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Open SQL Sessions",
       "tooltip": {
         "shared": true,
@@ -84,9 +95,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -96,23 +105,18 @@
           "format": "short",
           "label": "connections",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
           "$$hashKey": "object:109",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -120,12 +124,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "The total number of SQL transactions currently open.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The total number of SQL transactions currently open.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -152,7 +155,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -162,6 +165,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sql_txns_open{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}",
           "interval": "",
@@ -170,9 +177,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Open SQL Transactions",
       "tooltip": {
         "shared": true,
@@ -181,9 +186,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -193,23 +196,18 @@
           "format": "short",
           "label": "transactions",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
           "$$hashKey": "object:280",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -217,12 +215,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "description": "The total number of SQL statements currently running.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The total number of SQL statements currently running.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -249,7 +246,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -259,6 +256,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sum(sql_distsql_queries_active{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"})",
           "interval": "",
@@ -268,9 +269,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Active SQL Statements",
       "tooltip": {
         "shared": true,
@@ -279,9 +278,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -291,23 +288,18 @@
           "format": "short",
           "label": "queries",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
           "$$hashKey": "object:185",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -315,12 +307,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "description": "The total amount of SQL client network traffic in bytes per second.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The total amount of SQL client network traffic in bytes per second.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -347,7 +338,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "",
+      "pluginVersion": "9.0.2",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -357,6 +348,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sum(rate(sql_bytesin{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "instant": false,
@@ -366,6 +361,10 @@
           "refId": "A"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sum(rate(sql_bytesout{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
@@ -375,9 +374,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "SQL Byte Traffic",
       "tooltip": {
         "shared": true,
@@ -386,9 +383,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -398,23 +393,18 @@
           "format": "bytes",
           "label": "byte traffic",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
           "$$hashKey": "object:261",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -422,12 +412,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "A moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements successfully executed per second.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "A moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements successfully executed per second.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -454,7 +443,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "",
+      "pluginVersion": "9.0.2",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -464,6 +453,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sum(rate(sql_select_count{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
@@ -472,6 +465,10 @@
           "refId": "A"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sum(rate(sql_update_count{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
@@ -480,6 +477,10 @@
           "refId": "B"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sum(rate(sql_insert_count{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
@@ -488,6 +489,10 @@
           "refId": "C"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sum(rate(sql_delete_count{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
@@ -497,9 +502,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "SQL Statements",
       "tooltip": {
         "shared": true,
@@ -508,9 +511,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -520,23 +521,17 @@
           "format": "short",
           "label": "queries",
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:337",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -544,12 +539,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "description": "The number of statements which returned a planning or runtime error.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The number of statements which returned a planning or runtime error.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -586,6 +580,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sum(rate(sql_failure_count{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
@@ -595,9 +593,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "SQL Statement Errors",
       "tooltip": {
         "shared": true,
@@ -606,9 +602,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -625,16 +619,12 @@
         {
           "$$hashKey": "object:413",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -642,12 +632,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "The total number of SQL statements that experienced contention.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The total number of SQL statements that experienced contention.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -684,6 +673,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sum(rate(sql_distsql_contended_queries_count{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
@@ -692,9 +685,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "SQL Statement Contention",
       "tooltip": {
         "shared": true,
@@ -703,9 +694,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -715,7 +704,6 @@
           "format": "short",
           "label": "queries",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
@@ -724,14 +712,11 @@
           "format": "short",
           "label": "",
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -739,12 +724,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "description": "The number of flows on each node contributing to currently running distributed SQL statements.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The number of flows on each node contributing to currently running distributed SQL statements.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -781,6 +765,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "rate(sql_distsql_flows_active{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval])",
           "interval": "",
@@ -790,9 +778,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Active Flows for Distributed SQL Statements",
       "tooltip": {
         "shared": true,
@@ -801,9 +787,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -813,23 +797,18 @@
           "format": "short",
           "label": "flows",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
           "$$hashKey": "object:108",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -837,12 +816,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "Over the last minute, this node executed 99% of queries within this time. This time does not include network latency between the node and client.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "Over the last minute, this node executed 99% of queries within this time. This time does not include network latency between the node and client.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -879,6 +857,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "histogram_quantile(0.99, rate(sql_service_latency_bucket{job=\"cockroachdb\",instance=~\"$node\",cluster=\"$cluster\"}[$__rate_interval]))",
           "interval": "",
@@ -887,9 +869,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Service Latency: SQL, 99th percentile",
       "tooltip": {
         "shared": true,
@@ -898,9 +878,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -910,7 +888,6 @@
           "format": "ns",
           "label": "latency",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
@@ -919,14 +896,11 @@
           "format": "short",
           "label": "",
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -934,12 +908,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "Over the last minute, this node executed 90% of queries within this time. This time does not include network latency between the node and client.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "Over the last minute, this node executed 90% of queries within this time. This time does not include network latency between the node and client.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -976,6 +949,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "histogram_quantile(0.90, rate(sql_service_latency_bucket{job=\"cockroachdb\",instance=~\"$node\",cluster=\"$cluster\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{instance}}",
@@ -983,9 +960,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Service Latency: SQL, 90th percentile",
       "tooltip": {
         "shared": true,
@@ -994,9 +969,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1006,23 +979,17 @@
           "format": "ns",
           "label": "latency",
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:935",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1030,12 +997,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "The 99th percentile of latency between query requests and responses over a 1 minute period. Values are displayed individually for each node.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The 99th percentile of latency between query requests and responses over a 1 minute period. Values are displayed individually for each node.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1072,6 +1038,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "histogram_quantile(0.99,rate(exec_latency_bucket{job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
@@ -1080,9 +1050,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "KV Execution Latency: 99th percentile",
       "tooltip": {
         "shared": true,
@@ -1091,9 +1059,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1103,23 +1069,17 @@
           "format": "µs",
           "label": "latency",
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:1085",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1127,12 +1087,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "The 90th percentile of latency between query requests and responses over a 1 minute period. Values are displayed individually for each node.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The 90th percentile of latency between query requests and responses over a 1 minute period. Values are displayed individually for each node.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1169,6 +1128,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "histogram_quantile(0.90, rate(exec_latency_bucket{job=\"cockroachdb\",instance=~\"$node\",cluster=\"$cluster\"}[$rate_interval]))",
           "interval": "",
           "legendFormat": "{{instance}}",
@@ -1176,9 +1139,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "KV Execution Latency: 90th percentile",
       "tooltip": {
         "shared": true,
@@ -1187,9 +1148,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1199,23 +1158,18 @@
           "format": "ns",
           "label": "latency",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
           "$$hashKey": "object:1161",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1223,12 +1177,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "The total number of transactions initiated, committed, rolled back, or aborted per second.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The total number of transactions initiated, committed, rolled back, or aborted per second.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1265,6 +1218,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(sql_txn_begin_count{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
@@ -1272,6 +1229,10 @@
           "refId": "A"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sum(rate(sql_txn_commit_count{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
@@ -1280,6 +1241,10 @@
           "refId": "B"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sum(rate( sql_txn_rollback_count{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
@@ -1288,6 +1253,10 @@
           "refId": "D"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sum(rate(sql_txn_abort_count{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
@@ -1297,9 +1266,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Transactions",
       "tooltip": {
         "shared": true,
@@ -1308,9 +1275,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1320,23 +1285,18 @@
           "format": "short",
           "label": "latency",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
           "$$hashKey": "object:1459",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1344,12 +1304,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "The 99th percentile of total transaction time over a 1 minute period. Values are displayed individually for each node.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The 99th percentile of total transaction time over a 1 minute period. Values are displayed individually for each node.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1386,6 +1345,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "histogram_quantile(0.99,rate(sql_txn_latency_bucket{job=\"cockroachdb\",cluster=\"$cluster\"}[5m]))",
           "interval": "",
           "intervalFactor": 2,
@@ -1394,9 +1357,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Transaction Latency: 99th percentile",
       "tooltip": {
         "shared": true,
@@ -1405,9 +1366,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1417,23 +1376,18 @@
           "format": "µs",
           "label": "latency",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
           "$$hashKey": "object:1757",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1441,12 +1395,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "The 90th percentile of total transaction time over a 1 minute period. Values are displayed individually for each node.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The 90th percentile of total transaction time over a 1 minute period. Values are displayed individually for each node.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1483,6 +1436,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "histogram_quantile(0.90,rate(sql_txn_latency_bucket{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
@@ -1492,9 +1449,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Transaction Latency: 90th percentile",
       "tooltip": {
         "shared": true,
@@ -1503,9 +1458,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1515,23 +1468,18 @@
           "format": "ns",
           "label": "latency",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
           "$$hashKey": "object:1833",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1539,12 +1487,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "The current amount of allocated SQL memory. This amount is what is compared against the node's --max-sql-memory flag.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The current amount of allocated SQL memory. This amount is what is compared against the node's --max-sql-memory flag.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1581,6 +1528,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sql_mem_root_current{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}",
           "interval": "",
@@ -1589,9 +1540,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "SQL Memory",
       "tooltip": {
         "shared": true,
@@ -1600,9 +1549,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1612,23 +1559,17 @@
           "format": "bytes",
           "label": "allocation bytes",
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         },
         {
           "$$hashKey": "object:158",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1636,12 +1577,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "description": "The total number of DDL statements per second",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The total number of DDL statements per second",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1678,6 +1618,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "sum(rate(sql_ddl_count{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))  ",
           "interval": "",
@@ -1687,9 +1631,7 @@
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
       "title": "Schema Changes",
       "tooltip": {
         "shared": true,
@@ -1698,9 +1640,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1710,23 +1650,18 @@
           "format": "short",
           "label": "statements",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
           "$$hashKey": "object:1909",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -1734,12 +1669,11 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "The total number of statements denied per second due to a [cluster setting](https://www.cockroachlabs.com/docs/v21.1/cluster-settings.html) in the format feature.statement_type.enabled = FALSE.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The total number of statements denied per second due to a [cluster setting](https://www.cockroachlabs.com/docs/v21.1/cluster-settings.html) in the format feature.statement_type.enabled = FALSE.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1776,6 +1710,10 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
           "expr": "rate(sql_feature_flag_denial{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval])",
           "interval": "",
@@ -1793,9 +1731,7 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
@@ -1805,28 +1741,24 @@
           "format": "short",
           "label": "statements",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
           "$$hashKey": "object:215",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     }
   ],
-  "refresh": false,
-  "schemaVersion": 27,
+  "refresh": "30s",
+  "revision": 1,
+  "schemaVersion": 38,
   "style": "dark",
   "tags": [],
   "templating": {
@@ -1837,8 +1769,6 @@
           "text": "Prometheus",
           "value": "Prometheus"
         },
-        "description": null,
-        "error": null,
         "hide": 0,
         "includeAll": false,
         "label": "datasource",
@@ -1852,16 +1782,16 @@
         "type": "datasource"
       },
       {
-        "allValue": null,
         "current": {
           "selected": false,
-          "text": "my-cockroachdb-cluster",
-          "value": "my-cockroachdb-cluster"
+          "text": "drew-demo",
+          "value": "drew-demo"
         },
-        "datasource": "${DS_PROMETHEUS}",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
         "definition": "sys_uptime{job=\"cockroachdb\"}",
-        "description": null,
-        "error": null,
         "hide": 0,
         "includeAll": false,
         "label": "Cluster",
@@ -1877,7 +1807,6 @@
         "skipUrlSync": false,
         "sort": 1,
         "tagValuesQuery": "",
-        "tags": [],
         "tagsQuery": "",
         "type": "query",
         "useTags": false
@@ -1889,10 +1818,11 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "${DS_PROMETHEUS}",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
         "definition": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
-        "description": null,
-        "error": null,
         "hide": 0,
         "includeAll": true,
         "label": "Node",
@@ -1908,7 +1838,6 @@
         "skipUrlSync": false,
         "sort": 3,
         "tagValuesQuery": "",
-        "tags": [],
         "tagsQuery": "",
         "type": "query",
         "useTags": false
@@ -1922,8 +1851,6 @@
           "text": "1m",
           "value": "1m"
         },
-        "description": null,
-        "error": null,
         "hide": 0,
         "label": "Rate Interval",
         "name": "rate_interval",
@@ -1987,8 +1914,9 @@
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "utc",
-  "title": "CRDB Console: SQL",
-  "uid": "crdb-console-sql",
-  "version": 2
+  "timezone": "America/New_York",
+  "title": "CRDB Console: SQL by Test Run and Name",
+  "uid": "crdb-console-sql-byname",
+  "version": 3,
+  "weekStart": ""
 }
