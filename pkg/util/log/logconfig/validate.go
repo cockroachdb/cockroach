@@ -111,8 +111,11 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		UnsafeTLS:         &bf,
 		DisableKeepAlives: &bf,
 		Method:            func() *HTTPSinkMethod { m := HTTPSinkMethod(http.MethodPost); return &m }(),
-		Timeout:           &zeroDuration,
-		Compression:       &GzipCompression,
+		Timeout: func() *time.Duration {
+			twoSeconds := 2 * time.Second
+			return &twoSeconds
+		}(),
+		Compression: &GzipCompression,
 	}
 
 	propagateCommonDefaults(&baseFileDefaults.CommonSinkConfig, baseCommonSinkConfig)
