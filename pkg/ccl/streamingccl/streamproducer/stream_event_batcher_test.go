@@ -96,42 +96,55 @@ func TestBatchSpanConfigs(t *testing.T) {
 
 	for idx, toAdd := range []struct {
 		updates          []streampb.StreamedSpanConfigEntry
+		frontier         int64
 		expected         []streampb.StreamedSpanConfigEntry
 		shouldFlushAfter bool
 	}{
 		{
 			// Both spans should buffer
 			updates:  events(makeEntry(t1Span, 3, 1), makeEntry(t1Span, 4, 2)),
+			frontier: 2,
 			expected: events(makeEntry(t1Span, 3, 1), makeEntry(t1Span, 4, 2)),
 		},
 		{
 			// An event at a lower timestamp should not get flushed
 			updates:  events(makeEntry(t1Span, 3, 1)),
+			frontier: 2,
+			expected: []streampb.StreamedSpanConfigEntry{},
+		},
+		{
+			// An empty update should not screw things up.
+			updates:  []streampb.StreamedSpanConfigEntry{},
+			frontier: 2,
 			expected: []streampb.StreamedSpanConfigEntry{},
 		},
 		{
 			// An event at the frontier should not get flushed
 			updates:  events(makeEntry(t1Span, 4, 2)),
+			frontier: 2,
 			expected: []streampb.StreamedSpanConfigEntry{},
 		},
 		{
 			// Only one of the duplicate events should flush
 			updates:  events(makeEntry(t1Span, 3, 3), makeEntry(t1Span, 3, 3)),
+			frontier: 3,
 			expected: events(makeEntry(t1Span, 3, 3)),
 		},
 		{
 			// Only one of the duplicate events should flush, even if there's an event in between the duplicate events.
 			updates:  events(makeEntry(t1Span, 3, 4), makeEntry(t2Span, 4, 4), makeEntry(t1Span, 3, 4)),
+			frontier: 4,
 			expected: events(makeEntry(t1Span, 3, 4), makeEntry(t2Span, 4, 4)),
 		},
 		// Duplicate events from previous addition get elided.
 		{
 			updates:  events(makeEntry(t1Span, 3, 4), makeEntry(t2Span, 4, 4), makeEntry(t1Span, 3, 4), makeEntry(t2Span, 3, 5)),
+			frontier: 5,
 			expected: []streampb.StreamedSpanConfigEntry{makeEntry(t2Span, 3, 5)},
 		},
 	} {
 		bufferedEvents = append(bufferedEvents, toAdd.updates...)
-		seb.addSpanConfigs(bufferedEvents)
+		seb.addSpanConfigs(bufferedEvents, hlc.Timestamp{WallTime: toAdd.frontier})
 		require.Equal(t, toAdd.expected, seb.batch.SpanConfigs[previousBatchIdx:], fmt.Sprintf("failed on step %d (indexed by 0)", idx))
 		bufferedEvents = bufferedEvents[:0]
 		if rng.Intn(2) == 0 {
