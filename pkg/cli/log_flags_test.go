@@ -51,7 +51,7 @@ func TestSetupLogging(t *testing.T) {
 	const defaultHTTPConfig = `http-defaults: {` +
 		`method: POST, ` +
 		`unsafe-tls: false, ` +
-		`timeout: 0s, ` +
+		`timeout: 1m0s, ` +
 		`disable-keep-alives: false, ` +
 		`compression: gzip, ` +
 		`filter: INFO, ` +
