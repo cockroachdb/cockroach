@@ -238,16 +238,17 @@ func TestCreatePostRequest(t *testing.T) {
 
 				expectedTeam := "@cockroachdb/unowned"
 				expectedName := "github_test"
-				expectedLabel := ""
+				expectedLabels := []string{}
 				expectedMessagePrefix := ""
 
 				if errors.Is(c.failure.squashedErr, errClusterProvisioningFailed) {
-					expectedTeam = "@cockroachdb/dev-inf"
+					expectedTeam = "@cockroachdb/test-eng"
+					expectedLabels = []string{"T-testeng", "X-infra-flake"}
 					expectedName = "cluster_creation"
 					expectedMessagePrefix = "test github_test was skipped due to "
 				} else if errors.Is(c.failure.squashedErr, rperrors.ErrSSH255) {
 					expectedTeam = "@cockroachdb/test-eng"
-					expectedLabel = "T-testeng"
+					expectedLabels = []string{"T-testeng", "X-infra-flake"}
 					expectedName = "ssh_problem"
 					expectedMessagePrefix = "test github_test failed due to "
 				} else if errors.Is(c.failure.squashedErr, errDuringPostAssertions) {
@@ -257,11 +258,12 @@ func TestCreatePostRequest(t *testing.T) {
 				require.Contains(t, req.MentionOnCreate, expectedTeam)
 				require.Equal(t, expectedName, req.TestName)
 				require.True(t, strings.HasPrefix(req.Message, expectedMessagePrefix), req.Message)
-				if expectedLabel != "" {
-					require.Contains(t, req.ExtraLabels, expectedLabel)
+				if len(expectedLabels) > 0 {
+					for _, expectedLabel := range expectedLabels {
+						require.Contains(t, req.ExtraLabels, expectedLabel)
+					}
 				}
 			}
 		})
-
 	}
 }

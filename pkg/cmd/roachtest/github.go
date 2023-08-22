@@ -141,7 +141,7 @@ func (g *githubIssues) createPostRequest(
 	// Overrides to shield eng teams from potential flakes
 	switch {
 	case failureContainsError(firstFailure, errClusterProvisioningFailed):
-		issueOwner = registry.OwnerDevInf
+		issueOwner = registry.OwnerTestEng
 		issueName = "cluster_creation"
 		messagePrefix = fmt.Sprintf("test %s was skipped due to ", testName)
 		infraFlake = true
@@ -157,7 +157,9 @@ func (g *githubIssues) createPostRequest(
 	// Issues posted from roachtest are identifiable as such, and they are also release blockers
 	// (this label may be removed by a human upon closer investigation).
 	labels := []string{"O-roachtest"}
-	if !spec.NonReleaseBlocker && !infraFlake {
+	if infraFlake {
+		labels = append(labels, "X-infra-flake")
+	} else if !spec.NonReleaseBlocker {
 		labels = append(labels, "release-blocker")
 	}
 
