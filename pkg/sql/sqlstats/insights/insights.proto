@@ -92,17 +92,17 @@ message Transaction {
   // The error code of the last failed statement in the transaction.
   string last_error_code = 18; 
   Status status = 19;
-  // ServiceLat is the time in seconds to service the transaction, from the time a
+  // ServiceLatSeconds is the time in seconds to service the transaction, from the time a
   // transaction was received to end of execution.
-  google.protobuf.Duration  service_lat = 20 [(gogoproto.stdduration) = true];
-  // RetryLat is the amount of time in seconds spent retrying the transaction.
-  google.protobuf.Duration  retry_lat = 21 [(gogoproto.stdduration) = true];
-  // CommitLat is the amount of time in seconds required to commit the transaction after
+  google.protobuf.Duration  service_lat_seconds = 20 [(gogoproto.stdduration) = true];
+  // RetryLatSeconds is the amount of time in seconds spent retrying the transaction.
+  google.protobuf.Duration  retry_lat_seconds = 21 [(gogoproto.stdduration) = true];
+  // CommitLatSeconds is the amount of time in seconds required to commit the transaction after
   // all statement operations have been applied.
-  google.protobuf.Duration  commit_lat = 22 [(gogoproto.stdduration) = true];
-  // IdleLat is the cumulative amount of time spent in seconds waiting for
+  google.protobuf.Duration  commit_lat_seconds = 22 [(gogoproto.stdduration) = true];
+  // IdleLatSeconds is the cumulative amount of time spent in seconds waiting for
   // the client to send statements while holding the transaction open.
-  google.protobuf.Duration  idle_lat = 23 [(gogoproto.stdduration) = true];
+  google.protobuf.Duration  idle_lat_seconds = 23 [(gogoproto.stdduration) = true];
   // BytesRead collects the number of bytes read from disk.
   int64 bytes_read = 24;
   // Stats contains extended execution stats for current transaction.
@@ -145,17 +145,17 @@ message Statement {
   repeated Cause causes = 22;
   int64 cpu_sql_nanos = 23 [(gogoproto.customname) = "CPUSQLNanos"];
   string error_code = 24;
-  // IdleLat is the time spent in seconds in an open transaction waiting
+  // IdleLatSeconds is the time spent in seconds in an open transaction waiting
   // for the client to send the statement.
-  double idle_lat = 25;
+  double idle_lat_seconds = 25;
   // ParseLat is the time in seconds to transform the SQL string into an AST.
-  double parse_lat = 26;
-  // PlanLat is the time spent in seconds to transform the AST into a logical query plan.
-  double plan_lat = 27;
-  // RunLat is the time in seconds to run the query and fetch/compute the result rows.
-  double run_lat = 28;
-  // ServiceLat is the time in seconds to service the query, from start of parse to end of execute.
-  double service_lat = 29;
+  double parse_lat_seconds = 26;
+  // PlanLatSeconds is the time spent in seconds to transform the AST into a logical query plan.
+  double plan_lat_seconds = 27;
+  // RunLatSeconds is the time in seconds to run the query and fetch/compute the result rows.
+  double run_lat_seconds = 28;
+  // ServiceLatSeconds is the time in seconds to service the query, from start of parse to end of execute.
+  double service_lat_seconds = 29;
   // BytesRead collects the number of bytes read from disk.
   int64 bytes_read = 30;
   // Stats contains extended execution stats for current statement.
