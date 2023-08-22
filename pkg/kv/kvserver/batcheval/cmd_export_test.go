@@ -530,11 +530,14 @@ func exportUsingGoIterator(
 		return nil, nil
 	}
 
-	iter := storage.NewMVCCIncrementalIterator(reader.(storage.ReaderWithMustIterators), storage.MVCCIncrementalIterOptions{
+	iter, err := storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
 		EndKey:    endKey,
 		StartTime: startTime,
 		EndTime:   endTime,
 	})
+	if err != nil {
+		return nil, err
+	}
 	defer iter.Close()
 	for iter.SeekGE(storage.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
 		ok, err := iter.Valid()

@@ -639,25 +639,6 @@ type Reader interface {
 	PinEngineStateForIterators() error
 }
 
-// ReaderWithMustIterators is a Reader that guarantees no errors during
-// iterator creation.
-//
-// TODO(bilal): The only user of this interface is NewMVCCIncrementalIterator.
-// Update that method to handle errors and remove this interface.
-type ReaderWithMustIterators interface {
-	Reader
-
-	// MustMVCCIterator is identical to NewMVCCIterator, except it is implemented
-	// only for those Reader implementations that do not return an error on
-	// iterator creation.
-	MustMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator
-
-	// MustEngineIterator is identical to NewEngineIterator, except it is
-	// implemented only for those Reader implementations that do not return an
-	// error on iterator creation.
-	MustEngineIterator(opts IterOptions) EngineIterator
-}
-
 // Writer is the write interface to an engine's data.
 type Writer interface {
 	// ApplyBatchRepr atomically applies a set of batched updates. Created by
@@ -926,15 +907,6 @@ type ReadWriter interface {
 	Writer
 }
 
-// ReadWriterWithMustIterators is a version of ReadWriter that supports iterator
-// creation without errors.
-//
-// TODO(bilal): Move away from this interface and onto ReadWriter.
-type ReadWriterWithMustIterators interface {
-	ReaderWithMustIterators
-	Writer
-}
-
 // DurabilityRequirement is an advanced option. If in doubt, use
 // StandardDurability.
 //
@@ -953,7 +925,7 @@ const (
 
 // Engine is the interface that wraps the core operations of a key/value store.
 type Engine interface {
-	ReaderWithMustIterators
+	Reader
 	Writer
 	// Attrs returns the engine/store attributes.
 	Attrs() roachpb.Attributes
@@ -1104,7 +1076,7 @@ type Batch interface {
 	// iterator creation. To guarantee that they see all the mutations, the
 	// iterator has to be repositioned using a seek operation, after the
 	// mutations were done.
-	ReaderWithMustIterators
+	Reader
 	WriteBatch
 }
 

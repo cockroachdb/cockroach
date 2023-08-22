@@ -1500,33 +1500,9 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) (MVCCI
 	return maybeWrapInUnsafeIter(iter), nil
 }
 
-// MustMVCCIterator implements the ReaderWithMustIterators interface.
-//
-// If the underlying DB struct in Pebble ever starts returning errors in
-// NewIter(), this method must be removed.
-func (p *Pebble) MustMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
-	iter, err := p.NewMVCCIterator(iterKind, opts)
-	if err != nil {
-		panic(err)
-	}
-	return iter
-}
-
 // NewEngineIterator implements the Engine interface.
 func (p *Pebble) NewEngineIterator(opts IterOptions) (EngineIterator, error) {
 	return newPebbleIterator(p.db, opts, StandardDurability, p)
-}
-
-// MustEngineIterator implements the ReaderWithMustIterators interface.
-//
-// If the underlying DB struct in Pebble ever starts returning errors in
-// NewIter(), this method must be removed.
-func (p *Pebble) MustEngineIterator(opts IterOptions) EngineIterator {
-	iter, err := p.NewEngineIterator(opts)
-	if err != nil {
-		panic(err)
-	}
-	return iter
 }
 
 // ScanInternal implements the Engine interface.
@@ -2513,18 +2489,6 @@ func (p *pebbleReadOnly) NewMVCCIterator(
 	return maybeWrapInUnsafeIter(iter), nil
 }
 
-// MustMVCCIterator implements the ReaderWithMustIterators interface.
-//
-// If the underlying DB struct in Pebble ever starts returning errors in
-// NewIter(), this method must be removed.
-func (p *pebbleReadOnly) MustMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
-	iter, err := p.NewMVCCIterator(iterKind, opts)
-	if err != nil {
-		panic(err)
-	}
-	return iter
-}
-
 // NewEngineIterator implements the Engine interface.
 func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) (EngineIterator, error) {
 	if p.closed {
@@ -2559,18 +2523,6 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) (EngineIterator, er
 
 	iter.inuse = true
 	return iter, nil
-}
-
-// MustEngineIterator implements the ReaderWithMustIterators interface.
-//
-// If the underlying DB struct in Pebble ever starts returning errors in
-// NewIter(), this method must be removed.
-func (p *pebbleReadOnly) MustEngineIterator(opts IterOptions) EngineIterator {
-	iter, err := p.NewEngineIterator(opts)
-	if err != nil {
-		panic(err)
-	}
-	return iter
 }
 
 // ConsistentIterators implements the Engine interface.
@@ -2766,33 +2718,9 @@ func (p *pebbleSnapshot) NewMVCCIterator(
 	return maybeWrapInUnsafeIter(MVCCIterator(iter)), nil
 }
 
-// MustMVCCIterator implements the ReaderWithMustIterators interface.
-//
-// If the underlying Snapshot struct in Pebble ever starts returning errors in
-// NewIter(), this method must be removed.
-func (p *pebbleSnapshot) MustMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
-	iter, err := p.NewMVCCIterator(iterKind, opts)
-	if err != nil {
-		panic(err)
-	}
-	return iter
-}
-
 // NewEngineIterator implements the Reader interface.
 func (p pebbleSnapshot) NewEngineIterator(opts IterOptions) (EngineIterator, error) {
 	return newPebbleIterator(p.snapshot, opts, StandardDurability, p.parent)
-}
-
-// MustEngineIterator implements the ReaderWithMustIterators interface.
-//
-// If the underlying Snapshot struct in Pebble ever starts returning errors in
-// NewIter(), this method must be removed.
-func (p *pebbleSnapshot) MustEngineIterator(opts IterOptions) EngineIterator {
-	iter, err := p.NewEngineIterator(opts)
-	if err != nil {
-		panic(err)
-	}
-	return iter
 }
 
 // ConsistentIterators implements the Reader interface.
