@@ -202,6 +202,10 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		}
 	}
 
+	if stress && streamOutput {
+		return fmt.Errorf("cannot combine --%s and --%s", stressFlag, streamOutputFlag)
+	}
+
 	if rewrite {
 		ignoreCache = true
 		disableTestSharding = true

@@ -74,6 +74,7 @@ func StartSampler(
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	statsInterval time.Duration,
+	listener LatencyObserver,
 ) error {
 	return stopper.RunAsyncTask(ctx, "scheduler-latency-sampler", func(ctx context.Context) {
 		settingsValuesMu := struct {
@@ -84,7 +85,7 @@ func StartSampler(
 		settingsValuesMu.period = samplePeriod.Get(&st.SV)
 		settingsValuesMu.duration = sampleDuration.Get(&st.SV)
 
-		s := newSampler(settingsValuesMu.period, settingsValuesMu.duration)
+		s := newSampler(settingsValuesMu.period, settingsValuesMu.duration, listener)
 		_ = stopper.RunAsyncTask(ctx, "export-scheduler-stats", func(ctx context.Context) {
 			// cpuSchedulerLatencyBuckets are prometheus histogram buckets
 			// suitable for a histogram that records a (second-denominated)
@@ -157,15 +158,16 @@ func StartSampler(
 
 // sampler contains the local state maintained across scheduler latency samples.
 type sampler struct {
-	mu struct {
+	listener LatencyObserver
+	mu       struct {
 		syncutil.Mutex
 		ringBuffer            ring.Buffer[*metrics.Float64Histogram]
 		lastIntervalHistogram *metrics.Float64Histogram
 	}
 }
 
-func newSampler(period, duration time.Duration) *sampler {
-	s := &sampler{}
+func newSampler(period, duration time.Duration, listener LatencyObserver) *sampler {
+	s := &sampler{listener: listener}
 	s.mu.ringBuffer = ring.MakeBuffer(([]*metrics.Float64Histogram)(nil))
 	s.setPeriodAndDuration(period, duration)
 	return s
@@ -197,11 +199,9 @@ func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
 	s.mu.lastIntervalHistogram = sub(latestCumulative, oldestCumulative)
 	p99 := time.Duration(int64(percentile(s.mu.lastIntervalHistogram, 0.99) * float64(time.Second.Nanoseconds())))
 
-	globallyRegisteredCallbacks.mu.Lock()
-	defer globallyRegisteredCallbacks.mu.Unlock()
-	cbs := globallyRegisteredCallbacks.mu.callbacks
-	for i := range cbs {
-		cbs[i].cb(p99, period)
+	// Perform the callback if there's a listener.
+	if s.listener != nil {
+		s.listener.SchedulerLatency(p99, period)
 	}
 }
 
