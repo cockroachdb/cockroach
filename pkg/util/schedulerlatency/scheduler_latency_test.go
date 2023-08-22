@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,20 +64,10 @@ func TestSchedulerLatencySampler(t *testing.T) {
 		}(i)
 	}
 
-	mu := struct {
-		syncutil.Mutex
-		p99 time.Duration
-	}{}
-	slcbID := RegisterCallback(func(p99 time.Duration, period time.Duration) {
-		require.Equal(t, samplePeriod.Default(), period)
-		mu.Lock()
-		defer mu.Unlock()
-		mu.p99 = p99
-	})
-	defer UnregisterCallback(slcbID)
+	mu := testListener{}
 
 	reg := metric.NewRegistry()
-	require.NoError(t, StartSampler(ctx, st, stopper, reg, 10*time.Second))
+	require.NoError(t, StartSampler(ctx, st, stopper, reg, 10*time.Second, &mu))
 	testutils.SucceedsSoon(t, func() error {
 		mu.Lock()
 		defer mu.Unlock()
@@ -98,6 +89,25 @@ func TestSchedulerLatencySampler(t *testing.T) {
 		})
 		return err
 	})
+
+	if mu.err != nil {
+		t.Fatal(mu.err)
+	}
+}
+
+type testListener struct {
+	syncutil.Mutex
+	err error
+	p99 time.Duration
+}
+
+func (l *testListener) SchedulerLatency(p99 time.Duration, period time.Duration) {
+	l.Lock()
+	defer l.Unlock()
+	if samplePeriod.Default() != period {
+		l.err = errors.CombineErrors(l.err, errors.Newf("mismatch: expected %v, got %v", samplePeriod.Default(), period))
+	}
+	l.p99 = p99
 }
 
 func TestComputeSchedulerPercentile(t *testing.T) {

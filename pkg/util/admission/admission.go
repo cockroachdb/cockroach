@@ -132,6 +132,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -361,9 +362,7 @@ type elasticCPULimiter interface {
 
 // SchedulerLatencyListener listens to the latest scheduler latency data. We
 // expect this to be called every scheduler_latency.sample_period.
-type SchedulerLatencyListener interface {
-	SchedulerLatency(p99, period time.Duration)
-}
+type SchedulerLatencyListener = schedulerlatency.LatencyObserver
 
 // grantKind represents the two kind of ways we grant admission: using a slot
 // or a token. The slot terminology is akin to a scheduler, where a scheduling
