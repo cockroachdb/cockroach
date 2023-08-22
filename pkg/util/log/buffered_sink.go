@@ -272,8 +272,8 @@ func (bs *bufferedSink) output(b []byte, opts sinkOutputOptions) error {
 			if bs.mu.timer == nil && bs.maxStaleness > 0 {
 				bs.mu.timer = time.AfterFunc(bs.maxStaleness, func() {
 					bs.mu.Lock()
+					defer bs.mu.Unlock()
 					bs.flushAsyncLocked()
-					bs.mu.Unlock()
 				})
 			}
 		}
@@ -331,9 +331,11 @@ func (bs *bufferedSink) runFlusher(stopC <-chan struct{}) {
 			// We'll return after flushing everything.
 			done = true
 		}
-		bs.mu.Lock()
-		msg, errC := buf.flush(bs.format.prefix, bs.format.suffix, bs.format.delimiter)
-		bs.mu.Unlock()
+		msg, errC := func() (*buffer, chan<- error) {
+			bs.mu.Lock()
+			defer bs.mu.Unlock()
+			return buf.flush(bs.format.prefix, bs.format.suffix, bs.format.delimiter)
+		}()
 		if msg == nil {
 			// Nothing to flush.
 			// NOTE: This can happen in the done case, or if we get two flushC signals
@@ -351,9 +353,11 @@ func (bs *bufferedSink) runFlusher(stopC <-chan struct{}) {
 		} else if err != nil {
 			Ops.Errorf(context.Background(), "logging error from %T: %v", bs.child, err)
 			if bs.crashOnAsyncFlushFailure {
-				logging.mu.Lock()
-				f := logging.mu.exitOverride.f
-				logging.mu.Unlock()
+				f := func() func(exit.Code, error) {
+					logging.mu.Lock()
+					defer logging.mu.Unlock()
+					return logging.mu.exitOverride.f
+				}()
 				code := bs.exitCode()
 				if f != nil {
 					f(code, err)
