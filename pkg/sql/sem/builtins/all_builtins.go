@@ -11,7 +11,6 @@
 package builtins
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 
@@ -115,32 +114,29 @@ func addResolvedFuncDef(
 	}
 }
 
-func registerBuiltin(name string, def builtinDefinition) {
+// registerBuiltin adds the given builtin to the builtins registry. All
+// overloads of the Generator class are updated to have Fn and FnWithExprs
+// fields to be functions that return assertion errors upon execution (to
+// prevent misuse).
+//
+// If enforceClass is true, then it panics if at least one overload is not of
+// the expected class.
+//
+// Note that additional sanity checks are also performed in eval/overload.go.
+func registerBuiltin(
+	name string, def builtinDefinition, expectedClass tree.FunctionClass, enforceClass bool,
+) {
 	for i := range def.overloads {
 		overload := &def.overloads[i]
-		fnCount := 0
-		if overload.Fn != nil {
-			fnCount++
+		if enforceClass {
+			if overload.Class != expectedClass {
+				panic(errors.AssertionFailedf("%s: expected to be marked with class %q, found %q",
+					name, expectedClass, overload.Class))
+			}
 		}
-		if overload.FnWithExprs != nil {
-			fnCount++
-		}
-		if overload.Generator != nil {
+		if overload.Class == tree.GeneratorClass {
 			overload.Fn = unsuitableUseOfGeneratorFn
 			overload.FnWithExprs = unsuitableUseOfGeneratorFnWithExprs
-			fnCount++
-		}
-		if overload.GeneratorWithExprs != nil {
-			overload.Fn = unsuitableUseOfGeneratorFn
-			overload.FnWithExprs = unsuitableUseOfGeneratorFnWithExprs
-			fnCount++
-		}
-		if fnCount > 1 {
-			panic(fmt.Sprintf(
-				"builtin %s: at most 1 of Fn, FnWithExprs, Generator, and GeneratorWithExprs"+
-					"must be set on overloads; (found %d)",
-				name, fnCount,
-			))
 		}
 	}
 	if def.props.ShouldDocument() && def.props.Category == "" {

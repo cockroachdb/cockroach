@@ -63,6 +63,7 @@ go_library(
         "//pkg/sql/pgwire/pgwirecancel",
         "//pkg/sql/privilege",
         "//pkg/sql/roleoption",
+        "//pkg/sql/sem/builtins/builtinsregistry",
         "//pkg/sql/sem/cast",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",

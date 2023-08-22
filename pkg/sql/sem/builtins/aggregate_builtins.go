@@ -38,24 +38,9 @@ import (
 )
 
 func init() {
-	// Add all aggregates to the builtins map after a few sanity checks.
 	for k, v := range aggregates {
-		for _, a := range v.overloads {
-			if a.Class != tree.AggregateClass {
-				panic(errors.AssertionFailedf("%s: aggregate functions should be marked with the tree.AggregateClass "+
-					"function class, found %v", k, v))
-			}
-			if a.AggregateFunc == nil {
-				panic(errors.AssertionFailedf("%s: aggregate functions should have eval.AggregateFunc constructors, "+
-					"found %v", k, a))
-			}
-			if a.WindowFunc == nil {
-				panic(errors.AssertionFailedf("%s: aggregate functions should have tree.WindowFunc constructors, "+
-					"found %v", k, a))
-			}
-		}
-
-		registerBuiltin(k, v)
+		const enforceClass = true
+		registerBuiltin(k, v, tree.AggregateClass, enforceClass)
 	}
 }
 
@@ -712,8 +697,6 @@ func makeAggOverloadWithReturnType(
 	}
 
 	return tree.Overload{
-		// See the comment about aggregate functions in the definitions
-		// of the Builtins array above.
 		Types:         paramTypes,
 		ReturnType:    retType,
 		AggregateFunc: f,
