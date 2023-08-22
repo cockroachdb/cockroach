@@ -240,6 +240,9 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, fmt.Sprintf("--test_env=COCKROACH_WORKSPACE=%s", workspace))
 		args = append(args, "--test_arg", "-rewrite")
 	}
+	if stress && streamOutput {
+		return fmt.Errorf("cannot combine --%s and --%s", stressFlag, streamOutputFlag)
+	}
 	if showDiff {
 		args = append(args, "--test_arg", "-show-diff")
 	}
