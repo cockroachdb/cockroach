@@ -304,10 +304,3 @@ func (br BasicRanges) Generate(
 	br.LoadRangeInfo(s, rangesInfo)
 	return s
 }
-
-type EventGen interface {
-	// Generate returns a list of events, which should be exectued at the delay specified.
-	// TODO: figure out what seed is needed in gen here
-	Generate(settings *config.SimulationSettings) *event.Executor
-	String() string /**/
-}

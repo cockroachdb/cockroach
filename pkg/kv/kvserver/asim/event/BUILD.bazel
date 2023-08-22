@@ -12,7 +12,6 @@ go_library(
         "//pkg/kv/kvserver/asim",
         "//pkg/kv/kvserver/asim/assertion",
         "//pkg/kv/kvserver/asim/config",
-        "//pkg/kv/kvserver/asim/gen",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",

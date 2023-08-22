@@ -14,8 +14,14 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 )
+
+type EventGen interface {
+	// Generate returns a list of events, which should be exectued at the delay specified.
+	// TODO: figure out what seed is needed in gen here
+	Generate(settings *config.SimulationSettings) *Executor
+	String() string /**/
+}
 
 // StaticEvents implements the EventGen interface.
 // TODO(kvoli): introduce conditional events.
@@ -63,5 +69,3 @@ func (se StaticEvents) Generate(settings *config.SimulationSettings) *Executor {
 	executor.Start()
 	return &executor
 }
-
-var _ gen.EventGen = &StaticEvents{}
