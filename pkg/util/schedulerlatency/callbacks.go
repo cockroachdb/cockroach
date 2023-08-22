@@ -10,57 +10,10 @@
 
 package schedulerlatency
 
-import (
-	"time"
+import "time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-)
-
-// Callback is provided the current value of the scheduler's p99 latency and the
-// period over which the measurement applies.
-type Callback func(p99 time.Duration, period time.Duration)
-
-// RegisterCallback registers a callback to be run with observed scheduling
-// latencies every scheduler_latency.sample_period.
-func RegisterCallback(cb Callback) (id int64) {
-	globallyRegisteredCallbacks.mu.Lock()
-	defer globallyRegisteredCallbacks.mu.Unlock()
-
-	id = globallyRegisteredCallbacks.mu.nextID
-	globallyRegisteredCallbacks.mu.nextID++
-	globallyRegisteredCallbacks.mu.callbacks = append(globallyRegisteredCallbacks.mu.callbacks,
-		callbackWithID{
-			id: id,
-			cb: cb,
-		})
-	return id
+type LatencyObserver interface {
+	// SchedulerLatency is provided the current value of the scheduler's p99 latency and the
+	// period over which the measurement applies.
+	SchedulerLatency(p99 time.Duration, period time.Duration)
 }
-
-// UnregisterCallback unregisters the callback to be run with observed
-// scheduling latencies.
-func UnregisterCallback(id int64) {
-	globallyRegisteredCallbacks.mu.Lock()
-	defer globallyRegisteredCallbacks.mu.Unlock()
-
-	newCBs := []callbackWithID(nil)
-	for i := range globallyRegisteredCallbacks.mu.callbacks {
-		if globallyRegisteredCallbacks.mu.callbacks[i].id == id {
-			continue
-		}
-		newCBs = append(newCBs, globallyRegisteredCallbacks.mu.callbacks[i])
-	}
-	globallyRegisteredCallbacks.mu.callbacks = newCBs
-}
-
-type callbackWithID struct {
-	cb Callback
-	id int64 // used to uniquely identify a registered callback; used when unregistering
-}
-
-var globallyRegisteredCallbacks = struct {
-	mu struct {
-		syncutil.Mutex
-		nextID    int64 // used to allocate IDs to registered callbacks
-		callbacks []callbackWithID
-	}
-}{}

@@ -923,15 +923,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 	blobspb.RegisterBlobServer(grpcServer.Server, blobService)
 
-	{ // wire up admission control's scheduler latency listener
-		slcbID := schedulerlatency.RegisterCallback(
-			node.storeCfg.SchedulerLatencyListener.SchedulerLatency,
-		)
-		stopper.AddCloser(stop.CloserFn(func() {
-			schedulerlatency.UnregisterCallback(slcbID)
-		}))
-	}
-
 	replicationReporter := reports.NewReporter(
 		db, node.stores, storePool, st, nodeLiveness, internalExecutor, systemConfigWatcher,
 	)
@@ -1791,6 +1782,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// Start measuring the Go scheduler latency.
 	if err := schedulerlatency.StartSampler(
 		workersCtx, s.st, s.stopper, s.registry, base.DefaultMetricsSampleInterval,
+		// Wire up admission control's scheduler latency listener.
+		s.node.storeCfg.SchedulerLatencyListener,
 	); err != nil {
 		return err
 	}
