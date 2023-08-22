@@ -67,6 +67,7 @@ const (
 	backupOptDebugMetadataSST    = "debug_dump_metadata_sst"
 	backupOptEncDir              = "encryption_info_dir"
 	backupOptCheckFiles          = "check_files"
+	backupOptNowait              = "nowait"
 	backupOptConnTestTransfer    = "transfer"
 	backupOptConnTestDuration    = "time"
 	backupOptConnTestConcurrency = "concurrently"

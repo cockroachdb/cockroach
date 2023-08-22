@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -215,6 +216,7 @@ var showBackupOptions = exprutil.KVOptionValidationMap{
 	backupOptDebugMetadataSST:               exprutil.KVStringOptRequireNoValue,
 	backupOptEncDir:                         exprutil.KVStringOptRequireValue,
 	backupOptCheckFiles:                     exprutil.KVStringOptRequireNoValue,
+	backupOptNowait:                         exprutil.KVStringOptRequireNoValue,
 	backupOptConnTestTransfer:               exprutil.KVStringOptRequireValue,
 	backupOptConnTestDuration:               exprutil.KVStringOptRequireValue,
 	backupOptConnTestConcurrency:            exprutil.KVStringOptRequireValue,
@@ -792,10 +794,15 @@ func backupShowerDefault(p sql.PlanHookState, showSchemas bool, opts tree.KVOpti
 				if len(info.fileSizes) > 0 {
 					fileSizes = info.fileSizes[layer]
 				}
-				tableSizes, err := getTableSizes(ctx, manifest.Files, fileSizes)
-				if err != nil {
-					return nil, err
+
+				var tableSizes map[catid.DescID]descriptorSize
+				if !opts.HasKey(backupOptNowait) {
+					tableSizes, err = getTableSizes(ctx, manifest.Files, fileSizes)
+					if err != nil {
+						return nil, err
+					}
 				}
+
 				backupType := tree.NewDString("full")
 				if manifest.IsIncremental() {
 					backupType = tree.NewDString("incremental")
