@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 )
 
 // randomClusterInfoGen returns a randomly picked predefined configuration.
@@ -222,6 +223,25 @@ func getClusterConfigType(s string) clusterConfigType {
 		return anyRegion
 	default:
 		panic(fmt.Sprintf("unknown cluster type: %s", s))
+	}
+}
+
+func getNodeLivenessStatus(s string) livenesspb.NodeLivenessStatus {
+	switch s {
+	case "unknown":
+		return livenesspb.NodeLivenessStatus_UNKNOWN
+	case "dead":
+		return livenesspb.NodeLivenessStatus_DEAD
+	case "unavailable":
+		return livenesspb.NodeLivenessStatus_UNAVAILABLE
+	case "live":
+		return livenesspb.NodeLivenessStatus_LIVE
+	case "decommissioning":
+		return livenesspb.NodeLivenessStatus_DECOMMISSIONING
+	case "draining":
+		return livenesspb.NodeLivenessStatus_DRAINING
+	default:
+		panic(fmt.Sprintf("unkown liveness status: %s", s))
 	}
 }
 

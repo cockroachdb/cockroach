@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -37,6 +38,9 @@ func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{})
 	case *clusterConfigType:
 		d.ScanArgs(t, key, &tmp)
 		*dest = getClusterConfigType(tmp)
+	case *livenesspb.NodeLivenessStatus:
+		d.ScanArgs(t, key, &tmp)
+		*dest = getNodeLivenessStatus(tmp)
 	default:
 		require.Fail(t, "unsupported type %T", dest)
 	}

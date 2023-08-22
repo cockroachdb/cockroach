@@ -5,5 +5,12 @@ go_library(
     srcs = ["delayed_event.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/kv/kvserver/asim/state"],
+    deps = [
+        "//pkg/kv/kvserver/asim",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/asim/tests",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/util/log",
+    ],
 )

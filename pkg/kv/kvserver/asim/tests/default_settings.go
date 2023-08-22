@@ -12,7 +12,6 @@ package tests
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 )
 
@@ -99,7 +98,7 @@ func (f randTestingFramework) defaultStaticSettingsGen() gen.StaticSettings {
 }
 
 func (f randTestingFramework) defaultStaticEventsGen() gen.StaticEvents {
-	return gen.StaticEvents{DelayedEvents: event.DelayedEventList{}}
+	return gen.StaticEvents{DelayedEvents: event.delayedEventList{}}
 }
 
 func (f randTestingFramework) defaultLoadGen() gen.BasicLoad {
