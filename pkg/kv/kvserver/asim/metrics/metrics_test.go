@@ -142,7 +142,7 @@ func Example_workload() {
 
 	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, settings)
 
-	sim := asim.NewSimulator(duration, rwg, s, settings, m)
+	sim := asim.NewSimulator(duration, rwg, s, settings, m, asim.TestNoopEventExecutor())
 	sim.RunSim(ctx)
 	// WIP: non deterministic
 	// Output:

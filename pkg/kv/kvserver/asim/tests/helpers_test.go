@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/datadriven"
@@ -63,16 +64,16 @@ func scanIfExists(t *testing.T, d *datadriven.TestData, key string, dest interfa
 // fatal error is triggered. Note that only one key should be specified at a
 // time. If multiple keys are specified, the precedence order is exact_bound >
 // upper_bound > lower_bound.
-func scanThreshold(t *testing.T, d *datadriven.TestData) (th assertions.threshold) {
-	if scanIfExists(t, d, "exact_bound", &th.value) {
-		th.thresholdType = assertions.exactBound
+func scanThreshold(t *testing.T, d *datadriven.TestData) (th assertion.Threshold) {
+	if scanIfExists(t, d, "exact_bound", &th.Value) {
+		th.ThresholdType = assertion.ExactBound
 		return th
 	}
-	if scanIfExists(t, d, "upper_bound", &th.value) {
-		th.thresholdType = assertions.upperBound
+	if scanIfExists(t, d, "upper_bound", &th.Value) {
+		th.ThresholdType = assertion.UpperBound
 		return th
 	}
-	scanArg(t, d, "lower_bound", &th.value)
-	th.thresholdType = assertions.lowerBound
+	scanArg(t, d, "lower_bound", &th.Value)
+	th.ThresholdType = assertion.LowerBound
 	return th
 }

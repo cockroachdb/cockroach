@@ -79,12 +79,6 @@ func (de delayedEvent) getEventFn() interface{} {
 	return de.eventFn
 }
 
-func TestNoopEventExecutor() *Executor {
-	return &Executor{
-		delayedEvents: delayedEventList{},
-	}
-}
-
 // event: getAt, eventFn
 // Event: interface1
 // Event with assertion: interface2 -> stores a struct to another assertion struct type
@@ -103,6 +97,11 @@ type Executor struct {
 	//assertionCheckerSeqGen assertionCheckerID
 }
 
+func TestNoopEventExecutor() *Executor {
+	return &Executor{
+		delayedEvents: delayedEventList{},
+	}
+}
 func (e *Executor) Start() {
 	// order delayed event
 	sort.Sort(e.delayedEvents)
@@ -117,7 +116,7 @@ func (e *Executor) TickEvents(
 	for i := range e.delayedEvents {
 		if !tick.Before(e.delayedEvents[i].getAt()) {
 			idx = i + 1
-			log.Infof(ctx, "applying event (scheduled=%s tick=%s)", e.delayedEvents[i].getAt, tick)
+			log.Infof(ctx, "applying event (scheduled=%s tick=%s)", e.delayedEvents[i].getAt(), tick)
 			switch fn := e.delayedEvents[i].getEventFn().(type) {
 			case eventFunction:
 				fn(ctx, tick, state)

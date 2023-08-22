@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/events"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -35,7 +35,7 @@ func TestRunAllocatorSimulator(t *testing.T) {
 	m := metrics.NewTracker(settings.MetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, settings)
 
-	sim := asim.NewSimulator(duration, rwg, s, settings, m, events.TestNoopEventExecutor())
+	sim := asim.NewSimulator(duration, rwg, s, settings, m, asim.TestNoopEventExecutor())
 	sim.RunSim(ctx)
 }
 
@@ -58,7 +58,7 @@ func TestAsimDeterministic(t *testing.T) {
 	// be larger than 3 keys per range.
 	keyspace := 3 * ranges
 	// Track the run to compare against for determinism.
-	var refRun asim.History
+	var refRun history.History
 
 	for run := 0; run < runs; run++ {
 		rwg := make([]workload.Generator, 1)
@@ -78,7 +78,7 @@ func TestAsimDeterministic(t *testing.T) {
 		}
 
 		s := state.NewStateWithDistribution(replicaDistribution, ranges, replsPerRange, keyspace, settings)
-		sim := asim.NewSimulator(duration, rwg, s, settings, m, events.TestNoopEventExecutor())
+		sim := asim.NewSimulator(duration, rwg, s, settings, m, asim.TestNoopEventExecutor())
 
 		ctx := context.Background()
 		sim.RunSim(ctx)

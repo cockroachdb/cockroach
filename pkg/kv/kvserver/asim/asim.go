@@ -71,6 +71,10 @@ func (s *Simulator) GetState() state.State {
 	return s.state
 }
 
+func TestNoopEventExecutor() *events.Executor {
+	return events.TestNoopEventExecutor()
+}
+
 // NewSimulator constructs a valid Simulator.
 func NewSimulator(
 	duration time.Duration,
