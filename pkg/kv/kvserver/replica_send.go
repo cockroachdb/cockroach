@@ -1144,6 +1144,9 @@ func (r *Replica) collectSpans(
 
 	// Note that we are letting locking readers be considered for optimistic
 	// evaluation. This is correct, though not necessarily beneficial.
+	// TODO(xxx): replicated locks will automatically be considered for optimistic
+	// evaluation without needing to change this conditional, if they otherwise
+	// would have been considered for opt eval using other heuristic.
 	considerOptEval := ba.IsReadOnly() && ba.IsAllTransactional() &&
 		optimisticEvalLimitedScans.Get(&r.ClusterSettings().SV)
 
@@ -1359,4 +1362,62 @@ func (ec *endCmds) done(
 	if ec.g != nil {
 		ec.repl.concMgr.FinishReq(ec.g)
 	}
+}
+
+// TODO(arul): Move closer to the methods on Replica above.
+// maybeCheckOptimisticEvalSuccess checks if optimistic evaluation was attempted,
+// and if it was, if it was successful. If it was, nil is returned. Otherwise,
+// an error is returned indicating its failure; this should be bubbled up
+// further. Note that this function acts as a pass-through if optimistic
+// evaluation wasn't attempted.
+func (r *Replica) maybeCheckOptimisticEvalSuccess(
+	g *concurrency.Guard,
+	pErr *kvpb.Error,
+	ba *kvpb.BatchRequest,
+	br *kvpb.BatchResponse,
+	st *kvserverpb.LeaseStatus,
+) *kvpb.Error {
+	if g == nil || g.EvalKind != concurrency.OptimisticEval {
+		return nil // we didn't take the optimistic evaluation path
+	}
+
+	if isConcurrencyRetryError(pErr) {
+		// Since this request was not holding latches, it could have raced with
+		// intent resolution. So we can't trust it to add discovered locks, if
+		// there is a latch conflict. This means that a discovered lock plus a
+		// latch conflict will likely cause the request to evaluate at least 3
+		// times: optimistically; pessimistically and add the discovered lock;
+		// wait until resolution and evaluate pessimistically again.
+		//
+		// TODO(sumeer): scans and gets are correctly setting the resume span
+		// when returning a WriteIntentError. I am not sure about other
+		// concurrency errors. We could narrow the spans we check the latch
+		// conflicts for by using collectSpansRead as done below in the
+		// non-error path.
+		if !g.CheckOptimisticNoLatchConflicts() {
+			return kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
+		}
+		pErr = maybeAttachLease(pErr, &st.Lease)
+		return pErr
+	}
+
+	if pErr == nil {
+		// Gather the spans that were read -- we distinguish the spans in the
+		// request from the spans that were actually read, using resume spans in
+		// the response.
+		latchSpansRead, lockSpansRead, err := r.collectSpansRead(ba, br)
+		if err != nil {
+			return kvpb.NewError(err)
+		}
+		defer latchSpansRead.Release()
+		defer lockSpansRead.Release()
+		if ok := g.CheckOptimisticNoConflicts(latchSpansRead, lockSpansRead); !ok {
+			return kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
+		}
+	}
+	// There was an error, that was not classified as a concurrency retry
+	// error, and this request was not holding latches. This should be rare,
+	// and in the interest of not having subtle correctness bugs, we retry
+	// pessimistically.
+	return kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 }

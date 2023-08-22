@@ -124,51 +124,16 @@ func (r *Replica) executeReadOnlyBatch(
 	var result result.Result
 	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, g, &st, ui, evalPath)
 
+	optEvalErr := r.maybeCheckOptimisticEvalSuccess(g, pErr, ba, br, &st)
+	if optEvalErr != nil {
+		return nil, g, nil, optEvalErr
+	}
+
 	// If the request hit a server-side concurrency retry error, immediately
 	// propagate the error. Don't assume ownership of the concurrency guard.
 	if isConcurrencyRetryError(pErr) {
-		if g != nil && g.EvalKind == concurrency.OptimisticEval {
-			// Since this request was not holding latches, it could have raced with
-			// intent resolution. So we can't trust it to add discovered locks, if
-			// there is a latch conflict. This means that a discovered lock plus a
-			// latch conflict will likely cause the request to evaluate at least 3
-			// times: optimistically; pessimistically and add the discovered lock;
-			// wait until resolution and evaluate pessimistically again.
-			//
-			// TODO(sumeer): scans and gets are correctly setting the resume span
-			// when returning a WriteIntentError. I am not sure about other
-			// concurrency errors. We could narrow the spans we check the latch
-			// conflicts for by using collectSpansRead as done below in the
-			// non-error path.
-			if !g.CheckOptimisticNoLatchConflicts() {
-				return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
-			}
-		}
 		pErr = maybeAttachLease(pErr, &st.Lease)
 		return nil, g, nil, pErr
-	}
-
-	if g != nil && g.EvalKind == concurrency.OptimisticEval {
-		if pErr == nil {
-			// Gather the spans that were read -- we distinguish the spans in the
-			// request from the spans that were actually read, using resume spans in
-			// the response.
-			latchSpansRead, lockSpansRead, err := r.collectSpansRead(ba, br)
-			if err != nil {
-				return nil, g, nil, kvpb.NewError(err)
-			}
-			defer latchSpansRead.Release()
-			defer lockSpansRead.Release()
-			if ok := g.CheckOptimisticNoConflicts(latchSpansRead, lockSpansRead); !ok {
-				return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
-			}
-		} else {
-			// There was an error, that was not classified as a concurrency retry
-			// error, and this request was not holding latches. This should be rare,
-			// and in the interest of not having subtle correctness bugs, we retry
-			// pessimistically.
-			return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
-		}
 	}
 
 	// Handle any local (leaseholder-only) side-effects of the request.
