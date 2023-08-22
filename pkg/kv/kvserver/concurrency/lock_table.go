@@ -96,11 +96,11 @@ type waitingState struct {
 	// Represents who the request is waiting for. The conflicting
 	// transaction may be a lock holder of a conflicting lock or a
 	// conflicting request being sequenced through the same lockTable.
-	txn           *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished,Self} and waitElsewhere
-	key           roachpb.Key       // the key of the conflict
-	held          bool              // is the conflict a held lock?
-	queuedWriters int               // how many writers are waiting?
-	queuedReaders int               // how many readers are waiting?
+	txn           enginepb.TxnMeta // only set for waitFor{,Distinguished,Self} and waitElsewhere
+	key           roachpb.Key      // the key of the conflict
+	held          bool             // is the conflict a held lock?
+	queuedWriters int              // how many writers are waiting?
+	queuedReaders int              // how many readers are waiting?
 
 	// Represents the lock strength of the action that the request was trying to
 	// perform when it hit the conflict. E.g. was it trying to perform a (possibly
@@ -647,7 +647,12 @@ func (g *lockTableGuardImpl) updateWaitingStateLocked(newState waitingState) {
 func (g *lockTableGuardImpl) canElideWaitingStateUpdate(newState waitingState) bool {
 	// Note that we don't need to check newState.guardStrength as it's
 	// automatically assigned when updating the state.
-	return g.mu.state.kind == newState.kind && g.mu.state.txn == newState.txn &&
+	return g.mu.state.kind == newState.kind &&
+		// NB: The only field of interest to the pusher is the pushee transaction's
+		// ID. Other fields on the pushee's TxnMeta, such as its read timestamp or
+		// epoch, may be arbitrarily stale without being of material consequence.
+		// This allows us to elide updates just to these fields.
+		g.mu.state.txn.ID == newState.txn.ID &&
 		g.mu.state.key.Equal(newState.key) && g.mu.state.held == newState.held
 }
 
@@ -1804,7 +1809,9 @@ func (kl *keyLocks) informActiveWaiters() {
 	// However, if we naively plugged things into the current structure, it would
 	// either sit tight (because its waiting for itself) or, worse yet, push a
 	// transaction it's actually compatible with!
-	waitForState.txn, waitForState.held = kl.claimantTxn()
+	var claimantTxn *enginepb.TxnMeta
+	claimantTxn, waitForState.held = kl.claimantTxn()
+	waitForState.txn = *claimantTxn // store a copy of the claimant txn
 	findDistinguished := false
 	// We need to find a (possibly new) distinguished waiter if either:
 	//   There isn't one for this lock.
@@ -1818,7 +1825,7 @@ func (kl *keyLocks) informActiveWaiters() {
 		// be held by it. This is because if it were, this request would no longer
 		// be waiting in lock wait queues (via a call to releaseWritersFromTxn).
 		// This is asserted below.
-		kl.distinguishedWaiter.isSameTxn(waitForState.txn) {
+		kl.distinguishedWaiter.isSameTxn(&waitForState.txn) {
 		// Ensure that if we're trying to find a new distinguished waiter because
 		// all waiters on the lock are waiting on the (old) distinguished waiter,
 		// the lock is not held.
@@ -1861,7 +1868,7 @@ func (kl *keyLocks) informActiveWaiters() {
 		}
 		g := qg.guard
 		state := waitForState
-		if g.isSameTxn(waitForState.txn) {
+		if g.isSameTxn(&waitForState.txn) {
 			if waitForState.held {
 				panic("writer from the lock holder txn should not be waiting in a wait queue")
 			}
@@ -2234,8 +2241,8 @@ func (kl *keyLocks) constructWaitingState(g *lockTableGuardImpl) waitingState {
 	}
 	txn, held := kl.claimantTxn()
 	waitForState.held = held
-	waitForState.txn = txn
-	if g.isSameTxn(waitForState.txn) {
+	waitForState.txn = *txn // store a copy of the claimant txn.
+	if g.isSameTxn(&waitForState.txn) {
 		waitForState.kind = waitSelf
 	} else if kl.distinguishedWaiter == g {
 		waitForState.kind = waitForDistinguished
@@ -2905,7 +2912,7 @@ func (kl *keyLocks) tryClearLock(force bool) bool {
 			// themselves.
 			waitState := waitingState{
 				kind: waitElsewhere,
-				txn:  replicatedLockHolderTxn,
+				txn:  *replicatedLockHolderTxn, // store a copy of the replicated lock holder's txn
 				key:  kl.key,
 				held: true,
 			}

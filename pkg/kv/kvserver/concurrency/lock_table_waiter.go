@@ -517,7 +517,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		log.Fatalf(ctx, "unexpected WaitPolicy: %v", req.WaitPolicy)
 	}
 
-	pusheeTxn, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
+	pusheeTxn, err := w.ir.PushTransaction(ctx, &ws.txn, h, pushType)
 	if err != nil {
 		// If pushing with an Error WaitPolicy and the push fails, then the lock
 		// holder is still active. Transform the error into a LockConflictError.
@@ -699,7 +699,7 @@ func (w *lockTableWaiterImpl) pushRequestTxn(
 	pushType := kvpb.PUSH_ABORT
 	log.VEventf(ctx, 3, "pushing txn %s to detect request deadlock", ws.txn.Short())
 
-	_, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
+	_, err := w.ir.PushTransaction(ctx, &ws.txn, h, pushType)
 	if err != nil {
 		return err
 	}
@@ -1183,7 +1183,7 @@ func (tag *contentionTag) notify(ctx context.Context, s waitingState) *kvpb.Cont
 		res := tag.generateEventLocked()
 		tag.mu.waiting = true
 		tag.mu.curStateKey = s.key
-		tag.mu.curStateTxn = s.txn
+		tag.mu.curStateTxn = &s.txn
 		// Accumulate the wait time.
 		now := tag.clock.PhysicalTime()
 		if !tag.mu.waitStart.IsZero() {
@@ -1261,7 +1261,7 @@ func newLockConflictErr(req Request, ws waitingState, reason kvpb.LockConflictEr
 	// TODO(nvanbenschoten): we should use the correct Lock strength of the lock
 	// holder, once we have it.
 	err := kvpb.NewError(&kvpb.LockConflictError{
-		Locks:  []roachpb.Lock{roachpb.MakeIntent(ws.txn, ws.key).AsLock()},
+		Locks:  []roachpb.Lock{roachpb.MakeIntent(&ws.txn, ws.key).AsLock()},
 		Reason: reason,
 	})
 	// TODO(nvanbenschoten): setting an error index can assist the KV client in
@@ -1279,10 +1279,6 @@ func newLockConflictErr(req Request, ws waitingState, reason kvpb.LockConflictEr
 }
 
 func canPushWithPriority(req Request, s waitingState) bool {
-	if s.txn == nil {
-		// Can't push a non-transactional request.
-		return false
-	}
 	var pushType kvpb.PushTxnType
 	if s.guardStrength == lock.None {
 		pushType = kvpb.PUSH_TIMESTAMP

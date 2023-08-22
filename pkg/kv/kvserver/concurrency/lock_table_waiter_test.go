@@ -319,7 +319,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 			req := makeReq()
 			g.state = waitingState{
 				kind:          k,
-				txn:           &pusheeTxn.TxnMeta,
+				txn:           pusheeTxn.TxnMeta,
 				key:           keyA,
 				held:          lockHeld,
 				guardStrength: lock.None,
@@ -404,7 +404,7 @@ func testWaitNoopUntilDone(t *testing.T, k waitKind, makeReq func() Request) {
 	txn := makeTxnProto("noop-wait-txn")
 	g.state = waitingState{
 		kind: k,
-		txn:  &txn.TxnMeta,
+		txn:  txn.TxnMeta,
 	}
 	g.notify()
 	defer notifyUntilDone(t, g)()
@@ -511,7 +511,7 @@ func testErrorWaitPush(
 			req := makeReq()
 			g.state = waitingState{
 				kind:          k,
-				txn:           &pusheeTxn.TxnMeta,
+				txn:           pusheeTxn.TxnMeta,
 				key:           keyA,
 				held:          lockHeld,
 				guardStrength: lock.None,
@@ -671,7 +671,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 				req := makeReq()
 				g.state = waitingState{
 					kind:          k,
-					txn:           &pusheeTxn.TxnMeta,
+					txn:           pusheeTxn.TxnMeta,
 					key:           keyA,
 					held:          lockHeld,
 					guardStrength: lock.Intent,
@@ -805,7 +805,7 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 		lockHeld := sync
 		g.state = waitingState{
 			kind:          waitForDistinguished,
-			txn:           &pusheeTxn.TxnMeta,
+			txn:           pusheeTxn.TxnMeta,
 			key:           keyA,
 			held:          lockHeld,
 			guardStrength: lock.Intent,
@@ -993,7 +993,7 @@ func TestContentionEventTracer(t *testing.T) {
 	h.notify(ctx, waitingState{
 		kind: waitForDistinguished,
 		key:  roachpb.Key("a"),
-		txn:  &txn1.TxnMeta,
+		txn:  txn1.TxnMeta,
 	})
 	require.Zero(t, h.tag.mu.lockWait)
 	require.NotZero(t, h.tag.mu.waitStart)
@@ -1023,7 +1023,7 @@ func TestContentionEventTracer(t *testing.T) {
 	h.notify(ctx, waitingState{
 		kind: waitFor,
 		key:  roachpb.Key("a"),
-		txn:  &txn1.TxnMeta,
+		txn:  txn1.TxnMeta,
 	})
 	require.Empty(t, events)
 	require.Zero(t, h.tag.mu.lockWait)
@@ -1035,7 +1035,7 @@ func TestContentionEventTracer(t *testing.T) {
 	h.notify(ctx, waitingState{
 		kind: waitFor,
 		key:  roachpb.Key("a"),
-		txn:  &txn2.TxnMeta,
+		txn:  txn2.TxnMeta,
 	})
 	require.Equal(t, time.Duration(21) /* 10+11 */, h.tag.mu.lockWait)
 	require.Len(t, events, 1)
@@ -1050,7 +1050,7 @@ func TestContentionEventTracer(t *testing.T) {
 	h.notify(ctx, waitingState{
 		kind: waitForDistinguished,
 		key:  roachpb.Key("b"),
-		txn:  &txn2.TxnMeta,
+		txn:  txn2.TxnMeta,
 	})
 	require.Equal(t, time.Duration(33) /* 10+11+12 */, h.tag.mu.lockWait)
 	require.Len(t, events, 2)
@@ -1067,7 +1067,7 @@ func TestContentionEventTracer(t *testing.T) {
 	h.notify(ctx, waitingState{
 		kind: waitFor,
 		key:  roachpb.Key("b"),
-		txn:  &txn1.TxnMeta,
+		txn:  txn1.TxnMeta,
 	})
 	manual.Advance(14)
 	h.notify(ctx, waitingState{
