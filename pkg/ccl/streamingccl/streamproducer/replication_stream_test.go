@@ -938,17 +938,28 @@ USE d;`)
 	codec := source.mu.codec.(*partitionStreamDecoder)
 	updateCount := 0
 	for {
-		source.mu.Lock()
-		require.True(t, source.mu.rows.Next())
-		source.mu.codec.decode()
-		if codec.e.Batch != nil {
-			for _, cfg := range codec.e.Batch.SpanConfigs {
-				if receivedSpanConfigs.maybeAddNewRecord(cfg.SpanConfig, cfg.Timestamp.WallTime) {
-					updateCount++
+		func() {
+			// This codeblock is wrapped in an anonymous function to ensure the source
+			// gets unlocked if an assertion fails. Else, the test can hang.
+			source.mu.Lock()
+			defer source.mu.Unlock()
+			require.True(t, source.mu.rows.Next())
+			source.mu.codec.decode()
+			if codec.e.Batch != nil {
+				require.Greater(t, len(codec.e.Batch.SpanConfigs), 0, "a non empty batch had zero span config updates")
+				for _, cfg := range codec.e.Batch.SpanConfigs {
+					if receivedSpanConfigs.maybeAddNewRecord(cfg.SpanConfig, cfg.Timestamp.WallTime) {
+						updateCount++
+					}
 				}
 			}
-		}
-		source.mu.Unlock()
+			if codec.e.Checkpoint != nil {
+				require.Equal(t, 1, len(codec.e.Checkpoint.ResolvedSpans))
+				// The frontier in the checkpoint must be greater or equal to the commit
+				// timestamp associated with the latest event.
+				require.LessOrEqual(t, receivedSpanConfigs.latestTime, codec.e.Checkpoint.ResolvedSpans[0].Timestamp.WallTime)
+			}
+		}()
 		if updateCount == len(expectedSpanConfigs.allUpdates) {
 			break
 		}
