@@ -6417,6 +6417,15 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	})
 }
 
+// Check if export request is from a lease for a descriptor to avoid picking
+// up on wrong export requests
+func isLeasingExportRequest(r *kvpb.ExportRequest) bool {
+	_, tenantID, _ := keys.DecodeTenantPrefix(r.Key)
+	codec := keys.MakeSQLCodec(tenantID)
+	return bytes.HasPrefix(r.Key, codec.DescMetadataPrefix()) &&
+		r.EndKey.Equal(r.Key.PrefixEnd())
+}
+
 func TestPaginatedBackupTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6454,14 +6463,6 @@ func TestPaginatedBackupTenant(t *testing.T) {
 		return fmt.Sprintf("%v%s", span.String(), spanStr)
 	}
 
-	// Check if export request is from a lease for a descriptor to avoid picking
-	// up on wrong export requests
-	isLeasingExportRequest := func(r *kvpb.ExportRequest) bool {
-		_, tenantID, _ := keys.DecodeTenantPrefix(r.Key)
-		codec := keys.MakeSQLCodec(tenantID)
-		return bytes.HasPrefix(r.Key, codec.DescMetadataPrefix()) &&
-			r.EndKey.Equal(r.Key.PrefixEnd())
-	}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
 			for _, ru := range request.Requests {
@@ -9390,6 +9391,8 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	var exportReqsAtomic int64
+
 	tc, sqlDB, iodir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10,
 		InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
@@ -9400,6 +9403,17 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					SpanConfig: &spanconfig.TestingKnobs{
 						SQLWatcherCheckpointNoopsEveryDurationOverride: 100 * time.Millisecond,
+					},
+					Store: &kvserver.StoreTestingKnobs{
+						TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+							for _, ru := range request.Requests {
+								if exportRequest, ok := ru.GetInner().(*kvpb.ExportRequest); ok &&
+									!isLeasingExportRequest(exportRequest) {
+									atomic.AddInt64(&exportReqsAtomic, 1)
+								}
+							}
+							return nil
+						},
 					},
 				},
 			},
@@ -9421,8 +9435,11 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 	conn := tc.Conns[0]
 
 	sqlDB.Exec(t, `CREATE TABLE data.foo (id INT, INDEX bar(id))`)
-	sqlDB.Exec(t, `INSERT INTO data.foo select * from generate_series(1,10)`)
+	sqlDB.Exec(t, `INSERT INTO data.foo select * from generate_series(1,5)`)
 
+	sqlDB.Exec(t, `BACKUP DATABASE data INTO $1`, localFoo)
+
+	sqlDB.Exec(t, `INSERT INTO data.foo select * from generate_series(6,10)`)
 	// Create another table.
 	sqlDB.Exec(t, `CREATE TABLE data.bar (id INT, INDEX bar(id))`)
 	sqlDB.Exec(t, `INSERT INTO data.bar select * from generate_series(1,10)`)
@@ -9442,11 +9459,30 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 		}
 		return true, nil
 	})
-	sqlDB.Exec(t, `BACKUP DATABASE data INTO $1`, localFoo)
+
+	sqlDB.Exec(t, `BACKUP DATABASE data INTO LATEST IN $1`, localFoo)
+	sqlDB.Exec(t, `CREATE TABLE data.baz (id INT)`)
+	sqlDB.Exec(t, `ALTER TABLE data.baz SET (exclude_data_from_backup = true)`)
+	sqlDB.Exec(t, `INSERT INTO data.baz select * from generate_series(1,10)`)
+
+	waitForReplicaFieldToBeSet(t, tc, conn, "baz", "data", func(r *kvserver.Replica) (bool, error) {
+		if !r.ExcludeDataFromBackup() {
+			return false, errors.New("waiting for the range containing table data.foo to split")
+		}
+		return true, nil
+	})
+
+	sqlDB.Exec(t, `BACKUP DATABASE data INTO LATEST IN $1`, localFoo)
 
 	restoreDB.Exec(t, `RESTORE DATABASE data FROM LATEST IN $1`, localFoo)
-	require.Len(t, restoreDB.QueryStr(t, `SELECT * FROM data.foo`), 0)
+	require.Len(t, restoreDB.QueryStr(t, `SELECT * FROM data.foo`), 5)
 	require.Len(t, restoreDB.QueryStr(t, `SELECT * FROM data.bar`), 10)
+	require.Len(t, restoreDB.QueryStr(t, `SELECT * FROM data.baz`), 0)
+
+	before := atomic.LoadInt64(&exportReqsAtomic)
+	sqlDB.Exec(t, `BACKUP data.foo TO $1`, localFoo+"/tbl")
+	after := atomic.LoadInt64(&exportReqsAtomic)
+	require.Equal(t, before, after)
 }
 
 // TestExportRequestBelowGCThresholdOnDataExcludedFromBackup tests that a
