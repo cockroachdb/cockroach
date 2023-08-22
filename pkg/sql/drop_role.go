@@ -53,8 +53,15 @@ func (p *planner) DropRole(ctx context.Context, n *tree.DropRole) (planNode, err
 func (p *planner) DropRoleNode(
 	ctx context.Context, roleSpecs tree.RoleSpecList, ifExists bool, isRole bool, opName string,
 ) (*DropRoleNode, error) {
-	if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
+	hasCreateRolePriv, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.CREATEROLE, p.User())
+	if err != nil {
 		return nil, err
+	}
+
+	if !hasCreateRolePriv {
+		if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
+			return nil, err
+		}
 	}
 
 	for _, r := range roleSpecs {

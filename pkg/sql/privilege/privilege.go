@@ -71,6 +71,7 @@ const (
 	MODIFYSQLCLUSTERSETTING  Kind = 28
 	REPLICATION              Kind = 29
 	MANAGETENANT             Kind = 30
+	CREATEROLE               Kind = 31
 )
 
 // Privilege represents a privilege parsed from an Access Privilege Inquiry
@@ -149,8 +150,27 @@ var (
 	// before v22.2 we treated Sequences the same as Tables. This is to avoid making
 	// certain privileges unavailable after upgrade migration.
 	// Note that "CREATE, CHANGEFEED, INSERT, DELETE, ZONECONFIG" are no-op privileges on sequences.
-	SequencePrivileges           = List{ALL, USAGE, SELECT, UPDATE, CREATE, CHANGEFEED, DROP, INSERT, DELETE, ZONECONFIG}
-	GlobalPrivileges             = List{ALL, BACKUP, RESTORE, MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING, CANCELQUERY, NOSQLLOGIN, VIEWCLUSTERMETADATA, VIEWDEBUG, EXTERNALIOIMPLICITACCESS, VIEWJOB, MODIFYSQLCLUSTERSETTING, REPLICATION, MANAGETENANT}
+	SequencePrivileges = List{ALL, USAGE, SELECT, UPDATE, CREATE, CHANGEFEED, DROP, INSERT, DELETE, ZONECONFIG}
+	GlobalPrivileges   = List{
+		ALL,
+		BACKUP,
+		RESTORE,
+		MODIFYCLUSTERSETTING,
+		EXTERNALCONNECTION,
+		VIEWACTIVITY,
+		VIEWACTIVITYREDACTED,
+		VIEWCLUSTERSETTING,
+		CANCELQUERY,
+		NOSQLLOGIN,
+		VIEWCLUSTERMETADATA,
+		VIEWDEBUG,
+		EXTERNALIOIMPLICITACCESS,
+		VIEWJOB,
+		MODIFYSQLCLUSTERSETTING,
+		REPLICATION,
+		MANAGETENANT,
+		CREATEROLE,
+	}
 	VirtualTablePrivileges       = List{ALL, SELECT}
 	ExternalConnectionPrivileges = List{ALL, USAGE, DROP}
 )
@@ -196,6 +216,7 @@ var ByName = map[string]Kind{
 	"MODIFYSQLCLUSTERSETTING":  MODIFYSQLCLUSTERSETTING,
 	"REPLICATION":              REPLICATION,
 	"MANAGETENANT":             MANAGETENANT,
+	"CREATEROLE":               CREATEROLE,
 }
 
 // List is a list of privileges.
