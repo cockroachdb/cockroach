@@ -151,6 +151,15 @@ func (sr *SQLRunner) ExpectErr(t Fataler, errRE string, query string, args ...in
 	sr.expectErr(t, query, err, errRE)
 }
 
+// ExpectNonNilErr runs the given statement and verifies that it returns an error.
+func (sr *SQLRunner) ExpectNonNilErr(t Fataler, query string, args ...interface{}) {
+	helperOrNoop(t)()
+	_, err := sr.DB.ExecContext(context.Background(), query, args...)
+	if err == nil {
+		t.Fatalf("expected query '%s' to return a non-nil error", query)
+	}
+}
+
 func (sr *SQLRunner) expectErr(t Fataler, query string, err error, errRE string) {
 	helperOrNoop(t)()
 	if !testutils.IsError(err, errRE) {
