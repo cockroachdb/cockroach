@@ -1466,7 +1466,7 @@ func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, err
 func ScanIntents(
 	ctx context.Context, reader Reader, start, end roachpb.Key, maxIntents int64, targetBytes int64,
 ) ([]roachpb.Intent, error) {
-	intents := []roachpb.Intent{}
+	var intents []roachpb.Intent
 
 	if bytes.Compare(start, end) >= 0 {
 		return intents, nil

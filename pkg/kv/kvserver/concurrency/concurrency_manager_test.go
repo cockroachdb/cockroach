@@ -306,8 +306,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				var leaseSeq int
 				d.ScanArgs(t, "lease-seq", &leaseSeq)
 
-				// Each roachpb.Intent is provided on an indented line.
-				var intents []roachpb.Intent
+				// Each roachpb.Lock is provided on an indented line.
+				var locks []roachpb.Lock
 				singleReqLines := strings.Split(d.Input, "\n")
 				for _, line := range singleReqLines {
 					var err error
@@ -329,13 +329,13 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					var key string
 					d.ScanArgs(t, "key", &key)
 
-					intents = append(intents, roachpb.MakeIntent(&txn.TxnMeta, roachpb.Key(key)))
+					locks = append(locks, roachpb.MakeLock(&txn.TxnMeta, roachpb.Key(key), lock.Intent))
 				}
 
 				opName := fmt.Sprintf("handle lock conflict error %s", reqName)
 				mon.runAsync(opName, func(ctx context.Context) {
 					seq := roachpb.LeaseSequence(leaseSeq)
-					lcErr := &kvpb.LockConflictError{Locks: intents}
+					lcErr := &kvpb.LockConflictError{Locks: locks}
 					guard, err := m.HandleLockConflictError(ctx, prev, seq, lcErr)
 					if err != nil {
 						log.Eventf(ctx, "handled %v, returned error: %v", lcErr, err)
