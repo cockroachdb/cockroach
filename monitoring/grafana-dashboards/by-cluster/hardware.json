@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 8,
+  "id": 14,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -37,7 +37,6 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "The number of live nodes in the cluster.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -58,7 +57,7 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 1,
+      "linewidth": 2,
       "nullPointMode": "null as zero",
       "options": {
         "alertThreshold": true
@@ -79,16 +78,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "min(liveness_livenodes{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"})",
+          "expr": "sys_cpu_combined_percent_normalized{job='cockroachdb',cluster=~\"$cluster\",instance=~\"$node\"}",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Live Nodes",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Live Node Count",
+      "title": "CPU Percent",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -102,15 +101,15 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:637",
-          "format": "short",
-          "label": "nodes",
+          "$$hashKey": "object:233",
+          "format": "percentunit",
+          "label": "CPU (percentage)",
           "logBase": 1,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:638",
+          "$$hashKey": "object:234",
           "format": "short",
           "logBase": 1,
           "show": true
@@ -129,7 +128,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Memory in use across all nodes:\nRSS  \nTotal memory in use by CockroachDB\n\nGo Allocated  \nMemory allocated by the Go layer\n\nGo Total  \nTotal memory managed by the Go layer\n\nC Allocated  \nMemory allocated by the C layer\n\nC Total  \nTotal memory managed by the C layer",
+      "description": "Memory in use across all nodes",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -150,8 +149,8 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null as zero",
+      "linewidth": 1,
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
@@ -171,10 +170,10 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum(sys_rss{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "expr": "sys_rss{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}",
+          "hide": false,
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Total memory (RSS)",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         },
         {
@@ -182,44 +181,10 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(sys_cgo_allocbytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "expr": "",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Go Allocated",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(sys_go_totalbytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Go Total",
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(sys_go_allocbytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "CGo Allocated",
+          "legendFormat": "",
           "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(sys_cgo_totalbytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "CGo Total",
-          "refId": "E"
         }
       ],
       "thresholds": [],
@@ -238,7 +203,7 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:863",
+          "$$hashKey": "object:78",
           "format": "bytes",
           "label": "memory usage",
           "logBase": 1,
@@ -246,8 +211,8 @@
           "show": true
         },
         {
-          "$$hashKey": "object:864",
-          "format": "bytes",
+          "$$hashKey": "object:79",
+          "format": "short",
           "logBase": 1,
           "show": true
         }
@@ -265,7 +230,6 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "The number of Goroutines across all nodes. This count should rise and fall based on load.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -275,7 +239,7 @@
         "y": 16
       },
       "hiddenSeries": false,
-      "id": 10,
+      "id": 6,
       "legend": {
         "avg": false,
         "current": false,
@@ -287,7 +251,7 @@
       },
       "lines": true,
       "linewidth": 1,
-      "nullPointMode": "null as zero",
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
@@ -307,16 +271,15 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum(sys_goroutines{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "expr": "rate(sys_host_disk_read_bytes{job=\"cockroachdb\",instance=~\"$node\",cluster=~\"$cluster\"}[$__rate_interval])",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Goroutine Count",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Goroutine Count",
+      "title": "Disk Read B/s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -330,15 +293,14 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:1235",
-          "format": "short",
-          "label": "goroutines",
+          "$$hashKey": "object:183",
+          "format": "bytes",
+          "label": "bytes",
           "logBase": 1,
-          "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:1236",
+          "$$hashKey": "object:184",
           "format": "short",
           "logBase": 1,
           "show": true
@@ -357,7 +319,6 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "The number of Goroutines waiting for CPU. This count should rise and fall based on load.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -365,98 +326,6 @@
         "w": 24,
         "x": 0,
         "y": 24
-      },
-      "hiddenSeries": false,
-      "id": 16,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "9.0.2",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "sys_runnable_goroutines_per_cpu{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}",
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "{{instance}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeRegions": [],
-      "title": "Runnable Goroutines per CPU",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "mode": "time",
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:391",
-          "format": "short",
-          "label": "goroutines",
-          "logBase": 1,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:392",
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "description": "The number of times that Go’s garbage collector was invoked per second across all nodes.",
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 32
       },
       "hiddenSeries": false,
       "id": 8,
@@ -476,7 +345,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "",
+      "pluginVersion": "9.3.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -490,16 +359,15 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(sys_gc_count{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
+          "expr": "rate(sys_host_disk_write_bytes{job=\"cockroachdb\",instance=~\"$node\",cluster=~\"$cluster\"}[$__rate_interval])",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "GC Runs",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "GC Runs",
+      "title": "Disk Write B/s",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -513,15 +381,15 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:1311",
-          "format": "short",
-          "label": "runs",
+          "$$hashKey": "object:655",
+          "format": "bytes",
+          "label": "bytes",
           "logBase": 1,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:1312",
+          "$$hashKey": "object:656",
           "format": "short",
           "logBase": 1,
           "show": true
@@ -540,7 +408,97 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "The amount of processor time used by Go’s garbage collector per second across all nodes. During garbage collection, application code execution is paused.",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "hiddenSeries": false,
+      "id": 10,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.3.1",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "rate(sys_host_disk_read_count{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval])",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Disk Read IOPS",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:761",
+          "format": "short",
+          "label": "IOPS",
+          "logBase": 1,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:762",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -561,13 +519,13 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null as zero",
+      "linewidth": 1,
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "",
+      "pluginVersion": "9.3.1",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -582,16 +540,15 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum(rate(sys_gc_pause_ns{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
+          "expr": "rate(sys_host_disk_write_count{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval])",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "GC Pause Time",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "GC Pause Time",
+      "title": "Disk Write IOPS",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -605,15 +562,15 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:1387",
-          "format": "ns",
-          "label": "pause time",
+          "$$hashKey": "object:850",
+          "format": "short",
+          "label": "IOPS",
           "logBase": 1,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:1388",
+          "$$hashKey": "object:851",
           "format": "short",
           "logBase": 1,
           "show": true
@@ -641,7 +598,7 @@
         "y": 48
       },
       "hiddenSeries": false,
-      "id": 6,
+      "id": 14,
       "legend": {
         "avg": false,
         "current": false,
@@ -652,8 +609,8 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null as zero",
+      "linewidth": 1,
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
@@ -673,30 +630,15 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum(rate(sys_cpu_user_ns{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "instant": false,
+          "expr": "rate(sys_host_disk_iopsinprogress{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval])",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "User CPU Time",
+          "legendFormat": "{{instance}}",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "sum(rate(sys_cpu_sys_ns{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Sys CPU Time",
-          "refId": "B"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "CPU Time",
+      "title": "Disk Ops In Progress",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -710,15 +652,14 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:1833",
-          "format": "ns",
-          "label": "cpu time",
+          "$$hashKey": "object:926",
+          "format": "short",
+          "label": "Ops",
           "logBase": 1,
-          "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:1834",
+          "$$hashKey": "object:927",
           "format": "short",
           "logBase": 1,
           "show": true
@@ -737,7 +678,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Mean clock offset of each node against the rest of the cluster.",
+      "description": "Free disk space available to CockroachDB data.\n\n[How is this metric calculated?](https://www.cockroachlabs.com/docs/v21.1/ui-storage-dashboard.html#capacity-metrics)",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -747,7 +688,7 @@
         "y": 56
       },
       "hiddenSeries": false,
-      "id": 14,
+      "id": 20,
       "legend": {
         "avg": false,
         "current": false,
@@ -759,7 +700,7 @@
       },
       "lines": true,
       "linewidth": 1,
-      "nullPointMode": "null as zero",
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
@@ -779,16 +720,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "clock_offset_meannanos{job=\"cockroachdb\",instance=~\"$node\",cluster=~\"$cluster\"}",
+          "expr": "capacity_available{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}",
           "interval": "",
-          "intervalFactor": 2,
+          "intervalFactor": 1,
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Clock Offset",
+      "title": "Available Disk Capacity",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -802,16 +743,194 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:787",
-          "format": "ns",
-          "label": "offset",
+          "$$hashKey": "object:103",
+          "format": "bytes",
+          "label": "capacity",
+          "logBase": 1,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:104",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 64
+      },
+      "hiddenSeries": false,
+      "id": 16,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "rate(sys_host_net_recv_bytes{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval])",
+          "interval": "",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Network Bytes Received",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:1076",
+          "format": "bytes",
+          "label": "bytes",
+          "logBase": 1,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:1077",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 72
+      },
+      "hiddenSeries": false,
+      "id": 18,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "rate(sys_host_net_send_bytes{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval])",
+          "interval": "",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Network Bytes Sent",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:708",
+          "format": "bytes",
+          "label": "bytes",
           "logBase": 1,
           "show": true
         },
         {
-          "$$hashKey": "object:788",
+          "$$hashKey": "object:709",
           "format": "short",
-          "label": "",
           "logBase": 1,
           "show": true
         }
@@ -865,9 +984,9 @@
         "options": [],
         "query": {
           "query": "sys_uptime{job=\"cockroachdb\"}",
-          "refId": "Prometheus-cluster-Variable-Query"
+          "refId": "Prometheusa-cluster-Variable-Query"
         },
-        "refresh": 1,
+        "refresh": 2,
         "regex": "/cluster=\"([^\"]+)\"/",
         "skipUrlSync": false,
         "sort": 1,
@@ -896,12 +1015,12 @@
         "options": [],
         "query": {
           "query": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
-          "refId": "Prometheus-node-Variable-Query"
+          "refId": "Prometheusa-node-Variable-Query"
         },
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
-        "sort": 1,
+        "sort": 3,
         "tagValuesQuery": "",
         "tagsQuery": "",
         "type": "query",
@@ -967,7 +1086,6 @@
           }
         ],
         "query": "30s,1m,5m,10m,30m,1h,6h,12h,1d",
-        "queryValue": "",
         "refresh": 2,
         "skipUrlSync": false,
         "type": "interval"
@@ -979,9 +1097,9 @@
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "America/New_York",
-  "title": "CRDB Console: Runtime by Test Run and Name",
-  "uid": "crdb-console-runtime-byname",
-  "version": 4,
+  "timezone": "utc",
+  "title": "CRDB Console: Hardware",
+  "uid": "crdb-console-hardware",
+  "version": 5,
   "weekStart": ""
 }

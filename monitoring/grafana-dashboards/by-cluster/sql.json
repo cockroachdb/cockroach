@@ -1915,8 +1915,8 @@
   },
   "timepicker": {},
   "timezone": "America/New_York",
-  "title": "CRDB Console: SQL by Test Run and Name",
-  "uid": "crdb-console-sql-byname",
+  "title": "CRDB Console: SQL ",
+  "uid": "crdb-console-sql",
   "version": 3,
   "weekStart": ""
 }

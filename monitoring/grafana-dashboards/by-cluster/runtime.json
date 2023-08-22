@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 9,
+  "id": 8,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -37,6 +37,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The number of live nodes in the cluster.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -58,7 +59,7 @@
       },
       "lines": true,
       "linewidth": 1,
-      "nullPointMode": "null",
+      "nullPointMode": "null as zero",
       "options": {
         "alertThreshold": true
       },
@@ -78,15 +79,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum(rate(changefeed_max_behind_nanos{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "min(liveness_livenodes{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"})",
           "interval": "",
-          "legendFormat": "Max Changefeed Latency",
+          "intervalFactor": 2,
+          "legendFormat": "Live Nodes",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Max Changefeed Latency",
+      "title": "Live Node Count",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -100,15 +102,15 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:162",
-          "format": "ns",
-          "label": "time",
+          "$$hashKey": "object:637",
+          "format": "short",
+          "label": "nodes",
           "logBase": 1,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:163",
+          "$$hashKey": "object:638",
           "format": "short",
           "logBase": 1,
           "show": true
@@ -127,6 +129,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
+      "description": "Memory in use across all nodes:\nRSS  \nTotal memory in use by CockroachDB\n\nGo Allocated  \nMemory allocated by the Go layer\n\nGo Total  \nTotal memory managed by the Go layer\n\nC Allocated  \nMemory allocated by the C layer\n\nC Total  \nTotal memory managed by the C layer",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -134,6 +137,142 @@
         "w": 24,
         "x": 0,
         "y": 8
+      },
+      "hiddenSeries": false,
+      "id": 4,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 2,
+      "nullPointMode": "null as zero",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.4.7",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(sys_rss{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "Total memory (RSS)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(sys_cgo_allocbytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "Go Allocated",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(sys_go_totalbytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "Go Total",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(sys_go_allocbytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "CGo Allocated",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(sys_cgo_totalbytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "CGo Total",
+          "refId": "E"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Memory Usage",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:863",
+          "format": "bytes",
+          "label": "memory usage",
+          "logBase": 1,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:864",
+          "format": "bytes",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "The number of Goroutines across all nodes. This count should rise and fall based on load.",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
       },
       "hiddenSeries": false,
       "id": 10,
@@ -148,7 +287,7 @@
       },
       "lines": true,
       "linewidth": 1,
-      "nullPointMode": "null",
+      "nullPointMode": "null as zero",
       "options": {
         "alertThreshold": true
       },
@@ -168,16 +307,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum(rate(changefeed_emitted_bytes{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum(sys_goroutines{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"})",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "Emitted Bytes",
+          "legendFormat": "Goroutine Count",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Sink Byte Traffic",
+      "title": "Goroutine Count",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -191,16 +330,15 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:215",
+          "$$hashKey": "object:1235",
           "format": "short",
-          "label": "bytes",
+          "label": "goroutines",
           "logBase": 1,
-          "max": "1",
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:216",
+          "$$hashKey": "object:1236",
           "format": "short",
           "logBase": 1,
           "show": true
@@ -219,107 +357,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 16
-      },
-      "hiddenSeries": false,
-      "id": 4,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "9.4.7",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "sum(rate(changefeed_emitted_messages{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "Messages",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "sum(rate(changefeed_flushes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "Flushes",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeRegions": [],
-      "title": "Sink Counts",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "mode": "time",
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:319",
-          "format": "short",
-          "label": "actions",
-          "logBase": 1,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:320",
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
+      "description": "The number of Goroutines waiting for CPU. This count should rise and fall based on load.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -329,7 +367,7 @@
         "y": 24
       },
       "hiddenSeries": false,
-      "id": 6,
+      "id": 16,
       "legend": {
         "avg": false,
         "current": false,
@@ -346,7 +384,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "",
+      "pluginVersion": "9.0.2",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -361,26 +399,16 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum(rate(changefeed_emitted_messages{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sys_runnable_goroutines_per_cpu{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}",
           "interval": "",
-          "legendFormat": "Message Emit Time",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "exemplar": true,
-          "expr": "sum(rate(changefeed_flush_nanos{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "Flush Time",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Sink Timings",
+      "title": "Runnable Goroutines per CPU",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -394,15 +422,15 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:372",
-          "format": "ns",
-          "label": "time",
+          "$$hashKey": "object:391",
+          "format": "short",
+          "label": "goroutines",
           "logBase": 1,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:373",
+          "$$hashKey": "object:392",
           "format": "short",
           "logBase": 1,
           "show": true
@@ -421,6 +449,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The number of times that Go’s garbage collector was invoked per second across all nodes.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -461,16 +490,16 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "exemplar": true,
-          "expr": "sum(rate(jobs_changefeed_resume_retry_error{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "sum(rate(sys_gc_count{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
           "interval": "",
-          "legendFormat": "Retryable Errors",
+          "intervalFactor": 2,
+          "legendFormat": "GC Runs",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Changefeed Restarts",
+      "title": "GC Runs",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -484,16 +513,305 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:476",
+          "$$hashKey": "object:1311",
           "format": "short",
-          "label": "actions",
+          "label": "runs",
           "logBase": 1,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:477",
+          "$$hashKey": "object:1312",
           "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "The amount of processor time used by Go’s garbage collector per second across all nodes. During garbage collection, application code execution is paused.",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "hiddenSeries": false,
+      "id": 12,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 2,
+      "nullPointMode": "null as zero",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(sys_gc_pause_ns{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "GC Pause Time",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "GC Pause Time",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:1387",
+          "format": "ns",
+          "label": "pause time",
+          "logBase": 1,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:1388",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
+      "hiddenSeries": false,
+      "id": 6,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 2,
+      "nullPointMode": "null as zero",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(sys_cpu_user_ns{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "User CPU Time",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(sys_cpu_sys_ns{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "Sys CPU Time",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "CPU Time",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:1833",
+          "format": "ns",
+          "label": "cpu time",
+          "logBase": 1,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:1834",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Mean clock offset of each node against the rest of the cluster.",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "hiddenSeries": false,
+      "id": 14,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null as zero",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "clock_offset_meannanos{job=\"cockroachdb\",instance=~\"$node\",cluster=~\"$cluster\"}",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Clock Offset",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:787",
+          "format": "ns",
+          "label": "offset",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:788",
+          "format": "short",
+          "label": "",
           "logBase": 1,
           "show": true
         }
@@ -649,6 +967,7 @@
           }
         ],
         "query": "30s,1m,5m,10m,30m,1h,6h,12h,1d",
+        "queryValue": "",
         "refresh": 2,
         "skipUrlSync": false,
         "type": "interval"
@@ -660,9 +979,9 @@
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "browser",
-  "title": "CRDB Console: Changefeeds by Test Run and Name",
-  "uid": "crdb-console-changefeeds-byname",
-  "version": 3,
+  "timezone": "America/New_York",
+  "title": "CRDB Console: Runtime ",
+  "uid": "crdb-console-runtime",
+  "version": 4,
   "weekStart": ""
 }

@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 15,
+  "id": 9,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -40,7 +40,7 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 7,
+        "h": 8,
         "w": 24,
         "x": 0,
         "y": 0
@@ -78,15 +78,15 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum(requests_slow_raft{job=\"cockroachdb\",cluster=\"$cluster\"})",
+          "expr": "sum(rate(changefeed_max_behind_nanos{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
-          "legendFormat": "Slow Raft Proposals",
+          "legendFormat": "Max Changefeed Latency",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Slow Raft Proposals",
+      "title": "Max Changefeed Latency",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -100,17 +100,16 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:141",
-          "format": "short",
-          "label": "proposals",
+          "$$hashKey": "object:162",
+          "format": "ns",
+          "label": "time",
           "logBase": 1,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:142",
+          "$$hashKey": "object:163",
           "format": "short",
-          "label": "",
           "logBase": 1,
           "show": true
         }
@@ -131,10 +130,102 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 7,
+        "h": 8,
         "w": 24,
         "x": 0,
-        "y": 7
+        "y": 8
+      },
+      "hiddenSeries": false,
+      "id": 10,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.4.7",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(changefeed_emitted_bytes{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "Emitted Bytes",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Sink Byte Traffic",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:215",
+          "format": "short",
+          "label": "bytes",
+          "logBase": 1,
+          "max": "1",
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:216",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
       },
       "hiddenSeries": false,
       "id": 4,
@@ -169,16 +260,26 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum(requests_slow_distsender{job=\"cockroachdb\",cluster=\"$cluster\"})",
+          "expr": "sum(rate(changefeed_emitted_messages{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
-          "legendFormat": "Slow DistSender RPCs",
-          "queryType": "randomWalk",
+          "legendFormat": "Messages",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(changefeed_flushes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Flushes",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Slow DistSender RPCs",
+      "title": "Sink Counts",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -192,15 +293,15 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:88",
+          "$$hashKey": "object:319",
           "format": "short",
-          "label": "proposals",
+          "label": "actions",
           "logBase": 1,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:89",
+          "$$hashKey": "object:320",
           "format": "short",
           "logBase": 1,
           "show": true
@@ -222,10 +323,10 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 7,
+        "h": 8,
         "w": 24,
         "x": 0,
-        "y": 14
+        "y": 24
       },
       "hiddenSeries": false,
       "id": 6,
@@ -245,7 +346,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.4.7",
+      "pluginVersion": "",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -260,15 +361,26 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum(requests_slow_lease{job=\"cockroachdb\",cluster=\"$cluster\"})",
+          "expr": "sum(rate(changefeed_emitted_messages{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
-          "legendFormat": "Slow Lease Acquisitions",
+          "legendFormat": "Message Emit Time",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(changefeed_flush_nanos{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Flush Time",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Slow Lease Acquisitions",
+      "title": "Sink Timings",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -282,15 +394,15 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:245",
-          "format": "short",
-          "label": "lease acquisitions",
+          "$$hashKey": "object:372",
+          "format": "ns",
+          "label": "time",
           "logBase": 1,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:246",
+          "$$hashKey": "object:373",
           "format": "short",
           "logBase": 1,
           "show": true
@@ -312,10 +424,10 @@
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 7,
+        "h": 8,
         "w": 24,
         "x": 0,
-        "y": 21
+        "y": 32
       },
       "hiddenSeries": false,
       "id": 8,
@@ -335,7 +447,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "9.4.7",
+      "pluginVersion": "",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -350,15 +462,15 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum(requests_slow_latch{job=\"cockroachdb\",cluster=\"$cluster\"})",
+          "expr": "sum(rate(jobs_changefeed_resume_retry_error{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
-          "legendFormat": "Slow Latch Acquisitions",
+          "legendFormat": "Retryable Errors",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Slow Latch Acquisitions",
+      "title": "Changefeed Restarts",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -372,15 +484,15 @@
       },
       "yaxes": [
         {
-          "$$hashKey": "object:298",
+          "$$hashKey": "object:476",
           "format": "short",
-          "label": "latch acquisitions",
+          "label": "actions",
           "logBase": 1,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:299",
+          "$$hashKey": "object:477",
           "format": "short",
           "logBase": 1,
           "show": true
@@ -429,7 +541,7 @@
         "definition": "sys_uptime{job=\"cockroachdb\"}",
         "hide": 0,
         "includeAll": false,
-        "label": "cluster",
+        "label": "Cluster",
         "multi": false,
         "name": "cluster",
         "options": [],
@@ -447,7 +559,7 @@
         "useTags": false
       },
       {
-        "allValue": ".*",
+        "allValue": "",
         "current": {
           "selected": false,
           "text": "All",
@@ -471,7 +583,7 @@
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
-        "sort": 3,
+        "sort": 1,
         "tagValuesQuery": "",
         "tagsQuery": "",
         "type": "query",
@@ -548,9 +660,9 @@
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "America/New_York",
-  "title": "CRDB Console: Slow Requests by Test Run and Name",
-  "uid": "crdb-console-slow-request-byname",
+  "timezone": "browser",
+  "title": "CRDB Console: Changefeeds",
+  "uid": "crdb-console-changefeeds",
   "version": 3,
   "weekStart": ""
 }
