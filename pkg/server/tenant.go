@@ -622,6 +622,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// Start measuring the Go scheduler latency.
 	if err := schedulerlatency.StartSampler(
 		workersCtx, s.sqlServer.cfg.Settings, s.stopper, s.registry, base.DefaultMetricsSampleInterval,
+		nil, /* listener */
 	); err != nil {
 		return err
 	}
