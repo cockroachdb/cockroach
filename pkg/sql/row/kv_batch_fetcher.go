@@ -69,7 +69,7 @@ var elasticCPUDurationPerLowPriReadResponse = settings.RegisterDurationSetting(
 	"controls how many CPU tokens are allotted for handling responses for internally submitted low priority reads",
 	// NB: Experimentally, during TTL reads, we observed cumulative on-CPU time
 	// by SQL processors >> 100ms, over the course of a single select fetching
-	// many rows. So we pick a relative high duration here.
+	// many rows. So we pick a relatively high duration here.
 	100*time.Millisecond,
 	settings.DurationInRange(admission.MinElasticCPUDuration, admission.MaxElasticCPUDuration),
 )
@@ -337,9 +337,7 @@ func (f *txnKVFetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc) {
 	f.requestAdmissionHeader = txn.AdmissionHeader()
 	f.responseAdmissionQ = txn.DB().SQLKVResponseAdmissionQ
 
-	if f.admissionPacer != nil {
-		f.admissionPacer.Close()
-	}
+	f.admissionPacer.Close()
 	f.maybeInitAdmissionPacer(txn.AdmissionHeader(), txn.DB().AdmissionPacerFactory, txn.DB().SettingsValues)
 }
 
