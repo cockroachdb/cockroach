@@ -45,6 +45,7 @@ func TestIOLoadListener(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	L0MinimumSizePerSubLevel.Override(ctx, &st.SV, 0)
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "io_load_listener"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -86,6 +87,12 @@ func TestIOLoadListener(t *testing.T) {
 				var percent int
 				d.ScanArgs(t, "percent", &percent)
 				MinFlushUtilizationFraction.Override(ctx, &st.SV, float64(percent)/100)
+				return ""
+
+			case "set-min-size-per-sub-level":
+				var minSize int64
+				d.ScanArgs(t, "size", &minSize)
+				L0MinimumSizePerSubLevel.Override(ctx, &st.SV, minSize)
 				return ""
 
 			// TODO(sumeer): the output printed by set-state is hard to follow. It
@@ -270,7 +277,7 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 		buf.Printf("%s:\n", tt.name)
 		res := (*ioLoadListener)(nil).adjustTokensInner(
 			ctx, tt.prev, tt.l0Metrics, 12, pebble.ThroughputMetric{},
-			100, 10, 0.50)
+			100, 10, 0, 0.50)
 		buf.Printf("%s\n", res)
 	}
 	echotest.Require(t, string(redact.Sprint(buf)), filepath.Join(datapathutils.TestDataPath(t, "format_adjust_tokens_stats.txt")))
