@@ -69,6 +69,7 @@ http-defaults:
     format: ` + DefaultHTTPFormat + `
     redactable: true
     exit-on-error: false
+    timeout: 2s
     buffering:
       max-staleness: 5s	
       flush-trigger-size: 1mib
