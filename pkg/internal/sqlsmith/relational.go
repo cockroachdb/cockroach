@@ -109,10 +109,10 @@ var (
 		{1, makeRestore},
 		{1, makeExport},
 		{1, makeImport},
+		{1, makeCreateFunc},
 	}
 	nonMutatingStatements = []statementWeight{
 		{10, makeSelect},
-		{1, makeCreateFunc},
 	}
 	allStatements = append(mutatingStatements, nonMutatingStatements...)
 
