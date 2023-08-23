@@ -78,7 +78,9 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(109396),
+	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 	store, _ := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
