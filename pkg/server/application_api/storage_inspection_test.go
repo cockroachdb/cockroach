@@ -343,8 +343,15 @@ func BenchmarkAdminAPIDataDistribution(b *testing.B) {
 func TestHotRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ts := rangetestutils.StartServer(t)
-	defer ts.Stopper().Stop(context.Background())
+
+	defer serverutils.TestingSetDefaultTenantSelectionOverride(
+		// bug: HotRanges not available with secondary tenants yet.
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109499),
+	)()
+
+	srv := rangetestutils.StartServer(t)
+	defer srv.Stopper().Stop(context.Background())
+	ts := srv.ApplicationLayer()
 
 	var hotRangesResp serverpb.HotRangesResponse
 	if err := srvtestutils.GetStatusJSONProto(ts, "hotranges", &hotRangesResp); err != nil {
