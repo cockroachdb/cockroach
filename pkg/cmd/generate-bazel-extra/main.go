@@ -41,8 +41,15 @@ var (
 )
 
 func runBuildozer(args []string) {
-	const buildozer = "_bazel/bin/external/com_github_bazelbuild_buildtools/buildozer/buildozer_/buildozer"
-	cmd := exec.Command(buildozer, args...)
+	var mdfindArgs = []string{"-literal", "kMDItemDisplayName == \"generate-bazel-extra\"", "kind:folder"}
+	cmd := exec.Command("mdfind", mdfindArgs...)
+	outputLocation, err := cmd.Output()
+	if err != nil {
+		fmt.Printf("failed to find generate-bazel-extra, got output: %s", string(outputLocation))
+		panic(err)
+	}
+	var buildozer = strings.TrimSuffix(string(outputLocation), "\n") + "/../../../_bazel/bin/external/com_github_bazelbuild_buildtools/buildozer/buildozer_/buildozer"
+	cmd = exec.Command(buildozer, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		var cmderr *exec.ExitError
