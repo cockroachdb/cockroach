@@ -1895,6 +1895,38 @@ func TestLockStateSafeFormat(t *testing.T) {
 		redact.Sprint(l).Redact())
 }
 
+// TestLockStateSafeFormatMultipleLockHolders ensures multiple lock holders on
+// a single key are correctly formatted.
+func TestLockStateSafeFormatMultipleLockHolders(t *testing.T) {
+	kl := &keyLocks{
+		id:     1,
+		key:    []byte("KEY"),
+		endKey: []byte("END"),
+	}
+	holder1 := &txnLock{}
+	holder2 := &txnLock{}
+	kl.holders.PushBack(holder1)
+	kl.holders.PushBack(holder2)
+	holder1.txn = &enginepb.TxnMeta{ID: uuid.NamespaceDNS}
+	holder1.unreplicatedInfo.init()
+	holder1.unreplicatedInfo.ts = hlc.Timestamp{WallTime: 123, Logical: 7}
+	require.NoError(t, holder1.unreplicatedInfo.acquire(lock.Shared, 3))
+	holder2.txn = &enginepb.TxnMeta{ID: uuid.NamespaceURL}
+	holder2.unreplicatedInfo.init()
+	holder2.unreplicatedInfo.ts = hlc.Timestamp{WallTime: 125, Logical: 1}
+	require.NoError(t, holder2.unreplicatedInfo.acquire(lock.Shared, 6))
+	require.EqualValues(t,
+		" lock: ‹\"KEY\"›\n"+
+			"  holders: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: unrepl [(str: Shared seq: 3)]\n"+
+			"           txn: 6ba7b811-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000125,1, info: unrepl [(str: Shared seq: 6)]\n",
+		redact.Sprint(kl))
+	require.EqualValues(t,
+		" lock: ‹×›\n"+
+			"  holders: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: unrepl [(str: Shared seq: 3)]\n"+
+			"           txn: 6ba7b811-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000125,1, info: unrepl [(str: Shared seq: 6)]\n",
+		redact.Sprint(kl).Redact())
+}
+
 // TestElideWaitingStateUpdatesConsidersAllFields ensures all fields in the
 // waitingState struct have been considered for inclusion/non-inclusion in the
 // logic of canElideWaitingStateUpdate. The test doesn't check if the
