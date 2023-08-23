@@ -432,7 +432,9 @@ func setFuncOption(params runParams, udfDesc *funcdesc.Mutable, option tree.Func
 		if err != nil {
 			return err
 		}
-		typeReplacedFuncBody, err := serializeUserDefinedTypes(params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true /* multiStmt */)
+		typeReplacedFuncBody, err := serializeUserDefinedTypes(
+			params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true /* multiStmt */, "UDFs",
+		)
 		if err != nil {
 			return err
 		}
