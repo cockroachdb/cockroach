@@ -172,6 +172,7 @@ import ({{ if .SqliteLogicTest }}
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"{{ if .Ccl }}
 	"github.com/cockroachdb/cockroach/pkg/ccl"{{ end }}
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
@@ -214,6 +215,11 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
+
+	defer serverutils.TestingSetDefaultTenantSelectionOverride(
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+	)()
+
 	os.Exit(m.Run())
 }
 
