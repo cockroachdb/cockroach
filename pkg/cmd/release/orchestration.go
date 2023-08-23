@@ -11,20 +11,14 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"path"
-	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
 
 const (
-	versionFlag      = "version"
-	templatesDirFlag = "template-dir"
-	outputDirFlag    = "output-dir"
+	versionFlag = "version"
 )
 
 var orchestrationFlags = struct {
@@ -42,57 +36,13 @@ var setOrchestrationVersionCmd = &cobra.Command{
 
 func init() {
 	setOrchestrationVersionCmd.Flags().StringVar(&orchestrationFlags.version, versionFlag, "", "cockroachdb version")
-	setOrchestrationVersionCmd.Flags().StringVar(&orchestrationFlags.templatesDir, templatesDirFlag, "",
-		"orchestration templates directory")
-	setOrchestrationVersionCmd.Flags().StringVar(&orchestrationFlags.outputDir, outputDirFlag, "",
-		"orchestration directory")
 	_ = setOrchestrationVersionCmd.MarkFlagRequired(versionFlag)
-	_ = setOrchestrationVersionCmd.MarkFlagRequired(templatesDirFlag)
-	_ = setOrchestrationVersionCmd.MarkFlagRequired(outputDirFlag)
 }
 
 func setOrchestrationVersion(_ *cobra.Command, _ []string) error {
-	// make sure we have the leading "v" in the version
-	orchestrationFlags.version = "v" + strings.TrimPrefix(orchestrationFlags.version, "v")
-	dirInfo, err := os.Stat(orchestrationFlags.templatesDir)
+	pwd, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("cannot stat templates directory: %w", err)
+		return fmt.Errorf("getting working directory: %w", err)
 	}
-	if !dirInfo.IsDir() {
-		return fmt.Errorf("%s is not a directory", orchestrationFlags.templatesDir)
-	}
-	return filepath.Walk(orchestrationFlags.templatesDir, func(filePath string, fileInfo os.FileInfo, e error) error {
-		if e != nil {
-			return e
-		}
-		// Skip directories
-		if !fileInfo.Mode().IsRegular() {
-			return nil
-		}
-		// calculate file directory relative to the given root directory.
-		dir := path.Dir(filePath)
-		relDir, err := filepath.Rel(orchestrationFlags.templatesDir, dir)
-		if err != nil {
-			return err
-		}
-		destDir := filepath.Join(orchestrationFlags.outputDir, relDir)
-		destFile := filepath.Join(destDir, fileInfo.Name())
-		if err := os.MkdirAll(destDir, 0755); err != nil && !errors.Is(err, os.ErrExist) {
-			return err
-		}
-		contents, err := os.ReadFile(filePath)
-		if err != nil {
-			return err
-		}
-		// Go templates cannot be used here, because some files are templates already.
-		generatedContents := strings.ReplaceAll(string(contents), "@VERSION@", orchestrationFlags.version)
-		if strings.HasSuffix(destFile, ".yaml") {
-			generatedContents = fmt.Sprintf("# Generated file, DO NOT EDIT. Source: %s\n", filePath) + generatedContents
-		}
-		err = os.WriteFile(destFile, []byte(generatedContents), fileInfo.Mode().Perm())
-		if err != nil {
-			return err
-		}
-		return nil
-	})
+	return updateOrchestration(pwd, orchestrationFlags.version)
 }
