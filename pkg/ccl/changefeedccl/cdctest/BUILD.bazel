@@ -17,7 +17,6 @@ go_library(
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
-        "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
