@@ -223,18 +223,6 @@ func (p *pebbleBatch) NewMVCCIterator(
 	return maybeWrapInUnsafeIter(iter), nil
 }
 
-// MustMVCCIterator implements the ReaderWithMustIterators interface.
-//
-// If the underlying Batch struct in Pebble ever starts returning errors in
-// NewIter(), this method must be removed.
-func (p *pebbleBatch) MustMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
-	iter, err := p.NewMVCCIterator(iterKind, opts)
-	if err != nil {
-		panic(err)
-	}
-	return iter
-}
-
 // NewEngineIterator implements the Batch interface.
 func (p *pebbleBatch) NewEngineIterator(opts IterOptions) (EngineIterator, error) {
 	if p.writeOnly {
@@ -271,18 +259,6 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) (EngineIterator, error
 
 	iter.inuse = true
 	return iter, nil
-}
-
-// MustEngineIterator implements the ReaderWithMustIterators interface.
-//
-// If the underlying Batch struct in Pebble ever starts returning errors in
-// NewIter(), this method must be removed.
-func (p *pebbleBatch) MustEngineIterator(opts IterOptions) EngineIterator {
-	iter, err := p.NewEngineIterator(opts)
-	if err != nil {
-		panic(err)
-	}
-	return iter
 }
 
 // ScanInternal implements the Reader interface.

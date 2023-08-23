@@ -496,16 +496,6 @@ func (s spanSetReader) NewMVCCIterator(
 	return NewIteratorAt(mvccIter, s.spans, s.ts), nil
 }
 
-func (s spanSetReader) MustMVCCIterator(
-	iterKind storage.MVCCIterKind, opts storage.IterOptions,
-) storage.MVCCIterator {
-	iter, err := s.NewMVCCIterator(iterKind, opts)
-	if err != nil {
-		panic(err)
-	}
-	return iter
-}
-
 func (s spanSetReader) NewEngineIterator(opts storage.IterOptions) (storage.EngineIterator, error) {
 	engineIter, err := s.r.NewEngineIterator(opts)
 	if err != nil {
@@ -517,14 +507,6 @@ func (s spanSetReader) NewEngineIterator(opts storage.IterOptions) (storage.Engi
 		spansOnly: s.spansOnly,
 		ts:        s.ts,
 	}, nil
-}
-
-func (s spanSetReader) MustEngineIterator(opts storage.IterOptions) storage.EngineIterator {
-	iter, err := s.NewEngineIterator(opts)
-	if err != nil {
-		panic(err)
-	}
-	return iter
 }
 
 // ConsistentIterators implements the storage.Reader interface.

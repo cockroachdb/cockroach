@@ -104,12 +104,12 @@ func makeCatchUpIteratorConstructor(iter storage.SimpleMVCCIterator) CatchUpIter
 	if iter == nil {
 		return nil
 	}
-	return func(span roachpb.Span, startTime hlc.Timestamp) *CatchUpIterator {
+	return func(span roachpb.Span, startTime hlc.Timestamp) (*CatchUpIterator, error) {
 		return &CatchUpIterator{
 			simpleCatchupIter: simpleCatchupIterAdapter{iter},
 			span:              span,
 			startTime:         startTime,
-		}
+		}, nil
 	}
 }
 
@@ -129,7 +129,9 @@ func newTestRegistration(
 		func() {},
 		&future.ErrorFuture{},
 	)
-	r.maybeConstructCatchUpIter()
+	if err := r.maybeConstructCatchUpIter(); err != nil {
+		panic(err)
+	}
 	return &testRegistration{
 		registration: r,
 		stream:       s,
