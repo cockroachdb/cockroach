@@ -307,6 +307,8 @@ const (
 	InternalErrType ErrorDetailType = 25
 
 	NumErrors int = 45
+
+	NumRangeFeedRetryErrors = 8
 )
 
 // Register the migration of all errors that used to be in the roachpb package
@@ -348,6 +350,10 @@ func init() {
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.RefreshFailedError", &RefreshFailedError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.MVCCHistoryMutationError", &MVCCHistoryMutationError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.InsufficientSpaceError", &InsufficientSpaceError{})
+
+	if len(RangeFeedRetryError_Reason_value) != NumRangeFeedRetryErrors {
+		panic("NumRangeFeedRetryErrors constant must be updated whenever new rangefeed retry reason added")
+	}
 }
 
 // GoError returns a Go error converted from Error. If the error is a transaction

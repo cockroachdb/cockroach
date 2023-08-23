@@ -210,6 +210,15 @@ This counts the number of ranges with an active rangefeed that are performing ca
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderRangefeedPostCatchupRanges = metric.Metadata{
+		Name: "distsender.rangefeed.post_catchup_ranges",
+		Help: `Number of post-catchup ranges
+
+This counts the number of ranges that are active, and have completed their catchup scan
+`,
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderRangefeedErrorCatchupRanges = metric.Metadata{
 		Name:        "distsender.rangefeed.error_catchup_ranges",
 		Help:        `Number of ranges in catchup mode which experienced an error`,
@@ -308,11 +317,13 @@ type DistSenderMetrics struct {
 
 // DistSenderRangeFeedMetrics is a set of rangefeed specific metrics.
 type DistSenderRangeFeedMetrics struct {
-	RangefeedRanges        *metric.Gauge
-	RangefeedCatchupRanges *metric.Gauge
-	RangefeedErrorCatchup  *metric.Counter
-	RangefeedRestartRanges *metric.Counter
-	RangefeedRestartStuck  *metric.Counter
+	RangefeedRanges            *metric.Gauge
+	RangefeedCatchupRanges     *metric.Gauge
+	RangefeedPostCatchupRanges *metric.Gauge
+	RangefeedErrorCatchup      *metric.Counter
+	RangefeedRetryErrors       [kvpb.NumRangeFeedRetryErrors]*metric.Counter
+	RangefeedRestartRanges     *metric.Counter
+	RangefeedRestartStuck      *metric.Counter
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
@@ -354,12 +365,24 @@ func makeDistSenderMetrics() DistSenderMetrics {
 }
 
 func makeDistSenderRangeFeedMetrics() DistSenderRangeFeedMetrics {
+	var retryCounters [kvpb.NumRangeFeedRetryErrors]*metric.Counter
+	for idx, name := range kvpb.RangeFeedRetryError_Reason_name {
+		retryCounters[idx] = metric.NewCounter(metric.Metadata{
+			Name:        fmt.Sprintf("distsender.rangefeed.retry.%s", strings.ToLower(name)),
+			Help:        `Number of ranges in retried due to rangefeed retry error`,
+			Measurement: "Ranges",
+			Unit:        metric.Unit_COUNT,
+		})
+	}
+
 	return DistSenderRangeFeedMetrics{
-		RangefeedRanges:        metric.NewGauge(metaDistSenderRangefeedTotalRanges),
-		RangefeedCatchupRanges: metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
-		RangefeedErrorCatchup:  metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
-		RangefeedRestartRanges: metric.NewCounter(metaDistSenderRangefeedRestartRanges),
-		RangefeedRestartStuck:  metric.NewCounter(metaDistSenderRangefeedRestartStuck),
+		RangefeedRanges:            metric.NewGauge(metaDistSenderRangefeedTotalRanges),
+		RangefeedCatchupRanges:     metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
+		RangefeedPostCatchupRanges: metric.NewGauge(metaDistSenderRangefeedPostCatchupRanges),
+		RangefeedRetryErrors:       retryCounters,
+		RangefeedErrorCatchup:      metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
+		RangefeedRestartRanges:     metric.NewCounter(metaDistSenderRangefeedRestartRanges),
+		RangefeedRestartStuck:      metric.NewCounter(metaDistSenderRangefeedRestartStuck),
 	}
 }
 

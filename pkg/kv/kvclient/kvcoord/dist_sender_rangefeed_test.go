@@ -682,6 +682,7 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 		// Upon shutdown, make sure the metrics have correct values.
 		defer func() {
 			require.EqualValues(t, 0, metrics.RangefeedRanges.Value())
+			require.EqualValues(t, 0, metrics.RangefeedPostCatchupRanges.Value())
 			require.EqualValues(t, 0, metrics.RangefeedRestartStuck.Count())
 
 			// We injected numRangesToRetry transient errors during catchup scan.
@@ -802,6 +803,14 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 
 		// We also know that we have blocked numCatchupToBlock ranges in their catchup scan.
 		require.EqualValues(t, numCatchupToBlock, metrics.RangefeedCatchupRanges.Value())
+
+		// All but numCatchupToBlock ranges are also in the post catchup state.
+		testutils.SucceedsWithin(t, func() error {
+			if metrics.RangefeedPostCatchupRanges.Value() == numRanges-numCatchupToBlock {
+				return nil
+			}
+			return errors.New("waiting for post catchup counter")
+		}, 10*time.Second)
 	})
 }
 
