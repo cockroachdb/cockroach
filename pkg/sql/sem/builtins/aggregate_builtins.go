@@ -858,12 +858,22 @@ func (agg *stMakeLineAgg) Add(
 	}
 	switch g.(type) {
 	case *geom.Point, *geom.LineString, *geom.MultiPoint:
-		if err := agg.acc.Grow(ctx, int64(len(g.FlatCoords())*8)); err != nil {
-			return err
-		}
-		agg.flatCoords = append(agg.flatCoords, g.FlatCoords()...)
+		return agg.appendFlatCoords(ctx, g)
+	default:
+		return nil
 	}
-	return nil
+}
+
+const floatSize = int64(unsafe.Sizeof(float64(0)))
+
+func (agg *stMakeLineAgg) appendFlatCoords(ctx context.Context, g geom.T) error {
+	capBefore := int64(cap(agg.flatCoords))
+	agg.flatCoords = append(agg.flatCoords, g.FlatCoords()...)
+	capAfter := int64(cap(agg.flatCoords))
+	if capAfter == capBefore {
+		return nil
+	}
+	return agg.acc.Grow(ctx, (capAfter-capBefore)*floatSize)
 }
 
 // Result implements the AggregateFunc interface.
@@ -871,21 +881,37 @@ func (agg *stMakeLineAgg) Result() (tree.Datum, error) {
 	if len(agg.flatCoords) == 0 {
 		return tree.DNull, nil
 	}
+	// TODO(yuzefovich): plumb proper context as the function argument.
+	ctx := context.Background()
+	// Making the geometry from the accumulated flat coordinates requires
+	// marshalling the new line string object, which roughly uses the same
+	// amount of memory as the geom.T object itself, so we double the memory
+	// usage.
+	usedMem := agg.acc.Used()
+	if err := agg.acc.Grow(ctx, usedMem); err != nil {
+		return nil, err
+	}
 	g, err := geo.MakeGeometryFromGeomT(geom.NewLineStringFlat(agg.layout, agg.flatCoords))
 	if err != nil {
 		return nil, err
 	}
+	// It is the caller's responsibility to account for the returned DGeometry,
+	// so we can now shrink the memory account back.
+	agg.acc.Shrink(ctx, usedMem)
 	return tree.NewDGeometry(g), nil
 }
 
 // Reset implements the AggregateFunc interface.
-func (agg *stMakeLineAgg) Reset(ctx context.Context) {
+func (agg *stMakeLineAgg) Reset(context.Context) {
+	// Note that since we're keeping the reference to the flat coordinates, we
+	// need to keep the memory accounting unchanged (flatCoords is the only
+	// memory usage tracked against the account).
 	agg.flatCoords = agg.flatCoords[:0]
-	agg.acc.Empty(ctx)
 }
 
 // Close implements the AggregateFunc interface.
 func (agg *stMakeLineAgg) Close(ctx context.Context) {
+	agg.flatCoords = nil
 	agg.acc.Close(ctx)
 }
 
@@ -984,13 +1010,23 @@ func (agg *stCollectAgg) Add(
 	if firstArg == tree.DNull {
 		return nil
 	}
-	if err := agg.acc.Grow(ctx, int64(firstArg.Size())); err != nil {
+	// We will keep the reference to the argument as geom.T object, so estimate
+	// its memory usage upfront.
+	estimate := int64(firstArg.Size())
+	if err := agg.acc.Grow(ctx, estimate); err != nil {
 		return err
 	}
 	geomArg := tree.MustBeDGeometry(firstArg)
 	t, err := geomArg.AsGeomT()
 	if err != nil {
 		return err
+	}
+	// Now that we have the actual geom.T object we're going to store, get its
+	// actual memory usage and reconcile the memory account.
+	if actual := geo.GeomTSize(t); actual != estimate {
+		if err = agg.acc.Resize(ctx, estimate, actual); err != nil {
+			return err
+		}
 	}
 	if agg.coll != nil && agg.coll.SRID() != t.SRID() {
 		c, err := geo.MakeGeometryFromGeomT(agg.coll)
@@ -1002,7 +1038,7 @@ func (agg *stCollectAgg) Add(
 
 	// Fast path for geometry collections
 	if gc, ok := agg.coll.(*geom.GeometryCollection); ok {
-		return gc.Push(t)
+		return agg.geometryCollectionPush(ctx, gc, t)
 	}
 
 	// Try to append to a multitype, if possible.
@@ -1038,7 +1074,7 @@ func (agg *stCollectAgg) Add(
 		if err := agg.acc.Grow(ctx, usedMem); err != nil {
 			return err
 		}
-		gc, err = agg.multiToCollection(agg.coll)
+		gc, err = agg.multiToCollection(ctx, agg.coll)
 		if err != nil {
 			return err
 		}
@@ -1048,27 +1084,49 @@ func (agg *stCollectAgg) Add(
 		gc = geom.NewGeometryCollection().SetSRID(t.SRID())
 	}
 	agg.coll = gc
-	return gc.Push(t)
+	return agg.geometryCollectionPush(ctx, gc, t)
 }
 
-func (agg *stCollectAgg) multiToCollection(multi geom.T) (*geom.GeometryCollection, error) {
+const geomTSize = int64(unsafe.Sizeof(geom.T(nil)))
+
+// geometryCollectionPush is a helper method that calls gc.Push(t) as well as
+// performs some additional memory accounting.
+func (agg *stCollectAgg) geometryCollectionPush(
+	ctx context.Context, gc *geom.GeometryCollection, t geom.T,
+) error {
+	// geom.GeometryCollection.geoms can have non-trivial overhead, so we
+	// account for that.
+	capBefore := int64(cap(gc.Geoms()))
+	if err := gc.Push(t); err != nil {
+		return err
+	}
+	capAfter := int64(cap(gc.Geoms()))
+	if capAfter == capBefore {
+		return nil
+	}
+	return agg.acc.Grow(ctx, (capAfter-capBefore)*geomTSize)
+}
+
+func (agg *stCollectAgg) multiToCollection(
+	ctx context.Context, multi geom.T,
+) (*geom.GeometryCollection, error) {
 	gc := geom.NewGeometryCollection().SetSRID(multi.SRID())
 	switch t := multi.(type) {
 	case *geom.MultiPoint:
 		for i := 0; i < t.NumPoints(); i++ {
-			if err := gc.Push(t.Point(i)); err != nil {
+			if err := agg.geometryCollectionPush(ctx, gc, t.Point(i)); err != nil {
 				return nil, err
 			}
 		}
 	case *geom.MultiLineString:
 		for i := 0; i < t.NumLineStrings(); i++ {
-			if err := gc.Push(t.LineString(i)); err != nil {
+			if err := agg.geometryCollectionPush(ctx, gc, t.LineString(i)); err != nil {
 				return nil, err
 			}
 		}
 	case *geom.MultiPolygon:
 		for i := 0; i < t.NumPolygons(); i++ {
-			if err := gc.Push(t.Polygon(i)); err != nil {
+			if err := agg.geometryCollectionPush(ctx, gc, t.Polygon(i)); err != nil {
 				return nil, err
 			}
 		}
@@ -1083,10 +1141,25 @@ func (agg *stCollectAgg) Result() (tree.Datum, error) {
 	if agg.coll == nil {
 		return tree.DNull, nil
 	}
+	// TODO(yuzefovich): plumb proper context as the function argument.
+	ctx := context.Background()
+	// Making the geometry from the accumulated geom.T object requires
+	// marshalling that object which roughly uses the same amount of memory as
+	// the geom.T object itself (at least in case of the GeometryCollection), so
+	// we double the memory usage.
+	usedMem := agg.acc.Used()
+	if err := agg.acc.Grow(ctx, usedMem); err != nil {
+		return nil, err
+	}
 	g, err := geo.MakeGeometryFromGeomT(agg.coll)
 	if err != nil {
 		return nil, err
 	}
+	// We no longer need to hold on the accumulated geom.T object, so we can nil
+	// it out. Additionally, it is the caller's responsibility to account for
+	// the returned DGeometry, so we can also clear the memory account. Both of
+	// these things are done in Reset.
+	agg.Reset(ctx)
 	return tree.NewDGeometry(g), nil
 }
 

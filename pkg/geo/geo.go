@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
@@ -1064,4 +1065,33 @@ func compareSpatialObjectBytes(lhs *geopb.SpatialObject, rhs *geopb.SpatialObjec
 		panic(err)
 	}
 	return bytes.Compare(marshalledLHS, marshalledRHS)
+}
+
+const (
+	geomTSize              = int64(unsafe.Sizeof(geom.T(nil)))
+	geometryCollectionSize = int64(unsafe.Sizeof(geom.GeometryCollection{}))
+	intSize                = int64(unsafe.Sizeof(int(0)))
+	floatSize              = int64(unsafe.Sizeof(float64(0)))
+	intSliceOverhead       = int64(unsafe.Sizeof([]int{}))
+)
+
+// GeomTSize returns the best estimate for the memory footprint of the geom.T
+// object.
+func GeomTSize(g geom.T) int64 {
+	if gc, ok := g.(*geom.GeometryCollection); ok {
+		geoms := gc.Geoms()
+		size := geometryCollectionSize + geomTSize*int64(cap(geoms))
+		for _, innerG := range geoms {
+			size += GeomTSize(innerG)
+		}
+		return size
+	}
+	size := floatSize*int64(cap(g.FlatCoords())) + intSize*int64(cap(g.Ends()))
+	if endss := g.Endss(); cap(endss) > 0 {
+		size += intSliceOverhead * int64(cap(endss))
+		for _, ends := range endss {
+			size += intSize * int64(cap(ends))
+		}
+	}
+	return size
 }
