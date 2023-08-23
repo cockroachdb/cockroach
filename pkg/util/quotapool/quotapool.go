@@ -164,7 +164,6 @@ type UpdateFunc func(resource Resource) (shouldNotify bool)
 
 // Update updates the underlying resource with the provided value, notifying the
 // head of the queue if the Resource indicates that it should.
-//
 // Safe for concurrent use.
 func (qp *AbstractPool) Update(f UpdateFunc) {
 	qp.mu.Lock()
@@ -234,7 +233,6 @@ func (qp *AbstractPool) Acquire(ctx context.Context, r Request) (err error) {
 		slowTimer.Reset(qp.slowAcquisitionThreshold)
 		slowTimerC = slowTimer.Ch()
 	}
-
 	// Set up the infrastructure to deal with rate-limiter style pools which
 	// retry after the passage of time.
 	var tryAgainTimer timeutil.TimerI
