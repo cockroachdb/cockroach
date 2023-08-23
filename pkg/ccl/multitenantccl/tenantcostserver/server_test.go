@@ -62,7 +62,8 @@ func TestDataDriven(t *testing.T) {
 }
 
 type testState struct {
-	s           serverutils.TestServerInterface
+	srv         serverutils.TestServerInterface
+	s           serverutils.ApplicationLayerInterface
 	db          *gosql.DB
 	kvDB        *kv.DB
 	r           *sqlutils.SQLRunner
@@ -78,7 +79,10 @@ var t0 = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 func (ts *testState) start(t *testing.T) {
 	// Set up a server that we use only for the system tables.
-	ts.s, ts.db, ts.kvDB = serverutils.StartServer(t, base.TestServerArgs{})
+	ts.srv, ts.db, ts.kvDB = serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	ts.s = ts.srv.ApplicationLayer()
 	ts.r = sqlutils.MakeSQLRunner(ts.db)
 
 	ts.clock = timeutil.NewManualTime(t0)
@@ -323,6 +327,7 @@ func (ts *testState) advance(t *testing.T, d *datadriven.TestData) string {
 // up with a changing live set.
 func TestInstanceCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var ts testState
 	ts.start(t)
