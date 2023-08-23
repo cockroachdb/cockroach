@@ -16,7 +16,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 // column based on the column names and the number of buckets. The expression will be
 // of the form:
 //
-//	mod(fnv32(crdb_internal.datums_to_bytes(...)),buckets)
+//	mod(fnv32(md5(crdb_internal.datums_to_bytes(...))),buckets)
 func MakeHashShardComputeExpr(colNames []string, buckets int) *string {
 	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
 		return tree.ResolvableFunctionReference{
@@ -38,8 +38,13 @@ func MakeHashShardComputeExpr(colNames []string, buckets int) *string {
 			Func: unresolvedFunc("fnv32"),
 			Exprs: tree.Exprs{
 				&tree.FuncExpr{
-					Func:  unresolvedFunc("crdb_internal.datums_to_bytes"),
-					Exprs: columnItems(),
+					Func: unresolvedFunc("md5"),
+					Exprs: tree.Exprs{
+						&tree.FuncExpr{
+							Func:  unresolvedFunc("crdb_internal.datums_to_bytes"),
+							Exprs: columnItems(),
+						},
+					},
 				},
 			},
 		}
