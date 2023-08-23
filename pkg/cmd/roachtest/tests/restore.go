@@ -108,7 +108,7 @@ func registerRestore(r registry.Registry) {
 		PrometheusNameSpace, Subsystem: "restore", Name: "duration"}, []string{"test_name"})
 
 	withPauseSpecs := restoreSpecs{
-		hardware: makeHardwareSpecs(hardwareSpecs{}),
+		hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
 		backup: makeBackupSpecs(
 			backupSpecs{workload: tpceRestore{customers: 1000},
 				version: "v22.2.1"}),
@@ -268,7 +268,7 @@ func registerRestore(r registry.Registry) {
 
 	for _, sp := range []restoreSpecs{
 		{
-			hardware: makeHardwareSpecs(hardwareSpecs{}),
+			hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
 			backup:   makeBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
 		},
@@ -289,7 +289,7 @@ func registerRestore(r registry.Registry) {
 		{
 			// Benchmarks if per node throughput remains constant if the number of
 			// nodes doubles relative to default.
-			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 8}),
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 8, ebsThroughput: 250 /* MB/s */}),
 			backup:   makeBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
 		},
@@ -297,7 +297,7 @@ func registerRestore(r registry.Registry) {
 			// Benchmarks if per node throughput remains constant if the cluster
 			// is multi-region.
 			hardware: makeHardwareSpecs(hardwareSpecs{
-				nodes: 9,
+				nodes: 9, ebsThroughput: 250, /* MB/s */
 				zones: []string{"us-east-2b", "us-west-2b", "eu-west-1b"}}), // These zones are AWS-specific.
 			backup:  makeBackupSpecs(backupSpecs{cloud: spec.AWS}),
 			timeout: 90 * time.Minute,
@@ -305,14 +305,14 @@ func registerRestore(r registry.Registry) {
 		{
 			// Benchmarks if per node throughput doubles if the vcpu count doubles
 			// relative to default.
-			hardware: makeHardwareSpecs(hardwareSpecs{cpus: 16}),
+			hardware: makeHardwareSpecs(hardwareSpecs{cpus: 16, ebsThroughput: 250 /* MB/s */}),
 			backup:   makeBackupSpecs(backupSpecs{}),
 			timeout:  1 * time.Hour,
 		},
 		{
 			// Ensures we can restore a 48 length incremental chain.
 			// Also benchmarks per node throughput for a long chain.
-			hardware: makeHardwareSpecs(hardwareSpecs{}),
+			hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
 			backup:   makeBackupSpecs(backupSpecs{backupsIncluded: 48}),
 			timeout:  1 * time.Hour,
 		},
@@ -329,7 +329,8 @@ func registerRestore(r registry.Registry) {
 		},
 		{
 			// The weekly 32TB Restore test.
-			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000}),
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000,
+				ebsThroughput: 250 /* MB/s */}),
 			backup: makeBackupSpecs(backupSpecs{
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 2000000}}),
@@ -338,7 +339,7 @@ func registerRestore(r registry.Registry) {
 		},
 		{
 			// A teeny weeny 15GB restore that could be used to bisect scale agnostic perf regressions.
-			hardware: makeHardwareSpecs(hardwareSpecs{}),
+			hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
 			backup: makeBackupSpecs(
 				backupSpecs{workload: tpceRestore{customers: 1000},
 					version: "v22.2.1"}),
