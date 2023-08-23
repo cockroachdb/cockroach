@@ -39,8 +39,9 @@ func TestCanPlanCDCExpressions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.ExecMultiple(t,
@@ -206,14 +207,14 @@ FAMILY extra (extra)
 			name:         "a > 10",
 			desc:         fooDesc,
 			stmt:         "SELECT * FROM foo WHERE a > 10",
-			planSpans:    roachpb.Spans{{Key: mkPkKey(t, fooID, 11), EndKey: pkEnd}},
+			planSpans:    roachpb.Spans{{Key: mkPkKey(t, codec, fooID, 11), EndKey: pkEnd}},
 			presentation: mainColumns,
 		},
 		{
 			name:         "a > 10 with cdc_prev",
 			desc:         fooDesc,
 			stmt:         "SELECT * FROM foo WHERE a > 10 AND (cdc_prev).status = 'closed'",
-			planSpans:    roachpb.Spans{{Key: mkPkKey(t, fooID, 11), EndKey: pkEnd}},
+			planSpans:    roachpb.Spans{{Key: mkPkKey(t, codec, fooID, 11), EndKey: pkEnd}},
 			presentation: mainColumns,
 		},
 		{
@@ -288,12 +289,12 @@ FAMILY extra (extra)
 	}
 }
 
-func mkPkKey(t *testing.T, tableID descpb.ID, vals ...int) roachpb.Key {
+func mkPkKey(t *testing.T, codec keys.SQLCodec, tableID descpb.ID, vals ...int) roachpb.Key {
 	t.Helper()
 
 	// Encode index id, then each value.
 	key, err := keyside.Encode(
-		keys.SystemSQLCodec.TablePrefix(uint32(tableID)),
+		codec.TablePrefix(uint32(tableID)),
 		tree.NewDInt(tree.DInt(1)), encoding.Ascending)
 
 	require.NoError(t, err)
