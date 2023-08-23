@@ -1614,31 +1614,47 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 		return
 	}
 	if kl.isLocked() {
-		// TODO(arul): Change this formatting to consider multiple lock holders in a
-		// subsequent patch.
-		tl := kl.holders.Front().Value.(*txnLock)
-		txn, ts := tl.getLockHolder()
-		sb.Printf("  holder: txn: %v epoch: %d, iso: %s, ts: %v, info: ", redact.Safe(txn.ID), redact.Safe(txn.Epoch), redact.Safe(txn.IsoLevel), redact.Safe(ts))
-		if !tl.replicatedInfo.isEmpty() {
-			tl.replicatedInfo.safeFormat(sb)
-			if !tl.unreplicatedInfo.isEmpty() {
-				sb.Printf(", ")
-			}
-		}
-		if !tl.unreplicatedInfo.isEmpty() {
-			tl.unreplicatedInfo.safeFormat(sb)
-		}
-		if txnStatusCache != nil {
-			finalizedTxn, ok := txnStatusCache.finalizedTxns.get(txn.ID)
-			if ok {
-				var statusStr string
-				switch finalizedTxn.Status {
-				case roachpb.COMMITTED:
-					statusStr = "committed"
-				case roachpb.ABORTED:
-					statusStr = "aborted"
+
+		first := true
+		for e := kl.holders.Front(); e != nil; e = e.Next() {
+			tl := e.Value.(*txnLock)
+			txn, ts := tl.getLockHolder()
+			if first {
+				pluralSuffix := ""
+				if kl.holders.Len() > 1 {
+					pluralSuffix = "s"
 				}
-				sb.Printf(" [holder finalized: %s]", redact.Safe(statusStr))
+				sb.Printf("  holder%s: txn: %v epoch: %d, iso: %s, ts: %v, info: ",
+					redact.Safe(pluralSuffix), redact.Safe(txn.ID), redact.Safe(txn.Epoch),
+					redact.Safe(txn.IsoLevel), redact.Safe(ts),
+				)
+				first = false
+			} else {
+				sb.Printf("\n           txn: %v epoch: %d, iso: %s, ts: %v, info: ",
+					redact.Safe(txn.ID), redact.Safe(txn.Epoch), redact.Safe(txn.IsoLevel), redact.Safe(ts),
+				)
+			}
+			if !tl.replicatedInfo.isEmpty() {
+				tl.replicatedInfo.safeFormat(sb)
+				if !tl.unreplicatedInfo.isEmpty() {
+					sb.Printf(", ")
+				}
+			}
+			if !tl.unreplicatedInfo.isEmpty() {
+				tl.unreplicatedInfo.safeFormat(sb)
+			}
+			if txnStatusCache != nil {
+				finalizedTxn, ok := txnStatusCache.finalizedTxns.get(txn.ID)
+				if ok {
+					var statusStr string
+					switch finalizedTxn.Status {
+					case roachpb.COMMITTED:
+						statusStr = "committed"
+					case roachpb.ABORTED:
+						statusStr = "aborted"
+					}
+					sb.Printf(" [holder finalized: %s]", redact.Safe(statusStr))
+				}
 			}
 		}
 		sb.SafeString("\n")
