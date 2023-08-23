@@ -174,8 +174,24 @@ func startDistIngestion(
 		return rw.Err()
 	}
 
+	streamSpanConfigs := func(ctx context.Context) error {
+		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.SkipSpanConfigReplication {
+			return nil
+		}
+		sourceTenantID, err := planner.getSrcTenantID()
+		if err != nil {
+			return err
+		}
+		ingestor, err := makeSpanConfigIngestor(ctx, execCtx.ExecCfg(), ingestionJob, sourceTenantID)
+		if err != nil {
+			return err
+		}
+		defer ingestor.close(ctx)
+		return ingestor.ingestSpanConfigs(ctx, details.SourceTenantName)
+	}
+
 	updateRunningStatus(ctx, ingestionJob, jobspb.Replicating, "physical replication running")
-	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner)
+	err = ctxgroup.GoAndWait(ctx, execInitialPlan, streamSpanConfigs, replanner)
 	if errors.Is(err, sql.ErrPlanChanged) {
 		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
 	}
@@ -185,10 +201,24 @@ func startDistIngestion(
 type replicationFlowPlanner struct {
 	// initial contains the stream addresses found during the replicationFlowPlanner's first makePlan call.
 	initialStreamAddresses []string
+
+	srcTenantID roachpb.TenantID
 }
 
 func (p *replicationFlowPlanner) containsInitialStreamAddresses() bool {
 	return len(p.initialStreamAddresses) > 0
+}
+
+// getSourceTenantID is a bad bad function that returns the source tenant ID only after makePlan is called.
+//
+// TODO(msbutler): remove once spanConfig API is refactored. We need a way to
+// grab the sourceTenantID during distSQL planning. Perhaps we ought to store
+// the sourceTenantID id the job record.
+func (p *replicationFlowPlanner) getSrcTenantID() (roachpb.TenantID, error) {
+	if p.srcTenantID.InternalValue == 0 {
+		return p.srcTenantID, errors.New("make plan must be called before replication flow planner contains srcTenantID")
+	}
+	return p.srcTenantID, nil
 }
 
 func (p *replicationFlowPlanner) makePlan(
@@ -211,6 +241,8 @@ func (p *replicationFlowPlanner) makePlan(
 		if !p.containsInitialStreamAddresses() {
 			p.initialStreamAddresses = topology.StreamAddresses()
 		}
+
+		p.srcTenantID = topology.SourceTenantID
 
 		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg())
 		if err != nil {

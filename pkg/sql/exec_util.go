@@ -1794,6 +1794,8 @@ type StreamingTestingKnobs struct {
 	MockSpanConfigTableName *tree.TableName
 
 	AfterResumerJobLoad func(err error) error
+
+	SkipSpanConfigReplication bool
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}

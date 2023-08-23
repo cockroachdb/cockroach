@@ -161,6 +161,9 @@ func NewStreamClient(
 	case "postgres", "postgresql":
 		// The canonical PostgreSQL URL scheme is "postgresql", however our
 		// own client commands also accept "postgres".
+		if processOptions(opts).forSpanConfigs {
+			return NewSpanConfigStreamClient(ctx, streamURL, opts...)
+		}
 		return NewPartitionedStreamClient(ctx, streamURL, opts...)
 	case "external":
 		if db == nil {
@@ -226,7 +229,8 @@ func GetFirstActiveClient(
 }
 
 type options struct {
-	streamID streampb.StreamID
+	streamID       streampb.StreamID
+	forSpanConfigs bool
 }
 
 func (o *options) appName() string {
@@ -246,6 +250,13 @@ type Option func(*options)
 func WithStreamID(id streampb.StreamID) Option {
 	return func(o *options) {
 		o.streamID = id
+	}
+}
+
+// ForSpanConfigs will create a client for replicating span configs.
+func ForSpanConfigs() Option {
+	return func(o *options) {
+		o.forSpanConfigs = true
 	}
 }
 
