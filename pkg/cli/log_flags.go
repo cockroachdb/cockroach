@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -52,7 +53,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 
 	// Sanity check to prevent misuse of API.
 	if active, firstUse := log.IsActive(); active {
-		panic(errors.Newf("logging already active; first used at:\n%s", firstUse))
+		logcrash.ReportOrPanic(ctx, nil /* sv */, "logging already active; first used at:\n%s", firstUse)
 	}
 
 	// Try to derive a default directory from the first store,
