@@ -2,8 +2,18 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "event",
-    srcs = ["delayed_event.go"],
+    srcs = [
+        "event.go",
+        "executor.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/kv/kvserver/asim/state"],
+    deps = [
+        "//pkg/kv/kvserver/asim/assertion",
+        "//pkg/kv/kvserver/asim/history",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/util/log",
+    ],
 )

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -142,7 +143,7 @@ func Example_workload() {
 
 	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, settings)
 
-	sim := asim.NewSimulator(duration, rwg, s, settings, m)
+	sim := asim.NewSimulator(duration, rwg, s, settings, m, event.NewExecutorWithNoEvents())
 	sim.RunSim(ctx)
 	// WIP: non deterministic
 	// Output:

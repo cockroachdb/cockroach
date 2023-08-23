@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
@@ -35,7 +36,7 @@ func TestRunAllocatorSimulator(t *testing.T) {
 	m := metrics.NewTracker(settings.MetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, settings)
 
-	sim := asim.NewSimulator(duration, rwg, s, settings, m)
+	sim := asim.NewSimulator(duration, rwg, s, settings, m, event.NewExecutorWithNoEvents())
 	sim.RunSim(ctx)
 }
 
@@ -78,7 +79,7 @@ func TestAsimDeterministic(t *testing.T) {
 		}
 
 		s := state.NewStateWithDistribution(replicaDistribution, ranges, replsPerRange, keyspace, settings)
-		sim := asim.NewSimulator(duration, rwg, s, settings, m)
+		sim := asim.NewSimulator(duration, rwg, s, settings, m, event.NewExecutorWithNoEvents())
 
 		ctx := context.Background()
 		sim.RunSim(ctx)

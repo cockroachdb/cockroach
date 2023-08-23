@@ -27,10 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/guptarohit/asciigraph"
 	"github.com/stretchr/testify/require"
@@ -170,7 +168,7 @@ func TestDataDriven(t *testing.T) {
 			},
 		}
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
-		eventGen := gen.StaticEvents{DelayedEvents: event.DelayedEventList{}}
+		eventGen := gen.EmptyStaticEvents()
 		assertions := []assertion.SimulationAssertion{}
 		runs := []history.History{}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -251,26 +249,11 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "delay", &delay)
 				scanIfExists(t, d, "stores", &numStores)
 				scanIfExists(t, d, "locality", &localityString)
-
-				addEvent := event.DelayedEvent{
-					EventFn: func(ctx context.Context, tick time.Time, s state.State) {
-						node := s.AddNode()
-						if localityString != "" {
-							var locality roachpb.Locality
-							if err := locality.Set(localityString); err != nil {
-								panic(fmt.Sprintf("unable to set node locality %s", err.Error()))
-							}
-							s.SetNodeLocality(node.NodeID(), locality)
-						}
-						for i := 0; i < numStores; i++ {
-							if _, ok := s.AddStore(node.NodeID()); !ok {
-								panic(fmt.Sprintf("adding store to node=%d failed", node))
-							}
-						}
-					},
-					At: settingsGen.Settings.StartTime.Add(delay),
-				}
-				eventGen.DelayedEvents = append(eventGen.DelayedEvents, addEvent)
+				eventGen.AddStateChangeEventGen(event.AddNodeEvent{
+					Delay:          delay,
+					NumStores:      numStores,
+					LocalityString: localityString,
+				})
 				return ""
 			case "set_span_config":
 				var delay time.Duration
@@ -285,11 +268,10 @@ func TestDataDriven(t *testing.T) {
 					tag, data = strings.TrimSpace(tag), strings.TrimSpace(data)
 					span := spanconfigtestutils.ParseSpan(t, tag)
 					conf := spanconfigtestutils.ParseZoneConfig(t, data).AsSpanConfig()
-					eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
-						EventFn: func(ctx context.Context, tick time.Time, s state.State) {
-							s.SetSpanConfig(span, conf)
-						},
-						At: settingsGen.Settings.StartTime.Add(delay),
+					eventGen.AddStateChangeEventGen(event.SetSpanConfigEvent{
+						Delay:  delay,
+						Span:   span,
+						Config: conf,
 					})
 				}
 				return ""
@@ -300,14 +282,10 @@ func TestDataDriven(t *testing.T) {
 				scanArg(t, d, "node", &nodeID)
 				scanArg(t, d, "liveness", &livenessStatus)
 				scanIfExists(t, d, "delay", &delay)
-				eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
-					EventFn: func(ctx context.Context, tick time.Time, s state.State) {
-						s.SetNodeLiveness(
-							state.NodeID(nodeID),
-							livenessStatus,
-						)
-					},
-					At: settingsGen.Settings.StartTime.Add(delay),
+				eventGen.AddStateChangeEventGen(event.SetNodeLivenessEvent{
+					Delay:          delay,
+					NodeId:         state.NodeID(nodeID),
+					LivenessStatus: livenessStatus,
 				})
 				return ""
 			case "set_capacity":
@@ -328,13 +306,10 @@ func TestDataDriven(t *testing.T) {
 				if ioThreshold != -1 {
 					capacityOverride.IOThreshold = allocatorimpl.TestingIOThresholdWithScore(ioThreshold)
 				}
-
-				eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
-					EventFn: func(ctx context.Context, tick time.Time, s state.State) {
-						log.Infof(ctx, "setting capacity override %+v", capacityOverride)
-						s.SetCapacityOverride(state.StoreID(store), capacityOverride)
-					},
-					At: settingsGen.Settings.StartTime.Add(delay),
+				eventGen.AddStateChangeEventGen(event.SetCapacityOverrideEvent{
+					Delay:            delay,
+					StoreID:          state.StoreID(store),
+					CapacityOverride: capacityOverride,
 				})
 
 				return ""
