@@ -92,19 +92,22 @@ class TestDriver {
     // Expect Moment type field to be equal.
     expect(
       // Moments are the same
-      moment(statsLastUpdated).isSame(expectedStatsLastUpdated) ||
+      moment(statsLastUpdated.stats_last_created_at).isSame(
+        expectedStatsLastUpdated.stats_last_created_at,
+      ) ||
         // Moments are null.
-        (statsLastUpdated === expectedStatsLastUpdated &&
-          statsLastUpdated === null),
+        (statsLastUpdated.stats_last_created_at ===
+          expectedStatsLastUpdated.stats_last_created_at &&
+          statsLastUpdated.stats_last_created_at === null),
     ).toBe(true);
   }
 
   assertTableRoles(name: string, expected: string[]) {
-    expect(this.findTable(name).details.roles).toEqual(expected);
+    expect(this.findTable(name).details.grants.roles).toEqual(expected);
   }
 
   assertTableGrants(name: string, expected: string[]) {
-    expect(this.findTable(name).details.grants).toEqual(expected);
+    expect(this.findTable(name).details.grants.privileges).toEqual(expected);
   }
 
   async refreshDatabaseDetails() {
@@ -145,7 +148,8 @@ describe("Database Details Page", function () {
     driver.assertProperties({
       loading: false,
       loaded: false,
-      lastError: undefined,
+      requestError: undefined,
+      queryError: undefined,
       name: "things",
       search: null,
       filters: defaultFilters,
@@ -186,7 +190,8 @@ describe("Database Details Page", function () {
     driver.assertProperties({
       loading: false,
       loaded: true,
-      lastError: undefined,
+      requestError: null,
+      queryError: undefined,
       name: "things",
       search: null,
       filters: defaultFilters,
@@ -203,21 +208,19 @@ describe("Database Details Page", function () {
           name: `"public"."foo"`,
           loading: false,
           loaded: false,
-          lastError: undefined,
+          requestError: undefined,
+          queryError: undefined,
           details: {
-            columnCount: 0,
-            indexCount: 0,
-            userCount: 0,
-            roles: [],
-            grants: [],
-            statsLastUpdated: null,
-            hasIndexRecommendations: false,
-            livePercentage: 0,
-            liveBytes: 0,
-            totalBytes: 0,
+            schemaDetails: undefined,
+            grants: {
+              error: undefined,
+              roles: [],
+              privileges: [],
+            },
+            statsLastUpdated: undefined,
+            indexStatRecs: undefined,
+            spanStats: undefined,
             nodes: [],
-            replicationSizeInBytes: 0,
-            rangeCount: 0,
             nodesByRegionString: "",
           },
         },
@@ -225,21 +228,19 @@ describe("Database Details Page", function () {
           name: `"public"."bar"`,
           loading: false,
           loaded: false,
-          lastError: undefined,
+          requestError: undefined,
+          queryError: undefined,
           details: {
-            columnCount: 0,
-            indexCount: 0,
-            userCount: 0,
-            roles: [],
-            grants: [],
-            statsLastUpdated: null,
-            hasIndexRecommendations: false,
-            livePercentage: 0,
-            totalBytes: 0,
-            liveBytes: 0,
+            schemaDetails: undefined,
+            grants: {
+              error: undefined,
+              roles: [],
+              privileges: [],
+            },
+            statsLastUpdated: undefined,
+            indexStatRecs: undefined,
+            spanStats: undefined,
             nodes: [],
-            replicationSizeInBytes: 0,
-            rangeCount: 0,
             nodesByRegionString: "",
           },
         },
@@ -382,20 +383,29 @@ describe("Database Details Page", function () {
       name: `"public"."foo"`,
       loading: false,
       loaded: true,
-      lastError: null,
+      requestError: null,
+      queryError: undefined,
       details: {
-        columnCount: 3,
-        indexCount: 2,
-        userCount: 2,
-        roles: ["admin", "public"],
-        grants: ["CREATE", "SELECT"],
-        statsLastUpdated: mockStatsLastCreatedTimestamp,
-        hasIndexRecommendations: true,
-        liveBytes: 200,
-        totalBytes: 400,
-        livePercentage: 0.5,
-        replicationSizeInBytes: 100,
-        rangeCount: 400,
+        schemaDetails: {
+          columns: ["a", "b", "c"],
+          indexes: ["d", "e"],
+        },
+        grants: {
+          error: undefined,
+          roles: ["admin", "public"],
+          privileges: ["CREATE", "SELECT"],
+        },
+        statsLastUpdated: {
+          stats_last_created_at: mockStatsLastCreatedTimestamp,
+        },
+        indexStatRecs: { has_index_recommendations: true },
+        spanStats: {
+          approximate_disk_bytes: 100,
+          live_bytes: 200,
+          total_bytes: 400,
+          range_count: 400,
+          live_percentage: 0.5,
+        },
         nodes: [1, 2, 3],
         nodesByRegionString: "",
       },
@@ -405,20 +415,27 @@ describe("Database Details Page", function () {
       name: `"public"."bar"`,
       loading: false,
       loaded: true,
-      lastError: null,
+      requestError: null,
+      queryError: undefined,
       details: {
-        columnCount: 2,
-        indexCount: 4,
-        userCount: 3,
-        roles: ["root", "app", "data"],
-        grants: ["ALL", "SELECT", "INSERT"],
-        statsLastUpdated: null,
-        hasIndexRecommendations: false,
-        liveBytes: 100,
-        totalBytes: 100,
-        livePercentage: 1,
-        replicationSizeInBytes: 10,
-        rangeCount: 50,
+        schemaDetails: {
+          columns: ["a", "b"],
+          indexes: ["c", "d", "e", "f"],
+        },
+        grants: {
+          error: undefined,
+          roles: ["root", "app", "data"],
+          privileges: ["ALL", "SELECT", "INSERT"],
+        },
+        statsLastUpdated: { stats_last_created_at: null },
+        indexStatRecs: { has_index_recommendations: false },
+        spanStats: {
+          live_percentage: 1,
+          live_bytes: 100,
+          total_bytes: 100,
+          range_count: 50,
+          approximate_disk_bytes: 10,
+        },
         nodes: [1, 2, 3, 4, 5],
         nodesByRegionString: "",
       },
