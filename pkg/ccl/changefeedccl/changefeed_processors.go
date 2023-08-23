@@ -531,9 +531,7 @@ func (ca *changeAggregator) close() {
 		_ = ca.sink.Close()
 	}
 	ca.memAcc.Close(ca.Ctx())
-	if ca.kvFeedMemMon != nil {
-		ca.kvFeedMemMon.Stop(ca.Ctx())
-	}
+
 	ca.MemMonitor.Stop(ca.Ctx())
 	ca.InternalClose()
 }
