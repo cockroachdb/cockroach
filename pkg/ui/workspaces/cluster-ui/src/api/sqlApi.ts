@@ -145,7 +145,7 @@ export function isUpgradeError(message: string): boolean {
 }
 
 /**
- * errorMessage cleans the error message returned by the sqlApi,
+ * sqlApiErrorMessage cleans the error message returned by the sqlApi,
  * removing information not useful for the user.
  * e.g. the error message
  * "$executing stmt 1: run-query-via-api: only users with either MODIFYCLUSTERSETTING
@@ -167,7 +167,6 @@ export function sqlApiErrorMessage(message: string): string {
   if (message.includes(":")) {
     return message.split(":")[1];
   }
-
   return message;
 }
 
