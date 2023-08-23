@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -272,7 +273,7 @@ func forecastColumnStatistics(
 	// histogram. NOTE: If any of the observed histograms were for inverted
 	// indexes this will produce an incorrect histogram.
 	if observed[0].HistogramData != nil && observed[0].HistogramData.ColumnType != nil {
-		hist, err := predictHistogram(ctx, observed, forecastAt, minRequiredFit, nonNullRowCount)
+		hist, err := predictHistogram(ctx, sv, observed, forecastAt, minRequiredFit, nonNullRowCount)
 		if err != nil {
 			// If we did not successfully predict a histogram then copy the latest
 			// histogram so we can adjust it.
@@ -358,6 +359,7 @@ func forecastColumnStatistics(
 // predictHistogram tries to predict the histogram at forecast time.
 func predictHistogram(
 	ctx context.Context,
+	sv *settings.Values,
 	observed []*TableStatistic,
 	forecastAt float64,
 	minRequiredFit float64,
@@ -410,7 +412,12 @@ func predictHistogram(
 	// Construct a linear regression model of quantile functions over time, and
 	// use it to predict a quantile function at the given time.
 	yₙ, r2 := quantileSimpleLinearRegression(createdAts, quantiles, forecastAt)
-	yₙ = yₙ.fixMalformed()
+	var err error
+	yₙ, err = yₙ.fixMalformed()
+	if err != nil {
+		logcrash.ReportOrPanic(ctx, sv, "unable to fix malformed stats quantile: %v", yₙ)
+		return histogram{}, err
+	}
 	log.VEventf(
 		ctx, 3, "forecast for table %v columns %v predicted quantile %v R² %v",
 		tableID, columnIDs, yₙ, r2,
