@@ -2231,7 +2231,8 @@ func (testServerFactoryImpl) PrepareRangeTestServer(srv interface{}) error {
 
 	// Make sure the range is spun up with an arbitrary read command. We do not
 	// expect a specific response.
-	if _, err := kvDB.Get(context.Background(), "a"); err != nil {
+	scratchKey := append(ts.ApplicationLayer().Codec().TenantPrefix(), roachpb.Key("a")...)
+	if _, err := kvDB.Get(context.Background(), scratchKey); err != nil {
 		return err
 	}
 
