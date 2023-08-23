@@ -137,20 +137,11 @@ Please follow the instructions above on updating the golang version, omitting th
 
 The `bazelbuilder` image is used exclusively for performing builds using Bazel. Only add dependencies to the image that are necessary for performing Bazel builds. (Since the Bazel build downloads most dependencies as needed, updates to the Bazel builder image should be very infrequent.) The `bazelbuilder` image is published both for `amd64` and `arm64` platforms. You can go through the process of publishing a new Bazel build
 
-- (One-time setup) Depending on how your Docker instance is configured, you may have to run `docker run --privileged --rm tonistiigi/binfmt --install all`. This will install `qemu` emulators on your system for platforms besides your native one.
 - Edit `build/bazelbuilder/Dockerfile` as desired.
-- Build the image for both platforms and publish the cross-platform manifest. Note that the non-native build for your image will be very slow since it will have to emulate.
-```
-    TAG=$(date +%Y%m%d-%H%M%S)
-    docker build --platform linux/amd64 -t cockroachdb/bazel:amd64-$TAG build/bazelbuilder
-    docker push cockroachdb/bazel:amd64-$TAG
-    docker build --platform linux/arm64 -t cockroachdb/bazel:arm64-$TAG build/bazelbuilder
-    docker push cockroachdb/bazel:arm64-$TAG
-    docker manifest rm cockroachdb/bazel:$TAG
-    docker manifest create cockroachdb/bazel:$TAG cockroachdb/bazel:amd64-$TAG cockroachdb/bazel:arm64-$TAG
-    docker manifest push cockroachdb/bazel:$TAG
-```
-- Then, update `build/.bazelbuilderversion` with the new tag and commit all your changes.
+- Build the image by triggering the `Build and Push Bazel Builder Image` build in TeamCity. The generated image will be published to https://hub.docker.com/r/cockroachdb/bazel.
+- Update `build/.bazelbuilderversion` with the new tag and commit all your changes.
+- Build the FIPS image by triggering the `Build and Push FIPS Bazel Builder Image` build in TeamCity. The generated image will be published to https://hub.docker.com/r/cockroachdb/bazel-fips.
+- Update `build/.bazelbuilderversion-fips` with the new tag and commit all your changes.
 - Ensure the "Bazel CI" job passes on your PR before merging.
 
 #  Dependencies
