@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -358,6 +359,27 @@ func GetJSONProtoWithAdminOption(
 	u := ts.AdminURL().String()
 	fullURL := u + path
 	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
+	return httputil.GetJSON(httpClient, fullURL, response)
+}
+
+// GetJSONProtoWithAdminAndTimeoutOption is like GetJSONProtoWithAdminOption but
+// the caller can specify an additional timeout duration for the request.
+func GetJSONProtoWithAdminAndTimeoutOption(
+	ts ApplicationLayerInterface,
+	path string,
+	response protoutil.Message,
+	isAdmin bool,
+	additionalTimeout time.Duration,
+) error {
+	httpClient, err := ts.GetAuthenticatedHTTPClient(isAdmin, SingleTenantSession)
+	if err != nil {
+		return err
+	}
+	httpClient.Timeout += additionalTimeout
+	u := ts.AdminURL().String()
+	fullURL := u + path
+	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
+	log.Infof(context.Background(), "set HTTP client timeout to: %s", httpClient.Timeout)
 	return httputil.GetJSON(httpClient, fullURL, response)
 }
 
