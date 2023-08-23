@@ -163,40 +163,6 @@ func ExternalStorageFromURI(
 		db, limiters, metrics, opts...)
 }
 
-// SanitizeExternalStorageURI returns the external storage URI with with some
-// secrets redacted, for use when showing these URIs in the UI, to provide some
-// protection from shoulder-surfing. The param is still present -- just
-// redacted -- to make it clearer that that value is indeed persisted interally.
-// extraParams which should be scrubbed -- for params beyond those that the
-// various cloud-storage URIs supported by this package know about -- can be
-// passed allowing this function to be used to scrub other URIs too (such as
-// non-cloudstorage changefeed sinks).
-func SanitizeExternalStorageURI(path string, extraParams []string) (string, error) {
-	uri, err := url.Parse(path)
-	if err != nil {
-		return "", err
-	}
-	if uri.Scheme == "experimental-workload" || uri.Scheme == "workload" || uri.Scheme == "null" {
-		return path, nil
-	}
-
-	params := uri.Query()
-	for param := range params {
-		if _, ok := redactedQueryParams[param]; ok {
-			params.Set(param, "redacted")
-		} else {
-			for _, p := range extraParams {
-				if param == p {
-					params.Set(param, "redacted")
-				}
-			}
-		}
-	}
-
-	uri.RawQuery = params.Encode()
-	return uri.String(), nil
-}
-
 // MakeExternalStorage creates an ExternalStorage from the given config.
 func MakeExternalStorage(
 	ctx context.Context,
