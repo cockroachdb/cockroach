@@ -84,7 +84,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
@@ -8059,24 +8058,9 @@ CREATE TABLE crdb_internal.%s (
   retry_lat_seconds                       FLOAT,
   commit_lat_seconds                      FLOAT,
   idle_lat_seconds                        FLOAT,
-  bytes_read_seconds                      INT,
-  network_bytes_sent                      INT,
-  max_mem_usage                           INT,
-  network_messages_sent                   INT,
-  max_disk_usage                          INT,
-  mvcc_step_count                         INT,
-  mvcc_step_count_internal                INT,
-  mvcc_seek_count                         INT,
-  mvcc_seek_count_internal                INT,
-  mvcc_block_bytes                        INT,
-  mvcc_block_bytes_in_cache               INT,
-  mvcc_key_bytes                          INT,
-  mvcc_value_bytes                        INT,
-  mvcc_point_count                        INT,
-  mvcc_points_covered_by_range_tombstones INT,
-  mvcc_range_key_count                    INT,
-  mvcc_range_key_contained_points         INT,
-  mvcc_range_key_skipped_points           INT
+  bytes_read                              INT,
+  exec_stats                              JSONB,
+  mvcc_stats                              JSONB
 )`
 
 var crdbInternalClusterTxnExecutionInsightsTable = virtualSchemaTable{
@@ -8188,15 +8172,36 @@ func populateTxnExecutionInsights(
 			}
 		}
 
-		// Old versions don't have Stats and MvccStats objects so fall down
-		// to empty objects for mixed version clusters.
-		var stats = &insights.ExecStats{}
+		var stats = map[string]interface{}{}
 		if insight.Transaction.Stats != nil {
-			stats = insight.Transaction.Stats
+			stats["bytes_read"] = insight.Transaction.Stats.NetworkBytesSent
+			stats["network_bytes_sent"] = insight.Transaction.Stats.MaxMemUsage
+			stats["max_mem_usage"] = insight.Transaction.Stats.NetworkMessagesSent
+			stats["network_messages_sent"] = insight.Transaction.Stats.MaxDiskUsage
 		}
-		var mvccStats = &insights.MVCCStats{}
+		jsonStats, err := tree.MakeDJSON(stats)
+		if err != nil {
+			return err
+		}
+		var mvccStats = map[string]interface{}{}
 		if insight.Transaction.MvccStats != nil {
-			mvccStats = insight.Transaction.MvccStats
+			mvccStats["mvcc_step_count"] = insight.Transaction.MvccStats.StepCount
+			mvccStats["mvcc_step_count_internal"] = insight.Transaction.MvccStats.StepCountInternal
+			mvccStats["mvcc_seek_count"] = insight.Transaction.MvccStats.SeekCount
+			mvccStats["mvcc_seek_count_internal"] = insight.Transaction.MvccStats.SeekCountInternal
+			mvccStats["mvcc_block_bytes"] = insight.Transaction.MvccStats.BlockBytes
+			mvccStats["mvcc_block_bytes_in_cache"] = insight.Transaction.MvccStats.BlockBytesInCache
+			mvccStats["mvcc_key_bytes"] = insight.Transaction.MvccStats.KeyBytes
+			mvccStats["mvcc_value_bytes"] = insight.Transaction.MvccStats.ValueBytes
+			mvccStats["mvcc_point_count"] = insight.Transaction.MvccStats.PointCount
+			mvccStats["mvcc_points_covered_by_range_tombstones"] = insight.Transaction.MvccStats.PointsCoveredByRangeTombstones
+			mvccStats["mvcc_range_key_count"] = insight.Transaction.MvccStats.RangeKeyCount
+			mvccStats["mvcc_range_key_contained_points"] = insight.Transaction.MvccStats.RangeKeyContainedPoints
+			mvccStats["mvcc_range_key_skipped_points"] = insight.Transaction.MvccStats.RangeKeySkippedPoints
+		}
+		jsonMVCCStats, err := tree.MakeDJSON(mvccStats)
+		if err != nil {
+			return err
 		}
 
 		err = errors.CombineErrors(err, addRow(
@@ -8226,25 +8231,8 @@ func populateTxnExecutionInsights(
 			tree.NewDFloat(tree.DFloat(insight.Transaction.CommitLatSeconds.Seconds())),
 			tree.NewDFloat(tree.DFloat(insight.Transaction.IdleLatSeconds.Seconds())),
 			tree.NewDInt(tree.DInt(insight.Transaction.BytesRead)),
-			// Stats
-			tree.NewDInt(tree.DInt(stats.NetworkBytesSent)),
-			tree.NewDInt(tree.DInt(stats.MaxMemUsage)),
-			tree.NewDInt(tree.DInt(stats.NetworkMessagesSent)),
-			tree.NewDInt(tree.DInt(stats.MaxDiskUsage)),
-			// MVCC Stats
-			tree.NewDInt(tree.DInt(mvccStats.StepCount)),
-			tree.NewDInt(tree.DInt(mvccStats.StepCountInternal)),
-			tree.NewDInt(tree.DInt(mvccStats.SeekCount)),
-			tree.NewDInt(tree.DInt(mvccStats.SeekCountInternal)),
-			tree.NewDInt(tree.DInt(mvccStats.BlockBytes)),
-			tree.NewDInt(tree.DInt(mvccStats.BlockBytesInCache)),
-			tree.NewDInt(tree.DInt(mvccStats.KeyBytes)),
-			tree.NewDInt(tree.DInt(mvccStats.ValueBytes)),
-			tree.NewDInt(tree.DInt(mvccStats.PointCount)),
-			tree.NewDInt(tree.DInt(mvccStats.PointsCoveredByRangeTombstones)),
-			tree.NewDInt(tree.DInt(mvccStats.RangeKeyCount)),
-			tree.NewDInt(tree.DInt(mvccStats.RangeKeyContainedPoints)),
-			tree.NewDInt(tree.DInt(mvccStats.RangeKeySkippedPoints)),
+			jsonStats,
+			jsonMVCCStats,
 		))
 
 		if err != nil {
@@ -8291,23 +8279,8 @@ CREATE TABLE crdb_internal.%s (
     run_lat_seconds                         FLOAT,
     service_lat_seconds                     FLOAT,
     bytes_read                              INT,
-    network_bytes_sent                      INT,
-    max_mem_usage                           INT,
-    network_messages_sent                   INT,
-  	max_disk_usage                          INT,
-  	mvcc_step_count                         INT,
-  	mvcc_step_count_internal                INT,
-  	mvcc_seek_count                         INT,
-  	mvcc_seek_count_internal                INT,
-  	mvcc_block_bytes                        INT,
-  	mvcc_block_bytes_in_cache               INT,
-  	mvcc_key_bytes                          INT,
-  	mvcc_value_bytes                        INT,
-  	mvcc_point_count                        INT,
-  	mvcc_points_covered_by_range_tombstones INT,
-  	mvcc_range_key_count                    INT,
-  	mvcc_range_key_contained_points         INT,
-  	mvcc_range_key_skipped_points           INT
+    exec_stats                              JSONB,
+    mvcc_stats                              JSONB
 )`
 
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
@@ -8409,15 +8382,38 @@ func populateStmtInsights(
 				}
 			}
 
-			// Old versions don't have Stats and MvccStats objects so fall down
-			// to empty objects for mixed version clusters.
-			var stats = &insights.ExecStats{}
+			var stats = map[string]interface{}{}
 			if s.Stats != nil {
-				stats = s.Stats
+				stats["bytes_read"] = s.Stats.NetworkBytesSent
+				stats["network_bytes_sent"] = s.Stats.MaxMemUsage
+				stats["max_mem_usage"] = s.Stats.NetworkMessagesSent
+				stats["network_messages_sent"] = s.Stats.MaxDiskUsage
 			}
-			var mvccStats = &insights.MVCCStats{}
+			var jsonStats tree.Datum
+			jsonStats, err = tree.MakeDJSON(stats)
+			if err != nil {
+				return err
+			}
+			var mvccStats = map[string]interface{}{}
 			if s.MvccStats != nil {
-				mvccStats = s.MvccStats
+				mvccStats["mvcc_step_count"] = s.MvccStats.StepCount
+				mvccStats["mvcc_step_count_internal"] = s.MvccStats.StepCountInternal
+				mvccStats["mvcc_seek_count"] = s.MvccStats.SeekCount
+				mvccStats["mvcc_seek_count_internal"] = s.MvccStats.SeekCountInternal
+				mvccStats["mvcc_block_bytes"] = s.MvccStats.BlockBytes
+				mvccStats["mvcc_block_bytes_in_cache"] = s.MvccStats.BlockBytesInCache
+				mvccStats["mvcc_key_bytes"] = s.MvccStats.KeyBytes
+				mvccStats["mvcc_value_bytes"] = s.MvccStats.ValueBytes
+				mvccStats["mvcc_point_count"] = s.MvccStats.PointCount
+				mvccStats["mvcc_points_covered_by_range_tombstones"] = s.MvccStats.PointsCoveredByRangeTombstones
+				mvccStats["mvcc_range_key_count"] = s.MvccStats.RangeKeyCount
+				mvccStats["mvcc_range_key_contained_points"] = s.MvccStats.RangeKeyContainedPoints
+				mvccStats["mvcc_range_key_skipped_points"] = s.MvccStats.RangeKeySkippedPoints
+			}
+			var jsonMVCCStats tree.Datum
+			jsonMVCCStats, err = tree.MakeDJSON(mvccStats)
+			if err != nil {
+				return err
 			}
 
 			err = errors.CombineErrors(err, addRow(
@@ -8454,25 +8450,8 @@ func populateStmtInsights(
 				tree.NewDFloat(tree.DFloat(s.RunLatSeconds)),
 				tree.NewDFloat(tree.DFloat(s.ServiceLatSeconds)),
 				tree.NewDInt(tree.DInt(s.BytesRead)),
-				// Stats
-				tree.NewDInt(tree.DInt(stats.NetworkBytesSent)),
-				tree.NewDInt(tree.DInt(stats.MaxMemUsage)),
-				tree.NewDInt(tree.DInt(stats.NetworkMessagesSent)),
-				tree.NewDInt(tree.DInt(stats.MaxDiskUsage)),
-				// MVCC Stats
-				tree.NewDInt(tree.DInt(mvccStats.StepCount)),
-				tree.NewDInt(tree.DInt(mvccStats.StepCountInternal)),
-				tree.NewDInt(tree.DInt(mvccStats.SeekCount)),
-				tree.NewDInt(tree.DInt(mvccStats.SeekCountInternal)),
-				tree.NewDInt(tree.DInt(mvccStats.BlockBytes)),
-				tree.NewDInt(tree.DInt(mvccStats.BlockBytesInCache)),
-				tree.NewDInt(tree.DInt(mvccStats.KeyBytes)),
-				tree.NewDInt(tree.DInt(mvccStats.ValueBytes)),
-				tree.NewDInt(tree.DInt(mvccStats.PointCount)),
-				tree.NewDInt(tree.DInt(mvccStats.PointsCoveredByRangeTombstones)),
-				tree.NewDInt(tree.DInt(mvccStats.RangeKeyCount)),
-				tree.NewDInt(tree.DInt(mvccStats.RangeKeyContainedPoints)),
-				tree.NewDInt(tree.DInt(mvccStats.RangeKeySkippedPoints)),
+				jsonStats,
+				jsonMVCCStats,
 			))
 		}
 	}

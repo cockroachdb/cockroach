@@ -327,25 +327,25 @@ SELECT * FROM crdb_internal.node_inflight_trace_spans WHERE span_id < 0
 ----
 trace_id  parent_span_id  span_id  goroutine_id  finished  start_time  duration  operation
 
-query TTTBTTTTTIITITTTTTTTTTTTTIT colnames
+query TTTBTTTTTIITITTTTTTTTTTTTITRRRRRTT colnames
 SELECT * FROM crdb_internal.cluster_execution_insights WHERE query = ''
 ----
-session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code
+session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  idle_lat_seconds  parse_lat_seconds  plan_lat_seconds  run_lat_seconds  service_lat_seconds  exec_stats  mvcc_stats
 
-query TTTBTTTTTIITITTTTTTTTTTTTIT colnames
+query TTTBTTTTTIITITTTTTTTTTTTTITRRRRRTT colnames
 SELECT * FROM crdb_internal.node_execution_insights WHERE query = ''
 ----
-session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code
+session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  idle_lat_seconds  parse_lat_seconds  plan_lat_seconds  run_lat_seconds  service_lat_seconds  exec_stats  mvcc_stats
 
-query TTTBTTTTTIITITTTTTITT colnames
+query TTTBTTTTTIITITTTTTITTRRRRITT colnames
 SELECT * FROM crdb_internal.cluster_txn_execution_insights WHERE query = ''
 ----
-txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids  cpu_sql_nanos  last_error_code status
+txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids  cpu_sql_nanos  last_error_code status  service_lat_seconds  retry_lat_seconds  commit_lat_seconds  idle_lat_seconds  bytes_read  exec_stats  mvcc_stats
 
-query TTTBTTTTTIITITTTTTITT colnames
+query TTTBTTTTTIITITTTTTITTRRRRITT colnames
 SELECT * FROM crdb_internal.node_txn_execution_insights WHERE query = ''
 ----
-txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids  cpu_sql_nanos  last_error_code status
+txn_id  txn_fingerprint_id  query  implicit_txn  session_id  start_time  end_time  user_name  app_name  rows_read  rows_written  priority  retries  last_retry_reason  contention  problems  causes  stmt_execution_ids  cpu_sql_nanos  last_error_code status  service_lat_seconds  retry_lat_seconds  commit_lat_seconds  idle_lat_seconds  bytes_read  exec_stats  mvcc_stats
 
 query ITTI
 SELECT range_id, start_pretty, end_pretty, lease_holder FROM crdb_internal.ranges
