@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -41,7 +40,7 @@ func MakeRangeFeedValueReader(
 	ctx, cleanup := context.WithCancel(context.Background())
 
 	_, err := execCfg.RangeFeedFactory.RangeFeed(ctx, "feed-"+desc.GetName(),
-		[]roachpb.Span{desc.PrimaryIndexSpan(keys.SystemSQLCodec)},
+		[]roachpb.Span{desc.PrimaryIndexSpan(execCfg.Codec)},
 		execCfg.Clock.Now(),
 		func(ctx context.Context, value *kvpb.RangeFeedValue) {
 			select {
