@@ -2341,7 +2341,6 @@ func TestLint(t *testing.T) {
 			":!sql/importer/read_import_mysql_test.go",
 			":!sql/schemachanger/sctest/test_server_factory.go",
 			":!sql/server_params_test.go",
-			":!sql/sqlinstance/instancestorage/instancecache_test.go",
 			":!sql/ttl/ttljob/ttljob_test.go",
 			":!testutils/lint/lint_test.go",
 			":!ts/server_test.go",
