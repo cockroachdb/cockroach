@@ -57,8 +57,8 @@ import {
   SqlExecutionErrorMessage,
 } from "../api";
 import { InlineAlert } from "@cockroachlabs/ui-components";
-import {checkInfoAvailable} from "../databases";
-
+import { checkInfoAvailable } from "../databases";
+import { TableStatistics } from "../tableStatistics";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -554,11 +554,12 @@ export class DatabasesPage extends React.Component<
             Tables
           </Tooltip>
         ),
-        cell: database => checkInfoAvailable(
-          database.requestError,
-          database.tables?.error,
-          database.tables?.tables?.length,
-        ),
+        cell: database =>
+          checkInfoAvailable(
+            database.requestError,
+            database.tables?.error,
+            database.tables?.tables?.length,
+          ),
         sort: database => database.tables?.tables.length ?? 0,
         className: cx("databases-table__col-table-count"),
         name: "tableCount",
@@ -572,11 +573,12 @@ export class DatabasesPage extends React.Component<
             Range Count
           </Tooltip>
         ),
-        cell: database => checkInfoAvailable(
-          database.requestError,
-          database.spanStats?.error,
-          database.spanStats?.range_count,
-        ),
+        cell: database =>
+          checkInfoAvailable(
+            database.requestError,
+            database.spanStats?.error,
+            database.spanStats?.range_count,
+          ),
         sort: database => database.spanStats?.range_count,
         className: cx("databases-table__col-range-count"),
         name: "rangeCount",
@@ -590,11 +592,12 @@ export class DatabasesPage extends React.Component<
             {this.props.isTenant ? "Regions" : "Regions/Nodes"}
           </Tooltip>
         ),
-        cell: database => checkInfoAvailable(
-          database.requestError,
-          null,
-          database.nodesByRegionString ? database.nodesByRegionString : null,
-        ),
+        cell: database =>
+          checkInfoAvailable(
+            database.requestError,
+            null,
+            database.nodesByRegionString ? database.nodesByRegionString : null,
+          ),
         sort: database => database.nodesByRegionString,
         className: cx("databases-table__col-node-regions"),
         name: "nodeRegions",
