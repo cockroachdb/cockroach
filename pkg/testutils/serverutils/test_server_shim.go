@@ -24,6 +24,7 @@ import (
 	"math/rand"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -475,6 +477,27 @@ func GetJSONProtoWithAdminOption(
 		return err
 	}
 	return httputil.GetJSON(httpClient, ts.AdminURL()+path, response)
+}
+
+// GetJSONProtoWithAdminAndTimeoutOption is like GetJSONProtoWithAdminOption but
+// the caller can specify an additional timeout duration for the request.
+func GetJSONProtoWithAdminAndTimeoutOption(
+	ts TestTenantInterface,
+	path string,
+	response protoutil.Message,
+	isAdmin bool,
+	additionalTimeout time.Duration,
+) error {
+	httpClient, err := ts.GetAuthenticatedHTTPClient(isAdmin, SingleTenantSession)
+	if err != nil {
+		return err
+	}
+	httpClient.Timeout += additionalTimeout
+	u := ts.AdminURL()
+	fullURL := u + path
+	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
+	log.Infof(context.Background(), "set HTTP client timeout to: %s", httpClient.Timeout)
+	return httputil.GetJSON(httpClient, fullURL, response)
 }
 
 // PostJSONProto uses the supplied client to POST the URL specified by the parameters
