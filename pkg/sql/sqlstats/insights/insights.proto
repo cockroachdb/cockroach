@@ -105,7 +105,7 @@ message Transaction {
   google.protobuf.Duration  idle_lat_seconds = 23 [(gogoproto.stdduration) = true];
   // BytesRead collects the number of bytes read from disk.
   int64 bytes_read = 24;
-  // Stats contains extended execution stats for current transaction.
+  // ExecStats contains extended execution stats for current transaction.
   ExecStats stats = 25;
   // MVCCStats contains MVCC specific stats for current transaction.
   MVCCStats mvcc_stats = 26;
@@ -122,7 +122,7 @@ message Statement {
     (gogoproto.nullable) = false];
   uint64 fingerprint_id = 2 [(gogoproto.customname) = "FingerprintID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.StmtFingerprintID"];
-  double latency_in_seconds = 3; // DEPRECATED. Use service_lat instead
+  double latency_in_seconds = 3; // Use service_lat_seconds instead
   string query = 4;
   Status status = 5;
   google.protobuf.Timestamp start_time = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
