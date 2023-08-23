@@ -60,8 +60,7 @@ func (mp *metricsPoller) Resume(ctx context.Context, execCtx interface{}) error 
 	defer t.Stop()
 
 	runTask := func(name string, task func(ctx context.Context, execCtx sql.JobExecContext) error) error {
-		ctx = logtags.AddTag(ctx, "task", name)
-		return task(ctx, exec)
+		return task(logtags.AddTag(ctx, "task", name), exec)
 	}
 
 	for {
