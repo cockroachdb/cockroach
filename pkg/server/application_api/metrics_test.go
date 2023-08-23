@@ -13,6 +13,7 @@ package application_api_test
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -20,10 +21,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
+
+// _status/vars outputted lines as of the creation of the TestStatusVarsSizeLimit test.
+var sizeLimit = 9650
 
 // TestMetricsMetadata ensures that the server's recorder return metrics and
 // that each metric has a Name, Help, Unit, and DisplayUnit defined.
@@ -111,6 +117,27 @@ func TestStatusVarsTxnMetrics(t *testing.T) {
 	if !bytes.Contains(body, []byte("sql_txn_rollback_count{node_id=\"1\"} 0")) {
 		t.Errorf("expected `sql_txn_rollback_count{node_id=\"1\"} 0`, got: %s", body)
 	}
+}
+
+// TestStatusVarsSiZeLimit verifies the output of _status/vars has not increased
+// substantially from the time of writing this test. If the limit has been exceeded
+// and it is not due to a bug please consult with the observability infrastructure team
+// to determine a course of action to allow the new metrics to be available.
+// TODO(santamaura): if more use cases for comparison logic between a development branch
+// and master become prevalent then we should replace this with a CI job to check the amount
+// of increase to _status/vars and retire this test.
+func TestStatusVarsSizeLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "unrelated data race")
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	body, err := srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"vars").String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(string(body), "\n")
+	require.LessOrEqual(t, len(lines), int(float64(sizeLimit)*1.5))
 }
 
 func TestSpanStatsResponse(t *testing.T) {
