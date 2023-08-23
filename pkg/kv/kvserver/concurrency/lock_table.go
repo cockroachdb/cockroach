@@ -712,7 +712,7 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 			lockHolderTxn, _ := tl.getLockHolder()
 			if !g.isSameTxn(lockHolderTxn) &&
 				lock.Conflicts(tl.getLockMode(), makeLockMode(str, g.txn, g.ts), &g.lt.settings.SV) {
-				return true, &tl.txn, nil // the key is locked by some other transaction; return it
+				return true, tl.txn, nil // the key is locked by some other transaction; return it
 			}
 		}
 		// We can be in either of 2 cases at this point:
@@ -1198,7 +1198,10 @@ type txnLock struct {
 	// As a result, the TxnMeta stored here may not correspond to the latest
 	// call to acquire/update the lock (if the call was made using a TxnMeta
 	// with an older epoch).
-	txn enginepb.TxnMeta
+	//
+	// TODO(arul): Now that we expect this to always be set, let's store the
+	// entire txnMeta here instead of storing it by reference.
+	txn *enginepb.TxnMeta
 
 	// INVARIANT: At least one of (and possibly both of) unreplicatedInfo and
 	// replicatedInfo must be set to track lock holder information.
@@ -1222,7 +1225,7 @@ type txnLock struct {
 // newTxnLock constructs and returns a new txnLock.
 func newTxnLock(txn *enginepb.TxnMeta, clock *hlc.Clock) *txnLock {
 	tl := &txnLock{}
-	tl.txn = *txn
+	tl.txn = txn
 	tl.unreplicatedInfo.init()
 	tl.startTime = clock.PhysicalTime()
 	return tl
@@ -1249,7 +1252,7 @@ func (tl *txnLock) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
 	} else {
 		ts = tl.replicatedInfo.ts
 	}
-	return &tl.txn, ts
+	return tl.txn, ts
 }
 
 // isHeldReplicated returns true if the receiver is held as a replicated lock.
@@ -1431,9 +1434,9 @@ func (tl *txnLock) reacquireLock(acq *roachpb.LockAcquisition) error {
 		// unreplicatedLockInfo.
 		assert(acq.Durability == lock.Replicated, "the unreplicated case should have been handled above")
 	case tl.txn.Epoch == acq.Txn.Epoch: // lock is being acquired at the same epoch
-		tl.txn = acq.Txn
+		tl.txn = &acq.Txn
 	case tl.txn.Epoch < acq.Txn.Epoch: // lock is being acquired at a newer epoch
-		tl.txn = acq.Txn
+		tl.txn = &acq.Txn
 		// The txn meta tracked here corresponds to unreplicated locks. When we
 		// learn about a newer epoch during lock acquisition of a replicated lock,
 		// we clear out the unreplicatedLockInfo state being tracked from the
@@ -1715,7 +1718,7 @@ func (kl *keyLocks) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 		// This doesn't work with multiple lock holders. See
 		// https://github.com/cockroachdb/cockroach/issues/109081.
 		tl := kl.holders.Front().Value.(*txnLock)
-		txnHolder = &tl.txn
+		txnHolder = tl.txn
 		if tl.isHeldReplicated() {
 			durability = lock.Replicated
 		}
@@ -1914,7 +1917,7 @@ func (kl *keyLocks) claimantTxn() (_ *enginepb.TxnMeta, held bool) {
 		// necessitates it to change. So we always return the first lock holder,
 		// ensuring all requests consider the same transaction to have claimed a
 		// key.
-		return &kl.holders.Front().Value.(*txnLock).txn, true
+		return kl.holders.Front().Value.(*txnLock).txn, true
 	}
 	if kl.queuedWriters.Len() == 0 {
 		panic("no queued writers or lock holder; no one should be waiting on the lock")
@@ -2029,7 +2032,7 @@ func (kl *keyLocks) isAnyLockHeldReplicated() (bool, *enginepb.TxnMeta) {
 	for e := kl.holders.Front(); e != nil; e = e.Next() {
 		tl := e.Value.(*txnLock)
 		if tl.isHeldReplicated() {
-			return true, &tl.txn
+			return true, tl.txn
 		}
 	}
 	return false, nil
@@ -2664,7 +2667,7 @@ func (kl *keyLocks) isNonConflictingLock(g *lockTableGuardImpl) bool {
 
 	for e := kl.holders.Front(); e != nil; e = e.Next() {
 		tl := e.Value.(*txnLock)
-		if g.isSameTxn(&tl.txn) {
+		if g.isSameTxn(tl.txn) {
 			// NB: Unlike the pessimistic (normal) evaluation code path, we do
 			// not need to check the lock's strength if it is already held by
 			// this transaction -- it's non-conflicting. There's two cases to
@@ -2991,7 +2994,7 @@ func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 
 	e := kl.heldBy[up.Txn.ID]
 	tl := e.Value.(*txnLock)
-	txn := up.Txn
+	txn := &up.Txn
 	ts := up.Txn.WriteTimestamp
 	_, beforeTs := tl.getLockHolder()
 	advancedTs := beforeTs.Less(ts)

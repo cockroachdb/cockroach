@@ -1881,7 +1881,7 @@ func TestLockStateSafeFormat(t *testing.T) {
 	}
 	holder := &txnLock{}
 	l.holders.PushFront(holder)
-	holder.txn = enginepb.TxnMeta{ID: uuid.NamespaceDNS}
+	holder.txn = &enginepb.TxnMeta{ID: uuid.NamespaceDNS}
 	// TODO(arul): add something about replicated locks here too.
 	holder.unreplicatedInfo.init()
 	holder.unreplicatedInfo.ts = hlc.Timestamp{WallTime: 123, Logical: 7}
