@@ -856,7 +856,7 @@ func GetRowPrefixLength(key roachpb.Key) (int, error) {
 	// Strip tenant ID prefix to get a "SQL key" starting with a table ID.
 	sqlKey, _, err := DecodeTenantPrefix(key)
 	if err != nil {
-		return 0, errors.Errorf("%s: not a valid table key", key)
+		return 0, errors.Wrapf(err, "%s: not a valid table key, bad tenant prefix", key)
 	}
 	sqlN := len(sqlKey)
 
@@ -867,7 +867,7 @@ func GetRowPrefixLength(key roachpb.Key) (int, error) {
 	}
 	tableIDLen, err := encoding.GetUvarintLen(sqlKey)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrapf(err, "%s: not a valid table key, bad table id", key)
 	}
 
 	// Check whether the prefix contains a valid IndexID after the TableID. Not
@@ -877,7 +877,7 @@ func GetRowPrefixLength(key roachpb.Key) (int, error) {
 	}
 	indexIDLen, err := encoding.GetUvarintLen(sqlKey[tableIDLen:])
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrapf(err, "%s: not a valid table key, bad index id", key)
 	}
 	// If the IndexID is the last part of the key, the entire key is the prefix.
 	if tableIDLen+indexIDLen == sqlN {
@@ -891,7 +891,7 @@ func GetRowPrefixLength(key roachpb.Key) (int, error) {
 	colFamIDLenByte := sqlKey[sqlN-1:]
 	if encoding.PeekType(colFamIDLenByte) != encoding.Int {
 		// The last byte is not a valid column family ID suffix.
-		return 0, errors.Errorf("%s: not a valid table key", key)
+		return 0, errors.Errorf("%s: not a valid table key, bad column family id type", key)
 	}
 
 	// Strip off the column family ID suffix from the buf. The last byte of the
@@ -900,7 +900,7 @@ func GetRowPrefixLength(key roachpb.Key) (int, error) {
 	// 0 (see the optimization in MakeFamilyKey).
 	_, colFamIDLen, err := encoding.DecodeUvarintAscending(colFamIDLenByte)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrapf(err, "%s: not a valid table key, bad column family id", key)
 	}
 	// Note how this next comparison (and by extension the code after it) is
 	// overflow-safe. There are more intuitive ways of writing this that aren't
@@ -914,7 +914,7 @@ func GetRowPrefixLength(key roachpb.Key) (int, error) {
 		// because EnsureSafeSplitKey can be called on keys that look like table
 		// keys but which do not have a column family ID length suffix (e.g by
 		// SystemConfig.ComputeSplitKey).
-		return 0, errors.Errorf("%s: malformed table key", key)
+		return 0, errors.Errorf("%s: not a valid table key, bad column family id len", key)
 	}
 	return n - int(colFamIDLen) - 1, nil
 }
