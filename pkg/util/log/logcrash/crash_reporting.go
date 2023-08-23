@@ -92,6 +92,11 @@ var (
 	globalSettings atomic.Value
 )
 
+func init() {
+	// Inject ReportOrPanic into the log package.
+	log.SetReportOrPanicFn(ReportOrPanic)
+}
+
 // SetGlobalSettings sets the *settings.Values container that will be refreshed
 // at runtime -- ideally we should have no other *Values containers floating
 // around, as they will be stale / lies.
