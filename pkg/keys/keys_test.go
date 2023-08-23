@@ -680,7 +680,7 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 		err string
 	}{
 		// Column ID suffix size is too large.
-		{es(1, 2, 5), "malformed table key"},
+		{es(1, 2, 5), "not a valid table key, bad column family id len"},
 		// The table ID is invalid.
 		{es(200)[:1], "insufficient bytes to decode uvarint value"},
 		// The column ID suffix is invalid.
@@ -688,13 +688,13 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 		{es(1, 2, 200)[:3], "insufficient bytes to decode uvarint value"},
 		// Exercises a former overflow bug. We decode a uint(18446744073709551610) which, if cast
 		// to int carelessly, results in -6 for the column family length.
-		{encoding.EncodeVarintAscending(es(999, 2), 322434), "malformed table key"},
+		{encoding.EncodeVarintAscending(es(999, 2), 322434), "not a valid table key, bad column family id len"},
 		// Same test cases, but for tenant 5.
-		{e5(1, 2, 5), "malformed table key"},
+		{e5(1, 2, 5), "not a valid table key, bad column family id len"},
 		{e5(200)[:3], "insufficient bytes to decode uvarint value"},
 		{e5(1, 200)[:4], "insufficient bytes to decode uvarint value"},
 		{e5(1, 2, 200)[:5], "insufficient bytes to decode uvarint value"},
-		{encoding.EncodeVarintAscending(e5(999, 2), 322434), "malformed table key"},
+		{encoding.EncodeVarintAscending(e5(999, 2), 322434), "not a valid table key, bad column family id len"},
 	}
 	for i, d := range errorData {
 		_, err := EnsureSafeSplitKey(d.in)
