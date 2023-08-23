@@ -25,7 +25,6 @@ go_test(
     deps = [
         ":pgformat",
         "//pkg/base",
-        "//pkg/keys",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -41,6 +40,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",

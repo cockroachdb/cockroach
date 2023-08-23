@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -36,16 +36,18 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDBRaw, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, sqlDBRaw, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
-	defer s.Stopper().Stop(ctx)
 
 	const numRows = 100
 	if err := tests.CreateKVTable(sqlDBRaw, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	tableKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID)
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, s.Codec(), "t", "kv")
+	tableKey := catalogkeys.MakeDescMetadataKey(s.Codec(), tableDesc.ID)
 
 	// Hack in partitions. Doing this properly requires a CCL binary.
 	{

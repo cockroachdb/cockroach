@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -25,15 +24,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"gopkg.in/yaml.v2"
 )
 
 func TestInitIndexFetchSpec(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109390),
+	})
 	defer srv.Stopper().Stop(context.Background())
+	codec := srv.ApplicationLayer().Codec()
 
 	if _, err := db.Exec(`CREATE DATABASE testdb; USE testdb;`); err != nil {
 		t.Fatal(err)
@@ -58,7 +62,7 @@ func TestInitIndexFetchSpec(t *testing.T) {
 				if err := yaml.UnmarshalStrict([]byte(d.Input), &params); err != nil {
 					d.Fatalf(t, "failed to parse index-fetch params: %v", err)
 				}
-				table := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "testdb", params.Table)
+				table := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "testdb", params.Table)
 				index, err := catalog.MustFindIndexByName(table, params.Index)
 				if err != nil {
 					d.Fatalf(t, "%+v", err)
@@ -74,7 +78,7 @@ func TestInitIndexFetchSpec(t *testing.T) {
 				}
 
 				var spec fetchpb.IndexFetchSpec
-				if err := rowenc.InitIndexFetchSpec(&spec, keys.SystemSQLCodec, table, index, fetchColumnIDs); err != nil {
+				if err := rowenc.InitIndexFetchSpec(&spec, codec, table, index, fetchColumnIDs); err != nil {
 					d.Fatalf(t, "%+v", err)
 				}
 				res, err := json.MarshalIndent(&spec, "", "  ")
