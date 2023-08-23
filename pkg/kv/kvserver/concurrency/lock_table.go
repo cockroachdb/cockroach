@@ -2748,13 +2748,6 @@ func (kl *keyLocks) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 		return nil
 	}
 
-	if kl.isLocked() {
-		// TODO(arul): multilpe lock holders on a single key haven't been wired up
-		// fully. Return an error until that's the case. Note that the reacquisition
-		// case has already been handled above.
-		return errors.AssertionFailedf("existing lock cannot be acquired by different transaction")
-	}
-
 	// NB: The lock isn't held, so the request trying to acquire the lock must be
 	// an (inactive) queued writer in the lock's wait queues. Typically, we expect
 	// this to be the first queued writer; the list of queued writers is
