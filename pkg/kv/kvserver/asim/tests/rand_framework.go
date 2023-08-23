@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 )
 
@@ -167,7 +167,7 @@ func loadClusterInfo(configName string) gen.LoadedCluster {
 // checkAssertions checks the given history and assertions, returning (bool,
 // reason) indicating any failures and reasons if any assertions fail.
 func checkAssertions(
-	ctx context.Context, history asim.History, assertions []SimulationAssertion,
+	ctx context.Context, history history.History, assertions []SimulationAssertion,
 ) (bool, string) {
 	assertionFailures := []string{}
 	failureExists := false

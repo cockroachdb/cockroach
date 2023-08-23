@@ -16,7 +16,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -83,7 +83,7 @@ type SimulationAssertion interface {
 	// Assert looks at a simulation run history and returns true if the
 	// assertion holds and false if not. When the assertion does not hold, the
 	// reason is also returned.
-	Assert(context.Context, asim.History) (holds bool, reason string)
+	Assert(context.Context, history.History) (holds bool, reason string)
 	// String returns the string representation of the assertion.
 	String() string
 }
@@ -107,7 +107,7 @@ type steadyStateAssertion struct {
 // assertion tick. If violated, holds is returned as false along with the
 // reason.
 func (sa steadyStateAssertion) Assert(
-	ctx context.Context, h asim.History,
+	ctx context.Context, h history.History,
 ) (holds bool, reason string) {
 	m := h.Recorded
 	ticks := len(m)
@@ -193,7 +193,9 @@ type balanceAssertion struct {
 // stat's maximum/mean (over all stores) in the cluster meets the threshold
 // constraint at each assertion tick. If violated, holds is returned as false
 // along with the reason.
-func (ba balanceAssertion) Assert(ctx context.Context, h asim.History) (holds bool, reason string) {
+func (ba balanceAssertion) Assert(
+	ctx context.Context, h history.History,
+) (holds bool, reason string) {
 	m := h.Recorded
 	ticks := len(m)
 	if ba.ticks > ticks {
@@ -255,7 +257,7 @@ type storeStatAssertion struct {
 // assertion holds and false if not. When the assertion does not hold, the
 // reason is also returned.
 func (sa storeStatAssertion) Assert(
-	ctx context.Context, h asim.History,
+	ctx context.Context, h history.History,
 ) (holds bool, reason string) {
 	m := h.Recorded
 	ticks := len(m)
@@ -313,7 +315,7 @@ const conformanceAssertionSentinel = -1
 // assertion holds and false if not. When the assertion does not hold, the
 // reason is also returned.
 func (ca conformanceAssertion) Assert(
-	ctx context.Context, h asim.History,
+	ctx context.Context, h history.History,
 ) (holds bool, reason string) {
 	report := h.S.Report()
 	buf := strings.Builder{}
