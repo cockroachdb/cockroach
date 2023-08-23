@@ -115,7 +115,7 @@ func (dt *Tracker) Track(
 		position: pos,
 	})
 	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.Infof(ctx, "tracking %s flow control tokens for pri=%s stream=%s pos=%s",
+		log.VEventf(ctx, 1, "tracking %s flow control tokens for pri=%s stream=%s pos=%s",
 			tokens, pri, dt.stream, pos)
 	}
 	return true
@@ -160,7 +160,7 @@ func (dt *Tracker) Untrack(
 		if len(dt.trackedM[pri]) > 0 {
 			remaining = fmt.Sprintf(" (%s, ...)", dt.trackedM[pri][0].tokens)
 		}
-		log.Infof(ctx, "released %s flow control tokens for %d out of %d tracked deductions for pri=%s stream=%s, up to %s; %d tracked deduction(s) remain%s",
+		log.VEventf(ctx, 1, "released %s flow control tokens for %d out of %d tracked deductions for pri=%s stream=%s, up to %s; %d tracked deduction(s) remain%s",
 			tokens, untracked, trackedBefore, pri, dt.stream, upto, len(dt.trackedM[pri]), remaining)
 	}
 	if len(dt.trackedM[pri]) == 0 {
