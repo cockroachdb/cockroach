@@ -177,6 +177,7 @@ func (m *Outbox) flush(ctx context.Context) error {
 	if log.V(3) {
 		log.Infof(ctx, "flushing outbox")
 	}
+	log.VEvent(ctx, 2, "Outbox flushing")
 	sendErr := m.stream.Send(msg)
 	if m.statsCollectionEnabled {
 		m.streamStats.NetTx.BytesSent.Add(int64(msg.Size()))
