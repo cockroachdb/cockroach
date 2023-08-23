@@ -16,14 +16,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -139,13 +138,11 @@ func TestSpanToQueryBounds(t *testing.T) {
 
 			const tableName = "tbl"
 			ctx := context.Background()
-			codec := keys.SystemSQLCodec
+			srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+			defer srv.Stopper().Stop(ctx)
+			codec := srv.ApplicationLayer().Codec()
 
-			// Setup test cluster.
-			testCluster := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-			defer testCluster.Stopper().Stop(ctx)
-
-			sqlRunner := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+			sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 
 			// Create table.
 			sqlRunner.Exec(t, fmt.Sprintf("CREATE TABLE %s (id string PRIMARY KEY)", tableName))
@@ -163,8 +160,6 @@ func TestSpanToQueryBounds(t *testing.T) {
 			}
 
 			// Get table descriptor.
-			testServer := testCluster.Server(0)
-			kvDB := testServer.DB()
 			tableDesc := desctestutils.TestingGetPublicTableDescriptor(
 				kvDB,
 				codec,

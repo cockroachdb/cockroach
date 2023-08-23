@@ -10,10 +10,10 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",
-        "//pkg/keys",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/desctestutils",
