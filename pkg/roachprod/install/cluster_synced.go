@@ -22,7 +22,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -1752,7 +1751,9 @@ func (c *SyncedCluster) Put(
 
 	var detail string
 	if !c.IsLocal() {
-		if c.UseTreeDist {
+		// If scp does not support the -R flag, tree dist is slower as it ends up
+		// transferring everything through this machine anyway.
+		if c.UseTreeDist && sshVersion3() {
 			detail = " (dist)"
 		} else {
 			detail = " (scp)"
@@ -2452,6 +2453,24 @@ func (c *SyncedCluster) SSH(ctx context.Context, l *logger.Logger, sshArgs, args
 	return syscall.Exec(sshPath, allArgs, os.Environ())
 }
 
+var sshVersion3Internal struct {
+	value bool
+	once  sync.Once
+}
+
+// sshVersion3 returns true if ssh uses an SSL library at major version 3.
+func sshVersion3() bool {
+	sshVersion3Internal.once.Do(func() {
+		cmd := exec.Command("ssh", "-V")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			panic(fmt.Sprintf("error running ssh -V: %v\nOutput:\n%s", err, string(out)))
+		}
+		sshVersion3Internal.value = strings.Contains(string(out), "SSL 3.")
+	})
+	return sshVersion3Internal.value
+}
+
 // scp return type conforms to what runWithMaybeRetry expects. A nil error
 // is always returned here since the only error that can happen is an scp error
 // which we do want to be able to retry.
@@ -2462,12 +2481,9 @@ func scp(l *logger.Logger, src, dest string) (*RunResultDetails, error) {
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "ConnectTimeout=10",
 	}
-	if runtime.GOOS == "darwin" {
-		// SSH to src node and excute SCP there using agent-forwarding,
-		// as these are not the defaults on MacOS.
-		// TODO(sarkesian): Rather than checking Darwin, it would be preferable
-		// to check the output of `ssh-V` and check the version to see what flags
-		// are supported.
+	if sshVersion3() {
+		// Have scp do a direct transfer between two remote hosts (SSH to src node
+		// and execute SCP there using agent-forwarding).
 		args = append(args, "-R", "-A")
 	}
 	args = append(args, sshAuthArgs()...)
