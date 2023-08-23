@@ -11,14 +11,37 @@
 package tests
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
+
+func getNodeLivenessStatus(s string) livenesspb.NodeLivenessStatus {
+	switch s {
+	case "unknown":
+		return livenesspb.NodeLivenessStatus_UNKNOWN
+	case "dead":
+		return livenesspb.NodeLivenessStatus_DEAD
+	case "unavailable":
+		return livenesspb.NodeLivenessStatus_UNAVAILABLE
+	case "live":
+		return livenesspb.NodeLivenessStatus_LIVE
+	case "decommissioning":
+		return livenesspb.NodeLivenessStatus_DECOMMISSIONING
+	case "decommissioned":
+		return livenesspb.NodeLivenessStatus_DECOMMISSIONED
+	case "draining":
+		return livenesspb.NodeLivenessStatus_DRAINING
+	default:
+		panic(fmt.Sprintf("unkown liveness status: %s", s))
+	}
+}
 
 func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{}) {
 	var tmp string
@@ -38,6 +61,9 @@ func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{})
 	case *clusterConfigType:
 		d.ScanArgs(t, key, &tmp)
 		*dest = getClusterConfigType(tmp)
+	case *livenesspb.NodeLivenessStatus:
+		d.ScanArgs(t, key, &tmp)
+		*dest = getNodeLivenessStatus(tmp)
 	default:
 		require.Fail(t, "unsupported type %T", dest)
 	}
