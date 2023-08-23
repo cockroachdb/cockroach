@@ -877,7 +877,7 @@ func cmdTxnUpdate(e *evalCtx) error {
 }
 
 type clearKeyPrintingReadWriter struct {
-	storage.ReadWriterWithMustIterators
+	storage.ReadWriter
 	buf *redact.StringBuilder
 }
 
@@ -885,21 +885,19 @@ func (rw clearKeyPrintingReadWriter) ClearEngineKey(
 	key storage.EngineKey, opts storage.ClearOptions,
 ) error {
 	rw.buf.Printf("called ClearEngineKey(%v)\n", key)
-	return rw.ReadWriterWithMustIterators.ClearEngineKey(key, opts)
+	return rw.ReadWriter.ClearEngineKey(key, opts)
 }
 
 func (rw clearKeyPrintingReadWriter) SingleClearEngineKey(key storage.EngineKey) error {
 	rw.buf.Printf("called SingleClearEngineKey(%v)\n", key)
-	return rw.ReadWriterWithMustIterators.SingleClearEngineKey(key)
+	return rw.ReadWriter.SingleClearEngineKey(key)
 }
 
-func (e *evalCtx) tryWrapForClearKeyPrinting(
-	rw storage.ReadWriterWithMustIterators,
-) storage.ReadWriterWithMustIterators {
+func (e *evalCtx) tryWrapForClearKeyPrinting(rw storage.ReadWriter) storage.ReadWriter {
 	if e.results.traceClearKey {
 		return clearKeyPrintingReadWriter{
-			ReadWriterWithMustIterators: rw,
-			buf:                         e.results.buf,
+			ReadWriter: rw,
+			buf:        e.results.buf,
 		}
 	}
 	return rw
@@ -1784,7 +1782,11 @@ func cmdIterNewIncremental(e *evalCtx) error {
 	}
 
 	r := e.newReader()
-	it := storage.SimpleMVCCIterator(storage.NewMVCCIncrementalIterator(r.(storage.ReaderWithMustIterators), opts))
+	mvccIter, err := storage.NewMVCCIncrementalIterator(r, opts)
+	if err != nil {
+		return err
+	}
+	it := storage.SimpleMVCCIterator(mvccIter)
 	// Can't metamorphically move the iterator around since when intents get aggregated
 	// or emitted we can't undo that later at the level of the metamorphic iterator.
 	if opts.IntentPolicy == storage.MVCCIncrementalIterIntentPolicyError {
@@ -2336,7 +2338,7 @@ func (e *evalCtx) withReader(fn func(storage.Reader) error) error {
 // metamorphically chosen to be a batch, which will be committed and closed when
 // done.
 func (e *evalCtx) withWriter(cmd string, fn func(_ storage.ReadWriter) error) error {
-	var rw storage.ReadWriterWithMustIterators
+	var rw storage.ReadWriter
 	rw = e.engine
 	var batch storage.Batch
 	if e.hasArg("batched") || mvccHistoriesUseBatch {
@@ -2684,7 +2686,7 @@ func (i *iterWithCloser) Close() {
 
 // noopCloseReader overrides Reader.Close() with a noop.
 type noopCloseReader struct {
-	storage.ReaderWithMustIterators
+	storage.Reader
 }
 
 func (noopCloseReader) Close() {}

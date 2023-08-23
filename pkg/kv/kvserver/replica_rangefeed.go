@@ -245,15 +245,18 @@ func (r *Replica) RangeFeed(
 	// Register the stream with a catch-up iterator.
 	var catchUpIterFunc rangefeed.CatchUpIteratorConstructor
 	if usingCatchUpIter {
-		catchUpIterFunc = func(span roachpb.Span, startTime hlc.Timestamp) *rangefeed.CatchUpIterator {
+		catchUpIterFunc = func(span roachpb.Span, startTime hlc.Timestamp) (*rangefeed.CatchUpIterator, error) {
 			// Assert that we still hold the raftMu when this is called to ensure
 			// that the catchUpIter reads from the current snapshot.
 			r.raftMu.AssertHeld()
-			i := rangefeed.NewCatchUpIterator(r.store.TODOEngine(), span, startTime, iterSemRelease, pacer)
+			i, err := rangefeed.NewCatchUpIterator(r.store.TODOEngine(), span, startTime, iterSemRelease, pacer)
+			if err != nil {
+				return nil, err
+			}
 			if f := r.store.TestingKnobs().RangefeedValueHeaderFilter; f != nil {
 				i.OnEmit = f
 			}
-			return i
+			return i, nil
 		}
 	}
 	var done future.ErrorFuture

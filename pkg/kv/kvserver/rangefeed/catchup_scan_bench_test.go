@@ -50,10 +50,13 @@ func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) (numE
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		func() {
-			iter := rangefeed.NewCatchUpIterator(eng, span, opts.ts, nil, nil)
+			iter, err := rangefeed.NewCatchUpIterator(eng, span, opts.ts, nil, nil)
+			if err != nil {
+				b.Fatal(err)
+			}
 			defer iter.Close()
 			counter := 0
-			err := iter.CatchUpScan(ctx, func(*kvpb.RangeFeedEvent) error {
+			err = iter.CatchUpScan(ctx, func(*kvpb.RangeFeedEvent) error {
 				counter++
 				return nil
 			}, opts.withDiff)

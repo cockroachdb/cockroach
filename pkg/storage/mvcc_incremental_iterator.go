@@ -174,11 +174,9 @@ type MVCCIncrementalIterOptions struct {
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
 // specified reader and options. The timestamp hint range should not be more
 // restrictive than the start and end time range.
-//
-// TODO(bilal): Update this method to take a storage.Reader and return an error
 func NewMVCCIncrementalIterator(
-	reader ReaderWithMustIterators, opts MVCCIncrementalIterOptions,
-) *MVCCIncrementalIterator {
+	reader Reader, opts MVCCIncrementalIterOptions,
+) (*MVCCIncrementalIterator, error) {
 	// Default to MaxTimestamp for EndTime, since the code assumes it is set.
 	if opts.EndTime.IsEmpty() {
 		opts.EndTime = hlc.MaxTimestamp
@@ -193,16 +191,20 @@ func NewMVCCIncrementalIterator(
 	}
 
 	var iter MVCCIterator
+	var err error
 	var timeBoundIter MVCCIterator
 	if useTBI {
 		// An iterator without the timestamp hints is created to ensure that the
 		// iterator visits every required version of every key that has changed.
-		iter = reader.MustMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		iter, err = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:             opts.KeyTypes,
 			LowerBound:           opts.StartKey,
 			UpperBound:           opts.EndKey,
 			RangeKeyMaskingBelow: opts.RangeKeyMaskingBelow,
 		})
+		if err != nil {
+			return nil, err
+		}
 		// The timeBoundIter is only required to see versioned keys, since the
 		// intents will be found by iter. It can also always enable range key
 		// masking at the start time, since we never care about point keys below it
@@ -212,7 +214,7 @@ func NewMVCCIncrementalIterator(
 		if tbiRangeKeyMasking.LessEq(opts.StartTime) && opts.KeyTypes == IterKeyTypePointsAndRanges {
 			tbiRangeKeyMasking = opts.StartTime.Next()
 		}
-		timeBoundIter = reader.MustMVCCIterator(MVCCKeyIterKind, IterOptions{
+		timeBoundIter, err = reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 			KeyTypes:   opts.KeyTypes,
 			LowerBound: opts.StartKey,
 			UpperBound: opts.EndKey,
@@ -222,13 +224,20 @@ func NewMVCCIncrementalIterator(
 			MaxTimestampHint:     opts.EndTime,
 			RangeKeyMaskingBelow: tbiRangeKeyMasking,
 		})
+		if err != nil {
+			iter.Close()
+			return nil, err
+		}
 	} else {
-		iter = reader.MustMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		iter, err = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:             opts.KeyTypes,
 			LowerBound:           opts.StartKey,
 			UpperBound:           opts.EndKey,
 			RangeKeyMaskingBelow: opts.RangeKeyMaskingBelow,
 		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &MVCCIncrementalIterator{
@@ -237,7 +246,7 @@ func NewMVCCIncrementalIterator(
 		endTime:       opts.EndTime,
 		timeBoundIter: timeBoundIter,
 		intentPolicy:  opts.IntentPolicy,
-	}
+	}, nil
 }
 
 // SeekGE implements SimpleMVCCIterator.

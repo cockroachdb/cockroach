@@ -2871,13 +2871,16 @@ func MVCCClearTimeRange(
 	// time-range, as we do not want to clear any running transactions. We don't
 	// _expect_ to hit this since the RevertRange is only intended for non-live
 	// key spans, but there could be an intent leftover.
-	iter := NewMVCCIncrementalIterator(rw.(ReaderWithMustIterators), MVCCIncrementalIterOptions{
+	iter, err := NewMVCCIncrementalIterator(rw, MVCCIncrementalIterOptions{
 		KeyTypes:  IterKeyTypePointsAndRanges,
 		StartKey:  key,
 		EndKey:    endKey,
 		StartTime: startTime,
 		EndTime:   endTime,
 	})
+	if err != nil {
+		return nil, err
+	}
 	defer iter.Close()
 
 	// clearedMetaKey is the latest surfaced key that will get cleared.
@@ -3347,13 +3350,16 @@ func MVCCPredicateDeleteRange(
 	// endTime. We don't _expect_ to hit intents or newer keys in the client
 	// provided span since the MVCCPredicateDeleteRange is only intended for
 	// non-live key spans, but there could be an intent leftover.
-	iter := NewMVCCIncrementalIterator(rw.(ReaderWithMustIterators), MVCCIncrementalIterOptions{
+	iter, err := NewMVCCIncrementalIterator(rw, MVCCIncrementalIterOptions{
 		EndKey:               endKey,
 		StartTime:            predicates.StartTime,
 		EndTime:              hlc.MaxTimestamp,
 		RangeKeyMaskingBelow: endTime,
 		KeyTypes:             IterKeyTypePointsAndRanges,
 	})
+	if err != nil {
+		return nil, err
+	}
 	defer iter.Close()
 
 	iter.SeekGE(MVCCKey{Key: startKey})
@@ -3557,12 +3563,15 @@ func MVCCDeleteRangeUsingTombstone(
 	// do a separate time-bound scan for point key conflicts.
 	if msCovered != nil {
 		if err := func() error {
-			iter := NewMVCCIncrementalIterator(rw.(ReaderWithMustIterators), MVCCIncrementalIterOptions{
+			iter, err := NewMVCCIncrementalIterator(rw, MVCCIncrementalIterOptions{
 				KeyTypes:  IterKeyTypePointsOnly,
 				StartKey:  startKey,
 				EndKey:    endKey,
 				StartTime: timestamp.Prev(), // make inclusive
 			})
+			if err != nil {
+				return err
+			}
 			defer iter.Close()
 			iter.SeekGE(MVCCKey{Key: startKey})
 			if ok, err := iter.Valid(); err != nil {
@@ -5744,13 +5753,16 @@ func MVCCGarbageCollectRangeKeys(
 
 			// Verify that there are no remaining data under the deleted range using
 			// time bound iterator.
-			ptIter := NewMVCCIncrementalIterator(rw.(ReaderWithMustIterators), MVCCIncrementalIterOptions{
+			ptIter, err := NewMVCCIncrementalIterator(rw, MVCCIncrementalIterOptions{
 				KeyTypes:     IterKeyTypePointsOnly,
 				StartKey:     rangeKeys.Bounds.Key,
 				EndKey:       rangeKeys.Bounds.EndKey,
 				EndTime:      gcKey.Timestamp,
 				IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
 			})
+			if err != nil {
+				return err
+			}
 			defer ptIter.Close()
 
 			for ptIter.SeekGE(MVCCKey{Key: rangeKeys.Bounds.Key}); ; ptIter.Next() {
@@ -6523,7 +6535,8 @@ func MVCCIsSpanEmpty(
 			return false, err
 		}
 	} else {
-		iter = NewMVCCIncrementalIterator(reader.(ReaderWithMustIterators), MVCCIncrementalIterOptions{
+		var err error
+		iter, err = NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
 			KeyTypes:     IterKeyTypePointsAndRanges,
 			StartKey:     opts.StartKey,
 			EndKey:       opts.EndKey,
@@ -6531,6 +6544,9 @@ func MVCCIsSpanEmpty(
 			EndTime:      opts.EndTS,
 			IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
 		})
+		if err != nil {
+			return false, err
+		}
 	}
 	defer iter.Close()
 	iter.SeekGE(MVCCKey{Key: opts.StartKey})
@@ -6695,7 +6711,7 @@ func mvccExportToWriter(
 	// actually doing the backup work.
 	elasticCPUHandle.StartTimer()
 
-	iter := NewMVCCIncrementalIterator(reader.(ReaderWithMustIterators), MVCCIncrementalIterOptions{
+	iter, err := NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
 		KeyTypes:             IterKeyTypePointsAndRanges,
 		StartKey:             opts.StartKey.Key,
 		EndKey:               opts.EndKey,
@@ -6704,6 +6720,9 @@ func mvccExportToWriter(
 		RangeKeyMaskingBelow: rangeKeyMasking,
 		IntentPolicy:         MVCCIncrementalIterIntentPolicyAggregate,
 	})
+	if err != nil {
+		return kvpb.BulkOpSummary{}, ExportRequestResumeInfo{}, err
+	}
 	defer iter.Close()
 
 	paginated := opts.TargetSize > 0
