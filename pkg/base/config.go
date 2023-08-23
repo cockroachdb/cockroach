@@ -146,7 +146,7 @@ var (
 	// both a network roundtrip and a TCP retransmit, but we don't need to
 	// tolerate more than 1 retransmit per connection attempt, so
 	// 2 * NetworkTimeout is sufficient.
-	DialTimeout = 2 * NetworkTimeout
+	DialTimeout = envutil.EnvOrDefaultDuration("COCKROACH_RPC_DIAL_TIMEOUT", 2*NetworkTimeout)
 
 	// PingInterval is the interval between network heartbeat pings. It is used
 	// both for RPC heartbeat intervals and gRPC server keepalive pings. It is
@@ -212,7 +212,8 @@ var (
 	// heartbeats and reduce this to NetworkTimeout (plus DialTimeout for the
 	// initial heartbeat), see:
 	// https://github.com/cockroachdb/cockroach/issues/93397.
-	DefaultRPCHeartbeatTimeout = 3 * NetworkTimeout
+	DefaultRPCHeartbeatTimeout = envutil.EnvOrDefaultDuration(
+		"COCKROACH_RPC_HEARTBEAT_TIMEOUT", 3*NetworkTimeout)
 
 	// defaultRaftTickInterval is the default resolution of the Raft timer.
 	defaultRaftTickInterval = envutil.EnvOrDefaultDuration(
