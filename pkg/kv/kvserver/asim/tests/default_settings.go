@@ -11,6 +11,7 @@
 package tests
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
@@ -126,13 +127,13 @@ func (f randTestingFramework) defaultBasicRangesGen() gen.BasicRanges {
 	}
 }
 
-func defaultAssertions() []SimulationAssertion {
-	return []SimulationAssertion{
-		conformanceAssertion{
-			underreplicated: 0,
-			overreplicated:  0,
-			violating:       0,
-			unavailable:     0,
+func defaultAssertions() []assertion.SimulationAssertion {
+	return []assertion.SimulationAssertion{
+		assertion.ConformanceAssertion{
+			Underreplicated: 0,
+			Overreplicated:  0,
+			Violating:       0,
+			Unavailable:     0,
 		},
 	}
 }
