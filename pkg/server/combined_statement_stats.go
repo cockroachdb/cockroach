@@ -408,21 +408,31 @@ func collectCombinedStatements(
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 
 	aostClause := testingKnobs.GetAOSTClause()
-	const expectedNumDatums = 6
-	queryFormat := `
-SELECT * FROM (
-SELECT
+	const expectedNumDatums = 11
+	const queryFormat = `
+SELECT 
     fingerprint_id,
-    array_agg(distinct transaction_fingerprint_id),
+    txn_fingerprints,
     app_name,
-    max(aggregated_ts) as aggregated_ts,
-    crdb_internal.merge_stats_metadata(array_agg(metadata)) as metadata,
-    crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
-FROM %s %s
-GROUP BY
-    fingerprint_id,
-    app_name
-) %s
+    aggregated_ts,
+    COALESCE(CAST(metadata -> 'distSQLCount' AS INT), 0)  AS distSQLCount,
+    COALESCE(CAST(metadata -> 'fullScanCount' AS INT), 0) AS fullScanCount,
+    COALESCE(CAST(metadata -> 'failedCount' AS INT), 0)   AS failedCount,
+    metadata ->> 'query'                                  AS query,
+    metadata ->> 'querySummary'                           AS querySummary,
+    (SELECT string_agg(elem::text, ',') 
+    FROM json_array_elements_text(metadata->'db') AS elem) AS databases,
+    statistics
+FROM (SELECT fingerprint_id,
+             array_agg(distinct transaction_fingerprint_id)             AS txn_fingerprints,
+             app_name,
+             max(aggregated_ts)                                         AS aggregated_ts,
+             crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
+             crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
+      FROM %s %s
+      GROUP BY
+          fingerprint_id,
+          app_name) %s
 %s`
 
 	query := fmt.Sprintf(
@@ -492,28 +502,27 @@ GROUP BY
 		app := string(tree.MustBeDString(row[2]))
 
 		aggregatedTs := tree.MustBeDTimestampTZ(row[3]).Time
-
-		// The metadata is aggregated across all the statements with the same fingerprint.
-		aggregateMetadataJSON := tree.MustBeDJSON(row[4]).JSON
-		var aggregateMetadata roachpb.AggregatedStatementMetadata
-		if err = sqlstatsutil.DecodeAggregatedMetadataJSON(aggregateMetadataJSON, &aggregateMetadata); err != nil {
-			return nil, serverError(ctx, err)
-		}
+		distSQLCount := int64(*row[4].(*tree.DInt))
+		fullScanCount := int64(*row[5].(*tree.DInt))
+		failedCount := int64(*row[6].(*tree.DInt))
+		query := string(tree.MustBeDString(row[7]))
+		querySummary := string(tree.MustBeDString(row[8]))
+		databases := string(tree.MustBeDString(row[9]))
 
 		metadata := roachpb.CollectedStatementStatistics{
 			Key: roachpb.StatementStatisticsKey{
 				App:          app,
-				DistSQL:      aggregateMetadata.DistSQLCount > 0,
-				FullScan:     aggregateMetadata.FullScanCount > 0,
-				Failed:       aggregateMetadata.FailedCount > 0,
-				Query:        aggregateMetadata.Query,
-				QuerySummary: aggregateMetadata.QuerySummary,
-				Database:     strings.Join(aggregateMetadata.Databases, ","),
+				DistSQL:      distSQLCount > 0,
+				FullScan:     fullScanCount > 0,
+				Failed:       failedCount > 0,
+				Query:        query,
+				QuerySummary: querySummary,
+				Database:     databases,
 			},
 		}
 
 		var stats roachpb.StatementStatistics
-		statsJSON := tree.MustBeDJSON(row[5]).JSON
+		statsJSON := tree.MustBeDJSON(row[10]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &stats); err != nil {
 			return nil, serverError(ctx, err)
 		}
