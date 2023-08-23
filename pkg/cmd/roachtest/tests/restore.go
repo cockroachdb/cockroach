@@ -57,9 +57,8 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 
 	makeRestoreStarter := func(ctx context.Context, t test.Test, c cluster.Cluster,
 		gatewayNode int, rd restoreDriver) jobStarter {
-		return func(c cluster.Cluster, t test.Test) (string, error) {
-			jobID, err := rd.runDetached(ctx, "DATABASE tpce", gatewayNode)
-			return fmt.Sprintf("%d", jobID), err
+		return func(c cluster.Cluster, t test.Test) (jobspb.JobID, error) {
+			return rd.runDetached(ctx, "DATABASE tpce", gatewayNode)
 		}
 	}
 

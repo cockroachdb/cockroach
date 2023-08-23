@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,7 +44,8 @@ func readCreateTableFromFixture(fixtureURI string, gatewayDB *gosql.DB) (string,
 
 func registerImportNodeShutdown(r registry.Registry) {
 	getImportRunner := func(ctx context.Context, t test.Test, gatewayNode int) jobStarter {
-		startImport := func(c cluster.Cluster, t test.Test) (jobID string, err error) {
+		startImport := func(c cluster.Cluster, t test.Test) (jobspb.JobID, error) {
+			var jobID jobspb.JobID
 			// partsupp is 11.2 GiB.
 			tableName := "partsupp"
 			if c.IsLocal() {
@@ -69,7 +71,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 			createStmt, err := readCreateTableFromFixture(
 				fmt.Sprintf("gs://cockroach-fixtures/tpch-csv/schema/%s.sql?AUTH=implicit", tableName), gatewayDB)
 			if err != nil {
-				return "", err
+				return jobID, err
 			}
 
 			// Create the table to be imported into.
@@ -78,7 +80,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 			}
 
 			err = gatewayDB.QueryRowContext(ctx, importStmt).Scan(&jobID)
-			return
+			return jobID, err
 		}
 
 		return startImport
