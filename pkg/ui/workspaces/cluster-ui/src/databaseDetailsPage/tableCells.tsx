@@ -33,8 +33,27 @@ import * as format from "../util/format";
 import { Breadcrumbs } from "../breadcrumbs";
 import { CaretRight } from "../icon/caretRight";
 import { CockroachCloudContext } from "../contexts";
+import { checkInfoAvailable, getNetworkErrorMessage } from "../databases";
 
 const cx = classNames.bind(styles);
+
+export const DiskSizeCell = ({
+  table,
+}: {
+  table: DatabaseDetailsPageDataTable;
+}): JSX.Element => {
+  return (
+    <>
+      {checkInfoAvailable(
+        table.requestError,
+        table.details?.spanStats?.error,
+        table.details?.spanStats?.approximate_disk_bytes
+          ? format.Bytes(table.details?.spanStats?.approximate_disk_bytes)
+          : null,
+      )}
+    </>
+  );
+};
 
 export const TableNameCell = ({
   table,
@@ -58,19 +77,55 @@ export const TableNameCell = ({
       linkURL += `?tab=grants`;
     }
   }
+  let icon = <DatabaseIcon className={cx("icon--s", "icon--primary")} />;
+  if (table.requestError || table.queryError) {
+    icon = (
+      <Tooltip
+        overlayStyle={{ whiteSpace: "pre-line" }}
+        placement="bottom"
+        title={
+          table.requestError
+            ? getNetworkErrorMessage(table.requestError)
+            : table.queryError.message
+        }
+      >
+        <Caution className={cx("icon--s", "icon--warning")} />
+      </Tooltip>
+    );
+  }
   return (
     <Link to={linkURL} className={cx("icon__container")}>
-      <DatabaseIcon className={cx("icon--s", "icon--primary")} />
+      {icon}
       {table.name}
     </Link>
   );
 };
 
-export const IndexRecWithIconCell = ({
+export const IndexesCell = ({
   table,
+  showIndexRecommendations,
 }: {
   table: DatabaseDetailsPageDataTable;
+  showIndexRecommendations: boolean;
 }): JSX.Element => {
+  const elem = (
+    <>
+      {checkInfoAvailable(
+        table.requestError,
+        table.details?.schemaDetails?.error,
+        table.details?.schemaDetails?.indexes?.length,
+      )}
+    </>
+  );
+  // If index recommendations are not enabled or we don't have any index recommendations,
+  // just return the number of indexes.
+  if (
+    !table.details.indexStatRecs?.has_index_recommendations ||
+    !showIndexRecommendations
+  ) {
+    return elem;
+  }
+  // Display an icon indicating we have index recommendations next to the number of indexes.
   return (
     <div className={cx("icon__container")}>
       <Tooltip
@@ -79,7 +134,7 @@ export const IndexRecWithIconCell = ({
       >
         <Caution className={cx("icon--s", "icon--warning")} />
       </Tooltip>
-      {table.details.indexCount}
+      {elem}
     </div>
   );
 };
@@ -92,12 +147,16 @@ export const MVCCInfoCell = ({
   return (
     <>
       <p className={cx("multiple-lines-info")}>
-        {format.Percentage(details.livePercentage, 1, 1)}
+        {format.Percentage(details?.spanStats?.live_percentage, 1, 1)}
       </p>
       <p className={cx("multiple-lines-info")}>
-        <span className={cx("bold")}>{format.Bytes(details.liveBytes)}</span>{" "}
+        <span className={cx("bold")}>
+          {format.Bytes(details?.spanStats?.live_bytes)}
+        </span>{" "}
         live data /{" "}
-        <span className={cx("bold")}>{format.Bytes(details.totalBytes)}</span>
+        <span className={cx("bold")}>
+          {format.Bytes(details?.spanStats?.total_bytes)}
+        </span>
         {" total"}
       </p>
     </>
