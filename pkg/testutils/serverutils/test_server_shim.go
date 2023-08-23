@@ -110,6 +110,14 @@ func ShouldStartDefaultTestTenant(
 		return base.InternalNonDefaultDecision
 	}
 
+	if globalDefaultSelectionOverride.isSet {
+		override := globalDefaultSelectionOverride.value
+		if issueNum, label := override.IssueRef(); issueNum != 0 {
+			t.Logf("cluster virtualization disabled package-wide due to issue: #%d (expected label: %s)", issueNum, label)
+		}
+		return override
+	}
+
 	// Note: we ask the metamorphic framework for a "disable" value, instead
 	// of an "enable" value, because it probabilistically returns its default value
 	// more often than not and that is what we want.
@@ -121,6 +129,22 @@ func ShouldStartDefaultTestTenant(
 		return base.TestTenantAlwaysEnabled
 	}
 	return base.InternalNonDefaultDecision
+}
+
+// globalDefaultSelectionOverride is used when an entire package needs
+// to override the probabilistic behavior.
+var globalDefaultSelectionOverride struct {
+	isSet bool
+	value base.DefaultTestTenantOptions
+}
+
+// TestingSetDefaultTenantSelectionOverride changes the global selection override.
+func TestingSetDefaultTenantSelectionOverride(v base.DefaultTestTenantOptions) func() {
+	globalDefaultSelectionOverride.isSet = true
+	globalDefaultSelectionOverride.value = v
+	return func() {
+		globalDefaultSelectionOverride.isSet = false
+	}
 }
 
 var srvFactoryImpl TestServerFactory
