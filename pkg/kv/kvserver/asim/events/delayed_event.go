@@ -257,8 +257,8 @@ func (ag AssertionsGen) generate() assertionsEvent {
 	assertionResults := make([]assertionResult, 0, len(ag.Assertions))
 	var eventFn assertionFunction = func(ctx context.Context, t time.Time, h history.History) bool {
 		allHolds := true
-		for _, assertion := range ag.Assertions {
-			holds, reason := assertion.Assert(ctx, h)
+		for _, eachAssert := range ag.Assertions {
+			holds, reason := eachAssert.Assert(ctx, h)
 			assertionResults = append(assertionResults, assertionResult{
 				holds, reason,
 			})

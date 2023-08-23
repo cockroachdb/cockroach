@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/events"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
@@ -104,11 +103,11 @@ func (f randTestingFramework) getStaticSettings() gen.StaticSettings {
 	return gen.StaticSettings{}
 }
 
-func (f randTestingFramework) getStaticEvents() events.StaticEvents {
+func (f randTestingFramework) getStaticEvents() gen.StaticEvents {
 	if !f.s.randOptions.staticEvents {
 		return f.defaultStaticEventsGen()
 	}
-	return events.StaticEvents{}
+	return gen.StaticEvents{}
 }
 
 // runRandTest creates randomized configurations based on the specified test

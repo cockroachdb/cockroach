@@ -8,48 +8,49 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package events
+package gen
 
 import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/events"
 )
 
 type EventGen interface {
 	// Generate returns a list of events, which should be exectued at the delay specified.
 	// TODO: figure out what seed is needed in gen here
-	Generate(settings *config.SimulationSettings) *Executor
+	Generate(settings *config.SimulationSettings) *events.Executor
 	String() string /**/
 }
 
 // StaticEvents implements the EventGen interface.
 // TODO(kvoli): introduce conditional events.
 type StaticEvents struct {
-	StateChangeEvents               []StateChangeEventGen
-	StateChangeWithAssertionsEvents []StateChangeEventWithAssertionGen
-	AssertionsEvents                []AssertionsGen
+	StateChangeEvents               []events.StateChangeEventGen
+	StateChangeWithAssertionsEvents []events.StateChangeEventWithAssertionGen
+	AssertionsEvents                []events.AssertionsGen
 }
 
 func EmptyStaticEvents() StaticEvents {
 	return StaticEvents{
-		StateChangeEvents:               []StateChangeEventGen{},
-		StateChangeWithAssertionsEvents: []StateChangeEventWithAssertionGen{},
-		AssertionsEvents:                []AssertionsGen{},
+		StateChangeEvents:               []events.StateChangeEventGen{},
+		StateChangeWithAssertionsEvents: []events.StateChangeEventWithAssertionGen{},
+		AssertionsEvents:                []events.AssertionsGen{},
 	}
 }
 
-func (se *StaticEvents) AddStateChangeEventGen(event StateChangeEventGen) {
+func (se *StaticEvents) AddStateChangeEventGen(event events.StateChangeEventGen) {
 	se.StateChangeEvents = append(se.StateChangeEvents, event)
 }
 
 func (se *StaticEvents) AddStateChangeEventWithAssertionGen(
-	event StateChangeEventWithAssertionGen,
+	event events.StateChangeEventWithAssertionGen,
 ) {
 	se.StateChangeWithAssertionsEvents = append(se.StateChangeWithAssertionsEvents, event)
 }
 
-func (se *StaticEvents) AddAssertionsGen(event AssertionsGen) {
+func (se *StaticEvents) AddAssertionsGen(event events.AssertionsGen) {
 	se.AssertionsEvents = append(se.AssertionsEvents, event)
 }
 
@@ -61,8 +62,8 @@ func (se StaticEvents) String() string {
 
 // Generate returns a list of events, exactly the same as the events
 // StaticEvents was created with.
-func (se StaticEvents) Generate(settings *config.SimulationSettings) *Executor {
-	executor := Executor{}
+func (se StaticEvents) Generate(settings *config.SimulationSettings) *events.Executor {
+	executor := events.Executor{}
 	executor.RegisterStateChangeEvents(settings.StartTime, se.StateChangeEvents)
 	executor.RegisterStateChangeEventWithAssertions(settings.StartTime, se.StateChangeWithAssertionsEvents)
 	executor.RegisterAssertionEvents(se.AssertionsEvents)

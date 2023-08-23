@@ -168,7 +168,7 @@ func TestDataDriven(t *testing.T) {
 			},
 		}
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
-		eventGen := events.EmptyStaticEvents()
+		eventGen := gen.EmptyStaticEvents()
 		assertions := []assertion.SimulationAssertion{}
 		runs := []history.History{}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
