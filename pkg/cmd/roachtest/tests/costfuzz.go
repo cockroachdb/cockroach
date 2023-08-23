@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"strings"
 	"time"
 
@@ -35,6 +36,13 @@ func registerCostFuzz(r registry.Registry) {
 		case sqlsmith.SeedMultiRegionSetupName:
 			clusterSpec = r.MakeClusterSpec(9, spec.Geo(), spec.GatherCores())
 		case "workload-replay":
+			// When running in CI, only allow running in the private roachtest, which
+			// has the required credentials.
+			if os.Getenv("TC_BUILD_ID") != "" && os.Getenv("ROACHTEST_PRIVATE") != "1" {
+				fmt.Println("Skipping costfuzz/workload-replay in public CI roachtest")
+				continue
+			}
+
 			clusterSpec = r.MakeClusterSpec(1)
 			timeOut = time.Hour * 2
 			redactResults = true
