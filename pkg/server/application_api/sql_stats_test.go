@@ -48,6 +48,9 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Skip under stress until we extend the timeout for the http client.
+	skip.UnderStressWithIssue(t, 109184)
+
 	var params base.TestServerArgs
 	params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true} // TODO(irfansharif): #74919.
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
@@ -380,6 +383,9 @@ func TestStatusAPIStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Skip under stress until we extend the timeout for the http client.
+	skip.UnderStressWithIssue(t, 109184)
+
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
 	statsKnobs := sqlstats.CreateTestingKnobs()
@@ -645,6 +651,9 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 func TestStatusAPICombinedStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// Skip under stress until we extend the timeout for the http client.
+	skip.UnderStressWithIssue(t, 109184)
 
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)

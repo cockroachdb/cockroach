@@ -42,6 +42,15 @@ const (
 	showDiffFlag     = "show-diff"
 )
 
+// List of bazel integration tests that will fail when running `dev test pkg/...`
+var integrationTests = map[string]struct{ testName, commandToRun string }{
+	"pkg/acceptance":              {"acceptance_test", "dev acceptance"},
+	"pkg/compose":                 {"compose_test", "dev compose"},
+	"pkg/compose/compare/compare": {"compare_test", "dev compose"},
+	"pkg/testutils/docker":        {"docker_test", ""},
+	"pkg/testutils/lint":          {"lint_test", "dev lint"},
+}
+
 func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
 	// testCmd runs the specified cockroachdb tests.
 	testCmd := &cobra.Command{
@@ -255,6 +264,20 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			target = fmt.Sprintf("%s:all", pkg)
 		}
 		testTargets = append(testTargets, target)
+	}
+
+	for _, target := range testTargets {
+		testTarget := strings.Split(target, ":")
+		integrationTest, ok := integrationTests[testTarget[0]]
+		if ok {
+			// If the test targets all tests in the package or the individual test, warn the user
+			if testTarget[1] == "all" || testTarget[1] == integrationTest.testName {
+				if integrationTest.commandToRun == "" {
+					return fmt.Errorf("%s:%s will fail since it is an integration test", testTarget[0], integrationTest.testName)
+				}
+				return fmt.Errorf("%s:%s will fail since it is an integration test. To run this test, run `%s`", testTarget[0], integrationTest.testName, integrationTest.commandToRun)
+			}
+		}
 	}
 
 	args = append(args, testTargets...)
