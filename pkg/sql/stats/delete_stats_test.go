@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -40,15 +39,16 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	db := s.InternalDB().(descs.DB)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
 		s.ClusterSettings(),
 		db,
 	)
-	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
 
 	// The test data must be ordered by CreatedAt DESC so the calculated set of
 	// expected deleted stats is correct.
@@ -335,15 +335,16 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	db := s.InternalDB().(isql.DB)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 	)
-	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
 	testData := []TableStatisticProto{
 		{
 			TableID:       descpb.ID(100),
@@ -672,16 +673,32 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 
 	var params base.TestServerArgs
 	params.ScanMaxIdleTime = time.Millisecond // speed up MVCC GC queue scans
+	params.DefaultTestTenant = base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109380)
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 
+	// Poll for MVCC GC more frequently.
+	systemDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t, ""))
+	systemDB.Exec(t, "SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';")
+
 	// Disable auto stats so that it doesn't interfere.
 	runner.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
-	// Poll for MVCC GC more frequently.
-	runner.Exec(t, "SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';")
 	// Cached protected timestamp state delays MVCC GC, update it every second.
 	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';")
+
+	if s.StartedDefaultTestTenant() {
+		systemDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true")
+		// Block until we see that zone configs are enabled.
+		testutils.SucceedsSoon(t, func() error {
+			var enabled bool
+			runner.QueryRow(t, "SHOW CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled").Scan(&enabled)
+			if !enabled {
+				return errors.New("zone configs are not yet enabled")
+			}
+			return nil
+		})
+	}
 
 	// This subtest verifies that the statistic for a single dropped table is
 	// deleted promptly.
