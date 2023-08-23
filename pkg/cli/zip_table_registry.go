@@ -598,6 +598,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"range_end",
 			"resolved",
 			"last_event_utc",
+			"catchup",
 		},
 	},
 	"crdb_internal.feature_usage": {
