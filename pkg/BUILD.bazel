@@ -1300,6 +1300,7 @@ GO_TARGETS = [
     "//pkg/kv/kvserver/allocator:allocator",
     "//pkg/kv/kvserver/apply:apply",
     "//pkg/kv/kvserver/apply:apply_test",
+    "//pkg/kv/kvserver/asim/assertion:assertion",
     "//pkg/kv/kvserver/asim/config:config",
     "//pkg/kv/kvserver/asim/event:event",
     "//pkg/kv/kvserver/asim/gen:gen",

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
@@ -170,7 +171,7 @@ func TestDataDriven(t *testing.T) {
 		}
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
 		eventGen := gen.StaticEvents{DelayedEvents: event.DelayedEventList{}}
-		assertions := []SimulationAssertion{}
+		assertions := []assertion.SimulationAssertion{}
 		runs := []history.History{}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -413,45 +414,45 @@ func TestDataDriven(t *testing.T) {
 				case "balance":
 					scanArg(t, d, "stat", &stat)
 					scanArg(t, d, "ticks", &ticks)
-					assertions = append(assertions, balanceAssertion{
-						ticks:     ticks,
-						stat:      stat,
-						threshold: scanThreshold(t, d),
+					assertions = append(assertions, assertion.BalanceAssertion{
+						Ticks:     ticks,
+						Stat:      stat,
+						Threshold: scanThreshold(t, d),
 					})
 				case "steady":
 					scanArg(t, d, "stat", &stat)
 					scanArg(t, d, "ticks", &ticks)
-					assertions = append(assertions, steadyStateAssertion{
-						ticks:     ticks,
-						stat:      stat,
-						threshold: scanThreshold(t, d),
+					assertions = append(assertions, assertion.SteadyStateAssertion{
+						Ticks:     ticks,
+						Stat:      stat,
+						Threshold: scanThreshold(t, d),
 					})
 				case "stat":
 					var stores []int
 					scanArg(t, d, "stat", &stat)
 					scanArg(t, d, "ticks", &ticks)
 					scanArg(t, d, "stores", &stores)
-					assertions = append(assertions, storeStatAssertion{
-						ticks:     ticks,
-						stat:      stat,
-						threshold: scanThreshold(t, d),
-						stores:    stores,
+					assertions = append(assertions, assertion.StoreStatAssertion{
+						Ticks:     ticks,
+						Stat:      stat,
+						Threshold: scanThreshold(t, d),
+						Stores:    stores,
 					})
 				case "conformance":
 					var under, over, unavailable, violating int
-					under = conformanceAssertionSentinel
-					over = conformanceAssertionSentinel
-					unavailable = conformanceAssertionSentinel
-					violating = conformanceAssertionSentinel
+					under = assertion.ConformanceAssertionSentinel
+					over = assertion.ConformanceAssertionSentinel
+					unavailable = assertion.ConformanceAssertionSentinel
+					violating = assertion.ConformanceAssertionSentinel
 					scanIfExists(t, d, "under", &under)
 					scanIfExists(t, d, "over", &over)
 					scanIfExists(t, d, "unavailable", &unavailable)
 					scanIfExists(t, d, "violating", &violating)
-					assertions = append(assertions, conformanceAssertion{
-						underreplicated: under,
-						overreplicated:  over,
-						violating:       violating,
-						unavailable:     unavailable,
+					assertions = append(assertions, assertion.ConformanceAssertion{
+						Underreplicated: under,
+						Overreplicated:  over,
+						Violating:       violating,
+						Unavailable:     unavailable,
 					})
 				}
 				return ""
