@@ -131,7 +131,7 @@ func getDiff(ctx context.Context, sha string) (string, error) {
 		return "", err
 	}
 	baseSha := strings.TrimSpace(string(baseShaBytes))
-	cmd = exec.CommandContext(ctx, "git", "diff", "--no-ext-diff", baseSha, sha, "--")
+	cmd = exec.CommandContext(ctx, "git", "diff", "--no-ext-diff", baseSha, sha, "--", ":!pkg/acceptance/compose/**")
 	outputBytes, err := cmd.Output()
 	if err != nil {
 		return "", err
