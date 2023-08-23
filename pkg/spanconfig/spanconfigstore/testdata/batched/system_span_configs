@@ -4,11 +4,11 @@
 # apply a batch of system span configs + regular configs.
 apply
 set [a,f):A
-set {entire-keyspace}:X
+set {cluster-backup-keyspace}:X
 set {source=1,target=1}:Y
 set {source=10,target=10}:Z
 ----
-added {entire-keyspace}:X
+added {cluster-backup-keyspace}:X
 added {source=1,target=1}:Y
 added {source=10,target=10}:Z
 added [a,f):A
@@ -22,13 +22,13 @@ conf=A+X+Y
 # delete.
 apply
 set [c,d):B
-set {entire-keyspace}:W
+set {cluster-backup-keyspace}:W
 delete {source=1,target=1}
 ----
-deleted {entire-keyspace}
+deleted {cluster-backup-keyspace}
 deleted {source=1,target=1}
 deleted [a,f)
-added {entire-keyspace}:W
+added {cluster-backup-keyspace}:W
 added [a,c):A
 added [c,d):B
 added [d,f):A
@@ -46,10 +46,10 @@ conf=B+W
 
 apply
 delete [c,d)
-delete {entire-keyspace}
+delete {cluster-backup-keyspace}
 set {source=10,target=10}:V
 ----
-deleted {entire-keyspace}
+deleted {cluster-backup-keyspace}
 deleted {source=10,target=10}
 deleted [c,d)
 added {source=10,target=10}:V

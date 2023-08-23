@@ -83,7 +83,7 @@ tenants 111,112
 
 translate system-span-configurations
 ----
-{entire-keyspace}                          protection_policies=[{ts: 3}]
+{cluster-backup-keyspace}                  protection_policies=[{ts: 3}]
 {source=1,target=111}                      protection_policies=[{ts: 3} {ts: 4}]
 {source=1,target=112}                      protection_policies=[{ts: 3} {ts: 4}]
 {source=1,target=113}                      protection_policies=[{ts: 4}]
@@ -99,7 +99,7 @@ release record-id=1
 
 translate system-span-configurations
 ----
-{entire-keyspace}                          protection_policies=[{ts: 3}]
+{cluster-backup-keyspace}                  protection_policies=[{ts: 3}]
 {source=1,target=111}                      protection_policies=[{ts: 3} {ts: 4}]
 {source=1,target=112}                      protection_policies=[{ts: 3} {ts: 4}]
 {source=1,target=113}                      protection_policies=[{ts: 4}]
@@ -115,7 +115,7 @@ release record-id=2
 
 translate system-span-configurations
 ----
-{entire-keyspace}                          protection_policies=[{ts: 3}]
+{cluster-backup-keyspace}                  protection_policies=[{ts: 3}]
 {source=1,target=111}                      protection_policies=[{ts: 3} {ts: 4}]
 {source=1,target=112}                      protection_policies=[{ts: 3} {ts: 4}]
 {source=1,target=113}                      protection_policies=[{ts: 4}]

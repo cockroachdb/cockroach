@@ -47,7 +47,7 @@ import (
 //		delete [c,e)
 //		upsert [c,d):C
 //		upsert [d,e):D
-//		upsert {entire-keyspace}:X
+//		upsert {cluster-backup-keyspace}:X
 //		delete {source=1,target=20}
 //		----
 //

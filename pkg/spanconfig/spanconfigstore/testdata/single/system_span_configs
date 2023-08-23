@@ -6,9 +6,9 @@ set [a,c):A
 added [a,c):A
 
 apply
-set {entire-keyspace}:X
+set {cluster-backup-keyspace}:X
 ----
-added {entire-keyspace}:X
+added {cluster-backup-keyspace}:X
 
 # Check that keys are hydrated correctly.
 get key=b
@@ -21,7 +21,7 @@ conf=FALLBACK+X
 
 # Ensure no-ops appear as such.
 apply
-set {entire-keyspace}:X
+set {cluster-backup-keyspace}:X
 ----
 
 # Ensure combining system span configs that target a tenant and the entire
@@ -42,10 +42,10 @@ conf=FALLBACK+X+Y
 
 # Ensure updates take affect as you'd expect.
 apply
-set {entire-keyspace}:Z
+set {cluster-backup-keyspace}:Z
 ----
-deleted {entire-keyspace}
-added {entire-keyspace}:Z
+deleted {cluster-backup-keyspace}
+added {cluster-backup-keyspace}:Z
 
 get key=c
 ----
@@ -57,9 +57,9 @@ conf=A+Z+Y
 
 # Ensure deletion works properly.
 apply
-delete {entire-keyspace}
+delete {cluster-backup-keyspace}
 ----
-deleted {entire-keyspace}
+deleted {cluster-backup-keyspace}
 
 get key=c
 ----
@@ -71,7 +71,7 @@ conf=A+Y
 
 # Ensure deletion no-ops appear as such.
 apply
-delete {entire-keyspace}
+delete {cluster-backup-keyspace}
 ----
 
 # Ensure updates/deletes to the system span configuration that applies to tenant

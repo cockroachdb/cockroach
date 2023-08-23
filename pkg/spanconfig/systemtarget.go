@@ -48,9 +48,10 @@ const (
 	// SystemTargetTypeSpecificTenantKeyspace indicates that the system target is
 	// targeting a specific tenant's keyspace.
 	SystemTargetTypeSpecificTenantKeyspace
-	// SystemTargetTypeEntireKeyspace indicates that the system target is
-	// targeting the entire keyspace. Only the host tenant is allowed to do so.
-	SystemTargetTypeEntireKeyspace
+	// SystemTargetTypeClusterBackupKeyspace indicates that the system target is
+	// targeting the keyspace required for a cluster backup. Only the host tenant
+	// is allowed to do so.
+	SystemTargetTypeClusterBackupKeyspace
 	// SystemTargetTypeAllTenantKeyspaceTargetsSet represents a system target that
 	// encompasses all system targets that have been set by the source tenant over
 	// specific tenant's keyspace.
@@ -92,7 +93,7 @@ func makeSystemTargetFromProto(proto *roachpb.SystemSpanConfigTarget) (SystemTar
 		t = SystemTarget{
 			sourceTenantID:   proto.SourceTenantID,
 			targetTenantID:   roachpb.TenantID{},
-			systemTargetType: SystemTargetTypeEntireKeyspace,
+			systemTargetType: SystemTargetTypeClusterBackupKeyspace,
 		}
 	case proto.IsAllTenantKeyspaceTargetsSetTarget():
 		t = SystemTarget{
@@ -109,7 +110,7 @@ func makeSystemTargetFromProto(proto *roachpb.SystemSpanConfigTarget) (SystemTar
 func (st SystemTarget) toProto() *roachpb.SystemSpanConfigTarget {
 	var systemTargetType *roachpb.SystemSpanConfigTarget_Type
 	switch st.systemTargetType {
-	case SystemTargetTypeEntireKeyspace:
+	case SystemTargetTypeClusterBackupKeyspace:
 		systemTargetType = roachpb.NewEntireKeyspaceTargetType()
 	case SystemTargetTypeAllTenantKeyspaceTargetsSet:
 		systemTargetType = roachpb.NewAllTenantKeyspaceTargetsSetTargetType()
@@ -124,12 +125,13 @@ func (st SystemTarget) toProto() *roachpb.SystemSpanConfigTarget {
 	}
 }
 
-// MakeEntireKeyspaceTarget returns a new system target that targets the entire
-// keyspace. Only the host tenant is allowed to target the entire keyspace.
-func MakeEntireKeyspaceTarget() SystemTarget {
+// MakeClusterBackupKeyspaceTarget returns a new system target that targets the
+// custer backup  keyspace. Only the host tenant is allowed to target this
+// keyspace.
+func MakeClusterBackupKeyspaceTarget() SystemTarget {
 	return SystemTarget{
 		sourceTenantID:   roachpb.SystemTenantID,
-		systemTargetType: SystemTargetTypeEntireKeyspace,
+		systemTargetType: SystemTargetTypeClusterBackupKeyspace,
 	}
 }
 
@@ -146,14 +148,14 @@ func MakeAllTenantKeyspaceTargetsSet(sourceID roachpb.TenantID) SystemTarget {
 // targetsEntireKeyspace returns true if the target applies to all ranges in the
 // system (including those belonging to secondary tenants).
 func (st SystemTarget) targetsEntireKeyspace() bool {
-	return st.systemTargetType == SystemTargetTypeEntireKeyspace
+	return st.systemTargetType == SystemTargetTypeClusterBackupKeyspace
 }
 
 // keyspaceTargeted returns the keyspan the system target applies to.
 func (st SystemTarget) keyspaceTargeted() roachpb.Span {
 	switch st.systemTargetType {
-	case SystemTargetTypeEntireKeyspace:
-		return keys.EverythingSpan
+	case SystemTargetTypeClusterBackupKeyspace:
+		return keys.ClusterBackupSpan
 	case SystemTargetTypeSpecificTenantKeyspace:
 		// If the system tenant's keyspace is being targeted then this means
 		// everything from the start of the keyspace to where all non-system tenant
@@ -190,7 +192,7 @@ func (st SystemTarget) encode() roachpb.Span {
 	var k roachpb.Key
 
 	switch st.systemTargetType {
-	case SystemTargetTypeEntireKeyspace:
+	case SystemTargetTypeClusterBackupKeyspace:
 		k = keys.SystemSpanConfigEntireKeyspace
 	case SystemTargetTypeSpecificTenantKeyspace:
 		if st.sourceTenantID == roachpb.SystemTenantID {
@@ -223,7 +225,7 @@ func (st SystemTarget) validate() error {
 				"targetTenantID must be unset when targeting everything installed on tenants",
 			)
 		}
-	case SystemTargetTypeEntireKeyspace:
+	case SystemTargetTypeClusterBackupKeyspace:
 		if st.sourceTenantID != roachpb.SystemTenantID {
 			return errors.AssertionFailedf("only the host tenant is allowed to target the entire keyspace")
 		}
@@ -296,8 +298,8 @@ func (st SystemTarget) equal(ot SystemTarget) bool {
 // String returns a pretty printed version of a system target.
 func (st SystemTarget) String() string {
 	switch st.systemTargetType {
-	case SystemTargetTypeEntireKeyspace:
-		return "{entire-keyspace}"
+	case SystemTargetTypeClusterBackupKeyspace:
+		return "{cluster-backup-keyspace}"
 	case SystemTargetTypeAllTenantKeyspaceTargetsSet:
 		return fmt.Sprintf("{source=%d, all-tenant-keyspace-targets-set}", st.sourceTenantID)
 	case SystemTargetTypeSpecificTenantKeyspace:
@@ -320,7 +322,7 @@ func decodeSystemTarget(span roachpb.Span) (SystemTarget, error) {
 	}
 	switch {
 	case bytes.Equal(span.Key, keys.SystemSpanConfigEntireKeyspace):
-		return MakeEntireKeyspaceTarget(), nil
+		return MakeClusterBackupKeyspaceTarget(), nil
 	case bytes.HasPrefix(span.Key, keys.SystemSpanConfigHostOnTenantKeyspace):
 		// System span config was applied by the host tenant over a secondary
 		// tenant's entire keyspace.

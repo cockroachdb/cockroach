@@ -38,9 +38,9 @@ import (
 var spanRe = regexp.MustCompile(`^\[((/Tenant/\d*/)?\w+),\s??((/Tenant/\d*/)?\w+)\)$`)
 
 // systemTargetRe matches strings of the form
-// "{entire-keyspace|source=<id>,(target=<id>|all-tenant-keyspace-targets-set)}".
+// "{cluster-backup-keyspace|source=<id>,(target=<id>|all-tenant-keyspace-targets-set)}".
 var systemTargetRe = regexp.MustCompile(
-	`^{(entire-keyspace)|(source=(\d*),\s??((target=(\d*))|all-tenant-keyspace-targets-set))}$`,
+	`^{(cluster-backup-keyspace)|(source=(\d*),\s??((target=(\d*))|all-tenant-keyspace-targets-set))}$`,
 )
 
 // configRe matches either FALLBACK (for readability), a single letter, or a
@@ -211,8 +211,8 @@ func parseSystemTarget(t testing.TB, systemTarget string) spanconfig.SystemTarge
 	}
 	matches := systemTargetRe.FindStringSubmatch(systemTarget)
 
-	if matches[1] == "entire-keyspace" {
-		return spanconfig.MakeEntireKeyspaceTarget()
+	if matches[1] == "cluster-backup-keyspace" {
+		return spanconfig.MakeClusterBackupKeyspaceTarget()
 	}
 
 	sourceID, err := strconv.Atoi(matches[3])
