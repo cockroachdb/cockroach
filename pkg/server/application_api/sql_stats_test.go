@@ -328,7 +328,7 @@ func TestStatusAPITransactionStatementFingerprintIDsTruncation(t *testing.T) {
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
-	firstServerProto := testCluster.Server(0)
+	firstServerProto := testCluster.Server(0).ApplicationLayer()
 	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
 	testingApp := "testing"
 
@@ -402,7 +402,7 @@ func TestStatusAPIStatements(t *testing.T) {
 	})
 	defer testCluster.Stopper().Stop(context.Background())
 
-	firstServerProto := testCluster.Server(0)
+	firstServerProto := testCluster.Server(0).ApplicationLayer()
 	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
 
 	statements := []struct {
@@ -520,7 +520,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	endpoint := fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs)
 	findJobQuery := "SELECT status FROM [SHOW JOBS] WHERE statement = 'CREATE INDEX idx_age ON football.public.players (age) STORING (name)';"
 
-	firstServerProto := testCluster.Server(0)
+	firstServerProto := testCluster.Server(0).ApplicationLayer()
 	sqlSB := testCluster.ServerConn(0)
 	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
 
@@ -671,7 +671,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	})
 	defer testCluster.Stopper().Stop(context.Background())
 
-	firstServerProto := testCluster.Server(0)
+	firstServerProto := testCluster.Server(0).ApplicationLayer()
 	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
 
 	statements := []struct {
@@ -841,7 +841,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	})
 	defer testCluster.Stopper().Stop(context.Background())
 
-	firstServerProto := testCluster.Server(0)
+	firstServerProto := testCluster.Server(0).ApplicationLayer()
 	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
 
 	statements := []string{
