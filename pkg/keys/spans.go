@@ -16,6 +16,11 @@ var (
 	// EverythingSpan is a span that covers everything.
 	EverythingSpan = roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}
 
+	// ClusterBackupSpan is a span that covers all System and Tenant tables. It is
+	// a subset of EverythingSpan and skips certain keyspaces that are not used in
+	// full cluster backups (i.e. NodeLiveness, Timeseries, etc.)
+	ClusterBackupSpan = roachpb.Span{Key: TableDataMin, EndKey: roachpb.KeyMax}
+
 	// Meta1Span holds all first level addressing records.
 	Meta1Span = roachpb.Span{Key: roachpb.KeyMin, EndKey: Meta2Prefix}
 

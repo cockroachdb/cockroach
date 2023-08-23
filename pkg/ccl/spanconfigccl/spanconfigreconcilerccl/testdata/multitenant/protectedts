@@ -56,7 +56,7 @@ reconcile tenant=10
 # We should see protected timestamp record mutations as the host tenant.
 mutations
 ----
-upsert {entire-keyspace}                   protection_policies=[{ts: 1}]
+upsert {cluster-backup-keyspace}           protection_policies=[{ts: 1}]
 upsert {source=1,target=1}                 protection_policies=[{ts: 2}]
 upsert {source=1,target=10}                protection_policies=[{ts: 2}]
 
@@ -138,7 +138,7 @@ upsert {source=10,target=10}               protection_policies=[{ts: 3}]
 
 state limit=4
 ----
-{entire-keyspace}                          protection_policies=[{ts: 1}]
+{cluster-backup-keyspace}                  protection_policies=[{ts: 1}]
 {source=1,target=1}                        protection_policies=[{ts: 2}]
 {source=1,target=10}                       protection_policies=[{ts: 2}]
 {source=10,target=10}                      protection_policies=[{ts: 3}]
@@ -157,7 +157,7 @@ mutations tenant=10
 
 mutations
 ----
-delete {entire-keyspace}
+delete {cluster-backup-keyspace}
 delete {source=1,target=1}
 delete {source=1,target=10}
 

@@ -73,13 +73,13 @@ func (s *spanConfigStore) TestingSplitKeys(
 //	apply
 //	delete [a,c)
 //	set [c,h):X
-//	set {entire-keyspace}:X
+//	set {cluster-backup-keyspace}:X
 //	set {source=1,target=1}:Y
 //	----
 //	deleted [b,d)
 //	deleted [e,g)
 //	added [c,h):X
-//	added {entire-keyspace}:X
+//	added {cluster-backup-keyspace}:X
 //	added {source=1,target=1}:Y
 //
 //	get key=b
@@ -114,7 +114,7 @@ func (s *spanConfigStore) TestingSplitKeys(
 // delete /Tenant/10
 // ----
 //
-// Text of the form [a,b), {entire-keyspace}, {source=1,target=20}, and [a,b):C
+// Text of the form [a,b), {cluster-backup-keyspace}, {source=1,target=20}, and [a,b):C
 // correspond to targets {spans, system targets} and span config records; see
 // spanconfigtestutils.Parse{Target,Config,SpanConfigRecord} for more details.
 func TestDataDriven(t *testing.T) {
@@ -286,7 +286,7 @@ func TestStoreClone(t *testing.T) {
 			spanconfigtestutils.ParseConfig(t, "E"),
 		),
 		makeSpanConfigAddition(
-			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireKeyspaceTarget()),
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeClusterBackupKeyspaceTarget()),
 			spanconfigtestutils.ParseConfig(t, "G"),
 		),
 		makeSpanConfigAddition(

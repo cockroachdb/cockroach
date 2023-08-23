@@ -1,9 +1,9 @@
 apply
 set [b,d):A
-set {entire-keyspace}:X
+set {cluster-backup-keyspace}:X
 set [e,g):B
 ----
-added {entire-keyspace}:X
+added {cluster-backup-keyspace}:X
 added [b,d):A
 added [e,g):B
 

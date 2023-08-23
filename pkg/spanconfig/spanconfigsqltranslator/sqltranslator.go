@@ -161,7 +161,7 @@ func (s *SQLTranslator) generateSystemSpanConfigRecords(
 		var systemTarget spanconfig.SystemTarget
 		var err error
 		if sourceTenantID == roachpb.SystemTenantID {
-			systemTarget = spanconfig.MakeEntireKeyspaceTarget()
+			systemTarget = spanconfig.MakeClusterBackupKeyspaceTarget()
 		} else {
 			systemTarget, err = spanconfig.MakeTenantKeyspaceTarget(sourceTenantID, sourceTenantID)
 			if err != nil {

@@ -20,7 +20,7 @@ kvaccessor-get-all-system-span-configs-that-apply tenant-id=20
 ----
 
 kvaccessor-update
-upsert {entire-keyspace}:B
+upsert {cluster-backup-keyspace}:B
 upsert {source=10,target=10}:C
 upsert {source=1,target=1}:D
 ----
@@ -43,7 +43,7 @@ B
 
 # Remove a system span config and update another; make sure it's reflected.
 kvaccessor-update
-delete {entire-keyspace}
+delete {cluster-backup-keyspace}
 upsert {source=1,target=10}:E
 ----
 ok
