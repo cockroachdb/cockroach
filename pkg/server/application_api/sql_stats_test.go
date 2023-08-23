@@ -13,6 +13,7 @@ package application_api_test
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"reflect"
@@ -48,8 +49,11 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Skip under stress until we extend the timeout for the http client.
-	skip.UnderStressWithIssue(t, 109184)
+	// Increase the timeout for the http client if under stress.
+	additionalTimeout := 0 * time.Second
+	if skip.Stress() {
+		additionalTimeout = 15 * time.Second
+	}
 
 	var params base.TestServerArgs
 	params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true} // TODO(irfansharif): #74919.
@@ -128,7 +132,7 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 
 	// Hit query endpoint.
 	var resp serverpb.StatementsResponse
-	if err := srvtestutils.GetStatusJSONProto(firstServerProto, "combinedstmts", &resp); err != nil {
+	if err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(firstServerProto, "combinedstmts", &resp, true, additionalTimeout); err != nil {
 		t.Fatal(err)
 	}
 
@@ -383,8 +387,11 @@ func TestStatusAPIStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Skip under stress until we extend the timeout for the http client.
-	skip.UnderStressWithIssue(t, 109184)
+	// Increase the timeout for the http client if under stress.
+	additionalTimeout := 0 * time.Second
+	if skip.Stress() {
+		additionalTimeout = 15 * time.Second
+	}
 
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
@@ -425,7 +432,7 @@ func TestStatusAPIStatements(t *testing.T) {
 
 	// Test that non-admin without VIEWACTIVITY privileges cannot access.
 	var resp serverpb.StatementsResponse
-	err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, "statements", &resp, false)
+	err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(firstServerProto, "statements", &resp, false, additionalTimeout)
 	if !testutils.IsError(err, "status: 403") {
 		t.Fatalf("expected privilege error, got %v", err)
 	}
@@ -497,8 +504,11 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Skip under stress until we extend the timeout for the http client.
-	skip.UnderStressWithIssue(t, 109184)
+	// Increase the timeout for the http client if under stress.
+	additionalTimeout := 0 * time.Second
+	if skip.Stress() {
+		additionalTimeout = 15 * time.Second
+	}
 
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
@@ -591,7 +601,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	}
 
 	verifyCombinedStmtStats := func() {
-		err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, endpoint, &resp, false)
+		err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(firstServerProto, endpoint, &resp, false, additionalTimeout)
 		require.NoError(t, err)
 
 		for _, respStatement := range resp.Statements {
@@ -607,10 +617,16 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 				continue
 			}
 
-			require.Equal(t, expectedData.fullScan, actualFullScan)
-			require.Equal(t, expectedData.distSQL, actualDistSQL)
-			require.Equal(t, expectedData.failed, actualFailed)
-			require.Equal(t, expectedData.count, int(actualCount))
+			bytes, err := json.Marshal(respStatement)
+			if err != nil {
+				t.Fatal(err)
+			}
+			respString := (string(bytes))
+
+			require.Equal(t, expectedData.fullScan, actualFullScan, "failed for respStatement: %v", respString)
+			require.Equal(t, expectedData.distSQL, actualDistSQL, "failed for respStatement: %v", respString)
+			require.Equal(t, expectedData.failed, actualFailed, "failed for respStatement: %v", respString)
+			require.Equal(t, expectedData.count, int(actualCount), "failed for respStatement: %v", respString)
 		}
 	}
 
@@ -652,8 +668,11 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Skip under stress until we extend the timeout for the http client.
-	skip.UnderStressWithIssue(t, 109184)
+	// Increase the timeout for the http client if under stress.
+	additionalTimeout := 0 * time.Second
+	if skip.Stress() {
+		additionalTimeout = 15 * time.Second
+	}
 
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
@@ -701,7 +720,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 
 	verifyStmts := func(path string, expectedStmts []string, hasTxns bool, t *testing.T) {
 		// Hit query endpoint.
-		if err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false); err != nil {
+		if err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(firstServerProto, path, &resp, false, additionalTimeout); err != nil {
 			t.Fatal(err)
 		}
 
