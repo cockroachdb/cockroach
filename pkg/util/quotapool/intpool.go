@@ -69,6 +69,7 @@ func (ia *IntAlloc) Acquired() uint64 {
 // it has been merged. It is illegal to merge allocs from different pools and
 // doing so will result in a panic.
 func (ia *IntAlloc) Merge(other *IntAlloc) {
+	// FOO
 	if ia.p != other.p {
 		panic("cannot merge IntAllocs from two different pools")
 	}
@@ -92,6 +93,7 @@ func (ia *IntAlloc) Merge(other *IntAlloc) {
 // AcquireFunc() requests will be woken up with an updated Capacity, and Alloc()
 // requests will be trimmed accordingly.
 func (ia *IntAlloc) Freeze() {
+	// BAR
 	ia.p.decCapacity(uint64(ia.alloc))
 	ia.p = nil // ensure that future uses of this alloc will panic
 }
