@@ -295,32 +295,16 @@ func TestDataDriven(t *testing.T) {
 				return ""
 			case "set_liveness":
 				var nodeID int
-				var liveness string
 				var delay time.Duration
-				livenessStatus := 3
+				livenessStatus := livenesspb.NodeLivenessStatus_LIVE
 				scanArg(t, d, "node", &nodeID)
-				scanArg(t, d, "liveness", &liveness)
+				scanArg(t, d, "liveness", &livenessStatus)
 				scanIfExists(t, d, "delay", &delay)
-				switch liveness {
-				case "unknown":
-					livenessStatus = 0
-				case "dead":
-					livenessStatus = 1
-				case "unavailable":
-					livenessStatus = 2
-				case "live":
-					livenessStatus = 3
-				case "decommissioning":
-					livenessStatus = 4
-				case "draining":
-					livenessStatus = 5
-					panic(fmt.Sprintf("unkown liveness status: %s", liveness))
-				}
 				eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
 					EventFn: func(ctx context.Context, tick time.Time, s state.State) {
 						s.SetNodeLiveness(
 							state.NodeID(nodeID),
-							livenesspb.NodeLivenessStatus(livenessStatus),
+							livenessStatus,
 						)
 					},
 					At: settingsGen.Settings.StartTime.Add(delay),
