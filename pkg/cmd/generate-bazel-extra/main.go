@@ -41,7 +41,7 @@ var (
 )
 
 func runBuildozer(args []string) {
-	const buildozer = "_bazel/bin/external/com_github_bazelbuild_buildtools/buildozer/buildozer_/buildozer"
+	var buildozer = strings.TrimSuffix(os.Args[0], "\n") + ".runfiles/../../../../../external/com_github_bazelbuild_buildtools/buildozer/buildozer_/buildozer"
 	cmd := exec.Command(buildozer, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
