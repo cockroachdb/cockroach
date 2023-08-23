@@ -87,7 +87,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, pid)
-                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                         │ render pid: column2
                         │
                         └── • project
@@ -172,7 +172,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, pid)
-                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                         │ render pid: column2
                         │
                         └── • project
@@ -216,7 +216,7 @@ vectorized: true
     │
     └── • render
         │ columns: (crdb_internal_user_id_shard_16_comp, val_cast, user_id_default, crdb_region_default)
-        │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
+        │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(user_id_default))), 16)
         │ render val_cast: val_cast
         │ render user_id_default: user_id_default
         │ render crdb_region_default: crdb_region_default
@@ -269,8 +269,8 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, val_cast, user_id_default, crdb_region_default)
-                    │ render crdb_internal_user_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
-                    │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
+                    │ render crdb_internal_user_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(user_id_default))), 16)
+                    │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(user_id_default))), 16)
                     │ render val_cast: val_cast
                     │ render user_id_default: user_id_default
                     │ render crdb_region_default: crdb_region_default
@@ -329,8 +329,8 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, val_cast, user_id_default, crdb_region_default)
-                        │ render crdb_internal_user_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
-                        │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(user_id_default)), 16)
+                        │ render crdb_internal_user_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(user_id_default))), 16)
+                        │ render crdb_internal_user_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(user_id_default))), 16)
                         │ render val_cast: val_cast
                         │ render user_id_default: user_id_default
                         │ render crdb_region_default: crdb_region_default
@@ -373,7 +373,7 @@ vectorized: true
 │         size: 5 columns, 1 row
 │         row 0, expr 0: 4321
 │         row 0, expr 1: 'ap-southeast-2'
-│         row 0, expr 2: 9
+│         row 0, expr 2: 11
 │         row 0, expr 3: true
 │         row 0, expr 4: true
 │
@@ -401,7 +401,7 @@ vectorized: true
                     └── • filter
                         │ columns: (crdb_internal_id_shard_16, id, crdb_region)
                         │ estimated row count: 6 (missing stats)
-                        │ filter: (crdb_internal_id_shard_16 != 9) OR (crdb_region != 'ap-southeast-2')
+                        │ filter: (crdb_internal_id_shard_16 != 11) OR (crdb_region != 'ap-southeast-2')
                         │
                         └── • union all
                             │ columns: (crdb_internal_id_shard_16, id, crdb_region)
@@ -412,13 +412,13 @@ vectorized: true
                             │     columns: (crdb_internal_id_shard_16, id, crdb_region)
                             │     estimated row count: 1 (missing stats)
                             │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                            │     spans: /"@"/9/4321/0
+                            │     spans: /"@"/11/4321/0
                             │
                             └── • scan
                                   columns: (crdb_internal_id_shard_16, id, crdb_region)
                                   estimated row count: 1 (missing stats)
                                   table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                                  spans: /"\x80"/9/4321/0 /"\xc0"/9/4321/0
+                                  spans: /"\x80"/11/4321/0 /"\xc0"/11/4321/0
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321) ON CONFLICT DO NOTHING;
@@ -450,7 +450,7 @@ vectorized: true
         │     size: 3 columns, 1 row
         │     row 0, expr 0: 4321
         │     row 0, expr 1: 'ap-southeast-2'
-        │     row 0, expr 2: 9
+        │     row 0, expr 2: 11
         │
         └── • union all
             │ columns: (id)
@@ -461,13 +461,13 @@ vectorized: true
             │     columns: (id)
             │     estimated row count: 1 (missing stats)
             │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
-            │     spans: /"@"/9/4321/0
+            │     spans: /"@"/11/4321/0
             │
             └── • scan
                   columns: (id)
                   estimated row count: 1 (missing stats)
                   table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                  spans: /"\x80"/9/4321/0 /"\xc0"/9/4321/0
+                  spans: /"\x80"/11/4321/0 /"\xc0"/11/4321/0
                   parallel
 
 query T
@@ -510,8 +510,8 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1)
-                    │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
-                    │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
+                    │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
+                    │ render crdb_internal_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
                     │ render crdb_region_default: 'ap-southeast-2'
                     │ render column1: column1
                     │
@@ -551,7 +551,7 @@ vectorized: true
         │     size: 3 columns, 1 row
         │     row 0, expr 0: 4321
         │     row 0, expr 1: 'ap-southeast-2'
-        │     row 0, expr 2: 9
+        │     row 0, expr 2: 11
         │
         └── • union all
             │ columns: (id)
@@ -562,13 +562,13 @@ vectorized: true
             │     columns: (id)
             │     estimated row count: 1 (missing stats)
             │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
-            │     spans: /"@"/9/4321/0
+            │     spans: /"@"/11/4321/0
             │
             └── • scan
                   columns: (id)
                   estimated row count: 1 (missing stats)
                   table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                  spans: /"\x80"/9/4321/0 /"\xc0"/9/4321/0
+                  spans: /"\x80"/11/4321/0 /"\xc0"/11/4321/0
                   parallel
 
 query T
@@ -611,8 +611,8 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1)
-                    │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
-                    │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
+                    │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
+                    │ render crdb_internal_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
                     │ render crdb_region_default: 'ap-southeast-2'
                     │ render column1: column1
                     │
@@ -675,7 +675,7 @@ vectorized: true
 │                       │     size: 3 columns, 1 row
 │                       │     row 0, expr 0: 4321
 │                       │     row 0, expr 1: 'ap-southeast-2'
-│                       │     row 0, expr 2: 9
+│                       │     row 0, expr 2: 11
 │                       │
 │                       └── • union all
 │                           │ columns: (crdb_internal_id_shard_16, id, crdb_region)
@@ -686,13 +686,13 @@ vectorized: true
 │                           │     columns: (crdb_internal_id_shard_16, id, crdb_region)
 │                           │     estimated row count: 1 (missing stats)
 │                           │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
-│                           │     spans: /"@"/9/4321/0
+│                           │     spans: /"@"/11/4321/0
 │                           │
 │                           └── • scan
 │                                 columns: (crdb_internal_id_shard_16, id, crdb_region)
 │                                 estimated row count: 1 (missing stats)
 │                                 table: t_unique_hash_pk@t_unique_hash_pk_pkey
-│                                 spans: /"\x80"/9/4321/0 /"\xc0"/9/4321/0
+│                                 spans: /"\x80"/11/4321/0 /"\xc0"/11/4321/0
 │                                 parallel
 │
 └── • constraint-check
@@ -715,7 +715,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, crdb_region)
-                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
+                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
                         │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16_comp
                         │ render id: column1
                         │ render crdb_region: upsert_crdb_region
@@ -786,8 +786,8 @@ vectorized: true
 │                           │
 │                           └── • render
 │                               │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1)
-│                               │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
-│                               │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
+│                               │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
+│                               │ render crdb_internal_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
 │                               │ render crdb_region_default: 'ap-southeast-2'
 │                               │ render column1: column1
 │                               │
@@ -817,7 +817,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, crdb_region)
-                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
+                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
                         │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16_comp
                         │ render id: column1
                         │ render crdb_region: upsert_crdb_region
@@ -861,7 +861,7 @@ vectorized: true
         │     size: 3 columns, 1 row
         │     row 0, expr 0: 4321
         │     row 0, expr 1: 'ap-southeast-2'
-        │     row 0, expr 2: 9
+        │     row 0, expr 2: 11
         │
         └── • union all
             │ columns: (crdb_internal_id_shard_16, id, crdb_region)
@@ -872,13 +872,13 @@ vectorized: true
             │     columns: (crdb_internal_id_shard_16, id, crdb_region)
             │     estimated row count: 1 (missing stats)
             │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
-            │     spans: /"@"/9/4321/0
+            │     spans: /"@"/11/4321/0
             │
             └── • scan
                   columns: (crdb_internal_id_shard_16, id, crdb_region)
                   estimated row count: 1 (missing stats)
                   table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                  spans: /"\x80"/9/4321/0 /"\xc0"/9/4321/0
+                  spans: /"\x80"/11/4321/0 /"\xc0"/11/4321/0
                   parallel
 
 query T
@@ -917,8 +917,8 @@ vectorized: true
             │
             └── • render
                 │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1)
-                │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
-                │ render crdb_internal_id_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 16)
+                │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
+                │ render crdb_internal_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
                 │ render crdb_region_default: 'ap-southeast-2'
                 │ render column1: column1
                 │
@@ -950,7 +950,7 @@ vectorized: true
 │       └── • render
 │           │ columns: (crdb_internal_id_shard_16, id, crdb_region, crdb_internal_id_shard_16_comp, id_new, check1)
 │           │ render check1: true
-│           │ render crdb_internal_id_shard_16_comp: 6
+│           │ render crdb_internal_id_shard_16_comp: 4
 │           │ render id_new: 1234
 │           │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16
 │           │ render id: id
@@ -965,13 +965,13 @@ vectorized: true
 │               │     columns: (crdb_internal_id_shard_16, id, crdb_region)
 │               │     estimated row count: 1 (missing stats)
 │               │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
-│               │     spans: /"@"/9/4321/0
+│               │     spans: /"@"/11/4321/0
 │               │
 │               └── • scan
 │                     columns: (crdb_internal_id_shard_16, id, crdb_region)
 │                     estimated row count: 1 (missing stats)
 │                     table: t_unique_hash_pk@t_unique_hash_pk_pkey
-│                     spans: /"\x80"/9/4321/0 /"\xc0"/9/4321/0
+│                     spans: /"\x80"/11/4321/0 /"\xc0"/11/4321/0
 │                     parallel
 │
 └── • constraint-check
@@ -994,7 +994,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, crdb_region)
-                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(id_new)), 16)
+                        │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(id_new))), 16)
                         │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16_comp
                         │ render id: id_new
                         │ render crdb_region: crdb_region
@@ -1039,7 +1039,7 @@ vectorized: true
 │         row 0, expr 0: 4321
 │         row 0, expr 1: 'some_email'
 │         row 0, expr 2: 'ap-southeast-2'
-│         row 0, expr 3: 13
+│         row 0, expr 3: 1
 │         row 0, expr 4: true
 │         row 0, expr 5: true
 │
@@ -1111,20 +1111,20 @@ vectorized: true
                             │       │     columns: (id, email, crdb_region)
                             │       │     estimated row count: 1 (missing stats)
                             │       │     table: t_unique_hash_sec_key@idx_uniq_hash_email
-                            │       │     spans: /"@"/13/"some_email"/0
+                            │       │     spans: /"@"/1/"some_email"/0
                             │       │
                             │       └── • scan
                             │             columns: (id, email, crdb_region)
                             │             estimated row count: 1 (missing stats)
                             │             table: t_unique_hash_sec_key@idx_uniq_hash_email
-                            │             spans: /"\x80"/13/"some_email"/0 /"\xc0"/13/"some_email"/0
+                            │             spans: /"\x80"/1/"some_email"/0 /"\xc0"/1/"some_email"/0
                             │             parallel
                             │
                             └── • scan
                                   columns: (id, email, crdb_region)
                                   estimated row count: 1 (missing stats)
                                   table: t_unique_hash_sec_key@idx_uniq_hash_email
-                                  spans: /"\x80"/13/"some_email"/0 /"\xc0"/13/"some_email"/0
+                                  spans: /"\x80"/1/"some_email"/0 /"\xc0"/1/"some_email"/0
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email') ON CONFLICT DO NOTHING;
@@ -1167,7 +1167,7 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (crdb_internal_email_shard_16_eq, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
-                    │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                    │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                     │ render column1: column1
                     │ render column2: column2
                     │ render crdb_region_default: crdb_region_default
@@ -1183,7 +1183,7 @@ vectorized: true
                         │     row 0, expr 0: 4321
                         │     row 0, expr 1: 'some_email'
                         │     row 0, expr 2: 'ap-southeast-2'
-                        │     row 0, expr 3: 13
+                        │     row 0, expr 3: 1
                         │
                         └── • project
                             │ columns: ()
@@ -1247,7 +1247,7 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (crdb_internal_email_shard_16_eq, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
-                    │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                    │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                     │ render column1: column1
                     │ render column2: column2
                     │ render crdb_region_default: crdb_region_default
@@ -1269,7 +1269,7 @@ vectorized: true
                             │
                             └── • render
                                 │ columns: (crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
-                                │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                                │ render crdb_internal_email_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                                 │ render crdb_region_default: 'ap-southeast-2'
                                 │ render column1: column1
                                 │ render column2: column2
@@ -1316,7 +1316,7 @@ vectorized: true
 │           │     row 0, expr 0: 4321
 │           │     row 0, expr 1: 'some_email'
 │           │     row 0, expr 2: 'ap-southeast-2'
-│           │     row 0, expr 3: 13
+│           │     row 0, expr 3: 1
 │           │
 │           └── • project
 │               │ columns: ()
@@ -1330,13 +1330,13 @@ vectorized: true
 │                   │     columns: (email)
 │                   │     estimated row count: 1 (missing stats)
 │                   │     table: t_unique_hash_sec_key@idx_uniq_hash_email
-│                   │     spans: /"@"/13/"some_email"/0
+│                   │     spans: /"@"/1/"some_email"/0
 │                   │
 │                   └── • scan
 │                         columns: (email)
 │                         estimated row count: 1 (missing stats)
 │                         table: t_unique_hash_sec_key@idx_uniq_hash_email
-│                         spans: /"\x80"/13/"some_email"/0 /"\xc0"/13/"some_email"/0
+│                         spans: /"\x80"/1/"some_email"/0 /"\xc0"/1/"some_email"/0
 │                         parallel
 │
 └── • constraint-check
@@ -1410,8 +1410,8 @@ vectorized: true
 │                       │
 │                       └── • render
 │                           │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
-│                           │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
-│                           │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+│                           │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
+│                           │ render crdb_internal_email_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
 │                           │ render crdb_region_default: 'ap-southeast-2'
 │                           │ render column1: column1
 │                           │ render column2: column2
@@ -1491,7 +1491,7 @@ vectorized: true
 │                   │ render upsert_id: CASE WHEN crdb_region IS NULL THEN column1 ELSE id END
 │                   │ render upsert_email: CASE WHEN crdb_region IS NULL THEN column2 ELSE 'bad_email' END
 │                   │ render upsert_crdb_region: CASE WHEN crdb_region IS NULL THEN crdb_region_default ELSE crdb_region END
-│                   │ render upsert_crdb_internal_email_shard_16: CASE WHEN crdb_region IS NULL THEN crdb_internal_email_shard_16_comp ELSE 6 END
+│                   │ render upsert_crdb_internal_email_shard_16: CASE WHEN crdb_region IS NULL THEN crdb_internal_email_shard_16_comp ELSE 9 END
 │                   │ render column1: column1
 │                   │ render column2: column2
 │                   │ render crdb_region_default: crdb_region_default
@@ -1511,11 +1511,11 @@ vectorized: true
 │                       │     row 0, expr 0: 4321
 │                       │     row 0, expr 1: 'some_email'
 │                       │     row 0, expr 2: 'ap-southeast-2'
-│                       │     row 0, expr 3: 13
+│                       │     row 0, expr 3: 1
 │                       │
 │                       └── • render
 │                           │ columns: (crdb_internal_email_shard_16, id, email, crdb_region)
-│                           │ render crdb_internal_email_shard_16: mod(fnv32(crdb_internal.datums_to_bytes(email)), 16)
+│                           │ render crdb_internal_email_shard_16: mod(fnv32(md5(crdb_internal.datums_to_bytes(email))), 16)
 │                           │ render id: id
 │                           │ render email: email
 │                           │ render crdb_region: crdb_region
@@ -1529,13 +1529,13 @@ vectorized: true
 │                               │     columns: (id, email, crdb_region)
 │                               │     estimated row count: 1 (missing stats)
 │                               │     table: t_unique_hash_sec_key@idx_uniq_hash_email
-│                               │     spans: /"@"/13/"some_email"/0
+│                               │     spans: /"@"/1/"some_email"/0
 │                               │
 │                               └── • scan
 │                                     columns: (id, email, crdb_region)
 │                                     estimated row count: 1 (missing stats)
 │                                     table: t_unique_hash_sec_key@idx_uniq_hash_email
-│                                     spans: /"\x80"/13/"some_email"/0 /"\xc0"/13/"some_email"/0
+│                                     spans: /"\x80"/1/"some_email"/0 /"\xc0"/1/"some_email"/0
 │                                     parallel
 │
 ├── • constraint-check
@@ -1581,7 +1581,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
-                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(upsert_email)), 16)
+                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(upsert_email))), 16)
                         │ render id: upsert_id
                         │ render email: upsert_email
                         │ render crdb_region: upsert_crdb_region
@@ -1638,7 +1638,7 @@ vectorized: true
 │                   │ render upsert_id: CASE WHEN crdb_region IS NULL THEN column1 ELSE id END
 │                   │ render upsert_email: CASE WHEN crdb_region IS NULL THEN column2 ELSE 'bad_email' END
 │                   │ render upsert_crdb_region: CASE WHEN crdb_region IS NULL THEN crdb_region_default ELSE crdb_region END
-│                   │ render upsert_crdb_internal_email_shard_16: CASE WHEN crdb_region IS NULL THEN crdb_internal_email_shard_16_comp ELSE 6 END
+│                   │ render upsert_crdb_internal_email_shard_16: CASE WHEN crdb_region IS NULL THEN crdb_internal_email_shard_16_comp ELSE 9 END
 │                   │ render column1: column1
 │                   │ render column2: column2
 │                   │ render crdb_region_default: crdb_region_default
@@ -1650,7 +1650,7 @@ vectorized: true
 │                   │
 │                   └── • render
 │                       │ columns: (crdb_internal_email_shard_16, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region)
-│                       │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(crdb_internal.datums_to_bytes(email)), 16) END
+│                       │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(md5(crdb_internal.datums_to_bytes(email))), 16) END
 │                       │ render column1: column1
 │                       │ render column2: column2
 │                       │ render crdb_region_default: crdb_region_default
@@ -1676,8 +1676,8 @@ vectorized: true
 │                                   │
 │                                   └── • render
 │                                       │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
-│                                       │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
-│                                       │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+│                                       │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
+│                                       │ render crdb_internal_email_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
 │                                       │ render crdb_region_default: 'ap-southeast-2'
 │                                       │ render column1: column1
 │                                       │ render column2: column2
@@ -1733,7 +1733,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
-                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(upsert_email)), 16)
+                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(upsert_email))), 16)
                         │ render id: upsert_id
                         │ render email: upsert_email
                         │ render crdb_region: upsert_crdb_region
@@ -1792,11 +1792,11 @@ vectorized: true
 │                   │     row 0, expr 0: 1
 │                   │     row 0, expr 1: 'email1'
 │                   │     row 0, expr 2: 'ap-southeast-2'
-│                   │     row 0, expr 3: 5
+│                   │     row 0, expr 3: 12
 │                   │
 │                   └── • render
 │                       │ columns: (crdb_internal_email_shard_16, id, email, crdb_region)
-│                       │ render crdb_internal_email_shard_16: mod(fnv32(crdb_internal.datums_to_bytes(email)), 16)
+│                       │ render crdb_internal_email_shard_16: mod(fnv32(md5(crdb_internal.datums_to_bytes(email))), 16)
 │                       │ render id: id
 │                       │ render email: email
 │                       │ render crdb_region: crdb_region
@@ -1839,7 +1839,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
-                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                         │ render id: upsert_id
                         │ render email: column2
                         │ render crdb_region: crdb_region_default
@@ -1890,7 +1890,7 @@ vectorized: true
 │               │
 │               └── • render
 │                   │ columns: (crdb_internal_email_shard_16, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region)
-│                   │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(crdb_internal.datums_to_bytes(email)), 16) END
+│                   │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(md5(crdb_internal.datums_to_bytes(email))), 16) END
 │                   │ render column1: column1
 │                   │ render column2: column2
 │                   │ render crdb_region_default: crdb_region_default
@@ -1910,7 +1910,7 @@ vectorized: true
 │                       │
 │                       └── • render
 │                           │ columns: (crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
-│                           │ render crdb_internal_email_shard_16_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+│                           │ render crdb_internal_email_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
 │                           │ render crdb_region_default: 'ap-southeast-2'
 │                           │ render column1: column1
 │                           │ render column2: column2
@@ -1943,7 +1943,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
-                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                         │ render id: upsert_id
                         │ render email: column2
                         │ render crdb_region: crdb_region_default
@@ -1978,9 +1978,9 @@ vectorized: true
 │       └── • render
 │           │ columns: (id, email, crdb_region, crdb_internal_email_shard_16, email_new, crdb_internal_email_shard_16_comp, check1)
 │           │ render check1: true
-│           │ render crdb_internal_email_shard_16_comp: 5
+│           │ render crdb_internal_email_shard_16_comp: 12
 │           │ render email_new: 'email1'
-│           │ render crdb_internal_email_shard_16: mod(fnv32(crdb_internal.datums_to_bytes(email)), 16)
+│           │ render crdb_internal_email_shard_16: mod(fnv32(md5(crdb_internal.datums_to_bytes(email))), 16)
 │           │ render id: id
 │           │ render email: email
 │           │ render crdb_region: crdb_region
@@ -2023,7 +2023,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
-                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(email_new)), 16)
+                        │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(email_new))), 16)
                         │ render id: id
                         │ render email: email_new
                         │ render crdb_region: crdb_region
