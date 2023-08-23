@@ -270,7 +270,7 @@ func TestShowCreateTable(t *testing.T) {
 			)`,
 			Expect: `CREATE TABLE public.%[1]s (
 	a INT8 NULL,
-	crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
+	crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) VIRTUAL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	INDEX %[1]s_a_idx (a ASC) USING HASH WITH (bucket_count=8)

@@ -34,7 +34,7 @@ vectorized: true
     │
     └── • render
         │ columns: (crdb_internal_a_shard_11_comp, column1)
-        │ render crdb_internal_a_shard_11_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 11)
+        │ render crdb_internal_a_shard_11_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 11)
         │ render column1: column1
         │
         └── • values
@@ -314,7 +314,7 @@ vectorized: true
     │
     └── • render
         │ columns: (crdb_internal_a_shard_12_comp, rowid_default, column1)
-        │ render crdb_internal_a_shard_12_comp: mod(fnv32(crdb_internal.datums_to_bytes(column1)), 12)
+        │ render crdb_internal_a_shard_12_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 12)
         │ render rowid_default: unique_rowid()
         │ render column1: column1
         │
@@ -532,7 +532,7 @@ vectorized: true
   columns: (i2, i4, i8, f4, f8, s, c, b, dc, ival, oid, tstz, ts, da, inet, vb)
   estimated row count: 1 (missing stats)
   table: sharded_primary_with_many_column_types@sharded_primary_with_many_column_types_pkey
-  spans: /5/1/1/1/1/1/"1"/"1"/"1"/1/00:00:01/1/1970-01-01T00:00:01Z/1970-01-01T00:00:01Z/1/"\x00 \x7f\x00\x00\x01"/B1/0
+  spans: /3/1/1/1/1/1/"1"/"1"/"1"/1/00:00:01/1/1970-01-01T00:00:01Z/1970-01-01T00:00:01Z/1/"\x00 \x7f\x00\x00\x01"/B1/0
 
 # Test to make sure constraint on shard column value is added correctly when
 # creating a table with output show create table.
@@ -547,13 +547,13 @@ query T
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
- ├── crdb_internal_a_shard_8 int not null as (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) stored [hidden]
+ ├── crdb_internal_a_shard_8 int not null as (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) stored [hidden]
  ├── a int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── CHECK (crdb_internal_a_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8))
  ├── PRIMARY INDEX t_pkey
- │    ├── crdb_internal_a_shard_8 int not null as (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) stored [hidden] (implicit)
+ │    ├── crdb_internal_a_shard_8 int not null as (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) stored [hidden] (implicit)
  │    └── a int not null
  └── UNIQUE WITHOUT INDEX (a)
 scan t
@@ -561,7 +561,7 @@ scan t
  │    └── crdb_internal_a_shard_8 IN (0, 1, 2, 3, 4, 5, 6, 7)
  └── computed column expressions
       └── crdb_internal_a_shard_8
-           └── mod(fnv32(crdb_internal.datums_to_bytes(a)), 8)
+           └── mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8)
 
 let $create_statement
 SELECT create_statement FROM [SHOW CREATE TABLE t]
@@ -576,22 +576,22 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
 CREATE TABLE public.t (
-   crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
-   a INT8 NOT NULL,
-   CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8)
+  crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) VIRTUAL,
+  a INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8)
 )
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
 ----
 TABLE t
- ├── crdb_internal_a_shard_8 int not null as (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) stored [hidden]
+ ├── crdb_internal_a_shard_8 int not null as (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) stored [hidden]
  ├── a int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
  ├── CHECK (crdb_internal_a_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8))
  ├── PRIMARY INDEX t_pkey
- │    ├── crdb_internal_a_shard_8 int not null as (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) stored [hidden] (implicit)
+ │    ├── crdb_internal_a_shard_8 int not null as (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) stored [hidden] (implicit)
  │    └── a int not null
  └── UNIQUE WITHOUT INDEX (a)
 scan t
@@ -599,7 +599,7 @@ scan t
  │    └── crdb_internal_a_shard_8 IN (0, 1, 2, 3, 4, 5, 6, 7)
  └── computed column expressions
       └── crdb_internal_a_shard_8
-           └── mod(fnv32(crdb_internal.datums_to_bytes(a)), 8)
+           └── mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8)
 
 
 # Test to make sure unqiueness checks are omitted for unique without index
@@ -625,7 +625,7 @@ vectorized: true
   into: t_hash_indexed(crdb_internal_a_shard_8, a, b)
   auto commit
   size: 4 columns, 1 row
-  row 0, expr 0: 1
+  row 0, expr 0: 3
   row 0, expr 1: 4321
   row 0, expr 2: 8765
   row 0, expr 3: true
@@ -646,7 +646,7 @@ vectorized: true
 └── • render
     │ columns: (crdb_internal_a_shard_8, a, b, crdb_internal_a_shard_8_comp, a_new, check1)
     │ render check1: true
-    │ render crdb_internal_a_shard_8_comp: 1
+    │ render crdb_internal_a_shard_8_comp: 3
     │ render a_new: 4321
     │ render crdb_internal_a_shard_8: crdb_internal_a_shard_8
     │ render a: a
@@ -656,7 +656,7 @@ vectorized: true
           columns: (crdb_internal_a_shard_8, a, b)
           estimated row count: 1 (missing stats)
           table: t_hash_indexed@t_hash_indexed_pkey
-          spans: /6/1234/0
+          spans: /4/1234/0
           locking strength: for update
 
 query T
@@ -679,7 +679,7 @@ vectorized: true
           size: 4 columns, 1 row
           row 0, expr 0: 4321
           row 0, expr 1: 8765
-          row 0, expr 2: 1
+          row 0, expr 2: 3
           row 0, expr 3: true
 
 query T
@@ -712,7 +712,7 @@ vectorized: true
         │
         └── • render
             │ columns: (upsert_crdb_internal_a_shard_8, upsert_a, column1, column2, crdb_internal_a_shard_8_comp, crdb_internal_a_shard_8, a, b)
-            │ render upsert_crdb_internal_a_shard_8: CASE WHEN crdb_internal_a_shard_8 IS NULL THEN crdb_internal_a_shard_8_comp ELSE 1 END
+            │ render upsert_crdb_internal_a_shard_8: CASE WHEN crdb_internal_a_shard_8 IS NULL THEN crdb_internal_a_shard_8_comp ELSE 3 END
             │ render upsert_a: CASE WHEN crdb_internal_a_shard_8 IS NULL THEN column1 ELSE 4321 END
             │ render column1: column1
             │ render column2: column2
@@ -730,13 +730,13 @@ vectorized: true
                 │     size: 3 columns, 1 row
                 │     row 0, expr 0: 4321
                 │     row 0, expr 1: 8765
-                │     row 0, expr 2: 1
+                │     row 0, expr 2: 3
                 │
                 └── • scan
                       columns: (crdb_internal_a_shard_8, a, b)
                       estimated row count: 1 (missing stats)
                       table: t_hash_indexed@t_hash_indexed_pkey
-                      spans: /1/4321/0
+                      spans: /3/4321/0
                       locking strength: for update
 
 query T
@@ -768,13 +768,13 @@ vectorized: true
         │     size: 3 columns, 1 row
         │     row 0, expr 0: 4321
         │     row 0, expr 1: 8765
-        │     row 0, expr 2: 1
+        │     row 0, expr 2: 3
         │
         └── • scan
               columns: (a)
               estimated row count: 1 (missing stats)
               table: t_hash_indexed@t_hash_indexed_pkey
-              spans: /1/4321/0
+              spans: /3/4321/0
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765) ON CONFLICT (a) DO NOTHING
@@ -805,13 +805,13 @@ vectorized: true
         │     size: 3 columns, 1 row
         │     row 0, expr 0: 4321
         │     row 0, expr 1: 8765
-        │     row 0, expr 2: 1
+        │     row 0, expr 2: 3
         │
         └── • scan
               columns: (a)
               estimated row count: 1 (missing stats)
               table: t_hash_indexed@t_hash_indexed_pkey
-              spans: /1/4321/0
+              spans: /3/4321/0
 
 # Test to make sure unqiueness checks are omitted for unique without index
 # constraints that are derived from hash-sharded indexes on secondary index.
@@ -844,7 +844,7 @@ vectorized: true
   size: 4 columns, 1 row
   row 0, expr 0: 4321
   row 0, expr 1: 8765
-  row 0, expr 2: 3
+  row 0, expr 2: 5
   row 0, expr 3: true
 
 query T
@@ -863,9 +863,9 @@ vectorized: true
 └── • render
     │ columns: (a, b, crdb_internal_b_shard_8, b_new, crdb_internal_b_shard_8_comp, check1)
     │ render check1: true
-    │ render crdb_internal_b_shard_8_comp: 3
+    │ render crdb_internal_b_shard_8_comp: 5
     │ render b_new: 8765
-    │ render crdb_internal_b_shard_8: mod(fnv32(crdb_internal.datums_to_bytes(b)), 8)
+    │ render crdb_internal_b_shard_8: mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 8)
     │ render a: a
     │ render b: b
     │
@@ -911,11 +911,11 @@ vectorized: true
             │     size: 3 columns, 1 row
             │     row 0, expr 0: 4321
             │     row 0, expr 1: 8765
-            │     row 0, expr 2: 3
+            │     row 0, expr 2: 5
             │
             └── • render
                 │ columns: (crdb_internal_b_shard_8, a, b)
-                │ render crdb_internal_b_shard_8: mod(fnv32(crdb_internal.datums_to_bytes(b)), 8)
+                │ render crdb_internal_b_shard_8: mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 8)
                 │ render a: a
                 │ render b: b
                 │
@@ -956,7 +956,7 @@ vectorized: true
         └── • render
             │ columns: (upsert_b, upsert_crdb_internal_b_shard_8, column1, column2, crdb_internal_b_shard_8_comp, a, b, crdb_internal_b_shard_8)
             │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE 8765 END
-            │ render upsert_crdb_internal_b_shard_8: CASE WHEN a IS NULL THEN crdb_internal_b_shard_8_comp ELSE 3 END
+            │ render upsert_crdb_internal_b_shard_8: CASE WHEN a IS NULL THEN crdb_internal_b_shard_8_comp ELSE 5 END
             │ render column1: column1
             │ render column2: column2
             │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp
@@ -973,11 +973,11 @@ vectorized: true
                 │     size: 3 columns, 1 row
                 │     row 0, expr 0: 4321
                 │     row 0, expr 1: 8765
-                │     row 0, expr 2: 3
+                │     row 0, expr 2: 5
                 │
                 └── • render
                     │ columns: (crdb_internal_b_shard_8, a, b)
-                    │ render crdb_internal_b_shard_8: mod(fnv32(crdb_internal.datums_to_bytes(b)), 8)
+                    │ render crdb_internal_b_shard_8: mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 8)
                     │ render a: a
                     │ render b: b
                     │
@@ -1018,7 +1018,7 @@ vectorized: true
         └── • render
             │ columns: (upsert_b, upsert_crdb_internal_b_shard_8, column1, column2, crdb_internal_b_shard_8_comp, a, b, crdb_internal_b_shard_8)
             │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE 8765 END
-            │ render upsert_crdb_internal_b_shard_8: CASE WHEN a IS NULL THEN crdb_internal_b_shard_8_comp ELSE 3 END
+            │ render upsert_crdb_internal_b_shard_8: CASE WHEN a IS NULL THEN crdb_internal_b_shard_8_comp ELSE 5 END
             │ render column1: column1
             │ render column2: column2
             │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp
@@ -1035,11 +1035,11 @@ vectorized: true
                 │     size: 3 columns, 1 row
                 │     row 0, expr 0: 4321
                 │     row 0, expr 1: 8765
-                │     row 0, expr 2: 3
+                │     row 0, expr 2: 5
                 │
                 └── • render
                     │ columns: (crdb_internal_b_shard_8, a, b)
-                    │ render crdb_internal_b_shard_8: mod(fnv32(crdb_internal.datums_to_bytes(b)), 8)
+                    │ render crdb_internal_b_shard_8: mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 8)
                     │ render a: a
                     │ render b: b
                     │
@@ -1047,7 +1047,7 @@ vectorized: true
                           columns: (a, b)
                           estimated row count: 1 (missing stats)
                           table: t_hash_indexed@idx_t_hash_indexed
-                          spans: /3/8765/0
+                          spans: /5/8765/0
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (111, 222), (333, 444) ON CONFLICT (b) DO UPDATE SET b = excluded.b
@@ -1077,7 +1077,7 @@ vectorized: true
         │
         └── • render
             │ columns: (crdb_internal_b_shard_8, column1, column2, crdb_internal_b_shard_8_comp, a, b)
-            │ render crdb_internal_b_shard_8: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(crdb_internal.datums_to_bytes(b)), 8) END
+            │ render crdb_internal_b_shard_8: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 8) END
             │ render column1: column1
             │ render column2: column2
             │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp
@@ -1097,8 +1097,8 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_b_shard_8_eq, crdb_internal_b_shard_8_comp, column1, column2)
-                        │ render crdb_internal_b_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8)
-                        │ render crdb_internal_b_shard_8_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8)
+                        │ render crdb_internal_b_shard_8_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 8)
+                        │ render crdb_internal_b_shard_8_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 8)
                         │ render column1: column1
                         │ render column2: column2
                         │
@@ -1143,7 +1143,7 @@ vectorized: true
             │
             └── • render
                 │ columns: (crdb_internal_b_shard_8_eq, column1, column2, crdb_internal_b_shard_8_comp)
-                │ render crdb_internal_b_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8)
+                │ render crdb_internal_b_shard_8_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 8)
                 │ render column1: column1
                 │ render column2: column2
                 │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp
@@ -1157,7 +1157,7 @@ vectorized: true
                     │     size: 3 columns, 1 row
                     │     row 0, expr 0: 4321
                     │     row 0, expr 1: 8765
-                    │     row 0, expr 2: 3
+                    │     row 0, expr 2: 5
                     │
                     └── • project
                         │ columns: ()
@@ -1201,7 +1201,7 @@ vectorized: true
             │
             └── • render
                 │ columns: (crdb_internal_b_shard_8_eq, column1, column2, crdb_internal_b_shard_8_comp)
-                │ render crdb_internal_b_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8)
+                │ render crdb_internal_b_shard_8_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 8)
                 │ render column1: column1
                 │ render column2: column2
                 │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp
@@ -1215,7 +1215,7 @@ vectorized: true
                     │
                     └── • render
                         │ columns: (crdb_internal_b_shard_8_comp, column1, column2)
-                        │ render crdb_internal_b_shard_8_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8)
+                        │ render crdb_internal_b_shard_8_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 8)
                         │ render column1: column1
                         │ render column2: column2
                         │
@@ -1256,7 +1256,7 @@ vectorized: true
         │     size: 3 columns, 1 row
         │     row 0, expr 0: 4321
         │     row 0, expr 1: 8765
-        │     row 0, expr 2: 3
+        │     row 0, expr 2: 5
         │
         └── • project
             │ columns: ()
@@ -1265,7 +1265,7 @@ vectorized: true
                   columns: (b)
                   estimated row count: 1 (missing stats)
                   table: t_hash_indexed@idx_t_hash_indexed
-                  spans: /3/8765/0
+                  spans: /5/8765/0
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (111, 222), (333, 444) ON CONFLICT (b) DO NOTHING
@@ -1299,8 +1299,8 @@ vectorized: true
             │
             └── • render
                 │ columns: (crdb_internal_b_shard_8_eq, crdb_internal_b_shard_8_comp, column1, column2)
-                │ render crdb_internal_b_shard_8_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8)
-                │ render crdb_internal_b_shard_8_comp: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 8)
+                │ render crdb_internal_b_shard_8_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 8)
+                │ render crdb_internal_b_shard_8_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 8)
                 │ render column1: column1
                 │ render column2: column2
                 │
@@ -1367,7 +1367,7 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (crdb_internal_id_shard_16_eq, pid)
-                    │ render crdb_internal_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                    │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                     │ render pid: column2
                     │
                     └── • project
@@ -1436,7 +1436,7 @@ vectorized: true
                 │
                 └── • render
                     │ columns: (crdb_internal_real_id_shard_16_eq, pid)
-                    │ render crdb_internal_real_id_shard_16_eq: mod(fnv32(crdb_internal.datums_to_bytes(column2)), 16)
+                    │ render crdb_internal_real_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
                     │ render pid: column2
                     │
                     └── • project

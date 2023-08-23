@@ -37,7 +37,7 @@ upsert descriptor #104
      modificationTime: {}
   +  mutations:
   +  - column:
-  +      computeExpr: mod(fnv32(crdb_internal.datums_to_bytes(j)), 3:::INT8)
+  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 3:::INT8)
   +      hidden: true
   +      id: 3
   +      name: crdb_internal_j_shard_3
@@ -204,7 +204,7 @@ upsert descriptor #104
      modificationTime: {}
   +  mutations:
   +  - column:
-  +      computeExpr: mod(fnv32(crdb_internal.datums_to_bytes(j)), 3:::INT8)
+  +      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 3:::INT8)
   +      hidden: true
   +      id: 3
   +      name: crdb_internal_j_shard_3
@@ -776,7 +776,7 @@ upsert descriptor #104
   ...
          oid: 20
          width: 64
-  +  - computeExpr: mod(fnv32(crdb_internal.datums_to_bytes(j)), 3:::INT8)
+  +  - computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 3:::INT8)
   +    hidden: true
   +    id: 3
   +    name: crdb_internal_j_shard_3
@@ -822,7 +822,7 @@ upsert descriptor #104
      modificationTime: {}
      mutations:
   -  - column:
-  -      computeExpr: mod(fnv32(crdb_internal.datums_to_bytes(j)), 3:::INT8)
+  -      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(j))), 3:::INT8)
   -      hidden: true
   -      id: 3
   -      name: crdb_internal_j_shard_3
