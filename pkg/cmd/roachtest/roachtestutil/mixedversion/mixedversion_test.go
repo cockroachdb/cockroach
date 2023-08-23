@@ -30,9 +30,10 @@ func Test_assertValidTest(t *testing.T) {
 		}
 	}
 
+	// Validating that number of nodes matches what is encoded in the
+	// fixtures if using them.
 	notEnoughNodes := option.NodeListOption{1, 2, 3}
 	tooManyNodes := option.NodeListOption{1, 2, 3, 5, 6}
-
 	for _, crdbNodes := range []option.NodeListOption{notEnoughNodes, tooManyNodes} {
 		mvt := newTest()
 		mvt.crdbNodes = crdbNodes
@@ -47,4 +48,15 @@ func Test_assertValidTest(t *testing.T) {
 		assertValidTest(mvt, fatalFunc())
 		require.NoError(t, fatalErr)
 	}
+
+	// Validating number of upgrades specified by the test.
+	mvt := newTest(MinUpgrades(10))
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (3) must be greater than minUpgrades (10)")
+
+	mvt = newTest(MaxUpgrades(0))
+	assertValidTest(mvt, fatalFunc())
+	require.Error(t, fatalErr)
+	require.Contains(t, fatalErr.Error(), "mixedversion.NewTest: invalid test options: maxUpgrades (0) must be greater than minUpgrades (1)")
 }
