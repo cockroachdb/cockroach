@@ -58,7 +58,6 @@ type changeAggregator struct {
 	errCh chan error
 	// kvFeedDoneCh is closed when the kvfeed exits.
 	kvFeedDoneCh chan struct{}
-	kvFeedMemMon *mon.BytesMonitor
 
 	// drainWatchCh is signaled if the job registry on this node is being
 	// drained, which is a proxy for the node being drained. If a drain occurs,
@@ -253,17 +252,6 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.knobs = *cfKnobs
 	}
 
-	// TODO(yevgeniy): Introduce separate changefeed monitor that's a parent
-	// for all changefeeds to control memory allocated to all changefeeds.
-	pool := ca.flowCtx.Cfg.BackfillerMonitor
-	if ca.knobs.MemMonitor != nil {
-		pool = ca.knobs.MemMonitor
-	}
-	limit := changefeedbase.PerChangefeedMemLimit.Get(&ca.flowCtx.Cfg.Settings.SV)
-	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", limit, pool)
-	kvFeedMemMon.StartNoReserved(ctx, pool)
-	ca.kvFeedMemMon = kvFeedMemMon
-
 	// The job registry has a set of metrics used to monitor the various jobs it
 	// runs. They're all stored as the `metric.Struct` interface because of
 	// dependency cycles.
@@ -313,7 +301,14 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		kvFeedHighWater = ca.spec.Feed.StatementTime
 	}
 
-	ca.eventProducer, err = ca.startKVFeed(ctx, spans, kvFeedHighWater, needsInitialScan, feed)
+	// TODO(yevgeniy): Introduce separate changefeed monitor that's a parent
+	// for all changefeeds to control memory allocated to all changefeeds.
+	pool := ca.flowCtx.Cfg.BackfillerMonitor
+	if ca.knobs.MemMonitor != nil {
+		pool = ca.knobs.MemMonitor
+	}
+	limit := changefeedbase.PerChangefeedMemLimit.Get(&ca.flowCtx.Cfg.Settings.SV)
+	ca.eventProducer, ca.kvFeedDoneCh, ca.errCh, err = ca.startKVFeed(ctx, spans, kvFeedHighWater, needsInitialScan, feed, pool, limit)
 	if err != nil {
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -362,39 +357,49 @@ func (ca *changeAggregator) startKVFeed(
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
 	config ChangefeedConfig,
-) (kvevent.Reader, error) {
+	parentMemMon *mon.BytesMonitor,
+	memLimit int64,
+) (kvevent.Reader, chan struct{}, chan error, error) {
 	cfg := ca.flowCtx.Cfg
+	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", memLimit, parentMemMon)
+	kvFeedMemMon.StartNoReserved(ctx, parentMemMon)
 	buf := kvevent.NewThrottlingBuffer(
-		kvevent.NewMemBuffer(ca.kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics),
+		kvevent.NewMemBuffer(kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics),
 		cdcutils.NodeLevelThrottler(&cfg.Settings.SV, &ca.metrics.ThrottleMetrics))
 
 	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
 	// we return the kvevent.Reader part to the caller.
-	kvfeedCfg, err := ca.makeKVFeedCfg(ctx, config, spans, buf, initialHighWater, needsInitialScan)
+	kvfeedCfg, err := ca.makeKVFeedCfg(ctx, config, spans, buf, initialHighWater, needsInitialScan, kvFeedMemMon)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
-	// Give errCh enough buffer both possible errors from supporting goroutines,
-	// but only the first one is ever used.
-	ca.errCh = make(chan error, 2)
-	ca.kvFeedDoneCh = make(chan struct{})
+	errCh := make(chan error, 1)
+	doneCh := make(chan struct{})
+	// If RunAsyncTask immediately returns an error, the kvfeed was not run and
+	// will not run.
 	if err := ca.flowCtx.Stopper().RunAsyncTask(ctx, "changefeed-poller", func(ctx context.Context) {
 		defer close(ca.kvFeedDoneCh)
-		// Trying to call MoveToDraining here is racy (`MoveToDraining called in
-		// state stateTrailingMeta`), so return the error via a channel.
-		ca.errCh <- kvfeed.Run(ctx, kvfeedCfg)
+		defer kvFeedMemMon.Stop(ctx)
+		errCh <- kvfeed.Run(ctx, kvfeedCfg)
 	}); err != nil {
-		// If err != nil then the RunAsyncTask closure never ran, which means we
-		// need to manually close ca.kvFeedDoneCh so `(*changeAggregator).close`
-		// doesn't hang.
-		close(ca.kvFeedDoneCh)
-		ca.errCh <- err
-		ca.cancel()
-		return nil, err
+		return nil, nil, nil, err
 	}
 
-	return buf, nil
+	return buf, doneCh, errCh, nil
+}
+
+func (ca *changeAggregator) waitForKVFeedDone() {
+	<-ca.kvFeedDoneCh
+}
+
+func (ca *changeAggregator) checkKVFeedErr() error {
+	select {
+	case err := <-ca.errCh:
+		return err
+	default:
+		return nil
+	}
 }
 
 func (ca *changeAggregator) makeKVFeedCfg(
@@ -404,6 +409,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	buf kvevent.Writer,
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
+	memMon *mon.BytesMonitor,
 ) (kvfeed.Config, error) {
 	schemaChange, err := config.Opts.GetSchemaChangeHandlingOptions()
 	if err != nil {
@@ -435,7 +441,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		Metrics:                 &ca.metrics.KVFeedMetrics,
 		OnBackfillCallback:      ca.sliMetrics.getBackfillCallback(),
 		OnBackfillRangeCallback: ca.sliMetrics.getBackfillRangeCallback(),
-		MM:                      ca.kvFeedMemMon,
+		MM:                      memMon,
 		InitialHighWater:        initialHighWater,
 		EndTime:                 config.EndTime,
 		WithDiff:                filters.WithDiff,
@@ -508,9 +514,8 @@ func (ca *changeAggregator) close() {
 	}
 	ca.cancel()
 	// Wait for the poller to finish shutting down.
-	if ca.kvFeedDoneCh != nil {
-		<-ca.kvFeedDoneCh
-	}
+	ca.waitForKVFeedDone()
+
 	if ca.drainDone != nil {
 		ca.drainDone()
 	}
@@ -607,11 +612,10 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 					err = nil
 				}
 			} else {
-				select {
 				// If the poller errored first, that's the
 				// interesting one, so overwrite `err`.
-				case err = <-ca.errCh:
-				default:
+				if kvFeedErr := ca.checkKVFeedErr(); err != nil {
+					err = kvFeedErr
 				}
 			}
 			// Shut down the poller if it wasn't already.
