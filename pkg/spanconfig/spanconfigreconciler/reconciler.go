@@ -368,7 +368,7 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 		// keyspace (including secondary tenants), on its tenant keyspace, and on
 		// other secondary tenant keyspaces.
 		targets = append(targets,
-			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireKeyspaceTarget()))
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireTableKeyspaceTarget()))
 		targets = append(targets,
 			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeAllTenantKeyspaceTargetsSet(f.tenID)))
 		if f.knobs.ConfigureScratchRange {
@@ -628,7 +628,7 @@ func (r *incrementalReconciler) filterForMissingProtectedTimestampSystemTargets(
 			// For the host tenant a Cluster ProtectedTimestampUpdate corresponds
 			// to the entire keyspace (including secondary tenants).
 			if r.codec.ForSystemTenant() {
-				missingSystemTarget = spanconfig.MakeEntireKeyspaceTarget()
+				missingSystemTarget = spanconfig.MakeEntireTableKeyspaceTarget()
 			} else {
 				// For a secondary tenant a Cluster ProtectedTimestampUpdate
 				// corresponds to the tenants keyspace.

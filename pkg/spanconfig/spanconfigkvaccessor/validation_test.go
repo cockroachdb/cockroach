@@ -26,7 +26,7 @@ func TestValidateUpdateArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	entireKeyspaceTarget := spanconfig.MakeTargetFromSystemTarget(
-		spanconfig.MakeEntireKeyspaceTarget(),
+		spanconfig.MakeEntireTableKeyspaceTarget(),
 	)
 
 	makeTenantTarget := func(id uint64) spanconfig.Target {

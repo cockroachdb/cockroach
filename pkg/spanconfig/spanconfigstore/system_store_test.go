@@ -62,7 +62,7 @@ func TestSystemSpanConfigStoreCombine(t *testing.T) {
 
 	updates := []spanconfig.Update{
 		makeSpanConfigAddition(
-			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireKeyspaceTarget()),
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireTableKeyspaceTarget()),
 			makeSystemSpanConfig(100),
 		),
 		makeSpanConfigAddition(spanconfig.MakeTargetFromSystemTarget(

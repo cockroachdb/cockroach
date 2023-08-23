@@ -31,7 +31,7 @@ upsert {entire-keyspace}:X
 
 updates
 ----
-[/Min,/Max)
+[/Table/0,/Max)
 
 store-reader key=a
 ----
@@ -74,7 +74,7 @@ delete {entire-keyspace}
 
 updates
 ----
-[/Min,/Max)
+[/Table/0,/Max)
 
 store-reader key=a
 ----

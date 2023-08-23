@@ -107,7 +107,7 @@ func (k *KVAccessor) GetAllSystemSpanConfigsThatApply(
 	// 2. The system span config set by the host over just the tenant's keyspace.
 	// 3. The system span config set by the tenant over its own keyspace.
 	targets := []spanconfig.Target{
-		spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireKeyspaceTarget()),
+		spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireTableKeyspaceTarget()),
 		spanconfig.MakeTargetFromSystemTarget(hostSetOnTenant),
 	}
 

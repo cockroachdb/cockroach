@@ -286,7 +286,7 @@ func TestStoreClone(t *testing.T) {
 			spanconfigtestutils.ParseConfig(t, "E"),
 		),
 		makeSpanConfigAddition(
-			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireKeyspaceTarget()),
+			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeEntireTableKeyspaceTarget()),
 			spanconfigtestutils.ParseConfig(t, "G"),
 		),
 		makeSpanConfigAddition(

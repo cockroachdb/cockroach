@@ -108,7 +108,7 @@ func TestDecodeSystemTargets(t *testing.T) {
 			t, roachpb.SystemTenantID, roachpb.MustMakeTenantID(10),
 		),
 		// System tenant targeting the entire keyspace.
-		spanconfig.MakeEntireKeyspaceTarget(),
+		spanconfig.MakeEntireTableKeyspaceTarget(),
 	} {
 		// We start with a fresh table for each run.
 		tdb.Exec(t, fmt.Sprintf("DROP TABLE IF EXISTS %s", dummyTableName))

@@ -35,7 +35,7 @@ func TestEncodeDecodeSystemTarget(t *testing.T) {
 		// System tenant targeting a secondary tenant.
 		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MustMakeTenantID(10)),
 		// System tenant targeting the entire keyspace.
-		MakeEntireKeyspaceTarget(),
+		MakeEntireTableKeyspaceTarget(),
 	} {
 		systemTarget, err := decodeSystemTarget(testTarget.encode())
 		require.NoError(t, err)
@@ -61,7 +61,7 @@ func TestTargetToFromProto(t *testing.T) {
 		// System tenant targeting a secondary tenant.
 		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MustMakeTenantID(10)),
 		// System tenant targeting the entire keyspace.
-		MakeEntireKeyspaceTarget(),
+		MakeEntireTableKeyspaceTarget(),
 		// System tenant's read-only target to fetch all system span configurations
 		// it has set over secondary tenant keyspaces.
 		MakeAllTenantKeyspaceTargetsSet(roachpb.SystemTenantID),
@@ -93,8 +93,8 @@ func TestKeyspaceTargeted(t *testing.T) {
 		expSpan roachpb.Span
 	}{
 		{
-			target:  MakeTargetFromSystemTarget(MakeEntireKeyspaceTarget()),
-			expSpan: keys.EverythingSpan,
+			target:  MakeTargetFromSystemTarget(MakeEntireTableKeyspaceTarget()),
+			expSpan: keys.TableSpan,
 		},
 		{
 			target: MakeTargetFromSystemTarget(TestingMakeTenantKeyspaceTargetOrFatal(t, ten10, ten10)),
@@ -202,7 +202,7 @@ func TestSystemTargetValidation(t *testing.T) {
 			// Secondary tenants cannot target the entire keyspace.
 			sourceTenantID: tenant10,
 			targetTenantID: roachpb.TenantID{},
-			targetType:     SystemTargetTypeEntireKeyspace,
+			targetType:     SystemTargetTypeEntireTableKeyspace,
 			expErr:         "only the host tenant is allowed to target the entire keyspace",
 		},
 		{
@@ -210,7 +210,7 @@ func TestSystemTargetValidation(t *testing.T) {
 			// set targetTenantID to themselves.
 			sourceTenantID: tenant10,
 			targetTenantID: tenant10,
-			targetType:     SystemTargetTypeEntireKeyspace,
+			targetType:     SystemTargetTypeEntireTableKeyspace,
 			expErr:         "only the host tenant is allowed to target the entire keyspace",
 		},
 		{
@@ -234,7 +234,7 @@ func TestSystemTargetValidation(t *testing.T) {
 			// keyspace.
 			sourceTenantID: roachpb.SystemTenantID,
 			targetTenantID: tenant10,
-			targetType:     SystemTargetTypeEntireKeyspace,
+			targetType:     SystemTargetTypeEntireTableKeyspace,
 			expErr:         "malformed system target for entire keyspace; targetTenantID set",
 		},
 		{
@@ -256,7 +256,7 @@ func TestSystemTargetValidation(t *testing.T) {
 			// System tenant targeting the entire keyspace is allowed.
 			sourceTenantID: roachpb.SystemTenantID,
 			targetTenantID: roachpb.TenantID{},
-			targetType:     SystemTargetTypeEntireKeyspace,
+			targetType:     SystemTargetTypeEntireTableKeyspace,
 		},
 		{
 			// System tenant targeting itself is allowed.
@@ -309,7 +309,7 @@ func TestTargetSortingRandomized(t *testing.T) {
 	sortedTargets := Targets{
 		MakeTargetFromSystemTarget(MakeAllTenantKeyspaceTargetsSet(roachpb.SystemTenantID)),
 		MakeTargetFromSystemTarget(MakeAllTenantKeyspaceTargetsSet(roachpb.MustMakeTenantID(10))),
-		MakeTargetFromSystemTarget(MakeEntireKeyspaceTarget()),
+		MakeTargetFromSystemTarget(MakeEntireTableKeyspaceTarget()),
 		MakeTargetFromSystemTarget(
 			TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID),
 		),
@@ -350,7 +350,7 @@ func TestSpanTargetsConstructedInSystemSpanConfigKeyspace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, tc := range []roachpb.Span{
-		MakeEntireKeyspaceTarget().encode(),
+		MakeEntireTableKeyspaceTarget().encode(),
 		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MustMakeTenantID(10), roachpb.MustMakeTenantID(10)).encode(),
 		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID).encode(),
 		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MustMakeTenantID(10)).encode(),

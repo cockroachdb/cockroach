@@ -212,7 +212,7 @@ func parseSystemTarget(t testing.TB, systemTarget string) spanconfig.SystemTarge
 	matches := systemTargetRe.FindStringSubmatch(systemTarget)
 
 	if matches[1] == "entire-keyspace" {
-		return spanconfig.MakeEntireKeyspaceTarget()
+		return spanconfig.MakeEntireTableKeyspaceTarget()
 	}
 
 	sourceID, err := strconv.Atoi(matches[3])

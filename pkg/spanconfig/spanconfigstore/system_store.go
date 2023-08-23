@@ -95,7 +95,7 @@ func (s *systemSpanConfigStore) combine(
 	// 2. The system span config set by the host over the tenant's keyspace.
 	// 3. The system span config set by the tenant itself over its own keyspace.
 	targets := []spanconfig.SystemTarget{
-		spanconfig.MakeEntireKeyspaceTarget(),
+		spanconfig.MakeEntireTableKeyspaceTarget(),
 		hostSetOnTenant,
 	}
 
