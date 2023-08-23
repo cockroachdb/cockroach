@@ -149,7 +149,9 @@ t   25:00:01
 t2  25:00:01
 t3  04:00:00
 
-query T
+# The tables in db2 should have a gc_ttl of 90001, while test.public.t3 should
+# have a gc_ttl of 14400.
+query T retry
 SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)->'gcPolicy'->>'ttlSeconds'
 FROM system.span_configurations
 WHERE start_key >= (SELECT crdb_internal.table_span(100)[1])
@@ -159,6 +161,7 @@ ORDER BY start_key
 14400
 90001
 90001
+14400
 
 query B
 SELECT crdb_internal.upsert_dropped_relation_gc_ttl(id, '1 second')
