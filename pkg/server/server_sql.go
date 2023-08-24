@@ -222,7 +222,7 @@ type SQLServer struct {
 //
 // TODO(tbg): give all of these fields a wrapper that can signal whether the
 // respective object is available. When it is not, return
-// UnsupportedWithMultiTenancy.
+// UnsupportedUnderClusterVirtualization.
 type sqlServerOptionalKVArgs struct {
 	// nodesStatusServer gives access to the NodesStatus service.
 	nodesStatusServer serverpb.OptionalNodesStatusServer
