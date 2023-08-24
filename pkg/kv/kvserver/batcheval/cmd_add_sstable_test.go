@@ -1388,28 +1388,33 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 // and on disk.
 func TestDBAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	t.Run("store=in-memory", func(t *testing.T) {
+		defer log.Scope(t).Close(t)
 		ctx := context.Background()
-		s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
-		defer s.Stopper().Stop(ctx)
+		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
+		})
+		defer srv.Stopper().Stop(ctx)
+		s := srv.ApplicationLayer()
 		tr := s.TracerI().(*tracing.Tracer)
 		runTestDBAddSSTable(ctx, t, db, tr, nil)
 	})
 
 	t.Run("store=on-disk", func(t *testing.T) {
+		defer log.Scope(t).Close(t)
 		ctx := context.Background()
 		storeSpec := base.DefaultTestStoreSpec
 		storeSpec.InMemory = false
 		storeSpec.Path = t.TempDir()
-		s, _, db := serverutils.StartServer(t, base.TestServerArgs{
-			Insecure:   true,
-			StoreSpecs: []base.StoreSpec{storeSpec},
+		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
+			StoreSpecs:        []base.StoreSpec{storeSpec},
 		})
-		defer s.Stopper().Stop(ctx)
+		defer srv.Stopper().Stop(ctx)
+		s := srv.ApplicationLayer()
 		tr := s.TracerI().(*tracing.Tracer)
-		store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+		store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 		require.NoError(t, err)
 		runTestDBAddSSTable(ctx, t, db, tr, store)
 	})
@@ -1830,8 +1835,11 @@ func TestAddSSTableIntentResolution(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Start a transaction that writes an intent at b.
 	txn := db.NewTxn(ctx, "intent")
@@ -1870,10 +1878,12 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsTSCache(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{},
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
+		Knobs:             base.TestingKnobs{},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Write key.
 	txn := db.NewTxn(ctx, "txn")
@@ -1925,6 +1935,7 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) 
 
 	ctx := context.Background()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableCanAckBeforeApplication: true,
