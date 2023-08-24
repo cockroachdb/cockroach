@@ -130,9 +130,9 @@ func (c *Config) NetworkCost(path NetworkPath) NetworkCost {
 // multiplied by the number of replicas plus the cost of the cross region
 // networking. If it is a read, then the cost is zero, since reads can only be
 // costed by examining the ResponseInfo.
-func (c *Config) RequestCost(bri RequestInfo) RU {
+func (c *Config) RequestCost(bri RequestInfo) (kv RU, network RU) {
 	if !bri.IsWrite() {
-		return 0
+		return 0, 0
 	}
 	// writeCost measures how expensive each replica is for crdb to write. This
 	// covers things like the cost of serving the RPC, raft consensus, and pebble
@@ -146,22 +146,22 @@ func (c *Config) RequestCost(bri RequestInfo) RU {
 	// overhead of each replica.
 	networkCost := RU(bri.networkCost) * RU(bri.writeBytes)
 
-	return writeCost*RU(bri.writeReplicas) + networkCost
+	return writeCost * RU(bri.writeReplicas), networkCost
 }
 
 // ResponseCost returns the cost, in RUs, of the given response. If it is a
 // read, that includes the per-batch, per-request, and per-byte costs, and the
 // cross region networking cost. If it is a write, then the cost is zero, since
 // writes can only be costed by examining the RequestInfo.
-func (c *Config) ResponseCost(bri ResponseInfo) RU {
+func (c *Config) ResponseCost(bri ResponseInfo) (kv RU, network RU) {
 	if !bri.IsRead() {
-		return 0
+		return 0, 0
 	}
-	cost := c.KVReadBatch
-	cost += RU(bri.readCount) * c.KVReadRequest
-	cost += RU(bri.readBytes) * c.KVReadByte
-	cost += RU(bri.readBytes) * RU(bri.networkCost)
-	return cost
+	kv = c.KVReadBatch
+	kv += RU(bri.readCount) * c.KVReadRequest
+	kv += RU(bri.readBytes) * c.KVReadByte
+	network = RU(bri.readBytes) * RU(bri.networkCost)
+	return kv, network
 }
 
 // RequestInfo captures the BatchRequest information that is used (together

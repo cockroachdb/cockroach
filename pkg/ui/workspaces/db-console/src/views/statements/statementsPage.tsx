@@ -247,6 +247,8 @@ export default withRouter(
           state.cachedData?.statements?.data?.stmts_total_runtime_secs ?? 0,
         statementsResponse: selectStatements(state),
         statementDiagnostics: selectStatementDiagnostics(state)?.data,
+        oldestDataAvailable:
+          state.cachedData?.statements?.data?.oldest_aggregated_ts_returned,
       },
       activePageProps: mapStateToActiveStatementViewProps(state),
     }),

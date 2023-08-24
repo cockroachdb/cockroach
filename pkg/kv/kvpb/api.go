@@ -1766,6 +1766,7 @@ func (c *TenantConsumption) Add(other *TenantConsumption) {
 	c.PGWireEgressBytes += other.PGWireEgressBytes
 	c.ExternalIOIngressBytes += other.ExternalIOIngressBytes
 	c.ExternalIOEgressBytes += other.ExternalIOEgressBytes
+	c.CrossRegionNetworkRU += other.CrossRegionNetworkRU
 }
 
 // Sub subtracts consumption, making sure no fields become negative.
@@ -1840,6 +1841,12 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 		c.ExternalIOIngressBytes = 0
 	} else {
 		c.ExternalIOIngressBytes -= other.ExternalIOIngressBytes
+	}
+
+	if c.CrossRegionNetworkRU < other.CrossRegionNetworkRU {
+		c.CrossRegionNetworkRU = 0
+	} else {
+		c.CrossRegionNetworkRU -= other.CrossRegionNetworkRU
 	}
 }
 

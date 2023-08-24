@@ -98,6 +98,7 @@ import { CockroachCloudContext } from "../contexts";
 import { filterByTimeScale } from "./diagnostics/diagnosticsUtils";
 import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
 import { Timestamp } from "../timestamp";
+import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
 
 type StatementDetailsResponse =
   cockroach.server.serverpb.StatementDetailsResponse;
@@ -712,13 +713,10 @@ export class StatementDetails extends React.Component<
           </PageConfigItem>
         </PageConfig>
         <p className={timeScaleStylesCx("time-label", "label-margin")}>
-          Showing aggregated stats from{" "}
-          <span className={timeScaleStylesCx("bold")}>
-            <FormattedTimescale
-              ts={this.props.timeScale}
-              requestTime={moment(this.props.requestTime)}
-            />
-          </span>
+          <TimeScaleLabel
+            timeScale={this.props.timeScale}
+            requestTime={moment(this.props.requestTime)}
+          />
         </p>
         <section className={cx("section")}>
           <Row gutter={24}>

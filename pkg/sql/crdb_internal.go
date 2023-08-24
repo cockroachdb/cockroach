@@ -7414,7 +7414,9 @@ CREATE VIEW crdb_internal.tenant_usage_details AS
     (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds,
     (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes,
     (j->>'externalIOIngressBytes')::INT8 AS total_external_io_ingress_bytes,
-    (j->>'externalIOEgressBytes')::INT8 AS total_external_io_egress_bytes
+    (j->>'externalIOIngressBytes')::INT8 AS total_external_io_ingress_bytes,
+    (j->>'kvRU')::FLOAT8 AS total_kv_ru,
+    (j->>'crossRegionNetworkRU')::FLOAT8 AS total_cross_region_network_ru
   FROM
     (
       SELECT
@@ -7437,6 +7439,8 @@ CREATE VIEW crdb_internal.tenant_usage_details AS
 		{Name: "total_pgwire_egress_bytes", Typ: types.Int},
 		{Name: "total_external_io_ingress_bytes", Typ: types.Int},
 		{Name: "total_external_io_egress_bytes", Typ: types.Int},
+		{Name: "total_kv_ru", Typ: types.Float},
+		{Name: "total_cross_region_network_ru", Typ: types.Float},
 	},
 }
 
