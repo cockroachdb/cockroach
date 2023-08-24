@@ -311,3 +311,17 @@ check_workspace_clean() {
   fi
   echo "##teamcity[testFinished name='CheckGeneratedCode/$1']"
 }
+
+describe_version() {
+    # We emulate the behavior of `git describe` here without actually consulting
+    # any git tags. Instead, we assume that pkg/build/version.txt contains what
+    # would be the "git tag".
+    version_txt_changed_at=$(git log --pretty=%H -n1 -- pkg/build/version.txt)
+    num_commits=$(git log --oneline $version_txt_changed_at..HEAD | wc -l | xargs echo)
+    if [ $num_commits -eq 0 ]; then
+        build_name=$(cat pkg/build/version.txt)
+    else
+        build_name=$(cat pkg/build/version.txt)-$num_commits-g$(git rev-parse --short HEAD)$(git diff --quiet || echo '-dirty')
+    fi
+    echo $build_name
+}
