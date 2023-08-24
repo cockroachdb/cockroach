@@ -13,9 +13,12 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -23,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,6 +61,9 @@ func registerIntentResolutionOverload(r registry.Registry) {
 				WithGrafanaDashboardJSON(grafana.ChangefeedAdmissionControlGrafana)
 			err := c.StartGrafana(ctx, t.L(), promCfg)
 			require.NoError(t, err)
+			promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
+			require.NoError(t, err)
+			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
 
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, crdbNodes))
 			startOpts := option.DefaultStartOptsNoBackups()
@@ -88,13 +96,65 @@ func registerIntentResolutionOverload(r registry.Registry) {
 				if err != nil {
 					return err
 				}
-				t.Status("sleeping for async intent resolution to complete")
-				// Intents take ~10min to resolve, and we're padding by another 10min.
-				time.Sleep(20 * time.Minute)
-				t.Status("done sleeping")
-				// TODO(sumeer): use prometheus client and StatCollector to ensure
-				// that max(storage_l0_sublevels) is below the threshold of 20. Also
-				// confirm that the intentcount metric has a very low value.
+				t.Status("waiting for async intent resolution to complete")
+				const subLevelMetric = "storage_l0_sublevels"
+				const intentCountMetric = "intentcount"
+				getMetricVal := func(metricName string) (float64, error) {
+					point, err := statCollector.CollectPoint(ctx, t.L(), timeutil.Now(), metricName)
+					if err != nil {
+						t.L().Errorf("could not query prom %s", err.Error())
+						return 0, err
+					}
+					const labelName = "store"
+					val := point[labelName]
+					if len(val) != 1 {
+						err = errors.Errorf(
+							"unexpected number %d of points for metric %s", len(val), metricName)
+						t.L().Errorf("%s", err.Error())
+						return 0, err
+					}
+					for storeID, v := range val {
+						t.L().Printf("%s(store=%s): %f", metricName, storeID, v.Value)
+						return v.Value, nil
+					}
+					// Unreachable.
+					panic("unreachable")
+				}
+				// Loop for up to 20 minutes. Intents take ~10min to resolve, and
+				// we're padding by another 10min.
+				const subLevelThreshold = 20
+				numErrors := 0
+				numSuccesses := 0
+				latestIntentCount := math.MaxInt
+				for i := 0; i < 40; i++ {
+					time.Sleep(30 * time.Second)
+					val, err := getMetricVal(subLevelMetric)
+					if err != nil {
+						numErrors++
+						continue
+					}
+					if val > subLevelThreshold {
+						t.Fatalf("sub-level count %f exceeded threshold", val)
+					}
+					val, err = getMetricVal(intentCountMetric)
+					if err != nil {
+						numErrors++
+						continue
+					}
+					numSuccesses++
+					latestIntentCount = int(val)
+					if latestIntentCount < 10 {
+						break
+					}
+				}
+				t.Status(fmt.Sprintf("done waiting errors: %d successes: %d, intent-count: %d",
+					numErrors, numSuccesses, latestIntentCount))
+				if latestIntentCount > 20 {
+					t.Fatalf("too many intents left")
+				}
+				if numErrors > numSuccesses {
+					t.Fatalf("too many errors retrieving metrics")
+				}
 				return nil
 			})
 			m.Wait()

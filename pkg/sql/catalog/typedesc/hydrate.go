@@ -137,16 +137,26 @@ func ensureTypeMetadataIsHydrated(
 		return
 	}
 	if e := maybeDesc.AsEnumTypeDescriptor(); e != nil {
-		n := e.NumEnumMembers()
-		tm.EnumData = &types.EnumMetadata{
-			LogicalRepresentations:  make([]string, n),
-			PhysicalRepresentations: make([][]byte, n),
-			IsMemberReadOnly:        make([]bool, n),
-		}
-		for i := 0; i < n; i++ {
-			tm.EnumData.LogicalRepresentations[i] = e.GetMemberLogicalRepresentation(i)
-			tm.EnumData.PhysicalRepresentations[i] = e.GetMemberPhysicalRepresentation(i)
-			tm.EnumData.IsMemberReadOnly[i] = e.IsMemberReadOnly(i)
+		if imm, ok := e.(*immutable); ok {
+			// Fast-path for immutable enum descriptors. We can use a pointer into the
+			// immutable descriptor's slices, since the TypMetadata is immutable too.
+			tm.EnumData = &types.EnumMetadata{
+				LogicalRepresentations:  imm.logicalReps,
+				PhysicalRepresentations: imm.physicalReps,
+				IsMemberReadOnly:        imm.readOnlyMembers,
+			}
+		} else {
+			n := e.NumEnumMembers()
+			tm.EnumData = &types.EnumMetadata{
+				LogicalRepresentations:  make([]string, n),
+				PhysicalRepresentations: make([][]byte, n),
+				IsMemberReadOnly:        make([]bool, n),
+			}
+			for i := 0; i < n; i++ {
+				tm.EnumData.LogicalRepresentations[i] = e.GetMemberLogicalRepresentation(i)
+				tm.EnumData.PhysicalRepresentations[i] = e.GetMemberPhysicalRepresentation(i)
+				tm.EnumData.IsMemberReadOnly[i] = e.IsMemberReadOnly(i)
+			}
 		}
 	}
 }
