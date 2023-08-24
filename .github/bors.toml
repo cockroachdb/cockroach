@@ -11,7 +11,7 @@ status = ["Bazel Essential CI (Cockroach)"]
 pr_status = ["license/cla", "blathers/release-justification-check"]
 
 # List of PR labels that may not be attached to a PR when it is r+-ed.
-block_labels = ["do-not-merge"]
+block_labels = ["do-not-merge", "backport"]
 
 # Number of seconds from when a merge commit is created to when its statuses
 # must pass.
