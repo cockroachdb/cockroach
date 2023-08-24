@@ -136,7 +136,7 @@ func (c *Controller) Admit(
 	pri admissionpb.WorkPriority,
 	_ time.Time,
 	connection kvflowcontrol.ConnectedStream,
-) error {
+) (bool, error) {
 	class := admissionpb.WorkClassFromPri(pri)
 	c.metrics.onWaiting(class)
 
@@ -148,12 +148,11 @@ func (c *Controller) Admit(
 		c.mu.Unlock()
 
 		tokens := b.tokens(class)
-		if tokens > 0 ||
-			// In addition to letting requests through when there are tokens
-			// being available, we'll also let them through if we're not
-			// applying flow control to their specific work class.
-			c.mode() == kvflowcontrol.ApplyToElastic && class == admissionpb.RegularWorkClass {
-
+		// In addition to letting requests through when there are tokens
+		// being available, we'll also let them through if we're not
+		// applying flow control to their specific work class.
+		bypass := c.mode() == kvflowcontrol.ApplyToElastic && class == admissionpb.RegularWorkClass
+		if tokens > 0 || bypass {
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.Infof(ctx, "admitted request (pri=%s stream=%s tokens=%s wait-duration=%s mode=%s)",
 					pri, connection.Stream(), tokens, c.clock.PhysicalTime().Sub(tstart), c.mode())
@@ -179,7 +178,10 @@ func (c *Controller) Admit(
 
 			b.signal() // signal a waiter, if any
 			c.metrics.onAdmitted(class, c.clock.PhysicalTime().Sub(tstart))
-			return nil
+			if bypass {
+				return false, nil
+			}
+			return true, nil
 		}
 
 		if !logged && log.ExpensiveLogEnabled(ctx, 2) {
@@ -192,12 +194,12 @@ func (c *Controller) Admit(
 		case <-b.wait(): // wait for a signal
 		case <-connection.Disconnected():
 			c.metrics.onBypassed(class, c.clock.PhysicalTime().Sub(tstart))
-			return nil
+			return true, nil
 		case <-ctx.Done():
 			if ctx.Err() != nil {
 				c.metrics.onErrored(class, c.clock.PhysicalTime().Sub(tstart))
 			}
-			return ctx.Err()
+			return false, ctx.Err()
 		}
 	}
 

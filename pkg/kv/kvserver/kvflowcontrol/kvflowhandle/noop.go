@@ -26,8 +26,10 @@ type Noop struct{}
 var _ kvflowcontrol.Handle = Noop{}
 
 // Admit is part of the kvflowcontrol.Handle interface.
-func (n Noop) Admit(ctx context.Context, priority admissionpb.WorkPriority, time time.Time) error {
-	return nil
+func (n Noop) Admit(
+	ctx context.Context, priority admissionpb.WorkPriority, time time.Time,
+) (bool, error) {
+	return false, nil
 }
 
 // DeductTokensFor is part of the kvflowcontrol.Handle interface.
