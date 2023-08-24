@@ -9128,7 +9128,7 @@ func TestReplicaMetrics(t *testing.T) {
 			c.expected.Ticking = !c.expected.Quiescent
 			metrics := calcReplicaMetrics(calcReplicaMetricsInput{
 				raftCfg:            &cfg.RaftConfig,
-				conf:               spanConfig,
+				conf:               &spanConfig,
 				vitalityMap:        c.liveness.ScanNodeVitalityFromCache(),
 				desc:               &c.desc,
 				raftStatus:         c.raftStatus,
@@ -13503,9 +13503,9 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 	tc.repl.mu.Lock()
 	tc.repl.mu.destroyStatus.Set(errBoom, destroyReasonMergePending)
 	tc.repl.mu.Unlock()
-
 	conf, err := tc.repl.LoadSpanConfig(ctx)
 	require.NoError(t, err)
+
 	requeue, err := tc.store.replicateQueue.processOneChange(
 		ctx,
 		tc.repl,

@@ -80,6 +80,11 @@ func (r *Replica) Metrics(
 	nodeAttrs := r.store.nodeDesc.Attrs
 	nodeLocality := r.store.nodeDesc.Locality
 
+	conf, err := r.LoadSpanConfig(ctx)
+	if err != nil {
+		return ReplicaMetrics{}
+	}
+
 	r.mu.RLock()
 
 	var qpUsed, qpCap int64
@@ -88,10 +93,9 @@ func (r *Replica) Metrics(
 		qpCap = int64(q.Capacity()) // NB: max capacity is MaxInt64, see NewIntPool
 		qpUsed = qpCap - qpAvail
 	}
-
 	input := calcReplicaMetricsInput{
 		raftCfg:               &r.store.cfg.RaftConfig,
-		conf:                  r.mu.conf,
+		conf:                  conf,
 		vitalityMap:           vitalityMap,
 		clusterNodes:          clusterNodes,
 		desc:                  r.mu.state.Desc,
@@ -120,7 +124,7 @@ func (r *Replica) Metrics(
 
 type calcReplicaMetricsInput struct {
 	raftCfg               *base.RaftConfig
-	conf                  roachpb.SpanConfig
+	conf                  *roachpb.SpanConfig
 	vitalityMap           livenesspb.NodeVitalityMap
 	clusterNodes          int
 	desc                  *roachpb.RangeDescriptor
@@ -321,13 +325,9 @@ func (r *Replica) LoadStats() load.ReplicaLoadStats {
 	return r.loadStats.Stats()
 }
 
-func (r *Replica) needsSplitBySizeRLocked() bool {
-	exceeded, _ := r.exceedsMultipleOfSplitSizeRLocked(1)
+func (r *Replica) needsSplitBySizeRLocked(conf *roachpb.SpanConfig) bool {
+	exceeded, _ := r.exceedsMultipleOfSplitSizeRLocked(conf, 1)
 	return exceeded
-}
-
-func (r *Replica) needsMergeBySizeRLocked() bool {
-	return r.mu.state.Stats.Total() < r.mu.conf.RangeMinBytes
 }
 
 func (r *Replica) needsRaftLogTruncationLocked() bool {
@@ -352,8 +352,10 @@ func (r *Replica) needsRaftLogTruncationLocked() bool {
 // size as dictated by the span config or a previous max size indicating that
 // the max size has changed relatively recently and thus we should not
 // backpressure for being over.
-func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) (exceeded bool, bytesOver int64) {
-	maxBytes := r.mu.conf.RangeMaxBytes
+func (r *Replica) exceedsMultipleOfSplitSizeRLocked(
+	conf *roachpb.SpanConfig, mult float64,
+) (exceeded bool, bytesOver int64) {
+	maxBytes := conf.RangeMaxBytes
 	if r.mu.largestPreviousMaxRangeSizeBytes > maxBytes {
 		maxBytes = r.mu.largestPreviousMaxRangeSizeBytes
 	}
