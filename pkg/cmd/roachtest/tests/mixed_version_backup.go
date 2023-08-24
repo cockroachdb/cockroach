@@ -183,7 +183,7 @@ func sanitizeVersionForBackup(v string) string {
 // have the `crdb_internal.system_jobs` vtable in the mixed-version
 // context passed. If so, it should be used instead of `system.jobs`
 // when querying job status.
-func hasInternalSystemJobs(h *mixedversion.Helper) bool {
+func hasInternalSystemJobs(h mixedversion.CommonTestHelper) bool {
 	return h.LowestBinaryVersion().AtLeast(v231)
 }
 
@@ -1024,7 +1024,9 @@ func newMixedVersionBackup(
 
 // newBackupType chooses a random backup type (table, database,
 // cluster) with equal probability.
-func (mvb *mixedVersionBackup) newBackupType(rng *rand.Rand, h *mixedversion.Helper) backupType {
+func (mvb *mixedVersionBackup) newBackupType(
+	rng *rand.Rand, h mixedversion.CommonTestHelper,
+) backupType {
 	possibleTypes := []backupType{
 		newTableBackup(rng, mvb.dbs, mvb.tables),
 		newDatabaseBackup(rng, mvb.dbs, mvb.tables),
@@ -1034,15 +1036,27 @@ func (mvb *mixedVersionBackup) newBackupType(rng *rand.Rand, h *mixedversion.Hel
 	return possibleTypes[rng.Intn(len(possibleTypes))]
 }
 
+func (mvb *mixedVersionBackup) setShortJobIntervalsUserFn(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
+) error {
+	return mvb.setShortJobIntervals(ctx, l, rng, h)
+}
+
 // setShortJobIntervals increases the frequency of the adopt and
 // cancel loops in the job registry. This enables changes to job state
 // to be observed faster, and the test to run quicker.
 func (*mixedVersionBackup) setShortJobIntervals(
-	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h mixedversion.CommonTestHelper,
 ) error {
 	return setShortJobIntervalsCommon(func(query string, args ...interface{}) error {
 		return h.Exec(rng, query, args...)
 	})
+}
+
+func (mvb *mixedVersionBackup) systemTableWriterUserFn(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
+) error {
+	return mvb.systemTableWriter(ctx, l, rng, h)
 }
 
 // systemTableWriter will run random statements that lead to data
@@ -1058,7 +1072,7 @@ func (*mixedVersionBackup) setShortJobIntervals(
 //
 // TODO(renato): this should be a `workload`.
 func (mvb *mixedVersionBackup) systemTableWriter(
-	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h mixedversion.CommonTestHelper,
 ) error {
 	for !mvb.tablesLoaded.Load() {
 		l.Printf("waiting for user tables to be loaded...")
@@ -1169,7 +1183,7 @@ func (mvb *mixedVersionBackup) systemTableWriter(
 // loadTables returns a list of tables that are part of the database
 // with the given name.
 func (mvb *mixedVersionBackup) loadTables(
-	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h mixedversion.CommonTestHelper,
 ) error {
 	allTables := make([][]string, len(mvb.dbs))
 	eg, _ := errgroup.WithContext(ctx)
@@ -1213,6 +1227,12 @@ func (mvb *mixedVersionBackup) loadTables(
 	return nil
 }
 
+func (mvb *mixedVersionBackup) setClusterSettingsUserFn(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
+) error {
+	return mvb.setClusterSettings(ctx, l, rng, h)
+}
+
 // setClusterSettings may set up to numCustomSettings cluster settings
 // as defined in `systemSettingValues`. The system settings changed
 // are logged. This function should be called *before* the upgrade
@@ -1220,7 +1240,7 @@ func (mvb *mixedVersionBackup) loadTables(
 // cluster settings is not supported in mixed-version, so we don't
 // test that scenario.
 func (mvb *mixedVersionBackup) setClusterSettings(
-	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h mixedversion.CommonTestHelper,
 ) error {
 	const numCustomSettings = 3
 	const defaultSettingsProbability = 0.2
@@ -1360,7 +1380,7 @@ func (mvb *mixedVersionBackup) backupName(
 // succeed (according to `backupCompletionRetryOptions`). Returns an
 // error if the job doesn't succeed within the attempted retries.
 func (mvb *mixedVersionBackup) waitForJobSuccess(
-	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper, jobID int,
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h mixedversion.CommonTestHelper, jobID int,
 ) error {
 	var lastErr error
 	node, db := h.RandomDB(rng, mvb.roachNodes)
@@ -1419,7 +1439,7 @@ func (mvb *mixedVersionBackup) computeTableContents(
 	tables []string,
 	previousContents []tableContents,
 	timestamp string,
-	h *mixedversion.Helper,
+	h mixedversion.CommonTestHelper,
 ) ([]tableContents, error) {
 	previousTableContents := func(j int) tableContents {
 		if len(previousContents) == 0 {
@@ -1471,7 +1491,7 @@ func (mvb *mixedVersionBackup) saveContents(
 	rng *rand.Rand,
 	collection *backupCollection,
 	timestamp string,
-	h *mixedversion.Helper,
+	h mixedversion.CommonTestHelper,
 ) error {
 	l.Printf("backup %s: loading table contents at timestamp '%s'", collection.name, timestamp)
 	contents, err := mvb.computeTableContents(
@@ -1617,7 +1637,7 @@ func (mvb *mixedVersionBackup) runJobOnOneOf(
 	ctx context.Context,
 	l *logger.Logger,
 	nodes option.NodeListOption,
-	h *mixedversion.Helper,
+	h mixedversion.CommonTestHelper,
 	fn func() error,
 ) error {
 	sort.Ints(nodes)
@@ -1698,7 +1718,10 @@ func (mvb *mixedVersionBackup) sentinelFilePath(
 // creating an empty file in `jobs.PreventAdoptionFile`. The function
 // returns once any currently running jobs on the nodes terminate.
 func (mvb *mixedVersionBackup) disableJobAdoption(
-	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, h *mixedversion.Helper,
+	ctx context.Context,
+	l *logger.Logger,
+	nodes option.NodeListOption,
+	h mixedversion.CommonTestHelper,
 ) error {
 	l.Printf("disabling job adoption on nodes %v", nodes)
 	eg, _ := errgroup.WithContext(ctx)
@@ -1869,7 +1892,7 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 // that the latest backup in the collection passed is valid. This step
 // is skipped if the feature is not available.
 func (mvb *mixedVersionBackup) checkFiles(
-	rng *rand.Rand, l *logger.Logger, collection *backupCollection, h *mixedversion.Helper,
+	rng *rand.Rand, l *logger.Logger, collection *backupCollection, h mixedversion.CommonTestHelper,
 ) error {
 	if !h.LowestBinaryVersion().AtLeast(v231) {
 		l.Printf("skipping check_files as it is not supported")
@@ -1922,7 +1945,7 @@ func (mvb *mixedVersionBackup) verifyBackupCollection(
 	ctx context.Context,
 	l *logger.Logger,
 	rng *rand.Rand,
-	h *mixedversion.Helper,
+	h mixedversion.CommonTestHelper,
 	collection *backupCollection,
 	version string,
 ) error {
@@ -2009,7 +2032,7 @@ func (mvb *mixedVersionBackup) verifyBackupCollection(
 // specified version binary. This is done before we attempt restoring a
 // full cluster backup.
 func (mvb *mixedVersionBackup) resetCluster(
-	ctx context.Context, l *logger.Logger, h *mixedversion.Helper, version string,
+	ctx context.Context, l *logger.Logger, h mixedversion.CommonTestHelper, version string,
 ) error {
 	l.Printf("resetting cluster using version %q", clusterupgrade.VersionMsg(version))
 	h.ExpectDeaths(len(mvb.roachNodes))
@@ -2209,7 +2232,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 			//   operations more closely resemble a customer workload.
 			stopBank := mvt.Workload("bank", workloadNode, bankInit, bankRun)
 			stopTPCC := mvt.Workload("tpcc", workloadNode, tpccInit, tpccRun)
-			stopSystemWriter := mvt.BackgroundFunc("system table writer", backupTest.systemTableWriter)
+			stopSystemWriter := mvt.BackgroundFunc("system table writer", backupTest.systemTableWriterUserFn)
 
 			mvt.InMixedVersion("plan and run backups", backupTest.planAndRunBackups)
 			mvt.InMixedVersion("verify some backups", backupTest.verifySomeBackups)
