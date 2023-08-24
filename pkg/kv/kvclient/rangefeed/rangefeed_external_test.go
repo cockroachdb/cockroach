@@ -18,22 +18,26 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -55,14 +59,16 @@ type kvs = storageutils.KVs
 // the pieces working together.
 func TestRangeFeedIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
 
-	srv0 := tc.Server(0)
-	db := srv0.DB()
-	scratchKey := tc.ScratchRange(t)
+	scratchKey := append(ts.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	_, _, err := srv.SplitRange(scratchKey)
+	require.NoError(t, err)
 	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
 	mkKey := func(k string) roachpb.Key {
 		return encoding.EncodeStringAscending(scratchKey, k)
@@ -70,7 +76,7 @@ func TestRangeFeedIntegration(t *testing.T) {
 	// Split the range a bunch of times.
 	const splits = 10
 	for i := 0; i < splits; i++ {
-		_, _, err := tc.SplitRange(mkKey(string([]byte{'a' + byte(i)})))
+		_, _, err := srv.SplitRange(mkKey(string([]byte{'a' + byte(i)})))
 		require.NoError(t, err)
 	}
 
@@ -83,13 +89,13 @@ func TestRangeFeedIntegration(t *testing.T) {
 		Key:    scratchKey,
 		EndKey: scratchKey.PrefixEnd(),
 	}
-	{
-		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
-		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
-		require.NoError(t, err)
+
+	// Enable rangefeeds, otherwise the thing will retry until they are enabled.
+	for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
 	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.Stopper(), db, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 	rows := make(chan *kvpb.RangeFeedValue)
 	initialScanDone := make(chan struct{})
@@ -144,6 +150,7 @@ func TestRangeFeedIntegration(t *testing.T) {
 // correct timestamp.
 func TestWithOnFrontierAdvance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
@@ -151,10 +158,15 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	srv0 := tc.Server(0)
-	db := srv0.DB()
-	scratchKey := tc.ScratchRange(t)
+	srv := tc.Server(0)
+	ts := srv.ApplicationLayer()
+	db := ts.DB()
+
+	scratchKey := append(ts.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	_, _, err := srv.SplitRange(scratchKey)
+	require.NoError(t, err)
 	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
+
 	mkKey := func(k string) roachpb.Key {
 		return encoding.EncodeStringAscending(scratchKey, k)
 	}
@@ -163,23 +175,20 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 		Key:    scratchKey,
 		EndKey: scratchKey.PrefixEnd(),
 	}
-	{
+
+	for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
 		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
-		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
-		require.NoError(t, err)
-	}
-	{
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
 		// Lower the closed timestamp target duration to speed up the test.
-		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
-		require.NoError(t, err)
+		closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
 	}
 
 	// Split the range into two so we know the frontier has more than one span to
 	// track for certain. We later write to both these ranges.
-	_, _, err := tc.SplitRange(mkKey("b"))
+	_, _, err = srv.SplitRange(mkKey("b"))
 	require.NoError(t, err)
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.Stopper(), db, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	// mu protects secondWriteTS.
@@ -266,14 +275,16 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 // events.
 func TestWithOnCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
 
-	srv0 := tc.Server(0)
-	db := srv0.DB()
-	scratchKey := tc.ScratchRange(t)
+	scratchKey := append(ts.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	_, _, err := srv.SplitRange(scratchKey)
+	require.NoError(t, err)
 	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
 	mkKey := func(k string) roachpb.Key {
 		return encoding.EncodeStringAscending(scratchKey, k)
@@ -283,18 +294,14 @@ func TestWithOnCheckpoint(t *testing.T) {
 		Key:    scratchKey,
 		EndKey: scratchKey.PrefixEnd(),
 	}
-	{
+	for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
 		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
-		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
-		require.NoError(t, err)
-	}
-	{
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
 		// Lower the closed timestamp target duration to speed up the test.
-		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
-		require.NoError(t, err)
+		closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
 	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.Stopper(), db, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	var mu syncutil.RWMutex
@@ -365,14 +372,16 @@ func TestWithOnCheckpoint(t *testing.T) {
 // deleting keys.
 func TestRangefeedValueTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
 
-	srv0 := tc.Server(0)
-	db := srv0.DB()
-	scratchKey := tc.ScratchRange(t)
+	scratchKey := append(ts.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	_, _, err := srv.SplitRange(scratchKey)
+	require.NoError(t, err)
 	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
 	mkKey := func(k string) roachpb.Key {
 		return encoding.EncodeStringAscending(scratchKey, k)
@@ -382,18 +391,14 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 		Key:    scratchKey,
 		EndKey: scratchKey.PrefixEnd(),
 	}
-	{
+	for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
 		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
-		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
-		require.NoError(t, err)
-	}
-	{
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
 		// Lower the closed timestamp target duration to speed up the test.
-		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
-		require.NoError(t, err)
+		closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
 	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.Stopper(), db, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	rows := make(chan *kvpb.RangeFeedValue)
@@ -478,20 +483,23 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 // TestWithOnSSTable tests that the rangefeed emits SST ingestions correctly.
 func TestWithOnSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-	srv := tc.Server(0)
-	db := srv.DB()
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109473),
+	})
+	defer srv.Stopper().Stop(ctx)
+	tsrv := srv.ApplicationLayer()
 
-	_, _, err := tc.SplitRange(roachpb.Key("a"))
+	_, _, err := srv.SplitRange(roachpb.Key("a"))
 	require.NoError(t, err)
-	require.NoError(t, tc.WaitForFullReplication())
 
-	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
-	require.NoError(t, err)
-	f, err := rangefeed.NewFactory(srv.Stopper(), db, srv.ClusterSettings(), nil)
+	for _, l := range []serverutils.ApplicationLayerInterface{tsrv, srv.SystemLayer()} {
+		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
+	f, err := rangefeed.NewFactory(tsrv.Stopper(), db, tsrv.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	// We start the rangefeed over a narrower span than the AddSSTable (c-e vs
@@ -540,7 +548,7 @@ func TestWithOnSSTable(t *testing.T) {
 		pointKV("c", ts, "3"),
 		rangeKV("d", "e", ts, ""),
 	}
-	sst, sstStart, sstEnd := storageutils.MakeSST(t, srv.ClusterSettings(), sstKVs)
+	sst, sstStart, sstEnd := storageutils.MakeSST(t, tsrv.ClusterSettings(), sstKVs)
 	_, _, _, pErr := db.AddSSTableAtBatchTimestamp(ctx, sstStart, sstEnd, sst,
 		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
 		false /* ingestAsWrites */, now)
@@ -564,6 +572,7 @@ func TestWithOnSSTable(t *testing.T) {
 // scan if an OnSSTable event is emitted and no OnSSTable event handler is set.
 func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	storage.DisableMetamorphicSimpleValueEncoding(t)
 
@@ -665,6 +674,7 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 // harness, for more exhaustive testing. But it'll do for now.
 func TestWithOnDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
@@ -827,52 +837,53 @@ func TestWithOnDeleteRange(t *testing.T) {
 // to callers.
 func TestUnrecoverableErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				SpanConfig: &spanconfig.TestingKnobs{
-					ConfigureScratchRange: true,
-				},
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109472),
+
+		Knobs: base.TestingKnobs{
+			SpanConfig: &spanconfig.TestingKnobs{
+				ConfigureScratchRange: true,
 			},
 		},
 	})
-	defer tc.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
 
-	srv0 := tc.Server(0)
-	db0 := srv0.DB()
-	scratchKey := tc.ScratchRange(t)
+	scratchKey := append(ts.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	_, _, err := srv.SplitRange(scratchKey)
+	require.NoError(t, err)
 	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
 
 	sp := roachpb.Span{
 		Key:    scratchKey,
 		EndKey: scratchKey.PrefixEnd(),
 	}
-	{
+	for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
 		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
-		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
-		require.NoError(t, err)
-	}
-	{
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
 		// Lower the closed timestamp target duration to speed up the test.
-		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
-		require.NoError(t, err)
+		closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
+	}
 
+	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+	require.NoError(t, err)
+
+	{
 		// Lower the protectedts Cache refresh interval, so that the
 		// `preGCThresholdTS` defined below is less than the protectedts
 		// `readAt - GCTTL` window, resulting in a BatchTimestampBelowGCError.
-		_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'")
+		_, err := sqlDB.Exec("SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'")
 		require.NoError(t, err)
 
-		store, err := srv0.GetStores().(*kvserver.Stores).GetStore(srv0.GetFirstStoreID())
-		require.NoError(t, err)
 		ptsReader := store.GetStoreConfig().ProtectedTimestampReader
 		require.NoError(t,
-			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, srv0.Clock().Now()))
+			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, srv.SystemLayer().Clock().Now()))
 	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db0, srv0.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.Stopper(), kvDB, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	preGCThresholdTS := hlc.Timestamp{WallTime: 1}
@@ -882,7 +893,7 @@ func TestUnrecoverableErrors(t *testing.T) {
 	}{}
 
 	testutils.SucceedsSoon(t, func() error {
-		repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(scratchKey))
+		repl := store.LookupReplica(roachpb.RKey(scratchKey))
 		if repl.SpanConfig().GCPolicy.IgnoreStrictEnforcement {
 			return errors.New("waiting for span config to apply")
 		}
@@ -918,34 +929,38 @@ func TestUnrecoverableErrors(t *testing.T) {
 // emits an unrecoverable error.
 func TestMVCCHistoryMutationError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
 
-	srv0 := tc.Server(0)
-	db0 := srv0.DB()
-	scratchKey := tc.ScratchRange(t)
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+
+	scratchKey := append(ts.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	_, _, err := srv.SplitRange(scratchKey)
+	require.NoError(t, err)
 	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
 	sp := roachpb.Span{
 		Key:    scratchKey,
 		EndKey: scratchKey.PrefixEnd(),
 	}
-
-	_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
-	require.NoError(t, err)
-	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
-	require.NoError(t, err)
+	for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
+		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+		// Lower the closed timestamp target duration to speed up the test.
+		closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
+	}
 
 	// Set up a rangefeed.
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db0, srv0.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.Stopper(), db, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	var once sync.Once
 	checkpointC := make(chan struct{})
 	errC := make(chan error)
-	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, srv0.Clock().Now(),
+	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, ts.Clock().Now(),
 		func(context.Context, *kvpb.RangeFeedValue) {},
 		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
 			once.Do(func() {
@@ -972,7 +987,7 @@ func TestMVCCHistoryMutationError(t *testing.T) {
 	}
 
 	// Send a ClearRange request that mutates MVCC history.
-	_, pErr := kv.SendWrapped(ctx, db0.NonTransactionalSender(), &kvpb.ClearRangeRequest{
+	_, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(), &kvpb.ClearRangeRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key:    sp.Key,
 			EndKey: sp.EndKey,
@@ -995,14 +1010,16 @@ func TestMVCCHistoryMutationError(t *testing.T) {
 // annotated with pprof labels.
 func TestRangefeedWithLabelsOption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
 
-	srv0 := tc.Server(0)
-	db := srv0.DB()
-	scratchKey := tc.ScratchRange(t)
+	scratchKey := append(ts.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	_, _, err := srv.SplitRange(scratchKey)
+	require.NoError(t, err)
 	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
 	mkKey := func(k string) roachpb.Key {
 		return encoding.EncodeStringAscending(scratchKey, k)
@@ -1010,7 +1027,7 @@ func TestRangefeedWithLabelsOption(t *testing.T) {
 	// Split the range a bunch of times.
 	const splits = 10
 	for i := 0; i < splits; i++ {
-		_, _, err := tc.SplitRange(mkKey(string([]byte{'a' + byte(i)})))
+		_, _, err := srv.SplitRange(mkKey(string([]byte{'a' + byte(i)})))
 		require.NoError(t, err)
 	}
 
@@ -1023,10 +1040,9 @@ func TestRangefeedWithLabelsOption(t *testing.T) {
 		Key:    scratchKey,
 		EndKey: scratchKey.PrefixEnd(),
 	}
-	{
+	for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
 		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
-		_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
-		require.NoError(t, err)
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
 	}
 
 	const rangefeedName = "test-feed"
@@ -1059,7 +1075,7 @@ func TestRangefeedWithLabelsOption(t *testing.T) {
 			m[defaultLabel.k] == defaultLabel.v && m[label1.k] == label1.v && m[label2.k] == label2.v
 	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.Stopper(), db, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 	initialScanDone := make(chan struct{})
 
@@ -1104,14 +1120,16 @@ func TestRangefeedWithLabelsOption(t *testing.T) {
 // rangefeed is in fact exclusive, as specified.
 func TestRangeFeedStartTimeExclusive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
 
-	srv0 := tc.Server(0)
-	db := srv0.DB()
-	scratchKey := tc.ScratchRange(t)
+	scratchKey := append(ts.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	_, _, err := srv.SplitRange(scratchKey)
+	require.NoError(t, err)
 	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
 	mkKey := func(k string) roachpb.Key {
 		return encoding.EncodeStringAscending(scratchKey, k)
@@ -1126,11 +1144,12 @@ func TestRangeFeedStartTimeExclusive(t *testing.T) {
 	ts2 := kv.Value.Timestamp
 	require.NoError(t, db.Put(ctx, mkKey("foo"), 3))
 
-	// Enable rangefeeds, otherwise the thing will retry until they are enabled.
-	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
-	require.NoError(t, err)
+	for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
+		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
 
-	f, err := rangefeed.NewFactory(srv0.Stopper(), db, srv0.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.Stopper(), db, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 	rows := make(chan *kvpb.RangeFeedValue)
 	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{span}, ts2,
