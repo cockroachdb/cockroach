@@ -20,11 +20,18 @@ fi
 paths=""
 sep=""
 for p in ${packages}; do
-  paths="${paths}${sep}//$p:*"
-  sep=" + "
+  # Check if the path is really a package in this tree. We do this by checking
+  # for a BUILD.bazel file.
+  if [ -f "${p}/BUILD.bazel" ]; then
+    paths="${paths}${sep}//${p}:*"
+    sep=" + "
+  fi
 done
 
-targets=$(bazel query "kind(\".*_test\", ${paths})")
+targets=""
+if [ -n "${paths}" ]; then
+  targets=$(bazel query "kind(\".*_test\", ${paths})")
+fi
 
 if [[ -z "${targets}" ]]; then
   echo "No test targets found"
