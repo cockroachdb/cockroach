@@ -419,6 +419,7 @@ func SQL(
 	clusterName string,
 	secure bool,
 	tenantName string,
+	tenantInstance int,
 	cmdArray []string,
 ) error {
 	if err := LoadClusters(); err != nil {
@@ -429,9 +430,9 @@ func SQL(
 		return err
 	}
 	if len(c.Nodes) == 1 {
-		return c.ExecOrInteractiveSQL(ctx, l, tenantName, cmdArray)
+		return c.ExecOrInteractiveSQL(ctx, l, tenantName, tenantInstance, cmdArray)
 	}
-	return c.ExecSQL(ctx, l, c.Nodes, tenantName, cmdArray)
+	return c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, cmdArray)
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
@@ -891,9 +892,10 @@ func Get(ctx context.Context, l *logger.Logger, clusterName, src, dest string) e
 }
 
 type PGURLOptions struct {
-	Secure     bool
-	External   bool
-	TenantName string
+	Secure         bool
+	External       bool
+	TenantName     string
+	TenantInstance int
 }
 
 // PgURL generates pgurls for the nodes in a cluster.
@@ -925,7 +927,7 @@ func PgURL(
 
 	var urls []string
 	for i, ip := range ips {
-		desc, err := c.DiscoverService(nodes[i], opts.TenantName, install.ServiceTypeSQL)
+		desc, err := c.DiscoverService(nodes[i], opts.TenantName, install.ServiceTypeSQL, opts.TenantInstance)
 		if err != nil {
 			return nil, err
 		}
@@ -941,12 +943,13 @@ func PgURL(
 }
 
 type urlConfig struct {
-	path          string
-	usePublicIP   bool
-	openInBrowser bool
-	secure        bool
-	port          int
-	tenantName    string
+	path           string
+	usePublicIP    bool
+	openInBrowser  bool
+	secure         bool
+	port           int
+	tenantName     string
+	tenantInstance int
 }
 
 func urlGenerator(
@@ -969,7 +972,7 @@ func urlGenerator(
 		}
 		port := uConfig.port
 		if port == 0 {
-			desc, err := c.DiscoverService(node, uConfig.tenantName, install.ServiceTypeUI)
+			desc, err := c.DiscoverService(node, uConfig.tenantName, install.ServiceTypeUI, uConfig.tenantInstance)
 			if err != nil {
 				return nil, err
 			}
@@ -1013,7 +1016,11 @@ func browserCmd(url string) *exec.Cmd {
 
 // AdminURL generates admin UI URLs for the nodes in a cluster.
 func AdminURL(
-	l *logger.Logger, clusterName, tenantName, path string, usePublicIP, openInBrowser, secure bool,
+	l *logger.Logger,
+	clusterName, tenantName string,
+	tenantInstance int,
+	path string,
+	usePublicIP, openInBrowser, secure bool,
 ) ([]string, error) {
 	if err := LoadClusters(); err != nil {
 		return nil, err
@@ -1023,11 +1030,12 @@ func AdminURL(
 		return nil, err
 	}
 	uConfig := urlConfig{
-		path:          path,
-		usePublicIP:   usePublicIP,
-		openInBrowser: openInBrowser,
-		secure:        secure,
-		tenantName:    tenantName,
+		path:           path,
+		usePublicIP:    usePublicIP,
+		openInBrowser:  openInBrowser,
+		secure:         secure,
+		tenantName:     tenantName,
+		tenantInstance: tenantInstance,
 	}
 	return urlGenerator(c, l, c.TargetNodes(), uConfig)
 }

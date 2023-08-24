@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -21,9 +22,9 @@ import (
 )
 
 var parameterRe = regexp.MustCompile(`{[^{}]*}`)
-var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+)?(:[a-z0-9\-]+)?}`)
+var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+)?(:[a-z0-9\-]+(:[0-9]+)?)?}`)
 var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+)?}`)
-var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?(:[a-z0-9\-]+)?}`)
+var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?(:[a-z0-9\-]+(:[0-9]+)?)?}`)
 var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)}`)
 var storeDirRe = regexp.MustCompile(`{store-dir}`)
 var logDirRe = regexp.MustCompile(`{log-dir}`)
@@ -109,10 +110,41 @@ func (e *expander) maybeExpandMap(
 	return strings.Join(result, " "), nil
 }
 
+// extractTenantInfo extracts the tenant name and tenant instance from the given
+// tenant group match, if available. If no tenant information is provided, the
+// system tenant is assumed and if no tenant instance is provided, the first
+// instance is assumed.
+func extractTenantInfo(matches []string) (string, int, error) {
+	// Defaults if the passed in tenant group match is empty.
+	tenantName := SystemTenantName
+	tenantInstance := 0
+
+	// Extract the tenant name and instance matches.
+	trim := func(s string) string {
+		// Trim off the leading ':' in the capture group.
+		return s[1:]
+	}
+	tenantNameMatch := matches[0]
+	tenantInstanceMatch := matches[1]
+
+	if tenantNameMatch != "" {
+		tenantName = trim(tenantNameMatch)
+	}
+	if tenantInstanceMatch != "" {
+		var err error
+		tenantInstance, err = strconv.Atoi(trim(tenantInstanceMatch))
+		if err != nil {
+			return "", 0, err
+		}
+	}
+	return tenantName, tenantInstance, nil
+}
+
 // maybeExpandPgURL is an expanderFunc for {pgurl:<nodeSpec>}
 func (e *expander) maybeExpandPgURL(
 	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
 ) (string, bool, error) {
+	var err error
 	m := pgURLRe.FindStringSubmatch(s)
 	if m == nil {
 		return s, false, nil
@@ -121,20 +153,17 @@ func (e *expander) maybeExpandPgURL(
 	if e.pgURLs == nil {
 		e.pgURLs = make(map[string]map[Node]string)
 	}
-	tenant := SystemTenantName
-	if m[2] != "" {
-		// Trim off the leading ':' in the capture group.
-		tenant = m[2][1:]
+	tenantName, tenantInstance, err := extractTenantInfo(m[2:])
+	if err != nil {
+		return "", false, err
 	}
-	if e.pgURLs[tenant] == nil {
-		var err error
-		e.pgURLs[tenant], err = c.pgurls(ctx, l, allNodes(len(c.VMs)), tenant)
+	if e.pgURLs[tenantName] == nil {
+		e.pgURLs[tenantName], err = c.pgurls(ctx, l, allNodes(len(c.VMs)), tenantName, tenantInstance)
 		if err != nil {
 			return "", false, err
 		}
 	}
-
-	s, err := e.maybeExpandMap(c, e.pgURLs[tenant], m[1])
+	s, err = e.maybeExpandMap(c, e.pgURLs[tenantName], m[1])
 	return s, err == nil, err
 }
 
@@ -167,16 +196,15 @@ func (e *expander) maybeExpandPgPort(
 	if m == nil {
 		return s, false, nil
 	}
-	tenant := SystemTenantName
-	if m[2] != "" {
-		// Trim off the leading ':' in the capture group.
-		tenant = m[2][1:]
+	tenantName, tenantInstance, err := extractTenantInfo(m[2:])
+	if err != nil {
+		return "", false, err
 	}
 
 	if e.pgPorts == nil {
 		e.pgPorts = make(map[Node]string, len(c.VMs))
 		for _, node := range allNodes(len(c.VMs)) {
-			desc, err := c.DiscoverService(node, tenant, ServiceTypeSQL)
+			desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL, tenantInstance)
 			if err != nil {
 				return s, false, err
 			}
@@ -184,7 +212,7 @@ func (e *expander) maybeExpandPgPort(
 		}
 	}
 
-	s, err := e.maybeExpandMap(c, e.pgPorts, m[1])
+	s, err = e.maybeExpandMap(c, e.pgPorts, m[1])
 	return s, err == nil, err
 }
 
