@@ -689,6 +689,10 @@ export class TransactionsPage extends React.Component<
               LoadingError({
                 statsType: "transactions",
                 error: this.props.txnsResp.error,
+                sourceTables: this.props.txnsResp?.data?.txns_source_table && [
+                  this.props.txnsResp?.data?.txns_source_table,
+                  this.props.txnsResp?.data?.stmts_source_table,
+                ],
               })
             }
           />
