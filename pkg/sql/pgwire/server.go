@@ -224,12 +224,12 @@ type Server struct {
 		connCancelMap cancelChanMap
 		// draining is set to true when the server starts draining the SQL layer.
 		// When set to true, remaining SQL connections will be closed.
-		// After the timeout set by server.shutdown.query_wait,
-		// all connections will be closed regardless any queries in flight.
+		// After the timeout set by server.shutdown.transactions.timeout,
+		// all connections will be closed regardless any txns in flight.
 		draining bool
 		// rejectNewConnections is set true when the server does not accept new
 		// SQL connections, e.g. when the draining process enters the phase whose
-		// duration is specified by the server.shutdown.connection_wait.
+		// duration is specified by the server.shutdown.connections.timeout.
 		rejectNewConnections bool
 	}
 
