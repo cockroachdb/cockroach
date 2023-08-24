@@ -1614,31 +1614,48 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 		return
 	}
 	if kl.isLocked() {
-		// TODO(arul): Change this formatting to consider multiple lock holders in a
-		// subsequent patch.
-		tl := kl.holders.Front().Value.(*txnLock)
-		txn, ts := tl.getLockHolder()
-		sb.Printf("  holder: txn: %v epoch: %d, iso: %s, ts: %v, info: ", redact.Safe(txn.ID), redact.Safe(txn.Epoch), redact.Safe(txn.IsoLevel), redact.Safe(ts))
-		if !tl.replicatedInfo.isEmpty() {
-			tl.replicatedInfo.safeFormat(sb)
-			if !tl.unreplicatedInfo.isEmpty() {
-				sb.Printf(", ")
-			}
-		}
-		if !tl.unreplicatedInfo.isEmpty() {
-			tl.unreplicatedInfo.safeFormat(sb)
-		}
-		if txnStatusCache != nil {
-			finalizedTxn, ok := txnStatusCache.finalizedTxns.get(txn.ID)
-			if ok {
-				var statusStr string
-				switch finalizedTxn.Status {
-				case roachpb.COMMITTED:
-					statusStr = "committed"
-				case roachpb.ABORTED:
-					statusStr = "aborted"
+
+		first := true
+		for e := kl.holders.Front(); e != nil; e = e.Next() {
+			tl := e.Value.(*txnLock)
+			txn, ts := tl.getLockHolder()
+
+			var prefix string
+			if first {
+				first = false
+				optPlural := ""
+				if kl.holders.Len() > 1 {
+					optPlural = "s"
 				}
-				sb.Printf(" [holder finalized: %s]", redact.Safe(statusStr))
+				prefix = fmt.Sprintf("  holder%s: ", optPlural)
+			} else {
+				prefix = "\n           "
+			}
+			sb.Printf("%stxn: %v epoch: %d, iso: %s, ts: %v, info: ",
+				redact.Safe(prefix), redact.Safe(txn.ID), redact.Safe(txn.Epoch),
+				redact.Safe(txn.IsoLevel), redact.Safe(ts),
+			)
+			if !tl.replicatedInfo.isEmpty() {
+				tl.replicatedInfo.safeFormat(sb)
+				if !tl.unreplicatedInfo.isEmpty() {
+					sb.Printf(", ")
+				}
+			}
+			if !tl.unreplicatedInfo.isEmpty() {
+				tl.unreplicatedInfo.safeFormat(sb)
+			}
+			if txnStatusCache != nil {
+				finalizedTxn, ok := txnStatusCache.finalizedTxns.get(txn.ID)
+				if ok {
+					var statusStr string
+					switch finalizedTxn.Status {
+					case roachpb.COMMITTED:
+						statusStr = "committed"
+					case roachpb.ABORTED:
+						statusStr = "aborted"
+					}
+					sb.Printf(" [holder finalized: %s]", redact.Safe(statusStr))
+				}
 			}
 		}
 		sb.SafeString("\n")
@@ -1663,7 +1680,9 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 		for e := kl.queuedWriters.Front(); e != nil; e = e.Next() {
 			qg := e.Value.(*queuedGuard)
 			g := qg.guard
-			sb.Printf("    active: %t req: %d, txn: ", redact.Safe(qg.active), redact.Safe(qg.guard.seqNum))
+			sb.Printf("    active: %t req: %d, strength: %s, txn: ",
+				redact.Safe(qg.active), redact.Safe(qg.guard.seqNum), redact.Safe(qg.mode.Strength),
+			)
 			if g.txn == nil {
 				sb.SafeString("none\n")
 			} else {
@@ -2727,13 +2746,6 @@ func (kl *keyLocks) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 			}
 		}
 		return nil
-	}
-
-	if kl.isLocked() {
-		// TODO(arul): multilpe lock holders on a single key haven't been wired up
-		// fully. Return an error until that's the case. Note that the reacquisition
-		// case has already been handled above.
-		return errors.AssertionFailedf("existing lock cannot be acquired by different transaction")
 	}
 
 	// NB: The lock isn't held, so the request trying to acquire the lock must be

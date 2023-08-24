@@ -26,6 +26,7 @@ go_library(
         "//pkg/util/admission",
         "//pkg/util/bufalloc",
         "//pkg/util/buildutil",
+        "//pkg/util/container/heap",
         "//pkg/util/envutil",
         "//pkg/util/future",
         "//pkg/util/hlc",

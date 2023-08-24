@@ -15,6 +15,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util",
         "//pkg/util/cache",
+        "//pkg/util/container/list",
         "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/interval",

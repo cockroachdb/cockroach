@@ -372,18 +372,18 @@ num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 10, txn: 00000004-0000-0000-0000-000000000000
-    active: true req: 13, txn: 00000003-0000-0000-0000-000000000000
+    active: true req: 10, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 13, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 10
  lock: "b"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 11, txn: 00000001-0000-0000-0000-000000000000
+    active: true req: 11, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 11
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 12, txn: 00000002-0000-0000-0000-000000000000
+    active: true req: 12, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 12
 
 # Break the deadlock by aborting txn1.
@@ -576,11 +576,11 @@ num=3
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "b"
    queued writers:
-    active: false req: 17, txn: 00000004-0000-0000-0000-000000000000
+    active: false req: 17, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 17, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 17, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 17
 
 # --------------------------------
@@ -626,17 +626,17 @@ num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 19, txn: 00000003-0000-0000-0000-000000000000
+    active: true req: 19, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 19
  lock: "b"
    queued writers:
-    active: false req: 17, txn: 00000004-0000-0000-0000-000000000000
-    active: true req: 18, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 17, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 18, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 18
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 17, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 17, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 17
 
 # Break the deadlock by aborting txn4.
@@ -812,11 +812,11 @@ num=3
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "b"
    queued writers:
-    active: false req: 23, txn: 00000004-0000-0000-0000-000000000000
+    active: false req: 23, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 23, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 23, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 23
 
 # --------------------------------
@@ -862,17 +862,17 @@ num=3
  lock: "a"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 25, txn: 00000003-0000-0000-0000-000000000000
+    active: true req: 25, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 25
  lock: "b"
    queued writers:
-    active: false req: 23, txn: 00000004-0000-0000-0000-000000000000
-    active: true req: 24, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 23, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 24, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 24
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 23, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 23, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 23
 
 # Break the deadlock by aborting txn1.
@@ -1085,16 +1085,16 @@ debug-lock-table
 num=3
  lock: "a"
    queued writers:
-    active: false req: 30, txn: 00000004-0000-0000-0000-000000000000
+    active: false req: 30, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
  lock: "b"
    queued writers:
-    active: false req: 29, txn: 00000005-0000-0000-0000-000000000000
-    active: true req: 30, txn: 00000004-0000-0000-0000-000000000000
+    active: false req: 29, strength: Intent, txn: 00000005-0000-0000-0000-000000000000
+    active: true req: 30, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 30
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 29, txn: 00000005-0000-0000-0000-000000000000
+    active: true req: 29, strength: Intent, txn: 00000005-0000-0000-0000-000000000000
    distinguished req: 29
 
 # --------------------------------
@@ -1124,18 +1124,18 @@ debug-lock-table
 num=3
  lock: "a"
    queued writers:
-    active: false req: 30, txn: 00000004-0000-0000-0000-000000000000
-    active: true req: 31, txn: 00000003-0000-0000-0000-000000000000
+    active: false req: 30, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 31, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 31
  lock: "b"
    queued writers:
-    active: false req: 29, txn: 00000005-0000-0000-0000-000000000000
-    active: true req: 30, txn: 00000004-0000-0000-0000-000000000000
+    active: false req: 29, strength: Intent, txn: 00000005-0000-0000-0000-000000000000
+    active: true req: 30, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 30
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 29, txn: 00000005-0000-0000-0000-000000000000
+    active: true req: 29, strength: Intent, txn: 00000005-0000-0000-0000-000000000000
    distinguished req: 29
 
 # Break the deadlock by aborting txn4.

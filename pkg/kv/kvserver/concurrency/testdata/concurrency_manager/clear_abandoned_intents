@@ -166,7 +166,7 @@ num=1
  lock: "a"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 sequence req=req1
 ----
@@ -202,11 +202,11 @@ debug-lock-table
 num=2
  lock: "a"
    queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "b"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [holder finalized: committed]
    queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 sequence req=req1
 ----
@@ -231,14 +231,14 @@ debug-lock-table
 num=3
  lock: "a"
    queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "b"
    queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "c"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [holder finalized: committed]
    queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 sequence req=req1
 ----
@@ -258,13 +258,13 @@ debug-lock-table
 num=3
  lock: "a"
    queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "b"
    queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "c"
    queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 finish req=req1
 ----
@@ -451,15 +451,15 @@ num=3
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "d"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
   holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 sequence req=req1
 ----
@@ -478,16 +478,16 @@ num=3
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: true req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5
  lock: "d"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
   holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 new-request name=req3 txn=txn3 ts=10,1
   put key=a value=v3
@@ -537,16 +537,16 @@ num=5
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: true req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5
  lock: "d"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
   holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 new-request name=req2 txn=txn2 ts=11,1
   scan key=a endkey=c
@@ -577,16 +577,16 @@ num=5
  lock: "c"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: true req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5
  lock: "d"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
   holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 debug-advance-clock ts=123
 ----
@@ -619,15 +619,15 @@ num=4
    distinguished req: 8
  lock: "c"
    queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "d"
   holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [holder finalized: aborted]
    queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
   holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: true req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5
 
 debug-advance-clock ts=123
@@ -652,14 +652,14 @@ debug-lock-table
 num=3
  lock: "c"
    queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "d"
    queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
   holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
+    active: true req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5
 
 finish req=req2
