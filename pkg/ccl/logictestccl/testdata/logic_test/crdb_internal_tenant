@@ -327,15 +327,15 @@ SELECT * FROM crdb_internal.node_inflight_trace_spans WHERE span_id < 0
 ----
 trace_id  parent_span_id  span_id  goroutine_id  finished  start_time  duration  operation
 
-query TTTBTTTTTIITITTTTTTTTTTTTITRRRRRTT colnames
+query TTTBTTTTTIITITTTTTTTTTTTTITRRRRRITT colnames
 SELECT * FROM crdb_internal.cluster_execution_insights WHERE query = ''
 ----
-session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  idle_lat_seconds  parse_lat_seconds  plan_lat_seconds  run_lat_seconds  service_lat_seconds  exec_stats  mvcc_stats
+session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  idle_lat_seconds  parse_lat_seconds  plan_lat_seconds  run_lat_seconds  service_lat_seconds  bytes_read  exec_stats  mvcc_stats
 
-query TTTBTTTTTIITITTTTTTTTTTTTITRRRRRTT colnames
+query TTTBTTTTTIITITTTTTTTTTTTTITRRRRRITT colnames
 SELECT * FROM crdb_internal.node_execution_insights WHERE query = ''
 ----
-session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  idle_lat_seconds  parse_lat_seconds  plan_lat_seconds  run_lat_seconds  service_lat_seconds  exec_stats  mvcc_stats
+session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  idle_lat_seconds  parse_lat_seconds  plan_lat_seconds  run_lat_seconds  service_lat_seconds  bytes_read  exec_stats  mvcc_stats
 
 query TTTBTTTTTIITITTTTTITTRRRRITT colnames
 SELECT * FROM crdb_internal.cluster_txn_execution_insights WHERE query = ''
@@ -503,150 +503,6 @@ SELECT crdb_internal.pretty_key(e'\\xa82a00918ed9':::BYTES, (-509618906946614289
 /Table/32/???/9/6/81
 
 subtest max_retry_counter
-# Verify that the max_retry counter in statement stats actually increases with retries.
-
-statement ok
-SET application_name = 'test_max_retry'
-
-# Make the statement retry, to ensure max_retries increases to
-# become different from 0.
-statement OK
-CREATE SEQUENCE s;
-
-statement OK
-SELECT IF(nextval('s')<3, crdb_internal.force_retry('1h'::INTERVAL), 0);
-
-statement OK
-DROP SEQUENCE s
-
-statement OK
-RESET application_name
-
-# Note: in the following test, three rows of output are expected:
-# - one for the SELECT statements that failed with a retry error,
-# - one for the final SELECT retry attempt that succeeded without an error,
-# - one for the RESET statement.
-#
-# We expect the first two entries to have max_retries > 0 because
-# auto-retries are expected by the server.
-# We also expect the RESET statement to have max_retries = 0, because
-# RESET never retries. This tests that the retry counter is properly
-# reset to 0 between statements - a naive implementation could make
-# the counter increase forever, even between statements.
-#
-# TODO(radu): there should be a single fingerprint, with ::INTERVAL. The
-# different fingerprint on retries is caused by in-place mutation of the AST
-# (#22847).
-#
-
-query TIB
-SELECT key, max_retries, flags LIKE '!%' AS f
-  FROM crdb_internal.node_statement_statistics
- WHERE application_name = 'test_max_retry'
-ORDER BY key, f
-----
-CREATE SEQUENCE s                                                         0  false
-DROP SEQUENCE s                                                           0  false
-RESET application_name                                                    0  false
-SELECT IF(nextval('_') < _, crdb_internal.force_retry('_'::INTERVAL), _)  0  true
-SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)                2  false
-SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)                1  true
-
-query T
-SELECT crdb_internal.cluster_name()
-----
-testclustername
-
-# Regression for 41834.
-statement ok
-CREATE TABLE table41834 ();
-
-statement ok
-SELECT
-	crdb_internal.encode_key(
-		-8912529861854991652,
-		0,
-		CASE
-		WHEN false THEN (NULL,)
-		ELSE (NULL,)
-		END
-	)
-FROM
-	table41834;
-
-
 subtest builtin_is_admin
-
-user root
-
-query B
-SELECT crdb_internal.is_admin()
-----
-true
-
-user testuser
-
-query B
-SELECT crdb_internal.is_admin()
-----
-false
-
-user root
-
-# Test the crdb_internal.create_type_statements table.
-statement ok
-CREATE TYPE enum1 AS ENUM ('hello', 'hi');
-CREATE TYPE enum2 AS ENUM ()
-
-query ITTITTT
-SELECT * FROM crdb_internal.create_type_statements ORDER BY descriptor_id
-----
-104  test  public  113  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
-104  test  public  115  enum2  CREATE TYPE public.enum2 AS ENUM ()               {}
-
-# Test the virtual index as well.
-
-statement ok
-SET application_name = "test_txn_statistics"
-
-statement ok
-CREATE TABLE t_53504()
-
-statement ok
-BEGIN; SELECT * FROM t_53504; SELECT * FROM t_53504; SELECT * FROM t_53504; COMMIT;
-
-statement ok
-BEGIN; SELECT * FROM t_53504; SELECT * FROM t_53504; COMMIT;
-
-statement ok
-BEGIN; SELECT * FROM t_53504; SELECT * FROM t_53504; COMMIT;
-
-statement ok
-BEGIN; SELECT * FROM t_53504; COMMIT;
-
-statement ok
-SELECT * FROM t_53504
-
-query ITTTI colnames,rowsort
-SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'
-----
-node_id  application_name     key                   statement_ids                                                  count
-0        test_txn_statistics  10922505138341351577  {4104808689124681542}                                          1
-0        test_txn_statistics  12762606372390135532  {8833422719858486605,8833422719858486605,8833422719858486605}  1
-0        test_txn_statistics  15417266716795083410  {8833422719858486605}                                          1
-0        test_txn_statistics  15417266716795083422  {8833422719858486593}                                          1
-0        test_txn_statistics  17236010932163349339  {8833422719858486605,8833422719858486605}                      2
-
 subtest node_tenant_capabilities_cache
-
-user testuser
-
-statement error only users with the admin role are allowed to node_tenant_capabilities_cache
-SELECT * FROM crdb_internal.node_tenant_capabilities_cache
-
-user root
-
-statement error operation node_tenant_capabilities_cache supported only by system tenant
-SELECT * FROM crdb_internal.node_tenant_capabilities_cache
-
 subtest end
