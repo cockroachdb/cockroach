@@ -157,7 +157,12 @@ func downloadZips(
 	cmd.Dir = tmpdir
 	jsonBytes, err := cmd.Output()
 	if err != nil {
-		return nil, err
+		var stderr []byte
+		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
+			stderr = exitErr.Stderr
+		}
+		return nil, fmt.Errorf("failed to run go with arguments %+v; got stdout %s, stderr %s; %w",
+			downloadArgs, string(jsonBytes), string(stderr), err)
 	}
 	var jsonBuilder strings.Builder
 	ret := make(map[string]downloadedModule)
@@ -184,7 +189,12 @@ func listAllModules(tmpdir string) (map[string]listedModule, error) {
 	cmd.Dir = tmpdir
 	jsonBytes, err := cmd.Output()
 	if err != nil {
-		return nil, err
+		var stderr []byte
+		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
+			stderr = exitErr.Stderr
+		}
+		return nil, fmt.Errorf("failed to run `go list -mod=readonly -m -json all`; got stdout %s, stderr %s; %w",
+			string(jsonBytes), string(stderr), err)
 	}
 	ret := make(map[string]listedModule)
 	var jsonBuilder strings.Builder
