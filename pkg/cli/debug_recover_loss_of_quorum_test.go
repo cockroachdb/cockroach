@@ -461,6 +461,9 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		}
 	}
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ReusableListenerReg: listenerReg,
 		ServerArgsPerNode:   sa,
 	})
