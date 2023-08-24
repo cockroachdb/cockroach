@@ -187,13 +187,14 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 		// Set the span batch limit to 1.
 		_, err := helper.HostCluster().ServerConn(0).Exec(`SET CLUSTER SETTING server.span_stats.span_batch_limit = 1`)
 		require.NoError(t, err)
-		_, err = tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).SpanStats(ctx,
-			&roachpb.SpanStatsRequest{
-				NodeID: "0", // 0 indicates we want stats from all nodes.
-				Spans:  []roachpb.Span{aSpan, aSpan},
-			})
-		require.ErrorContains(t, err, `error getting span statistics - number of spans in request payload (2) exceeds`+
-			` 'server.span_stats.span_batch_limit' cluster setting limit (1)`)
+		res, err := tenantA.TenantStatusSrv().(serverpb.TenantStatusServer).
+			SpanStats(ctx,
+				&roachpb.SpanStatsRequest{
+					NodeID: "0", // 0 indicates we want stats from all nodes.
+					Spans:  []roachpb.Span{aSpan, aSpan},
+				})
+		require.NoError(t, err)
+		require.Contains(t, res.SpanToStats, aSpan.String())
 		// Reset the span batch limit to default.
 		_, err = helper.HostCluster().ServerConn(0).Exec(`SET CLUSTER SETTING server.span_stats.span_batch_limit = $1`, roachpb.DefaultSpanStatsSpanLimit)
 		require.NoError(t, err)
