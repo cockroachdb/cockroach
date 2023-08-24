@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,4 +71,43 @@ func MakeSST(
 	writer.Close()
 
 	return sstFile.Data(), start, end
+}
+
+// KeysFromSST takes an SST as a byte slice and returns all point
+// and range keys in the SST.
+func KeysFromSST(t *testing.T, data []byte) ([]storage.MVCCKey, []storage.MVCCRangeKeyStack) {
+	var results []storage.MVCCKey
+	var rangeKeyRes []storage.MVCCRangeKeyStack
+	it, err := storage.NewMemSSTIterator(data, false, storage.IterOptions{
+		KeyTypes:   pebble.IterKeyTypePointsAndRanges,
+		LowerBound: keys.MinKey,
+		UpperBound: keys.MaxKey,
+	})
+	require.NoError(t, err, "Failed to read exported data")
+	defer it.Close()
+	for it.SeekGE(storage.MVCCKey{Key: []byte{}}); ; {
+		ok, err := it.Valid()
+		require.NoError(t, err, "Failed to advance iterator while preparing data")
+		if !ok {
+			break
+		}
+
+		if it.RangeKeyChanged() {
+			hasPoint, hasRange := it.HasPointAndRange()
+			if hasRange {
+				rangeKeyRes = append(rangeKeyRes, it.RangeKeys().Clone())
+			}
+			if !hasPoint {
+				it.Next()
+				continue
+			}
+		}
+
+		results = append(results, storage.MVCCKey{
+			Key:       append(roachpb.Key(nil), it.UnsafeKey().Key...),
+			Timestamp: it.UnsafeKey().Timestamp,
+		})
+		it.Next()
+	}
+	return results, rangeKeyRes
 }
