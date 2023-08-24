@@ -1,0 +1,570 @@
+setup
+SET use_declarative_schema_changer = off;
+ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 7200;
+CREATE SCHEMA sc;
+CREATE TYPE sc.greeting AS ENUM('hi', 'hello');
+CREATE FUNCTION sc.identityfun(val INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$ SELECT val $$;
+CREATE TABLE kv (k INT PRIMARY KEY, v STRING);
+ALTER TABLE kv ADD CONSTRAINT ck CHECK (k > 0);
+CREATE MATERIALIZED VIEW mv AS SELECT k, v FROM kv;
+CREATE INDEX idx ON mv(v);
+ALTER TABLE kv CONFIGURE ZONE USING gc.ttlseconds = 3600;
+COMMENT ON DATABASE defaultdb IS 'this is the default database';
+COMMENT ON SCHEMA sc IS 'this is a schema';
+COMMENT ON SCHEMA public IS 'this is the public schema';
+COMMENT ON TABLE kv IS 'this is a table';
+COMMENT ON INDEX mv@idx IS 'this is an index';
+COMMENT ON CONSTRAINT ck ON kv IS 'this is a check constraint';
+COMMENT ON CONSTRAINT kv_pkey ON kv IS 'this is a primary key constraint';
+----
+
+scan_namespace_for_databases
+----
+catalog:
+  "001":
+    namespace: (0, 0, "system")
+  "100":
+    namespace: (0, 0, "defaultdb")
+  "102":
+    namespace: (0, 0, "postgres")
+trace:
+- Scan /NamespaceTable/30/1/0/0
+
+is_name_in_cache name_key=(0,0,system)
+----
+true
+
+is_name_in_cache name_key=(1,29,jobs)
+----
+false
+
+# System tables are not in the cached catalog, but their names are not
+# read from storage either if a system database cache is present.
+get_by_names name_key=(1,29,jobs)
+----
+catalog:
+  "015":
+    namespace: (1, 29, "jobs")
+trace:
+- Get /NamespaceTable/30/1/1/29/"jobs"/4/1
+cached:
+- Get /NamespaceTable/30/1/1/29/"jobs"/4/1
+
+# After a lookup the result is always cached regardless of the above.
+is_name_in_cache name_key=(1,29,jobs)
+----
+true
+
+scan_namespace_for_database_schemas_and_objects db_id=100
+----
+catalog:
+  "101":
+    namespace: (100, 0, "public")
+  "104":
+    namespace: (100, 0, "sc")
+  "105":
+    namespace: (100, 104, "greeting")
+  "106":
+    namespace: (100, 104, "_greeting")
+  "108":
+    namespace: (100, 101, "kv")
+  "109":
+    namespace: (100, 101, "mv")
+trace:
+- Scan /NamespaceTable/30/1/100
+
+# The results should be cached from the previous call.
+scan_namespace_for_database_schemas db_id=100
+----
+catalog:
+  "101":
+    namespace: (100, 0, "public")
+  "104":
+    namespace: (100, 0, "sc")
+trace:
+- Scan /NamespaceTable/30/1/100/0
+cached:
+- Scan /NamespaceTable/30/1/100/0
+
+is_name_in_cache name_key=(100,101,kv)
+----
+true
+
+# Same as above.
+scan_namespace_for_schema_objects db_id=100 sc_id=104
+----
+catalog:
+  "105":
+    namespace: (100, 104, "greeting")
+  "106":
+    namespace: (100, 104, "_greeting")
+trace:
+- Scan /NamespaceTable/30/1/100/104
+cached:
+- Scan /NamespaceTable/30/1/100/104
+
+# We exhaustively know all the name -> ID mappings in the database.
+is_desc_id_known_to_not_exist id=123 maybe_parent_id=100
+----
+true
+
+# Descriptor, comments and zone config should be present.
+get_by_ids id=108
+----
+catalog:
+  "108":
+    comments:
+      constraint_1: this is a primary key constraint
+      constraint_2: this is a check constraint
+      table: this is a table
+    descriptor: relation
+    zone: gc.ttlseconds=3600
+trace:
+- Get /Table/3/1/108/2/1
+- Scan /Table/24/1/0/108
+- Scan /Table/24/1/1/108
+- Scan /Table/24/1/2/108
+- Scan /Table/24/1/3/108
+- Scan /Table/24/1/4/108
+- Scan /Table/24/1/5/108
+- Scan /Table/24/1/6/108
+- Get /Table/5/1/108/2/1
+
+# Zone config, but no descriptor should be present.
+get_by_ids id=0
+----
+catalog:
+  "000":
+    zone: gc.ttlseconds=14400
+trace:
+- Get /Table/3/1/0/2/1
+- Scan /Table/24/1/0/0
+- Scan /Table/24/1/1/0
+- Scan /Table/24/1/2/0
+- Scan /Table/24/1/3/0
+- Scan /Table/24/1/4/0
+- Scan /Table/24/1/5/0
+- Scan /Table/24/1/6/0
+- Get /Table/5/1/0/2/1
+
+get_by_ids id=104 id=105 id=106 id=107
+----
+catalog:
+  "104":
+    comments:
+      schema: this is a schema
+    descriptor: schema
+  "105":
+    descriptor: type
+  "106":
+    descriptor: type
+  "107":
+    descriptor: function
+trace:
+- Scan Range /Table/3/1/104/2/1 /Table/3/1/108/2/1
+- Scan Range /Table/24/1/0/104 /Table/24/1/0/108
+- Scan Range /Table/24/1/1/104 /Table/24/1/1/108
+- Scan Range /Table/24/1/2/104 /Table/24/1/2/108
+- Scan Range /Table/24/1/3/104 /Table/24/1/3/108
+- Scan Range /Table/24/1/4/104 /Table/24/1/4/108
+- Scan Range /Table/24/1/5/104 /Table/24/1/5/108
+- Scan Range /Table/24/1/6/104 /Table/24/1/6/108
+- Scan Range /Table/5/1/104/2/1 /Table/5/1/108/2/1
+
+is_id_in_cache id=107
+----
+true
+
+# Reset the cache.
+reset
+----
+
+is_id_in_cache id=107
+----
+false
+
+# System database cache should be preserved after reset.
+get_by_names name_key=(1,29,jobs)
+----
+catalog:
+  "015":
+    namespace: (1, 29, "jobs")
+trace:
+- Get /NamespaceTable/30/1/1/29/"jobs"/4/1
+cached:
+- Get /NamespaceTable/30/1/1/29/"jobs"/4/1
+
+scan_all
+----
+catalog:
+  "000":
+    zone: gc.ttlseconds=14400
+  "001":
+    descriptor: database
+    namespace: (0, 0, "system")
+  "003":
+    descriptor: relation
+    namespace: (1, 29, "descriptor")
+  "004":
+    descriptor: relation
+    namespace: (1, 29, "users")
+  "005":
+    descriptor: relation
+    namespace: (1, 29, "zones")
+  "006":
+    descriptor: relation
+    namespace: (1, 29, "settings")
+  "007":
+    descriptor: relation
+    namespace: (1, 29, "descriptor_id_seq")
+  "009":
+    descriptor: relation
+    namespace: (1, 29, "region_liveness")
+  "011":
+    descriptor: relation
+    namespace: (1, 29, "lease")
+  "012":
+    descriptor: relation
+    namespace: (1, 29, "eventlog")
+  "013":
+    descriptor: relation
+    namespace: (1, 29, "rangelog")
+  "014":
+    descriptor: relation
+    namespace: (1, 29, "ui")
+  "015":
+    descriptor: relation
+    namespace: (1, 29, "jobs")
+  "019":
+    descriptor: relation
+    namespace: (1, 29, "web_sessions")
+  "020":
+    descriptor: relation
+    namespace: (1, 29, "table_statistics")
+  "021":
+    descriptor: relation
+    namespace: (1, 29, "locations")
+  "023":
+    descriptor: relation
+    namespace: (1, 29, "role_members")
+  "024":
+    descriptor: relation
+    namespace: (1, 29, "comments")
+  "025":
+    descriptor: relation
+    namespace: (1, 29, "replication_constraint_stats")
+  "026":
+    descriptor: relation
+    namespace: (1, 29, "replication_critical_localities")
+  "027":
+    descriptor: relation
+    namespace: (1, 29, "replication_stats")
+  "028":
+    descriptor: relation
+    namespace: (1, 29, "reports_meta")
+  "029":
+    namespace: (1, 0, "public")
+  "030":
+    descriptor: relation
+    namespace: (1, 29, "namespace")
+  "031":
+    descriptor: relation
+    namespace: (1, 29, "protected_ts_meta")
+  "032":
+    descriptor: relation
+    namespace: (1, 29, "protected_ts_records")
+  "033":
+    descriptor: relation
+    namespace: (1, 29, "role_options")
+  "034":
+    descriptor: relation
+    namespace: (1, 29, "statement_bundle_chunks")
+  "035":
+    descriptor: relation
+    namespace: (1, 29, "statement_diagnostics_requests")
+  "036":
+    descriptor: relation
+    namespace: (1, 29, "statement_diagnostics")
+  "037":
+    descriptor: relation
+    namespace: (1, 29, "scheduled_jobs")
+  "039":
+    descriptor: relation
+    namespace: (1, 29, "sqlliveness")
+  "040":
+    descriptor: relation
+    namespace: (1, 29, "migrations")
+  "041":
+    descriptor: relation
+    namespace: (1, 29, "join_tokens")
+  "042":
+    descriptor: relation
+    namespace: (1, 29, "statement_statistics")
+  "043":
+    descriptor: relation
+    namespace: (1, 29, "transaction_statistics")
+  "044":
+    descriptor: relation
+    namespace: (1, 29, "database_role_settings")
+  "046":
+    descriptor: relation
+    namespace: (1, 29, "sql_instances")
+  "048":
+    descriptor: relation
+    namespace: (1, 29, "role_id_seq")
+  "050":
+    descriptor: relation
+    namespace: (1, 29, "span_count")
+  "051":
+    descriptor: relation
+    namespace: (1, 29, "privileges")
+  "052":
+    descriptor: relation
+    namespace: (1, 29, "external_connections")
+  "053":
+    descriptor: relation
+    namespace: (1, 29, "job_info")
+  "054":
+    descriptor: relation
+    namespace: (1, 29, "span_stats_unique_keys")
+  "055":
+    descriptor: relation
+    namespace: (1, 29, "span_stats_buckets")
+  "056":
+    descriptor: relation
+    namespace: (1, 29, "span_stats_samples")
+  "057":
+    descriptor: relation
+    namespace: (1, 29, "span_stats_tenant_boundaries")
+  "058":
+    descriptor: relation
+    namespace: (1, 29, "statement_activity")
+  "059":
+    descriptor: relation
+    namespace: (1, 29, "transaction_activity")
+  "100":
+    comments:
+      database: this is the default database
+    descriptor: database
+    namespace: (0, 0, "defaultdb")
+    zone: gc.ttlseconds=7200
+  "101":
+    comments:
+      schema: this is the public schema
+    descriptor: schema
+    namespace: (100, 0, "public")
+  "102":
+    descriptor: database
+    namespace: (0, 0, "postgres")
+  "103":
+    descriptor: schema
+    namespace: (102, 0, "public")
+  "104":
+    comments:
+      schema: this is a schema
+    descriptor: schema
+    namespace: (100, 0, "sc")
+  "105":
+    descriptor: type
+    namespace: (100, 104, "greeting")
+  "106":
+    descriptor: type
+    namespace: (100, 104, "_greeting")
+  "107":
+    descriptor: function
+  "108":
+    comments:
+      constraint_1: this is a primary key constraint
+      constraint_2: this is a check constraint
+      table: this is a table
+    descriptor: relation
+    namespace: (100, 101, "kv")
+    zone: gc.ttlseconds=3600
+  "109":
+    comments:
+      index_2: this is an index
+    descriptor: relation
+    namespace: (100, 101, "mv")
+trace:
+- Scan /Table/3/1
+- Scan /NamespaceTable/30/1
+- Scan /Table/24/1
+- Scan /Table/5/1
+
+# After scanning everything we also know what doesn't exist.
+is_desc_id_known_to_not_exist id=123
+----
+true
+
+# Get* queries involving IDs or names which don't exist after a
+# ScanAll should bypass storage in the cached CatalogReader.
+get_by_ids id=456
+----
+catalog: {}
+trace:
+- Get /Table/3/1/456/2/1
+- Scan /Table/24/1/0/456
+- Scan /Table/24/1/1/456
+- Scan /Table/24/1/2/456
+- Scan /Table/24/1/3/456
+- Scan /Table/24/1/4/456
+- Scan /Table/24/1/5/456
+- Scan /Table/24/1/6/456
+- Get /Table/5/1/456/2/1
+cached:
+- Get /Table/3/1/456/2/1
+- Scan /Table/24/1/0/456
+- Scan /Table/24/1/1/456
+- Scan /Table/24/1/2/456
+- Scan /Table/24/1/3/456
+- Scan /Table/24/1/4/456
+- Scan /Table/24/1/5/456
+- Scan /Table/24/1/6/456
+- Get /Table/5/1/456/2/1
+
+get_by_names name_key=(123,456,foo)
+----
+catalog: {}
+trace:
+- Get /NamespaceTable/30/1/123/456/"foo"/4/1
+cached:
+- Get /NamespaceTable/30/1/123/456/"foo"/4/1
+
+# Reset to clear any caching
+reset
+----
+
+# Scanning all comments after resetting should only
+# give us comments
+scan_all_comments
+----
+catalog:
+  "001":
+    namespace: (0, 0, "system")
+  "003":
+    namespace: (1, 29, "descriptor")
+  "004":
+    namespace: (1, 29, "users")
+  "005":
+    namespace: (1, 29, "zones")
+  "006":
+    namespace: (1, 29, "settings")
+  "007":
+    namespace: (1, 29, "descriptor_id_seq")
+  "009":
+    namespace: (1, 29, "region_liveness")
+  "011":
+    namespace: (1, 29, "lease")
+  "012":
+    namespace: (1, 29, "eventlog")
+  "013":
+    namespace: (1, 29, "rangelog")
+  "014":
+    namespace: (1, 29, "ui")
+  "015":
+    namespace: (1, 29, "jobs")
+  "019":
+    namespace: (1, 29, "web_sessions")
+  "020":
+    namespace: (1, 29, "table_statistics")
+  "021":
+    namespace: (1, 29, "locations")
+  "023":
+    namespace: (1, 29, "role_members")
+  "024":
+    namespace: (1, 29, "comments")
+  "025":
+    namespace: (1, 29, "replication_constraint_stats")
+  "026":
+    namespace: (1, 29, "replication_critical_localities")
+  "027":
+    namespace: (1, 29, "replication_stats")
+  "028":
+    namespace: (1, 29, "reports_meta")
+  "029":
+    namespace: (1, 0, "public")
+  "030":
+    namespace: (1, 29, "namespace")
+  "031":
+    namespace: (1, 29, "protected_ts_meta")
+  "032":
+    namespace: (1, 29, "protected_ts_records")
+  "033":
+    namespace: (1, 29, "role_options")
+  "034":
+    namespace: (1, 29, "statement_bundle_chunks")
+  "035":
+    namespace: (1, 29, "statement_diagnostics_requests")
+  "036":
+    namespace: (1, 29, "statement_diagnostics")
+  "037":
+    namespace: (1, 29, "scheduled_jobs")
+  "039":
+    namespace: (1, 29, "sqlliveness")
+  "040":
+    namespace: (1, 29, "migrations")
+  "041":
+    namespace: (1, 29, "join_tokens")
+  "042":
+    namespace: (1, 29, "statement_statistics")
+  "043":
+    namespace: (1, 29, "transaction_statistics")
+  "044":
+    namespace: (1, 29, "database_role_settings")
+  "046":
+    namespace: (1, 29, "sql_instances")
+  "048":
+    namespace: (1, 29, "role_id_seq")
+  "050":
+    namespace: (1, 29, "span_count")
+  "051":
+    namespace: (1, 29, "privileges")
+  "052":
+    namespace: (1, 29, "external_connections")
+  "053":
+    namespace: (1, 29, "job_info")
+  "054":
+    namespace: (1, 29, "span_stats_unique_keys")
+  "055":
+    namespace: (1, 29, "span_stats_buckets")
+  "056":
+    namespace: (1, 29, "span_stats_samples")
+  "057":
+    namespace: (1, 29, "span_stats_tenant_boundaries")
+  "058":
+    namespace: (1, 29, "statement_activity")
+  "059":
+    namespace: (1, 29, "transaction_activity")
+  "100":
+    comments:
+      database: this is the default database
+    namespace: (0, 0, "defaultdb")
+  "101":
+    comments:
+      schema: this is the public schema
+    namespace: (100, 0, "public")
+  "102":
+    namespace: (0, 0, "postgres")
+  "103":
+    namespace: (102, 0, "public")
+  "104":
+    comments:
+      schema: this is a schema
+    namespace: (100, 0, "sc")
+  "105":
+    namespace: (100, 104, "greeting")
+  "106":
+    namespace: (100, 104, "_greeting")
+  "108":
+    comments:
+      constraint_1: this is a primary key constraint
+      constraint_2: this is a check constraint
+      table: this is a table
+    namespace: (100, 101, "kv")
+  "109":
+    comments:
+      index_2: this is an index
+    namespace: (100, 101, "mv")
+trace:
+- Scan /NamespaceTable/30/1
+- Scan /Table/24/1
