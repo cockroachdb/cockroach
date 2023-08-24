@@ -91,18 +91,18 @@ num=3
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 4, txn: none
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 4, strength: Intent, txn: none
    distinguished req: 2
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 3
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 5, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 5
 
 # The locks at a, b, c are released. The non-transactional request waits behind
@@ -113,15 +113,15 @@ release txn=txn1 span=a,d
 num=3
  lock: "a"
    queued writers:
-    active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 4, txn: none
+    active: false req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 4, strength: Intent, txn: none
    distinguished req: 4
  lock: "b"
    queued writers:
-    active: false req: 3, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
  lock: "c"
    queued writers:
-    active: false req: 5, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
 
 guard-state r=req2
 ----
@@ -153,16 +153,16 @@ print
 num=3
  lock: "a"
    queued writers:
-    active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 4, txn: none
-    active: true req: 6, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 4, strength: Intent, txn: none
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 4
  lock: "b"
    queued writers:
-    active: false req: 3, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
  lock: "c"
    queued writers:
-    active: false req: 5, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
 
 # Release the reservation at a. The first waiter is non-transactional so it will not acquire the
 # reservation. The second waiter will acquire the reservation. The non-transactional request will
@@ -173,13 +173,13 @@ dequeue r=req2
 num=3
  lock: "a"
    queued writers:
-    active: false req: 6, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
    queued writers:
-    active: false req: 3, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
  lock: "c"
    queued writers:
-    active: false req: 5, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
 
 guard-state r=req4
 ----
@@ -194,15 +194,15 @@ print
 num=3
  lock: "a"
    queued writers:
-    active: false req: 6, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
    queued writers:
-    active: false req: 3, txn: 00000000-0000-0000-0000-000000000003
-    active: true req: 4, txn: none
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 4, strength: Intent, txn: none
    distinguished req: 4
  lock: "c"
    queued writers:
-    active: false req: 5, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
 
 # Release the reservation at b. The non-transactional waiter will be done at b, and when it gets
 # to c it will see a reservation holder with a higher sequence num and ignore it.
@@ -212,10 +212,10 @@ dequeue r=req3
 num=2
  lock: "a"
    queued writers:
-    active: false req: 6, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
    queued writers:
-    active: false req: 5, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
 
 guard-state r=req4
 ----
@@ -230,10 +230,10 @@ print
 num=2
  lock: "a"
    queued writers:
-    active: false req: 6, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
    queued writers:
-    active: false req: 5, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
 
 # Non-transactional request scans again and proceeds to evaluation and discovers a lock at c
 
@@ -246,12 +246,12 @@ add-discovered r=req4 k=c txn=txn2
 num=2
  lock: "a"
    queued writers:
-    active: false req: 6, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
    queued writers:
-    active: false req: 4, txn: none
-    active: false req: 5, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 4, strength: Intent, txn: none
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
 
 scan r=req4
 ----
@@ -276,10 +276,10 @@ release txn=txn2 span=c
 num=2
  lock: "a"
    queued writers:
-    active: false req: 6, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
    queued writers:
-    active: false req: 5, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
 
 guard-state r=req4
 ----
@@ -296,17 +296,17 @@ dequeue r=req4
 num=2
  lock: "a"
    queued writers:
-    active: false req: 6, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
    queued writers:
-    active: false req: 5, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
 
 dequeue r=req5
 ----
 num=1
  lock: "a"
    queued writers:
-    active: false req: 6, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 dequeue r=req6
 ----

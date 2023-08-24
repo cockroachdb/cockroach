@@ -118,7 +118,7 @@ num=4
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
    queued writers:
-    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 new-request r=req4 txn=txn1 ts=10,1 spans=shared@g
 ----
@@ -142,7 +142,7 @@ num=5
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
    queued writers:
-    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
 
@@ -168,7 +168,7 @@ num=6
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
    queued writers:
-    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
  lock: "h"
@@ -196,7 +196,7 @@ num=7
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
    queued writers:
-    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
  lock: "h"
@@ -226,7 +226,7 @@ num=7
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
    queued writers:
-    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
  lock: "h"
@@ -234,7 +234,7 @@ num=7
  lock: "i"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
    queued writers:
-    active: true req: 7, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 7
 
 # ---------------------------------------------------------------------------------
@@ -373,7 +373,7 @@ num=7
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
    queued writers:
-    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
  lock: "h"
@@ -381,7 +381,7 @@ num=7
  lock: "i"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
    queued writers:
-    active: true req: 7, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 7
 
 # ---------------------------------------------------------------------------------
@@ -447,7 +447,7 @@ num=7
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
    queued writers:
-    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+    active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "g"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
  lock: "h"
@@ -455,7 +455,7 @@ num=7
  lock: "i"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
    queued writers:
-    active: true req: 7, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 7
 
 # ---------------------------------------------------------------------------------

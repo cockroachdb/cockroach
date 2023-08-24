@@ -116,7 +116,7 @@ debug-lock-table
 num=1
  lock: "c"
    queued writers:
-    active: false req: 2, txn: 00000003-0000-0000-0000-000000000000
+    active: false req: 2, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
 
 on-txn-updated txn=txn2 status=aborted
 ----
@@ -477,7 +477,7 @@ debug-lock-table
 num=1
  lock: "c"
    queued writers:
-    active: false req: 7, txn: 00000003-0000-0000-0000-000000000000
+    active: false req: 7, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
 
 on-txn-updated txn=txn2 status=aborted
 ----
