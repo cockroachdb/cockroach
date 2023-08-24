@@ -12,7 +12,9 @@ package event
 
 import (
 	"context"
+	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
@@ -41,13 +43,15 @@ func (del delayedEventList) Swap(i, j int) {
 type delayedEventInterface interface {
 	getAt() time.Time
 	getEventFn() interface{}
+	printDelayedEvent() string
 }
 
 type eventFunction func(context.Context, time.Time, *state.State)
 type assertionFunction func(context.Context, time.Time, history.History) (allHolds bool)
 
 type executor struct {
-	delayedEvents delayedEventList
+	nextEventIndex int
+	delayedEvents  delayedEventList
 }
 
 type Executor interface {
@@ -69,7 +73,8 @@ func NewExecutorWithNoEvents() Executor {
 
 func newExecutorWithNoEvents() *executor {
 	return &executor{
-		delayedEvents: delayedEventList{},
+		nextEventIndex: 0,
+		delayedEvents:  delayedEventList{},
 	}
 }
 
@@ -79,20 +84,30 @@ func (e *executor) Start() {
 }
 
 func (e *executor) PrintEventsExecuted() string {
-	return ""
+	if e.delayedEvents == nil {
+		panic("unexpected")
+	}
+	if len(e.delayedEvents) == 0 {
+		return fmt.Sprintln("no delayed events were executed")
+	} else {
+		buf := strings.Builder{}
+		buf.WriteString(fmt.Sprintln("delayed events executed:"))
+		for _, event := range e.delayedEvents {
+			buf.WriteString(fmt.Sprintln(event.printDelayedEvent()))
+		}
+		return buf.String()
+	}
 }
 
 func (e *executor) TickEvents(
 	ctx context.Context, tick time.Time, state *state.State, history history.History,
 ) (failureExists bool) {
-	var idx int
 	// Assume the events are in sorted order and the event list is never added
 	// to.
-	for i := range e.delayedEvents {
-		if !tick.Before(e.delayedEvents[i].getAt()) {
-			idx = i + 1
-			log.Infof(ctx, "applying event (scheduled=%s tick=%s)", e.delayedEvents[i].getAt(), tick)
-			switch fn := e.delayedEvents[i].getEventFn().(type) {
+	for e.nextEventIndex < len(e.delayedEvents) {
+		if !tick.Before(e.delayedEvents[e.nextEventIndex].getAt()) {
+			log.Infof(ctx, "applying event (scheduled=%s tick=%s)", e.delayedEvents[e.nextEventIndex].getAt(), tick)
+			switch fn := e.delayedEvents[e.nextEventIndex].getEventFn().(type) {
 			case eventFunction:
 				fn(ctx, tick, state)
 			case assertionFunction:
@@ -102,12 +117,10 @@ func (e *executor) TickEvents(
 			default:
 				panic("unexpected function type")
 			}
+			e.nextEventIndex++
 		} else {
 			break
 		}
-	}
-	if idx != 0 {
-		e.delayedEvents = e.delayedEvents[idx:]
 	}
 	return failureExists
 }

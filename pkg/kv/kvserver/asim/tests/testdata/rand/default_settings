@@ -231,6 +231,7 @@ topology:
 AU_EAST
   AU_EAST_1
     └── [1 2 3]
+no delayed events were executed
 sample1: pass
 ----------------------------------
 sample2: start running
@@ -245,6 +246,7 @@ topology:
 AU_EAST
   AU_EAST_1
     └── [1 2 3]
+no delayed events were executed
 sample2: pass
 ----------------------------------
 sample3: start running
@@ -259,6 +261,7 @@ topology:
 AU_EAST
   AU_EAST_1
     └── [1 2 3]
+no delayed events were executed
 sample3: pass
 ----------------------------------
 

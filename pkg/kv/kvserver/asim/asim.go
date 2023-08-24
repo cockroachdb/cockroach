@@ -72,6 +72,10 @@ func (s *Simulator) GetState() state.State {
 	return s.state
 }
 
+func (s *Simulator) PrintEventRecord() string {
+	return s.eventExecutor.PrintEventsExecuted()
+}
+
 // NewSimulator constructs a valid Simulator.
 func NewSimulator(
 	duration time.Duration,
@@ -334,5 +338,7 @@ func (s *Simulator) tickMetrics(ctx context.Context, tick time.Time) {
 
 // tickEvents ticks the registered simulation events.
 func (s *Simulator) tickEvents(ctx context.Context, tick time.Time) {
+	// TODO(wenyihu6): add change simulation settings as part of the rand
+	// framework interface to allow early exit
 	s.eventExecutor.TickEvents(ctx, tick, &s.state, s.history)
 }

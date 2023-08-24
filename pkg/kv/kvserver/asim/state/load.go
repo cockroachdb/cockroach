@@ -11,6 +11,8 @@
 package state
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
@@ -122,6 +124,23 @@ const capacityOverrideSentinel = -1
 
 // CapacityOverride is used to override some field(s) of a store's capacity.
 type CapacityOverride roachpb.StoreCapacity
+
+func (co CapacityOverride) String() string {
+	return fmt.Sprintf(
+		"capacity=%d, available=%d, used=%d, logical_bytes=%d, range_count=%d, lease_count=%d, queries_per_sec=%.2f, writes_per_sec=%.2f, cpu_per_sec=%.2f, l0_sublevels=%d, io_threhold=%s",
+		co.Capacity,
+		co.Available,
+		co.Used,
+		co.LogicalBytes,
+		co.RangeCount,
+		co.LeaseCount,
+		co.QueriesPerSecond,
+		co.WritesPerSecond,
+		co.CPUPerSecond,
+		co.L0Sublevels,
+		co.IOThreshold.String(),
+	)
+}
 
 // NewCapacityOverride returns a capacity override where no overrides are set.
 func NewCapacityOverride() CapacityOverride {

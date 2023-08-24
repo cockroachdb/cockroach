@@ -135,6 +135,7 @@ func (f randTestingFramework) runRandTest() testResult {
 		eventGen:     staticEvents,
 		initialState: initialState,
 		initialTime:  initialTime,
+		eventRecord:  simulator.PrintEventRecord(),
 	}
 }
 

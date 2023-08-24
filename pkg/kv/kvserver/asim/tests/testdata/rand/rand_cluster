@@ -86,6 +86,7 @@ US_East
 US_West
   US_West_1
     └── [17 18]
+no delayed events were executed
 sample1: pass
 ----------------------------------
 sample2: start running
@@ -121,6 +122,7 @@ US_West
     └── [17 18 19 20]
   US_West_3
     └── [21 22 23 24]
+no delayed events were executed
 sample2: pass
 ----------------------------------
 sample3: start running
@@ -152,6 +154,7 @@ US_East
 US_West
   US_West_1
     └── [17 18]
+no delayed events were executed
 sample3: pass
 ----------------------------------
 

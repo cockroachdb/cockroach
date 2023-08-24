@@ -35,15 +35,17 @@ const (
 	// iteration.
 	OutputConfigGen // 1 << 2: 0000 0100
 	// OutputTopology displays the topology of cluster configurations.
-	OutputTopology // 1 << 3: 0000 1000
+	OutputTopology      // 1 << 3: 0000 1000
+	OutputDelayedEvents // 1 << 4: 0001 0000
 	// OutputAll shows everything above.
-	OutputAll = (1 << (iota - 1)) - 1 // (1 << 4) - 1: 0000 1111
+	OutputAll = (1 << (iota - 1)) - 1 // (1 << 4) - 1: 0001 1111
 )
 
 // ScanFlags converts an array of input strings into a single flag.
 func (o OutputFlags) ScanFlags(inputs []string) OutputFlags {
 	dict := map[string]OutputFlags{"result_only": OutputResultOnly, "test_settings": OutputTestSettings,
-		"initial_state": OutputInitialState, "config_gen": OutputConfigGen, "topology": OutputTopology, "all": OutputAll}
+		"initial_state": OutputInitialState, "config_gen": OutputConfigGen, "topology": OutputTopology,
+		"events": OutputDelayedEvents, "all": OutputAll}
 	flag := OutputResultOnly
 	for _, input := range inputs {
 		flag = flag.set(dict[input])
@@ -71,6 +73,7 @@ type testResult struct {
 	eventGen     gen.EventGen
 	initialTime  time.Time
 	initialState state.State
+	eventRecord  string
 }
 
 type testResultsReport struct {
@@ -158,6 +161,9 @@ func (tr testResultsReport) String() string {
 		if failed || tr.flags.Has(OutputTopology) {
 			topology := output.initialState.Topology()
 			buf.WriteString(fmt.Sprintf("topology:\n%s", topology.String()))
+		}
+		if failed || tr.flags.Has(OutputDelayedEvents) {
+			buf.WriteString(output.eventRecord)
 		}
 		if failed {
 			buf.WriteString(fmt.Sprintf("sample%d: failed assertion\n%s", nthSample, output.reason))
