@@ -30,11 +30,11 @@ import {
   requestDatabaseDetailsSaga,
 } from "./databaseDetails.saga";
 import {
-  actions,
   KeyedDatabaseDetailsState,
-  reducer,
+  databaseDetailsReducer,
 } from "./databaseDetails.reducer";
 import { indexUnusedDuration } from "src/util/constants";
+const { actions, reducer } = databaseDetailsReducer;
 
 describe("DatabaseDetails sagas", () => {
   const database = "test_db";
@@ -68,12 +68,6 @@ describe("DatabaseDetails sagas", () => {
         zone_config_level: ZoneConfigurationLevel.CLUSTER,
       },
       stats: {
-        spanStats: {
-          approximate_disk_bytes: 1000,
-          live_bytes: 100,
-          total_bytes: 500,
-          range_count: 20,
-        },
         replicaData: {
           replicas: [1, 2, 3],
           regions: ["this", "is", "a", "region"],

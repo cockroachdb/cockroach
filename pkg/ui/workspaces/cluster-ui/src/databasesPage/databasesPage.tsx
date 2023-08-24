@@ -70,29 +70,6 @@ const booleanSettingCx = classnames.bind(booleanSettingStyles);
 //
 // The loading and loaded flags help us know when to dispatch the appropriate
 // refresh actions.
-//
-// The overall structure is:
-//
-//   interface DatabasesPageData {
-//     loading: boolean;
-//     loaded: boolean;
-//     lastError: Error;
-//     sortSetting: SortSetting;
-//     search: string;
-//     filters: Filters;
-//     nodeRegions: { [nodeId: string]: string };
-//     isTenant: boolean;
-//     databases: { // DatabasesPageDataDatabase[]
-//       loading: boolean;
-//       loaded: boolean;
-//       name: string;
-//       sizeInBytes: number;
-//       tableCount: number;
-//       rangeCount: number;
-//       nodes: number[];
-//       nodesByRegionString: string;
-//     }[];
-//   }
 export interface DatabasesPageData {
   loading: boolean;
   loaded: boolean;
@@ -113,12 +90,18 @@ export interface DatabasesPageData {
 }
 
 export interface DatabasesPageDataDatabase {
-  loading: boolean;
-  loaded: boolean;
+  detailsLoading: boolean;
+  detailsLoaded: boolean;
+
+  spanStatsLoading: boolean;
+  spanStatsLoaded: boolean;
+
   // Request error when getting database details.
-  requestError: Error;
+  detailsRequestError: Error;
+  spanStatsRequestError: Error;
   // Query error when getting database details.
-  queryError: SqlExecutionErrorMessage;
+  detailsQueryError: SqlExecutionErrorMessage;
+  spanStatsQueryError: SqlExecutionErrorMessage;
   name: string;
   spanStats?: SqlApiQueryResponse<DatabaseSpanStatsRow>;
   tables?: SqlApiQueryResponse<DatabaseTablesResponse>;
@@ -137,6 +120,7 @@ export interface DatabasesPageActions {
     database: string,
     csIndexUnusedDuration: string,
   ) => void;
+  refreshDatabaseSpanStats: (database: string) => void;
   refreshSettings: () => void;
   refreshNodes?: () => void;
   onFilterChange?: (value: Filters) => void;
@@ -338,14 +322,21 @@ export class DatabasesPage extends React.Component<
 
     filteredDbs.forEach(database => {
       if (
-        !database.loaded &&
-        !database.loading &&
-        database.requestError === undefined
+        !database.detailsLoaded &&
+        !database.detailsLoading &&
+        database.detailsRequestError == null
       ) {
         this.props.refreshDatabaseDetails(
           database.name,
           this.props.csIndexUnusedDuration,
         );
+      }
+      if (
+        !database.spanStatsLoaded &&
+        !database.spanStatsLoading &&
+        database.spanStatsRequestError == null
+      ) {
+        this.props.refreshDatabaseSpanStats(database.name);
       }
     });
   }
@@ -488,7 +479,13 @@ export class DatabasesPage extends React.Component<
     if (
       !this.props.databases ||
       this.props.databases.length === 0 ||
-      this.props.databases.every(x => x.loaded || x.loading)
+      this.props.databases.every(
+        x =>
+          x.detailsLoading ||
+          x.detailsLoaded ||
+          x.spanStatsLoaded ||
+          x.spanStatsLoading,
+      )
     ) {
       return false;
     }
@@ -508,7 +505,18 @@ export class DatabasesPage extends React.Component<
       i++
     ) {
       const db = filteredDatabases[i];
-      if (db.loaded || db.loading || db.requestError != null) {
+      if (
+        db.detailsLoaded ||
+        db.detailsLoading ||
+        db.detailsRequestError != null
+      ) {
+        continue;
+      }
+      if (
+        db.spanStatsLoading ||
+        db.spanStatsLoaded ||
+        db.spanStatsRequestError != null
+      ) {
         continue;
       }
       // Info is not loaded for a visible database.
@@ -556,7 +564,7 @@ export class DatabasesPage extends React.Component<
         ),
         cell: database =>
           checkInfoAvailable(
-            database.requestError,
+            database.detailsRequestError,
             database.tables?.error,
             database.tables?.tables?.length,
           ),
@@ -575,7 +583,7 @@ export class DatabasesPage extends React.Component<
         ),
         cell: database =>
           checkInfoAvailable(
-            database.requestError,
+            database.spanStatsRequestError,
             database.spanStats?.error,
             database.spanStats?.range_count,
           ),
@@ -594,7 +602,7 @@ export class DatabasesPage extends React.Component<
         ),
         cell: database =>
           checkInfoAvailable(
-            database.requestError,
+            database.detailsRequestError,
             null,
             database.nodesByRegionString ? database.nodesByRegionString : null,
           ),
