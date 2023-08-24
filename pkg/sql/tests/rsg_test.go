@@ -807,8 +807,6 @@ func testRandomSyntax(
 	}
 	srv, rawDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
-	sql.SecondaryTenantScatterEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
 	db := &verifyFormatDB{db: rawDB}
 	err := db.exec(t, ctx, "SET CLUSTER SETTING schemachanger.job.max_retry_backoff='1s'")
 	require.NoError(t, err)

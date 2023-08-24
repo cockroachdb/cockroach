@@ -1,4 +1,5 @@
 # LogicTest: 3node-tenant
+# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.zone_configs.enabled=false
 
 # Note that we haven't used the setting override directive in this file to
 # override the default.

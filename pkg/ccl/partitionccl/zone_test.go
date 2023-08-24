@@ -390,8 +390,6 @@ func TestZoneConfigAppliesToTemporaryIndex(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	codec := s.ApplicationLayer().Codec()
-	sv := &s.ApplicationLayer().ClusterSettings().SV
-	sql.SecondaryTenantZoneConfigsEnabled.Override(context.Background(), sv, true)
 
 	if _, err := sqlDB.Exec(`
 SET use_declarative_schema_changer='off';

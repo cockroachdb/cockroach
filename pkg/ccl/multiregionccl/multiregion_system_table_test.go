@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -42,8 +41,6 @@ func TestMrSystemDatabase(t *testing.T) {
 
 	// Enable settings required for configuring a tenant's system database as multi-region.
 	cs := cluster.MakeTestingClusterSettings()
-	sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(ctx, &cs.SV, true)
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &cs.SV, true)
 	instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
 
 	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3, base.TestingKnobs{}, multiregionccltestutils.WithSettings(cs))
@@ -254,19 +251,13 @@ func TestMultiRegionTenantRegions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Enable settings required for configuring a tenant's system database as multi-region.
-	cs := cluster.MakeTestingClusterSettings()
-	sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(context.Background(), &cs.SV, true)
-	sql.SecondaryTenantZoneConfigsEnabled.Override(context.Background(), &cs.SV, true)
-
 	tc, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /*numServers*/, base.TestingKnobs{}, multiregionccltestutils.WithSettings(cs),
+		t, 3 /*numServers*/, base.TestingKnobs{},
 	)
 	defer cleanup()
 
 	ctx := context.Background()
 	ten, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
-		Settings: cs,
 		TenantID: serverutils.TestTenantID(),
 		Locality: roachpb.Locality{
 			Tiers: []roachpb.Tier{
@@ -332,19 +323,13 @@ func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Enable settings required for configuring a tenant's system database as multi-region.
-	cs := cluster.MakeTestingClusterSettings()
-	sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(context.Background(), &cs.SV, true)
-	sql.SecondaryTenantZoneConfigsEnabled.Override(context.Background(), &cs.SV, true)
-
 	tc, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /*numServers*/, base.TestingKnobs{}, multiregionccltestutils.WithSettings(cs),
+		t, 3 /*numServers*/, base.TestingKnobs{},
 	)
 	defer cleanup()
 
 	tenID := roachpb.MustMakeTenantID(10)
 	ten, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
-		Settings: cs,
 		TenantID: tenID,
 		Locality: roachpb.Locality{
 			Tiers: []roachpb.Tier{
@@ -361,7 +346,6 @@ func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 	tenSQLDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
 
 	ten2, tSQL2 := serverutils.StartTenant(t, tc.Server(2), base.TestTenantArgs{
-		Settings: cs,
 		TenantID: tenID,
 		Locality: roachpb.Locality{
 			Tiers: []roachpb.Tier{

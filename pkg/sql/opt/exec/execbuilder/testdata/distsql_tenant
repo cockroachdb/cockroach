@@ -1,5 +1,4 @@
 # LogicTest: 3node-tenant
-# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.zone_configs.enabled=true sql.virtual_cluster.feature_access.multiregion.enabled=true sql.virtual_cluster.feature_access.manual_range_split.enabled=true
 
 statement ok
 CREATE TABLE tbl1 (a INT PRIMARY KEY, b INT)

@@ -1463,6 +1463,17 @@ func (ts *testServer) StartTenant(
 	baseCfg.DisableTLSForHTTP = params.DisableTLSForHTTP
 	baseCfg.EnableDemoLoginEndpoint = params.EnableDemoLoginEndpoint
 
+	// TODO(knz): Once https://github.com/cockroachdb/cockroach/issues/96512 is
+	// resolved, we could override this cluster setting for the secondary tenant
+	// using SQL instead of reaching in using this testing knob. One way to do
+	// so would be to perform the override for all tenants and only then
+	// initializing our test tenant; However, the linked issue above prevents
+	// us from being able to do so.
+	sql.SecondaryTenantScatterEnabled.Override(ctx, &baseCfg.Settings.SV, true)
+	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &baseCfg.Settings.SV, true)
+	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &baseCfg.Settings.SV, true)
+	sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(ctx, &baseCfg.Settings.SV, true)
+
 	// Waiting for capabilities can time To avoid paying this cost in all
 	// cases, we only set the nodelocal storage capability if the caller has
 	// configured an ExternalIODir since nodelocal storage only works with

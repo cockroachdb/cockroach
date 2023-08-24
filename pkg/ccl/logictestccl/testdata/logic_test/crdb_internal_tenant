@@ -1,4 +1,5 @@
 # LogicTest: 3node-tenant
+# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.manual_range_split.enabled=false
 
 query II
 SELECT count(distinct(node_id)), count(*)  FROM crdb_internal.node_runtime_info
