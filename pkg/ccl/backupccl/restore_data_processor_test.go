@@ -10,7 +10,6 @@ package backupccl
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	math "math"
 	"os"
@@ -55,14 +54,13 @@ import (
 
 func TestPathelogicalIngest(t *testing.T) {
 	ctx := context.Background()
-
-	// ingesting span [/Table/183/1-/Table/183/1/‹21›/‹8›/‹-94›/‹11›/‹NULL›)
+	//PROBLEM SPAN: /Table/183/{1/81/9/-2056/3/NULL-2}
 	//startKey, err := hex.DecodeString("f6b789")
-	startKey, err := hex.DecodeString("f6b7899d9087a293")
-	require.NoError(t, err)
+	//startKey, err := hex.DecodeString("f6b7899d9087a293")
+	//require.NoError(t, err)
 	// endKey, err := hex.DecodeString("f6b7899d9087a293")
-	endKey, err := hex.DecodeString("f6b789b28c86fc478d")
-	require.NoError(t, err)
+	//endKey, err := hex.DecodeString("f6b789b28c86fc478d")
+	//require.NoError(t, err)
 	baseURL := "gs://cockroach-tmp/108676/current-to-22.2.9_database-tpcc_SLOW/2023/08/15-185423.23?AUTH=implicit"
 	//	dataFiles := []string{
 	//		"data/891470699015929860.sst",
@@ -92,6 +90,9 @@ func TestPathelogicalIngest(t *testing.T) {
 	"data/891470843652145155.sst",
 	}
 	*/
+	codec := keys.SystemSQLCodec
+	startKey := codec.IndexPrefix(183, 1)
+	endKey := codec.IndexPrefix(183, 2)
 	dataFiles := []string{
 		"data/891470891329912835.sst",
 		"data/891470709612773378.sst",
@@ -119,7 +120,7 @@ func TestPathelogicalIngest(t *testing.T) {
 		})
 	}
 
-	iter0, err := storageccl.ExternalSSTReader(ctx, storeFiles, nil,
+	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, nil,
 		storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypePointsAndRanges,
 			LowerBound: startKey,
@@ -127,10 +128,10 @@ func TestPathelogicalIngest(t *testing.T) {
 		})
 	require.NoError(t, err)
 	// defer iter0.Close()
-	ts, err := time.Parse("2006-01-02 15:04:05.000000", "2023-08-15 18:54:23.234682")
-	require.NoError(t, err)
-	asOf := hlc.Timestamp{WallTime: ts.UnixNano()}
-	iter := storage.NewReadAsOfIterator(iter0, asOf)
+	//ts, err := time.Parse("2006-01-02 15:04:05.000000", "2023-08-15 18:54:23.234682")
+	//require.NoError(t, err)
+	//asOf := hlc.Timestamp{WallTime: ts.UnixNano()}
+	//iter := storage.NewReadAsOfIterator(iter0, asOf)
 	defer iter.Close()
 	keyCount := 0
 	startTime := timeutil.Now()
