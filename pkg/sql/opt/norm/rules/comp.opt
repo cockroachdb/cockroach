@@ -258,68 +258,6 @@
     (MakeTimeZoneFunction (FirstScalarListExpr $args) $right)
 )
 
-# FoldEqZeroSTDistance matches an expression of the form: 'ST_Distance(a,b) = 0'
-# and replaces it with 'ST_Intersects(a,b)'. This replacement allows for
-# early-exit behavior, and may allow an inverted index scan to be generated.
-[FoldEqZeroSTDistance, Normalize]
-(Eq
-    (Function $args:* $private:(FunctionPrivate "st_distance")) &
-        ^(STDistanceUseSpheroid $args)
-    $right:(Const
-        $value:* & (IsFloatDatum $value) & (DatumsEqual $value 0)
-    )
-)
-=>
-(MakeIntersectionFunction $args)
-
-# FoldCmpSTDistanceLeft replaces an expression of the form:
-# 'ST_Distance(...) <= x' with a call to ST_DWithin or ST_DWithinExclusive. This
-# replacement allows early-exit behavior, and may enable use of an inverted
-# index scan. See the MakeSTDWithin method for the specific variation on
-# ST_DWithin that is used to replace expressions with different comparison
-# operators (e.g. '<' vs '<=').
-[FoldCmpSTDistanceLeft, Normalize]
-(Ge | Gt | Le | Lt
-    (Function $args:* $private:(FunctionPrivate "st_distance"))
-    $right:*
-)
-=>
-(MakeSTDWithinLeft (OpName) $args $right)
-
-# FoldCmpSTDistanceRight mirrors FoldCmpSTDistanceLeft.
-[FoldCmpSTDistanceRight, Normalize]
-(Ge | Gt | Le | Lt
-    $left:*
-    (Function $args:* $private:(FunctionPrivate "st_distance"))
-)
-=>
-(MakeSTDWithinRight (OpName) $args $left)
-
-# FoldCmpSTMaxDistanceLeft is a variant of FoldCmpSTDistanceLeft that matches
-# ST_MaxDistance instead of ST_Distance.
-[FoldCmpSTMaxDistanceLeft, Normalize]
-(Ge | Gt | Le | Lt
-    (Function
-        $args:*
-        $private:(FunctionPrivate "st_maxdistance")
-    )
-    $right:*
-)
-=>
-(MakeSTDFullyWithinLeft (OpName) $args $right)
-
-# FoldCmpSTMaxDistanceRight mirrors FoldCmpSTMaxDistanceLeft.
-[FoldCmpSTMaxDistanceRight, Normalize]
-(Ge | Gt | Le | Lt
-    $left:*
-    (Function
-        $args:*
-        $private:(FunctionPrivate "st_maxdistance")
-    )
-)
-=>
-(MakeSTDFullyWithinRight (OpName) $args $left)
-
 # FoldEqTrue replaces x = True with x.
 [FoldEqTrue, Normalize]
 (Eq $left:* (True))
