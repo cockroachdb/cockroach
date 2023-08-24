@@ -47,6 +47,9 @@ func TestDecommissionPreCheckInvalid(t *testing.T) {
 	// Set up test cluster.
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, 4, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ReplicationMode: base.ReplicationManual,
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: decommissionTsArgs("a", "n1"),
@@ -91,6 +94,9 @@ func TestDecommissionPreCheckEvaluation(t *testing.T) {
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, 7, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: tsArgs("ns1", "origin"),
 			1: tsArgs("ns2", "west"),
@@ -211,6 +217,9 @@ func TestDecommissionPreCheckOddToEven(t *testing.T) {
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, 5, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 	})
 	defer tc.Stopper().Stop(ctx)
 
@@ -335,6 +344,9 @@ func TestDecommissionPreCheckBasicReadiness(t *testing.T) {
 
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, 7, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ReplicationMode: base.ReplicationManual, // saves time
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -359,6 +371,9 @@ func TestDecommissionPreCheckUnready(t *testing.T) {
 
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, 7, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ReplicationMode: base.ReplicationManual, // saves time
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -507,6 +522,9 @@ func TestDecommissionPreCheckMultiple(t *testing.T) {
 
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, 5, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ReplicationMode: base.ReplicationManual, // saves time
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -573,6 +591,9 @@ func TestDecommissionPreCheckInvalidNode(t *testing.T) {
 
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, 5, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ReplicationMode: base.ReplicationManual, // saves time
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -639,6 +660,9 @@ func TestDecommissionSelf(t *testing.T) {
 	// Set up test cluster.
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, 7, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ReplicationMode: base.ReplicationManual, // saves time
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -712,7 +736,7 @@ func TestDecommissionEnqueueReplicas(t *testing.T) {
 	tc := serverutils.StartCluster(t, 7, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
-			Insecure: true, // allows admin client without setting up certs
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					EnqueueReplicaInterceptor: func(
@@ -777,10 +801,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 	tc := serverutils.StartCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
 		ServerArgs: base.TestServerArgs{
-			// Disable the default test tenant for now as this tests fails
-			// with it enabled. Tracked with #81590.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			Insecure:          true, // allows admin client without setting up certs
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(81590),
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
