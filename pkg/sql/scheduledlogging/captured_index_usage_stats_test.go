@@ -100,7 +100,9 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 
 	scheduleCompleteChan := make(chan struct{})
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109465),
+
 		Settings: settings,
 		Knobs: base.TestingKnobs{
 			CapturedIndexUsageStatsKnobs: &CaptureIndexUsageStatsTestingKnobs{
@@ -114,7 +116,8 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 		},
 	})
 
-	defer s.Stopper().Stop(context.Background())
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
