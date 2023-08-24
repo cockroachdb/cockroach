@@ -65,7 +65,7 @@ func StartTenant(
 
 	// Create tenant, if necessary. We need to run this SQL against a single host.
 	l.Printf("Creating tenant metadata")
-	if err := hc.ExecSQL(ctx, l, hc.Nodes[:1], "", []string{
+	if err := hc.ExecSQL(ctx, l, hc.Nodes[:1], "", 0, []string{
 		`-e`,
 		fmt.Sprintf(createTenantIfNotExistsQuery, startOpts.TenantID),
 	}); err != nil {

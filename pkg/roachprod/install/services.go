@@ -64,6 +64,8 @@ type ServiceDesc struct {
 	ServiceMode ServiceMode
 	// Node is the node the service is running on.
 	Node Node
+	// Instance is the instance number of the service.
+	Instance int
 	// Port is the port the service is running on.
 	Port int
 }
@@ -73,6 +75,9 @@ type NodeServiceMap map[Node]map[ServiceType]*ServiceDesc
 
 // ServiceDescriptors is a convenience type for a slice of service descriptors.
 type ServiceDescriptors []ServiceDesc
+
+// ServicePredicate is a predicate function definition for filtering services.
+type ServicePredicate func(ServiceDesc) bool
 
 // localClusterPortCache is a workaround for local clusters to prevent multiple
 // nodes from using the same port when searching for open ports.
@@ -118,11 +123,12 @@ func serviceNameComponents(name string) (string, ServiceType, error) {
 }
 
 // DiscoverServices discovers services running on the given nodes. Services
-// matching the tenant name and service type are returned. It's possible that
-// more than one service can be returned for the given parameters if additional
-// services of the same type are running for the same tenant.
+// matching the tenant name and service type are returned and can be filtered by
+// passing predicates. It's possible that multiple services can be returned for
+// the given parameters if instances of the same tenant and type are running on
+// any of the nodes.
 func (c *SyncedCluster) DiscoverServices(
-	nodes Nodes, tenantName string, serviceType ServiceType,
+	tenantName string, serviceType ServiceType, predicates ...ServicePredicate,
 ) (ServiceDescriptors, error) {
 	// If no tenant name is specified, use the system tenant.
 	if tenantName == "" {
@@ -148,24 +154,27 @@ func (c *SyncedCluster) DiscoverServices(
 	if err != nil {
 		return nil, err
 	}
-	return descriptors.Filter(nodes), nil
+	return descriptors.Filter(predicates...), nil
 }
 
-// DiscoverService is a convenience method for discovering a single service. It
-// returns the highest priority service returned by DiscoverServices. If no
-// services are found, it returns a service descriptor with the default port for
-// the service type.
+// DiscoverService is a convenience method for discovering a single service. If
+// no services are found, it returns a service descriptor with the default port
+// for the service type.
 func (c *SyncedCluster) DiscoverService(
-	node Node, tenantName string, serviceType ServiceType,
+	node Node, tenantName string, serviceType ServiceType, tenantInstance int,
 ) (ServiceDesc, error) {
-	services, err := c.DiscoverServices([]Node{node}, tenantName, serviceType)
+	services, err := c.DiscoverServices(
+		tenantName, serviceType, ServiceNodePredicate(node), ServiceInstancePredicate(tenantInstance),
+	)
 	if err != nil {
 		return ServiceDesc{}, err
 	}
-	// If no services are found, attempt to discover a service for the system
-	// tenant, and assume the service is shared.
+	// If no services are found matching the criteria, attempt to discover a
+	// service for the system tenant, and assume the service is shared.
 	if len(services) == 0 {
-		services, err = c.DiscoverServices([]Node{node}, SystemTenantName, serviceType)
+		services, err = c.DiscoverServices(
+			SystemTenantName, serviceType, ServiceNodePredicate(node),
+		)
 		if err != nil {
 			return ServiceDesc{}, err
 		}
@@ -190,21 +199,22 @@ func (c *SyncedCluster) DiscoverService(
 			TenantName:  tenantName,
 			Node:        node,
 			Port:        port,
+			Instance:    0,
 		}, nil
 	}
-
-	// If there are multiple services available select the first one.
 	return services[0], err
 }
 
-// MapServices discovers all service types for a given tenant and maps it by
-// node and service type.
-func (c *SyncedCluster) MapServices(tenantName string) (NodeServiceMap, error) {
-	sqlServices, err := c.DiscoverServices(c.Nodes, tenantName, ServiceTypeSQL)
+// MapServices discovers all service types for a given tenant and instance and
+// maps it by node and service type
+func (c *SyncedCluster) MapServices(tenantName string, instance int) (NodeServiceMap, error) {
+	nodeFilter := ServiceNodePredicate(c.Nodes...)
+	instanceFilter := ServiceInstancePredicate(instance)
+	sqlServices, err := c.DiscoverServices(tenantName, ServiceTypeSQL, nodeFilter, instanceFilter)
 	if err != nil {
 		return nil, err
 	}
-	uiServices, err := c.DiscoverServices(c.Nodes, tenantName, ServiceTypeUI)
+	uiServices, err := c.DiscoverServices(tenantName, ServiceTypeUI, nodeFilter, instanceFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +254,7 @@ func (c *SyncedCluster) RegisterServices(services ServiceDescriptors) error {
 					Target:   c.TargetDNSName(desc.Node),
 					Port:     uint16(desc.Port),
 					Priority: uint16(priority),
-					Weight:   0,
+					Weight:   uint16(desc.Instance),
 				}
 				records = append(records, vm.CreateSRVRecord(name, srvData))
 			}
@@ -258,17 +268,40 @@ func (c *SyncedCluster) RegisterServices(services ServiceDescriptors) error {
 	return nil
 }
 
-// Filter returns ServiceDescriptors with only the descriptors that match
-// the given nodes.
-func (d ServiceDescriptors) Filter(nodes Nodes) ServiceDescriptors {
+// Filter returns a new ServiceDescriptors containing only the descriptors that
+// match all the provided predicates.
+func (d ServiceDescriptors) Filter(predicates ...ServicePredicate) ServiceDescriptors {
 	filteredDescriptors := make(ServiceDescriptors, 0)
+outer:
 	for _, descriptor := range d {
-		if !nodes.Contains(descriptor.Node) {
-			continue
+		for _, filter := range predicates {
+			if !filter(descriptor) {
+				continue outer
+			}
 		}
 		filteredDescriptors = append(filteredDescriptors, descriptor)
 	}
 	return filteredDescriptors
+}
+
+// ServiceNodePredicate returns a ServicePredicate that match on the given nodes.
+func ServiceNodePredicate(nodes ...Node) ServicePredicate {
+	nodeSet := make(map[Node]struct{})
+	for _, node := range nodes {
+		nodeSet[node] = struct{}{}
+	}
+	return func(descriptor ServiceDesc) bool {
+		_, ok := nodeSet[descriptor.Node]
+		return ok
+	}
+}
+
+// ServiceInstancePredicate returns a ServicePredicate that match on the provided
+// instance.
+func ServiceInstancePredicate(instance int) ServicePredicate {
+	return func(descriptor ServiceDesc) bool {
+		return descriptor.Instance == instance
+	}
 }
 
 // FindOpenPorts finds the requested number of open ports on the provided node.
@@ -381,6 +414,7 @@ func (c *SyncedCluster) dnsRecordsToServiceDescriptors(
 			ServiceType: serviceType,
 			ServiceMode: serviceMode,
 			Port:        int(data.Port),
+			Instance:    int(data.Weight),
 			Node:        dnsNameToNode[data.Target],
 		})
 	}
