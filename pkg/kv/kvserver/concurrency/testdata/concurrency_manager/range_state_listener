@@ -103,7 +103,7 @@ num=2
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 2, txn: 00000002-0000-0000-0000-000000000000
+    active: true req: 2, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 2
  lock: "k2"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
@@ -166,7 +166,7 @@ num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 3, txn: 00000002-0000-0000-0000-000000000000
+    active: false req: 3, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
 
 sequence req=req2
 ----
@@ -213,7 +213,7 @@ debug-lock-table
 num=1
  lock: "k"
    queued writers:
-    active: false req: 3, txn: 00000002-0000-0000-0000-000000000000
+    active: false req: 3, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
 
 on-lock-acquired req=req2 key=k
 ----
@@ -281,7 +281,7 @@ num=1
  lock: "k"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 4, txn: 00000003-0000-0000-0000-000000000000
+    active: false req: 4, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
 
 sequence req=req3
 ----
@@ -323,7 +323,7 @@ debug-lock-table
 num=1
  lock: "k"
    queued writers:
-    active: false req: 4, txn: 00000003-0000-0000-0000-000000000000
+    active: false req: 4, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
 
 on-lock-acquired req=req3 key=k
 ----
@@ -412,7 +412,7 @@ num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 6, txn: 00000002-0000-0000-0000-000000000000
+    active: true req: 6, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 6
 
 on-split
@@ -439,7 +439,7 @@ num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 6, txn: 00000002-0000-0000-0000-000000000000
+    active: false req: 6, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
 
 sequence req=req2
 ----
@@ -481,7 +481,7 @@ debug-lock-table
 num=1
  lock: "k"
    queued writers:
-    active: false req: 6, txn: 00000002-0000-0000-0000-000000000000
+    active: false req: 6, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
 
 on-lock-acquired req=req2 key=k
 ----
@@ -591,7 +591,7 @@ num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 8, txn: 00000002-0000-0000-0000-000000000000
+    active: true req: 8, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 8
 
 on-merge
@@ -659,7 +659,7 @@ num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 10, txn: 00000002-0000-0000-0000-000000000000
+    active: false req: 10, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
 
 sequence req=req2
 ----
@@ -701,7 +701,7 @@ debug-lock-table
 num=1
  lock: "k"
    queued writers:
-    active: false req: 10, txn: 00000002-0000-0000-0000-000000000000
+    active: false req: 10, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
 
 on-lock-acquired req=req2 key=k
 ----
@@ -790,7 +790,7 @@ num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 12, txn: 00000002-0000-0000-0000-000000000000
+    active: true req: 12, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 12
 
 on-snapshot-applied
@@ -817,7 +817,7 @@ num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 12, txn: 00000002-0000-0000-0000-000000000000
+    active: false req: 12, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
 
 sequence req=req2
 ----
@@ -859,7 +859,7 @@ debug-lock-table
 num=1
  lock: "k"
    queued writers:
-    active: false req: 12, txn: 00000002-0000-0000-0000-000000000000
+    active: false req: 12, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
 
 on-lock-acquired req=req2 key=k
 ----

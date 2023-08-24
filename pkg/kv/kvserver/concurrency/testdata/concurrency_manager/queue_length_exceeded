@@ -91,9 +91,9 @@ num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 2, txn: 00000002-0000-0000-0000-000000000000
-    active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
-    active: true req: 4, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 2, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
+    active: true req: 3, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
+    active: true req: 4, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 2
 
 # -------------------------------------------------------------
@@ -171,8 +171,8 @@ num=1
  lock: "k"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
-    active: true req: 4, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 3, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
+    active: true req: 4, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 3
 
 # -------------------------------------------------------------

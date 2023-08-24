@@ -69,8 +69,8 @@ release txn=txn1 span=a
 num=1
  lock: "a"
    queued writers:
-    active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 3
 
 guard-state r=req2
@@ -91,7 +91,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
 scan r=req2
 ----
@@ -111,7 +111,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 2
 
 release txn=txn3 span=a
@@ -119,7 +119,7 @@ release txn=txn3 span=a
 num=1
  lock: "a"
    queued writers:
-    active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
 guard-state r=req2
 ----

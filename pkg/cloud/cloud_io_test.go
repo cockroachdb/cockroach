@@ -129,8 +129,20 @@ func TestResumingReader(t *testing.T) {
 					}
 
 					reader := NewResumingReader(ctx, rfWithErr.newReaderAt, nil, 0, 0, "", tc.retryOnErrFn, nil)
-					actualData, err := ioctx.ReadAll(ctx, reader)
-
+					var actualData []byte
+					buf := make([]byte, 8)
+					var err error
+					for {
+						var n int
+						n, err = reader.Read(ctx, buf)
+						if err != nil {
+							break
+						}
+						actualData = append(actualData, buf[:n]...)
+					}
+					if err == io.EOF {
+						err = nil
+					}
 					if retriable {
 						require.NoError(t, err)
 						require.Equal(t, "hello world", string(actualData))

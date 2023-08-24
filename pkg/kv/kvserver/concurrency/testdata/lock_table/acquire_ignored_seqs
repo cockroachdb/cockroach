@@ -117,7 +117,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl, unrepl [(str: Exclusive seq: 1)]
    queued writers:
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
 
 # However, unreplicated lock acquisition with the same ignored sequence number
@@ -131,7 +131,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl, unrepl [(str: Exclusive seq: 1)]
    queued writers:
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
 
 # ------------------------------------------------------------------------------
@@ -150,7 +150,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl, unrepl [(str: Exclusive seq: 11)]
    queued writers:
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
 
 # ------------------------------------------------------------------------------
@@ -172,5 +172,5 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 11.000000000,1, info: repl
    queued writers:
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
