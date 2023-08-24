@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -819,9 +818,6 @@ func TestPGPreparedQuery(t *testing.T) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-
-	ts := s.ApplicationLayer()
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
 
 	// Update the default AS OF time for querying the system.table_statistics
 	// table to create the crdb_internal.table_row_statistics table.

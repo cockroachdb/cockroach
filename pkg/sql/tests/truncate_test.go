@@ -399,9 +399,6 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 			s := tc.ApplicationLayer(0)
 			tenantSettings := s.ClusterSettings()
 			conn := s.SQLConn(t, "defaultdb")
-			// Ensure that if we're running with the test tenant, it can split
-			// the table below.
-			sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tenantSettings.SV, true)
 
 			{
 				// This test asserts on KV-internal effects (i.e. range splits

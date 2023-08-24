@@ -21,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -46,9 +44,6 @@ func TestSQLStatsRegions(t *testing.T) {
 	// and a secondary tenant, ensuring that a distsql query across multiple
 	// regions sees those regions reported in sqlstats.
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(ctx, &st.SV, true)
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &st.SV, true)
 
 	numServers := 3
 	regionNames := []string{
@@ -62,7 +57,6 @@ func TestSQLStatsRegions(t *testing.T) {
 	for i := 0; i < numServers; i++ {
 		signalAfter[i] = make(chan struct{})
 		args := base.TestServerArgs{
-			Settings: st,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i%len(regionNames)]}},
 			},
@@ -111,15 +105,12 @@ func TestSQLStatsRegions(t *testing.T) {
 	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms'")
 	tdb.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '500ms'`)
 
-	tdb.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true")
-	tdb.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled = true")
 	tdb.Exec(t, `ALTER RANGE meta configure zone using constraints = '{"+region=gcp-us-west1": 1, "+region=gcp-us-central1": 1, "+region=gcp-us-east1": 1}';`)
 
 	// Create secondary tenants
 	var tenantDbs []*gosql.DB
 	for _, server := range host.Servers {
 		_, tenantDb := serverutils.StartTenant(t, server, base.TestTenantArgs{
-			Settings: st,
 			TenantID: roachpb.MustMakeTenantID(11),
 			Locality: server.Locality(),
 		})
@@ -135,28 +126,24 @@ func TestSQLStatsRegions(t *testing.T) {
 	testCases := []struct {
 		name   string
 		dbName string
-		db     func(t *testing.T, host *testcluster.TestCluster, st *cluster.Settings) *sqlutils.SQLRunner
+		db     *sqlutils.SQLRunner
 	}{{
 		// This test runs against the system tenant, opening a database
 		// connection to the first node in the cluster.
 		name:   "system tenant",
 		dbName: systemDbName,
-		db: func(t *testing.T, host *testcluster.TestCluster, _ *cluster.Settings) *sqlutils.SQLRunner {
-			return tdb
-		},
+		db:     tdb,
 	}, {
 		// This test runs against a secondary tenant, launching a SQL instance
 		// for each node in the underlying cluster and returning a database
 		// connection to the first one.
 		name:   "secondary tenant",
 		dbName: tenantDbName,
-		db: func(t *testing.T, host *testcluster.TestCluster, st *cluster.Settings) *sqlutils.SQLRunner {
-			return tenantRunner
-		},
+		db:     tenantRunner,
 	}}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			db := tc.db(t, host, st)
+			db := tc.db
 			db.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 1;`)
 
 			// In order to ensure that ranges are replicated across all regions, following

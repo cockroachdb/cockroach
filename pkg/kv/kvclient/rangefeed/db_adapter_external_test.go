@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -57,8 +56,6 @@ func TestDBClientScan(t *testing.T) {
 	srv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	ts := srv.ApplicationLayer()
-
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
 
 	beforeAny := db.Clock().Now()
 

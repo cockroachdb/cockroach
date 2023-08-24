@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -187,7 +186,6 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	if srv := tc.Server(0); srv.StartedDefaultTestTenant() {
-		sql.SecondaryTenantSplitAtEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
 		systemSqlDB := srv.SystemLayer().SQLConn(t, "system")
 		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
 		require.NoError(t, err)

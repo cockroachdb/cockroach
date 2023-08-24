@@ -1,5 +1,4 @@
 # LogicTest: 3node-tenant
-# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.zone_configs.enabled=true
 # Zone config logic tests that are only meant to work for secondary tenants.
 
 statement ok

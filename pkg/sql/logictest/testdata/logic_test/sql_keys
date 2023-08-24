@@ -1,5 +1,4 @@
 # LogicTest: local 3node-tenant
-# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.manual_range_split.enabled=true
 
 # This test depends on table ID's being stable, so add new tests at the bottom
 # of the file.

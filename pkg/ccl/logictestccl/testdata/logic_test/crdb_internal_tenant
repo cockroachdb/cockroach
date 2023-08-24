@@ -440,9 +440,6 @@ test  {}
 statement ok
 CREATE TABLE foo (a INT PRIMARY KEY, INDEX idx(a)); INSERT INTO foo VALUES(1)
 
-statement error tenant cluster setting sql.virtual_cluster.feature_access.manual_range_split.enabled disabled
-ALTER TABLE foo SPLIT AT VALUES(2)
-
 # Make sure that the cluster id isn't unset.
 query B
 select crdb_internal.cluster_id() != '00000000-0000-0000-0000-000000000000' FROM foo

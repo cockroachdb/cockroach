@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -47,8 +46,6 @@ func TestSetups(t *testing.T) {
 			ctx := context.Background()
 			srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 			defer srv.Stopper().Stop(ctx)
-			sql.SecondaryTenantSplitAtEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
-			sql.SecondaryTenantScatterEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
 
 			rnd, _ := randutil.NewTestRand()
 
@@ -74,8 +71,6 @@ func TestGenerateParse(t *testing.T) {
 	ctx := context.Background()
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
-	sql.SecondaryTenantScatterEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
 
 	rnd, seed := randutil.NewTestRand()
 	t.Log("seed:", seed)

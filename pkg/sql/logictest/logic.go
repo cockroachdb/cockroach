@@ -1583,10 +1583,11 @@ func (t *logicTest) newCluster(
 	// implicitly) set any necessary cluster settings to override blocked
 	// behavior.
 	if cfg.UseSecondaryTenant == logictestbase.Always || t.cluster.StartedDefaultTestTenant() {
+		tenantID := serverutils.TestTenantID()
 		conn := t.cluster.SystemLayer(0).SQLConn(t.rootT, "")
+
 		clusterSettings := toa.clusterSettings
-		_, ok := clusterSettings[string(sql.SecondaryTenantZoneConfigsEnabled.Name())]
-		if ok {
+		if len(clusterSettings) > 0 {
 			// We reduce the closed timestamp duration on the host tenant so that the
 			// setting override can propagate to the tenant faster.
 			if _, err := conn.Exec(
@@ -1604,26 +1605,23 @@ func (t *logicTest) newCluster(
 			); err != nil {
 				t.Fatal(err)
 			}
-		}
-
-		tenantID := serverutils.TestTenantID()
-		for settingName, value := range clusterSettings {
-			query := fmt.Sprintf("ALTER TENANT [$1] SET CLUSTER SETTING %s = $2", settingName)
-			if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
-				t.Fatal(err)
+			for settingName, value := range clusterSettings {
+				query := fmt.Sprintf("ALTER TENANT [$1] SET CLUSTER SETTING %s = $2", settingName)
+				if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
 
 		capabilities := toa.capabilities
-		for name, value := range capabilities {
-			query := fmt.Sprintf("ALTER TENANT [$1] GRANT CAPABILITY %s = $2", name)
-			if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
-				t.Fatal(err)
+		if len(capabilities) > 0 {
+			for name, value := range capabilities {
+				query := fmt.Sprintf("ALTER TENANT [$1] GRANT CAPABILITY %s = $2", name)
+				if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
+					t.Fatal(err)
+				}
 			}
-		}
-		numCapabilities := len(capabilities)
-		if numCapabilities > 0 {
-			capabilityMap := make(map[tenantcapabilities.ID]string, numCapabilities)
+			capabilityMap := make(map[tenantcapabilities.ID]string, len(capabilities))
 			for k, v := range capabilities {
 				capability, ok := tenantcapabilities.FromName(k)
 				if !ok {

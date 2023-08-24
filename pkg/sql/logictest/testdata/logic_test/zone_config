@@ -1,7 +1,3 @@
-# As these tests are run for both the system tenant and secondary tenants, we
-# turn on the setting that gates setting zone configs for system tenants.
-# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.zone_configs.enabled=true
-
 # Check that we can alter the default zone config.
 statement ok
 ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1
