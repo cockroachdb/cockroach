@@ -19,7 +19,11 @@ import { EncodeDatabaseUri } from "../util";
 import { Link } from "react-router-dom";
 import { StackIcon } from "../icon/stackIcon";
 import { CockroachCloudContext } from "../contexts";
-import { checkInfoAvailable, getNetworkErrorMessage } from "../databases";
+import {
+  checkInfoAvailable,
+  getNetworkErrorMessage,
+  getQueryErrorMessage,
+} from "../databases";
 import * as format from "../util/format";
 import { Caution } from "@cockroachlabs/icons";
 
@@ -33,7 +37,7 @@ export const DiskSizeCell = ({ database }: CellProps): JSX.Element => {
   return (
     <>
       {checkInfoAvailable(
-        database.requestError,
+        database.spanStatsRequestError,
         database.spanStats?.error,
         database.spanStats?.approximate_disk_bytes
           ? format.Bytes(database.spanStats?.approximate_disk_bytes)
@@ -66,16 +70,33 @@ export const DatabaseNameCell = ({ database }: CellProps): JSX.Element => {
     ? `${location.pathname}/${database.name}`
     : EncodeDatabaseUri(database.name);
   let icon = <StackIcon className={cx("icon--s", "icon--primary")} />;
-  if (database.requestError || database.queryError) {
+
+  const needsWarning =
+    database.detailsRequestError ||
+    database.spanStatsRequestError ||
+    database.detailsQueryError ||
+    database.spanStatsQueryError;
+
+  if (needsWarning) {
+    const titleList = [];
+    if (database.detailsRequestError) {
+      titleList.push(getNetworkErrorMessage(database.detailsRequestError));
+    }
+    if (database.spanStatsRequestError) {
+      titleList.push(getNetworkErrorMessage(database.spanStatsRequestError));
+    }
+    if (database.detailsQueryError) {
+      titleList.push(database.detailsQueryError.message);
+    }
+    if (database.spanStatsQueryError) {
+      titleList.push(getQueryErrorMessage(database.spanStatsQueryError));
+    }
+
     icon = (
       <Tooltip
         overlayStyle={{ whiteSpace: "pre-line" }}
         placement="bottom"
-        title={
-          database.requestError
-            ? getNetworkErrorMessage(database.requestError)
-            : database.queryError.message
-        }
+        title={titleList.join("\n")}
       >
         <Caution className={cx("icon--s", "icon--warning")} />
       </Tooltip>

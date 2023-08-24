@@ -16,7 +16,10 @@ import {
   normalizePrivileges,
   normalizeRoles,
 } from "./util";
-import { DatabaseDetailsState } from "../store/databaseDetails";
+import {
+  DatabaseDetailsSpanStatsState,
+  DatabaseDetailsState,
+} from "../store/databaseDetails";
 import { createSelector } from "@reduxjs/toolkit";
 import { TableDetailsState } from "../store/databaseTableDetails";
 import { generateTableID, longToInt, TimestampToMoment } from "../util";
@@ -32,6 +35,7 @@ const { RecommendationType } = cockroach.sql.IndexRecommendation;
 interface DerivedDatabaseDetailsParams {
   dbListResp: DatabasesListResponse;
   databaseDetails: Record<string, DatabaseDetailsState>;
+  spanStats: Record<string, DatabaseDetailsSpanStatsState>;
   nodeRegions: Record<string, string>;
   isTenant: boolean;
 }
@@ -39,20 +43,24 @@ interface DerivedDatabaseDetailsParams {
 export const deriveDatabaseDetailsMemoized = createSelector(
   (params: DerivedDatabaseDetailsParams) => params.dbListResp,
   (params: DerivedDatabaseDetailsParams) => params.databaseDetails,
+  (params: DerivedDatabaseDetailsParams) => params.spanStats,
   (params: DerivedDatabaseDetailsParams) => params.nodeRegions,
   (params: DerivedDatabaseDetailsParams) => params.isTenant,
   (
     dbListResp,
     databaseDetails,
+    spanStats,
     nodeRegions,
     isTenant,
   ): DatabasesPageDataDatabase[] => {
     const databases = dbListResp?.databases ?? [];
     return databases.map(dbName => {
       const dbDetails = databaseDetails[dbName];
+      const spanStatsForDB = spanStats[dbName];
       return deriveDatabaseDetails(
         dbName,
         dbDetails,
+        spanStatsForDB,
         dbListResp.error,
         nodeRegions,
         isTenant,
@@ -64,6 +72,7 @@ export const deriveDatabaseDetailsMemoized = createSelector(
 const deriveDatabaseDetails = (
   database: string,
   dbDetails: DatabaseDetailsState,
+  spanStats: DatabaseDetailsSpanStatsState,
   dbListError: SqlExecutionErrorMessage,
   nodeRegionsByID: Record<string, string>,
   isTenant: boolean,
@@ -79,12 +88,16 @@ const deriveDatabaseDetails = (
     dbStats?.indexStats.num_index_recommendations || 0;
 
   return {
-    loading: !!dbDetails?.inFlight,
-    loaded: !!dbDetails?.valid,
-    requestError: dbDetails?.lastError,
-    queryError: dbDetails?.data?.results?.error,
+    detailsLoading: !!dbDetails?.inFlight,
+    detailsLoaded: !!dbDetails?.valid,
+    spanStatsLoading: !!spanStats?.inFlight,
+    spanStatsLoaded: !!spanStats?.valid,
+    detailsRequestError: dbDetails?.lastError, // http request error.
+    spanStatsRequestError: spanStats?.lastError, // http request error.
+    detailsQueryError: dbDetails?.data?.results?.error,
+    spanStatsQueryError: spanStats?.data?.results?.error,
     name: database,
-    spanStats: dbStats?.spanStats,
+    spanStats: spanStats?.data?.results.spanStats,
     tables: dbDetails?.data?.results.tablesResp,
     nodes: nodes,
     nodesByRegionString,

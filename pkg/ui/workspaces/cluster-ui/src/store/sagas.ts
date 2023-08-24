@@ -35,6 +35,7 @@ import { txnStatsSaga } from "./transactionStats";
 import { clusterSettingsSaga } from "./clusterSettings/clusterSettings.saga";
 import { databaseDetailsSaga } from "./databaseDetails";
 import { tableDetailsSaga } from "./databaseTableDetails";
+import { databaseDetailsSpanStatsSaga } from "./databaseDetails/databaseDetailsSpanStats.saga";
 
 export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
   yield all([
@@ -49,6 +50,7 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(jobSaga),
     fork(databasesListSaga),
     fork(databaseDetailsSaga),
+    fork(databaseDetailsSpanStatsSaga),
     fork(tableDetailsSaga),
     fork(sessionsSaga),
     fork(terminateSaga),

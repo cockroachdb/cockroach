@@ -24,7 +24,8 @@ const history = H.createHashHistory();
 const withLoadingIndicator: DatabasesPageProps = {
   loading: true,
   loaded: false,
-  lastError: undefined,
+  requestError: undefined,
+  queryError: undefined,
   automaticStatsCollectionEnabled: true,
   indexRecommendationsEnabled: false,
   csIndexUnusedDuration: indexUnusedDuration,
@@ -40,6 +41,7 @@ const withLoadingIndicator: DatabasesPageProps = {
   refreshDatabases: () => {},
   refreshSettings: () => {},
   refreshDatabaseDetails: () => {},
+  refreshDatabaseSpanStats: () => {},
   location: history.location,
   history,
   match: {
@@ -53,7 +55,8 @@ const withLoadingIndicator: DatabasesPageProps = {
 const withoutData: DatabasesPageProps = {
   loading: false,
   loaded: true,
-  lastError: null,
+  requestError: undefined,
+  queryError: undefined,
   automaticStatsCollectionEnabled: true,
   indexRecommendationsEnabled: false,
   csIndexUnusedDuration: indexUnusedDuration,
@@ -69,6 +72,7 @@ const withoutData: DatabasesPageProps = {
   refreshDatabases: () => {},
   refreshSettings: () => {},
   refreshDatabaseDetails: () => {},
+  refreshDatabaseSpanStats: () => {},
   location: history.location,
   history,
   match: {
@@ -82,7 +86,8 @@ const withoutData: DatabasesPageProps = {
 const withData: DatabasesPageProps = {
   loading: false,
   loaded: true,
-  lastError: null,
+  requestError: undefined,
+  queryError: undefined,
   showNodeRegionsColumn: true,
   automaticStatsCollectionEnabled: true,
   indexRecommendationsEnabled: true,
@@ -100,9 +105,14 @@ const withData: DatabasesPageProps = {
   },
   databases: Array(42).map(() => {
     return {
-      loading: false,
-      loaded: true,
-      lastError: null,
+      detailsLoading: false,
+      detailsLoaded: false,
+      spanStatsLoading: false,
+      spanStatsLoaded: false,
+      detailsRequestError: undefined,
+      detailsQueryError: undefined,
+      spanStatsRequestError: undefined,
+      spanStatsQueryError: undefined,
       name: randomName(),
       sizeInBytes: _.random(1000.0) * 1024 ** _.random(1, 2),
       tableCount: _.random(5, 100),
@@ -116,6 +126,7 @@ const withData: DatabasesPageProps = {
   refreshDatabases: () => {},
   refreshSettings: () => {},
   refreshDatabaseDetails: () => {},
+  refreshDatabaseSpanStats: () => {},
   location: history.location,
   history,
   match: {
