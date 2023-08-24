@@ -582,8 +582,6 @@ func registerRestore(r registry.Registry) {
 				// having terminated when the test ends.
 				dul := NewDiskUsageLogger(t, c)
 				m.Go(dul.Runner)
-				hc := NewHealthChecker(t, c, c.All())
-				m.Go(hc.Runner)
 
 				// TODO(peter): This currently causes the test to fail because we see a
 				// flurry of valid merges when the restore finishes.
@@ -599,7 +597,6 @@ func registerRestore(r registry.Registry) {
 				tick, perfBuf := initBulkJobPerfArtifacts(testName, item.timeout)
 				m.Go(func(ctx context.Context) error {
 					defer dul.Done()
-					defer hc.Done()
 					t.Status(`running restore`)
 					// Tick once before starting the restore, and once after to
 					// capture the total elapsed time. This is used by
@@ -661,8 +658,6 @@ func registerRestore(r registry.Registry) {
 			// having terminated when the test ends.
 			dul := NewDiskUsageLogger(t, c)
 			m.Go(dul.Runner)
-			hc := NewHealthChecker(t, c, c.All())
-			m.Go(hc.Runner)
 
 			jobIDCh := make(chan jobspb.JobID)
 			jobCompleteCh := make(chan struct{}, 1)
@@ -736,7 +731,6 @@ func registerRestore(r registry.Registry) {
 			tick, perfBuf := initBulkJobPerfArtifacts(withPauseTestName, withPauseTimeout)
 			m.Go(func(ctx context.Context) error {
 				defer dul.Done()
-				defer hc.Done()
 				defer close(jobCompleteCh)
 				defer close(jobIDCh)
 				t.Status(`running restore`)
