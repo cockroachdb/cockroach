@@ -141,3 +141,18 @@ func TestDNSSafeAccount(t *testing.T) {
 		})
 	}
 }
+
+func TestSanitizeLabel(t *testing.T) {
+	cases := []struct{ label, expected string }{
+		{"this/is/a/test", "this-is-a-test"},
+		{"1234/abc!!", "1234-abc"},
+		{"What/about-!!this one?", "what-about-this-one"},
+		{"this-is-a-really/long-one-probably/over-63-characters/maybe?/let's_see", "this-is-a-really-long-one-probably-over-63-characters-maybe-let"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.expected, func(t *testing.T) {
+			assert.EqualValues(t, c.expected, SanitizeLabel(c.label))
+		})
+	}
+}
