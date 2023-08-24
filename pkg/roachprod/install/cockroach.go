@@ -123,10 +123,11 @@ type StartOpts struct {
 	EncryptedStores bool
 
 	// -- Options that apply only to StartTenantSQL target --
-	TenantName string
-	TenantID   int
-	KVAddrs    string
-	KVCluster  *SyncedCluster
+	TenantName     string
+	TenantID       int
+	TenantInstance int
+	KVAddrs        string
+	KVCluster      *SyncedCluster
 }
 
 // startSQLTimeout identifies the COCKROACH_CONNECT_TIMEOUT to use (in seconds)
@@ -185,7 +186,7 @@ func (so StartOpts) GetJoinTargets() []Node {
 func (c *SyncedCluster) maybeRegisterServices(
 	ctx context.Context, l *logger.Logger, startOpts StartOpts,
 ) error {
-	serviceMap, err := c.MapServices(startOpts.TenantName)
+	serviceMap, err := c.MapServices(startOpts.TenantName, startOpts.TenantInstance)
 	if err != nil {
 		return err
 	}
@@ -208,6 +209,7 @@ func (c *SyncedCluster) maybeRegisterServices(
 				ServiceMode: serviceMode,
 				Node:        node,
 				Port:        startOpts.SQLPort,
+				Instance:    startOpts.TenantInstance,
 			})
 		}
 		if _, ok := serviceMap[node][ServiceTypeUI]; !ok {
@@ -217,6 +219,7 @@ func (c *SyncedCluster) maybeRegisterServices(
 				ServiceMode: serviceMode,
 				Node:        node,
 				Port:        startOpts.AdminUIPort,
+				Instance:    startOpts.TenantInstance,
 			})
 		}
 		requiredPorts := 0
@@ -397,7 +400,7 @@ func (c *SyncedCluster) NodeURL(host string, port int, sharedTenantName string) 
 
 // NodePort returns the system tenant's SQL port for the given node.
 func (c *SyncedCluster) NodePort(node Node) (int, error) {
-	desc, err := c.DiscoverService(node, SystemTenantName, ServiceTypeSQL)
+	desc, err := c.DiscoverService(node, SystemTenantName, ServiceTypeSQL, 0)
 	if err != nil {
 		return 0, err
 	}
@@ -406,7 +409,7 @@ func (c *SyncedCluster) NodePort(node Node) (int, error) {
 
 // NodeUIPort returns the system tenant's AdminUI port for the given node.
 func (c *SyncedCluster) NodeUIPort(node Node) (int, error) {
-	desc, err := c.DiscoverService(node, SystemTenantName, ServiceTypeUI)
+	desc, err := c.DiscoverService(node, SystemTenantName, ServiceTypeUI, 0)
 	if err != nil {
 		return 0, err
 	}
@@ -420,12 +423,12 @@ func (c *SyncedCluster) NodeUIPort(node Node) (int, error) {
 //
 // CAUTION: this function should not be used by roachtest writers. Use ExecSQL below.
 func (c *SyncedCluster) ExecOrInteractiveSQL(
-	ctx context.Context, l *logger.Logger, tenantName string, args []string,
+	ctx context.Context, l *logger.Logger, tenantName string, tenantInstance int, args []string,
 ) error {
 	if len(c.Nodes) != 1 {
 		return fmt.Errorf("invalid number of nodes for interactive sql: %d", len(c.Nodes))
 	}
-	desc, err := c.DiscoverService(c.Nodes[0], tenantName, ServiceTypeSQL)
+	desc, err := c.DiscoverService(c.Nodes[0], tenantName, ServiceTypeSQL, tenantInstance)
 	if err != nil {
 		return err
 	}
@@ -446,11 +449,16 @@ func (c *SyncedCluster) ExecOrInteractiveSQL(
 // ExecSQL runs a `cockroach sql` .
 // It is assumed that the args include the -e flag.
 func (c *SyncedCluster) ExecSQL(
-	ctx context.Context, l *logger.Logger, nodes Nodes, tenantName string, args []string,
+	ctx context.Context,
+	l *logger.Logger,
+	nodes Nodes,
+	tenantName string,
+	tenantInstance int,
+	args []string,
 ) error {
 	display := fmt.Sprintf("%s: executing sql", c.Name)
 	results, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
-		desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL)
+		desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL, tenantInstance)
 		if err != nil {
 			return nil, err
 		}
@@ -616,9 +624,10 @@ func (c *SyncedCluster) generateStartArgs(
 	}
 
 	tenantName := startOpts.TenantName
+	instance := startOpts.TenantInstance
 	var sqlPort int
 	if startOpts.Target == StartTenantSQL {
-		desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL)
+		desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL, instance)
 		if err != nil {
 			return nil, err
 		}
@@ -626,14 +635,16 @@ func (c *SyncedCluster) generateStartArgs(
 		args = append(args, fmt.Sprintf("--sql-addr=%s:%d", listenHost, sqlPort))
 	} else {
 		tenantName = SystemTenantName
-		desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL)
+		// System tenant instance is always 0.
+		instance = 0
+		desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL, instance)
 		if err != nil {
 			return nil, err
 		}
 		sqlPort = desc.Port
 		args = append(args, fmt.Sprintf("--listen-addr=%s:%d", listenHost, sqlPort))
 	}
-	desc, err := c.DiscoverService(node, tenantName, ServiceTypeUI)
+	desc, err := c.DiscoverService(node, tenantName, ServiceTypeUI, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -656,7 +667,7 @@ func (c *SyncedCluster) generateStartArgs(
 		joinTargets := startOpts.GetJoinTargets()
 		addresses := make([]string, len(joinTargets))
 		for i, joinNode := range startOpts.GetJoinTargets() {
-			desc, err := c.DiscoverService(joinNode, SystemTenantName, ServiceTypeSQL)
+			desc, err := c.DiscoverService(joinNode, SystemTenantName, ServiceTypeSQL, 0)
 			if err != nil {
 				return nil, err
 			}
