@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
 type (
@@ -115,11 +117,51 @@ type (
 			cache []*gosql.DB
 		}
 	}
+
+	// CommonTestHelper provides helper functions that can be used by all tests,
+	// not necessarily limited to tests for clusters in a mixed-version state.
+	CommonTestHelper interface {
+		// Connect makes a database handle to the node.
+		Connect(node int) *gosql.DB
+
+		// Exec executes the query on a random node.
+		Exec(rng *rand.Rand, query string, args ...interface{}) error
+
+		// RandomNode returns a random nodeID in the cluster.
+		RandomNode(prng *rand.Rand, nodes option.NodeListOption) int
+
+		// RandomDB returns a (nodeID, connection) tuple for a randomly picked node.
+		RandomDB(prng *rand.Rand, nodes option.NodeListOption) (int, *gosql.DB)
+
+		// QueryRow executes a query that is expected to return at most one row on a
+		// random node.
+		QueryRow(rng *rand.Rand, query string, args ...interface{}) *gosql.Row
+
+		// ExpectDeath alerts the testing infrastructure that a node is
+		// expected to die. Regular restarts as part of the mixedversion
+		// testing are already taken into account. This function should only
+		// be used by tests that perform their own node restarts or chaos
+		// events.
+		ExpectDeath()
+
+		// ExpectDeaths is the general version of `ExpectDeath()`.
+		ExpectDeaths(n int)
+
+		// LowestBinaryVersion returns a parsed `version.Version` object
+		// corresponding to the lowest binary version used in the current
+		// test. The {Major, Minor} information in the version returned
+		// provides a lower bound on the cluster version active when this
+		// function is called. Test authors can use this information to
+		// determine whether a certain feature is available.
+		LowestBinaryVersion() *version.Version
+	}
 )
 
 var (
 	// everything that is not an alphanum or a few special characters
 	invalidChars = regexp.MustCompile(`[^a-zA-Z0-9 \-_\.]`)
+
+	_ CommonTestHelper = &Helper{}
 )
 
 func newTestRunner(
