@@ -682,6 +682,7 @@ go_test(
         "scatter_test.go",
         "schema_changer_helpers_test.go",
         "schema_changer_test.go",
+        "schema_resolver_test.go",
         "scrub_test.go",
         "sequence_test.go",
         "server_params_test.go",
