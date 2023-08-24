@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	math "math"
 	"os"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
@@ -50,6 +52,104 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPathelogicalIngest(t *testing.T) {
+	ctx := context.Background()
+
+	// ingesting span [/Table/183/1-/Table/183/1/‹21›/‹8›/‹-94›/‹11›/‹NULL›)
+	//startKey, err := hex.DecodeString("f6b789")
+	startKey, err := hex.DecodeString("f6b7899d9087a293")
+	require.NoError(t, err)
+	// endKey, err := hex.DecodeString("f6b7899d9087a293")
+	endKey, err := hex.DecodeString("f6b789b28c86fc478d")
+	require.NoError(t, err)
+	baseURL := "gs://cockroach-tmp/108676/current-to-22.2.9_database-tpcc_SLOW/2023/08/15-185423.23?AUTH=implicit"
+	//	dataFiles := []string{
+	//		"data/891470699015929860.sst",
+	//		"data/891470820366188547.sst",
+	//		"data/891470843652145155.sst",
+	//		"data/891470869852094467.sst",
+	//		"data/891470709612773378.sst",
+	//		"data/891470820366188547.sst",
+	//		"data/891470699015929860.sst",
+	//		"data/891470709612773378.sst",
+	//		"data/891470820366188547.sst",
+	//		"data/891470699015929860.sst",
+	//	}
+
+	/*dataFiles := []string{
+	"data/891470699015929860.sst",
+	"data/891470709612773378.sst",
+	"data/891470699015929860.sst",
+	"data/891470709612773378.sst",
+	"data/891470820366188547.sst",
+	"data/891470843652145155.sst",
+	"data/891470869852094467.sst",
+	"data/891470891329912835.sst",
+	"data/891470699015929860.sst",
+	"data/891470843652145155.sst",
+	"data/891470699015929860.sst",
+	"data/891470843652145155.sst",
+	}
+	*/
+	dataFiles := []string{
+		"data/891470891329912835.sst",
+		"data/891470709612773378.sst",
+		"data/891470891329912835.sst",
+		"data/891470709612773378.sst",
+		"data/891470891329912835.sst",
+	}
+	conf, err := cloud.ExternalStorageConfFromURI(baseURL, username.RootUserName())
+	require.NoError(t, err)
+	s, err := cloud.MakeExternalStorage(context.Background(), conf, base.ExternalIODirConfig{},
+		cluster.MakeTestingClusterSettings(),
+		nil, /* blobClientFactory */
+		nil, /* db */
+		nil, /* limiters */
+		nil,
+		nil,
+		cloud.NilMetrics,
+	)
+	require.NoError(t, err)
+	storeFiles := []storageccl.StoreFile{}
+	for _, f := range dataFiles {
+		storeFiles = append(storeFiles, storageccl.StoreFile{
+			Store:    s,
+			FilePath: f,
+		})
+	}
+
+	iter0, err := storageccl.ExternalSSTReader(ctx, storeFiles, nil,
+		storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
+			LowerBound: startKey,
+			UpperBound: endKey,
+		})
+	require.NoError(t, err)
+	// defer iter0.Close()
+	ts, err := time.Parse("2006-01-02 15:04:05.000000", "2023-08-15 18:54:23.234682")
+	require.NoError(t, err)
+	asOf := hlc.Timestamp{WallTime: ts.UnixNano()}
+	iter := storage.NewReadAsOfIterator(iter0, asOf)
+	defer iter.Close()
+	keyCount := 0
+	startTime := timeutil.Now()
+	for iter.SeekGE(storage.MVCCKey{Key: startKey}); ; iter.NextKey() {
+		if ok, err := iter.Valid(); err != nil {
+			t.Fatal(err)
+		} else if !ok {
+			break
+		}
+		keyCount++
+		if keyCount%1000 == 0 {
+			elapsed := time.Since(startTime).Seconds()
+			t.Logf("read %d keys; %.02f keys/s; currently at %s",
+				keyCount,
+				float64(keyCount)/elapsed,
+				iter.UnsafeKey())
+		}
+	}
+}
 
 func slurpSSTablesLatestKey(
 	t *testing.T, dir string, paths []string, oldPrefix, newPrefix []byte,

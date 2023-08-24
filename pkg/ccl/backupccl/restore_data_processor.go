@@ -105,8 +105,8 @@ var defaultNumWorkers = util.ConstantWithMetamorphicTestRange(
 		}
 		return min(4, restoreWorkerCores)
 	}(), /* defaultValue */
-	1, /* metamorphic min */
-	8, /* metamorphic max */
+	1,   /* metamorphic min */
+	8,   /* metamorphic max */
 )
 
 // TODO(pbardea): It may be worthwhile to combine this setting with the one that
@@ -180,14 +180,19 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 		return inputReader(ctx, rd.input, entries, rd.metaCh)
 	})
 
+	problemSpanString := "/Table/183/{1/81/9/-2056/3/NULL-2}"
+
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(rd.sstCh)
 		for entry := range entries {
+			if !(entry.Span.String() == problemSpanString) {
+				log.Infof(ctx, "%s not in target span (%s)", entry.Span, problemSpanString)
+				continue
+			}
 			if err := rd.openSSTs(ctx, entry, rd.sstCh); err != nil {
 				return err
 			}
 		}
-
 		return nil
 	})
 
