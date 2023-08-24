@@ -3497,7 +3497,7 @@ func (s *Store) ReplicateQueueDryRun(
 		s.cfg.AmbientCtx.Tracer, "replicate queue dry run",
 	)
 	defer collectAndFinish()
-	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica, conf roachpb.SpanConfig) bool {
+	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig) bool {
 		return true
 	}
 	desc := repl.Desc()
@@ -3561,7 +3561,7 @@ func (s *Store) AllocatorCheckRange(
 		storePool = s.cfg.StorePool
 	}
 
-	action, _ := s.allocator.ComputeAction(ctx, storePool, conf, desc)
+	action, _ := s.allocator.ComputeAction(ctx, storePool, &conf, desc)
 
 	// In the case that the action does not require a target, return immediately.
 	if !(action.Add() || action.Replace()) {
@@ -3575,7 +3575,7 @@ func (s *Store) AllocatorCheckRange(
 		return action, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
 	}
 
-	target, _, err := s.allocator.AllocateTarget(ctx, storePool, conf,
+	target, _, err := s.allocator.AllocateTarget(ctx, storePool, &conf,
 		filteredVoters, filteredNonVoters, replacing, action.ReplicaStatus(), action.TargetReplicaType(),
 	)
 	if err == nil {
@@ -3586,7 +3586,7 @@ func (s *Store) AllocatorCheckRange(
 		fragileQuorumErr := s.allocator.CheckAvoidsFragileQuorum(
 			ctx,
 			storePool,
-			conf,
+			&conf,
 			desc.Replicas().VoterDescriptors(),
 			filteredVoters,
 			action.ReplicaStatus(),

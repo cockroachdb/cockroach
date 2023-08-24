@@ -3561,7 +3561,7 @@ type RelocateOneOptions interface {
 	// StorePool returns the store's configured store pool.
 	StorePool() storepool.AllocatorStorePool
 	// SpanConfig returns the span configuration for the range with start key.
-	SpanConfig(ctx context.Context, startKey roachpb.RKey) (roachpb.SpanConfig, error)
+	SpanConfig(ctx context.Context, startKey roachpb.RKey) (*roachpb.SpanConfig, error)
 	// LeaseHolder returns the descriptor of the replica which holds the lease
 	// on the range with start key.
 	Leaseholder(ctx context.Context, startKey roachpb.RKey) (roachpb.ReplicaDescriptor, error)
@@ -3584,16 +3584,16 @@ func (roo *replicaRelocateOneOptions) StorePool() storepool.AllocatorStorePool {
 // SpanConfig returns the span configuration for the range with start key.
 func (roo *replicaRelocateOneOptions) SpanConfig(
 	ctx context.Context, startKey roachpb.RKey,
-) (roachpb.SpanConfig, error) {
+) (*roachpb.SpanConfig, error) {
 	confReader, err := roo.store.GetConfReader(ctx)
 	if err != nil {
-		return roachpb.SpanConfig{}, errors.Wrap(err, "can't relocate range")
+		return nil, errors.Wrap(err, "can't relocate range")
 	}
 	conf, err := confReader.GetSpanConfigForKey(ctx, startKey)
 	if err != nil {
-		return roachpb.SpanConfig{}, err
+		return nil, err
 	}
-	return conf, nil
+	return &conf, nil
 }
 
 // Leaseholder returns the descriptor of the replica which holds the lease on
@@ -3996,7 +3996,7 @@ func (r *Replica) adminScatter(
 	var allowLeaseTransfer bool
 	var err error
 	requeue := true
-	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica, conf roachpb.SpanConfig) bool {
+	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig) bool {
 		return allowLeaseTransfer
 	}
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {

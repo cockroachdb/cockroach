@@ -56,7 +56,7 @@ var _ Event = &SetCapacityOverrideEvent{}
 
 func (se SetSpanConfigEvent) Func() EventFunc {
 	return MutationFunc(func(ctx context.Context, s state.State) {
-		s.SetSpanConfig(se.Span, se.Config)
+		s.SetSpanConfig(se.Span, &se.Config)
 	})
 }
 

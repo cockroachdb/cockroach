@@ -110,7 +110,7 @@ func TestReplicateQueue(t *testing.T) {
 		}
 	}
 
-	testingState := func(replicaCounts map[state.StoreID]int, spanConfig roachpb.SpanConfig, initialRF int) state.State {
+	testingState := func(replicaCounts map[state.StoreID]int, spanConfig *roachpb.SpanConfig, initialRF int) state.State {
 		s := state.NewStateWithReplCounts(replicaCounts, initialRF, 1000 /* keyspace */, testSettings)
 		for _, r := range s.Ranges() {
 			s.SetSpanConfigForRange(r.RangeID(), spanConfig)
@@ -362,7 +362,7 @@ func TestReplicateQueue(t *testing.T) {
 				initialRF = 2
 			}
 
-			s := testingState(tc.replicaCounts, spanConfig, initialRF)
+			s := testingState(tc.replicaCounts, &spanConfig, initialRF)
 			changer := state.NewReplicaChanger()
 			store, _ := s.Store(testingStore)
 			rq := NewReplicateQueue(

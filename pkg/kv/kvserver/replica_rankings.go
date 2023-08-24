@@ -47,7 +47,7 @@ type CandidateReplica interface {
 	GetFirstIndex() kvpb.RaftIndex
 	// DescAndSpanConfig returns the authoritative range descriptor as well
 	// as the span config for the replica.
-	DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)
+	DescAndSpanConfig() (*roachpb.RangeDescriptor, *roachpb.SpanConfig)
 	// Desc returns the authoritative range descriptor.
 	Desc() *roachpb.RangeDescriptor
 	// RangeUsageInfo returns usage information (sizes and traffic) needed by
