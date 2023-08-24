@@ -49,6 +49,10 @@ type RandomizedBasicRanges struct {
 
 var _ gen.RangeGen = &RandomizedBasicRanges{}
 
+func (r RandomizedBasicRanges) String() string {
+	return fmt.Sprintf("randomized ranges with placement_type=%v, %v", r.placementType, r.BaseRanges)
+}
+
 func (r RandomizedBasicRanges) Generate(
 	seed int64, settings *config.SimulationSettings, s state.State,
 ) state.State {
@@ -71,11 +75,18 @@ type WeightedRandomizedBasicRanges struct {
 
 var _ gen.RangeGen = &WeightedRandomizedBasicRanges{}
 
+func (wr WeightedRandomizedBasicRanges) String() string {
+	return fmt.Sprintf("weighted randomized ranges with placement_type=%v, weighted_rand=%v, %v", wr.placementType, wr.weightedRand, wr.BaseRanges)
+}
+
 func (wr WeightedRandomizedBasicRanges) Generate(
 	seed int64, settings *config.SimulationSettings, s state.State,
 ) state.State {
 	if wr.placementType != gen.WeightedRandom || len(wr.weightedRand) == 0 {
 		panic("RandomizedBasicRanges generate only weighted randomized distributions with non-empty weightedRand")
+	}
+	if len(s.Stores()) != len(wr.weightedRand) {
+		panic("mismatch: len(weighted_rand) != stores count")
 	}
 	rangesInfo := wr.GetRangesInfo(wr.placementType, len(s.Stores()), wr.randSource, wr.weightedRand)
 	wr.LoadRangeInfo(s, rangesInfo)
@@ -242,10 +253,10 @@ type clusterGenSettings struct {
 	clusterGenType clusterConfigType
 }
 
-func (c clusterGenSettings) String() string {
-	return fmt.Sprintf("cluster_gen_type=%v", c.clusterGenType)
-}
-
 const (
 	defaultClusterGenType = multiRegion
 )
+
+func (c clusterGenSettings) String() string {
+	return fmt.Sprintf("cluster_gen_type=%v", c.clusterGenType)
+}

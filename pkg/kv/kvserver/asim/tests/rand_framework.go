@@ -18,11 +18,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/guptarohit/asciigraph"
 )
 
 type testRandOptions struct {
@@ -36,75 +35,19 @@ type testRandOptions struct {
 type testSettings struct {
 	numIterations int
 	duration      time.Duration
-	verbose       bool
+	verbose       OutputFlags
 	randSource    *rand.Rand
-	assertions    []SimulationAssertion
+	assertions    []assertion.SimulationAssertion
 	randOptions   testRandOptions
 	clusterGen    clusterGenSettings
 	rangeGen      rangeGenSettings
 }
 
-// String converts the test setting to a string for output.
-// For example,
-// test settings
-// num_iterations=10 duration=5m0s
-// ----------------------------------
-// generating cluster configurations using randomized option
-// clusterGenType=multi_region
-// generating ranges configurations using static option
-// generating load configurations using static option
-// generating events configurations using static option
-// generating settings configurations using static option
-func (t testSettings) String() string {
-	buf := strings.Builder{}
-	buf.WriteString(fmt.Sprintln("test settings"))
-	buf.WriteString(fmt.Sprintf("\tnum_iterations=%v duration=%s\n", t.numIterations, t.duration.Round(time.Second)))
-	divider := fmt.Sprintln("----------------------------------")
-	buf.WriteString(divider)
-
-	configStr := func(configType string, optionType string) string {
-		return fmt.Sprintf("generating %s configurations using %s option\n", configType, optionType)
-	}
-
-	if t.randOptions.cluster {
-		buf.WriteString(configStr("cluster", "randomized"))
-		buf.WriteString(fmt.Sprintf("\t%v\n", t.clusterGen))
-	} else {
-		buf.WriteString(configStr("cluster", "static"))
-	}
-
-	if t.randOptions.ranges {
-		buf.WriteString(configStr("ranges", "randomized"))
-		buf.WriteString(fmt.Sprintf("\t%v\n", t.rangeGen))
-	} else {
-		buf.WriteString(configStr("ranges", "static"))
-	}
-
-	if t.randOptions.load {
-		buf.WriteString(configStr("load", "randomized"))
-	} else {
-		buf.WriteString(configStr("load", "static"))
-	}
-
-	if t.randOptions.staticEvents {
-		buf.WriteString(configStr("events", "randomized"))
-	} else {
-		buf.WriteString(configStr("events", "static"))
-	}
-
-	if t.randOptions.staticSettings {
-		buf.WriteString(configStr("settings", "randomized"))
-	} else {
-		buf.WriteString(configStr("settings", "static"))
-	}
-	return buf.String()
-}
-
 type randTestingFramework struct {
-	recordBuf         *strings.Builder
-	s                 testSettings
-	rangeGenerator    generator
-	keySpaceGenerator generator
+	s                     testSettings
+	defaultStaticSettings staticOptionSettings
+	rangeGenerator        generator
+	keySpaceGenerator     generator
 }
 
 // newRandTestingFramework constructs a new testing framework with the given
@@ -113,108 +56,104 @@ type randTestingFramework struct {
 // distribution as ranges are generated. Additionally, it initializes a buffer
 // that persists across all iterations, recording outputs and states of each
 // iteration.
-func newRandTestingFramework(settings testSettings) randTestingFramework {
+func newRandTestingFramework(
+	s testSettings, staticOptionSettings staticOptionSettings,
+) randTestingFramework {
 	if int64(defaultMaxRange) > defaultMinKeySpace {
 		panic(fmt.Sprintf(
 			"Max number of ranges specified (%d) is greater than number of keys in key space (%d) ",
 			defaultMaxRange, defaultMinKeySpace))
 	}
-	rangeGenerator := newGenerator(settings.randSource, defaultMinRange, defaultMaxRange, settings.rangeGen.rangeGenType)
-	keySpaceGenerator := newGenerator(settings.randSource, defaultMinKeySpace, defaultMaxKeySpace, settings.rangeGen.keySpaceGenType)
-	var buf strings.Builder
+	rangeGenerator := newGenerator(s.randSource, defaultMinRange, defaultMaxRange, s.rangeGen.rangeGenType)
+	keySpaceGenerator := newGenerator(s.randSource, defaultMinKeySpace, defaultMaxKeySpace, s.rangeGen.keySpaceGenType)
 
 	return randTestingFramework{
-		recordBuf:         &buf,
-		s:                 settings,
-		rangeGenerator:    rangeGenerator,
-		keySpaceGenerator: keySpaceGenerator,
+		defaultStaticSettings: staticOptionSettings,
+		s:                     s,
+		rangeGenerator:        rangeGenerator,
+		keySpaceGenerator:     keySpaceGenerator,
 	}
 }
 
 func (f randTestingFramework) getCluster() gen.ClusterGen {
 	if !f.s.randOptions.cluster {
-		return defaultBasicClusterGen()
+		return f.defaultBasicClusterGen()
 	}
 	return f.randomClusterInfoGen(f.s.randSource)
 }
 
 func (f randTestingFramework) getRanges() gen.RangeGen {
 	if !f.s.randOptions.ranges {
-		return defaultBasicRangesGen()
+		return f.defaultBasicRangesGen()
 	}
 	return f.randomBasicRangesGen()
 }
 
 func (f randTestingFramework) getLoad() gen.LoadGen {
 	if !f.s.randOptions.load {
-		return defaultLoadGen()
+		return f.defaultLoadGen()
 	}
 	return gen.BasicLoad{}
 }
 
 func (f randTestingFramework) getStaticSettings() gen.StaticSettings {
 	if !f.s.randOptions.staticSettings {
-		return defaultStaticSettingsGen()
+		return f.defaultStaticSettingsGen()
 	}
 	return gen.StaticSettings{}
 }
 
 func (f randTestingFramework) getStaticEvents() gen.StaticEvents {
 	if !f.s.randOptions.staticEvents {
-		return defaultStaticEventsGen()
+		return f.defaultStaticEventsGen()
 	}
 	return gen.StaticEvents{}
 }
 
 // runRandTest creates randomized configurations based on the specified test
 // settings and runs one test using those configurations.
-func (f randTestingFramework) runRandTest(nthSample int) (asim.History, string) {
-	buf := strings.Builder{}
-	divider := fmt.Sprintln("----------------------------------")
-	if nthSample == 1 {
-		buf.WriteString(divider)
-	}
-	buf.WriteString(fmt.Sprintf("sample%d: start running\n", nthSample))
+func (f randTestingFramework) runRandTest() testResult {
 	ctx := context.Background()
 	cluster := f.getCluster()
 	ranges := f.getRanges()
 	load := f.getLoad()
 	staticSettings := f.getStaticSettings()
 	staticEvents := f.getStaticEvents()
-	simulator := gen.GenerateSimulation(f.s.duration, cluster, ranges, load, staticSettings, staticEvents, f.s.randSource.Int63())
+	seed := f.s.randSource.Int63()
+	simulator := gen.GenerateSimulation(f.s.duration, cluster, ranges, load, staticSettings, staticEvents, seed)
+	initialState, initialTime := simulator.GetState(), simulator.GetCurrTime()
 	simulator.RunSim(ctx)
 	history := simulator.History()
 	failed, reason := checkAssertions(ctx, history, f.s.assertions)
-	if failed {
-		buf.WriteString(fmt.Sprintf("sample%d: failed assertion\n%s", nthSample, reason))
-	} else {
-		buf.WriteString(fmt.Sprintf("sample%d: pass\n", nthSample))
+	return testResult{
+		seed:         seed,
+		failed:       failed,
+		reason:       reason,
+		clusterGen:   cluster,
+		rangeGen:     ranges,
+		loadGen:      load,
+		eventGen:     staticEvents,
+		initialState: initialState,
+		initialTime:  initialTime,
+		eventRecord:  simulator.PrintEventRecord(),
 	}
-	buf.WriteString(divider)
-	return history, buf.String()
 }
 
 // runRandTestRepeated runs the test multiple times, each time with a new
 // randomly generated configuration. The result of each iteration is recorded in
 // f.recordBuf.
-func (f randTestingFramework) runRandTestRepeated() {
+func (f randTestingFramework) runRandTestRepeated() testResultsReport {
 	numIterations := f.s.numIterations
-	runs := make([]asim.History, numIterations)
-	f.recordBuf.WriteString(f.s.String())
+	outputs := make([]testResult, numIterations)
 	for i := 0; i < numIterations; i++ {
-		history, output := f.runRandTest(i + 1)
-		runs[i] = history
-		f.recordBuf.WriteString(output)
+		outputs[i] = f.runRandTest()
 	}
-	if f.s.verbose {
-		plotAllHistory(runs, f.recordBuf)
+	return testResultsReport{
+		flags:          f.s.verbose,
+		settings:       f.s,
+		staticSettings: f.defaultStaticSettings,
+		outputSlice:    outputs,
 	}
-}
-
-// printResults outputs the following information: 1. test settings used for
-// generating the tests 2. results of each randomized test
-func (f randTestingFramework) printResults() string {
-	return f.recordBuf.String()
 }
 
 // loadClusterInfo creates a LoadedCluster from a matching ClusterInfo based on
@@ -227,30 +166,10 @@ func loadClusterInfo(configName string) gen.LoadedCluster {
 	}
 }
 
-// PlotAllHistory outputs stat plots for the provided asim history array into
-// the given strings.Builder buf.
-func plotAllHistory(runs []asim.History, buf *strings.Builder) {
-	settings := defaultPlotSettings()
-	stat, height, width := settings.stat, settings.height, settings.width
-	for i := 0; i < len(runs); i++ {
-		history := runs[i]
-		ts := metrics.MakeTS(history.Recorded)
-		statTS := ts[stat]
-		buf.WriteString(fmt.Sprintf("sample%d\n", i+1))
-		buf.WriteString(asciigraph.PlotMany(
-			statTS,
-			asciigraph.Caption(stat),
-			asciigraph.Height(height),
-			asciigraph.Width(width),
-		))
-		buf.WriteString("\n")
-	}
-}
-
 // checkAssertions checks the given history and assertions, returning (bool,
 // reason) indicating any failures and reasons if any assertions fail.
 func checkAssertions(
-	ctx context.Context, history asim.History, assertions []SimulationAssertion,
+	ctx context.Context, history history.History, assertions []assertion.SimulationAssertion,
 ) (bool, string) {
 	assertionFailures := []string{}
 	failureExists := false
@@ -319,6 +238,12 @@ func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
 	case gen.WeightedRandom:
 		if len(f.s.rangeGen.weightedRand) == 0 {
 			panic("set weightedRand array for stores properly to use weighted random placement for stores")
+		}
+		if f.s.randOptions.cluster {
+			panic("randomized cluster with weighted rand stores is not supported")
+		}
+		if stores, length := f.defaultStaticSettings.storesPerNode*f.defaultStaticSettings.nodes, len(f.s.rangeGen.weightedRand); stores != length {
+			panic(fmt.Sprintf("number of stores %d does not match length of weighted_rand %d: ", stores, length))
 		}
 		return WeightedRandomizedBasicRanges{
 			BaseRanges: gen.BaseRanges{

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -45,7 +46,7 @@ func TestTracker(t *testing.T) {
 	l2 := &mockListener{history: [][]metrics.StoreMetrics{}}
 	tracker := metrics.NewTracker(testingMetricsInterval, l1, l2)
 
-	sim := asim.NewSimulator(duration, rwg, s, settings, tracker)
+	sim := asim.NewSimulator(duration, rwg, s, settings, tracker, event.NewExecutorWithNoEvents())
 	sim.RunSim(ctx)
 
 	require.Equal(t, l1.history, l2.history)
