@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/kylelemons/godebug/diff"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 // TestDataDriven exercises the methods of a catkv.CatalogReader in a
@@ -50,15 +50,19 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+		srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					UseTransactionalDescIDGenerator: true,
 				},
 			},
 		})
-		defer s.Stopper().Stop(ctx)
+		defer srv.Stopper().Stop(ctx)
+
+		s := srv.ApplicationLayer()
+
+		sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		v := execCfg.Settings.Version.ActiveVersion(ctx)
@@ -381,6 +385,8 @@ func (h testHelper) traceToYaml(rs tracingpb.RecordedSpan) interface{} {
 	for i := range rs.Logs {
 		msgWithFilePrefix := rs.Logs[i].Message.StripMarkers()
 		stripped := re.ReplaceAllString(msgWithFilePrefix, "")
+		// Make the test agnostic of cluster virtualization.
+		stripped = strings.ReplaceAll(stripped, "/Tenant/10", "")
 		l = append(l, stripped)
 	}
 	return l
