@@ -259,7 +259,9 @@ type LockTableKey struct {
 // strength byte persisted in a lock table key's encoding. See
 // LockTableKey.ToEngineKey().
 var replicatedLockStrengthToByte = [...]byte{
-	lock.Intent: 3,
+	lock.Shared:    1,
+	lock.Exclusive: 2,
+	lock.Intent:    3,
 }
 
 // byteToReplicatedLockStrength is a mapping between the strength byte persisted
@@ -285,11 +287,11 @@ var byteToReplicatedLockStrength = func() (arr []lock.Strength) {
 // a lock's key encoding, given its lock strength.
 func getByteForReplicatedLockStrength(str lock.Strength) byte {
 	if str < 0 || int(str) >= len(replicatedLockStrengthToByte) {
-		panic(errors.AssertionFailedf("unknown lock strength %s", str))
+		panic(errors.AssertionFailedf("unexpected lock strength: %s", str))
 	}
 	b := replicatedLockStrengthToByte[str]
 	if b == 0 {
-		panic(errors.AssertionFailedf("unexpected empty byte"))
+		panic(errors.AssertionFailedf("unexpected lock strength: %s", str))
 	}
 	return b
 }
@@ -298,11 +300,11 @@ func getByteForReplicatedLockStrength(str lock.Strength) byte {
 // the strength byte from its key encoding.
 func getReplicatedLockStrengthForByte(b byte) (lock.Strength, error) {
 	if int(b) >= len(byteToReplicatedLockStrength) { // byte cannot be < 0
-		return lock.None, errors.AssertionFailedf("unsupported byte %d", b)
+		return lock.None, errors.AssertionFailedf("unexpected lock strength byte: %d", b)
 	}
 	str := byteToReplicatedLockStrength[b]
 	if str == 0 {
-		return lock.None, errors.AssertionFailedf("unknown lock strength %s", str)
+		return lock.None, errors.AssertionFailedf("unexpected lock strength byte: %d", b)
 	}
 	return str, nil
 }
@@ -321,9 +323,6 @@ func mustGetReplicatedLockStrengthForByte(b byte) lock.Strength {
 // scratch-space to avoid allocations -- its contents will be overwritten and
 // not appended to.
 func (lk LockTableKey) ToEngineKey(buf []byte) (EngineKey, []byte) {
-	if lk.Strength != lock.Intent {
-		panic("unsupported lock strength")
-	}
 	// The first term in estimatedLen is for LockTableSingleKey.
 	estimatedLen :=
 		(len(keys.LocalRangeLockTablePrefix) + len(keys.LockTableSingleKeyInfix) + len(lk.Key) + 3) +
