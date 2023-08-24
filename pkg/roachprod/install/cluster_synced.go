@@ -2344,7 +2344,7 @@ func (c *SyncedCluster) Get(
 
 // pgurls returns a map of PG URLs for the given nodes.
 func (c *SyncedCluster) pgurls(
-	ctx context.Context, l *logger.Logger, nodes Nodes, tenantName string,
+	ctx context.Context, l *logger.Logger, nodes Nodes, tenantName string, tenantInstance int,
 ) (map[Node]string, error) {
 	hosts, err := c.pghosts(ctx, l, nodes)
 	if err != nil {
@@ -2352,7 +2352,7 @@ func (c *SyncedCluster) pgurls(
 	}
 	m := make(map[Node]string, len(hosts))
 	for node, host := range hosts {
-		desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL)
+		desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL, tenantInstance)
 		if err != nil {
 			return nil, err
 		}
