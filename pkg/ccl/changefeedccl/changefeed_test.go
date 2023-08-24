@@ -85,6 +85,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randident"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -7143,47 +7144,65 @@ func TestChangefeedEndTimeWithCursor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		knobs := s.TestingKnobs.
-			DistSQL.(*execinfra.TestingKnobs).
-			Changefeed.(*TestingKnobs)
-		endTimeReached := make(chan struct{})
-		knobs.FeedKnobs.EndTimeReached = func() bool {
-			select {
-			case <-endTimeReached:
-				return true
-			default:
-				return false
-			}
-		}
-
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
 		sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
-		sqlDB.Exec(t, "INSERT INTO foo VALUES (1), (2), (3)")
 
 		var tsCursor string
 		sqlDB.QueryRow(t, "SELECT (cluster_logical_timestamp())").Scan(&tsCursor)
-		sqlDB.Exec(t, "INSERT INTO foo VALUES (4), (5), (6)")
 
-		fakeEndTime := s.Server.Clock().Now().Add(int64(time.Hour), 0).AsOfSystemTime()
-		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH cursor = $1, end_time = $2, no_initial_scan", tsCursor, fakeEndTime)
+		// Insert 1k rows -- using separate statements to get different MVCC timestamps.
+		for i := 0; i < 1024; i++ {
+			sqlDB.Exec(t, "INSERT INTO foo VALUES ($1)", i)
+		}
+
+		// Split table into multiple ranges to make things more interesting.
+		sqlDB.Exec(t, "ALTER TABLE foo SPLIT AT VALUES (100), (200), (400), (800)")
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		fooSpan := func() roachpb.Span {
+			fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+				s.Server.DB(), s.Codec, "d", "foo")
+			return fooDesc.PrimaryIndexSpan(s.Codec)
+		}()
+
+		// Capture resolved events emitted during changefeed.  We expect
+		// every range to emit resolved event with end_time timestamp.
+		frontier, err := span.MakeFrontier(fooSpan)
+		require.NoError(t, err)
+		knobs.FilterSpanWithMutation = func(rs *jobspb.ResolvedSpan) (bool, error) {
+			_, err := frontier.Forward(rs.Span, rs.Timestamp)
+			return false, err
+		}
+
+		// endTime must be after creation time (5 seconds should be enough
+		// to reach create changefeed statement and process it).
+		endTime := s.Server.Clock().Now().AddDuration(5 * time.Second)
+		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH cursor = $1, end_time = $2, no_initial_scan",
+			tsCursor, eval.TimestampToDecimalDatum(endTime).String())
 		defer closeFeed(t, feed)
 
-		assertPayloads(t, feed, []string{
-			`foo: [4]->{"after": {"a": 4}}`,
-			`foo: [5]->{"after": {"a": 5}}`,
-			`foo: [6]->{"after": {"a": 6}}`,
-		})
-		close(endTimeReached)
-
+		// Don't care much about the values emitted (tested elsewhere) -- all
+		// we want to make sure is that the feed terminates.
 		testFeed := feed.(cdctest.EnterpriseTestFeed)
 		require.NoError(t, testFeed.WaitForStatus(func(s jobs.Status) bool {
 			return s == jobs.StatusSucceeded
 		}))
+
+		// After changefeed completes, verify we have seen all ranges emit resolved
+		// event with end_time timestamp.  That is: verify frontier.Frontier() is at end_time.
+		expectedFrontier := endTime.Prev()
+		testutils.SucceedsWithin(t, func() error {
+			if expectedFrontier.EqOrdering(frontier.Frontier()) {
+				return nil
+			}
+			return errors.Newf("still waiting for frontier to reach %s, current %s",
+				expectedFrontier, frontier.Frontier())
+		}, 5*time.Second)
 	}
 
-	// TODO: Fix sinkless feeds not providing pre-close events if Next is called
-	// after the feed was closed
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
