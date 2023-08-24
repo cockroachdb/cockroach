@@ -3,7 +3,7 @@
 # Note that we haven't used the setting override directive in this file to
 # override the default.
 
-statement error pq: unimplemented: operation is unsupported in multi-tenancy mode
+statement error pq: unimplemented: operation is unsupported within a virtual cluster
 ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
 
 statement error setting sql.virtual_cluster.feature_access.zone_configs.enabled is only settable by the operator

@@ -53,5 +53,5 @@ var _ StoresIterator = UnsupportedStoresIterator{}
 
 // ForEachStore is part of the StoresIterator interface.
 func (i UnsupportedStoresIterator) ForEachStore(f func(Store) error) error {
-	return errorutil.UnsupportedWithMultiTenancy(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+	return errorutil.UnsupportedUnderClusterVirtualization(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
 }

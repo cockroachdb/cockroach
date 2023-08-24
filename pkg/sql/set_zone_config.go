@@ -264,7 +264,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		// Return an unimplemented error here instead of referencing the cluster
 		// setting here as zone configurations for secondary tenants are intended to
 		// be hidden.
-		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
+		return nil, errorutil.UnsupportedUnderClusterVirtualization(MultitenancyZoneCfgIssueNo)
 	}
 
 	if err := checkPrivilegeForSetZoneConfig(ctx, p, n.ZoneSpecifier); err != nil {

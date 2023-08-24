@@ -28,12 +28,12 @@ var _ inspectzpb.InspectzServer = Unsupported{}
 func (u Unsupported) KVFlowController(
 	ctx context.Context, request *kvflowinspectpb.ControllerRequest,
 ) (*kvflowinspectpb.ControllerResponse, error) {
-	return nil, errorutil.UnsupportedWithMultiTenancy(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+	return nil, errorutil.UnsupportedUnderClusterVirtualization(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
 }
 
 // KVFlowHandles is part of the inspectzpb.InspectzServer interface.
 func (u Unsupported) KVFlowHandles(
 	ctx context.Context, request *kvflowinspectpb.HandlesRequest,
 ) (*kvflowinspectpb.HandlesResponse, error) {
-	return nil, errorutil.UnsupportedWithMultiTenancy(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+	return nil, errorutil.UnsupportedUnderClusterVirtualization(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
 }
