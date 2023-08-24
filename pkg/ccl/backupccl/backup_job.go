@@ -281,6 +281,9 @@ func backup(
 			// Signal that an ExportRequest finished to update job progress.
 			for i := int32(0); i < progDetails.CompletedSpans; i++ {
 				requestFinishedCh <- struct{}{}
+				if execCtx.ExecCfg().TestingKnobs.AfterBackupChunk != nil {
+					execCtx.ExecCfg().TestingKnobs.AfterBackupChunk()
+				}
 			}
 
 			// Update the per-component progress maintained by the job profiler.
