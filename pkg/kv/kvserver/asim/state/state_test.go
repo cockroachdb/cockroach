@@ -95,7 +95,7 @@ func TestRangeMap(t *testing.T) {
 	require.Equal(t, firstRange.startKey, MinKey)
 	require.Equal(t, firstRange.desc.StartKey, MinKey.ToRKey())
 	require.Equal(t, firstRange.desc.EndKey, MaxKey.ToRKey())
-	require.Equal(t, defaultSpanConfig, firstRange.SpanConfig())
+	require.Equal(t, defaultSpanConfig, *firstRange.SpanConfig())
 
 	k2 := Key(1)
 	k3 := Key(2)
@@ -611,7 +611,7 @@ func TestSetSpanConfig(t *testing.T) {
 				Key:    tc.start.ToRKey().AsRawKey(),
 				EndKey: tc.end.ToRKey().AsRawKey(),
 			}
-			s.SetSpanConfig(span, config)
+			s.SetSpanConfig(span, &config)
 			for _, rng := range s.Ranges() {
 				start, _, ok := s.RangeSpan(rng.RangeID())
 				require.True(t, ok)

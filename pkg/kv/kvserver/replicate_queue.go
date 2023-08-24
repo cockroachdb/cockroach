@@ -640,7 +640,7 @@ func (rq *replicateQueue) shouldQueue(
 		now,
 		repl,
 		desc,
-		conf,
+		&conf,
 		rq.canTransferLeaseFrom,
 	)
 }
@@ -665,7 +665,7 @@ func (rq *replicateQueue) process(
 	// usually signaling that a rebalancing reservation could not be made with the
 	// selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		requeue, err := rq.processOneChangeWithTracing(ctx, repl, desc, conf)
+		requeue, err := rq.processOneChangeWithTracing(ctx, repl, desc, &conf)
 		if isSnapshotError(err) {
 			// If ChangeReplicas failed because the snapshot failed, we attempt to
 			// retry the operation. The most likely causes of the snapshot failing
@@ -749,7 +749,7 @@ func filterTracingSpans(rec tracingpb.Recording, opNamesToFilter ...string) trac
 // logging the resulting traces to the DEV channel in the case of errors or
 // when the configured log traces threshold is exceeded.
 func (rq *replicateQueue) processOneChangeWithTracing(
-	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig,
+	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf *roachpb.SpanConfig,
 ) (requeue bool, _ error) {
 	processStart := timeutil.Now()
 	ctx, sp := tracing.EnsureChildSpan(ctx, rq.Tracer, "process replica",
@@ -832,7 +832,9 @@ func (rq *replicateQueue) applyChange(
 // ShouldRequeue determines whether a replica should be requeued into the
 // replicate queue, using the planned change and error returned from either
 // application or planning.
-func ShouldRequeue(ctx context.Context, change plan.ReplicateChange, conf roachpb.SpanConfig) bool {
+func ShouldRequeue(
+	ctx context.Context, change plan.ReplicateChange, conf *roachpb.SpanConfig,
+) bool {
 	var requeue bool
 
 	if _, ok := change.Op.(plan.AllocationNoop); ok {
@@ -868,7 +870,7 @@ func (rq *replicateQueue) processOneChange(
 	ctx context.Context,
 	repl *Replica,
 	desc *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	canTransferLeaseFrom plan.CanTransferLeaseFrom,
 	scatter, dryRun bool,
 ) (requeue bool, _ error) {
@@ -990,7 +992,7 @@ func (rq *replicateQueue) shedLease(
 	ctx context.Context,
 	repl *Replica,
 	desc *roachpb.RangeDescriptor,
-	conf roachpb.SpanConfig,
+	conf *roachpb.SpanConfig,
 	opts allocator.TransferLeaseOptions,
 ) (allocator.LeaseTransferOutcome, error) {
 	rangeUsageInfo := repl.RangeUsageInfo()
@@ -1120,7 +1122,7 @@ func (rq *replicateQueue) changeReplicas(
 // replica. It considers two factors if the replica is in -conformance with
 // lease preferences and the last time a transfer occurred to avoid thrashing.
 func (rq *replicateQueue) canTransferLeaseFrom(
-	ctx context.Context, repl plan.LeaseCheckReplica, conf roachpb.SpanConfig,
+	ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig,
 ) bool {
 	if !repl.OwnsValidLease(ctx, rq.store.cfg.Clock.NowAsClockTimestamp()) {
 		// This replica is not the leaseholder, so it can't transfer the lease.

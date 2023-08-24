@@ -59,7 +59,7 @@ func (sr *SimulatorReplica) HasCorrectLeaseType(lease roachpb.Lease) bool {
 	return true
 }
 
-// CurrentLeaseStatus returns the status of the current lease for the
+// LeaseStatusAt returns the status of the current lease for the
 // timestamp given.
 //
 // Common operations to perform on the resulting status are to check if
@@ -85,7 +85,7 @@ func (sr *SimulatorReplica) LeaseStatusAt(
 // error or no preferences defined then it will return false and consider that
 // to be in-conformance.
 func (sr *SimulatorReplica) LeaseViolatesPreferences(
-	_ context.Context, conf roachpb.SpanConfig,
+	_ context.Context, conf *roachpb.SpanConfig,
 ) bool {
 	descs := sr.state.StoreDescriptors(true /* useCached */, sr.repl.StoreID())
 	if len(descs) != 1 {
@@ -147,7 +147,7 @@ func (sr *SimulatorReplica) GetFirstIndex() kvpb.RaftIndex {
 	return 2
 }
 
-func (sr *SimulatorReplica) SpanConfig() (roachpb.SpanConfig, error) {
+func (sr *SimulatorReplica) SpanConfig() (*roachpb.SpanConfig, error) {
 	return sr.rng.SpanConfig(), nil
 }
 
