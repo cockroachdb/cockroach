@@ -114,7 +114,7 @@ num=4
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "k4"
    queued writers:
-    active: false req: 4, txn: 00000004-0000-0000-0000-000000000000
+    active: false req: 4, strength: Intent, txn: 00000004-0000-0000-0000-000000000000
 
 # -------------------------------------------------------------
 # Read-only request with WaitPolicy_Skip hits lock sequences

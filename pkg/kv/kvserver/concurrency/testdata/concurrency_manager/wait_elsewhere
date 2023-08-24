@@ -71,7 +71,7 @@ num=1
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
    queued writers:
-    active: true req: 2, txn: 00000002-0000-0000-0000-000000000000
+    active: true req: 2, strength: Intent, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 2
 
 sequence req=reqSecondLock

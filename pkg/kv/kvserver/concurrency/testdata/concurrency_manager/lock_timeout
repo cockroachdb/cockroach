@@ -83,7 +83,7 @@ num=3
  lock: "k2"
   holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
+    active: true req: 3, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 3
  lock: "k3"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
@@ -141,11 +141,11 @@ debug-lock-table
 num=2
  lock: "k2"
    queued writers:
-    active: false req: 3, txn: 00000003-0000-0000-0000-000000000000
+    active: false req: 3, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
  lock: "k3"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
+    active: true req: 3, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 3
 
 # -------------------------------------------------------------
@@ -208,11 +208,11 @@ debug-lock-table
 num=3
  lock: "k2"
    queued writers:
-    active: false req: 3, txn: 00000003-0000-0000-0000-000000000000
+    active: false req: 3, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
  lock: "k3"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
    queued writers:
-    active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
+    active: true req: 3, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 3
  lock: "k4"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl

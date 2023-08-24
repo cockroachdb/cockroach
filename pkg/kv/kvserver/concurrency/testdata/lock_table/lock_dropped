@@ -97,7 +97,7 @@ num=1
    waiting readers:
     req: 1, txn: none
    queued writers:
-    active: true req: 2, txn: none
+    active: true req: 2, strength: Intent, txn: none
    distinguished req: 1
 
 acquire r=req1 k=a durability=r strength=intent
@@ -108,7 +108,7 @@ num=1
    waiting readers:
     req: 1, txn: none
    queued writers:
-    active: true req: 2, txn: none
+    active: true req: 2, strength: Intent, txn: none
    distinguished req: 1
 
 guard-state r=reqContendReader

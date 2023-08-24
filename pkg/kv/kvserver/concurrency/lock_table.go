@@ -1680,7 +1680,9 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 		for e := kl.queuedWriters.Front(); e != nil; e = e.Next() {
 			qg := e.Value.(*queuedGuard)
 			g := qg.guard
-			sb.Printf("    active: %t req: %d, txn: ", redact.Safe(qg.active), redact.Safe(qg.guard.seqNum))
+			sb.Printf("    active: %t req: %d, strength: %s, txn: ",
+				redact.Safe(qg.active), redact.Safe(qg.guard.seqNum), redact.Safe(qg.mode.Strength),
+			)
 			if g.txn == nil {
 				sb.SafeString("none\n")
 			} else {
