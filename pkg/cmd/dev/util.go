@@ -102,7 +102,7 @@ func mustGetFlagDuration(cmd *cobra.Command, name string) time.Duration {
 	return val
 }
 
-func (d *dev) getBazelInfo(ctx context.Context, key string, extraArgs []string) (string, error) {
+func (d *dev) getBazelInfo(ctx context.Context, key string) (string, error) {
 	args := []string{"info", key, "--color=no"}
 	out, err := d.exec.CommandContextSilent(ctx, "bazel", args...)
 	if err != nil {
@@ -117,17 +117,15 @@ func (d *dev) getWorkspace(ctx context.Context) (string, error) {
 		return os.Getwd()
 	}
 
-	return d.getBazelInfo(ctx, "workspace", []string{})
+	return d.getBazelInfo(ctx, "workspace")
 }
 
-// The second argument should be the relevant "config args", namely Bazel arguments
-// that are --config or --compilation_mode arguments (see getConfigArgs()).
-func (d *dev) getBazelBin(ctx context.Context, configArgs []string) (string, error) {
-	return d.getBazelInfo(ctx, "bazel-bin", configArgs)
+func (d *dev) getBazelBin(ctx context.Context) (string, error) {
+	return d.getBazelInfo(ctx, "bazel-bin")
 }
 
 func (d *dev) getExecutionRoot(ctx context.Context) (string, error) {
-	return d.getBazelInfo(ctx, "execution_root", []string{})
+	return d.getBazelInfo(ctx, "execution_root")
 }
 
 // getArchivedCdepString returns a non-empty string iff the force_build_cdeps

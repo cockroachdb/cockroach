@@ -171,8 +171,6 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 		return err
 	}
 	args = append(args, additionalBazelArgs...)
-	configArgs := getConfigArgs(args)
-	configArgs = append(configArgs, getConfigArgs(additionalBazelArgs)...)
 
 	if err := d.assertNoLinkedNpmDeps(buildTargets); err != nil {
 		return err
@@ -190,7 +188,7 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 		if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
 			return err
 		}
-		return d.stageArtifacts(ctx, buildTargets, configArgs)
+		return d.stageArtifacts(ctx, buildTargets)
 	}
 	volume := mustGetFlagString(cmd, volumeFlag)
 	cross = "cross" + cross
@@ -262,9 +260,7 @@ func (d *dev) crossBuild(
 	return err
 }
 
-func (d *dev) stageArtifacts(
-	ctx context.Context, targets []buildTarget, configArgs []string,
-) error {
+func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget) error {
 	workspace, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
@@ -273,7 +269,7 @@ func (d *dev) stageArtifacts(
 	if err = d.os.MkdirAll(path.Join(workspace, "bin")); err != nil {
 		return err
 	}
-	bazelBin, err := d.getBazelBin(ctx, configArgs)
+	bazelBin, err := d.getBazelBin(ctx)
 	if err != nil {
 		return err
 	}
@@ -465,19 +461,11 @@ func (d *dev) getBasicBuildArgs(
 	return args, buildTargets, nil
 }
 
-// Given a list of Bazel arguments, find the ones that represent a "config"
-// (either --config or -c) and return all of these. This is used to find
-// the appropriate bazel-bin for any invocation.
+// Given a list of Bazel arguments, find the ones starting with --config= and
+// return them.
 func getConfigArgs(args []string) (ret []string) {
-	var addNext bool
 	for _, arg := range args {
-		if addNext {
-			ret = append(ret, arg)
-			addNext = false
-		} else if arg == "--config" || arg == "--compilation_mode" || arg == "-c" {
-			ret = append(ret, arg)
-			addNext = true
-		} else if strings.HasPrefix(arg, "--config=") || strings.HasPrefix(arg, "--compilation_mode=") {
+		if strings.HasPrefix(arg, "--config=") {
 			ret = append(ret, arg)
 		}
 	}
