@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
@@ -25,12 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 const MixedVersionErr = "span stats request - unable to service a mixed version request"
 const UnexpectedLegacyRequest = "span stats request - unexpected populated legacy fields (StartKey, EndKey)"
 const nodeErrorMsgPlaceholder = "could not get span stats sample for node %d: %v"
-const exceedSpanLimitPlaceholder = "error getting span statistics - number of spans in request payload (%d) exceeds 'server.span_stats.span_batch_limit' cluster setting limit (%d)"
 
 func (s *systemStatusServer) spanStatsFanOut(
 	ctx context.Context, req *roachpb.SpanStatsRequest,
@@ -379,4 +380,95 @@ func flushBatchedContainedKeys(
 func isLegacyRequest(req *roachpb.SpanStatsRequest) bool {
 	// If the start/end key fields are not nil, we have a request using the old request format.
 	return req.StartKey != nil || req.EndKey != nil
+}
+
+// verifySpanStatsRequest returns an error if the request can not be serviced.
+// Requests can not be serviced if the active cluster version is less than 23.1,
+// or if the request is made using the pre 23.1 format.
+func verifySpanStatsRequest(
+	ctx context.Context, req *roachpb.SpanStatsRequest, version clusterversion.Handle,
+) error {
+
+	// If the cluster's active version is less than 23.1 return a mixed version error.
+	if !version.IsActive(ctx, clusterversion.V23_1) {
+		return errors.New(MixedVersionErr)
+	}
+
+	// If we receive a request using the old format.
+	if isLegacyRequest(req) {
+		// We want to force 23.1 callers to use the new format (e.g. Spans field).
+		if req.NodeID == "0" {
+			return errors.New(UnexpectedLegacyRequest)
+		}
+		// We want to error if we receive a legacy request from a 22.2
+		// node (e.g. during a mixed-version fanout).
+		return errors.New(MixedVersionErr)
+	}
+
+	return nil
+}
+
+// batchedSpanStats breaks the request spans down into batches that are
+// batchSize large. impl is invoked for each batch. Then, responses from
+// each batch are merged together and returned to the caller of this function.
+func batchedSpanStats(
+	ctx context.Context,
+	req *roachpb.SpanStatsRequest,
+	impl func(
+		ctx context.Context, req *roachpb.SpanStatsRequest,
+	) (*roachpb.SpanStatsResponse, error),
+	batchSize int,
+) (*roachpb.SpanStatsResponse, error) {
+
+	if len(req.Spans) == 0 {
+		return &roachpb.SpanStatsResponse{}, nil
+	}
+
+	if len(req.Spans) <= batchSize {
+		return impl(ctx, req)
+	}
+
+	// Just in case, check for an invalid batch size. The batch size
+	// should originate from server.span_stats.span_batch_limit, which
+	// is validated to be a positive integer.
+	if batchSize <= 0 {
+		return nil, errors.Newf("invalid batch size of %d, "+
+			"batch size must be positive", batchSize)
+	}
+
+	totalSpans := len(req.Spans)
+	batches := (totalSpans + batchSize - 1) / batchSize
+
+	// Keep a reference of the original spans slice.
+	s := req.Spans
+	res := &roachpb.SpanStatsResponse{}
+	res.SpanToStats = make(map[string]*roachpb.SpanStats, totalSpans)
+
+	for i := 0; i < batches; i++ {
+
+		start := i * batchSize
+		end := start + batchSize
+
+		// The total number of spans may not divide evenly by the
+		// batch size. If that's the case, take action here
+		// to prevent the last batch from indexing past the end
+		// of the spans slice.
+		if i == batches-1 && totalSpans%batchSize != 0 {
+			end = start + totalSpans%batchSize
+		}
+
+		req.Spans = s[start:end]
+		batchRes, batchErr := impl(ctx, req)
+		if batchErr != nil {
+			return nil, batchErr
+		}
+
+		for k, v := range batchRes.SpanToStats {
+			res.SpanToStats[k] = v
+		}
+
+		res.Errors = append(res.Errors, batchRes.Errors...)
+	}
+
+	return res, nil
 }
