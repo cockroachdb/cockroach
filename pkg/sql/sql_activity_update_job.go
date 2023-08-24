@@ -226,6 +226,7 @@ func (u *sqlActivityUpdater) transferAllStats(
 	totalStmtClusterExecCount int64,
 	totalTxnClusterExecCount int64,
 ) error {
+	// Any chance should update cockroach/pkg/sql/opt/exec/execbuilder/testdata/observability
 	_, err := u.db.Executor().ExecEx(ctx,
 		"activity-flush-txn-transfer-all",
 		nil, /* txn */
@@ -272,6 +273,7 @@ func (u *sqlActivityUpdater) transferAllStats(
 		return err
 	}
 
+	// Any chance should update cockroach/pkg/sql/opt/exec/execbuilder/testdata/observability
 	_, err = u.db.Executor().ExecEx(ctx,
 		"activity-flush-stmt-transfer-all",
 		nil, /* txn */
@@ -367,6 +369,7 @@ func (u *sqlActivityUpdater) transferTopStats(
 		// contention_time, p99_latency and insert into transaction_activity table.
 		// Up to 3000 rows (sql.stats.activity.top.max * 6) may be added to
 		// transaction_activity.
+		// Any chance should update cockroach/pkg/sql/opt/exec/execbuilder/testdata/observability
 		_, err = txn.ExecEx(ctx,
 			"activity-flush-txn-transfer-tops",
 			txn.KV(), /* txn */
@@ -473,6 +476,7 @@ INTO system.public.transaction_activity
 		// contention_time, p99_latency. Also include all statements that are in the
 		// top N transactions. This is needed so the statement information is
 		// available for the ui so a user can see what is in the transaction.
+		// Any chance should update cockroach/pkg/sql/opt/exec/execbuilder/testdata/observability
 		_, err = txn.ExecEx(ctx,
 			"activity-flush-stmt-transfer-tops",
 			txn.KV(), /* txn */
@@ -564,7 +568,89 @@ INTO system.public.statement_activity
 		return err
 	})
 
-	return errTxn
+	if errTxn != nil {
+		return errTxn
+	}
+
+	// Ensure that if the transaction is in the transaction_activity table that
+	// all the stmts for that transaction are in the statement_activity table.
+	// This is necessary for the UI on the transaction details page to show
+	// the necessary information.
+	// The previous statement update only includes the top 500 by the top columns.
+	// This might not include all the statements that are in the transaction
+	// activity table. This query figure out if any statement fingerprint ids
+	// listed in the transaction activity table are missing from the
+	// statement_activity table and adds them if necessary.
+	// Any chance should update cockroach/pkg/sql/opt/exec/execbuilder/testdata/observability
+	_, err := u.db.Executor().ExecEx(ctx,
+		"activity-flush-check-all-txn-stmts-captured",
+		nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		`WITH missed_stmt_ids_from_txn_activity AS (SELECT ta.fingerprint_id, ta.app_name
+                                     FROM (SELECT ta_sub.aggregated_ts,
+                                                  decode(jsonb_array_elements_text(ta_sub.metadata -> 'stmtFingerprintIDs'), 'hex')::bytes AS fingerprint_id,
+                                                  ta_sub.fingerprint_id                                                     AS transaction_fingerprint_id,
+                                                  ta_sub.app_name
+                                           FROM system.transaction_activity ta_sub WHERE ta_sub.aggregated_ts = $2) ta
+                                        	 LEFT OUTER JOIN (select fingerprint_id,
+                                                                      app_name,
+                                                                      aggregated_ts
+                                                               FROM system.statement_activity WHERE aggregated_ts = $2) sa
+                                                              ON sa.fingerprint_id = ta.fingerprint_id AND
+                                                                 sa.app_name = ta.app_name AND
+                                                                 ta.aggregated_ts = sa.aggregated_ts
+                                     WHERE sa.fingerprint_id is null
+																		 GROUP BY ta.fingerprint_id, ta.app_name)
+UPSERT INTO system.public.statement_activity
+(aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name,
+ agg_interval, metadata, statistics, plan, index_recommendations, execution_count,
+ execution_total_seconds, execution_total_cluster_seconds,
+ contention_time_avg_seconds,
+ cpu_sql_avg_nanos,
+ service_latency_avg_seconds, service_latency_p99_seconds)
+(SELECT aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    agg_interval,
+    metadata,
+    statistics,
+    plan,
+    index_recommendations,
+    (statistics -> 'execution_statistics' ->> 'cnt')::int,
+    ((statistics -> 'execution_statistics' ->> 'cnt')::float) *
+    ((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float),
+    $1 AS execution_total_cluster_seconds,
+    COALESCE ((statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float, 0),
+    COALESCE ((statistics -> 'execution_statistics' -> 'cpu_sql_nanos' ->> 'mean')::float, 0),
+    (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float,
+    COALESCE ((statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::float, 0)
+FROM (SELECT max(ss.aggregated_ts) AS aggregated_ts,
+    ss.fingerprint_id,
+    ss.transaction_fingerprint_id,
+    ss.plan_hash,
+    ss.app_name,
+    ss.agg_interval,
+    crdb_internal.merge_stats_metadata(array_agg(ss.metadata)) AS metadata,
+    crdb_internal.merge_statement_stats(array_agg(ss.statistics)) AS statistics,
+    ss.plan,
+    ss.index_recommendations
+    FROM system.public.statement_statistics ss
+    INNER JOIN missed_stmt_ids_from_txn_activity ON missed_stmt_ids_from_txn_activity.app_name = ss.app_name AND missed_stmt_ids_from_txn_activity.fingerprint_id = ss.fingerprint_id
+    WHERE aggregated_ts = $2
+		GROUP BY ss.app_name,
+		 ss.fingerprint_id,
+		 ss.transaction_fingerprint_id,
+		 ss.plan_hash,
+		 ss.agg_interval,
+		 ss.plan,
+		 ss.index_recommendations));
+`,
+		totalStmtClusterExecCount,
+		aggTs)
+
+	return err
 }
 
 // getAostExecutionCount is used to get the row counts of both the
