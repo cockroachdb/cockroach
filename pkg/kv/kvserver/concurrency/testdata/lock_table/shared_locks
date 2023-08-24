@@ -10,6 +10,10 @@ new-txn txn=txn2 ts=10 epoch=0 seq=0
 new-request r=req1 txn=txn1 ts=10 spans=shared@a
 ----
 
+scan r=req1
+----
+start-waiting: false
+
 acquire r=req1 k=a durability=u strength=shared
 ----
 num=1
@@ -53,8 +57,8 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
    queued writers:
-    active: false req: 2, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
     active: false req: 3, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 4, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
 
 # TODO(arul): This is currently a limitation of the lock table, as it doesn't
 # allow multiple locks on a single key from different transactions.
@@ -82,11 +86,11 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
    queued writers:
-    active: false req: 2, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
     active: false req: 3, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 4
+    active: false req: 4, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 5
 
 # ------------------------------------------------------------------------------
 # Ensure requests with locking strength shared actively wait if there are active
@@ -107,9 +111,9 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
    queued writers:
-    active: false req: 2, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
     active: false req: 3, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 6, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 4
+    active: false req: 4, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 7, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 5
