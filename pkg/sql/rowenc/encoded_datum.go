@@ -192,7 +192,7 @@ func DatumToEncDatum(ctyp *types.T, d tree.Datum) EncDatum {
 
 	dTyp := d.ResolvedType()
 	if d != tree.DNull && !ctyp.Equivalent(dTyp) && !dTyp.IsAmbiguous() {
-		panic(errors.AssertionFailedf("invalid datum type given: %s, expected %s", dTyp, ctyp))
+		panic(errors.AssertionFailedf("invalid datum type given: %s, expected %s", dTyp.SQLStringForError(), ctyp.SQLStringForError()))
 	}
 	return EncDatum{Datum: d}
 }
