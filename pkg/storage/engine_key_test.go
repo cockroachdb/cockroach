@@ -36,11 +36,25 @@ func TestLockTableKeyEncodeDecode(t *testing.T) {
 	testCases := []struct {
 		key LockTableKey
 	}{
+		// Shared locks.
+		{key: LockTableKey{Key: roachpb.Key("foo"), Strength: lock.Shared, TxnUUID: uuid1}},
+		{key: LockTableKey{Key: roachpb.Key("a"), Strength: lock.Shared, TxnUUID: uuid2}},
+		{key: LockTableKey{
+			Key:      keys.RangeDescriptorKey(roachpb.RKey("baz")), // causes a doubly-local range local key
+			Strength: lock.Shared,
+			TxnUUID:  uuid1}},
+		// Exclusive locks.
+		{key: LockTableKey{Key: roachpb.Key("foo"), Strength: lock.Exclusive, TxnUUID: uuid1}},
+		{key: LockTableKey{Key: roachpb.Key("a"), Strength: lock.Exclusive, TxnUUID: uuid2}},
+		{key: LockTableKey{
+			Key:      keys.RangeDescriptorKey(roachpb.RKey("baz")), // causes a doubly-local range local key
+			Strength: lock.Exclusive,
+			TxnUUID:  uuid1}},
+		// Intent locks.
 		{key: LockTableKey{Key: roachpb.Key("foo"), Strength: lock.Intent, TxnUUID: uuid1}},
 		{key: LockTableKey{Key: roachpb.Key("a"), Strength: lock.Intent, TxnUUID: uuid2}},
-		// Causes a doubly-local range local key.
 		{key: LockTableKey{
-			Key:      keys.RangeDescriptorKey(roachpb.RKey("baz")),
+			Key:      keys.RangeDescriptorKey(roachpb.RKey("baz")), // causes a doubly-local range local key
 			Strength: lock.Intent,
 			TxnUUID:  uuid1}},
 	}
