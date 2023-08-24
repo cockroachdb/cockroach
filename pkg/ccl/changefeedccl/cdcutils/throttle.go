@@ -12,7 +12,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"sync"
 	"time"
 
@@ -69,7 +68,7 @@ func (t *Throttler) AcquireFlushQuota(ctx context.Context) error {
 func (t *Throttler) updateConfig(config changefeedbase.SinkThrottleConfig) {
 	setLimits := func(rl *quotapool.RateLimiter, rate, burst float64) {
 		// set rateBudget to unlimited if rate is 0.
-		rateBudget := quotapool.Limit(math.MaxInt64)
+		rateBudget := quotapool.Inf()
 		if rate > 0 {
 			rateBudget = quotapool.Limit(rate)
 		}
