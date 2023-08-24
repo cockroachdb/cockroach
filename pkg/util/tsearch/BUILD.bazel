@@ -15,6 +15,7 @@ go_library(
         "tsvector.go",
     ],
     embedsrcs = [
+        "stopwords/chinese.stop",
         "stopwords/danish.stop",
         "stopwords/dutch.stop",
         "stopwords/english.stop",
