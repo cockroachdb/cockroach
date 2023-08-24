@@ -1620,6 +1620,9 @@ type ExecutorTestingKnobs struct {
 		txnFingerprintID appstatspb.TransactionFingerprintID,
 	)
 
+	// AfterBackupChunk is called after each chunk of a backup is completed.
+	AfterBackupChunk func()
+
 	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
 	// is written.
 	AfterBackupCheckpoint func()
