@@ -81,7 +81,6 @@ func TestDataDriven(t *testing.T) {
 
 		tenantID := roachpb.MustMakeTenantID(10)
 		tenant := spanConfigTestCluster.InitializeTenant(ctx, tenantID)
-		spanConfigTestCluster.AllowSecondaryTenantToSetZoneConfigurations(t, tenantID)
 		spanConfigTestCluster.EnsureTenantCanSetZoneConfigurationsOrFatal(t, tenant)
 
 		// TODO(irfansharif): Expose this through the test harness once we integrate
