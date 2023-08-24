@@ -981,8 +981,7 @@ func TestPrimaryKeyChangeZoneConfigs(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	codec, sv := s.ApplicationLayer().Codec(), &s.ApplicationLayer().ClusterSettings().SV
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, sv, true)
+	codec := s.ApplicationLayer().Codec()
 
 	// Write a table with some partitions into the database,
 	// and change its primary key.
@@ -1163,8 +1162,6 @@ func TestZoneConfigAppliesToTemporaryIndex(t *testing.T) {
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	codec := s.Codec()
-	sv := &s.ClusterSettings().SV
-	sql.SecondaryTenantZoneConfigsEnabled.Override(context.Background(), sv, true)
 
 	if _, err := sqlDB.Exec(`
 SET use_declarative_schema_changer='off';

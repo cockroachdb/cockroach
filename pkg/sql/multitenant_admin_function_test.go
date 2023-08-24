@@ -259,19 +259,27 @@ func (tc testCase) runTest(
 		tenantID roachpb.TenantID,
 		clusterSettings ...*settings.BoolSetting,
 	) *gosql.DB {
-		testingClusterSettings := cluster.MakeTestingClusterSettings()
-		for _, clusterSetting := range clusterSettings {
-			// Filter out nil cluster settings.
-			if clusterSetting != nil {
-				clusterSetting.Override(ctx, &testingClusterSettings.SV, true)
-			}
-		}
-		_, db := serverutils.StartTenant(
+		s, db := serverutils.StartTenant(
 			t, testServer, base.TestTenantArgs{
-				Settings: testingClusterSettings,
 				TenantID: tenantID,
 			},
 		)
+		st := s.ClusterSettings()
+		// StartTenant enables a couple of settings by default, but we want
+		// precise control of what's enabled, so we first disable the settings
+		// we care about and then apply the overrides the caller asked for.
+		for _, toDisable := range []*settings.BoolSetting{
+			sql.SecondaryTenantScatterEnabled,
+			sql.SecondaryTenantSplitAtEnabled,
+		} {
+			toDisable.Override(ctx, &st.SV, false)
+		}
+		for _, clusterSetting := range clusterSettings {
+			// Filter out nil cluster settings.
+			if clusterSetting != nil {
+				clusterSetting.Override(ctx, &st.SV, true)
+			}
+		}
 		return db
 	}
 

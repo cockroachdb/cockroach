@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -50,12 +49,7 @@ func TestBank(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 
-	s := srv.ApplicationLayer()
-
 	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE test`)
-
-	// To enable workloadsql.Split.
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("rows=%d/ranges=%d", test.rows, test.ranges), func(t *testing.T) {

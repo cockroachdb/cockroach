@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -237,9 +236,7 @@ func TestStreamerCorrectlyDiscardsResponses(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		SQLMemoryPoolSize: 1 << 30, /* 1GiB */
 	})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ApplicationLayer().ClusterSettings().SV, true)
+	defer s.Stopper().Stop(context.Background())
 
 	// The initial estimate for TargetBytes argument for each asynchronous
 	// request by the Streamer will be numRowsPerRange x InitialAvgResponseSize,
@@ -302,9 +299,7 @@ func TestStreamerWideRows(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		SQLMemoryPoolSize: 1 << 30, /* 1GiB */
 	})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ApplicationLayer().ClusterSettings().SV, true)
+	defer s.Stopper().Stop(context.Background())
 
 	const blobSize = 10 * kvstreamer.InitialAvgResponseSize
 	const numRows = 2
@@ -408,7 +403,6 @@ func TestStreamerEmptyScans(t *testing.T) {
 
 	ts := s.ApplicationLayer()
 	codec := ts.Codec()
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
 
 	// Create a dummy table for which we know the encoding of valid keys.
 	// Although not strictly necessary, we set up two column families since with
@@ -478,9 +472,7 @@ func TestStreamerMultiRangeScan(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ApplicationLayer().ClusterSettings().SV, true)
+	defer s.Stopper().Stop(context.Background())
 
 	rng, _ := randutil.NewTestRand()
 	numRows := rng.Intn(100) + 2

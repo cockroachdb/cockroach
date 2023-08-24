@@ -61,8 +61,6 @@ func TestExportCmd(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	ts := srv.ApplicationLayer()
 
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
-
 	export := func(
 		t *testing.T, start hlc.Timestamp, mvccFilter kvpb.MVCCFilter, maxResponseSSTBytes int64,
 	) (kvpb.Response, *kvpb.Error) {
@@ -464,9 +462,6 @@ func TestExportRequestWithCPULimitResumeSpans(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	s := tc.ApplicationLayer(0)
-
-	sql.SecondaryTenantSplitAtEnabled.Override(context.Background(), &s.ClusterSettings().SV, true)
-	sql.SecondaryTenantScatterEnabled.Override(context.Background(), &s.ClusterSettings().SV, true)
 
 	sqlDB := tc.Conns[0]
 	db := sqlutils.MakeSQLRunner(sqlDB)

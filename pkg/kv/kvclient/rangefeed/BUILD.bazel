@@ -78,7 +78,6 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigptsreader",
-        "//pkg/sql",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/storage",
         "//pkg/testutils",
