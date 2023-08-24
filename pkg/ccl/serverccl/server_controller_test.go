@@ -474,7 +474,7 @@ func TestServerStartStop(t *testing.T) {
 
 		// Don't wait for graceful jobs shutdown in this test since
 		// we want to make sure test completes reasonably quickly.
-		_, err = db2.Exec("SET CLUSTER SETTING server.shutdown.jobs_wait='0s'")
+		_, err = db2.Exec("SET CLUSTER SETTING server.shutdown.jobs.timeout='0s'")
 		require.NoError(t, err)
 
 		return nil

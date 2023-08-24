@@ -165,7 +165,7 @@ func (q *quitTest) setupIncrementalDrain(ctx context.Context) {
 	db := q.c.Conn(ctx, q.t.L(), 1)
 	defer db.Close()
 	if _, err := db.ExecContext(ctx, `
-SET CLUSTER SETTING server.shutdown.lease_transfer_wait = '10ms'`); err != nil {
+SET CLUSTER SETTING server.shutdown.lease_transfer_iteration.timeout = '10ms'`); err != nil {
 		if strings.Contains(err.Error(), "unknown cluster setting") {
 			// old version; ok
 		} else {

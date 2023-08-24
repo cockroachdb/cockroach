@@ -770,9 +770,9 @@ ijk
 
 # Show a notice if a custom session variable has the same name as a cluster setting.
 query T noticetrace
-SET server.shutdown.drain_wait = '10s'
+SET server.shutdown.initial_wait = '10s'
 ----
-NOTICE: setting custom variable "server.shutdown.drain_wait"
+NOTICE: setting custom variable "server.shutdown.initial_wait"
 HINT: did you mean SET CLUSTER SETTING?
 
 # Test that RESET ALL changes custom options to empty strings.
