@@ -77,13 +77,10 @@ type MemAllocator interface {
 type Type uint8
 
 const (
-	// TypeUnknown indicates the event could not be parsed. Will fail the feed.
-	TypeUnknown Type = iota
-
 	// TypeFlush indicates a request to flush buffered data.
 	// This request type is emitted by blocking buffer when it's blocked, waiting
 	// for more memory.
-	TypeFlush
+	TypeFlush Type = iota
 
 	// TypeKV indicates that the KV, PrevKeyValue, and BackfillTimestamp methods
 	// on the Event meaningful.
@@ -98,6 +95,9 @@ const (
 	// TypeResolved indicates that the Resolved method on the Event will be
 	// meaningful.
 	TypeResolved = resolvedNone
+
+	// number of event types.
+	numEventTypes = 3
 )
 
 // Event represents an event emitted by a kvfeed. It is either a KV or a
@@ -117,6 +117,18 @@ func (e *Event) Type() Type {
 		return TypeResolved
 	default:
 		return e.et
+	}
+}
+
+// Index returns numerical/ordinal type index suitable for indexing into arrays.
+func (t Type) Index() int {
+	switch t {
+	case TypeFlush:
+		return int(TypeFlush)
+	case TypeKV:
+		return int(TypeKV)
+	default:
+		return int(TypeResolved)
 	}
 }
 
