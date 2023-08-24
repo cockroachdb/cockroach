@@ -35,6 +35,7 @@ func TestKnobsUseRangeTombstonesForPointDeletes(t *testing.T) {
 
 	ctx := context.Background()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
