@@ -262,14 +262,32 @@ func (p *planner) CheckPrivilegeForUser(
 	privilegeKind privilege.Kind,
 	user username.SQLUsername,
 ) error {
-	ok, err := p.HasPrivilege(ctx, privilegeObject, privilegeKind, user)
+	hasPriv, err := p.HasPrivilege(ctx, privilegeObject, privilegeKind, user)
 	if err != nil {
 		return err
 	}
-	if !ok {
-		return insufficientPrivilegeError(user, privilegeKind, privilegeObject)
+	if hasPriv {
+		return nil
 	}
-	return nil
+	// Special case for system tables. The VIEWSYSTEMTABLE system privilege is
+	// equivalent to having SELECT on all system tables. This is because it is not
+	// possible to dybamically grant SELECT privileges system tables, but in the
+	// context of support escalations, we need to be able to grant the ability to
+	// view system tables without granting the entire admin role.
+	if d, ok := privilegeObject.(catalog.Descriptor); ok {
+		if catalog.IsSystemDescriptor(d) && privilegeKind == privilege.SELECT {
+			hasViewSystemTablePriv, err := p.HasPrivilege(
+				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWSYSTEMTABLE, user,
+			)
+			if err != nil {
+				return err
+			}
+			if hasViewSystemTablePriv {
+				return nil
+			}
+		}
+	}
+	return insufficientPrivilegeError(user, privilegeKind, privilegeObject)
 }
 
 // CheckPrivilege implements the AuthorizationAccessor interface.
