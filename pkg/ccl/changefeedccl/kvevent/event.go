@@ -136,6 +136,11 @@ func (t Type) Index() int {
 	}
 }
 
+// Raw returns the underlying RangeFeedEvent.
+func (e *Event) Raw() *kvpb.RangeFeedEvent {
+	return e.ev
+}
+
 // ApproximateSize returns events approximate size in bytes.
 func (e *Event) ApproximateSize() int {
 	if e.et == TypeFlush {
