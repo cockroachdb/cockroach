@@ -13,7 +13,9 @@ package securitytest
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 )
@@ -34,6 +36,13 @@ func CreateTestCerts(certsDir string) (cleanup func() error) {
 		filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedRootCert),
 		filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedRootKey),
 		filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedTenantCACert),
+	}
+	for _, tenantID := range security.EmbeddedTenantIDs() {
+		st := strconv.Itoa(int(tenantID))
+		assets = append(assets,
+			filepath.Join(certnames.EmbeddedCertsDir, certnames.TenantCertFilename(st)),
+			filepath.Join(certnames.EmbeddedCertsDir, certnames.TenantKeyFilename(st)),
+		)
 	}
 
 	for _, a := range assets {
