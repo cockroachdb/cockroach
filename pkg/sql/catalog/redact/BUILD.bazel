@@ -25,7 +25,6 @@ go_test(
     deps = [
         ":redact",
         "//pkg/base",
-        "//pkg/keys",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

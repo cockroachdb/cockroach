@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -37,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -150,8 +148,9 @@ func TestPurgeOldVersions(t *testing.T) {
 			},
 		},
 	}
-	s, db, kvDB := serverutils.StartServer(t, serverParams)
-	defer s.Stopper().Stop(context.Background())
+	srv, db, kvDB := serverutils.StartServer(t, serverParams)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	leaseManager := s.LeaseManager().(*Manager)
 
 	// Block gossip.
@@ -168,7 +167,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 
 	var tables []catalog.TableDescriptor
 	var expiration hlc.Timestamp
@@ -253,6 +252,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // modification time should still be retained.
 func TestPurgeOldVersionsRetainsDescriptorWithFutureModificationTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// We're going to block gossip so it doesn't come randomly and clear up the
 	// leases we're artificially setting up.
 	gossipSem := make(chan struct{}, 1)
@@ -268,8 +268,9 @@ func TestPurgeOldVersionsRetainsDescriptorWithFutureModificationTime(t *testing.
 		},
 	}
 	ctx := context.Background()
-	s, db, kvDB := serverutils.StartServer(t, serverParams)
-	defer s.Stopper().Stop(ctx)
+	srv, db, kvDB := serverutils.StartServer(t, serverParams)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	leaseManager := s.LeaseManager().(*Manager)
 
 	// Block gossip.
@@ -286,7 +287,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 	futureTime := s.Clock().Now().Add(500*time.Millisecond.Nanoseconds(), 0).WithSynthetic(true)
 
 	getLatestDesc := func() catalog.TableDescriptor {
@@ -317,11 +318,12 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		if err := txn2.SetFixedTimestamp(ctx, futureTime.Prev()); err != nil {
 			return err
 		}
-		if _, err := txn2.Get(ctx, "key"); err != nil {
+		key := append(s.Codec().TenantPrefix(), "key"...)
+		if _, err := txn2.Get(ctx, key); err != nil {
 			return errors.Wrap(err, "read from other txn in future")
 		}
 
-		return txn.Put(ctx, "key", "value")
+		return txn.Put(ctx, key, "value")
 	}
 	if _, err := leaseManager.Publish(ctx, tableDesc.GetID(), update, logEvent); err != nil {
 		t.Fatal(err)
@@ -358,9 +360,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // do not cause issues.
 func TestNameCacheDBConflictingTableNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	leaseManager := s.LeaseManager().(*Manager)
 
 	if _, err := db.Exec(`SET experimental_enable_temp_tables = true`); err != nil {
@@ -391,7 +395,7 @@ CREATE TEMP TABLE t2 (temp int);
 	}
 
 	for _, tableName := range []string{"t", "t2"} {
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", tableName)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
 		lease := leaseManager.names.get(
 			context.Background(),
 			tableDesc.GetParentID(),
@@ -408,8 +412,11 @@ CREATE TEMP TABLE t2 (temp int);
 // Test that changing a descriptor's name updates the name cache.
 func TestNameCacheIsUpdated(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer log.Scope(t).Close(t)
+
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	leaseManager := s.LeaseManager().(*Manager)
 
 	if _, err := db.Exec(`
@@ -425,7 +432,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 
 	// Rename.
 	if _, err := db.Exec("ALTER TABLE t.test RENAME TO t.test2;"); err != nil {
@@ -462,8 +469,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // Tests that a name cache entry with by an expired lease is not returned.
 func TestNameCacheEntryDoesntReturnExpiredLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer log.Scope(t).Close(t)
+
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	leaseManager := s.LeaseManager().(*Manager)
 
 	const tableName = "test"
@@ -480,7 +490,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", tableName)
 
 	// Check the assumptions this tests makes: that there is a cache entry
 	// (with a valid lease).
@@ -514,6 +524,8 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 // the lease expiration time is monotonically increasing.
 func TestNameCacheContainsLatestLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	removalTracker := NewLeaseRemovalTracker()
 	testingKnobs := base.TestingKnobs{
 		SQLLeaseManager: &ManagerTestingKnobs{
@@ -522,8 +534,9 @@ func TestNameCacheContainsLatestLease(t *testing.T) {
 			},
 		},
 	}
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{Knobs: testingKnobs})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{Knobs: testingKnobs})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	leaseManager := s.LeaseManager().(*Manager)
 
 	const tableName = "test"
@@ -535,7 +548,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", tableName)
 
 	// Populate the name cache.
 	if _, err := db.Exec("SELECT * FROM t.test;"); err != nil {
@@ -586,8 +599,11 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 // Test that table names are treated as case sensitive by the name cache.
 func TestTableNameCaseSensitive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer log.Scope(t).Close(t)
+
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	leaseManager := s.LeaseManager().(*Manager)
 
 	if _, err := db.Exec(`
@@ -602,7 +618,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 
 	// Check that we cannot get the table by a different name.
 	if leaseManager.names.get(
@@ -623,6 +639,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // AcquireByName()d at the same time.
 func TestReleaseAcquireByNameDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	removalTracker := NewLeaseRemovalTracker()
 	testingKnobs := base.TestingKnobs{
 		SQLLeaseManager: &ManagerTestingKnobs{
@@ -632,9 +650,10 @@ func TestReleaseAcquireByNameDeadlock(t *testing.T) {
 			},
 		},
 	}
-	s, sqlDB, kvDB := serverutils.StartServer(
+	srv, sqlDB, kvDB := serverutils.StartServer(
 		t, base.TestServerArgs{Knobs: testingKnobs})
-	defer s.Stopper().Stop(context.Background())
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	leaseManager := s.LeaseManager().(*Manager)
 
 	if _, err := sqlDB.Exec(`
@@ -644,7 +663,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 
 	// Populate the name cache.
 	ctx := context.Background()
@@ -739,8 +758,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // Manager.acquireFreshestFromStore() in parallel to test for races.
 func TestAcquireFreshestFromStoreRaces(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer log.Scope(t).Close(t)
+
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	leaseManager := s.LeaseManager().(*Manager)
 
 	if _, err := db.Exec(`
@@ -750,7 +772,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 
 	var wg sync.WaitGroup
 	numRoutines := 10
@@ -778,6 +800,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // is still valid. They are able to reacquire a lease if needed.
 func TestParallelLeaseAcquireWithImmediateRelease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	testingKnobs := base.TestingKnobs{
 		SQLLeaseManager: &ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: StorageTestingKnobs{
@@ -788,9 +812,10 @@ func TestParallelLeaseAcquireWithImmediateRelease(t *testing.T) {
 			},
 		},
 	}
-	s, sqlDB, kvDB := serverutils.StartServer(
+	srv, sqlDB, kvDB := serverutils.StartServer(
 		t, base.TestServerArgs{Knobs: testingKnobs})
-	defer s.Stopper().Stop(context.Background())
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	leaseManager := s.LeaseManager().(*Manager)
 
 	if _, err := sqlDB.Exec(`
@@ -800,7 +825,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 
 	var wg sync.WaitGroup
 	numRoutines := 10
@@ -841,6 +866,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 //     one.
 func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Result is a struct for moving results to the main result routine.
 	type Result struct {
@@ -968,9 +994,9 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			// leases are checked for having a different expiration.
 			LeaseJitterFraction.Override(ctx, &serverArgs.SV, 0)
 
-			s, sqlDB, _ := serverutils.StartServer(
-				t, serverArgs)
-			defer s.Stopper().Stop(context.Background())
+			srv, sqlDB, _ := serverutils.StartServer(t, serverArgs)
+			defer srv.Stopper().Stop(context.Background())
+			s := srv.ApplicationLayer()
 			tdb := sqlutils.MakeSQLRunner(sqlDB)
 			tdb.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY)")
 			{
@@ -1056,6 +1082,8 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 // table descriptor from store through an ExportRequest.
 func TestReadOlderVersionForTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLLeaseManager: &ManagerTestingKnobs{
@@ -1065,11 +1093,10 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 			},
 		},
 	}
-	var stopper *stop.Stopper
-	s, sqlDB, _ := serverutils.StartServer(t, serverParams)
-	stopper = s.Stopper()
 	ctx := context.Background()
-	defer stopper.Stop(ctx)
+	srv, sqlDB, _ := serverutils.StartServer(t, serverParams)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	// Prevent non-explicit Acquire to leases for testing purposes.
@@ -1251,10 +1278,13 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 // correct.
 func TestDescriptorByteSizeOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	params := base.TestServerArgs{}
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	manager := s.LeaseManager().(*Manager)
@@ -1390,10 +1420,12 @@ func TestDescriptorByteSizeOrder(t *testing.T) {
 // from the binary encoded in the descriptor table.
 func TestLeasedDescriptorByteSizeBaseline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	params := base.TestServerArgs{}
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	tdb := sqlutils.MakeSQLRunner(db)
 	manager := s.LeaseManager().(*Manager)
 
@@ -1500,7 +1532,7 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 
 	ctx := context.Background()
 	var numRequests int
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 			TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
 				for _, ru := range request.Requests {
@@ -1519,7 +1551,8 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 			},
 		}},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	beforeCreate := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
