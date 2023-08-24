@@ -11,15 +11,20 @@
 import { all, call, put, takeLatest } from "redux-saga/effects";
 
 import { actions } from "./schemaInsights.reducer";
-import { getSchemaInsights } from "../../api";
+import { SchemaInsightReqParams, getSchemaInsights } from "../../api";
+import { PayloadAction } from "@reduxjs/toolkit";
 
-export function* refreshSchemaInsightsSaga() {
-  yield put(actions.request());
+export function* refreshSchemaInsightsSaga(
+  action: PayloadAction<SchemaInsightReqParams>,
+) {
+  yield put(actions.request(action.payload));
 }
 
-export function* requestSchemaInsightsSaga(): any {
+export function* requestSchemaInsightsSaga(
+  action: PayloadAction<SchemaInsightReqParams>,
+): any {
   try {
-    const result = yield call(getSchemaInsights);
+    const result = yield call(getSchemaInsights, action.payload);
     yield put(actions.received(result));
   } catch (e) {
     yield put(actions.failed(e));

@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/builtins/builtinconstants",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/sqltelemetry",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -46,8 +47,10 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     deps = [
+        ":schematelemetry",
         "//pkg/base",
         "//pkg/jobs",
+        "//pkg/jobs/jobspb",
         "//pkg/jobs/jobstest",
         "//pkg/scheduledjobs",
         "//pkg/security/securityassets",

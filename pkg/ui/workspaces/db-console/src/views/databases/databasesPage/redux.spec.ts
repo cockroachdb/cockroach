@@ -22,6 +22,7 @@ import {
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import * as fakeApi from "src/util/fakeApi";
 import { mapDispatchToProps, mapStateToProps } from "./redux";
+import { indexUnusedDuration } from "src/util/constants";
 
 class TestDriver {
   private readonly actions: DatabasesPageActions;
@@ -104,7 +105,7 @@ describe("Databases Page", function () {
       automaticStatsCollectionEnabled: true,
       indexRecommendationsEnabled: true,
       showNodeRegionsColumn: false,
-      csIndexUnusedDuration: "168h",
+      csIndexUnusedDuration: indexUnusedDuration,
     });
   });
 
@@ -172,7 +173,7 @@ describe("Databases Page", function () {
       sortSetting: { ascending: true, columnTitle: "name" },
       showNodeRegionsColumn: false,
       indexRecommendationsEnabled: true,
-      csIndexUnusedDuration: "168h",
+      csIndexUnusedDuration: indexUnusedDuration,
       automaticStatsCollectionEnabled: true,
     });
   });
@@ -225,7 +226,7 @@ describe("Databases Page", function () {
     fakeApi.stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
       clusterUiApi.createDatabaseDetailsReq({
         database: "test",
-        csIndexUnusedDuration: "168h",
+        csIndexUnusedDuration: indexUnusedDuration,
       }),
       [
         // Id
@@ -287,7 +288,7 @@ describe("Databases Page", function () {
 
     await driver.refreshNodes();
     await driver.refreshDatabases();
-    await driver.refreshDatabaseDetails("test", "168h");
+    await driver.refreshDatabaseDetails("test", indexUnusedDuration);
 
     driver.assertDatabaseProperties("test", {
       loading: false,

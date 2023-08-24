@@ -22,7 +22,11 @@ import {
 } from "@cockroachlabs/cluster-ui";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
-import { databaseNameAttr, tableNameAttr } from "src/util/constants";
+import {
+  databaseNameAttr,
+  indexUnusedDuration,
+  tableNameAttr,
+} from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 import moment from "moment-timezone";
@@ -139,7 +143,11 @@ class TestDriver {
     return this.actions.refreshSettings();
   }
   async refreshTableDetails() {
-    return this.actions.refreshTableDetails(this.database, this.table, "168h");
+    return this.actions.refreshTableDetails(
+      this.database,
+      this.table,
+      indexUnusedDuration,
+    );
   }
 
   async refreshIndexStats() {
@@ -196,7 +204,7 @@ describe("Database Table Page", function () {
       automaticStatsCollectionEnabled: true,
       indexUsageStatsEnabled: true,
       showIndexRecommendations: true,
-      csIndexUnusedDuration: "168h",
+      csIndexUnusedDuration: indexUnusedDuration,
       hasAdminRole: false,
       indexStats: {
         loading: false,
@@ -212,7 +220,11 @@ describe("Database Table Page", function () {
     const mockStatsLastCreatedTimestamp = moment();
 
     fakeApi.stubSqlApiCall<clusterUiApi.TableDetailsRow>(
-      clusterUiApi.createTableDetailsReq("DATABASE", "TABLE", "168h"),
+      clusterUiApi.createTableDetailsReq(
+        "DATABASE",
+        "TABLE",
+        indexUnusedDuration,
+      ),
       [
         // Table ID query
         { rows: [{ table_id: "1" }] },

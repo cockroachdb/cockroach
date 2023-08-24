@@ -18,7 +18,10 @@ import * as protos from "@cockroachlabs/crdb-protobuf-client";
 const cockroach = protos.cockroach;
 import * as api from "./api";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
-import { REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
+import {
+  REMOTE_DEBUGGING_ERROR_TEXT,
+  indexUnusedDuration,
+} from "src/util/constants";
 import Severity = protos.cockroach.util.log.Severity;
 import { stubSqlApiCall } from "src/util/fakeApi";
 
@@ -104,7 +107,6 @@ describe("rest api", function () {
 
   describe("database details request", function () {
     const database = "test";
-    const csIndexUnusedDuration = "168h";
     const mockOldDate = new Date(2023, 2, 3);
     const mockZoneConfig = new ZoneConfig({
       inherited_constraints: true,
@@ -128,7 +130,7 @@ describe("rest api", function () {
       stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
         clusterUiApi.createDatabaseDetailsReq({
           database,
-          csIndexUnusedDuration,
+          csIndexUnusedDuration: indexUnusedDuration,
         }),
         [
           // Database ID query
@@ -192,7 +194,10 @@ describe("rest api", function () {
       );
 
       return clusterUiApi
-        .getDatabaseDetails({ database, csIndexUnusedDuration })
+        .getDatabaseDetails({
+          database,
+          csIndexUnusedDuration: indexUnusedDuration,
+        })
         .then(result => {
           expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
           expect(result.results.idResp.database_id).toEqual("1");
@@ -220,7 +225,7 @@ describe("rest api", function () {
       // Mock out the fetch query, but return a 500 status code
       const req = clusterUiApi.createDatabaseDetailsReq({
         database,
-        csIndexUnusedDuration,
+        csIndexUnusedDuration: indexUnusedDuration,
       });
       fetchMock.mock({
         matcher: clusterUiApi.SQL_API_PATH,
@@ -236,7 +241,10 @@ describe("rest api", function () {
       });
 
       clusterUiApi
-        .getDatabaseDetails({ database, csIndexUnusedDuration })
+        .getDatabaseDetails({
+          database,
+          csIndexUnusedDuration: indexUnusedDuration,
+        })
         .then(_result => {
           done(new Error("Request unexpectedly succeeded."));
         })
@@ -250,7 +258,7 @@ describe("rest api", function () {
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
       const req = clusterUiApi.createDatabaseDetailsReq({
         database,
-        csIndexUnusedDuration,
+        csIndexUnusedDuration: indexUnusedDuration,
       });
       fetchMock.mock({
         matcher: clusterUiApi.SQL_API_PATH,
@@ -267,7 +275,7 @@ describe("rest api", function () {
 
       clusterUiApi
         .getDatabaseDetails(
-          { database, csIndexUnusedDuration },
+          { database, csIndexUnusedDuration: indexUnusedDuration },
           moment.duration(0),
         )
         .then(_result => {
@@ -283,7 +291,6 @@ describe("rest api", function () {
   describe("table details request", function () {
     const dbName = "testDB";
     const tableName = "testTable";
-    const csIndexUnusedDuration = "168h";
     const mockOldDate = new Date(2023, 2, 3);
     const mockZoneConfig = new ZoneConfig({
       inherited_constraints: true,
@@ -309,7 +316,7 @@ describe("rest api", function () {
         clusterUiApi.createTableDetailsReq(
           dbName,
           tableName,
-          csIndexUnusedDuration,
+          indexUnusedDuration,
         ),
         [
           // Table ID query
@@ -368,7 +375,7 @@ describe("rest api", function () {
         .getTableDetails({
           database: dbName,
           table: tableName,
-          csIndexUnusedDuration,
+          csIndexUnusedDuration: indexUnusedDuration,
         })
         .then(resp => {
           expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
@@ -417,7 +424,7 @@ describe("rest api", function () {
             ...clusterUiApi.createTableDetailsReq(
               dbName,
               tableName,
-              csIndexUnusedDuration,
+              indexUnusedDuration,
             ),
             application_name: clusterUiApi.INTERNAL_SQL_API_APP,
           });
@@ -429,7 +436,7 @@ describe("rest api", function () {
         .getTableDetails({
           database: dbName,
           table: tableName,
-          csIndexUnusedDuration,
+          csIndexUnusedDuration: indexUnusedDuration,
         })
         .then(_result => {
           done(new Error("Request unexpectedly succeeded."));
@@ -450,7 +457,7 @@ describe("rest api", function () {
             ...clusterUiApi.createTableDetailsReq(
               dbName,
               tableName,
-              csIndexUnusedDuration,
+              indexUnusedDuration,
             ),
             application_name: clusterUiApi.INTERNAL_SQL_API_APP,
           });
@@ -463,7 +470,7 @@ describe("rest api", function () {
           {
             database: dbName,
             table: tableName,
-            csIndexUnusedDuration,
+            csIndexUnusedDuration: indexUnusedDuration,
           },
           moment.duration(0),
         )

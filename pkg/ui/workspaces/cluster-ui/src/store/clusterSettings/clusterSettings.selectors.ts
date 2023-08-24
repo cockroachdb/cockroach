@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { AppState } from "../reducers";
-import { greaterOrEqualThanVersion } from "../../util";
+import { greaterOrEqualThanVersion, indexUnusedDuration } from "../../util";
 
 export const selectAutomaticStatsCollectionEnabled = (
   state: AppState,
@@ -43,9 +43,10 @@ export const selectIndexUsageStatsEnabled = (state: AppState): boolean => {
 export const selectDropUnusedIndexDuration = (state: AppState): string => {
   const settings = state.adminUI?.clusterSettings.data?.key_values;
   if (!settings) {
-    return "168h";
+    return indexUnusedDuration;
   }
   return (
-    settings["sql.index_recommendation.drop_unused_duration"]?.value || "168h"
+    settings["sql.index_recommendation.drop_unused_duration"]?.value ||
+    indexUnusedDuration
   );
 };
