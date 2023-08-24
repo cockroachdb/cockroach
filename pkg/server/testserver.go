@@ -599,7 +599,14 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		return nil // nolint:returnerrcheck
 	}
 
-	tempStorageConfig := base.DefaultTestTempStorageConfig(cluster.MakeTestingClusterSettings())
+	tenantSettings := ts.params.Settings
+	if tenantSettings == nil {
+		tenantSettings = cluster.MakeTestingClusterSettings()
+	}
+	tempStorageConfig := ts.params.TempStorageConfig
+	if tempStorageConfig.Settings == nil {
+		tempStorageConfig = base.DefaultTestTempStorageConfig(tenantSettings)
+	}
 	params := base.TestTenantArgs{
 		// Currently, all the servers leverage the same tenant ID. We may
 		// want to change this down the road, for more elaborate testing.
@@ -614,7 +621,7 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		SSLCertsDir:               ts.params.SSLCertsDir,
 		TestingKnobs:              ts.params.Knobs,
 		StartDiagnosticsReporting: ts.params.StartDiagnosticsReporting,
-		Settings:                  ts.params.Settings,
+		Settings:                  tenantSettings,
 	}
 
 	// Since we're creating a tenant, it doesn't make sense to pass through the
