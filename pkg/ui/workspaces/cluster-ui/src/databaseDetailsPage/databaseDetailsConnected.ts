@@ -14,7 +14,8 @@ import { Dispatch } from "redux";
 import { databaseNameCCAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 import { AppState } from "../store";
-import { actions as databaseDetailsActions } from "../store/databaseDetails";
+import { databaseDetailsReducer } from "../store/databaseDetails";
+const databaseDetailsActions = databaseDetailsReducer.actions;
 import {
   actions as localStorageActions,
   LocalStorageKeys,

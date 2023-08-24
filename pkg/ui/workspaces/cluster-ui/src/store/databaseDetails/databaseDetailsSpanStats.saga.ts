@@ -10,35 +10,30 @@
 
 import { all, call, put, takeEvery } from "redux-saga/effects";
 
-import { databaseDetailsReducer } from "./databaseDetails.reducer";
+import { databaseDetailsSpanStatsReducer } from "./databaseDetails.reducer";
 import {
-  DatabaseDetailsReqParams,
+  DatabaseDetailsSpanStatsReqParams,
   ErrorWithKey,
-  getDatabaseDetails,
+  getDatabaseDetailsSpanStats,
 } from "src/api";
-import moment from "moment";
 import { PayloadAction } from "@reduxjs/toolkit";
 
-const actions = databaseDetailsReducer.actions;
-export function* refreshDatabaseDetailsSaga(
-  action: PayloadAction<DatabaseDetailsReqParams>,
+const actions = databaseDetailsSpanStatsReducer.actions;
+export function* refreshDatabaseDetailsSpanStatsSaga(
+  action: PayloadAction<DatabaseDetailsSpanStatsReqParams>,
 ) {
   yield put(actions.request(action.payload));
 }
 
-export function* requestDatabaseDetailsSaga(
-  action: PayloadAction<DatabaseDetailsReqParams>,
+export function* requestDatabaseDetailsSpanStatsSaga(
+  action: PayloadAction<DatabaseDetailsSpanStatsReqParams>,
 ): any {
   try {
-    const result = yield call(
-      getDatabaseDetails,
-      action.payload,
-      moment.duration(10, "m"),
-    );
+    const result = yield call(getDatabaseDetailsSpanStats, action.payload);
     yield put(
       actions.received({
         key: action.payload.database,
-        databaseDetailsResponse: result,
+        response: result,
       }),
     );
   } catch (e) {
@@ -50,9 +45,9 @@ export function* requestDatabaseDetailsSaga(
   }
 }
 
-export function* databaseDetailsSaga() {
+export function* databaseDetailsSpanStatsSaga() {
   yield all([
-    takeEvery(actions.refresh, refreshDatabaseDetailsSaga),
-    takeEvery(actions.request, requestDatabaseDetailsSaga),
+    takeEvery(actions.refresh, refreshDatabaseDetailsSpanStatsSaga),
+    takeEvery(actions.request, requestDatabaseDetailsSpanStatsSaga),
   ]);
 }
