@@ -37,10 +37,10 @@ import (
 
 const (
 	defaultProject = "cockroach-ephemeral"
-	// ProviderName is gce.
-	ProviderName        = "gce"
-	DefaultImage        = "ubuntu-2004-focal-v20210603"
-	ARM64Image          = "ubuntu-2004-focal-arm64-v20230523"
+	ProviderName   = "gce"
+	DefaultImage   = "ubuntu-2204-jammy-v20230727"
+	ARM64Image     = "ubuntu-2204-jammy-arm64-v20230727"
+	// As of Aug 2023, there is no 22.04 image for FIPS.
 	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230302"
 	defaultImageProject = "ubuntu-os-cloud"
 	FIPSImageProject    = "ubuntu-os-pro-cloud"
