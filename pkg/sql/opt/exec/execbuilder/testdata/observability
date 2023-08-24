@@ -714,3 +714,196 @@ vectorized: true
                                                                                               estimated row count: 3 (missing stats)
                                                                                               table: transaction_statistics@execution_count_idx (partial index)
                                                                                               spans: /2023-04-10T16:00:00Z-/2023-04-10T16:00:00.000000001Z
+
+# Upsert top 500 transactions
+query T retry
+EXPLAIN (VERBOSE)
+WITH missed_stmt_ids_from_txn_activity AS (SELECT ta.fingerprint_id, ta.app_name
+                                     FROM (SELECT ta_sub.aggregated_ts,
+                                                  decode(jsonb_array_elements_text(ta_sub.metadata -> 'stmtFingerprintIDs'), 'hex')::bytes AS fingerprint_id,
+                                                  ta_sub.fingerprint_id                                                     AS transaction_fingerprint_id,
+                                                  ta_sub.app_name
+                                           FROM system.transaction_activity ta_sub WHERE ta_sub.aggregated_ts = '2023-04-10 16:00:00.000000 +00:00') ta
+                                        	 LEFT OUTER JOIN (select fingerprint_id,
+                                                                      app_name,
+                                                                      aggregated_ts
+                                                               FROM system.statement_activity WHERE aggregated_ts = '2023-04-10 16:00:00.000000 +00:00') sa
+                                                              ON sa.fingerprint_id = ta.fingerprint_id AND
+                                                                 sa.app_name = ta.app_name AND
+                                                                 ta.aggregated_ts = sa.aggregated_ts
+                                     WHERE sa.fingerprint_id is null
+																		 GROUP BY ta.fingerprint_id, ta.app_name)
+UPSERT INTO system.public.statement_activity
+(aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name,
+ agg_interval, metadata, statistics, plan, index_recommendations, execution_count,
+ execution_total_seconds, execution_total_cluster_seconds,
+ contention_time_avg_seconds,
+ cpu_sql_avg_nanos,
+ service_latency_avg_seconds, service_latency_p99_seconds)
+(SELECT aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    agg_interval,
+    metadata,
+    statistics,
+    plan,
+    index_recommendations,
+    (statistics -> 'execution_statistics' ->> 'cnt')::int,
+    ((statistics -> 'execution_statistics' ->> 'cnt')::float) *
+    ((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float),
+    100 AS execution_total_cluster_seconds,
+    COALESCE ((statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::float, 0),
+    COALESCE ((statistics -> 'execution_statistics' -> 'cpu_sql_nanos' ->> 'mean')::float, 0),
+    (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float,
+    COALESCE ((statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::float, 0)
+FROM (SELECT max(ss.aggregated_ts) AS aggregated_ts,
+    ss.fingerprint_id,
+    ss.transaction_fingerprint_id,
+    ss.plan_hash,
+    ss.app_name,
+    ss.agg_interval,
+    crdb_internal.merge_stats_metadata(array_agg(ss.metadata)) AS metadata,
+    crdb_internal.merge_statement_stats(array_agg(ss.statistics)) AS statistics,
+    ss.plan,
+    ss.index_recommendations
+    FROM system.public.statement_statistics ss
+    INNER JOIN missed_stmt_ids_from_txn_activity ON missed_stmt_ids_from_txn_activity.app_name = ss.app_name AND missed_stmt_ids_from_txn_activity.fingerprint_id = ss.fingerprint_id
+    WHERE aggregated_ts = '2023-04-10 16:00:00.000000 +00:00'
+		GROUP BY ss.app_name,
+		 ss.fingerprint_id,
+		 ss.transaction_fingerprint_id,
+		 ss.plan_hash,
+		 ss.agg_interval,
+		 ss.plan,
+		 ss.index_recommendations));
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: statement_activity(aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
+│ auto commit
+│ arbiter indexes: primary
+│
+└── • project
+    │ columns: (max, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds, agg_interval, metadata, statistics, plan, index_recommendations, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", aggregated_ts)
+    │
+    └── • lookup join (left outer)
+        │ columns: (int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, plan, index_recommendations, max, metadata, statistics, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
+        │ estimated row count: 7 (missing stats)
+        │ table: statement_activity@primary
+        │ equality: (max, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name) = (aggregated_ts,fingerprint_id,transaction_fingerprint_id,plan_hash,app_name)
+        │ equality cols are key
+        │
+        └── • distinct
+            │ columns: (int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, plan, index_recommendations, max, metadata, statistics)
+            │ estimated row count: 7 (missing stats)
+            │ distinct on: fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, max
+            │ nulls are distinct
+            │ error on duplicate
+            │
+            └── • render
+                │ columns: (int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, plan, index_recommendations, max, metadata, statistics)
+                │ render int8: ((statistics->'execution_statistics')->>'cnt')::INT8
+                │ render ?column?: ((statistics->'execution_statistics')->>'cnt')::FLOAT8 * (((statistics->'statistics')->'svcLat')->>'mean')::FLOAT8
+                │ render execution_total_cluster_seconds: 100.0
+                │ render coalesce: COALESCE((((statistics->'execution_statistics')->'contentionTime')->>'mean')::FLOAT8, 0.0)
+                │ render coalesce: COALESCE((((statistics->'execution_statistics')->'cpu_sql_nanos')->>'mean')::FLOAT8, 0.0)
+                │ render float8: (((statistics->'statistics')->'svcLat')->>'mean')::FLOAT8
+                │ render coalesce: COALESCE((((statistics->'statistics')->'latencyInfo')->>'p99')::FLOAT8, 0.0)
+                │ render fingerprint_id: fingerprint_id
+                │ render transaction_fingerprint_id: transaction_fingerprint_id
+                │ render plan_hash: plan_hash
+                │ render app_name: app_name
+                │ render agg_interval: agg_interval
+                │ render plan: plan
+                │ render index_recommendations: index_recommendations
+                │ render max: max
+                │ render metadata: metadata
+                │ render statistics: statistics
+                │
+                └── • render
+                    │ columns: (metadata, statistics, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, plan, index_recommendations, max)
+                    │ render metadata: crdb_internal.merge_stats_metadata(array_agg)
+                    │ render statistics: crdb_internal.merge_statement_stats(array_agg)
+                    │ render fingerprint_id: fingerprint_id
+                    │ render transaction_fingerprint_id: transaction_fingerprint_id
+                    │ render plan_hash: plan_hash
+                    │ render app_name: app_name
+                    │ render agg_interval: agg_interval
+                    │ render plan: plan
+                    │ render index_recommendations: index_recommendations
+                    │ render max: max
+                    │
+                    └── • group (hash)
+                        │ columns: (fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, plan, index_recommendations, max, array_agg, array_agg)
+                        │ estimated row count: 7 (missing stats)
+                        │ aggregate 0: max(aggregated_ts)
+                        │ aggregate 1: array_agg(metadata)
+                        │ aggregate 2: array_agg(statistics)
+                        │ group by: fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, plan, index_recommendations
+                        │
+                        └── • project
+                            │ columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations)
+                            │
+                            └── • hash join (inner)
+                                │ columns: (fingerprint_id, app_name, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations)
+                                │ estimated row count: 7 (missing stats)
+                                │ equality: (app_name, fingerprint_id) = (app_name, fingerprint_id)
+                                │ left cols are key
+                                │
+                                ├── • render
+                                │   │ columns: (fingerprint_id, app_name)
+                                │   │ render fingerprint_id: fingerprint_id
+                                │   │ render app_name: app_name
+                                │   │
+                                │   └── • distinct
+                                │       │ columns: (app_name, fingerprint_id)
+                                │       │ estimated row count: 64 (missing stats)
+                                │       │ distinct on: app_name, fingerprint_id
+                                │       │
+                                │       └── • project
+                                │           │ columns: (app_name, fingerprint_id)
+                                │           │
+                                │           └── • filter
+                                │               │ columns: (fingerprint_id, aggregated_ts, app_name, aggregated_ts, fingerprint_id, app_name)
+                                │               │ estimated row count: 89 (missing stats)
+                                │               │ filter: fingerprint_id IS NULL
+                                │               │
+                                │               └── • hash join (left outer)
+                                │                   │ columns: (fingerprint_id, aggregated_ts, app_name, aggregated_ts, fingerprint_id, app_name)
+                                │                   │ estimated row count: 100 (missing stats)
+                                │                   │ equality: (fingerprint_id, app_name, aggregated_ts) = (fingerprint_id, app_name, aggregated_ts)
+                                │                   │
+                                │                   ├── • render
+                                │                   │   │ columns: (fingerprint_id, aggregated_ts, app_name)
+                                │                   │   │ render fingerprint_id: decode(jsonb_array_elements_text, 'hex')
+                                │                   │   │ render aggregated_ts: aggregated_ts
+                                │                   │   │ render app_name: app_name
+                                │                   │   │
+                                │                   │   └── • project set
+                                │                   │       │ columns: (aggregated_ts, app_name, metadata, jsonb_array_elements_text)
+                                │                   │       │ estimated row count: 100 (missing stats)
+                                │                   │       │ render 0: jsonb_array_elements_text(metadata->'stmtFingerprintIDs')
+                                │                   │       │
+                                │                   │       └── • scan
+                                │                   │             columns: (aggregated_ts, app_name, metadata)
+                                │                   │             estimated row count: 10 (missing stats)
+                                │                   │             table: transaction_activity@primary
+                                │                   │             spans: /2023-04-10T16:00:00Z-/2023-04-10T16:00:00.000000001Z
+                                │                   │
+                                │                   └── • scan
+                                │                         columns: (aggregated_ts, fingerprint_id, app_name)
+                                │                         estimated row count: 10 (missing stats)
+                                │                         table: statement_activity@execution_count_idx
+                                │                         spans: /2023-04-10T16:00:00Z-/2023-04-10T16:00:00.000000001Z
+                                │
+                                └── • scan
+                                      columns: (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations)
+                                      estimated row count: 10 (missing stats)
+                                      table: statement_statistics@primary
+                                      spans: /0/2023-04-10T16:00:00Z-/0/2023-04-10T16:00:00.000000001Z /1/2023-04-10T16:00:00Z-/1/2023-04-10T16:00:00.000000001Z /2/2023-04-10T16:00:00Z-/2/2023-04-10T16:00:00.000000001Z /3/2023-04-10T16:00:00Z-/3/2023-04-10T16:00:00.000000001Z /4/2023-04-10T16:00:00Z-/4/2023-04-10T16:00:00.000000001Z /5/2023-04-10T16:00:00Z-/5/2023-04-10T16:00:00.000000001Z /6/2023-04-10T16:00:00Z-/6/2023-04-10T16:00:00.000000001Z /7/2023-04-10T16:00:00Z-/7/2023-04-10T16:00:00.000000001Z
