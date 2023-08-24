@@ -13,6 +13,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -171,4 +172,32 @@ func TestCustomQuery(t *testing.T) {
 	executeAllCustomQuerys(t, sqlDB, zipInternalTablesPerCluster)
 	executeAllCustomQuerys(t, sqlDB, zipInternalTablesPerNode)
 	executeAllCustomQuerys(t, sqlDB, zipSystemTables)
+}
+
+func executeSelectOnNonSensitiveColumns(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, tableRegistry DebugZipTableRegistry) {
+
+	for table, regConfig := range tableRegistry {
+		if len(regConfig.nonSensitiveCols) != 0 {
+			columns := strings.Join(regConfig.nonSensitiveCols[:], ",")
+			rows := sqlDB.Query(t, fmt.Sprintf("SELECT %s FROM %s", columns, table))
+			require.NoError(t, rows.Err(), "failed to select non sensitive columns on table %s", table)
+		}
+	}
+}
+
+func TestNonSensitiveColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{},
+	})
+	defer cluster.Stopper().Stop(context.Background())
+	testConn := cluster.ServerConn(0 /* idx */)
+	sqlDB := sqlutils.MakeSQLRunner(testConn)
+
+	executeSelectOnNonSensitiveColumns(t, sqlDB, zipInternalTablesPerCluster)
+	executeSelectOnNonSensitiveColumns(t, sqlDB, zipInternalTablesPerNode)
+	executeSelectOnNonSensitiveColumns(t, sqlDB, zipSystemTables)
 }
