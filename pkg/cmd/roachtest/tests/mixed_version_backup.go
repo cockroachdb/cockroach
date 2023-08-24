@@ -72,6 +72,11 @@ const (
 
 	// the test will not pause a backup job more than `maxPauses` times.
 	maxPauses = 3
+
+	// mixedVersionRestore is the description passed to
+	// `verifyBackupCollection` when the restore is happening in
+	// mixed-version.
+	mixedVersionRestore = "mixed-version"
 )
 
 var (
@@ -88,6 +93,10 @@ var (
 
 	v231 = version.MustParse("v23.1.0")
 	v222 = version.MustParse("v22.2.0")
+	// minSupportedV22RestoreVersion is the 22.2 version before which we
+	// do not attempt to restore backups taken in mixed-version as they
+	// might fail for known reasons. For more details, see #105900.
+	minSupportedV22RestoreVersion = version.MustParse("v22.2.9")
 
 	// systemTablesInFullClusterBackup includes all system tables that
 	// are included as part of a full cluster backup. It should include
@@ -981,6 +990,16 @@ func (bc *backupCollection) encryptionOption() *encryptionPassphrase {
 	}
 
 	return nil
+}
+
+func (bc *backupCollection) hasRevisionHistory() bool {
+	for _, opt := range bc.options {
+		if _, ok := opt.(revisionHistory); ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 // backupCollectionDesc builds a string that describes how a backup
@@ -1897,6 +1916,45 @@ func (mvb *mixedVersionBackup) collectFailureArtifacts(
 	return fmt.Errorf("%w (artifacts collected in %s)", restoreErr, dirName), nil
 }
 
+// shouldSkipRestore returns whether restoring in the current version
+// is not supported and should be skipped (typically because of known
+// bugs or limitations in older versions). If it returns `true`, the
+// second return value will include the reason for skipping the
+// restore, which should be logged by the caller.
+func (mvb *mixedVersionBackup) shouldSkipRestore(
+	h *mixedversion.Helper, v string, collection *backupCollection,
+) (bool, string) {
+	var activeVersion *version.Version
+	switch v {
+	case clusterupgrade.MainVersion:
+		// This will only be `MainVersion` when the every node in the
+		// cluster is running current binaries, and the cluster version
+		// matches the binary version.
+		activeVersion = nil
+	case mixedVersionRestore:
+		// mixedVersionRestore indicates that the restore is happening
+		// while in mixed-version state. The active version is the lowest
+		// binary version in any node in the cluster.
+		activeVersion = h.LowestBinaryVersion()
+	default:
+		// Otherwise, `v` should be the version that every node in the
+		// cluster is running, and the cluster version matches that binary
+		// version.
+		activeVersion = version.MustParse("v" + v)
+	}
+
+	if activeVersion != nil {
+		// This is in accordance with TA 101963.
+		is222 := activeVersion.Major() == 22 && activeVersion.Minor() == 2
+		if is222 && collection.hasRevisionHistory() && !activeVersion.AtLeast(minSupportedV22RestoreVersion) {
+			reason := fmt.Sprintf("backup has revision history and %s < %s", activeVersion, minSupportedV22RestoreVersion)
+			return true, reason
+		}
+	}
+
+	return false, ""
+}
+
 // verifyBackupCollection restores the backup collection passed and
 // verifies that the contents after the restore match the contents
 // when the backup was taken.
@@ -1910,6 +1968,11 @@ func (mvb *mixedVersionBackup) verifyBackupCollection(
 ) error {
 	v := clusterupgrade.VersionMsg(version)
 	l.Printf("%s: verifying %s", v, collection.name)
+
+	if skip, reason := mvb.shouldSkipRestore(h, version, collection); skip {
+		l.Printf("skipping restore because %s", reason)
+		return nil
+	}
 
 	// Defaults for the database where the backup will be restored,
 	// along with the expected names of the tables after restore.
@@ -2025,7 +2088,7 @@ func (mvb *mixedVersionBackup) verifySomeBackups(
 
 	l.Printf("verifying %d out of %d backups in mixed version", len(toBeRestored), len(mvb.collections))
 	for _, collection := range toBeRestored {
-		if err := mvb.verifyBackupCollection(ctx, l, rng, h, collection, "mixed-version"); err != nil {
+		if err := mvb.verifyBackupCollection(ctx, l, rng, h, collection, mixedVersionRestore); err != nil {
 			return err
 		}
 	}
