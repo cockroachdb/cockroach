@@ -553,6 +553,7 @@ func (ts *testState) usage(*testing.T, *datadriven.TestData, cmdArgs) string {
 	return fmt.Sprintf(""+
 		"RU:  %.2f\n"+
 		"KVRU:  %.2f\n"+
+		"CrossRegionNetworkRU:  %.2f\n"+
 		"Reads:  %d requests in %d batches (%d bytes)\n"+
 		"Writes:  %d requests in %d batches (%d bytes)\n"+
 		"SQL Pods CPU seconds:  %.2f\n"+
@@ -561,6 +562,7 @@ func (ts *testState) usage(*testing.T, *datadriven.TestData, cmdArgs) string {
 		"ExternalIO ingress: %d bytes\n",
 		c.RU,
 		c.KVRU,
+		c.CrossRegionNetworkRU,
 		c.ReadRequests,
 		c.ReadBatches,
 		c.ReadBytes,
