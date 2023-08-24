@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -48,22 +49,30 @@ import (
 
 func TestExportCmd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
-	defer tc.Stopper().Stop(ctx)
-	kvDB := tc.Server(0).DB()
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109429),
+		ExternalIODir:     dir,
+	})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+
+	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
 
 	export := func(
 		t *testing.T, start hlc.Timestamp, mvccFilter kvpb.MVCCFilter, maxResponseSSTBytes int64,
 	) (kvpb.Response, *kvpb.Error) {
+		startKey := ts.Codec().TablePrefix(bootstrap.TestingUserDescID(0))
+		endKey := startKey.PrefixEnd()
 		req := &kvpb.ExportRequest{
-			RequestHeader:  kvpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
+			RequestHeader:  kvpb.RequestHeader{Key: startKey, EndKey: endKey},
 			StartTime:      start,
 			MVCCFilter:     mvccFilter,
-			TargetFileSize: batcheval.ExportRequestTargetFileSize.Get(&tc.Server(0).ClusterSettings().SV),
+			TargetFileSize: batcheval.ExportRequestTargetFileSize.Get(&ts.ClusterSettings().SV),
 		}
 		var h kvpb.Header
 		h.TargetBytes = maxResponseSSTBytes
@@ -172,7 +181,7 @@ func TestExportCmd(t *testing.T) {
 			"unexpected ResumeReason in latest export")
 	}
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE DATABASE mvcclatest`)
 	sqlDB.Exec(t, `CREATE TABLE mvcclatest.export (id INT PRIMARY KEY, value INT)`)
 	tableID := descpb.ID(sqlutils.QueryTableID(
@@ -455,6 +464,10 @@ func TestExportRequestWithCPULimitResumeSpans(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	s := tc.ApplicationLayer(0)
+
+	sql.SecondaryTenantSplitAtEnabled.Override(context.Background(), &s.ClusterSettings().SV, true)
+	sql.SecondaryTenantScatterEnabled.Override(context.Background(), &s.ClusterSettings().SV, true)
+
 	sqlDB := tc.Conns[0]
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -486,6 +499,7 @@ func TestExportRequestWithCPULimitResumeSpans(t *testing.T) {
 
 func TestExportGCThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
@@ -751,6 +765,8 @@ func assertEqualKVs(
 
 func TestRandomKeyAndTimestampExport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	storage.DisableMetamorphicSimpleValueEncoding(t)
 
 	ctx := context.Background()
