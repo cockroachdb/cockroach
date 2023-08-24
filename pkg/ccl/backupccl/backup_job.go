@@ -233,7 +233,7 @@ func backup(
 			// Currently the granularity of backup progress is the % of spans
 			// exported. Would improve accuracy if we tracked the actual size of each
 			// file.
-			return progressLogger.Loop(ctx, requestFinishedCh)
+			return errors.Wrap(progressLogger.Loop(ctx, requestFinishedCh), "updating job progress")
 		}
 	}
 
@@ -340,7 +340,7 @@ func backup(
 	}
 
 	runBackup := func(ctx context.Context) error {
-		return distBackup(
+		return errors.Wrapf(distBackup(
 			ctx,
 			execCtx,
 			planCtx,
@@ -348,7 +348,7 @@ func backup(
 			progCh,
 			tracingAggCh,
 			backupSpecs,
-		)
+		), "exporting %d ranges", errors.Safe(numTotalSpans))
 	}
 
 	if err := ctxgroup.GoAndWait(
@@ -359,7 +359,7 @@ func backup(
 		tracingAggLoop,
 		runBackup,
 	); err != nil {
-		return roachpb.RowCount{}, 0, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
+		return roachpb.RowCount{}, 0, err
 	}
 
 	backupID := uuid.MakeV4()

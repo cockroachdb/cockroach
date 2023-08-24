@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -104,11 +105,11 @@ func (jpl *ChunkProgressLogger) Loop(ctx context.Context, chunkCh <-chan struct{
 			if !ok {
 				return nil
 			}
-			if err := jpl.chunkFinished(ctx); err != nil {
+			if err := jpl.chunkFinished(ctx); err != nil && !startup.IsRetryableReplicaError(err) {
 				return err
 			}
 			if jpl.completedChunks == jpl.expectedChunks {
-				if err := jpl.batcher.Done(ctx); err != nil {
+				if err := jpl.batcher.Done(ctx); err != nil && !startup.IsRetryableReplicaError(err) {
 					return err
 				}
 			}
