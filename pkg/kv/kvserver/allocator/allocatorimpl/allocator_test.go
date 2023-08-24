@@ -51,7 +51,7 @@ import (
 	"go.etcd.io/raft/v3/tracker"
 )
 
-var simpleSpanConfig = roachpb.SpanConfig{
+var simpleSpanConfig = &roachpb.SpanConfig{
 	NumReplicas: 1,
 	Constraints: []roachpb.ConstraintsConjunction{
 		{
@@ -63,21 +63,21 @@ var simpleSpanConfig = roachpb.SpanConfig{
 	},
 }
 
-var multiDCConfigSSD = roachpb.SpanConfig{
+var multiDCConfigSSD = &roachpb.SpanConfig{
 	NumReplicas: 2,
 	Constraints: []roachpb.ConstraintsConjunction{
 		{Constraints: []roachpb.Constraint{{Value: "ssd", Type: roachpb.Constraint_REQUIRED}}},
 	},
 }
 
-var multiDCConfigConstrainToA = roachpb.SpanConfig{
+var multiDCConfigConstrainToA = &roachpb.SpanConfig{
 	NumReplicas: 2,
 	Constraints: []roachpb.ConstraintsConjunction{
 		{Constraints: []roachpb.Constraint{{Value: "a", Type: roachpb.Constraint_REQUIRED}}},
 	},
 }
 
-var multiDCConfigUnsatisfiableVoterConstraints = roachpb.SpanConfig{
+var multiDCConfigUnsatisfiableVoterConstraints = &roachpb.SpanConfig{
 	NumReplicas: 2,
 	VoterConstraints: []roachpb.ConstraintsConjunction{
 		{Constraints: []roachpb.Constraint{{Value: "doesNotExist", Type: roachpb.Constraint_REQUIRED}}},
@@ -86,7 +86,7 @@ var multiDCConfigUnsatisfiableVoterConstraints = roachpb.SpanConfig{
 
 // multiDCConfigVoterAndNonVoter prescribes that one voting replica be placed in
 // DC "b" and one non-voting replica be placed in DC "a".
-var multiDCConfigVoterAndNonVoter = roachpb.SpanConfig{
+var multiDCConfigVoterAndNonVoter = &roachpb.SpanConfig{
 	NumReplicas: 2,
 	Constraints: []roachpb.ConstraintsConjunction{
 		// Constrain the non-voter to "a".
@@ -99,8 +99,8 @@ var multiDCConfigVoterAndNonVoter = roachpb.SpanConfig{
 }
 
 // emptySpanConfig returns the empty span configuration.
-func emptySpanConfig() roachpb.SpanConfig {
-	return roachpb.SpanConfig{}
+func emptySpanConfig() *roachpb.SpanConfig {
+	return &roachpb.SpanConfig{}
 }
 
 func testingStartTime() time.Time {
@@ -603,7 +603,7 @@ func TestAllocatorAllocateVoterIOOverloadCheck(t *testing.T) {
 	type testCase struct {
 		name   string
 		stores []*roachpb.StoreDescriptor
-		conf   roachpb.SpanConfig
+		conf   *roachpb.SpanConfig
 		// The expected store to add when replicas are alive. The allocator should
 		// pick one of the best stores, with low range count.
 		expectedTargetIfAlive roachpb.StoreID
@@ -792,7 +792,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	result, _, err := a.AllocateVoter(
 		ctx,
 		sp,
-		roachpb.SpanConfig{
+		&roachpb.SpanConfig{
 			NumReplicas: 0,
 			Constraints: []roachpb.ConstraintsConjunction{
 				{
@@ -853,7 +853,7 @@ func TestAllocatorReplaceDecommissioningReplica(t *testing.T) {
 	result, _, err := a.AllocateVoter(
 		ctx,
 		oSp,
-		roachpb.SpanConfig{
+		&roachpb.SpanConfig{
 			NumReplicas: 3,
 			Constraints: []roachpb.ConstraintsConjunction{
 				{
@@ -913,7 +913,7 @@ func TestAllocatorReplaceFailsOnConstrainedDecommissioningReplica(t *testing.T) 
 	_, _, err := a.AllocateVoter(
 		ctx,
 		oSp,
-		roachpb.SpanConfig{
+		&roachpb.SpanConfig{
 			NumReplicas: 3,
 			Constraints: []roachpb.ConstraintsConjunction{
 				{
@@ -2274,15 +2274,15 @@ func TestAllocatorTransferLeaseTargetConstraints(t *testing.T) {
 		}
 	}
 
-	constraints := func(value string) roachpb.SpanConfig {
-		return roachpb.SpanConfig{
+	constraints := func(value string) *roachpb.SpanConfig {
+		return &roachpb.SpanConfig{
 			NumReplicas: 1,
 			Constraints: constraint(value),
 		}
 	}
 
-	voterConstraints := func(value string) roachpb.SpanConfig {
-		return roachpb.SpanConfig{
+	voterConstraints := func(value string) *roachpb.SpanConfig {
+		return &roachpb.SpanConfig{
 			NumReplicas:      1,
 			VoterConstraints: constraint(value),
 		}
@@ -2292,7 +2292,7 @@ func TestAllocatorTransferLeaseTargetConstraints(t *testing.T) {
 		existing    []roachpb.ReplicaDescriptor
 		leaseholder roachpb.StoreID
 		expected    roachpb.StoreID
-		conf        roachpb.SpanConfig
+		conf        *roachpb.SpanConfig
 	}{
 		{existing: existing, leaseholder: 5, expected: 1, conf: constraints("1")},
 		{existing: existing, leaseholder: 5, expected: 1, conf: voterConstraints("1")},
@@ -2386,7 +2386,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 		leaseholder      roachpb.StoreID
 		excludeLeaseRepl bool
 		expected         roachpb.StoreID
-		conf             roachpb.SpanConfig
+		conf             *roachpb.SpanConfig
 	}{
 		// No existing lease holder, nothing to do.
 		{existing: existing, leaseholder: 0, excludeLeaseRepl: false, expected: 0, conf: emptySpanConfig()},
@@ -2405,13 +2405,13 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 		// Verify that lease preferences dont impact draining.
 		// If the store that is within the lease preferences (store 1) is draining,
 		// we'd like the lease to stay on the next best store (which is store 2).
-		{existing: existing, leaseholder: 2, excludeLeaseRepl: false, expected: 0, conf: roachpb.SpanConfig{LeasePreferences: preferDC1}},
+		{existing: existing, leaseholder: 2, excludeLeaseRepl: false, expected: 0, conf: &roachpb.SpanConfig{LeasePreferences: preferDC1}},
 		// If the current lease on store 2 needs to be shed (indicated by
 		// excludeLeaseRepl = false), and store 1 is draining, then store 3
 		// is the only reasonable lease transfer target.
-		{existing: existing, leaseholder: 2, excludeLeaseRepl: true, expected: 3, conf: roachpb.SpanConfig{LeasePreferences: preferDC1}},
-		{existing: existing, leaseholder: 2, excludeLeaseRepl: false, expected: 3, conf: roachpb.SpanConfig{LeasePreferences: preferRegion1}},
-		{existing: existing, leaseholder: 2, excludeLeaseRepl: true, expected: 3, conf: roachpb.SpanConfig{LeasePreferences: preferRegion1}},
+		{existing: existing, leaseholder: 2, excludeLeaseRepl: true, expected: 3, conf: &roachpb.SpanConfig{LeasePreferences: preferDC1}},
+		{existing: existing, leaseholder: 2, excludeLeaseRepl: false, expected: 3, conf: &roachpb.SpanConfig{LeasePreferences: preferRegion1}},
+		{existing: existing, leaseholder: 2, excludeLeaseRepl: true, expected: 3, conf: &roachpb.SpanConfig{LeasePreferences: preferRegion1}},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -2958,7 +2958,7 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			conf := roachpb.SpanConfig{LeasePreferences: c.preferences}
+			conf := &roachpb.SpanConfig{LeasePreferences: c.preferences}
 			result := a.ShouldTransferLease(
 				ctx,
 				sp,
@@ -3088,7 +3088,7 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			conf := roachpb.SpanConfig{LeasePreferences: c.preferences}
+			conf := &roachpb.SpanConfig{LeasePreferences: c.preferences}
 			target := a.TransferLeaseTarget(
 				ctx,
 				sp,
@@ -3251,7 +3251,7 @@ func TestAllocatorConstraintsAndVoterConstraints(t *testing.T) {
 		name                                          string
 		existingVoters, existingNonVoters             []roachpb.ReplicaDescriptor
 		stores                                        []*roachpb.StoreDescriptor
-		conf                                          roachpb.SpanConfig
+		conf                                          *roachpb.SpanConfig
 		expectedVoters, expectedNonVoters             []roachpb.StoreID
 		shouldVoterAllocFail, shouldNonVoterAllocFail bool
 		expError                                      string
@@ -3790,7 +3790,7 @@ func TestAllocatorNonVoterAllocationExcludesVoterNodes(t *testing.T) {
 		name                              string
 		existingVoters, existingNonVoters []roachpb.ReplicaDescriptor
 		stores                            []*roachpb.StoreDescriptor
-		conf                              roachpb.SpanConfig
+		conf                              *roachpb.SpanConfig
 		expected                          roachpb.StoreID
 		shouldFail                        bool
 		expError                          string
@@ -4360,7 +4360,7 @@ func TestAllocatorRebalanceNonVoters(t *testing.T) {
 	type testCase struct {
 		name                                      string
 		stores                                    []*roachpb.StoreDescriptor
-		conf                                      roachpb.SpanConfig
+		conf                                      *roachpb.SpanConfig
 		existingVoters, existingNonVoters         []roachpb.ReplicaDescriptor
 		expectNoAction                            bool
 		expectedRemoveTargets, expectedAddTargets []roachpb.StoreID
@@ -4511,7 +4511,7 @@ func TestAllocatorRebalanceIOOverloadCheck(t *testing.T) {
 	type testCase struct {
 		name                                      string
 		stores                                    []*roachpb.StoreDescriptor
-		conf                                      roachpb.SpanConfig
+		conf                                      *roachpb.SpanConfig
 		existingVoters                            []roachpb.ReplicaDescriptor
 		expectNoAction                            bool
 		expectedRemoveTargets, expectedAddTargets []roachpb.StoreID
@@ -4637,7 +4637,7 @@ func TestVotersCanRebalanceToNonVoterStores(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(multiDiversityDCStores, t)
 
-	conf := roachpb.SpanConfig{
+	conf := &roachpb.SpanConfig{
 		NumReplicas: 4,
 		NumVoters:   2,
 		// We constrain 2 voting replicas to datacenter "a" (stores 1 and 2) but
@@ -5503,7 +5503,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			}
 		}
 		var rangeUsageInfo allocator.RangeUsageInfo
-		conf := roachpb.SpanConfig{
+		conf := &roachpb.SpanConfig{
 			Constraints: tc.constraints,
 			NumReplicas: tc.numReplicas,
 		}
@@ -6649,7 +6649,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 
 	lastPriority := float64(999999999)
 	for i, tcase := range testCases {
-		action, priority := a.ComputeAction(ctx, sp, tcase.conf, &tcase.desc)
+		action, priority := a.ComputeAction(ctx, sp, &tcase.conf, &tcase.desc)
 		if tcase.expectedAction != action {
 			t.Errorf("Test case %d expected action %q, got action %q",
 				i, allocatorActionNames[tcase.expectedAction], allocatorActionNames[action])
@@ -6746,7 +6746,7 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 
 	for i, tcase := range testCases {
 		mockStorePool(sp, tcase.live, nil, tcase.dead, nil, nil, nil)
-		action, _ := a.ComputeAction(ctx, sp, conf, &tcase.desc)
+		action, _ := a.ComputeAction(ctx, sp, &conf, &tcase.desc)
 		if tcase.expectedAction != action {
 			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
 		}
@@ -6852,7 +6852,7 @@ func TestAllocatorComputeActionWithStorePoolRemoveDead(t *testing.T) {
 
 				return sp.NodeLivenessFn(nid)
 			}, getNumNodes)
-			action, _ := a.ComputeAction(ctx, oSp, conf, &tcase.desc)
+			action, _ := a.ComputeAction(ctx, oSp, &conf, &tcase.desc)
 			if tcase.expectedAction != action {
 				t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
 			}
@@ -6926,7 +6926,7 @@ func TestAllocatorComputeActionSuspect(t *testing.T) {
 
 	for i, tcase := range testCases {
 		mockStorePool(sp, tcase.live, nil, nil, nil, nil, tcase.suspect)
-		action, _ := a.ComputeAction(ctx, sp, conf, &tcase.desc)
+		action, _ := a.ComputeAction(ctx, sp, &conf, &tcase.desc)
 		if tcase.expectedAction != action {
 			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
 		}
@@ -7205,7 +7205,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 
 	for i, tcase := range testCases {
 		mockStorePool(sp, tcase.live, nil, tcase.dead, tcase.decommissioning, tcase.decommissioned, nil)
-		action, _ := a.ComputeAction(ctx, sp, tcase.conf, &tcase.desc)
+		action, _ := a.ComputeAction(ctx, sp, &tcase.conf, &tcase.desc)
 		if tcase.expectedAction != action {
 			t.Errorf("Test case %d expected action %s, got action %s", i, tcase.expectedAction, action)
 			continue
@@ -7503,7 +7503,7 @@ func TestAllocatorComputeActionWithStorePoolDecommission(t *testing.T) {
 			oSp := storepool.NewOverrideStorePool(sp,
 				storepool.OverrideNodeLivenessFunc(overrideLivenessMap, sp.NodeLivenessFn), getNumNodes,
 			)
-			action, _ := a.ComputeAction(ctx, oSp, tcase.conf, &tcase.desc)
+			action, _ := a.ComputeAction(ctx, oSp, &tcase.conf, &tcase.desc)
 			if tcase.expectedAction != action {
 				t.Errorf("Test case %d expected action %s, got action %s", i, tcase.expectedAction, action)
 			}
@@ -7539,7 +7539,7 @@ func TestAllocatorRemoveLearner(t *testing.T) {
 	defer stopper.Stop(ctx)
 	live, dead := []roachpb.StoreID{1, 2}, []roachpb.StoreID{3}
 	mockStorePool(sp, live, nil, dead, nil, nil, nil)
-	action, _ := a.ComputeAction(ctx, sp, conf, &rangeWithLearnerDesc)
+	action, _ := a.ComputeAction(ctx, sp, &conf, &rangeWithLearnerDesc)
 	require.Equal(t, AllocatorRemoveLearner, action)
 }
 
@@ -7761,7 +7761,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 				effectiveNumReplicas := GetNeededVoters(conf.NumReplicas, clusterNodes)
 				require.Equal(t, c.expectedNumReplicas, effectiveNumReplicas, "clusterNodes=%d", clusterNodes)
 
-				action, _ := a.ComputeAction(ctx, sp, conf, &desc)
+				action, _ := a.ComputeAction(ctx, sp, &conf, &desc)
 				require.Equal(t, c.expectedAction.String(), action.String())
 			})
 		}
@@ -7845,7 +7845,7 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	a := MakeAllocator(nil, false, nil, nil)
-	action, priority := a.ComputeAction(context.Background(), nil, roachpb.SpanConfig{}, nil)
+	action, priority := a.ComputeAction(context.Background(), nil, &roachpb.SpanConfig{}, nil)
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
 	}
@@ -8175,10 +8175,11 @@ func TestAllocatorRebalanceDeterminism(t *testing.T) {
 			var rangeUsageInfo allocator.RangeUsageInfo
 			// Ensure that we wouldn't normally rebalance when all stores have the same
 			// replica count.
+			sc := roachpb.TestingDefaultSpanConfig()
 			add, remove, _, _ := a.RebalanceVoter(
 				ctx,
 				sp,
-				roachpb.TestingDefaultSpanConfig(),
+				&sc,
 				nil,
 				replicas(1, 2, 5),
 				nil,
@@ -8378,7 +8379,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 			actual, _, _, ok := a.RebalanceVoter(
 				ctx,
 				sp,
-				roachpb.SpanConfig{Constraints: []roachpb.ConstraintsConjunction{constraints}},
+				&roachpb.SpanConfig{Constraints: []roachpb.ConstraintsConjunction{constraints}},
 				nil,
 				existingReplicas,
 				nil,
@@ -9066,7 +9067,7 @@ func TestNonVoterPrioritizationInVoterAdditions(t *testing.T) {
 	testCases := []struct {
 		existingVoters         []roachpb.ReplicaDescriptor
 		existingNonVoters      []roachpb.ReplicaDescriptor
-		spanConfig             roachpb.SpanConfig
+		spanConfig             *roachpb.SpanConfig
 		expectedTargetAllocate roachpb.ReplicationTarget
 	}{
 		// NB: Store 5 has a non-voter and range count 516 and store 4 can add a
@@ -9113,7 +9114,7 @@ func TestNonVoterPrioritizationInVoterAdditions(t *testing.T) {
 			existingNonVoters: []roachpb.ReplicaDescriptor{
 				{NodeID: 5, StoreID: 5},
 			},
-			spanConfig: roachpb.SpanConfig{
+			spanConfig: &roachpb.SpanConfig{
 				VoterConstraints: []roachpb.ConstraintsConjunction{
 					{
 						Constraints: []roachpb.Constraint{

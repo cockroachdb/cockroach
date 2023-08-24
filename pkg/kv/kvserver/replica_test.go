@@ -13465,7 +13465,7 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 		tc.repl,
 		tc.repl.Desc(),
 		tc.repl.SpanConfig(),
-		func(ctx context.Context, repl plan.LeaseCheckReplica, conf roachpb.SpanConfig) bool { return false },
+		func(ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig) bool { return false },
 		false, /* scatter */
 		true,  /* dryRun */
 	)
