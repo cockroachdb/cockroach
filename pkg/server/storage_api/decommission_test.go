@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/decommissioning"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -808,8 +809,8 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 
 	// Configure drain to immediately cancel SQL queries and jobs to speed up the
 	// test and avoid timeouts.
-	serverutils.SetClusterSetting(t, tc, "server.shutdown.query_wait", 0)
-	serverutils.SetClusterSetting(t, tc, "server.shutdown.jobs_wait", 0)
+	serverutils.SetClusterSetting(t, tc, string(server.QueryShutdownTimeout.Name()), 0)
+	serverutils.SetClusterSetting(t, tc, string(server.JobShutdownTimeout.Name()), 0)
 
 	scratchKey := tc.ScratchRange(t)
 	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)

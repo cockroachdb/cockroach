@@ -262,19 +262,18 @@ var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-// leaseTransferWait is the timeout for a single iteration of draining range leases.
-var leaseTransferWait = settings.RegisterDurationSetting(
+// LeaseTransferPerIterationTimeout is the timeout for a single iteration of draining range leases.
+var LeaseTransferPerIterationTimeout = settings.RegisterDurationSetting(
 	settings.SystemOnly,
-	leaseTransferWaitSettingName,
+	"server.shutdown.lease_transfer_wait",
 	"the timeout for a single iteration of the range lease transfer phase of draining "+
 		"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 		"after changing this setting)",
 	5*time.Second,
+	settings.WithName("server.shutdown.lease_transfer_iteration.timeout"),
 	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
-
-const leaseTransferWaitSettingName = "server.shutdown.lease_transfer_wait"
 
 // ExportRequestsLimit is the number of Export requests that can run at once.
 // Each extracts data from Pebble to an in-memory SST and returns it to the
@@ -1777,7 +1776,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					case <-transferCtx.Done():
 						// Context canceled: the timeout loop has decided we've
 						// done enough draining
-						// (server.shutdown.lease_transfer_wait).
+						// (server.shutdown.lease_transfer_iteration.timeout).
 						//
 						// We need this check here because each call of
 						// transferAllAway() traverses all stores/replicas without
@@ -1936,7 +1935,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 
 	// We've seen all the replicas once. Now we're going to iterate
 	// until they're all gone, up to the configured timeout.
-	transferTimeout := leaseTransferWait.Get(&s.cfg.Settings.SV)
+	transferTimeout := LeaseTransferPerIterationTimeout.Get(&s.cfg.Settings.SV)
 
 	drainLeasesOp := "transfer range leases"
 	if err := timeutil.RunWithTimeout(ctx, drainLeasesOp, transferTimeout,
@@ -1976,7 +1975,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 			// same time. If we see it on healthy ones, there's likely something to fix.
 			log.Warningf(ctx, "unable to drain cleanly within %s (cluster setting %s), "+
 				"service might briefly deteriorate if the node is terminated: %s",
-				transferTimeout, leaseTransferWaitSettingName, tErr.Cause())
+				transferTimeout, LeaseTransferPerIterationTimeout.Name(), tErr.Cause())
 		} else {
 			log.Warningf(ctx, "drain error: %+v", err)
 		}
