@@ -371,6 +371,7 @@ func registerRestore(r registry.Registry) {
 				dul := roachtestutil.NewDiskUsageLogger(t, c)
 				m.Go(dul.Runner)
 				m.Go(func(ctx context.Context) error {
+					defer dul.Done()
 					t.Status(`running restore`)
 					metricCollector := rd.initRestorePerfMetrics(ctx, durationGauge)
 					if err := rd.run(ctx, ""); err != nil {
