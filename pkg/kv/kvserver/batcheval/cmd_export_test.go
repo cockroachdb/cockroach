@@ -67,7 +67,7 @@ func TestExportCmd(t *testing.T) {
 		t *testing.T, start hlc.Timestamp, mvccFilter kvpb.MVCCFilter, maxResponseSSTBytes int64,
 	) (kvpb.Response, *kvpb.Error) {
 		startKey := ts.Codec().TablePrefix(bootstrap.TestingUserDescID(0))
-		endKey := startKey.PrefixEnd()
+		endKey := ts.Codec().TenantSpan().EndKey
 		req := &kvpb.ExportRequest{
 			RequestHeader:  kvpb.RequestHeader{Key: startKey, EndKey: endKey},
 			StartTime:      start,
