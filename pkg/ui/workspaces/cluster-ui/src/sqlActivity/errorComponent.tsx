@@ -18,6 +18,7 @@ const cx = classNames.bind(styles);
 interface SQLActivityErrorProps {
   statsType: string;
   error: Error;
+  sourceTables?: string[];
 }
 
 export function mergeErrors(errs: Error | Error[]): Error {
@@ -76,6 +77,13 @@ const LoadingError: React.FC<SQLActivityErrorProps> = props => {
     ? "a timeout"
     : "an unexpected error";
 
+  const tablesInfo =
+    props.sourceTables?.length == 1
+      ? `Source Table: ${props.sourceTables[0]}`
+      : props.sourceTables?.length > 1
+      ? `Source Tables: ${props.sourceTables.join(", ")}`
+      : "";
+
   return (
     <div>
       <div className={cx("row")}>
@@ -92,11 +100,17 @@ const LoadingError: React.FC<SQLActivityErrorProps> = props => {
       </div>
       <div className={cx("row-small")}>
         <br />
-        <span>{`Debug information: ${moment
-          .utc()
-          .format("YYYY.MM.DD HH:mm:ss")} utc; Error message: ${
-          props?.error?.message
-        }; URL: ${url};`}</span>
+        <span>
+          {`Debug information: ${moment
+            .utc()
+            .format("YYYY.MM.DD HH:mm:ss")} utc;`}
+          <br />
+          {`Error message: ${props?.error?.message};`}
+          <br />
+          {`URL: ${url};`}
+          <br />
+          {tablesInfo}
+        </span>
       </div>
     </div>
   );
