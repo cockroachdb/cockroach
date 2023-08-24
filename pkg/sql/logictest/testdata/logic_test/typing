@@ -273,3 +273,43 @@ SELECT ARRAY[]::TIMESTAMPTZ[] >
 query error pq: cannot determine type of empty array\. Consider casting to the desired type, for example ARRAY\[\]::int\[\]
 SELECT ARRAY[]::TIMESTAMPTZ[] <
        SOME (ARRAY[TIMESTAMPTZ '1969-12-29T21:20:13+01'], ARRAY[NULL]);
+
+# Regression test for #102110. Ensure CASE is typed correctly.
+statement ok
+CREATE TABLE t102110_1 (t TEXT);
+INSERT INTO t102110_1 VALUES ('tt');
+
+statement ok
+CREATE TABLE t102110_2 (c CHAR);
+INSERT INTO t102110_2 VALUES ('c');
+
+query T
+SELECT t102110_1.t FROM t102110_1, t102110_2
+WHERE t102110_1.t NOT BETWEEN t102110_1.t AND
+  (CASE WHEN NULL THEN t102110_2.c ELSE t102110_1.t END);
+----
+
+# IF is typed differently (Postgres does not support IF).
+query T
+SELECT t102110_1.t FROM t102110_1, t102110_2
+WHERE t102110_1.t NOT BETWEEN t102110_1.t AND
+  IF(NULL, t102110_2.c, t102110_1.t);
+----
+tt
+
+# TODO(#108360): implicit casts from STRING to CHAR should use bpchar.
+statement ok
+CREATE TABLE t108360_1 (t TEXT);
+INSERT INTO t108360_1 VALUES ('tt');
+
+statement ok
+CREATE TABLE t108360_2 (c CHAR);
+INSERT INTO t108360_2 VALUES ('c');
+
+# This returns one row with 'tt' in Postgres. The results are different because
+# Postgres casts t108360_1.t to bpchar rather than char.
+query T
+SELECT (CASE WHEN t108360_1.t > t108360_2.c THEN t108360_1.t ELSE t108360_2.c END)
+FROM t108360_1, t108360_2
+WHERE t108360_1.t = (CASE WHEN t108360_1.t > t108360_2.c THEN t108360_1.t ELSE t108360_2.c END);
+----

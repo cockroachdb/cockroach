@@ -579,11 +579,11 @@ RETURNING
   CASE c_credit WHEN 'BC' THEN "left"(c_data, 200) ELSE '' END
 ----
 project
- ├── columns: c_first:4 c_middle:5 c_last:6 c_street_1:7 c_street_2:8 c_city:9 c_state:10 c_zip:11 c_phone:12 c_since:13 c_credit:14 c_credit_lim:15 c_discount:16 c_balance:17 case:54
+ ├── columns: c_first:4 c_middle:5 c_last:6 c_street_1:7 c_street_2:8 c_city:9 c_state:10 c_zip:11 c_phone:12 c_since:13 c_credit:14 c_credit_lim:15 c_discount:16 c_balance:17 case:53
  ├── cardinality: [0 - 1]
  ├── volatile, mutations
  ├── key: ()
- ├── fd: ()-->(4-17,54)
+ ├── fd: ()-->(4-17,53)
  ├── update customer
  │    ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_middle:5 c_last:6 c_street_1:7 c_street_2:8 c_city:9 c_state:10 c_zip:11 c_phone:12 c_since:13 c_credit:14 c_credit_lim:15 c_discount:16 c_balance:17 c_data:21
  │    ├── fetch columns: c_id:24 c_d_id:25 c_w_id:26 c_first:27 c_middle:28 c_last:29 c_street_1:30 c_street_2:31 c_city:32 c_state:33 c_zip:34 c_phone:35 c_since:36 c_credit:37 c_credit_lim:38 c_discount:39 c_balance:40 c_ytd_payment:41 c_payment_cnt:42 c_delivery_cnt:43 c_data:44
@@ -591,7 +591,7 @@ project
  │    │    ├── c_balance_cast:51 => c_balance:17
  │    │    ├── c_ytd_payment_cast:52 => c_ytd_payment:18
  │    │    ├── c_payment_cnt_new:49 => c_payment_cnt:19
- │    │    └── c_data_cast:53 => c_data:21
+ │    │    └── c_data_new:50 => c_data:21
  │    ├── return-mapping:
  │    │    ├── c_id:24 => c_id:1
  │    │    ├── c_d_id:25 => c_d_id:2
@@ -610,17 +610,17 @@ project
  │    │    ├── c_credit_lim:38 => c_credit_lim:15
  │    │    ├── c_discount:39 => c_discount:16
  │    │    ├── c_balance_cast:51 => c_balance:17
- │    │    └── c_data_cast:53 => c_data:21
+ │    │    └── c_data_new:50 => c_data:21
  │    ├── cardinality: [0 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
  │    ├── fd: ()-->(1-17,21)
  │    └── project
- │         ├── columns: c_balance_cast:51 c_ytd_payment_cast:52 c_data_cast:53 c_payment_cnt_new:49 c_id:24!null c_d_id:25!null c_w_id:26!null c_first:27 c_middle:28 c_last:29 c_street_1:30 c_street_2:31 c_city:32 c_state:33 c_zip:34 c_phone:35 c_since:36 c_credit:37 c_credit_lim:38 c_discount:39 c_balance:40 c_ytd_payment:41 c_payment_cnt:42 c_delivery_cnt:43 c_data:44
+ │         ├── columns: c_balance_cast:51 c_ytd_payment_cast:52 c_payment_cnt_new:49 c_data_new:50 c_id:24!null c_d_id:25!null c_w_id:26!null c_first:27 c_middle:28 c_last:29 c_street_1:30 c_street_2:31 c_city:32 c_state:33 c_zip:34 c_phone:35 c_since:36 c_credit:37 c_credit_lim:38 c_discount:39 c_balance:40 c_ytd_payment:41 c_payment_cnt:42 c_delivery_cnt:43 c_data:44
  │         ├── cardinality: [0 - 1]
  │         ├── immutable
  │         ├── key: ()
- │         ├── fd: ()-->(24-44,49,51-53)
+ │         ├── fd: ()-->(24-44,49-52)
  │         ├── scan customer
  │         │    ├── columns: c_id:24!null c_d_id:25!null c_w_id:26!null c_first:27 c_middle:28 c_last:29 c_street_1:30 c_street_2:31 c_city:32 c_state:33 c_zip:34 c_phone:35 c_since:36 c_credit:37 c_credit_lim:38 c_discount:39 c_balance:40 c_ytd_payment:41 c_payment_cnt:42 c_delivery_cnt:43 c_data:44
  │         │    ├── constraint: /26/25/24: [/10/5/1343 - /10/5/1343]
@@ -632,11 +632,10 @@ project
  │              │    └── c_balance:40 - 3860.61
  │              ├── assignment-cast: DECIMAL(12,2) [as=c_ytd_payment_cast:52, outer=(41), immutable]
  │              │    └── c_ytd_payment:41 + 3860.61
- │              ├── assignment-cast: VARCHAR(500) [as=c_data_cast:53, outer=(24-26,37,44), immutable]
- │              │    └── CASE c_credit:37 WHEN 'BC' THEN left((((((c_id:24::STRING || c_d_id:25::STRING) || c_w_id:26::STRING) || '5') || '10') || '3860.61') || c_data:44, 500) ELSE c_data:44::STRING END
- │              └── c_payment_cnt:42 + 1 [as=c_payment_cnt_new:49, outer=(42), immutable]
+ │              ├── c_payment_cnt:42 + 1 [as=c_payment_cnt_new:49, outer=(42), immutable]
+ │              └── CASE c_credit:37 WHEN 'BC' THEN left((((((c_id:24::STRING || c_d_id:25::STRING) || c_w_id:26::STRING) || '5') || '10') || '3860.61') || c_data:44, 500)::VARCHAR(500) ELSE c_data:44 END [as=c_data_new:50, outer=(24-26,37,44), immutable]
  └── projections
-      └── CASE c_credit:14 WHEN 'BC' THEN left(c_data:21, 200) ELSE '' END [as=case:54, outer=(14,21), immutable]
+      └── CASE c_credit:14 WHEN 'BC' THEN left(c_data:21, 200) ELSE '' END [as=case:53, outer=(14,21), immutable]
 
 opt format=hide-qual
 INSERT INTO history

@@ -364,7 +364,7 @@ error (42601): multiple ORDER BY clauses not allowed
 build
 SELECT CASE a WHEN 1 THEN b ELSE c END as val FROM t ORDER BY val
 ----
-error (22023): incompatible value type: expected c to be of type int, found type bool
+error (22023): incompatible value type: expected b to be of type bool, found type int
 
 build
 SELECT * FROM t ORDER BY 0

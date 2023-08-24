@@ -1196,10 +1196,16 @@ CREATE TABLE t78159 (b BOOL)
 statement ok
 INSERT INTO t78159 VALUES (false)
 
-query B
-SELECT (CASE WHEN b THEN ((ROW(1) AS a)) ELSE NULL END).a from t78159
+query I
+SELECT (CASE WHEN b THEN NULL ELSE ((ROW(1) AS a)) END).a from t78159
 ----
-NULL
+1
+
+# TODO(rytaft): Uncomment this case once #109105 is fixed.
+# query B
+# SELECT (CASE WHEN b THEN ((ROW(1) AS a)) ELSE NULL END).a from t78159
+# ----
+# NULL
 
 # Regression test for #78515. Propagate tuple labels when type-checking
 # expressions with multiple matching tuple types.
@@ -1208,14 +1214,12 @@ subtest 78515
 statement ok
 SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS a) END).a;
 
-# The label of the first tuple is used in the type of the CASE expression. This
-# is similar to Postgres, but not exactly the same - Postgres uses the labels of
-# the last tuple. This difference should be addressed in the future when we try
-# to adhere more closely to Postgres's type conversion behavior (see #75101).
-statement ok
+# The label of the last tuple is used in the type of the CASE expression. This
+# matches Postgres behavior.
+statement error could not identify column \"a\" in tuple{int AS b}
 SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS b) END).a;
 
-statement error could not identify column \"b\" in tuple{int AS a}
+statement ok
 SELECT (CASE WHEN false THEN (ROW(1) AS a) ELSE (ROW(2) AS b) END).b;
 
 subtest end
