@@ -250,6 +250,8 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "cloud.ResumingReader.Read")
 	defer sp.Finish()
 
+	var read int
+
 	var lastErr error
 	for retries := 0; lastErr == nil; retries++ {
 		if r.Reader == nil {
@@ -257,10 +259,15 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 		}
 
 		if lastErr == nil {
-			n, readErr := r.Reader.Read(p)
+			n, readErr := r.Reader.Read(p[read:])
+			read += n
+			r.Pos += int64(n)
 			if readErr == nil || readErr == io.EOF {
-				r.Pos += int64(n)
-				return n, readErr
+				return read, readErr
+			}
+			if r.Size > 0 && r.Pos == r.Size {
+				log.Warningf(ctx, "read %s ignoring read error received after completed read (%d): %v", r.Filename, r.Pos, readErr)
+				return read, io.EOF
 			}
 			lastErr = errors.Wrapf(readErr, "read %s", r.Filename)
 		}
@@ -272,7 +279,7 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 		// Use the configured retry-on-error decider to check for a resumable error.
 		if r.RetryOnErrFn(lastErr) {
 			if retries >= maxNoProgressReads {
-				return 0, errors.Wrapf(lastErr, "multiple Read calls (%d) return no data", retries)
+				return read, errors.Wrapf(lastErr, "multiple Read calls (%d) return no data", retries)
 			}
 			log.Errorf(ctx, "Retry IO error: %s", lastErr)
 			lastErr = nil
@@ -287,7 +294,7 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 	// something with what was read before the error, but this mostly applies to
 	// err = EOF case which we handle above, so likely OK that we're discarding n
 	// here and pretending it was zero.
-	return 0, lastErr
+	return read, lastErr
 }
 
 // Close implements io.Closer.
