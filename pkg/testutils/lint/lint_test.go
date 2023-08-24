@@ -2336,6 +2336,7 @@ func TestLint(t *testing.T) {
 			":!server/storage_api/rangelog_test.go",
 			":!server/testserver.go",
 			":!sql/catalog/internal/catkv/catalog_reader_test.go",
+			":!sql/catalog/lease/lease_test.go",
 			":!sql/importer/import_processor_test.go",
 			":!sql/importer/import_stmt_test.go",
 			":!sql/importer/read_import_mysql_test.go",

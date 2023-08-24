@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -37,16 +36,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestIndexInterface(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// This server is only used to turn a CREATE TABLE statement into a
 	// catalog.TableDescriptor.
-	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	if _, err := conn.Exec(`CREATE DATABASE d`); err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -89,7 +91,7 @@ func TestIndexInterface(t *testing.T) {
 		{0, 1, 2},
 	}
 
-	immutable := desctestutils.TestingGetPublicTableDescriptor(db, keys.SystemSQLCodec, "d", "t")
+	immutable := desctestutils.TestingGetPublicTableDescriptor(db, s.Codec(), "d", "t")
 	require.NotNil(t, immutable)
 	var tableI = immutable
 	require.NotNil(t, tableI)
@@ -335,11 +337,14 @@ func TestIndexInterface(t *testing.T) {
 // redundant column IDs in descpb.IndexDescriptor.
 func TestIndexStrictColumnIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 
 	// Create a regular table with a secondary index.
-	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	codec := srv.ApplicationLayer().Codec()
 	_, err := conn.Exec(`
 		CREATE DATABASE d;
 		CREATE TABLE d.t (
@@ -353,7 +358,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 
 	// Mess with the table descriptor to add redundant columns in the secondary
 	// index while still passing validation.
-	mut := desctestutils.TestingGetMutableExistingTableDescriptor(db, keys.SystemSQLCodec, "d", "t")
+	mut := desctestutils.TestingGetMutableExistingTableDescriptor(db, codec, "d", "t")
 	idx := &mut.Indexes[0]
 	id := idx.KeyColumnIDs[0]
 	name := idx.KeyColumnNames[0]
@@ -367,7 +372,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	// Store the corrupted table descriptor.
 	err = db.Put(
 		ctx,
-		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, mut.GetID()),
+		catalogkeys.MakeDescMetadataKey(codec, mut.GetID()),
 		mut.DescriptorProto(),
 	)
 	require.NoError(t, err)
@@ -388,7 +393,11 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	var msg string
 	err = rows.Scan(&msg)
 	require.NoError(t, err)
-	expected := fmt.Sprintf(`InitPut /Table/%d/2/0/0/0/0/0/0 -> /BYTES/0x2300030003000300`, mut.GetID())
+	var tenantPrefix string
+	if srv.StartedDefaultTestTenant() {
+		tenantPrefix = codec.TenantPrefix().String()
+	}
+	expected := fmt.Sprintf(`InitPut %s/Table/%d/2/0/0/0/0/0/0 -> /BYTES/0x2300030003000300`, tenantPrefix, mut.GetID())
 	require.Equal(t, expected, msg)
 
 	// Test that with the strict guarantees, this table descriptor would have been
@@ -425,8 +434,9 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 			},
 		},
 	}
-	s, sqlDB, kvDB := serverutils.StartServer(t, args)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, args)
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Test relies on legacy schema changer testing knobs.
@@ -557,7 +567,7 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 
 	// Test again but with RunPostDeserializationChanges.
 	for _, name := range []string{`t`, `s`, `v`} {
-		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", name)
+		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", name)
 		test(desc)
 	}
 

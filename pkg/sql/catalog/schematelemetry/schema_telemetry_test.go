@@ -77,12 +77,16 @@ func TestSchemaTelemetrySchedule(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, makeTestServerArgs())
-	defer s.Stopper().Stop(ctx)
+	args := makeTestServerArgs()
+	// 'sql.schema.telemetry.recurrence' setting is settable only by the
+	// operator.
+	args.DefaultTestTenant = base.TestIsSpecificToStorageLayerAndNeedsASystemTenant
+	srv, db, _ := serverutils.StartServer(t, args)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	tdb := sqlutils.MakeSQLRunner(db)
 
-	clusterID := s.ExecutorConfig().(sql.ExecutorConfig).NodeInfo.
-		LogicalClusterID()
+	clusterID := s.ExecutorConfig().(sql.ExecutorConfig).NodeInfo.LogicalClusterID()
 	exp := scheduledjobs.MaybeRewriteCronExpr(clusterID, "@weekly")
 	tdb.CheckQueryResultsRetry(t, qExists, [][]string{{exp, "1"}})
 	tdb.ExecSucceedsSoon(t, qSet)

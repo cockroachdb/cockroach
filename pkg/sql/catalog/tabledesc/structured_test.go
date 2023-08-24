@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -35,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -788,8 +788,9 @@ func TestKeysPerRow(t *testing.T) {
 	// TODO(dan): This server is only used to turn a CREATE TABLE statement into
 	// a descpb.TableDescriptor. It should be possible to move MakeTableDesc into
 	// sqlbase. If/when that happens, use it here instead of this server.
-	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	codec := srv.ApplicationLayer().Codec()
 	if _, err := conn.Exec(`CREATE DATABASE d`); err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -850,7 +851,7 @@ func TestKeysPerRow(t *testing.T) {
 			tableName := fmt.Sprintf("t%d", i)
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE d.%s %s`, tableName, test.createTable))
 
-			desc := desctestutils.TestingGetPublicTableDescriptor(db, keys.SystemSQLCodec, "d", tableName)
+			desc := desctestutils.TestingGetPublicTableDescriptor(db, codec, "d", tableName)
 			require.NotNil(t, desc)
 			idx, err := catalog.MustFindIndexByID(desc, test.indexID)
 			require.NoError(t, err)
@@ -968,9 +969,13 @@ func TestDefaultExprNil(t *testing.T) {
 // TestStrippedDanglingSelfBackReferences checks the proper behavior of the
 // catalog.StrippedDanglingSelfBackReferences post-deserialization change.
 func TestStrippedDanglingSelfBackReferences(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Create a table.
@@ -978,7 +983,7 @@ func TestStrippedDanglingSelfBackReferences(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE t.tbl (a INT PRIMARY KEY)`)
 
 	// Get the descriptor for the table.
-	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tbl")
+	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "tbl")
 
 	// Inject some nonsense into the mutation_jobs slice.
 	mut := NewBuilder(tbl.TableDesc()).BuildExistingMutableTable()
@@ -999,8 +1004,12 @@ func TestStrippedDanglingSelfBackReferences(t *testing.T) {
 // correctly removed from descriptors of computed columns as part of the
 // RunPostDeserializationChanges suite.
 func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	codec := srv.ApplicationLayer().Codec()
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	const expectedErrRE = `.*: computed column \"b\" cannot also have a DEFAULT expression`
@@ -1009,7 +1018,7 @@ func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE t.tbl (a INT PRIMARY KEY, b INT AS (1) STORED)`)
 
 	// Get the descriptor for the table.
-	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tbl")
+	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "tbl")
 
 	// Setting a default value on the computed column should fail.
 	tdb.ExpectErr(t, expectedErrRE, `ALTER TABLE t.tbl ALTER COLUMN b SET DEFAULT 2`)
