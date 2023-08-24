@@ -34,9 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -48,12 +48,16 @@ import (
 // picked up.
 func TestSettingWatcherOnTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
+	s0 := srv.ApplicationLayer()
 
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	const systemOnlySetting = "kv.snapshot_rebalance.max_rate"
 	toSet := map[string][]interface{}{
@@ -69,7 +73,6 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	fakeCodec := keys.MakeSQLCodec(fakeTenant)
 	fakeTenantPrefix := keys.MakeTenantPrefix(fakeTenant)
 
-	db := tc.Server(0).DB()
 	getSourceClusterRows := func() []kv.KeyValue {
 		rows, err := db.Scan(ctx, systemTable, systemTable.PrefixEnd(), 0 /* maxRows */)
 		require.NoError(t, err)
@@ -147,7 +150,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		tdb.Exec(t, "SET CLUSTER SETTING "+k+" = $1", v[0])
 	}
 	copySettingsFromSystemToFakeTenant()
-	s0 := tc.Server(0)
+
 	tenantSettings := cluster.MakeTestingClusterSettings()
 	tenantSettings.SV.SetNonSystemTenant()
 
@@ -236,6 +239,7 @@ var _ = settings.RegisterIntSetting(settings.TenantWritable, "i1", "desc", 1)
 
 func TestSettingsWatcherWithOverrides(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	// Set up a test cluster for the system table.
@@ -392,9 +396,12 @@ func (m *testingOverrideMonitor) Overrides() (
 // rangefeed failure.
 func TestOverflowRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	sideSettings := cluster.MakeTestingClusterSettings()
@@ -473,6 +480,7 @@ func CheckSettingsValuesMatch(t *testing.T, a, b *cluster.Settings) error {
 // do), that the setting value that clients read does not regress.
 func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -485,6 +493,8 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	interceptedStreamCh := make(chan kvpb.RangeFeedEventSink)
 	cancelCtx, cancel := context.WithCancel(ctx)
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRangefeedFilter: func(args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink) *kvpb.Error {
