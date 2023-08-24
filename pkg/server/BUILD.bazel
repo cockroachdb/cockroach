@@ -455,6 +455,7 @@ go_test(
         "server_test.go",
         "settings_cache_test.go",
         "settings_test.go",
+        "span_stats_server_test.go",
         "span_stats_test.go",
         "statements_test.go",
         "status_ext_test.go",
