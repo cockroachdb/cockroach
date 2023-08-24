@@ -42,10 +42,11 @@ func TestChangefeedNemeses(t *testing.T) {
 	}
 
 	// Tenant tests disabled because ALTER TABLE .. SPLIT is not
-	// support in multi-tenancy mode:
+	// supported with cluster virtualization:
 	//
-	// nemeses_test.go:39: pq: unimplemented: operation is
-	// unsupported in multi-tenancy mode
+	// nemeses_test.go:39: pq: unimplemented: operation is unsupported inside virtual clusters
+	//
+	// TODO(knz): This seems incorrect, see issue #109417.
 	cdcTest(t, testFn, feedTestNoTenants)
 	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
