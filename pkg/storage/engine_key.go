@@ -173,9 +173,9 @@ func (k EngineKey) ToLockTableKey() (LockTableKey, error) {
 	key := LockTableKey{Key: lockedKey}
 	switch len(k.Version) {
 	case engineKeyVersionLockTableLen:
-		key.Strength = lock.Strength(k.Version[0])
-		if key.Strength < lock.None || key.Strength > lock.Exclusive {
-			return LockTableKey{}, errors.Errorf("unknown strength %d", key.Strength)
+		key.Strength, err = getReplicatedLockStrengthForByte(k.Version[0])
+		if err != nil {
+			return LockTableKey{}, err
 		}
 		key.TxnUUID = *(*uuid.UUID)(k.Version[1:])
 	default:
@@ -255,11 +255,73 @@ type LockTableKey struct {
 	TxnUUID  uuid.UUID
 }
 
+// replicatedLockStrengthToByte is a mapping between lock.Strength and the
+// strength byte persisted in a lock table key's encoding. See
+// LockTableKey.ToEngineKey().
+var replicatedLockStrengthToByte = [...]byte{
+	lock.Intent: 3,
+}
+
+// byteToReplicatedLockStrength is a mapping between the strength byte persisted
+// in a lock table key's encoding and the lock.Strength of the lock it
+// corresponds to. Also see EngineKey.ToLockTableKey().
+var byteToReplicatedLockStrength = func() (arr []lock.Strength) {
+	maxByte := byte(0)
+	for _, b := range replicatedLockStrengthToByte {
+		if b > maxByte {
+			maxByte = b
+		}
+	}
+	arr = make([]lock.Strength, maxByte+1)
+	for str, b := range replicatedLockStrengthToByte {
+		if b != 0 {
+			arr[b] = lock.Strength(str)
+		}
+	}
+	return arr
+}()
+
+// getByteForReplicatedLockStrength returns a strength byte, suitable for use in
+// a lock's key encoding, given its lock strength.
+func getByteForReplicatedLockStrength(str lock.Strength) byte {
+	if str < 0 || int(str) >= len(replicatedLockStrengthToByte) {
+		panic(errors.AssertionFailedf("unknown lock strength %s", str))
+	}
+	b := replicatedLockStrengthToByte[str]
+	if b == 0 {
+		panic(errors.AssertionFailedf("unexpected empty byte"))
+	}
+	return b
+}
+
+// getReplicatedLockStrengthForByte returns a replicated lock's strength given
+// the strength byte from its key encoding.
+func getReplicatedLockStrengthForByte(b byte) (lock.Strength, error) {
+	if int(b) >= len(byteToReplicatedLockStrength) { // byte cannot be < 0
+		return lock.None, errors.AssertionFailedf("unsupported byte %d", b)
+	}
+	str := byteToReplicatedLockStrength[b]
+	if str == 0 {
+		return lock.None, errors.AssertionFailedf("unknown lock strength %s", str)
+	}
+	return str, nil
+}
+
+// mustGetReplicatedLockStrengthForByte is like mustGetReplicatedLockStrength
+// except it panics if there is an error.
+func mustGetReplicatedLockStrengthForByte(b byte) lock.Strength {
+	str, err := getReplicatedLockStrengthForByte(b)
+	if err != nil {
+		panic(err)
+	}
+	return str
+}
+
 // ToEngineKey converts a lock table key to an EngineKey. buf is used as
 // scratch-space to avoid allocations -- its contents will be overwritten and
 // not appended to.
 func (lk LockTableKey) ToEngineKey(buf []byte) (EngineKey, []byte) {
-	if lk.Strength != lock.Exclusive {
+	if lk.Strength != lock.Intent {
 		panic("unsupported lock strength")
 	}
 	// The first term in estimatedLen is for LockTableSingleKey.
@@ -277,7 +339,7 @@ func (lk LockTableKey) ToEngineKey(buf []byte) (EngineKey, []byte) {
 		// estimatedLen was an underestimate.
 		k.Version = make([]byte, engineKeyVersionLockTableLen)
 	}
-	k.Version[0] = byte(lk.Strength)
+	k.Version[0] = getByteForReplicatedLockStrength(lk.Strength)
 	copy(k.Version[1:], lk.TxnUUID[:])
 	return k, buf
 }

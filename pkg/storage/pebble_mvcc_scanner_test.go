@@ -73,7 +73,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	for _, k := range keys {
 		lockTableKey, _ := LockTableKey{
 			Key:      k,
-			Strength: lock.Exclusive,
+			Strength: lock.Intent,
 			TxnUUID:  uuid,
 		}.ToEngineKey(nil)
 		err = eng.PutEngineKey(lockTableKey, metaBytes)
