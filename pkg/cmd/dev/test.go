@@ -119,7 +119,7 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	// visible.
 	testCmd.Flags().BoolP(vFlag, "v", false, "show testing process output")
 	testCmd.Flags().Bool(changedFlag, false, "automatically determine tests to run. This is done on a best-effort basis by asking git which files have changed. Only .go files and files in testdata/ directories are factored into this analysis.")
-	testCmd.Flags().Int(countFlag, 1, "run test the given number of times")
+	testCmd.Flags().Int(countFlag, 0, "run test the given number of times")
 	testCmd.Flags().BoolP(showLogsFlag, "", false, "show crdb logs in-line")
 	testCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
@@ -281,9 +281,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	}
 
 	args = append(args, testTargets...)
-	if ignoreCache {
-		args = append(args, "--nocache_test_results")
-	}
 	args = append(args, "--test_env=GOTRACEBACK=all")
 
 	if rewrite {
@@ -336,7 +333,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	}
 
 	if stress {
-		if count == 1 {
+		if count == 0 {
 			// Default to 1000 unless a different count was provided.
 			count = 1000
 		}
@@ -362,7 +359,9 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if showLogs {
 		args = append(args, "--test_arg", "-show-logs")
 	}
-	if count != 1 {
+	if count == 1 {
+		ignoreCache = true
+	} else if count != 0 {
 		args = append(args, fmt.Sprintf("--runs_per_test=%d", count))
 	}
 	if vModule != "" {
@@ -377,6 +376,10 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	}
 	if disableTestSharding {
 		args = append(args, "--test_sharding_strategy=disabled")
+	}
+
+	if ignoreCache {
+		args = append(args, "--nocache_test_results")
 	}
 
 	if len(goTags) > 0 {
