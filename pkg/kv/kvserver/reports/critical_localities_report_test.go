@@ -180,7 +180,10 @@ func TestCriticalLocalitiesSaving(t *testing.T) {
 	// the cluster. We disable the cluster's own production of reports so that it
 	// doesn't interfere with the test.
 	ReporterInterval.Override(ctx, &st.SV, 0)
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Settings:          st,
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
 	con := s.InternalExecutor().(isql.Executor)
 	defer s.Stopper().Stop(ctx)
 
