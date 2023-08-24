@@ -30,6 +30,7 @@ import (
 
 func TestOrdinality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	v := [15]rowenc.EncDatum{}
 	for i := range v {

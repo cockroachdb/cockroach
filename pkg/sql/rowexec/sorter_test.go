@@ -37,6 +37,7 @@ import (
 
 func TestSorter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	v := [6]rowenc.EncDatum{}
 	for i := range v {
@@ -339,6 +340,7 @@ func TestSorter(t *testing.T) {
 // an invalid k-parameter.
 func TestSortInvalidLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	spec := execinfrapb.SorterSpec{}
 	spec.Limit = 0
