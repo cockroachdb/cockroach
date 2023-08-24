@@ -43,7 +43,7 @@ import (
 // lease table from 1 to 2. It is injected from the lease_test package so that
 // it can use sql primitives.
 var MoveTablePrimaryIndexIDto2 func(
-	context.Context, *testing.T, serverutils.TestServerInterface, descpb.ID,
+	context.Context, *testing.T, serverutils.ApplicationLayerInterface, descpb.ID,
 )
 
 // TestKVWriterMatchesIEWriter is a rather involved test to exercise the
@@ -57,13 +57,16 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Otherwise, we wouldn't get complete SSTs in our export under stress.
-	tdb.Exec(t, "SET CLUSTER SETTING admission.elastic_cpu.enabled = false")
+	sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t, "")).Exec(
+		t, "SET CLUSTER SETTING admission.elastic_cpu.enabled = false",
+	)
 
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	schema := systemschema.LeaseTableSchema
 	makeTable := func(name string) (id descpb.ID) {
 		tdb.Exec(t, strings.Replace(schema, "system.lease", name, 1))
@@ -76,7 +79,7 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 	lease2ID := makeTable("lease2")
 
 	ie := s.InternalExecutor().(isql.Executor)
-	codec := s.LeaseManager().(*Manager).Codec()
+	codec := s.Codec()
 	settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
 	w := teeWriter{
 		a: newInternalExecutorWriter(ie, "defaultdb.public.lease1"),

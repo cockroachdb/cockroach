@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/redact"
@@ -32,8 +31,9 @@ func TestRedactQueries(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
 	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, "CREATE TABLE kv (k INT PRIMARY KEY, v STRING)")
 	tdb.Exec(t, "CREATE VIEW view AS SELECT k, v FROM kv WHERE v <> 'constant literal'")
@@ -48,7 +48,7 @@ $$`)
 
 	t.Run("view", func(t *testing.T) {
 		view := desctestutils.TestingGetTableDescriptor(
-			kvDB, keys.SystemSQLCodec, "defaultdb", "public", "view",
+			kvDB, codec, "defaultdb", "public", "view",
 		)
 		mut := tabledesc.NewBuilder(view.TableDesc()).BuildCreatedMutableTable()
 		require.Empty(t, redact.Redact(mut.DescriptorProto()))
@@ -57,7 +57,7 @@ $$`)
 
 	t.Run("create table as", func(t *testing.T) {
 		ctas := desctestutils.TestingGetTableDescriptor(
-			kvDB, keys.SystemSQLCodec, "defaultdb", "public", "ctas",
+			kvDB, codec, "defaultdb", "public", "ctas",
 		)
 		mut := tabledesc.NewBuilder(ctas.TableDesc()).BuildCreatedMutableTable()
 		require.Empty(t, redact.Redact(mut.DescriptorProto()))
@@ -65,7 +65,7 @@ $$`)
 	})
 
 	t.Run("create function", func(t *testing.T) {
-		fn := desctestutils.TestingGetFunctionDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", "public", "f1")
+		fn := desctestutils.TestingGetFunctionDescriptor(kvDB, codec, "defaultdb", "public", "f1")
 		mut := funcdesc.NewBuilder(fn.FuncDesc()).BuildCreatedMutableFunction()
 		require.Empty(t, redact.Redact(mut.DescriptorProto()))
 		require.Equal(t, `SELECT k FROM defaultdb.public.kv WHERE v != '_'; SELECT k FROM defaultdb.public.kv WHERE v = '_';`, mut.FunctionBody)
