@@ -52,10 +52,10 @@ func BenchmarkResolveTypeByOID(b *testing.B) {
 
 	ctx := context.Background()
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
-	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
+	sd := NewFakeSessionData(&execCfg.Settings.SV, "test")
 	sd.Database = "defaultdb"
 	planner, cleanup := newInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
-		username.RootUserName(), &MemoryMetrics{}, &execCfg, sd,
+		username.RootUserName(), &MemoryMetrics{}, &execCfg, sd.SessionData,
 	)
 	defer cleanup()
 
