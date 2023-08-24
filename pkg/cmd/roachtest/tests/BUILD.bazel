@@ -30,6 +30,7 @@ go_library(
         "awsdms.go",
         "backup.go",
         "backup_fixtures.go",
+        "backup_restore_roundtrip.go",
         "build_info.go",
         "canary.go",
         "cancel.go",
