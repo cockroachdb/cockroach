@@ -12,7 +12,7 @@ go_library(
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/security",
+        "//pkg/security/securitytest",
         "//pkg/server/serverpb",
         "//pkg/sql",
         "//pkg/sql/contention",

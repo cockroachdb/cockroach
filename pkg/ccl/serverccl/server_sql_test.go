@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher/systemconfigwatchertest"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -134,11 +134,11 @@ func TestTenantUnauthenticatedAccess(t *testing.T) {
 
 	_, err := s.StartTenant(ctx,
 		base.TestTenantArgs{
-			TenantID: roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[0]),
+			TenantID: roachpb.MustMakeTenantID(securitytest.EmbeddedTenantIDs()[0]),
 			TestingKnobs: base.TestingKnobs{
 				TenantTestingKnobs: &sql.TenantTestingKnobs{
 					// Configure the SQL server to access the wrong tenant keyspace.
-					TenantIDCodecOverride: roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[1]),
+					TenantIDCodecOverride: roachpb.MustMakeTenantID(securitytest.EmbeddedTenantIDs()[1]),
 				},
 			},
 		})
