@@ -488,6 +488,10 @@ func TestUseSplitCACerts(t *testing.T) {
 	params := base.TestServerArgs{
 		SSLCertsDir:       certsDir,
 		InsecureWebAccess: true,
+
+		// Disable the use of cluster virtualization, as the logic here
+		// makes assumptions about which layer is responding to requests.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 	}
 	s, _, db := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
