@@ -17,10 +17,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// EmbeddedTenantIDs lists the tenants we embed certs for.
-// See 'securitytest/test_certs/regenerate.sh'.
-var EmbeddedTenantIDs = func() []uint64 { return []uint64{10, 11, 20, 2} }
-
 // newServerTLSConfig creates a server TLSConfig from the supplied byte strings containing
 // - the certificate of this node (should be signed by the CA),
 // - the private key of this node.

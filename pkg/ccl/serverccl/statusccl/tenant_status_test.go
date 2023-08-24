@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -1467,8 +1467,8 @@ func testTenantHotRanges(_ context.Context, t *testing.T, helper serverccl.Tenan
 	tenantA := helper.TestCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
 	tenantB := helper.ControlCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
 
-	tIDa := security.EmbeddedTenantIDs()[0]
-	tIDb := security.EmbeddedTenantIDs()[1]
+	tIDa := securitytest.EmbeddedTenantIDs()[0]
+	tIDb := securitytest.EmbeddedTenantIDs()[1]
 
 	testutils.SucceedsSoon(t, func() error {
 		resp, err := tenantA.HotRangesV2(context.Background(), &serverpb.HotRangesRequest{})

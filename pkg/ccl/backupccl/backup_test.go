@@ -67,7 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -6348,7 +6348,7 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	defer cleanupFn()
 	srv := tc.Server(0)
 
-	_ = security.EmbeddedTenantIDs()
+	_ = securitytest.EmbeddedTenantIDs()
 
 	resetStateVars := func() {
 		mu.Lock()
@@ -6470,7 +6470,7 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 	srv := tc.Server(0)
 
 	// NB: tenant certs for 10, 11, and 20 are embedded. See:
-	_ = security.EmbeddedTenantIDs()
+	_ = securitytest.EmbeddedTenantIDs()
 
 	tenant10, cleanupT10 := makeTenant(srv, 10)
 	defer cleanupT10()
@@ -6590,7 +6590,7 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 	defer cleanupFn()
 
 	// NB: tenant certs for 2, 10, 11, and 20 are embedded. See:
-	_ = security.EmbeddedTenantIDs()
+	_ = securitytest.EmbeddedTenantIDs()
 
 	// Create another server.
 	tc2, _, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
@@ -6643,7 +6643,7 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 	srv := tc.Server(0)
 
 	// NB: tenant certs for 10, 11, and 20 are embedded. See:
-	_ = security.EmbeddedTenantIDs()
+	_ = securitytest.EmbeddedTenantIDs()
 
 	// Create another server.
 	tc2, systemDB2, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
@@ -6777,7 +6777,7 @@ func TestBackupRestoreCreatedAndDroppedTenant(t *testing.T) {
 	defer cleanupFn()
 
 	// NB: tenant certs for 10, 11, 20 are embedded. See:
-	_ = security.EmbeddedTenantIDs()
+	_ = securitytest.EmbeddedTenantIDs()
 
 	systemDB.Exec(t, "CREATE TENANT foo")
 
@@ -6850,7 +6850,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 	srv := tc.Server(0)
 
 	// NB: tenant certs for 10, 11, 20 are embedded. See:
-	_ = security.EmbeddedTenantIDs()
+	_ = securitytest.EmbeddedTenantIDs()
 
 	// Setup a few tenants, each with a different table.
 	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})

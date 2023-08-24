@@ -253,7 +253,6 @@ go_test(
         "//pkg/roachpb",
         "//pkg/scheduledjobs",
         "//pkg/scheduledjobs/schedulebase",
-        "//pkg/security",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
