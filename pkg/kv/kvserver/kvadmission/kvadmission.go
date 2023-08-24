@@ -308,14 +308,18 @@ func (n *controllerImpl) AdmitKVWork(
 	// to continue even when throttling since there are often significant
 	// number of tokens available.
 	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
-		if !bypassAdmission &&
+		var bypassFlowcontrol bool
+		attemptFlowControl := !bypassAdmission &&
 			kvflowcontrol.Enabled.Get(&n.settings.SV) &&
-			n.settings.Version.IsActive(ctx, clusterversion.V23_2_UseACRaftEntryEntryEncodings) {
+			n.settings.Version.IsActive(ctx, clusterversion.V23_2_UseACRaftEntryEntryEncodings)
+		if attemptFlowControl {
 			kvflowHandle, found := n.kvflowHandles.Lookup(ba.RangeID)
 			if !found {
 				return Handle{}, nil
 			}
-			if err := kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime)); err != nil {
+			var err error
+			bypassFlowcontrol, err = kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime))
+			if err != nil {
 				return Handle{}, err
 			}
 			// NB: It's possible for us to be waiting for available flow tokens
@@ -323,12 +327,19 @@ func (n *controllerImpl) AdmitKVWork(
 			// deduct tokens from, if the range experiences a split between now
 			// and the point of deduction. That's ok, there's no strong
 			// synchronization needed between these two points.
-			ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
-				AdmissionPriority:   int32(admissionInfo.Priority),
-				AdmissionCreateTime: admissionInfo.CreateTime,
-				AdmissionOriginNode: n.nodeID.Get(),
+			if !bypassFlowcontrol {
+				ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
+					AdmissionPriority:   int32(admissionInfo.Priority),
+					AdmissionCreateTime: admissionInfo.CreateTime,
+					AdmissionOriginNode: n.nodeID.Get(),
+				}
 			}
-		} else {
+		}
+		// NB: When flow control is enabled for elastic work, and we encounter
+		// non-elastic (i.e. "regular work), we skip waiting for tokens in
+		// kvflowcontrol.Controller.Admit(). In this case, we want to make sure that
+		// this work still subject to AC.
+		if !attemptFlowControl || bypassFlowcontrol {
 			storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
 			if storeAdmissionQ != nil {
 				storeWorkHandle, err := storeAdmissionQ.Admit(

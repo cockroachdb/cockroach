@@ -79,7 +79,10 @@ func New(
 var _ kvflowcontrol.Handle = &Handle{}
 
 // Admit is part of the kvflowcontrol.Handle interface.
-func (h *Handle) Admit(ctx context.Context, pri admissionpb.WorkPriority, ct time.Time) error {
+func (h *Handle) Admit(
+	ctx context.Context, pri admissionpb.WorkPriority, ct time.Time,
+) (bool, error) {
+	var bypassTokens bool
 	if h == nil {
 		// TODO(irfansharif): This can happen if we're proposing immediately on
 		// a newly split off RHS that doesn't know it's a leader yet (so we
@@ -92,14 +95,14 @@ func (h *Handle) Admit(ctx context.Context, pri admissionpb.WorkPriority, ct tim
 		// As for cluster settings that disable flow control entirely or only
 		// for regular traffic, that can be dealt with at the caller by not
 		// calling .Admit() and ensuring we use the right raft entry encodings.
-		return nil
+		return bypassTokens, nil
 	}
 
 	h.mu.Lock()
 	if h.mu.closed {
 		h.mu.Unlock()
 		log.Errorf(ctx, "operating on a closed handle")
-		return nil
+		return bypassTokens, nil
 	}
 
 	// NB: We're using a copy-on-write scheme elsewhere to maintain this slice
@@ -116,14 +119,16 @@ func (h *Handle) Admit(ctx context.Context, pri admissionpb.WorkPriority, ct tim
 	tstart := h.clock.PhysicalTime()
 
 	for _, c := range connections {
-		if err := h.controller.Admit(ctx, pri, ct, c); err != nil {
+		var err error
+		bypassTokens, err = h.controller.Admit(ctx, pri, ct, c)
+		if err != nil {
 			h.metrics.onErrored(class, h.clock.PhysicalTime().Sub(tstart))
-			return err
+			return bypassTokens, err
 		}
 	}
 
 	h.metrics.onAdmitted(class, h.clock.PhysicalTime().Sub(tstart))
-	return nil
+	return bypassTokens, nil
 }
 
 // DeductTokensFor is part of the kvflowcontrol.Handle interface.
