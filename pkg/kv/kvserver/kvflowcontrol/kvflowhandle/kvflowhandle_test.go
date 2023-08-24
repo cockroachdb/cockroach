@@ -110,7 +110,9 @@ func TestHandleAdmit(t *testing.T) {
 			// the goroutine is blocked.
 			admitCh := make(chan struct{})
 			go func() {
-				require.NoError(t, handle.Admit(ctx, admissionpb.NormalPri, time.Time{}))
+				admitted, err := handle.Admit(ctx, admissionpb.NormalPri, time.Time{})
+				require.NoError(t, err)
+				require.True(t, admitted)
 				close(admitCh)
 			}()
 
@@ -189,16 +191,26 @@ func TestFlowControlMode(t *testing.T) {
 			handle.ConnectStream(ctx, pos(0), stream)
 			handle.DeductTokensFor(ctx, admissionpb.NormalPri, pos(1), kvflowcontrol.Tokens(16<<20 /* 16MiB */))
 
+			mode := tc.mode // copy to avoid nogo error
+
 			// Invoke .Admit() for {regular,elastic} work in a separate
 			// goroutines, and test below whether the goroutines are blocked.
 			regularAdmitCh := make(chan struct{})
 			elasticAdmitCh := make(chan struct{})
 			go func() {
-				require.NoError(t, handle.Admit(ctx, admissionpb.NormalPri, time.Time{}))
+				admitted, err := handle.Admit(ctx, admissionpb.NormalPri, time.Time{})
+				require.NoError(t, err)
+				if mode == kvflowcontrol.ApplyToElastic {
+					require.False(t, admitted)
+				} else {
+					require.True(t, admitted)
+				}
 				close(regularAdmitCh)
 			}()
 			go func() {
-				require.NoError(t, handle.Admit(ctx, admissionpb.BulkNormalPri, time.Time{}))
+				admitted, err := handle.Admit(ctx, admissionpb.BulkNormalPri, time.Time{})
+				require.NoError(t, err)
+				require.True(t, admitted)
 				close(elasticAdmitCh)
 			}()
 

@@ -196,7 +196,9 @@ func TestInspectController(t *testing.T) {
 
 	// Set up a single connected stream, s1/t1, and ensure it shows up in the
 	// Inspect() state.
-	require.NoError(t, controller.Admit(ctx, admissionpb.NormalPri, time.Time{}, makeConnectedStream(1)))
+	admitted, err := controller.Admit(ctx, admissionpb.NormalPri, time.Time{}, makeConnectedStream(1))
+	require.NoError(t, err)
+	require.True(t, admitted)
 	require.Len(t, controller.Inspect(ctx), 1)
 	require.Equal(t, controller.Inspect(ctx)[0],
 		makeInspectStream(1, 8<<20 /* 8MiB */, 16<<20 /* 16 MiB */))
@@ -211,7 +213,9 @@ func TestInspectController(t *testing.T) {
 
 	// Connect another stream, s1/s2, and ensure it shows up in the Inspect()
 	// state.
-	require.NoError(t, controller.Admit(ctx, admissionpb.BulkNormalPri, time.Time{}, makeConnectedStream(2)))
+	admitted, err = controller.Admit(ctx, admissionpb.BulkNormalPri, time.Time{}, makeConnectedStream(2))
+	require.NoError(t, err)
+	require.True(t, admitted)
 	require.Len(t, controller.Inspect(ctx), 2)
 	require.Equal(t, controller.Inspect(ctx)[1],
 		makeInspectStream(2, 8<<20 /* 8MiB */, 16<<20 /* 16 MiB */))
