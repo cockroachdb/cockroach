@@ -575,13 +575,12 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 	startRKey := mkRKey("a")
 	startKey := mkKey("a")
 
-	setup := func(t *testing.T, knobs base.TestingKnobs) (*testcluster.TestCluster, roachpb.RangeID) {
+	setup := func(t *testing.T) (*testcluster.TestCluster, roachpb.RangeID) {
 		t.Helper()
 
 		tc := testcluster.StartTestCluster(t, 3,
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
-				ServerArgs:      base.TestServerArgs{Knobs: knobs},
 			},
 		)
 
@@ -671,7 +670,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 
 	t.Run(kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED.String(), func(t *testing.T) {
 		const removeStore = 2
-		tc, rangeID := setup(t, base.TestingKnobs{})
+		tc, rangeID := setup(t)
 		defer tc.Stopper().Stop(ctx)
 
 		// Establish a rangefeed on the replica we plan to remove.
@@ -706,7 +705,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErr, kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED)
 	})
 	t.Run(kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT.String(), func(t *testing.T) {
-		tc, rangeID := setup(t, base.TestingKnobs{})
+		tc, rangeID := setup(t)
 		defer tc.Stopper().Stop(ctx)
 
 		// Establish a rangefeed on the replica we plan to split.
@@ -741,7 +740,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErr, kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT)
 	})
 	t.Run(kvpb.RangeFeedRetryError_REASON_RANGE_MERGED.String(), func(t *testing.T) {
-		tc, rangeID := setup(t, base.TestingKnobs{})
+		tc, rangeID := setup(t)
 		defer tc.Stopper().Stop(ctx)
 
 		ts := tc.Servers[0]
@@ -807,7 +806,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErrRight, kvpb.RangeFeedRetryError_REASON_RANGE_MERGED)
 	})
 	t.Run(kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT.String(), func(t *testing.T) {
-		tc, rangeID := setup(t, base.TestingKnobs{})
+		tc, rangeID := setup(t)
 		defer tc.Stopper().Stop(ctx)
 
 		ts2 := tc.Servers[2]
@@ -928,23 +927,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErr, kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT)
 	})
 	t.Run(kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING.String(), func(t *testing.T) {
-		knobs := base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				// This test splits off a range manually from system table ranges.
-				// Because this happens "underneath" the span configs infra, when
-				// applying a config over the replicas, we fallback to one that
-				// enables rangefeeds by default. The sub-test doesn't want that, so
-				// we add an intercept and disable it for the test range.
-				SetSpanConfigInterceptor: func(desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig) roachpb.SpanConfig {
-					if !desc.ContainsKey(roachpb.RKey(startKey)) {
-						return conf
-					}
-					conf.RangefeedEnabled = false
-					return conf
-				},
-			},
-		}
-		tc, _ := setup(t, knobs)
+		tc, _ := setup(t)
 		defer tc.Stopper().Stop(ctx)
 
 		ts := tc.Servers[0]
@@ -996,24 +979,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErr, kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING)
 	})
 	t.Run("range key mismatch", func(t *testing.T) {
-		knobs := base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				// Use a span config override to check that we get a key mismatch error
-				// despite the span config's setting whenever the key is outside the
-				// bounds of the range.
-				SetSpanConfigInterceptor: func(desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig) roachpb.SpanConfig {
-					if desc.ContainsKey(roachpb.RKey(keys.ScratchRangeMin)) {
-						conf.RangefeedEnabled = false
-						return conf
-					} else if desc.ContainsKey(startRKey) {
-						conf.RangefeedEnabled = true
-						return conf
-					}
-					return conf
-				},
-			},
-		}
-		tc, _ := setup(t, knobs)
+		tc, _ := setup(t)
 		defer tc.Stopper().Stop(ctx)
 
 		ts := tc.Servers[0]

@@ -313,8 +313,9 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 	}
 	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
 	tracer := tracing.NewTracerWithOpt(context.TODO(), tracing.WithClusterSettings(&st.SV))
+	defaultSpanConfig := zonepb.DefaultZoneConfigRef().AsSpanConfig()
 	sc := StoreConfig{
-		DefaultSpanConfig:           zonepb.DefaultZoneConfigRef().AsSpanConfig(),
+		DefaultSpanConfig:           defaultSpanConfig,
 		Settings:                    st,
 		AmbientCtx:                  log.MakeTestingAmbientContext(tracer),
 		Clock:                       clock,
@@ -328,7 +329,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		// Use a constant empty system config, which mirrors the previously
 		// existing logic to install an empty system config in gossip.
 		SystemConfigProvider: config.NewConstantSystemConfigProvider(
-			config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
+			config.NewSystemConfig(zonepb.DefaultSystemZoneConfigRef()),
 		),
 	}
 	sc.TestingKnobs.TenantRateKnobs.Authorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
@@ -1867,7 +1868,11 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					// without leases we probably should try to move the leadership
 					// manually to a non-draining replica.
 
-					desc, conf := r.DescAndSpanConfig()
+					desc := r.Desc()
+					conf, err := r.LoadSpanConfig(ctx)
+					if err != nil {
+						log.Infof(ctx, "skipping range %s without a valid span config", desc)
+					}
 
 					if verbose || log.V(1) {
 						// This logging is useful to troubleshoot incomplete drains.
@@ -3502,8 +3507,11 @@ func (s *Store) ReplicateQueueDryRun(
 		return true
 	}
 	desc := repl.Desc()
-	conf, _ := repl.LoadSpanConfig(ctx)
-	_, err := s.replicateQueue.processOneChange(
+	conf, err := repl.LoadSpanConfig(ctx)
+	if err != nil {
+		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
+	}
+	_, err = s.replicateQueue.processOneChange(
 		ctx, repl, desc, conf, canTransferLease, false /* scatter */, true, /* dryRun */
 	)
 	if err != nil {
@@ -3541,13 +3549,7 @@ func (s *Store) AllocatorCheckRange(
 	}
 	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator check range", spanOptions...)
 
-	confReader, err := s.GetConfReader(ctx)
-	if err != nil {
-		log.Eventf(ctx, "span configs unavailable: %s", err)
-		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
-	}
-
-	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
+	conf, err := s.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
 		log.Eventf(ctx, "error retrieving span config for range %s: %s", desc, err)
 		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
@@ -3562,7 +3564,7 @@ func (s *Store) AllocatorCheckRange(
 		storePool = s.cfg.StorePool
 	}
 
-	action, _ := s.allocator.ComputeAction(ctx, storePool, &conf, desc)
+	action, _ := s.allocator.ComputeAction(ctx, storePool, conf, desc)
 
 	// In the case that the action does not require a target, return immediately.
 	if !(action.Add() || action.Replace()) {
@@ -3576,7 +3578,7 @@ func (s *Store) AllocatorCheckRange(
 		return action, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
 	}
 
-	target, _, err := s.allocator.AllocateTarget(ctx, storePool, &conf,
+	target, _, err := s.allocator.AllocateTarget(ctx, storePool, conf,
 		filteredVoters, filteredNonVoters, replacing, action.ReplicaStatus(), action.TargetReplicaType(),
 	)
 	if err == nil {
@@ -3587,7 +3589,7 @@ func (s *Store) AllocatorCheckRange(
 		fragileQuorumErr := s.allocator.CheckAvoidsFragileQuorum(
 			ctx,
 			storePool,
-			&conf,
+			conf,
 			desc.Replicas().VoterDescriptors(),
 			filteredVoters,
 			action.ReplicaStatus(),
