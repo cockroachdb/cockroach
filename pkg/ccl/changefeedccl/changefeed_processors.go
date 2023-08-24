@@ -581,7 +581,7 @@ var aggregatorHeartbeatFrequency = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.aggregator.heartbeat",
 	"changefeed aggregator will emit a heartbeat message to the coordinator with this frequency; 0 disables. "+
-		"The setting value should be <=1/2 of server.shutdown.jobs_wait period",
+		"The setting value should be <=1/2 of server.shutdown.jobs.timeout period",
 	4*time.Second,
 	settings.NonNegativeDuration,
 )

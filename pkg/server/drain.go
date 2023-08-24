@@ -37,29 +37,36 @@ import (
 )
 
 var (
-	queryWait = settings.RegisterDurationSetting(
+	// QueryShutdownTimeout is the max amount of time waiting for
+	// queries to stop execution.
+	QueryShutdownTimeout = settings.RegisterDurationSetting(
 		settings.ApplicationLevel,
 		"server.shutdown.query_wait",
-		"the timeout for waiting for active queries to finish during a drain "+
+		"the timeout for waiting for active transactions to finish during a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting)",
 		10*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Hour),
+		settings.WithName("server.shutdown.transactions.timeout"),
 		settings.WithPublic)
 
-	drainWait = settings.RegisterDurationSetting(
+	// DrainWait is the initial wait time before a drain effectively starts.
+	DrainWait = settings.RegisterDurationSetting(
 		settings.ApplicationLevel,
 		"server.shutdown.drain_wait",
 		"the amount of time a server waits in an unready state before proceeding with a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting. --drain-wait is to specify the duration of the "+
-			"whole draining process, while server.shutdown.drain_wait is to set the "+
+			"whole draining process, while server.shutdown.initial_wait is to set the "+
 			"wait time for health probes to notice that the node is not ready.)",
 		0*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Hour),
+		settings.WithName("server.shutdown.initial_wait"),
 		settings.WithPublic)
 
-	connectionWait = settings.RegisterDurationSetting(
+	// ConnectionShutdownTimeout is the max amount of time waiting for
+	// clients to disconnect.
+	ConnectionShutdownTimeout = settings.RegisterDurationSetting(
 		settings.ApplicationLevel,
 		"server.shutdown.connection_wait",
 		"the maximum amount of time a server waits for all SQL connections to "+
@@ -68,15 +75,19 @@ var (
 			"after changing this setting)",
 		0*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Hour),
+		settings.WithName("server.shutdown.connections.timeout"),
 		settings.WithPublic)
 
-	jobRegistryWait = settings.RegisterDurationSetting(
+	// JobShutdownTimeout is the max amount of time waiting for jobs to
+	// stop executing.
+	JobShutdownTimeout = settings.RegisterDurationSetting(
 		settings.ApplicationLevel,
 		"server.shutdown.jobs_wait",
 		"the maximum amount of time a server waits for all currently executing jobs "+
 			"to notice drain request and to perform orderly shutdown",
 		10*time.Second,
 		settings.NonNegativeDurationWithMaximum(10*time.Minute),
+		settings.WithName("server.shutdown.jobs.timeout"),
 		settings.WithPublic)
 )
 
@@ -379,21 +390,21 @@ func (s *drainServer) drainClients(
 		log.Ops.Warningf(ctx, "error showing alive SQL connections: %v", err)
 	}
 
-	// Wait the duration of drainWait.
+	// Wait the duration of DrainWait.
 	// This will fail load balancer checks and delay draining so that client
 	// traffic can move off this node.
 	// Note delay only happens on first call to drain.
 	if shouldDelayDraining {
 		log.Ops.Info(ctx, "waiting for health probes to notice that the node "+
 			"is not ready for new sql connections")
-		s.drainSleepFn(drainWait.Get(&s.sqlServer.execCfg.Settings.SV))
+		s.drainSleepFn(DrainWait.Get(&s.sqlServer.execCfg.Settings.SV))
 	}
 
 	// Wait for users to close the existing SQL connections.
 	// During this phase, the server is rejecting new SQL connections.
 	// The server exits this phase either once all SQL connections are closed,
 	// or the connectionMaxWait timeout elapses, whichever happens earlier.
-	if err := s.sqlServer.pgServer.WaitForSQLConnsToClose(ctx, connectionWait.Get(&s.sqlServer.execCfg.Settings.SV), s.stopper); err != nil {
+	if err := s.sqlServer.pgServer.WaitForSQLConnsToClose(ctx, ConnectionShutdownTimeout.Get(&s.sqlServer.execCfg.Settings.SV), s.stopper); err != nil {
 		return err
 	}
 
@@ -406,7 +417,7 @@ func (s *drainServer) drainClients(
 	// registry is now unavailable due to the drain.
 	{
 		_ = timeutil.RunWithTimeout(ctx, "drain-job-registry",
-			jobRegistryWait.Get(&s.sqlServer.execCfg.Settings.SV),
+			JobShutdownTimeout.Get(&s.sqlServer.execCfg.Settings.SV),
 			func(ctx context.Context) error {
 				s.sqlServer.jobRegistry.DrainRequested(ctx)
 				return nil
@@ -417,16 +428,16 @@ func (s *drainServer) drainClients(
 	s.sqlServer.statsRefresher.SetDraining()
 
 	// Drain any remaining SQL connections.
-	// The queryWait duration is a timeout for waiting for SQL queries to finish.
+	// The QueryShutdownTimeout duration is a timeout for waiting for SQL queries to finish.
 	// If the timeout is reached, any remaining connections
 	// will be closed.
-	queryMaxWait := queryWait.Get(&s.sqlServer.execCfg.Settings.SV)
+	queryMaxWait := QueryShutdownTimeout.Get(&s.sqlServer.execCfg.Settings.SV)
 	if err := s.sqlServer.pgServer.Drain(ctx, queryMaxWait, reporter, s.stopper); err != nil {
 		return err
 	}
 
 	// Drain all distributed SQL execution flows.
-	// The queryWait duration is used to wait on currently running flows to finish.
+	// The QueryShutdownTimeout duration is used to wait on currently running flows to finish.
 	s.sqlServer.distSQLServer.Drain(ctx, queryMaxWait, reporter)
 
 	// Flush in-memory SQL stats into the statement stats system table.
