@@ -19,9 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,12 +31,14 @@ import (
 // few different types set.
 func TestRowDecoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
 
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb := sqlutils.MakeSQLRunner(db)
 
 	toSet := map[string]struct {
 		val        interface{}
@@ -67,10 +70,10 @@ func TestRowDecoder(t *testing.T) {
 		tdb.Exec(t, "SET CLUSTER SETTING "+k+" = $1", v.val)
 	}
 
-	k := keys.SystemSQLCodec.TablePrefix(keys.SettingsTableID)
-	rows, err := tc.Server(0).DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
+	k := ts.Codec().TablePrefix(keys.SettingsTableID)
+	rows, err := kvDB.Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 	require.NoError(t, err)
-	dec := settingswatcher.MakeRowDecoder(keys.SystemSQLCodec)
+	dec := settingswatcher.MakeRowDecoder(ts.Codec())
 	var alloc *tree.DatumAlloc
 	for _, row := range rows {
 		kv := roachpb.KeyValue{
