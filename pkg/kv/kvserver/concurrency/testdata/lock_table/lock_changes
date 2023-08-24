@@ -67,7 +67,7 @@ acquire r=req2 k=a durability=r strength=intent
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 8.000000000,0, info: repl, unrepl [(str: Exclusive seq: 2)]
-   queued writers:
+   queued locking requests:
     active: true req: 1, strength: Intent, txn: none
    distinguished req: 1
 

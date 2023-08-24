@@ -62,7 +62,7 @@ print
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
-   queued writers:
+   queued locking requests:
     active: false req: 3, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
     active: false req: 4, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
 
@@ -103,7 +103,7 @@ num=1
  lock: "a"
   holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
-   queued writers:
+   queued locking requests:
     active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 5
@@ -127,7 +127,7 @@ num=1
  lock: "a"
   holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
-   queued writers:
+   queued locking requests:
     active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 7, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
@@ -149,7 +149,7 @@ num=1
  lock: "a"
   holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
-   queued writers:
+   queued locking requests:
     active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 7, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
@@ -228,7 +228,7 @@ num=1
   holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
-   queued writers:
+   queued locking requests:
     active: true req: 12, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
    distinguished req: 12
 
@@ -240,7 +240,7 @@ num=1
  lock: "a"
   holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
-   queued writers:
+   queued locking requests:
     active: true req: 12, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
    distinguished req: 12
 
@@ -249,7 +249,7 @@ release txn=txn2 span=a
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
-   queued writers:
+   queued locking requests:
     active: true req: 12, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
    distinguished req: 12
 
@@ -259,7 +259,7 @@ release txn=txn3 span=a
 ----
 num=1
  lock: "a"
-   queued writers:
+   queued locking requests:
     active: false req: 12, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
 
 
@@ -293,4 +293,3 @@ num=1
 # 8. Cases where the waiter is a non-transactional writer. For example, a state
 # transition that uncorks a number of non-transactional writer from the head of
 # the queue.
-
