@@ -108,7 +108,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 	_, err := db.Exec("SHOW RANGES FROM TABLE system.descriptor")
 	if err != nil {
 		if strings.Contains(err.Error(), "not fully contained in tenant") ||
-			strings.Contains(err.Error(), errorutil.UnsupportedWithMultiTenancyMessage) {
+			strings.Contains(err.Error(), errorutil.UnsupportedUnderClusterVirtualizationMessage) {
 			log.Infof(ctx, `skipping workload splits; can't split on tenants'`)
 			//nolint:returnerrcheck
 			return nil
@@ -171,9 +171,12 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 					// not) help you.
 					stmt := buf.String()
 					if _, err := db.Exec(stmt); err != nil {
-						if strings.Contains(err.Error(), errorutil.UnsupportedWithMultiTenancyMessage) {
+						if strings.Contains(err.Error(), errorutil.UnsupportedUnderClusterVirtualizationMessage) {
 							// We don't care about split errors if we're running a workload
-							// in multi-tenancy mode; we can't do them so we'll just continue
+							// with virtual clusters; we can't do them so we'll just continue.
+							//
+							// TODO(knz): This seems incorrect: this should be possible
+							// with the right capability. See: #109422.
 							break
 						}
 						return errors.Wrapf(err, "executing %s", stmt)
