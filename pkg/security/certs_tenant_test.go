@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
@@ -98,7 +99,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 		certsDir = makeTenantCerts(t, tenant)
 	} else {
 		certsDir = certnames.EmbeddedCertsDir
-		tenant = security.EmbeddedTenantIDs()[0]
+		tenant = securitytest.EmbeddedTenantIDs()[0]
 	}
 
 	// Now set up the config a server would use. The client will trust it based on

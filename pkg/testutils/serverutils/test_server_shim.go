@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -294,21 +294,21 @@ func StartSharedProcessTenant(
 // starting a test Tenant. The returned tenant IDs match those built
 // into the test certificates.
 func TestTenantID() roachpb.TenantID {
-	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[0])
+	return roachpb.MustMakeTenantID(securitytest.EmbeddedTenantIDs()[0])
 }
 
 // TestTenantID2 returns another roachpb.TenantID that can be used when
 // starting a test Tenant. The returned tenant IDs match those built
 // into the test certificates.
 func TestTenantID2() roachpb.TenantID {
-	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[1])
+	return roachpb.MustMakeTenantID(securitytest.EmbeddedTenantIDs()[1])
 }
 
 // TestTenantID3 returns another roachpb.TenantID that can be used when
 // starting a test Tenant. The returned tenant IDs match those built
 // into the test certificates.
 func TestTenantID3() roachpb.TenantID {
-	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[2])
+	return roachpb.MustMakeTenantID(securitytest.EmbeddedTenantIDs()[2])
 }
 
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters
