@@ -3534,7 +3534,9 @@ func TestChangefeedWorksOnRBRChange(t *testing.T) {
 	//
 	// error executing 'ALTER DATABASE d PRIMARY REGION
 	// "us-east-1"': pq: get_live_cluster_regions: unimplemented:
-	// operation is unsupported in multi-tenancy mode
+	// operation is unsupported inside virtual clusters
+	//
+	// TODO(knz): This seems incorrect; see issue #109418.
 	opts := []feedTestOption{
 		feedTestNoTenants,
 		feedTestEnterpriseSinks,
