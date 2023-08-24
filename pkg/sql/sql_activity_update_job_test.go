@@ -228,6 +228,15 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 			db.Exec(t, "SELECT 1;")
 		}
 
+		db.Exec(t, "SET SESSION application_name=$1", "topTransaction")
+		tx := db.Begin(t)
+		_, err = tx.Exec("SELECT 1,2")
+		require.NoError(t, err)
+		_, err = tx.Exec("SELECT 1,2,3")
+		require.NoError(t, err)
+		err = tx.Commit()
+		require.NoError(t, err)
+
 		db.Exec(t, "SET SESSION application_name=$1", "randomIgnore")
 
 		srv.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
@@ -279,6 +288,12 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 			}
 		}
 
+		// Update the transaction stats
+		db.Exec(t, `UPDATE system.public.transaction_statistics
+			SET statistics =  jsonb_set(jsonb_set(statistics, '{execution_statistics, cnt}', to_jsonb($1::INT)),
+			    '{statistics, svcLat, mean}', to_jsonb($2::FLOAT))
+			    WHERE app_name = $3;`, 10000, 1, "topTransaction")
+
 		// Run the updater to add rows to the activity tables.
 		// This will use the transfer all scenarios with there only
 		// being a few rows.
@@ -300,6 +315,29 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		row = db.QueryRow(t, `SELECT count_rows() FROM system.public.transaction_activity`)
 		row.Scan(&count)
 		require.LessOrEqual(t, count, maxRows, "transaction_activity after transfer: actual:%d, max:%d", count, maxRows)
+
+		// Verify that if the transaction is in the transaction_activity table that
+		// all the stmts for that transaction are in the statement_activity table.
+		// This is necessary for the UI on the transaction details page to show
+		// the necessary information.
+		var stmtIDs [2]string
+		rows := db.Query(t, `SELECT json_array_elements_text(metadata->'stmtFingerprintIDs') FROM system.public.transaction_activity where app_name = 'topTransaction' AND json_array_length(metadata->'stmtFingerprintIDs') = 2`)
+		defer rows.Close()
+		stmtIdCnt := 0
+		for rows.Next() {
+			require.Less(t, stmtIdCnt, 2)
+			require.NoError(t, rows.Scan(&stmtIDs[stmtIdCnt]))
+			stmtIdCnt++
+		}
+
+		require.Equal(t, 2, stmtIdCnt, "transaction_activity should have 2 stmts ids: actual:%d", stmtIdCnt)
+		for _, stmtToFind := range stmtIDs {
+			row = db.QueryRow(t, `SELECT count_rows() FROM system.public.statement_activity 
+                    WHERE encode(fingerprint_id, 'hex') = $1`, stmtToFind)
+			row.Scan(&count)
+			require.Equal(t, 1, count, "missing fingerprint from statement_activity:%s", stmtToFind)
+
+		}
 	}
 }
 
