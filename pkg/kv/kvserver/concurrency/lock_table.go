@@ -1234,7 +1234,7 @@ func newTxnLock(txn *enginepb.TxnMeta, clock *hlc.Clock) *txnLock {
 
 // getLockHolder returns information about the lock's holder.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (tl *txnLock) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
 	assert(
 		tl.isHeldReplicated() || tl.isHeldUnreplicated(),
@@ -1258,7 +1258,7 @@ func (tl *txnLock) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
 
 // isHeldReplicated returns true if the receiver is held as a replicated lock.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (tl *txnLock) isHeldReplicated() bool {
 	return !tl.replicatedInfo.ts.IsEmpty()
 }
@@ -1266,7 +1266,7 @@ func (tl *txnLock) isHeldReplicated() bool {
 // isHeldUnreplicated returns true if the receiver is held as a unreplicated
 // lock.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (tl *txnLock) isHeldUnreplicated() bool {
 	return !tl.unreplicatedInfo.ts.IsEmpty()
 }
@@ -1275,7 +1275,7 @@ func (tl *txnLock) isHeldUnreplicated() bool {
 // by a transaction with multiple locking strengths, the mode corresponding to
 // the highest lock strength is returned.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (tl *txnLock) getLockMode() lock.Mode {
 	lockHolderTxn, lockHolderTS := tl.getLockHolder()
 
@@ -1302,7 +1302,7 @@ func (tl *txnLock) getLockMode() lock.Mode {
 // idempotent. Idempotent lock acquisitions do not require any changes to what
 // is being tracked in the lock's state.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (tl *txnLock) isIdempotentLockAcquisition(acq *roachpb.LockAcquisition) bool {
 	txn, _ := tl.getLockHolder()
 	assert(txn.ID == acq.Txn.ID, "existing lock transaction is different from the acquisition")
@@ -1334,7 +1334,7 @@ func (tl *txnLock) isIdempotentLockAcquisition(acq *roachpb.LockAcquisition) boo
 // a lock is already held on the receiver's key by the transaction referenced in
 // the supplied lock acquisition.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (tl *txnLock) reacquireLock(acq *roachpb.LockAcquisition) error {
 	// An unreplicated lock is being re-acquired...
 	if acq.Durability == lock.Unreplicated && tl.isHeldUnreplicated() {
@@ -1598,7 +1598,7 @@ func (kl *keyLocks) SetID(v uint64)     { kl.id = v }
 func (kl *keyLocks) SetKey(v []byte)    { kl.key = v }
 func (kl *keyLocks) SetEndKey(v []byte) { kl.endKey = v }
 
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) String() string {
 	var sb redact.StringBuilder
 	kl.safeFormat(&sb, nil)
@@ -1606,7 +1606,7 @@ func (kl *keyLocks) String() string {
 }
 
 // SafeFormat implements redact.SafeFormatter.
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) SafeFormat(w redact.SafePrinter, _ rune) {
 	var sb redact.StringBuilder
 	kl.safeFormat(&sb, nil)
@@ -1614,7 +1614,7 @@ func (kl *keyLocks) SafeFormat(w redact.SafePrinter, _ rune) {
 }
 
 // safeFormat is a helper for SafeFormat and String methods.
-// REQUIRES: l.mu is locked. txnStatusCache can be nil.
+// REQUIRES: kl.mu is locked. txnStatusCache can be nil.
 func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStatusCache) {
 	sb.Printf(" lock: %s\n", kl.key)
 	if kl.isEmptyLock() {
@@ -1736,7 +1736,7 @@ func (kl *keyLocks) collectLockStateInfo(
 }
 
 // lockStateInfo converts receiver to the roachpb.LockStateInfo structure.
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 	var txnHolder *enginepb.TxnMeta
 
@@ -1816,7 +1816,7 @@ func (kl *keyLocks) addToMetrics(m *LockTableMetrics, now time.Time) {
 // inconsistencies with waitSelf and waitForDistinguished states that need
 // changing.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) informActiveWaiters() {
 	if kl.waitingReaders.Len() == 0 && kl.queuedLockingRequests.Len() == 0 {
 		return // no active waiters to speak of; early return
@@ -1937,7 +1937,7 @@ func (kl *keyLocks) informActiveWaiters() {
 // they use the concept of the transaction that has claimed a particular key as
 // the transaction to push.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) claimantTxn() (_ *enginepb.TxnMeta, held bool) {
 	if kl.isLocked() {
 		// We want the claimant transaction to remain the same unless there has been
@@ -1980,7 +1980,7 @@ func (kl *keyLocks) releaseLockingRequestsFromTxn(txn *enginepb.TxnMeta) {
 // the waiting state for other actively waiting requests as well; as such,
 // informActiveWaiters is more appropriate.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) tryMakeNewDistinguished() {
 	var g *lockTableGuardImpl
 	claimantTxn, _ := kl.claimantTxn()
@@ -2013,7 +2013,7 @@ func (kl *keyLocks) tryMakeNewDistinguished() {
 // Returns true iff the keyLocks is empty, i.e., there is no lock holder and no
 // waiters.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) isEmptyLock() bool {
 	if kl.isLocked() {
 		return false // lock is held
@@ -2033,7 +2033,8 @@ func (kl *keyLocks) isEmptyLock() bool {
 // for a lock to be safely removed from the tree. If it does not hold, requests
 // with a stale snapshot of the btree will still be able to enter the lock's
 // wait-queue, after which point they will never hear of lock updates.
-// REQUIRES: l.mu is locked.
+//
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) assertEmptyLock() {
 	if !kl.isEmptyLock() {
 		panic("keyLocks is not empty")
@@ -2041,7 +2042,8 @@ func (kl *keyLocks) assertEmptyLock() {
 }
 
 // assertEmptyLockUnlocked is like assertEmptyLock, but it locks the keyLocks.
-// REQUIRES: l.mu is not locked.
+//
+// REQUIRES: kl.mu is not locked.
 func (kl *keyLocks) assertEmptyLockUnlocked() {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
@@ -2052,7 +2054,7 @@ func (kl *keyLocks) assertEmptyLockUnlocked() {
 // held with durability replicated. If so, the first transaction that holds a
 // replicated lock is also returned.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) isAnyLockHeldReplicated() (bool, *enginepb.TxnMeta) {
 	if !kl.isLocked() {
 		return false, nil
@@ -2067,7 +2069,8 @@ func (kl *keyLocks) isAnyLockHeldReplicated() (bool, *enginepb.TxnMeta) {
 }
 
 // Returns the duration of time the lock has been tracked as held in the lock table.
-// REQUIRES: l.mu is locked.
+//
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) lockHeldDuration(now time.Time) time.Duration {
 	if !kl.isLocked() {
 		return time.Duration(0)
@@ -2085,7 +2088,7 @@ func (kl *keyLocks) lockHeldDuration(now time.Time) time.Duration {
 
 // Returns the total amount of time all waiters in the queues of
 // readers and locking requests have been waiting on the key referenced in the
-// reciever.
+// receiver.
 //
 // REQUIRES: kl.mu is locked.
 func (kl *keyLocks) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.Duration) {
@@ -2117,7 +2120,8 @@ func (kl *keyLocks) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.
 
 // Returns true iff the lock is currently held by the transaction with the
 // given id.
-// REQUIRES: l.mu is locked.
+//
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) isLockedBy(id uuid.UUID) bool {
 	if kl.isLocked() {
 		_, ok := kl.heldBy[id]
@@ -2130,7 +2134,7 @@ func (kl *keyLocks) isLockedBy(id uuid.UUID) bool {
 // or more transactions. Each transaction's locks may be held durably,
 // non-durably, or both.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) isLocked() bool {
 	return kl.holders.Len() != 0
 }
@@ -2138,7 +2142,7 @@ func (kl *keyLocks) isLocked() bool {
 // clearLockHeldBy removes the lock, if held, by the transaction referenced by
 // the supplied ID. It is a no-op if the lock isn't held by the transaction.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) clearLockHeldBy(ID uuid.UUID) {
 	e, held := kl.heldBy[ID]
 	if !held {
@@ -2157,7 +2161,7 @@ func (kl *keyLocks) clearAllLockHolders() {
 // acquired or discovered on the key referenced in the receiver for the first
 // time.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) lockAcquiredOrDiscovered(tl *txnLock) {
 	_, found := kl.heldBy[tl.txn.ID]
 	assert(!found, "lock was already being tracked for this key")
@@ -2186,7 +2190,7 @@ func (kl *keyLocks) lockAcquiredOrDiscovered(tl *txnLock) {
 // evaluate. The guard's state is modified to indicate if there are locks that
 // need resolution.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) scanAndMaybeEnqueue(g *lockTableGuardImpl, notify bool) (wait bool) {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
@@ -2256,7 +2260,7 @@ func (kl *keyLocks) scanAndMaybeEnqueue(g *lockTableGuardImpl, notify bool) (wai
 // constructWaitingState constructs the waiting state the supplied request
 // should use to wait in the receiver's lock wait-queues.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) constructWaitingState(g *lockTableGuardImpl) waitingState {
 	waitForState := waitingState{
 		kind:                  waitFor,
@@ -2281,7 +2285,7 @@ func (kl *keyLocks) constructWaitingState(g *lockTableGuardImpl) waitingState {
 // transaction already holds the lock with an equal or higher lock strength
 // compared to the one supplied. Otherwise, false is returned.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) alreadyHoldsLockAndIsAllowedToProceed(
 	g *lockTableGuardImpl, str lock.Strength,
 ) bool {
@@ -2325,7 +2329,7 @@ func (kl *keyLocks) alreadyHoldsLockAndIsAllowedToProceed(
 // non-conflicting. However, the caller may be responsible for cleaning them up
 // before proceeding.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 // REQUIRES: the transaction, to which the request belongs, should not be a lock
 // holder.
 func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
@@ -2441,7 +2445,7 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 // A boolean is returned indicating whether the read request conflicted with
 // the lock or not.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) maybeEnqueueNonLockingReadRequest(g *lockTableGuardImpl) (conflicts bool) {
 	assert(g.curStrength() == lock.None, "unexpected locking strength; expected read")
 	if !kl.conflictsWithLockHolders(g) {
@@ -2468,7 +2472,7 @@ func (kl *keyLocks) maybeEnqueueNonLockingReadRequest(g *lockTableGuardImpl) (co
 // configured bound the request is not enqueued; instead, a boolean indicating
 // this case is returned to the caller.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) enqueueLockingRequest(g *lockTableGuardImpl) (maxQueueLengthExceeded bool) {
 	assert(g.curStrength() != lock.None, "should only be called with a locking request")
 	g.mu.Lock()
@@ -2537,7 +2541,7 @@ func (kl *keyLocks) enqueueLockingRequest(g *lockTableGuardImpl) (maxQueueLength
 // [1] A request that belongs to the lock's claimant transaction is not eligible
 // to become a distinguished waiter.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) maybeMakeDistinguishedWaiter(g *lockTableGuardImpl) {
 	if kl.distinguishedWaiter != nil {
 		return
@@ -2553,7 +2557,7 @@ func (kl *keyLocks) maybeMakeDistinguishedWaiter(g *lockTableGuardImpl) {
 // shouldRequestActivelyWait returns true iff the supplied request needs to
 // actively wait on the receiver.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 // REQUIRES: g.mu to be locked.
 func (kl *keyLocks) shouldRequestActivelyWait(g *lockTableGuardImpl) bool {
 	if g.curStrength() == lock.None {
@@ -2609,7 +2613,7 @@ func (kl *keyLocks) shouldRequestActivelyWait(g *lockTableGuardImpl) bool {
 // [2] While non-transactional writers cannot establish claims, they do need to
 // be removed from the receiver's wait queue before proceeding. We do that here.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) claimBeforeProceeding(g *lockTableGuardImpl) {
 	assert(g.curStrength() != lock.None, "non-locking requests should not try to grab claims")
 
@@ -2989,7 +2993,7 @@ func (kl *keyLocks) tryUpdateLock(up *roachpb.LockUpdate) (heldByTxn, gc bool) {
 	return kl.tryUpdateLockLocked(*up)
 }
 
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bool) {
 	if kl.isEmptyLock() {
 		// Already free. This can happen when an unreplicated lock is removed in
@@ -3108,7 +3112,8 @@ func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 
 // The lock holder timestamp has increased. Some of the waiters may no longer
 // need to wait.
-// REQUIRES: l.mu is locked.
+//
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) increasedLockTs(newTs hlc.Timestamp) {
 	distinguishedRemoved := false
 	for e := kl.waitingReaders.Front(); e != nil; {
