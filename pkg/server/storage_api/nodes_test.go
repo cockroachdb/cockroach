@@ -138,7 +138,9 @@ func TestMetricsRecording(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	// Verify that metrics for the current timestamp are recorded. This should
