@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
@@ -587,61 +586,6 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	}
 }
 
-// TestTimeoutPushDoesntBlockRegister verifies that in the case of a timeout
-// error, we are still able to register flows while Pushing the error (#34041).
-func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	fr := NewFlowRegistry()
-	// pushChan is used to be able to tell when a Push on the RowBuffer has
-	// occurred.
-	pushChan := make(chan *execinfrapb.ProducerMetadata)
-	rc := distsqlutils.NewRowBuffer(
-		types.OneIntCol,
-		nil, /* rows */
-		distsqlutils.RowBufferArgs{
-			OnPush: func(_ rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata) {
-				pushChan <- meta
-				<-pushChan
-			},
-		},
-	)
-
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
-		0: {
-			receiver: RowInboundStreamHandler{rc, types.OneIntCol},
-			onFinish: wg.Done,
-		},
-	}
-
-	// RegisterFlow with an immediate timeout.
-	if err := fr.RegisterFlow(
-		ctx, execinfrapb.FlowID{}, &FlowBase{}, inboundStreams, 0, /* timeout */
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	// Ensure RegisterFlow performs a Push.
-	meta := <-pushChan
-	if !testutils.IsError(meta.Err, errNoInboundStreamConnection.Error()) {
-		t.Fatalf("unexpected err %v, expected %s", meta.Err, errNoInboundStreamConnection)
-	}
-
-	// Attempt to register a flow. Note that this flow has no inbound streams, so
-	// Pushing to the RowBuffer is unexpected.
-	if err := fr.RegisterFlow(
-		ctx, execinfrapb.FlowID{UUID: uuid.MakeV4()}, &FlowBase{}, nil /* inboundStreams */, time.Hour, /* timeout */
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	// Unblock the first RegisterFlow.
-	close(pushChan)
-}
-
 // TestFlowCancelPartiallyBlocked tests that cancellation messages can propagate
 // into a flow even if one of the inbound streams are blocked (#35859).
 func TestFlowCancelPartiallyBlocked(t *testing.T) {
@@ -842,7 +786,7 @@ func TestErrorOnSlowHandshake(t *testing.T) {
 		record = receiver.Mu.Records[0]
 		return nil
 	})
-	if !IsNoInboundStreamConnectionError(record.Meta.Err) {
-		t.Fatalf("unexpected record: %v", record)
-	}
+	//if !IsNoInboundStreamConnectionError(record.Meta.Err) {
+	t.Fatalf("unexpected record: %v", record)
+	//}
 }

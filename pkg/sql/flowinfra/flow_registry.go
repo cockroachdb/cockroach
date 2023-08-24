@@ -18,24 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 )
-
-// errNoInboundStreamConnection is the error propagated through the flow when
-// the timeout to setup the flow is exceeded.
-var errNoInboundStreamConnection = errors.New("no inbound stream connection")
-
-// IsNoInboundStreamConnectionError returns true if err's Cause is an
-// errNoInboundStreamConnection.
-func IsNoInboundStreamConnectionError(err error) bool {
-	return errors.Is(err, errNoInboundStreamConnection)
-}
 
 // SettingFlowStreamTimeout is a cluster setting that sets the default flow
 // stream timeout.
@@ -305,29 +293,6 @@ func (fr *FlowRegistry) RegisterFlow(
 	// If there are any waiters, wake them up by closing waitCh.
 	if entry.waitCh != nil {
 		close(entry.waitCh)
-	}
-
-	if len(inboundStreams) > 0 {
-		// Set up a function to time out inbound streams after a while.
-		entry.streamTimer = time.AfterFunc(timeout, func() {
-			// We're giving up waiting for these inbound streams. We will push
-			// an error to its consumer; the error will propagate and eventually
-			// drain all the processors.
-			numTimedOutReceivers := fr.cancelPendingStreams(id, errNoInboundStreamConnection)
-			if numTimedOutReceivers != 0 {
-				// The span in the context might be finished by the time this runs. In
-				// principle, we could ForkSpan() beforehand, but we don't want to
-				// create the extra span every time.
-				timeoutCtx := tracing.ContextWithSpan(ctx, nil)
-				log.Errorf(
-					timeoutCtx,
-					"flow id:%s : %d inbound streams timed out after %s; propagated error throughout flow",
-					id,
-					numTimedOutReceivers,
-					timeout,
-				)
-			}
-		})
 	}
 	return nil
 }
