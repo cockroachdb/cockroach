@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -71,18 +71,25 @@ func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+		defer log.Scope(t).Close(t)
+
 		ctx := context.Background()
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-		defer tc.Stopper().Stop(ctx)
+		srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+			// Requires span_configuration table which is not visible
+			// from secondary tenants.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		})
+		defer srv.Stopper().Stop(ctx)
+		ts := srv.ApplicationLayer()
 
 		const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
-		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+		tdb := sqlutils.MakeSQLRunner(db)
 		tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummySpanConfigurationsFQN))
 		accessor := spanconfigkvaccessor.New(
-			tc.Server(0).DB(),
-			tc.Server(0).InternalExecutor().(isql.Executor),
-			tc.Server(0).ClusterSettings(),
-			tc.Server(0).Clock(),
+			kvDB,
+			ts.InternalExecutor().(isql.Executor),
+			ts.ClusterSettings(),
+			ts.Clock(),
 			dummySpanConfigurationsFQN,
 			nil, /* knobs */
 		)
@@ -147,24 +154,23 @@ func BenchmarkKVAccessorUpdate(b *testing.B) {
 		}
 
 		b.Run(fmt.Sprintf("batch-size=%d", batchSize), func(b *testing.B) {
-			tc := testcluster.StartTestCluster(b, 1, base.TestClusterArgs{
-				ServerArgs: base.TestServerArgs{
-					// Requires span_configuration table which is not visible
-					// from secondary tenants.
-					DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-				},
+			srv, db, kvDB := serverutils.StartServer(b, base.TestServerArgs{
+				// Requires span_configuration table which is not visible
+				// from secondary tenants.
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			})
-			defer tc.Stopper().Stop(ctx)
+			defer srv.Stopper().Stop(ctx)
+			ts := srv.ApplicationLayer()
 
 			const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
-			tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+			tdb := sqlutils.MakeSQLRunner(db)
 			tdb.Exec(b, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummySpanConfigurationsFQN))
 
 			accessor := spanconfigkvaccessor.New(
-				tc.Server(0).DB(),
-				tc.Server(0).InternalExecutor().(isql.Executor),
-				tc.Server(0).ClusterSettings(),
-				tc.Server(0).Clock(),
+				kvDB,
+				ts.InternalExecutor().(isql.Executor),
+				ts.ClusterSettings(),
+				ts.Clock(),
 				dummySpanConfigurationsFQN,
 				nil, /* knobs */
 			)
@@ -187,27 +193,27 @@ func BenchmarkKVAccessorUpdate(b *testing.B) {
 
 func TestKVAccessorPagination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			// Requires span_configuration table which is not visible
-			// from secondary tenants.
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		},
+	ts, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		// Requires span_configuration table which is not visible
+		// from secondary tenants.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 	})
-	defer tc.Stopper().Stop(ctx)
+	defer ts.Stopper().Stop(ctx)
 
 	const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummySpanConfigurationsFQN))
 
 	var batches, batchSize int
 	accessor := spanconfigkvaccessor.New(
-		tc.Server(0).DB(),
-		tc.Server(0).InternalExecutor().(isql.Executor),
-		tc.Server(0).ClusterSettings(),
-		tc.Server(0).Clock(),
+		kvDB,
+		ts.InternalExecutor().(isql.Executor),
+		ts.ClusterSettings(),
+		ts.Clock(),
 		dummySpanConfigurationsFQN,
 		&spanconfig.TestingKnobs{
 			KVAccessorPaginationInterceptor: func() {
@@ -314,19 +320,26 @@ span [j,k)
 // of the minimum commit timestamp respond to context cancellations.
 func TestKVAccessorCommitMinTSWaitRespondsToCtxCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		// Requires span_configuration table which is not visible
+		// from secondary tenants.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
 
 	const dummySpanConfigurationsFQN = "defaultdb.public.dummy_span_configurations"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	accessor := spanconfigkvaccessor.New(
-		tc.Server(0).DB(),
-		tc.Server(0).InternalExecutor().(isql.Executor),
-		tc.Server(0).ClusterSettings(),
-		tc.Server(0).Clock(),
+		kvDB,
+		ts.InternalExecutor().(isql.Executor),
+		ts.ClusterSettings(),
+		ts.Clock(),
 		dummySpanConfigurationsFQN,
 		&spanconfig.TestingKnobs{
 			KVAccessorPreCommitMinTSWaitInterceptor: func() {
@@ -335,7 +348,7 @@ func TestKVAccessorCommitMinTSWaitRespondsToCtxCancellation(t *testing.T) {
 		},
 	)
 
-	commitMinTS := tc.Server(0).Clock().Now().Add(time.Second.Nanoseconds(), 0)
+	commitMinTS := ts.Clock().Now().Add(time.Second.Nanoseconds(), 0)
 	err := accessor.UpdateSpanConfigRecords(
 		ctx, nil /* toDelete */, nil /* toUpsert */, commitMinTS, hlc.MaxTimestamp,
 	)
