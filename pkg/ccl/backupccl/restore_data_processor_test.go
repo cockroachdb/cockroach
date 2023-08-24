@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
@@ -39,9 +40,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/keysutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -50,6 +53,85 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
+
+type sz int64
+
+func (b sz) String() string { return string(humanizeutil.IBytes(int64(b))) }
+
+func TestPathelogicalIngest(t *testing.T) {
+	ctx := context.Background()
+
+	scanner := keysutils.MakePrettyScannerForNamedTables(map[string]int{"183": 183}, map[string]int{"183.1": 1, "183.2": 2})
+	startKey, err := scanner.Scan(`/Table/183/1/81/9/-2056/3`)
+	require.NoError(t, err)
+	endKey, err := scanner.Scan(`/Table/183/2`)
+	require.NoError(t, err)
+
+	baseURL := "gs://cockroach-tmp/108676/current-to-22.2.9_database-tpcc_SLOW/2023/08/15-185423.23?AUTH=implicit"
+
+	dataFiles := []string{
+		"data/891470709612773378.sst",
+		"data/891470891329912835.sst",
+	}
+	conf, err := cloud.ExternalStorageConfFromURI(baseURL, username.RootUserName())
+	require.NoError(t, err)
+	s, err := cloud.MakeExternalStorage(context.Background(), conf, base.ExternalIODirConfig{},
+		cluster.MakeTestingClusterSettings(),
+		nil, /* blobClientFactory */
+		nil, /* db */
+		nil, /* limiters */
+		nil,
+		nil,
+		cloud.NilMetrics,
+	)
+	require.NoError(t, err)
+	storeFiles := []storageccl.StoreFile{}
+	for _, f := range dataFiles {
+		storeFiles = append(storeFiles, storageccl.StoreFile{
+			Store:    s,
+			FilePath: f,
+		})
+	}
+
+	for _, name := range dataFiles {
+		n, err := s.Size(ctx, name)
+		require.NoError(t, err, name)
+		t.Logf("%s size: %s", name, sz(n))
+	}
+
+	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, nil,
+		storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
+			LowerBound: startKey,
+			UpperBound: endKey,
+		})
+	require.NoError(t, err)
+	defer iter.Close()
+
+	prev := timeutil.Now()
+	var prevCount int
+	iter.SeekGE(storage.MVCCKey{Key: startKey})
+	t.Log("starting iteration")
+	var count int
+	for ; ; iter.NextKey() {
+		if ok, err := iter.Valid(); err != nil {
+			t.Fatal(err)
+		} else if !ok {
+			break
+		}
+		count++
+		if count%10000 == 0 || timeutil.Since(prev) > time.Second {
+			elapsed := timeutil.Since(prev).Seconds()
+			t.Logf("%0.2fs: read %d keys \t reading at %0.02f keys/s \t last read %s",
+				elapsed,
+				count,
+				float64(count-prevCount)/elapsed,
+				iter.UnsafeKey())
+			prev = timeutil.Now()
+			prevCount = count
+		}
+	}
+}
 
 func slurpSSTablesLatestKey(
 	t *testing.T, dir string, paths []string, oldPrefix, newPrefix []byte,
