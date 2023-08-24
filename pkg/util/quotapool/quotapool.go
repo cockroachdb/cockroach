@@ -167,6 +167,7 @@ type UpdateFunc func(resource Resource) (shouldNotify bool)
 //
 // Safe for concurrent use.
 func (qp *AbstractPool) Update(f UpdateFunc) {
+	// OMG
 	qp.mu.Lock()
 	defer qp.mu.Unlock()
 	qp.updateLocked(f)
