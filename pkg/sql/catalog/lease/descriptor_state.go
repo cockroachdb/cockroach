@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -184,7 +185,8 @@ func (t *descriptorState) upsertLeaseLocked(
 	// delete. For expiration we should flag this as
 	// requiring some sort of clean up.
 	// FIXME: For expiration we should still clean up.
-	if toRelease.version == s.mu.lease.version {
+	if toRelease.version == s.mu.lease.version &&
+		t.m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
 		toRelease = nil
 	}
 	return nil, toRelease, nil

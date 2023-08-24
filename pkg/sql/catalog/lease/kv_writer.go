@@ -12,7 +12,6 @@ package lease
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -70,9 +69,6 @@ func (w *kvWriter) versionGuard(
 func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
 	return w.do(ctx, txn, l, func(guard settingswatcher.VersionGuard, b *kv.Batch) error {
 		if guard.IsActive(clusterversion.V23_2) {
-			if l.descID == 104 {
-				fmt.Printf("P")
-			}
 			err := w.currentWriter.Insert(ctx, b, false /*kvTrace */, leaseAsCurrentDatum(l)...)
 			if err != nil {
 				return err

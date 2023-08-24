@@ -88,7 +88,7 @@ func CheckTwoVersionInvariant(
 	// transaction ends up committing then there won't have been any created
 	// in the meantime.
 	count, err := lease.CountLeases(
-		ctx, noTxnExec, withNewVersion, txn.ProvisionalCommitTimestamp(),
+		ctx, descsCol.settings.Version, noTxnExec, withNewVersion, txn.ProvisionalCommitTimestamp(),
 	)
 	if err != nil {
 		return err
@@ -115,7 +115,7 @@ func CheckTwoVersionInvariant(
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		// Use the current clock time.
 		now := clock.Now()
-		count, err := lease.CountLeases(ctx, noTxnExec, withNewVersion, now)
+		count, err := lease.CountLeases(ctx, descsCol.settings.Version, noTxnExec, withNewVersion, now)
 		if err != nil {
 			return err
 		}

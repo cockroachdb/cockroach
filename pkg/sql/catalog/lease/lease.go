@@ -86,7 +86,7 @@ func (m *Manager) WaitForNoVersion(
 		ie := m.storage.db.Executor()
 		stmt := `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND (crdb_internal.sql_liveness_is_alive("sessionID")))`
 		if !m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
-			stmt = `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND expiration > $1))`
+			stmt = `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND expiration > $1)`
 		}
 		now := m.storage.clock.Now()
 		stmt = fmt.Sprintf(stmt,
@@ -158,7 +158,7 @@ func (m *Manager) WaitForOneVersion(
 
 		now := m.storage.clock.Now()
 		descs := []IDVersion{NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion())}
-		count, err := CountLeases(ctx, m.storage.db.Executor(), descs, now)
+		count, err := CountLeases(ctx, m.storage.settings.Version, m.storage.db.Executor(), descs, now)
 		if err != nil {
 			return nil, err
 		}
@@ -1281,8 +1281,11 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 				refreshTimer.Read = true
 				refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
 
-				// FIXME: Disabled
-				// m.refreshSomeLeases(ctx)
+				// FIXME: Partially enable next
+				if !m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
+					m.refreshSomeLeases(ctx)
+				}
+
 			}
 		}
 	})
