@@ -208,6 +208,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				timeSource = timeutil.NewManualTime(initialTime)
 				opts.timeSource = timeSource
 				opts.disableEpochClosingGoroutine = true
+				opts.disableGCTenantsAndResetUsed = true
 				st = cluster.MakeTestingClusterSettings()
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 					KVWork, tg, st, metrics, opts).(*WorkQueue)
@@ -289,7 +290,11 @@ func TestWorkQueueBasic(t *testing.T) {
 				if !work.admitted {
 					return fmt.Sprintf("id not admitted: %d\n", id)
 				}
-				q.AdmittedWorkDone(work.tenantID)
+				cpuTime := int64(1)
+				if d.HasArg("cpu-time") {
+					d.ScanArgs(t, "cpu-time", &cpuTime)
+				}
+				q.AdmittedWorkDone(work.tenantID, time.Duration(cpuTime))
 				wrkMap.delete(id)
 				return buf.stringAndReset()
 
@@ -322,6 +327,10 @@ func TestWorkQueueBasic(t *testing.T) {
 				timeSource.Advance(time.Duration(millis) * time.Millisecond)
 				EpochLIFOEnabled.Override(context.Background(), &st.SV, true)
 				q.tryCloseEpoch(timeSource.Now())
+				return q.String()
+
+			case "gc-tenants-and-reset-used":
+				q.gcTenantsAndResetUsed()
 				return q.String()
 
 			default:
@@ -406,7 +415,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 				// This hot loop with GC calls is able to trigger the previously buggy
 				// code by squeezing in multiple times between the token grant and
 				// cancellation.
-				q.gcTenantsAndResetTokens()
+				q.gcTenantsAndResetUsed()
 			}
 		}
 	}()
