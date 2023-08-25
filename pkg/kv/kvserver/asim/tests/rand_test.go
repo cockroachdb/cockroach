@@ -137,7 +137,8 @@ const (
 //	- height (default value is 15): height of the plot
 //	- width (default value is 80): width of the plot
 
-//  5. "rand_events" [type=<string>{cycle_via_hardcoded_survival_goals}]
+//  5. "rand_events" [type=<string>{cycle_via_hardcoded_survival_goals,
+//  cycle_via_random_survival_goals}]
 //  [duration_to_assert_on_event=<time.Duration>]
 //  e.g. rand_events type=cycle_via_hardcoded_survival_goals duration=5m
 //  - rand_events: generates interesting event series to be scheduled in the
