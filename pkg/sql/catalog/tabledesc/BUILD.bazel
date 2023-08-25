@@ -119,6 +119,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//:errors",

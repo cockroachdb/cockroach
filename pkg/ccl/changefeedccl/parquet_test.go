@@ -58,6 +58,7 @@ func TestParquetRows(t *testing.T) {
 	maxRowGroupSize := int64(2)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 
 	for _, tc := range []struct {
 		testName          string

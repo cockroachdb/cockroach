@@ -3756,10 +3756,10 @@ func DescsTxn(
 }
 
 // TestingDescsTxn is a convenience function for running a transaction on
-// descriptors when you have a serverutils.TestServerInterface.
+// descriptors when you have a serverutils.ApplicationLayerInterface.
 func TestingDescsTxn(
 	ctx context.Context,
-	s serverutils.TestServerInterface,
+	s serverutils.ApplicationLayerInterface,
 	f func(ctx context.Context, txn isql.Txn, col *descs.Collection) error,
 ) error {
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
