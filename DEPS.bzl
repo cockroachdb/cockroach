@@ -28,10 +28,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:co_honnef_go_tools.patch",
         ],
-        sha256 = "bdd216490737b6cd0fe2655f574415606136f56033cc9f95c9d077c0227aa71c",
-        strip_prefix = "honnef.co/go/tools@v0.4.3",
+        sha256 = "3f7c266a830f3a0727ac0b85cd7cd74a765c05d337d73af20906219f1a4ec4c3",
+        strip_prefix = "honnef.co/go/tools@v0.4.5",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/honnef.co/go/tools/co_honnef_go_tools-v0.4.3.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/honnef.co/go/tools/co_honnef_go_tools-v0.4.5.zip",
         ],
     )
     go_repository(
