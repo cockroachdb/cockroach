@@ -248,8 +248,7 @@ type lockTableImpl struct {
 	//   A.
 	// Now in the queues for A and B req1 is behind req3 and vice versa and
 	// this deadlock has been created entirely due to the lock table's behavior.
-	// TODO(nvanbenschoten): use an atomic.Uint64.
-	seqNum uint64
+	seqNum atomic.Uint64
 
 	// locks contains the btree object (wrapped in the treeMu structure) that
 	// contains the actual keyLocks objects. These keyLocks objects represent the
@@ -3448,7 +3447,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 
 func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g := newLockTableGuardImpl()
-	g.seqNum = atomic.AddUint64(&t.seqNum, 1)
+	g.seqNum = t.seqNum.Add(1)
 	g.lt = t
 	g.txn = req.Txn
 	g.ts = req.Timestamp
