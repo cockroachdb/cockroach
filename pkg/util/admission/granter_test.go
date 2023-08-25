@@ -139,6 +139,7 @@ func TestGranterBasic(t *testing.T) {
 				},
 				kvIOTokensExhaustedDuration:     metrics.KVIOTokensExhaustedDuration,
 				kvIOTokensAvailable:             metrics.KVIOTokensAvailable,
+				kvElasticIOTokensAvailable:      metrics.KVElasticIOTokensAvailable,
 				kvIOTokensTookWithoutPermission: metrics.KVIOTokensTookWithoutPermission,
 				kvIOTotalTokensTaken:            metrics.KVIOTotalTokensTaken,
 				workQueueMetrics:                workQueueMetrics,
@@ -236,8 +237,8 @@ func TestGranterBasic(t *testing.T) {
 				// We are not using a real ioLoadListener, and simply setting the
 				// tokens (the ioLoadListener has its own test).
 				coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
-					int64(ioTokens), int64(elasticTokens),
-					int64(ioTokens*250), int64(elasticTokens*250),
+					int64(ioTokens), int64(ioTokens), int64(elasticTokens),
+					int64(ioTokens*250), int64(ioTokens*250), int64(elasticTokens*250), false,
 				)
 			}
 			coord.testingTryGrant()
@@ -249,6 +250,10 @@ func TestGranterBasic(t *testing.T) {
 			var tickInterval int
 			d.ScanArgs(t, "io-tokens", &ioTokens)
 			d.ScanArgs(t, "elastic-disk-bw-tokens", &elasticTokens)
+			elasticIOTokens := ioTokens
+			if d.HasArg("elastic-io-tokens") {
+				d.ScanArgs(t, "elastic-io-tokens", &elasticIOTokens)
+			}
 			if d.HasArg("tick-interval") {
 				d.ScanArgs(t, "tick-interval", &tickInterval)
 			}
@@ -263,8 +268,9 @@ func TestGranterBasic(t *testing.T) {
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
 			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
-				int64(ioTokens), int64(elasticTokens),
-				int64(ioTokens*burstMultiplier), int64(elasticTokens*burstMultiplier),
+				int64(ioTokens), int64(elasticIOTokens), int64(elasticTokens),
+				int64(ioTokens*burstMultiplier), int64(elasticIOTokens*burstMultiplier),
+				int64(elasticTokens*burstMultiplier), false,
 			)
 			coord.testingTryGrant()
 			return flushAndReset()

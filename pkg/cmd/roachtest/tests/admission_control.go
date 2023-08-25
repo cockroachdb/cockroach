@@ -40,4 +40,5 @@ func registerAdmission(r registry.Registry) {
 	registerIndexBackfill(r)
 	registerDatabaseDrop(r)
 	registerIntentResolutionOverload(r)
+	registerElasticIO(r)
 }
