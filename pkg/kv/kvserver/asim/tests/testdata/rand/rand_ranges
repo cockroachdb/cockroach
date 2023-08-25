@@ -43,7 +43,7 @@ configurations generated using seed 1926012586526624009
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
 	randomized ranges with placement_type=random, ranges=305, key_space=1015, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
+	number of mutation events=0, number of assertion events=0
 sample1: pass
 ----------------------------------
 sample2: start running
@@ -52,7 +52,7 @@ configurations generated using seed 2643318057788968173
  		region:US [zone=US_1(nodes=5,stores=0), zone=US_2(nodes=5,stores=0), zone=US_3(nodes=5,stores=0)]
 	randomized ranges with placement_type=random, ranges=944, key_space=1357, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
+	number of mutation events=0, number of assertion events=0
 sample2: pass
 ----------------------------------
 sample3: start running
@@ -61,7 +61,7 @@ configurations generated using seed 6972490225919430754
  		region:US [zone=US_1(nodes=5,stores=0), zone=US_2(nodes=5,stores=0), zone=US_3(nodes=5,stores=0)]
 	randomized ranges with placement_type=random, ranges=479, key_space=1003, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
+	number of mutation events=0, number of assertion events=0
 sample3: pass
 ----------------------------------
 sample4: start running
@@ -70,7 +70,7 @@ configurations generated using seed 8427801741804500990
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
 	randomized ranges with placement_type=random, ranges=487, key_space=2171, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
+	number of mutation events=0, number of assertion events=0
 sample4: pass
 ----------------------------------
 sample5: start running
@@ -79,7 +79,7 @@ configurations generated using seed 8063729658764635782
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
 	randomized ranges with placement_type=random, ranges=285, key_space=1060, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
+	number of mutation events=0, number of assertion events=0
 sample5: pass
 ----------------------------------
 sample6: start running
@@ -88,7 +88,7 @@ configurations generated using seed 3814222400681984302
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
 	randomized ranges with placement_type=random, ranges=611, key_space=1000, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
+	number of mutation events=0, number of assertion events=0
 sample6: pass
 ----------------------------------
 sample7: start running
@@ -97,7 +97,7 @@ configurations generated using seed 13013938835543503
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
 	randomized ranges with placement_type=random, ranges=271, key_space=1439, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
+	number of mutation events=0, number of assertion events=0
 sample7: pass
 ----------------------------------
 sample8: start running
@@ -106,7 +106,7 @@ configurations generated using seed 2207144605302255518
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
 	randomized ranges with placement_type=random, ranges=502, key_space=1198, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
+	number of mutation events=0, number of assertion events=0
 sample8: pass
 ----------------------------------
 sample9: start running
@@ -115,7 +115,7 @@ configurations generated using seed 5888461606762344739
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
 	randomized ranges with placement_type=random, ranges=865, key_space=1427, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
+	number of mutation events=0, number of assertion events=0
 sample9: pass
 ----------------------------------
 sample10: start running
@@ -124,7 +124,7 @@ configurations generated using seed 6738330972202035110
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
 	randomized ranges with placement_type=random, ranges=787, key_space=1001, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
+	number of mutation events=0, number of assertion events=0
 sample10: pass
 ----------------------------------
 
@@ -132,14 +132,14 @@ clear
 ----
 
 # We expect ranges to be randomly allocated across stores with a replication
-# factor of 1. Assertion failures on some samples are expected under this setup.
-# When there is only one replica and the removal target in rebalancing is the
-# leaseholder, stabilizing is hard. The system can't easily remove the replica,
-# so it choose to fall back to adding another replica, hoping lease transfer
-# would happen next time this range is checked. This can cause thrashing where
-# settling is difficult. In addition, we expect all output details to be
-# displayed upon test failure. Please see the comment in
-# ReplicationChangesForRebalance for more details.
+# factor of 1. Assertion failures on some samples are expected due to this
+# factor. When there is only one replica, the removal target in rebalancing is a
+# leaseholder, it is locked into the current replica distribution. The
+# rebalancer falls back to adding one replica, hoping the rebalancing would
+# happen next time this range is checked. This can case thrashing where settling
+# is difficult. In addition, we expect all output details to be displayed upon
+# test failure.
+
 rand_cluster cluster_gen_type=single_region
 ----
 
@@ -166,7 +166,7 @@ configurations generated using seed 1926012586526624009
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
 	randomized ranges with placement_type=random, ranges=305, key_space=96760, replication_factor=1, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
+	number of mutation events=0, number of assertion events=0
 sample1: pass
 ----------------------------------
 sample2: start running
@@ -175,7 +175,7 @@ configurations generated using seed 2643318057788968173
  		region:US [zone=US_1(nodes=5,stores=0), zone=US_2(nodes=5,stores=0), zone=US_3(nodes=5,stores=0)]
 	randomized ranges with placement_type=random, ranges=944, key_space=150098, replication_factor=1, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
+	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(15)=[s1n1=(replicas(65)),s2n2=(replicas(64)),s3n3=(replicas(66)),s4n4=(replicas(63)),s5n5=(replicas(63)),s6n6=(replicas(63)),s7n7=(replicas(63)),s8n8=(replicas(62)),s9n9=(replicas(64)),s10n10=(replicas(64)),s11n11=(replicas(62)),s12n12=(replicas(63)),s13n13=(replicas(63)),s14n14=(replicas(64)),s15n15=(replicas(64))]
 topology:
@@ -206,6 +206,6 @@ configurations generated using seed 6972490225919430754
  		region:US [zone=US_1(nodes=5,stores=0), zone=US_2(nodes=5,stores=0), zone=US_3(nodes=5,stores=0)]
 	randomized ranges with placement_type=random, ranges=479, key_space=199954, replication_factor=1, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of static events generated=0
+	number of mutation events=0, number of assertion events=0
 sample3: pass
 ----------------------------------
