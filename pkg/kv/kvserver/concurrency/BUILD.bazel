@@ -30,6 +30,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage/enginepb",
         "//pkg/util/buildutil",
+        "//pkg/util/container/list",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
