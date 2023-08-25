@@ -105,17 +105,17 @@ eval verbose=(initial_state)
 ----
 ----------------------------------
 sample1: start running
-initial state at 2022-03-21 11:00:00 +0000 UTC:
+initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 sample1: pass
 ----------------------------------
 sample2: start running
-initial state at 2022-03-21 11:00:00 +0000 UTC:
+initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 sample2: pass
 ----------------------------------
 sample3: start running
-initial state at 2022-03-21 11:00:00 +0000 UTC:
+initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 sample3: pass
 ----------------------------------
@@ -175,7 +175,7 @@ configurations generated using seed 3440579354231278675
 	basic ranges with placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of static events generated=0
-initial state at 2022-03-21 11:00:00 +0000 UTC:
+initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 sample1: pass
 ----------------------------------
@@ -185,7 +185,7 @@ configurations generated using seed 608747136543856411
 	basic ranges with placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of static events generated=0
-initial state at 2022-03-21 11:00:00 +0000 UTC:
+initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 sample2: pass
 ----------------------------------
@@ -195,7 +195,7 @@ configurations generated using seed 5571782338101878760
 	basic ranges with placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of static events generated=0
-initial state at 2022-03-21 11:00:00 +0000 UTC:
+initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 sample3: pass
 ----------------------------------
@@ -225,7 +225,7 @@ configurations generated using seed 3440579354231278675
 	basic ranges with placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of static events generated=0
-initial state at 2022-03-21 11:00:00 +0000 UTC:
+initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 topology:
 AU_EAST
@@ -239,7 +239,7 @@ configurations generated using seed 608747136543856411
 	basic ranges with placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of static events generated=0
-initial state at 2022-03-21 11:00:00 +0000 UTC:
+initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 topology:
 AU_EAST
@@ -253,7 +253,7 @@ configurations generated using seed 5571782338101878760
 	basic ranges with placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of static events generated=0
-initial state at 2022-03-21 11:00:00 +0000 UTC:
+initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 topology:
 AU_EAST
