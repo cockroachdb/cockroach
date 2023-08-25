@@ -180,7 +180,7 @@ func (t *descriptorState) upsertLeaseLocked(
 		expiration: storedLeaseExpiration(expiration),
 		sessionID:  []byte(session.ID()),
 	}
-	if !t.m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
+	if !t.m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseToSessionCreation) {
 		s.mu.lease.sessionID = nil
 		s.mu.session = nil
 	}
@@ -190,7 +190,7 @@ func (t *descriptorState) upsertLeaseLocked(
 	// If the version never changed there is nothing to
 	// delete, if we are using session based leases.
 	if toRelease.version == s.mu.lease.version &&
-		t.m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
+		t.m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeasesTableWithNewDesc) {
 		toRelease = nil
 	}
 	return nil, toRelease, nil
@@ -211,7 +211,7 @@ func newDescriptorVersionState(
 		t:          t,
 		Descriptor: desc,
 	}
-	if !t.m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
+	if !t.m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseToSessionCreation) {
 		session = nil
 	}
 	descState.mu.expiration = expiration
