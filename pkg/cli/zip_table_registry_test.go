@@ -163,7 +163,12 @@ func TestCustomQuery(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	cluster := serverutils.StartCluster(t, 1 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{},
+		ServerArgs: base.TestServerArgs{
+			// The zip queries include queries that are only meant to work
+			// in a system tenant. These would fail if pointed to a
+			// secondary tenant.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 	})
 	defer cluster.Stopper().Stop(context.Background())
 	testConn := cluster.ServerConn(0 /* idx */)
@@ -192,7 +197,12 @@ func TestNonSensitiveColumns(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	cluster := serverutils.StartCluster(t, 1 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{},
+		ServerArgs: base.TestServerArgs{
+			// The zip queries include queries that are only meant to work
+			// in a system tenant. These would fail if pointed to a
+			// secondary tenant.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 	})
 	defer cluster.Stopper().Stop(context.Background())
 	testConn := cluster.ServerConn(0 /* idx */)

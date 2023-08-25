@@ -44,6 +44,10 @@ func TestDebugCheckStore(t *testing.T) {
 	const n = 3
 
 	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// This logic is specific to the storage layer.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{},
 	}
 	var storePaths []string
