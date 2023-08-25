@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"google.golang.org/grpc"
 )
 
 // TenantCluster represents the set of sql nodes running in a secondary tenant.
@@ -228,8 +229,17 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 		grp.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			conn, err := t.Dialer.Dial(ctx, roachpb.NodeID(instance.InstanceID), rpc.DefaultClass)
-			if err != nil {
+			var conn *grpc.ClientConn
+			retryOpts := retry.Options{
+				InitialBackoff: 0,
+				MaxRetries:     2,
+				MaxBackoff:     10 * time.Millisecond,
+			}
+			if err := retry.WithMaxAttempts(ctx, retryOpts, retryOpts.MaxRetries+1, func() error {
+				var err error
+				conn, err = t.Dialer.Dial(ctx, roachpb.NodeID(instance.InstanceID), rpc.DefaultClass)
+				return err
+			}); err != nil {
 				if errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) {
 					if errors.Is(err, rpc.VersionCompatError) {
 						return errors.WithHint(errors.Newf("upgrade failed due to active SQL servers with incompatible binary version(s)"),
