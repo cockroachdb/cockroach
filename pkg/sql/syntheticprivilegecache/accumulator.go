@@ -29,7 +29,9 @@ type accumulator struct {
 // newAccumulator initializes a Accumulator.
 func newAccumulator(objectType privilege.ObjectType, path string) *accumulator {
 	return &accumulator{
-		desc:       &catpb.PrivilegeDescriptor{},
+		desc: &catpb.PrivilegeDescriptor{
+			OwnerProto: username.NodeUserName().EncodeProto(),
+		},
 		objectType: objectType,
 		path:       path,
 	}
