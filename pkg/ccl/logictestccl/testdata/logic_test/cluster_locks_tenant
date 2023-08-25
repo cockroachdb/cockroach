@@ -175,8 +175,8 @@ user root
 query TTT colnames,retry
 SELECT user_name, query, phase FROM crdb_internal.cluster_queries WHERE txn_id='$txn4'
 ----
-user_name   query                                         phase
-testuser    DELETE FROM t WHERE (k >= 'b') AND (k < 'x')  executing
+user_name  query                                         phase
+testuser   DELETE FROM t WHERE (k >= 'b') AND (k < 'x')  executing
 
 # looking at each transaction separately, validate the expected results in the lock table
 query TTTTTTTBB colnames,retry

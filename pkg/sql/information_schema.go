@@ -2931,26 +2931,28 @@ func userCanSeeDescriptor(
 		return false, nil
 	}
 
+	// Users can see objects in the database if they have connect privilege.
+	if parentDBDesc != nil {
+		if ok, err := p.HasPrivilege(ctx, parentDBDesc, privilege.CONNECT, p.User()); err != nil {
+			return false, err
+		} else if ok {
+			return true, nil
+		}
+	}
+	// Also check if the user has any privilege on the descriptor. This check is
+	// done second, so that the check above can short-circuit, allowing us to
+	// avoid fetching the synthetic privileges for virtual tables in a thundering
+	// herd while populating a table like pg_class, which has a row for every
+	// table, including virtual tables.
 	// TODO(richardjcai): We may possibly want to remove the ability to view
 	// the descriptor if they have any privilege on the descriptor and only
 	// allow the descriptor to be viewed if they have CONNECT on the DB. #59827.
-	canSeeDescriptor := false
 	if ok, err := p.HasAnyPrivilege(ctx, desc); err != nil {
 		return false, err
-	} else {
-		canSeeDescriptor = ok
+	} else if ok {
+		return true, nil
 	}
-	// Users can see objects in the database if they have connect privilege.
-	if parentDBDesc != nil {
-		if !canSeeDescriptor {
-			if ok, err := p.HasPrivilege(ctx, parentDBDesc, privilege.CONNECT, p.User()); err != nil {
-				return false, err
-			} else {
-				canSeeDescriptor = ok
-			}
-		}
-	}
-	return canSeeDescriptor, nil
+	return false, nil
 }
 
 func descriptorIsVisible(desc catalog.Descriptor, allowAdding bool) bool {
