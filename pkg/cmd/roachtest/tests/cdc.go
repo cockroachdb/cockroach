@@ -11,8 +11,9 @@
 package tests
 
 import (
+	"bytes"
 	"context"
-	"crypto/rand"
+	cryptorand "crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -55,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/rand"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -255,6 +257,17 @@ type tpccArgs struct {
 	warehouses     int
 	duration       string
 	tolerateErrors bool
+	conns          int
+	noWait         bool
+	cdcFeatureFlags
+}
+
+func (ct *cdcTester) lockSchema(targets []string) {
+	for _, target := range targets {
+		if _, err := ct.DB().Exec(fmt.Sprintf("ALTER TABLE %s SET (schema_locked=true)", target)); err != nil {
+			ct.t.Fatal(err)
+		}
+	}
 }
 
 func (ct *cdcTester) runTPCCWorkload(args tpccArgs) {
@@ -262,6 +275,8 @@ func (ct *cdcTester) runTPCCWorkload(args tpccArgs) {
 		sqlNodes:           ct.crdbNodes,
 		workloadNodes:      ct.workloadNode,
 		tpccWarehouseCount: args.warehouses,
+		conns:              args.conns,
+		noWait:             args.noWait,
 		// TolerateErrors if crdbChaos is true; otherwise, the workload will fail
 		// if it attempts to use the node which was brought down by chaos.
 		tolerateErrors: args.tolerateErrors,
@@ -270,6 +285,10 @@ func (ct *cdcTester) runTPCCWorkload(args tpccArgs) {
 	if !ct.t.SkipInit() {
 		ct.t.Status("installing TPCC workload")
 		tpcc.install(ct.ctx, ct.cluster)
+		if args.SchemaLockTables.enabled() {
+			ct.t.Status(fmt.Sprintf("Setting schema_locked for %s", allTpccTargets))
+			ct.lockSchema(allTpccTargets)
+		}
 	} else {
 		ct.t.Status("skipping TPCC installation")
 	}
@@ -373,6 +392,38 @@ var allLedgerTargets []string = []string{
 	`ledger.session`,
 }
 
+type featureFlag int
+
+const (
+	metamorphicFlag featureFlag = iota
+	featureDisabled
+	featureEnabled
+)
+
+func (f featureFlag) enabled() bool {
+	switch f {
+	case metamorphicFlag:
+		return rand.Int()%2 == 0
+	case featureEnabled:
+		return true
+	case featureDisabled:
+		return false
+	default:
+		panic("invalid feature flag value")
+	}
+}
+
+// cdcFeatureFlags describes various cdc feature flags.
+// zero value cdcFeatureFlags uses metamorphic settings for features.
+type cdcFeatureFlags struct {
+	MuxRangefeed     featureFlag
+	SchemaLockTables featureFlag
+}
+
+func makeDefaultFeatureFlags() cdcFeatureFlags {
+	return cdcFeatureFlags{}
+}
+
 type feedArgs struct {
 	sinkType        sinkType
 	targets         []string
@@ -381,6 +432,7 @@ type feedArgs struct {
 	assumeRole      string
 	tolerateErrors  bool
 	sinkURIOverride string
+	cdcFeatureFlags
 }
 
 // TODO: Maybe move away from feedArgs since its only 3 things
@@ -421,7 +473,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		args.sinkType, args.targets, feedOptions,
 	))
 	db := ct.DB()
-	jobID, err := newChangefeedCreator(db, targetsStr, sinkURI).
+	jobID, err := newChangefeedCreator(db, ct.logger, targetsStr, sinkURI, makeDefaultFeatureFlags()).
 		With(feedOptions).Create()
 	if err != nil {
 		ct.t.Fatalf("failed to create changefeed: %s", err.Error())
@@ -540,30 +592,18 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	}
 	tester.logger = changefeedLogger
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	startOpts, settings := makeCDCBenchOptions()
 
-	settings := install.MakeClusterSettings()
-	settings.Env = append(settings.Env, envVars...)
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, tester.crdbNodes)
-
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", tester.workloadNode)
-
-	db := tester.DB()
 	// With a target_duration of 10s, we won't see slow span logs from changefeeds untils we are > 100s
 	// behind, which is well above the 60s targetSteadyLatency we have in some tests.
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING changefeed.slow_span_log_threshold='30s'`,
-	); err != nil {
-		// We don't hard fail here because, not all versions support this setting
-		t.L().Printf("failed to set cluster setting: %s", err)
-	}
-	if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
-		t.L().Printf("failed to set cluster setting: %s", err)
-	}
-	if _, err := db.Exec("SET CLUSTER SETTING server.child_metrics.enabled = true"); err != nil {
-		t.L().Printf("failed to set cluster setting: %s", err)
-	}
+	settings.ClusterSettings["changefeed.slow_span_log_threshold"] = "30s"
+	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
 
+	settings.Env = append(settings.Env, envVars...)
+
+	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Start(ctx, t.L(), startOpts, settings, tester.crdbNodes)
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", tester.workloadNode)
 	tester.startGrafana()
 	return tester
 }
@@ -634,7 +674,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"min_checkpoint_frequency": "'2s'",
 		"diff":                     "",
 	}
-	_, err := newChangefeedCreator(db, "bank.bank", kafka.sinkURL(ctx)).
+	_, err := newChangefeedCreator(db, t.L(), "bank.bank", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
 		With(options).
 		Create()
 	if err != nil {
@@ -800,7 +840,7 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"diff":                      "",
 	}
 
-	_, err := newChangefeedCreator(db, "foo", kafka.sinkURL(ctx)).
+	_, err := newChangefeedCreator(db, t.L(), "foo", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
 		With(options).
 		Args(kafka.schemaRegistryURL(ctx)).
 		Create()
@@ -944,7 +984,7 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	for _, f := range feeds {
 		t.Status(f.desc)
-		_, err := newChangefeedCreator(db, "auth_test_table", f.queryArg).Create()
+		_, err := newChangefeedCreator(db, t.L(), "auth_test_table", f.queryArg, makeDefaultFeatureFlags()).Create()
 		if err != nil {
 			t.Fatalf("%s: %s", f.desc, err.Error())
 		}
@@ -1410,12 +1450,12 @@ func (t *testCerts) CACertBase64() string {
 }
 
 func makeTestCerts(sinkNodeIP string) (*testCerts, error) {
-	CAKey, err := rsa.GenerateKey(rand.Reader, keyLength)
+	CAKey, err := rsa.GenerateKey(cryptorand.Reader, keyLength)
 	if err != nil {
 		return nil, errors.Wrap(err, "CA private key")
 	}
 
-	SinkKey, err := rsa.GenerateKey(rand.Reader, keyLength)
+	SinkKey, err := rsa.GenerateKey(cryptorand.Reader, keyLength)
 	if err != nil {
 		return nil, errors.Wrap(err, "sink private key")
 	}
@@ -1487,7 +1527,7 @@ func generateSinkCert(
 		IPAddresses: []net.IP{ip},
 	}
 
-	return x509.CreateCertificate(rand.Reader, certSpec, CACert, &priv.PublicKey, CAKey)
+	return x509.CreateCertificate(cryptorand.Reader, certSpec, CACert, &priv.PublicKey, CAKey)
 }
 
 func generateCACert(priv *rsa.PrivateKey) ([]byte, *x509.Certificate, error) {
@@ -1511,7 +1551,7 @@ func generateCACert(priv *rsa.PrivateKey) ([]byte, *x509.Certificate, error) {
 		BasicConstraintsValid: true,
 		MaxPathLenZero:        true,
 	}
-	cert, err := x509.CreateCertificate(rand.Reader, certSpec, certSpec, &priv.PublicKey, priv)
+	cert, err := x509.CreateCertificate(cryptorand.Reader, certSpec, certSpec, &priv.PublicKey, priv)
 	return cert, certSpec, err
 }
 
@@ -1535,7 +1575,7 @@ func pemEncodeCert(cert []byte) (string, error) {
 
 func randomSerial() (*big.Int, error) {
 	limit := new(big.Int).Lsh(big.NewInt(1), 128)
-	ret, err := rand.Int(rand.Reader, limit)
+	ret, err := cryptorand.Int(cryptorand.Reader, limit)
 	if err != nil {
 		return nil, errors.Wrap(err, "generate random serial")
 	}
@@ -2269,6 +2309,8 @@ type tpccWorkload struct {
 	sqlNodes           option.NodeListOption
 	tpccWarehouseCount int
 	tolerateErrors     bool
+	conns              int
+	noWait             bool
 }
 
 func (tw *tpccWorkload) install(ctx context.Context, c cluster.Cluster) {
@@ -2282,14 +2324,20 @@ func (tw *tpccWorkload) install(ctx context.Context, c cluster.Cluster) {
 }
 
 func (tw *tpccWorkload) run(ctx context.Context, c cluster.Cluster, workloadDuration string) {
-	tolerateErrors := ""
+	var cmd bytes.Buffer
+	fmt.Fprintf(&cmd, "./workload run tpcc --warehouses=%d --duration=%s ", tw.tpccWarehouseCount, workloadDuration)
 	if tw.tolerateErrors {
-		tolerateErrors = "--tolerate-errors"
+		cmd.WriteString("--tolerate-errors ")
 	}
-	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
-		`./workload run tpcc --warehouses=%d --duration=%s %s {pgurl%s} `,
-		tw.tpccWarehouseCount, workloadDuration, tolerateErrors, tw.sqlNodes,
-	))
+	if tw.conns > 0 {
+		fmt.Fprintf(&cmd, " --conns=%d ", tw.conns)
+	}
+	if tw.noWait {
+		cmd.WriteString("--wait=0 ")
+	}
+	fmt.Fprintf(&cmd, "{pgurl%s}", tw.sqlNodes)
+
+	c.Run(ctx, tw.workloadNodes, cmd.String())
 }
 
 type ledgerWorkload struct {
@@ -2318,18 +2366,24 @@ func (lw *ledgerWorkload) run(ctx context.Context, c cluster.Cluster, workloadDu
 // different options and sinks
 type changefeedCreator struct {
 	db        *gosql.DB
+	logger    *logger.Logger
 	targets   string
 	sinkURL   string
 	options   map[string]string
 	extraArgs []interface{}
+	useMux    bool
 }
 
-func newChangefeedCreator(db *gosql.DB, targets, sinkURL string) *changefeedCreator {
+func newChangefeedCreator(
+	db *gosql.DB, logger *logger.Logger, targets, sinkURL string, flags cdcFeatureFlags,
+) *changefeedCreator {
 	return &changefeedCreator{
 		db:      db,
+		logger:  logger,
 		targets: targets,
 		sinkURL: sinkURL,
 		options: make(map[string]string),
+		useMux:  flags.MuxRangefeed.enabled(),
 	}
 }
 
@@ -2337,8 +2391,8 @@ func newChangefeedCreator(db *gosql.DB, targets, sinkURL string) *changefeedCrea
 // `value` is passed in one of the options, the option will be passed
 // as {option}={value}.
 func (cfc *changefeedCreator) With(opts map[string]string) *changefeedCreator {
-	for option, value := range opts {
-		cfc.options[option] = value
+	for opt, value := range opts {
+		cfc.options[opt] = value
 	}
 	return cfc
 }
@@ -2358,6 +2412,11 @@ func (cfc *changefeedCreator) Args(args ...interface{}) *changefeedCreator {
 func (cfc *changefeedCreator) Create() (int, error) {
 	// kv.rangefeed.enabled is required for changefeeds to run
 	if _, err := cfc.db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+		return -1, err
+	}
+
+	cfc.logger.Printf("Setting changefeed.mux_rangefeed.enabled to %t", cfc.useMux)
+	if _, err := cfc.db.Exec("SET CLUSTER SETTING changefeed.mux_rangefeed.enabled = $1", cfc.useMux); err != nil {
 		return -1, err
 	}
 
