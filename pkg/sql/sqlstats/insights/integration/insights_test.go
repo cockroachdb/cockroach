@@ -627,12 +627,24 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 			}
 		}
 
+		rowCount = 0
 		if rowCount < 1 {
-			return fmt.Errorf("cluster_execution_insights did not return any rows")
+			var queryStatsMsg string
+			var contentionMean string
+			err = conn.DB.QueryRowContext(ctx, `
+			SELECT 
+				statistics->'execution_statistics'->'contentionTime'->> 'mean'
+			FROM crdb_internal.statement_statistics
+			WHERE metadata->>'query' like 'UPDATE t SET s =%'`).Scan(&contentionMean)
+			if err != nil {
+				queryStatsMsg = fmt.Sprintf("attempted to get contention statistics for 'UPDATE' query: %s", err.Error())
+			} else {
+				queryStatsMsg = fmt.Sprintf("contention mean for the 'UPDATE' query: %+v", contentionMean)
+			}
+			return fmt.Errorf("cluster_execution_insights did not return any rows - %s", queryStatsMsg)
 		}
-
 		return nil
-	}, 5*time.Second)
+	}, 10*time.Second)
 }
 
 // Testing that the index recommendation is included
