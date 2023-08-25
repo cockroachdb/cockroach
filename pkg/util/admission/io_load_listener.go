@@ -226,7 +226,11 @@ type ioLoadListenerState struct {
 	byteTokensAllocated int64
 	// Used tokens can be negative if some tokens taken in one interval were
 	// returned in another, but that will be extremely rare.
-	byteTokensUsed int64
+	byteTokensUsed              int64
+	byteTokensUsedByElasticWork int64
+
+	totalNumElasticByteTokens  int64
+	elasticByteTokensAllocated int64
 
 	// elasticDiskBWTokens represents the tokens to give out until the next call
 	// to adjustTokens. They are parceled out in small intervals.
@@ -404,8 +408,9 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 				curL0Bytes:         m.Levels[0].Size,
 				cumWriteStallCount: metrics.WriteStallCount,
 				// No initial limit, i.e, the first interval is unlimited.
-				totalNumByteTokens:  unlimitedTokens,
-				elasticDiskBWTokens: unlimitedTokens,
+				totalNumByteTokens:        unlimitedTokens,
+				totalNumElasticByteTokens: unlimitedTokens,
+				elasticDiskBWTokens:       unlimitedTokens,
 			},
 			aux: adjustTokensAuxComputations{},
 			ioThreshold: &admissionpb.IOThreshold{
@@ -430,7 +435,7 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 	io.cumFlushWriteThroughput = metrics.Flush.WriteThroughput
 	// We assume that the system is loaded if there is less than unlimited tokens
 	// available.
-	return io.totalNumByteTokens < unlimitedTokens
+	return io.totalNumByteTokens < unlimitedTokens || io.totalNumElasticByteTokens < unlimitedTokens
 }
 
 // For both byte and disk bandwidth tokens, allocateTokensTick gives out
@@ -471,6 +476,12 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 	if toAllocateByteTokens < 0 {
 		panic(errors.AssertionFailedf("toAllocateByteTokens is negative %d", toAllocateByteTokens))
 	}
+	toAllocateElasticByteTokens := allocateFunc(
+		io.totalNumElasticByteTokens, io.elasticByteTokensAllocated, remainingTicks)
+	if toAllocateElasticByteTokens < 0 {
+		panic(errors.AssertionFailedf("toAllocateElasticByteTokens is negative %d",
+			toAllocateElasticByteTokens))
+	}
 	toAllocateElasticDiskBWTokens :=
 		allocateFunc(
 			io.elasticDiskBWTokens,
@@ -486,20 +497,32 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 	if io.byteTokensAllocated < 0 {
 		panic(errors.AssertionFailedf("tokens allocated is negative %d", io.byteTokensAllocated))
 	}
+	io.elasticByteTokensAllocated += toAllocateElasticByteTokens
+	if io.elasticByteTokensAllocated < 0 {
+		panic(errors.AssertionFailedf(
+			"tokens allocated is negative %d", io.elasticByteTokensAllocated))
+	}
 	io.elasticDiskBWTokensAllocated += toAllocateElasticDiskBWTokens
 
 	tokensMaxCapacity := allocateFunc(
 		io.totalNumByteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
 	)
+	elasticTokensMaxCapacity := allocateFunc(
+		io.totalNumElasticByteTokens, 0, unloadedDuration.ticksInAdjustmentInterval())
 	diskBWTokenMaxCapacity := allocateFunc(
 		io.elasticDiskBWTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
 	)
-	io.byteTokensUsed += io.kvGranter.setAvailableTokens(
+	tokensUsed, tokensUsedByElasticWork := io.kvGranter.setAvailableTokens(
 		toAllocateByteTokens,
+		toAllocateElasticByteTokens,
 		toAllocateElasticDiskBWTokens,
 		tokensMaxCapacity,
+		elasticTokensMaxCapacity,
 		diskBWTokenMaxCapacity,
+		remainingTicks == 1,
 	)
+	io.byteTokensUsed += tokensUsed
+	io.byteTokensUsedByElasticWork += tokensUsedByElasticWork
 }
 
 func computeIntervalDiskLoadInfo(
@@ -566,8 +589,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	io.kvRequester.setStoreRequestEstimates(requestEstimates)
 	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtDone()
 	io.kvGranter.setLinearModels(l0WriteLM, l0IngestLM, ingestLM)
-	if score, _ := io.ioThreshold.Score(); score >= 0.5 || io.aux.doLogFlush ||
-		io.elasticDiskBWTokens != unlimitedTokens || log.V(1) {
+	if io.aux.doLogFlush || io.elasticDiskBWTokens != unlimitedTokens || log.V(1) {
 		log.Infof(ctx, "IO overload: %s", io.adjustTokensResult)
 	}
 }
@@ -604,8 +626,9 @@ type adjustTokensAuxComputations struct {
 	intFlushUtilization float64
 	intWriteStalls      int64
 
-	prevTokensUsed int64
-	tokenKind      tokenKind
+	prevTokensUsed              int64
+	prevTokensUsedByElasticWork int64
+	tokenKind                   tokenKind
 
 	perWorkTokensAux perWorkTokensAux
 	doLogFlush       bool
@@ -878,6 +901,7 @@ func (*ioLoadListener) adjustTokensInner(
 		smoothedCompactionByteTokens = alpha*float64(numTokens) + (1-alpha)*prev.smoothedCompactionByteTokens
 		totalNumByteTokens = unlimitedTokens
 	} else {
+		doLogFlush = true
 		var fTotalNumByteTokens float64
 		if score >= 2 {
 			// Overload.
@@ -887,8 +911,9 @@ func (*ioLoadListener) adjustTokensInner(
 			// since we want to get under the thresholds over time.
 			fTotalNumByteTokens = float64(smoothedIntL0CompactedBytes / 2.0)
 		} else if score >= 0.5 && score < 1 {
-			// Low load. Score in [0.5, 1). Score should be smoothedIntL0CompactedBytes at 1,
-			// and 2 * smoothedIntL0CompactedBytes at 0.5.
+			// Low load. Score in [0.5, 1). Tokens should be
+			// smoothedIntL0CompactedBytes at 1, and 2 * smoothedIntL0CompactedBytes
+			// at 0.5.
 			fTotalNumByteTokens = -score*(2*float64(smoothedIntL0CompactedBytes)) + 3*float64(smoothedIntL0CompactedBytes)
 		} else {
 			// Medium load. Score in [1, 2). We use linear interpolation from
@@ -906,12 +931,32 @@ func (*ioLoadListener) adjustTokensInner(
 		}
 	}
 
+	totalNumElasticByteTokens := int64(unlimitedTokens)
+	// NB: score == (num-sublevels / 20) * 2 = num-sublevels/10 (we are ignoring
+	// the rare case where score is determined by file count). So score >= 0.1
+	// means that we start shaping when there is 1 sublevel. sublevel / 10 >=
+	if score >= 0.1 {
+		doLogFlush = true
+		// Use a linear function with slope of -1.25 and compaction tokens of
+		// 1.25*compaction-bandwidth at score of 0.1. At a score of 0.5 (5
+		// sublevels) the tokens will be 0.75*compaction-bandwidth. Experimental
+		// results show the sublevels hovering around 3, as expected.
+		//
+		// NB: at score >= 1.1 (11 sublevels), there are 0 elastic tokens.
+		totalNumElasticByteTokens = int64(float64(smoothedIntL0CompactedBytes) *
+			(1.25 - 1.25*(score-0.1)))
+
+		totalNumElasticByteTokens = max(totalNumElasticByteTokens, 1)
+	}
 	// Use the minimum of the token count calculated using compactions and
 	// flushes.
 	tokenKind := compactionTokenKind
 	if totalNumByteTokens > numFlushTokens {
 		totalNumByteTokens = numFlushTokens
 		tokenKind = flushTokenKind
+	}
+	if totalNumElasticByteTokens > totalNumByteTokens {
+		totalNumElasticByteTokens = totalNumByteTokens
 	}
 	// Install the latest cumulative stats.
 	return adjustTokensResult{
@@ -926,16 +971,20 @@ func (*ioLoadListener) adjustTokensInner(
 			totalNumByteTokens:           totalNumByteTokens,
 			byteTokensAllocated:          0,
 			byteTokensUsed:               0,
+			byteTokensUsedByElasticWork:  0,
+			totalNumElasticByteTokens:    totalNumElasticByteTokens,
+			elasticByteTokensAllocated:   0,
 		},
 		aux: adjustTokensAuxComputations{
-			intL0AddedBytes:     intL0AddedBytes,
-			intL0CompactedBytes: intL0CompactedBytes,
-			intFlushTokens:      intFlushTokens,
-			intFlushUtilization: intFlushUtilization,
-			intWriteStalls:      intWriteStalls,
-			prevTokensUsed:      prev.byteTokensUsed,
-			tokenKind:           tokenKind,
-			doLogFlush:          doLogFlush,
+			intL0AddedBytes:             intL0AddedBytes,
+			intL0CompactedBytes:         intL0CompactedBytes,
+			intFlushTokens:              intFlushTokens,
+			intFlushUtilization:         intFlushUtilization,
+			intWriteStalls:              intWriteStalls,
+			prevTokensUsed:              prev.byteTokensUsed,
+			prevTokensUsedByElasticWork: prev.byteTokensUsedByElasticWork,
+			tokenKind:                   tokenKind,
+			doLogFlush:                  doLogFlush,
 		},
 		ioThreshold: ioThreshold,
 	}
@@ -992,20 +1041,25 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Printf("flushed %s [≈%s]; ", ib(int64(res.aux.intFlushTokens)),
 		ib(int64(res.smoothedNumFlushTokens)))
 	p.Printf("admitting ")
-	if n := res.ioLoadListenerState.totalNumByteTokens; n < unlimitedTokens {
-		p.Printf("%s (rate %s/s)", ib(n), ib(n/adjustmentInterval))
+	if n, m := res.ioLoadListenerState.totalNumByteTokens,
+		res.ioLoadListenerState.totalNumElasticByteTokens; n < unlimitedTokens {
+		p.Printf("%s (rate %s/s) (elastic %s rate %s/s)", ib(n), ib(n/adjustmentInterval), ib(m),
+			ib(m/adjustmentInterval))
 		switch res.aux.tokenKind {
 		case compactionTokenKind:
 			p.Printf(" due to L0 growth")
 		case flushTokenKind:
 			p.Printf(" due to memtable flush (multiplier %.3f)", res.flushUtilTargetFraction)
 		}
-		p.Printf(" (used %s)", ib(res.aux.prevTokensUsed))
+		p.Printf(" (used total: %s elastic %s)", ib(res.aux.prevTokensUsed),
+			ib(res.aux.prevTokensUsedByElasticWork))
+	} else if m < unlimitedTokens {
+		p.Printf("elastic %s (rate %s/s) due to L0 growth", ib(m), ib(m/adjustmentInterval))
 	} else {
 		p.SafeString("all")
 	}
 	if res.elasticDiskBWTokens != unlimitedTokens {
-		p.Printf("; elastic tokens %s (used %s, regular used %s): "+
+		p.Printf("; elastic-disk-bw tokens %s (used %s, regular used %s): "+
 			"write model %.2fx+%s ingest model %.2fx+%s, ",
 			ib(res.elasticDiskBWTokens), ib(res.aux.diskBW.intervalLSMInfo.elasticTokensUsed),
 			ib(res.aux.diskBW.intervalLSMInfo.regularTokensUsed),
