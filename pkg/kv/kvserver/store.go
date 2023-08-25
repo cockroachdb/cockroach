@@ -2120,6 +2120,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// Gossip is only ever nil while bootstrapping a cluster and
 	// in unittests.
+	time.Sleep(100 * time.Millisecond)
 	if s.cfg.Gossip != nil {
 		s.storeGossip.stopper = stopper
 		s.storeGossip.Ident = *s.Ident
