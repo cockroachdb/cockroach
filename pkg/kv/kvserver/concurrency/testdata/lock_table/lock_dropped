@@ -96,7 +96,7 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 2)]
    waiting readers:
     req: 1, txn: none
-   queued writers:
+   queued locking requests:
     active: true req: 2, strength: Intent, txn: none
    distinguished req: 1
 
@@ -107,7 +107,7 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl, unrepl [(str: Exclusive seq: 2)]
    waiting readers:
     req: 1, txn: none
-   queued writers:
+   queued locking requests:
     active: true req: 2, strength: Intent, txn: none
    distinguished req: 1
 

@@ -1941,13 +1941,13 @@ func TestCanElideWaitingStateUpdateConsidersAllFields(t *testing.T) {
 		doNotIncludeWhenDeciding inclusionStatus = false
 	)
 	fieldMap := map[string]inclusionStatus{
-		"kind":          includeWhenDeciding,
-		"txn":           includeWhenDeciding,
-		"key":           includeWhenDeciding,
-		"held":          includeWhenDeciding,
-		"queuedWriters": doNotIncludeWhenDeciding,
-		"queuedReaders": doNotIncludeWhenDeciding,
-		"guardStrength": doNotIncludeWhenDeciding,
+		"kind":                  includeWhenDeciding,
+		"txn":                   includeWhenDeciding,
+		"key":                   includeWhenDeciding,
+		"held":                  includeWhenDeciding,
+		"queuedLockingRequests": doNotIncludeWhenDeciding,
+		"queuedReaders":         doNotIncludeWhenDeciding,
+		"guardStrength":         doNotIncludeWhenDeciding,
 	}
 	ws := waitingState{}
 	typ := reflect.ValueOf(ws).Type()

@@ -97,7 +97,7 @@ num=1
    waiting readers:
     req: 4, txn: none
     req: 2, txn: 00000000-0000-0000-0000-000000000002
-   queued writers:
+   queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, strength: Intent, txn: none
    distinguished req: 2
@@ -204,7 +204,7 @@ num=1
    waiting readers:
     req: 4, txn: none
     req: 2, txn: 00000000-0000-0000-0000-000000000002
-   queued writers:
+   queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, strength: Intent, txn: none
    distinguished req: 2
@@ -222,7 +222,7 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 13.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 4, txn: none
-   queued writers:
+   queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, strength: Intent, txn: none
    distinguished req: 4
@@ -242,7 +242,7 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 13.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 4, txn: none
-   queued writers:
+   queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, strength: Intent, txn: none
    distinguished req: 4
@@ -259,7 +259,7 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 13.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 4, txn: none
-   queued writers:
+   queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, strength: Intent, txn: none
    distinguished req: 4
@@ -275,7 +275,7 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 15.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 4, txn: none
-   queued writers:
+   queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, strength: Intent, txn: none
    distinguished req: 4
@@ -291,7 +291,7 @@ update txn=txn1 ts=17,1 epoch=0 span=a
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 17.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
-   queued writers:
+   queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, strength: Intent, txn: none
    distinguished req: 3
@@ -309,7 +309,7 @@ dequeue r=req4
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 17.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
-   queued writers:
+   queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, strength: Intent, txn: none
    distinguished req: 3
@@ -323,7 +323,7 @@ update txn=txn1 ts=19,1 epoch=0 span=a
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 19.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
-   queued writers:
+   queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, strength: Intent, txn: none
    distinguished req: 3
@@ -339,7 +339,7 @@ update txn=txn1 ts=19,1 epoch=1 span=a
 ----
 num=1
  lock: "a"
-   queued writers:
+   queued locking requests:
     active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, strength: Intent, txn: none
    distinguished req: 5
