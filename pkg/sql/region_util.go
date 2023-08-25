@@ -118,6 +118,26 @@ func makeRequiredConstraintForRegion(r catpb.RegionName) zonepb.Constraint {
 	}
 }
 
+// TestingConvertRegionToZoneConfig converts a given region config into a zone
+// configuration, ensuring the result is fully hydrated. Refer to the
+// zoneConfigForMultiRegionDatabase function for details on how the conversion
+// is made. Note that this should only be used for testing purposes.
+func TestingConvertRegionToZoneConfig(
+	regionConfig multiregion.RegionConfig,
+) (zonepb.ZoneConfig, error) {
+	zc, err := zoneConfigForMultiRegionDatabase(regionConfig)
+
+	// Hardcode settings based on DefaultZoneConfig() to ensure that generated
+	// zone configuration is fully hydrated for AsSpanConfig() conversion.
+	zc.RangeMinBytes = proto.Int64(128 << 20)
+	zc.RangeMaxBytes = proto.Int64(512 << 20)
+	zc.GC = &zonepb.GCPolicy{
+		TTLSeconds: 4 * 60 * 60, // 4 hrs
+	}
+	zc.NullVoterConstraintsIsEmpty = true
+	return zc, err
+}
+
 // zoneConfigForMultiRegionDatabase generates a ZoneConfig stub for a
 // multi-region database such that at least one replica (voting or non-voting)
 // is constrained to each region defined within the given `regionConfig` and
