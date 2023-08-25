@@ -10,14 +10,18 @@
 
 package rttanalysis
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 func BenchmarkORMQueries(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("ORMQueries", []RoundTripBenchTestCase{
 		{
 			Name:  "django column introspection 1 table",
-			Setup: `CREATE TABLE t1(a int primary key, b int);`,
+			Setup: buildNTables(1),
 			Stmt: `SELECT
     a.attname AS column_name,
     NOT (a.attnotnull OR ((t.typtype = 'd') AND t.typnotnull)) AS is_nullable,
@@ -35,11 +39,8 @@ WHERE (
 		},
 
 		{
-			Name: "django column introspection 4 tables",
-			Setup: `CREATE TABLE t1(a int primary key, b int);
-CREATE TABLE t2(a int primary key, b int);
-CREATE TABLE t3(a int primary key, b int);
-CREATE TABLE t4(a int primary key, b int);`,
+			Name:  "django column introspection 4 tables",
+			Setup: buildNTables(4),
 			Stmt: `SELECT
     a.attname AS column_name,
     NOT (a.attnotnull OR ((t.typtype = 'd') AND t.typnotnull)) AS is_nullable,
@@ -57,15 +58,8 @@ WHERE (
 		},
 
 		{
-			Name: "django column introspection 8 tables",
-			Setup: `CREATE TABLE t1(a int primary key, b int);
-CREATE TABLE t2(a int primary key, b int);
-CREATE TABLE t3(a int primary key, b int);
-CREATE TABLE t4(a int primary key, b int);
-CREATE TABLE t5(a int primary key, b int);
-CREATE TABLE t6(a int primary key, b int);
-CREATE TABLE t7(a int primary key, b int);
-CREATE TABLE t8(a int primary key, b int);`,
+			Name:  "django column introspection 8 tables",
+			Setup: buildNTables(8),
 			Stmt: `SELECT
     a.attname AS column_name,
     NOT (a.attnotnull OR ((t.typtype = 'd') AND t.typnotnull)) AS is_nullable,
@@ -84,7 +78,7 @@ WHERE (
 
 		{
 			Name:  "django table introspection 1 table",
-			Setup: `CREATE TABLE t1(a int primary key, b int);`,
+			Setup: buildNTables(1),
 			Stmt: `SELECT
     c.relname,
     CASE
@@ -101,15 +95,8 @@ WHERE c.relkind IN ('f', 'm', 'p', 'r', 'v')
 		},
 
 		{
-			Name: "django table introspection 8 tables",
-			Setup: `CREATE TABLE t1(a int primary key, b int);
-CREATE TABLE t2(a int primary key, b int);
-CREATE TABLE t3(a int primary key, b int);
-CREATE TABLE t4(a int primary key, b int);
-CREATE TABLE t5(a int primary key, b int);
-CREATE TABLE t6(a int primary key, b int);
-CREATE TABLE t7(a int primary key, b int);
-CREATE TABLE t8(a int primary key, b int);`,
+			Name:  "django table introspection 8 tables",
+			Setup: buildNTables(8),
 			Stmt: `SELECT
     c.relname,
     CASE
@@ -343,7 +330,7 @@ ORDER BY relname DESC, input`,
 
 		{
 			Name:  "hasura column descriptions",
-			Setup: "CREATE TABLE t(a INT PRIMARY KEY)",
+			Setup: buildNTables(1),
 			Stmt: `WITH
   "tabletable" as ( SELECT "table".oid,
            "table".relkind,
@@ -371,15 +358,8 @@ LEFT JOIN LATERAL
 		},
 
 		{
-			Name: "hasura column descriptions 8 tables",
-			Setup: `CREATE TABLE t1(a int primary key, b int);
-CREATE TABLE t2(a int primary key, b int);
-CREATE TABLE t3(a int primary key, b int);
-CREATE TABLE t4(a int primary key, b int);
-CREATE TABLE t5(a int primary key, b int);
-CREATE TABLE t6(a int primary key, b int);
-CREATE TABLE t7(a int primary key, b int);
-CREATE TABLE t8(a int primary key, b int);`,
+			Name:  "hasura column descriptions 8 tables",
+			Setup: buildNTables(8),
 			Stmt: `WITH
   "tabletable" as ( SELECT "table".oid,
            "table".relkind,
@@ -476,5 +456,56 @@ FROM
 WHERE
 	"table".relkind IN ('r')`,
 		},
+
+		{
+			Name:  "prisma column descriptions",
+			Setup: buildNTables(20),
+			Stmt: `SELECT
+  oid.namespace,
+  info.table_name,
+  info.column_name,
+  format_type(att.atttypid, att.atttypmod) AS formatted_type,
+  info.numeric_precision,
+  info.numeric_scale,
+  info.numeric_precision_radix,
+  info.datetime_precision,
+  info.data_type,
+  info.udt_schema AS type_schema_name,
+  info.udt_name AS full_data_type,
+  pg_get_expr(attdef.adbin, attdef.adrelid) AS column_default,
+  info.is_nullable,
+  info.is_identity,
+  info.character_maximum_length,
+  description.description
+FROM
+  information_schema.columns AS info
+  JOIN pg_attribute AS att ON att.attname = info.column_name
+  JOIN (
+      SELECT
+        pg_class.oid, relname, pg_namespace.nspname AS namespace
+      FROM
+        pg_class
+        JOIN pg_namespace ON
+            pg_namespace.oid = pg_class.relnamespace AND pg_namespace.nspname = ANY (ARRAY['public'])
+    )
+      AS oid ON
+      oid.oid = att.attrelid AND relname = info.table_name AND namespace = info.table_schema
+  LEFT JOIN pg_attrdef AS attdef ON
+      attdef.adrelid = att.attrelid AND attdef.adnum = att.attnum AND table_schema = namespace
+  LEFT JOIN pg_description AS description ON
+      description.objoid = att.attrelid AND description.objsubid = ordinal_position
+WHERE
+  table_schema = ANY (ARRAY['public']) AND info.is_hidden = 'NO'
+ORDER BY
+  namespace, table_name, ordinal_position`,
+		},
 	})
+}
+
+func buildNTables(n int) string {
+	b := strings.Builder{}
+	for i := 0; i < n; i++ {
+		b.WriteString(fmt.Sprintf("CREATE TABLE t%d(a int primary key, b int);\n", i))
+	}
+	return b.String()
 }
