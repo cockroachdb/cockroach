@@ -14,6 +14,7 @@ package lease
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"sync"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -84,26 +86,46 @@ func (m *Manager) WaitForNoVersion(
 		// version of the descriptor.
 		// FIXME: Validate...
 		ie := m.storage.db.Executor()
-		stmt := `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND (crdb_internal.sql_liveness_is_alive("sessionID")))`
-		if !m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
-			stmt = `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND expiration > $1)`
+		stmts := make([]string, 0, 2)
+		leaseDescs := make([]catalog.Descriptor, 0, 2)
+		if m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseToSessionCreation) {
+			leaseDescs = append(leaseDescs, systemschema.LeaseTable())
+			stmts = append(stmts, `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND (crdb_internal.sql_liveness_is_alive("sessionID")))`)
+		}
+		if !m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseWillOnlyHaveSessions) {
+			leaseDescs = append(leaseDescs, systemschema.V23_1_LeaseTable())
+			stmts = append(stmts, `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND expiration > $1)`)
 		}
 		now := m.storage.clock.Now()
-		stmt = fmt.Sprintf(stmt,
-			now.AsOfSystemTime(),
-			id)
-		values, err := ie.QueryRowEx(
-			ctx, "count-leases", nil, /* txn */
-			sessiondata.RootUserSessionDataOverride,
-			stmt, now.GoTime(),
-		)
-		if err != nil {
-			return err
+
+		var count int
+		for idx, stmt := range stmts {
+			stmt = fmt.Sprintf(stmt,
+				now.AsOfSystemTime(),
+				id)
+			if err := ie.WithSyntheticDescriptors(leaseDescs[idx:idx+1],
+				func() error {
+					var err error
+					values, err := ie.QueryRowEx(
+						ctx, "count-leases", nil, /* txn */
+						sessiondata.RootUserSessionDataOverride,
+						stmt, now.GoTime(),
+					)
+					if err != nil {
+						return err
+					}
+					if values == nil {
+						return errors.New("failed to count leases")
+					}
+					count += int(tree.MustBeDInt(values[0]))
+					return nil
+				}); err != nil {
+				return err
+			}
+			if count > 0 {
+				break
+			}
 		}
-		if values == nil {
-			return errors.New("failed to count leases")
-		}
-		count := int(tree.MustBeDInt(values[0]))
 		if count == 0 {
 			break
 		}
@@ -771,6 +793,9 @@ type Manager struct {
 	ambientCtx   log.AmbientContext
 	stopper      *stop.Stopper
 	sem          *quotapool.IntPool
+
+	// forceRefresh used to for a refresh of all descriptors
+	forceRefresh chan struct{}
 }
 
 const leaseConcurrencyLimit = 5
@@ -820,6 +845,7 @@ func NewLeaseManager(
 		ambientCtx:       ambientCtx,
 		stopper:          stopper,
 		sem:              quotapool.NewIntPool("lease manager", leaseConcurrencyLimit),
+		forceRefresh:     make(chan struct{}),
 	}
 	lm.storage.regionPrefix = &atomic.Value{}
 	lm.storage.regionPrefix.Store(enum.One)
@@ -1251,6 +1277,12 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 					evFunc(desc.DescriptorProto())
 				}
 
+				// Lease table updates will attempt to force a refresh
+				// of all leases.
+				if desc.GetID() == keys.LeaseTableID {
+					m.forceRefresh <- struct{}{}
+				}
+
 			case <-s.ShouldQuiesce():
 				return
 			}
@@ -1333,21 +1365,33 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 		}
 		refreshTimer := timeutil.NewTimer()
 		defer refreshTimer.Stop()
+		sessionMigrationCompleted := false
 		refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
 		for {
 			select {
 			case <-m.stopper.ShouldQuiesce():
 				return
 
+			case <-m.forceRefresh:
+				// If we are migrating over to session based leases are going to
+				// only do to one last refresh for expire.
+				if m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseToSessionCreation) &&
+					!m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseWillOnlyHaveSessions) {
+					if !sessionMigrationCompleted {
+						m.refreshSomeLeases(ctx, true /* ignore limit */)
+					}
+					sessionMigrationCompleted = true
+				}
 			case <-refreshTimer.C:
 				refreshTimer.Read = true
 				refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
-				if !m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
-					m.refreshSomeLeases(ctx)
+				// Enable lease renewals until we only have session based leases.
+				if !m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseWillOnlyHaveSessions) {
+					m.refreshSomeLeases(ctx, false /* ignore limit */)
 				}
 				// Expire leases using a timer, since the concept
 				// of expiry no longer exists.
-				if m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
+				if m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseWillOnlyHaveSessions) {
 					now := m.storage.db.KV().Clock().Now()
 					m.mu.Lock()
 					latest := -1
@@ -1377,6 +1421,7 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 								if leaseToDelete != nil {
 									m.storage.release(ctx, m.stopper, leaseToDelete)
 								}
+
 							}
 						}); err != nil {
 							log.Infof(ctx, "unable to delete leases from storage %s", err)
@@ -1389,10 +1434,13 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 }
 
 // Refresh some of the current leases.
-func (m *Manager) refreshSomeLeases(ctx context.Context) {
+func (m *Manager) refreshSomeLeases(ctx context.Context, ignoreLimit bool) {
 	limit := leaseRefreshLimit.Get(&m.storage.settings.SV)
 	if limit <= 0 {
 		return
+	}
+	if ignoreLimit {
+		limit = math.MaxInt32
 	}
 	// Construct a list of descriptors needing their leases to be reacquired.
 	ids := func() []descpb.ID {
@@ -1498,6 +1546,14 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 		)
 		query := queryWithSession
 		hasSession := true
+		if !m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseWillOnlyHaveSessions) {
+			hasSession = false
+			query = queryWithRegion
+		}
+		if !m.settings.Version.IsActive(ctx, clusterversion.V23_1_SystemRbrReadNew) {
+			hasSession = false
+			query = queryWithoutRegion
+		}
 		sqlQuery := fmt.Sprintf(query, timeThreshold, instanceID)
 		var rows []tree.Datums
 		retryOptions := base.DefaultRetryOptions()
