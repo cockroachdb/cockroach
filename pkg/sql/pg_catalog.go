@@ -2083,7 +2083,8 @@ https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
 	},
 }
 
-var adminOID = makeOidHasher().UserOid(username.MakeSQLUsernameFromPreNormalizedString("admin"))
+var adminOID = makeOidHasher().UserOid(username.AdminRoleName())
+var nodeOID = makeOidHasher().UserOid(username.NodeUserName())
 
 var pgCatalogNamespaceTable = virtualSchemaTable{
 	comment: `available namespaces
@@ -2103,6 +2104,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 					} else if sc.SchemaKind() == catalog.SchemaPublic {
 						// admin is the owner of the public schema.
 						ownerOID = adminOID
+					} else if sc.SchemaKind() == catalog.SchemaVirtual {
+						ownerOID = nodeOID
 					}
 					return addRow(
 						schemaOid(sc.GetID()),         // oid
@@ -2162,6 +2165,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 				} else if sc.SchemaKind() == catalog.SchemaPublic {
 					// admin is the owner of the public schema.
 					ownerOID = adminOID
+				} else if sc.SchemaKind() == catalog.SchemaVirtual {
+					ownerOID = nodeOID
 				}
 				if err := addRow(
 					schemaOid(sc.GetID()),         // oid

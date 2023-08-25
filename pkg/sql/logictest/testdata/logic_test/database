@@ -62,10 +62,10 @@ query TT colnames,rowsort
 SHOW SCHEMAS FROM a
 ----
 schema_name         owner
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
 public              admin
 s                   root
 
@@ -379,10 +379,10 @@ query TT colnames,rowsort
 SHOW SCHEMAS
 ----
 schema_name         owner
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
 public              admin
 regression_105906   root
 
@@ -391,10 +391,10 @@ query TT colnames,rowsort
 SHOW SCHEMAS FROM regression_105906
 ----
 schema_name         owner
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
 public              admin
 
 statement ok

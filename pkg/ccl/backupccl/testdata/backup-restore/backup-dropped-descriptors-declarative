@@ -147,13 +147,13 @@ USE d3;
 
 # We expect to not see the dropped schema 's'.
 query-sql
-SELECT schema_name FROM [SHOW SCHEMAS];
+SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY 1;
 ----
-public
 crdb_internal
 information_schema
 pg_catalog
 pg_extension
+public
 
 
 query-sql
@@ -170,13 +170,13 @@ USE d4;
 ----
 
 query-sql
-SELECT schema_name FROM [SHOW SCHEMAS];
+SELECT schema_name FROM [SHOW SCHEMAS] ORDER BY 1;
 ----
-public
 crdb_internal
 information_schema
 pg_catalog
 pg_extension
+public
 
 query-sql
 SELECT schema_name, table_name FROM [SHOW TABLES];
