@@ -248,8 +248,7 @@ type lockTableImpl struct {
 	//   A.
 	// Now in the queues for A and B req1 is behind req3 and vice versa and
 	// this deadlock has been created entirely due to the lock table's behavior.
-	// TODO(nvanbenschoten): use an atomic.Uint64.
-	seqNum uint64
+	seqNum atomic.Uint64
 
 	// locks contains the btree object (wrapped in the treeMu structure) that
 	// contains the actual keyLocks objects. These keyLocks objects represent the
@@ -1473,11 +1472,11 @@ type lockWaitQueue struct {
 	// Waiters: An active waiter needs to be notified about changes in who it is
 	// waiting for.
 
-	// queuedLockingRequests is of requests queued at a key. They may be waiting
-	// actively or inactively. The list is maintained in increasing order of
-	// sequence numbers. This helps ensure some degree of fairness as requests are
-	// released from the head of the queue. Typically, this happens when all locks
-	// on the associated key are released.
+	// queuedLockingRequests is a list of requests queued at a key. They may be
+	// waiting actively or inactively. The list is maintained in increasing order
+	// of sequence numbers. This helps ensure some degree of fairness as requests
+	// are released from the head of the queue. Typically, this happens when all
+	// locks on the associated key are released.
 	//
 	// When a lock is not held, the head of the list should be comprised of an
 	// inactive, transactional locking request (if the list is non-empty). Keeping
@@ -1573,9 +1572,9 @@ type lockWaitQueue struct {
 	//   breaks the claim at A.
 	queuedLockingRequests list.List[*queuedGuard]
 
-	// waitingReaders is the list of non-locking reads that are actively waiting.
-	// If this list is non-empty, the key must be locked, as non-locking reads do
-	// not wait otherwise.
+	// waitingReaders is a list of non-locking reads that are actively waiting at
+	// a key. If this list is non-empty, the key must be locked, as non-locking
+	// reads do not wait otherwise.
 	//
 	// NB: Non-locking readers can never wait in the waitSelf state, because if
 	// another request from their transaction already holds a lock on the key,
@@ -3448,7 +3447,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 
 func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g := newLockTableGuardImpl()
-	g.seqNum = atomic.AddUint64(&t.seqNum, 1)
+	g.seqNum = t.seqNum.Add(1)
 	g.lt = t
 	g.txn = req.Txn
 	g.ts = req.Timestamp
