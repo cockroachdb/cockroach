@@ -1844,8 +1844,8 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
 		return err
 	} else if !r.isRangefeedEnabledRLocked() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
-		return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
-			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
+		return errors.Errorf("[r%d] rangefeeds require the kv.rangefeed.enabled setting. See %s",
+			r.RangeID, docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	} else if err := r.checkTSAboveGCThresholdRLocked(ts, status, false /* isAdmin */); err != nil {
 		return err
 	}
