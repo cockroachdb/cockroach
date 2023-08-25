@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "scheduled",
+    srcs = [
+        "scheduled_event.go",
+        "scheduled_event_executor.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/scheduled",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/asim/event",
+        "//pkg/kv/kvserver/asim/history",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/util/log",
+    ],
+)

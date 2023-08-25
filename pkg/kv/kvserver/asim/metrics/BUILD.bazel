@@ -28,6 +28,7 @@ go_test(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/asim",
         "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/scheduled",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
         "//pkg/roachpb",
