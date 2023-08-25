@@ -561,6 +561,13 @@ const (
 	// and its ready for use.
 	V23_2_RegionaLivenessTable
 
+	// V23_2_LeaseToSessionCreation lease table will have sessions inside it.
+	V23_2_LeaseToSessionCreation
+
+	// V23_2_LeaseWillOnlyHaveSessions only the lease table with session table
+	// will get writes.
+	V23_2_LeaseWillOnlyHaveSessions
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -978,6 +985,16 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_RegionaLivenessTable,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 20},
+	},
+
+	{
+		Key:     V23_2_LeaseToSessionCreation,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 22},
+	},
+
+	{
+		Key:     V23_2_LeaseWillOnlyHaveSessions,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 24},
 	},
 
 	// *************************************************

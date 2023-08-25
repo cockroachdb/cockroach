@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -84,20 +85,27 @@ func (m *Manager) WaitForNoVersion(
 		// version of the descriptor.
 		// FIXME: Validate...
 		ie := m.storage.db.Executor()
+		leaseDesc := systemschema.LeaseTable()
 		stmt := `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND (crdb_internal.sql_liveness_is_alive("sessionID")))`
 		if !m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
+			leaseDesc = systemschema.V23_1_LeaseTable()
 			stmt = `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND expiration > $1)`
 		}
 		now := m.storage.clock.Now()
 		stmt = fmt.Sprintf(stmt,
 			now.AsOfSystemTime(),
 			id)
-		values, err := ie.QueryRowEx(
-			ctx, "count-leases", nil, /* txn */
-			sessiondata.RootUserSessionDataOverride,
-			stmt, now.GoTime(),
-		)
-		if err != nil {
+		var values tree.Datums
+		if err := ie.WithSyntheticDescriptors([]catalog.Descriptor{leaseDesc},
+			func() error {
+				var err error
+				values, err = ie.QueryRowEx(
+					ctx, "count-leases", nil, /* txn */
+					sessiondata.RootUserSessionDataOverride,
+					stmt, now.GoTime(),
+				)
+				return err
+			}); err != nil {
 			return err
 		}
 		if values == nil {

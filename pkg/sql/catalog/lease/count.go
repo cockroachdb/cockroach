@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -33,6 +35,10 @@ func CountLeases(
 	at hlc.Timestamp,
 ) (int, error) {
 	usesExpiry := !activeVersion.IsActive(ctx, clusterversion.V23_2)
+	leaseDesc := systemschema.LeaseTable()
+	if usesExpiry {
+		leaseDesc = systemschema.V23_1_LeaseTable()
+	}
 	var whereClauses []string
 	for _, t := range versions {
 		clause := fmt.Sprintf(`("descID" = %d AND version = %d AND (crdb_internal.sql_liveness_is_alive("sessionID")))`,
@@ -50,12 +56,16 @@ func CountLeases(
 		at.AsOfSystemTime()) +
 		strings.Join(whereClauses, " OR ")
 
-	values, err := executor.QueryRowEx(
-		ctx, "count-leases", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
-		stmt, at.GoTime(),
-	)
-	if err != nil {
+	var values tree.Datums
+	if err := executor.WithSyntheticDescriptors([]catalog.Descriptor{leaseDesc}, func() error {
+		var err error
+		values, err = executor.QueryRowEx(
+			ctx, "count-leases", nil, /* txn */
+			sessiondata.RootUserSessionDataOverride,
+			stmt, at.GoTime(),
+		)
+		return err
+	}); err != nil {
 		return 0, err
 	}
 	if values == nil {
