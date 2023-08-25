@@ -255,6 +255,7 @@ type HistogramOptions struct {
 }
 
 func NewHistogram(opt HistogramOptions) IHistogram {
+	opt.Metadata.MetricType = prometheusgo.MetricType_HISTOGRAM
 	if hdrEnabled && opt.Mode != HistogramModePrometheus {
 		if opt.Mode == HistogramModePreferHdrLatency {
 			return NewHdrLatency(opt.Metadata, opt.Duration)
@@ -492,6 +493,7 @@ func NewManualWindowHistogram(
 		panic(err.Error())
 	}
 
+	meta.MetricType = prometheusgo.MetricType_HISTOGRAM
 	h := &ManualWindowHistogram{
 		Metadata: meta,
 	}
