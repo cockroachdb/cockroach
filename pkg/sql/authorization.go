@@ -348,6 +348,13 @@ func (p *planner) CheckGrantOptionsForUser(
 func (p *planner) getOwnerOfPrivilegeObject(
 	ctx context.Context, privilegeObject privilege.Object,
 ) (username.SQLUsername, error) {
+	// Short-circuit for virtual tables, which are all owned by node. This allows
+	// us to avoid fetching the synthetic privileges for virtual tables in a
+	// thundering herd while populating a table like pg_class, which has a row for
+	// every table, including virtual tables.
+	if d, ok := privilegeObject.(catalog.TableDescriptor); ok && d.IsVirtualTable() {
+		return username.NodeUserName(), nil
+	}
 	privDesc, err := p.getPrivilegeDescriptor(ctx, privilegeObject)
 	if err != nil {
 		return username.SQLUsername{}, err
