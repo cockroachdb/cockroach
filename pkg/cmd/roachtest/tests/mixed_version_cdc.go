@@ -374,8 +374,7 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 		"resolved": fmt.Sprintf("'%s'", resolvedInterval),
 	}
 
-	jobID, err := newChangefeedCreator(db, fmt.Sprintf("%s.%s", targetDB, targetTable),
-		cmvt.kafka.manager.sinkURL(ctx)).
+	jobID, err := newChangefeedCreator(db, fmt.Sprintf("%s.%s", targetDB, targetTable), cmvt.kafka.manager.sinkURL(ctx), metamorphicMux).
 		With(options).
 		Create()
 	if err != nil {
