@@ -13,6 +13,7 @@ package integration
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -628,11 +630,19 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 		}
 
 		if rowCount < 1 {
-			return fmt.Errorf("cluster_execution_insights did not return any rows")
+			var rawJSON []uint8
+			var test appstatspb.NumericStat
+			conn.QueryRow(t, `
+			SELECT 
+				statistics->'execution_statistics'->'contentionTime' as contentionStats
+			FROM crdb_internal.statement_statistics
+			WHERE metadata->>'query' like 'UPDATE t SET s =%'`).Scan(&rawJSON)
+			err = json.Unmarshal(rawJSON, &test)
+			require.NoError(t, err)
+			return fmt.Errorf("cluster_execution_insights did not return any rows, contention stats for the 'UPDATE' query: %+v", test)
 		}
-
 		return nil
-	}, 5*time.Second)
+	}, 10*time.Second)
 }
 
 // Testing that the index recommendation is included
