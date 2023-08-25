@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -32,35 +34,67 @@ func CountLeases(
 	versions []IDVersion,
 	at hlc.Timestamp,
 ) (int, error) {
-	usesExpiry := !activeVersion.IsActive(ctx, clusterversion.V23_2)
-	var whereClauses []string
+	// Depending on if we have a sessionID or expiry only query, either
+	// one or both tables.
+	hasSessionID := activeVersion.IsActive(ctx, clusterversion.V23_2_LeaseToSessionCreation)
+	usesExpiry := !activeVersion.IsActive(ctx, clusterversion.V23_2_LeaseWillOnlyHaveSessions)
+	leaseDescs := make([]catalog.Descriptor, 0, 2)
+	stmts := make([]string, 0, 2)
+	if hasSessionID {
+		leaseDescs = append(leaseDescs, systemschema.LeaseTable())
+	}
+	if usesExpiry {
+		leaseDescs = append(leaseDescs, systemschema.V23_1_LeaseTable())
+	}
+	var whereClauses [2][]string
 	for _, t := range versions {
-		clause := fmt.Sprintf(`("descID" = %d AND version = %d AND (crdb_internal.sql_liveness_is_alive("sessionID")))`,
-			t.ID, t.Version)
-		if usesExpiry {
-			clause = fmt.Sprintf(`("descID" = %d AND version = %d AND expiration > $1)`,
+		if hasSessionID {
+			clause := fmt.Sprintf(`("descID" = %d AND version = %d AND (crdb_internal.sql_liveness_is_alive("sessionID")))`,
 				t.ID, t.Version)
+			whereClauses[0] = append(whereClauses[0],
+				clause,
+			)
 		}
-		whereClauses = append(whereClauses,
-			clause,
-		)
+		if usesExpiry {
+			clause := fmt.Sprintf(`("descID" = %d AND version = %d AND expiration > $1)`,
+				t.ID, t.Version)
+			whereClauses[1] = append(whereClauses[1],
+				clause)
+		}
+	}
+	if hasSessionID {
+		stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE `,
+			at.AsOfSystemTime()) +
+			strings.Join(whereClauses[0], " OR ")
+		stmts = append(stmts, stmt)
+	}
+	if usesExpiry {
+		stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE `,
+			at.AsOfSystemTime()) +
+			strings.Join(whereClauses[1], " OR ")
+		stmts = append(stmts, stmt)
 	}
 
-	stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE `,
-		at.AsOfSystemTime()) +
-		strings.Join(whereClauses, " OR ")
-
-	values, err := executor.QueryRowEx(
-		ctx, "count-leases", nil, /* txn */
-		sessiondata.RootUserSessionDataOverride,
-		stmt, at.GoTime(),
-	)
-	if err != nil {
-		return 0, err
+	for idx, stmt := range stmts {
+		var values tree.Datums
+		if err := executor.WithSyntheticDescriptors(leaseDescs[idx:idx+1], func() error {
+			var err error
+			values, err = executor.QueryRowEx(
+				ctx, "count-leases", nil, /* txn */
+				sessiondata.RootUserSessionDataOverride,
+				stmt, at.GoTime(),
+			)
+			return err
+		}); err != nil {
+			return 0, err
+		}
+		if values == nil {
+			return 0, errors.New("failed to count leases")
+		}
+		count := int(tree.MustBeDInt(values[0]))
+		if count > 0 {
+			return count, nil
+		}
 	}
-	if values == nil {
-		return 0, errors.New("failed to count leases")
-	}
-	count := int(tree.MustBeDInt(values[0]))
-	return count, nil
+	return 0, nil
 }

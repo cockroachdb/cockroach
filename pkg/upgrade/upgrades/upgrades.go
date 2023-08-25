@@ -324,6 +324,24 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		createRegionLivenessTables,
 	),
+	upgrade.NewTenantUpgrade(
+		"start writing leases to a new hidden index",
+		toCV(clusterversion.V23_2_LeaseToSessionCreation),
+		upgrade.NoPrecondition,
+		NoTenantUpgradeFunc,
+	),
+	upgrade.NewTenantUpgrade(
+		"lease renewals are stopped so public the new version of the table",
+		toCV(clusterversion.V23_2_LeaseWillOnlyHaveSessions),
+		upgrade.NoPrecondition,
+		leaseWaitForSessionIDAdoption,
+	),
+	upgrade.NewTenantUpgrade(
+		"lease table format is updated to remove expiry",
+		toCV(clusterversion.V23_2_LeasesTableWithNewDesc),
+		upgrade.NoPrecondition,
+		updateLeaseTableDesc,
+	),
 }
 
 var (
