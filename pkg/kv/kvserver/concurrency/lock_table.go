@@ -75,9 +75,9 @@ const (
 	waitSelf
 
 	// waitQueueMaxLengthExceeded indicates that the request attempted to enter a
-	// lock wait-queue as a writer and found that the queue's length was already
-	// equal to or exceeding the request's configured maximum. As a result, the
-	// request was rejected.
+	// lock wait-queue as a locking request and found that the queue's length was
+	// already equal to or exceeding the request's configured maximum. As a
+	// result, the request was rejected.
 	waitQueueMaxLengthExceeded
 
 	// doneWaiting indicates that the request is done waiting on this pass
@@ -96,11 +96,11 @@ type waitingState struct {
 	// Represents who the request is waiting for. The conflicting
 	// transaction may be a lock holder of a conflicting lock or a
 	// conflicting request being sequenced through the same lockTable.
-	txn           *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished,Self} and waitElsewhere
-	key           roachpb.Key       // the key of the conflict
-	held          bool              // is the conflict a held lock?
-	queuedWriters int               // how many writers are waiting?
-	queuedReaders int               // how many readers are waiting?
+	txn                   *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished,Self} and waitElsewhere
+	key                   roachpb.Key       // the key of the conflict
+	held                  bool              // is the conflict a held lock?
+	queuedLockingRequests int               // how many locking requests are waiting?
+	queuedReaders         int               // how many readers are waiting?
 
 	// Represents the lock strength of the action that the request was trying to
 	// perform when it hit the conflict. E.g. was it trying to perform a (possibly
@@ -125,8 +125,8 @@ func (s waitingState) SafeFormat(w redact.SafePrinter, _ rune) {
 		if !s.held {
 			target = "running request"
 		}
-		w.Printf("wait for%s txn %s %s @ key %s (queuedWriters: %d, queuedReaders: %d)",
-			distinguished, s.txn.Short(), target, s.key, s.queuedWriters, s.queuedReaders)
+		w.Printf("wait for%s txn %s %s @ key %s (queuedLockingRequests: %d, queuedReaders: %d)",
+			distinguished, s.txn.Short(), target, s.key, s.queuedLockingRequests, s.queuedReaders)
 	case waitSelf:
 		w.Printf("wait self @ key %s", s.key)
 	case waitElsewhere:
@@ -136,7 +136,7 @@ func (s waitingState) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.Printf("wait elsewhere for txn %s @ key %s", s.txn.Short(), s.key)
 	case waitQueueMaxLengthExceeded:
 		w.Printf("wait-queue maximum length exceeded @ key %s with length %d",
-			s.key, s.queuedWriters)
+			s.key, s.queuedLockingRequests)
 	case doneWaiting:
 		w.SafeString("done waiting")
 	default:
@@ -371,9 +371,9 @@ func (t *lockTableImpl) setMaxKeysLocked(maxKeysLocked int64) {
 //     claiming a lock on claimantTxn().
 //
 //   - The waitQueueMaxLengthExceeded state is used to indicate that the request
-//     was rejected because it attempted to enter a lock wait-queue as a writer
-//     and found that the queue's length was already equal to or exceeding the
-//     request's configured maximum.
+//     was rejected because it attempted to enter a lock wait-queue as a locking
+//     request and found that the queue's length was already equal to or
+//     exceeding the request's configured maximum.
 //
 //   - The doneWaiting state is used to indicate that the request should make
 //     another call to ScanAndEnqueue() (that next call is more likely to return a
@@ -452,10 +452,10 @@ type lockTableGuardImpl struct {
 		state  waitingState
 		signal chan struct{}
 
-		// locks for which this request is in the list of queued{Readers,Writers}.
-		// For writers, this includes both active and inactive waiters. For readers,
-		// there's no such thing as inactive readers, so by definition the request
-		// must be an active waiter.
+		// locks for which this request is in the list of
+		// queued{Readers,LockingRequests}. For locking requests, this includes both
+		// active and inactive waiters. For readers, there's no such thing as an
+		// inactive reader, so by definition the request must be an active waiter.
 		//
 		// TODO(sbhola): investigate whether the logic to maintain this locks map
 		// can be simplified so it doesn't need to be adjusted by various keyLocks
@@ -725,19 +725,19 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 
 	// There's no conflict with the lock holder itself. However, there may be
 	// other locking requests that came before us that we may conflict with.
-	// Checking for conflicts with the list of queuedWriters ensures fairness by
-	// preventing a stream of locking[1] SKIP LOCKED requests from starving out
-	// regular locking requests.
+	// Checking for conflicts with the list of queuedLockingRequests ensures
+	// fairness by preventing a stream of locking[1] SKIP LOCKED requests from
+	// starving out regular locking requests.
 	if str == lock.None { // [1] we only need to do this checking for locking requests
 		return false, nil, nil
 	}
 
-	for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
+	for e := l.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 		qqg := e.Value.(*queuedGuard)
 		if qqg.guard.seqNum > g.seqNum {
 			// We only need to check for conflicts with requests that came before us
 			// (read: have lower sequence numbers than us). Note that the list of
-			// queuedWriters is sorted in increasing order of sequence number.
+			// queuedLockingRequests is sorted in increasing order of sequence number.
 			break
 		}
 		if g.isSameTxn(qqg.guard.txnMeta()) {
@@ -938,14 +938,15 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) {
 	}
 }
 
-// Waiting writers in the keyLocks struct are wrapped in a queuedGuard. A
-// waiting writer is typically waiting in an active state, i.e., the
-// lockTableGuardImpl.key refers to this keyLocks struct. However, there are
-// multiple reasons that can cause a writer to be an inactive waiter:
-//   - The first transactional writer is able to claim a lock when it is
-//     released. Doing so entails the writer being marked inactive.
+// queuedGuard is used to wrap waiting locking requests in the keyLocks struct.
+// Waiting requests typically wait in an active state, i.e., the
+// lockTableGuardImpl.key refers to the same key inside this keyLock struct.
+// However, there are multiple reasons that can cause a locking request to wait
+// inactively at a keyLock:
+//   - The first locking request is able to claim a lock when it is released.
+//     Doing so entails the request being marked inactive.
 //   - It is able to claim a lock that was previously claimed by a request with
-//     a higher sequence number. In such cases, the writer adds itself to the
+//     a higher sequence number. In such cases, the request adds itself to the
 //     head of the queue as an inactive waiter and proceeds with its scan.
 //   - A discovered lock causes the discoverer to become an inactive waiter
 //     (until it scans again).
@@ -953,8 +954,8 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) {
 //     waiter.
 //
 // The first two cases above (claiming an unheld lock) only occur for
-// transactional requests, but the other cases can happen for both transactional
-// and non-transactional requests.
+// (transactional) locking requests, but the other cases can happen for
+// both locking requests and non-transactional writers.
 type queuedGuard struct {
 	guard  *lockTableGuardImpl
 	mode   lock.Mode // protected by keyLocks.mu
@@ -1218,7 +1219,7 @@ type txnLock struct {
 	// Note that if the lock is replicated in nature, the lock would not be
 	// tracked by the lock table when it was acquired as we do not track
 	// uncontended replicated locks. Instead, this field would be initialized when
-	// a contending reader/writer discovered this lock.
+	// a contending request discovered this lock.
 	startTime time.Time
 }
 
@@ -1233,7 +1234,7 @@ func newTxnLock(txn *enginepb.TxnMeta, clock *hlc.Clock) *txnLock {
 
 // getLockHolder returns information about the lock's holder.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (tl *txnLock) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
 	assert(
 		tl.isHeldReplicated() || tl.isHeldUnreplicated(),
@@ -1257,7 +1258,7 @@ func (tl *txnLock) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
 
 // isHeldReplicated returns true if the receiver is held as a replicated lock.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (tl *txnLock) isHeldReplicated() bool {
 	return !tl.replicatedInfo.ts.IsEmpty()
 }
@@ -1265,7 +1266,7 @@ func (tl *txnLock) isHeldReplicated() bool {
 // isHeldUnreplicated returns true if the receiver is held as a unreplicated
 // lock.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (tl *txnLock) isHeldUnreplicated() bool {
 	return !tl.unreplicatedInfo.ts.IsEmpty()
 }
@@ -1274,7 +1275,7 @@ func (tl *txnLock) isHeldUnreplicated() bool {
 // by a transaction with multiple locking strengths, the mode corresponding to
 // the highest lock strength is returned.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (tl *txnLock) getLockMode() lock.Mode {
 	lockHolderTxn, lockHolderTS := tl.getLockHolder()
 
@@ -1301,7 +1302,7 @@ func (tl *txnLock) getLockMode() lock.Mode {
 // idempotent. Idempotent lock acquisitions do not require any changes to what
 // is being tracked in the lock's state.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (tl *txnLock) isIdempotentLockAcquisition(acq *roachpb.LockAcquisition) bool {
 	txn, _ := tl.getLockHolder()
 	assert(txn.ID == acq.Txn.ID, "existing lock transaction is different from the acquisition")
@@ -1333,7 +1334,7 @@ func (tl *txnLock) isIdempotentLockAcquisition(acq *roachpb.LockAcquisition) boo
 // a lock is already held on the receiver's key by the transaction referenced in
 // the supplied lock acquisition.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (tl *txnLock) reacquireLock(acq *roachpb.LockAcquisition) error {
 	// An unreplicated lock is being re-acquired...
 	if acq.Durability == lock.Unreplicated && tl.isHeldUnreplicated() {
@@ -1461,12 +1462,12 @@ type lockWaitQueue struct {
 	// for cases that find a particular guard the lockTableGuardImpl.locks can be
 	// a map instead of a set to point directly to the *list.Element.
 	//
-	// queuedWriters:
-	// - to find all active queuedWriters.
-	// - to find the first active writer to make it distinguished.
+	// queuedLockingRequests:
+	// - to find all active queued locking requests.
+	// - to find the first active locking request to make it distinguished.
 	// - to find a particular guard.
 	// - to find the position, based on seqNum, for inserting a particular guard.
-	// - to find all waiting writers with a particular txn ID.
+	// - to find all waiting locking requests with a particular txn ID.
 	//
 	// waitingReaders:
 	// - readers with a higher timestamp than some timestamp.
@@ -1477,14 +1478,14 @@ type lockWaitQueue struct {
 
 	// List of *queueGuard. The list is maintained in increasing order of sequence
 	// numbers. This helps ensure some degree of fairness as requests are released
-	// from the head of the queue. Typically, this happens when the associated
-	// lock is released.
+	// from the head of the queue. Typically, this happens when all locks on the
+	// associated key are released.
 	//
 	// When a lock is not held, the head of the list should be comprised of an
-	// inactive, transactional writer (if the list is non-empty). Keeping its
-	// position as an inactive waiter at the head of the queue serves as a claim
-	// to prevent other concurrent requests (with higher sequence numbers) from
-	// barging in front of it. This is important for two reasons:
+	// inactive, transactional locking request (if the list is non-empty). Keeping
+	// its position as an inactive waiter at the head of the queue serves as a
+	// claim to prevent other concurrent locking requests (with higher sequence
+	// numbers) from barging in front of it. This is important for two reasons:
 	//
 	// 1. It helps ensure some degree of fairness, as sequence numbers are a proxy
 	// for arrival order.
@@ -1493,48 +1494,54 @@ type lockWaitQueue struct {
 	// upfront to the lock table (as uncontended, replicated locks are only
 	// discovered during evaluation). This means that no total ordering of lock
 	// acquisition is enforced by the lock table -- using sequence numbers to
-	// break ties allows us to prevent deadlocks that would have arisen otherwise.
+	// break ties allows us to prevent deadlocks that could have arisen otherwise.
 	//
 	// Conversely, a request with a lower sequence number is allowed to barge in
 	// front of an inactive waiter with a higher sequence number if the lock is
 	// not held. This can be thought of as "breaking the claim" that the higher
-	// sequence numbered request tried to claim. As both these requests sequence
-	// through the lock table one of them will win the race. This is fine, as the
-	// request that wins the race can only evaluate while holding latches and the
-	// two requests must conflict on latches. As a result they're guaranteed to be
-	// isolated. We don't concern ourselves with the possible fairness issue if
-	// the higher sequence number wins the race.
+	// sequence numbered request tried to establish. As both these requests
+	// sequence through the lock table one of them will win the race. This is
+	// fine, as the request that wins the race can only evaluate while holding
+	// latches and the two requests must conflict on latches. As a result they're
+	// guaranteed to be isolated. We don't concern ourselves with the possible
+	// fairness issue if the higher sequence number wins the race.
 	//
-	// Non-locking readers are held in a separate list to the list of
-	// waitingReaders, and they make no claims on unheld locks like writers do.
-	// They race with the transactional writer that has made the claim.
+	// Non-locking readers are held separately, in the waitingReaders list. Unlike
+	// locking requests, they make no claims on unheld locks. Instead, they race
+	// with other locking request(s) that have made a claim.
 	//
 	// Similarly, non-transactional requests make no claims either, regardless of
-	// their read/write status. Non-transactional writes wait in the queuedWriters
-	// list along with transactional writers. The difference is as follows:
+	// their read/write status. Non-transactional writers wait in the
+	// queuedLockingRequests list along with transactional locking requests. The
+	// difference between non-transactional writers and transactional locking
+	// requests is as follows:
+	//
 	// 1. When a lock transitions from held to released, the head of the queue
-	// that is made of non-transactional writes is cleared in one swoop (until we
-	// hit the first transactional writer or the queue is entirely drained). This
-	// means non-transactional writers race with a transactional writer's claim,
-	// like read requests.
+	// that is made up of non-transactional writes is cleared in one swoop (until
+	// we hit the first transactional writer or the queue is entirely drained).
+	// This means non-transactional writers race with transactional locking
+	// requests' claim(s), like read requests.
 	// 2. When deciding whether to wait at an unheld lock or not, a
 	// non-transactional writer will check how its sequence number compares to the
-	// head of the queuedWriters list. If its lower, it'll proceed; otherwise,
+	// head of the queuedLockingRequests list. If it's lower, it'll proceed
+	// without inserting itself into the queuedLockingRequests list; otherwise,
 	// it'll wait.
 	//
 	// Multiple requests from the same transaction wait independently, including
 	// the situation where one of the requests is an inactive waiter at the head
 	// of the queue. However, if the inactive waiter manages to sequence,
 	// evaluate, and acquire the lock, other requests from the same transaction
-	// are allowed to be released.
+	// with lock strength <= the strength with which the lock was acquired are
+	// allowed to proceed.
 	//
-	// The behavior of only one transactional writer being allowed to make a claim
-	// by marking itself as inactive when a lock transitions from held to free is
-	// subject to change. As we introduce support for multiple locking strengths,
-	// and in particular locking strengths that are compatible with each other
-	// (read: shared locks), one could imagine a scheme where the head of the
-	// queuedWriters (s/queuedWriters/queuedLockers/g) that is compatible with
-	// each other is marked as inactive and allowed to proceed. A "joint claim".
+	// The behavior of only one transactional locking request being allowed to
+	// make a claim by marking itself as inactive when a lock transitions from
+	// held to free is subject to change. As we introduce support for multiple
+	// locking strengths, and in particular locking strengths that are compatible
+	// with each other (read: shared locks), one could imagine a scheme where the
+	// head of the queuedLockingRequests that is compatible with each other is
+	// marked as inactive and allowed to proceed. A "joint claim".
+	// TODO(arul): update the comment above, this change is coming soon!
 	//
 	// Once we introduce joint claims, we'll also need to support partially
 	// breaking such claims. This means that a request that was previously
@@ -1566,7 +1573,7 @@ type lockWaitQueue struct {
 	//   C       req2        req3
 	//   This is a deadlock caused by the lock table unless req2 partially
 	//   breaks the claim at A.
-	queuedWriters list.List
+	queuedLockingRequests list.List
 
 	// List of *lockTableGuardImpl. All of these are actively waiting. If
 	// non-empty, the lock must be held. By definition these cannot be in
@@ -1590,7 +1597,7 @@ func (kl *keyLocks) SetID(v uint64)     { kl.id = v }
 func (kl *keyLocks) SetKey(v []byte)    { kl.key = v }
 func (kl *keyLocks) SetEndKey(v []byte) { kl.endKey = v }
 
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) String() string {
 	var sb redact.StringBuilder
 	kl.safeFormat(&sb, nil)
@@ -1598,7 +1605,7 @@ func (kl *keyLocks) String() string {
 }
 
 // SafeFormat implements redact.SafeFormatter.
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) SafeFormat(w redact.SafePrinter, _ rune) {
 	var sb redact.StringBuilder
 	kl.safeFormat(&sb, nil)
@@ -1606,7 +1613,7 @@ func (kl *keyLocks) SafeFormat(w redact.SafePrinter, _ rune) {
 }
 
 // safeFormat is a helper for SafeFormat and String methods.
-// REQUIRES: l.mu is locked. txnStatusCache can be nil.
+// REQUIRES: kl.mu is locked. txnStatusCache can be nil.
 func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStatusCache) {
 	sb.Printf(" lock: %s\n", kl.key)
 	if kl.isEmptyLock() {
@@ -1675,9 +1682,9 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 			}
 		}
 	}
-	if kl.queuedWriters.Len() > 0 {
-		sb.SafeString("   queued writers:\n")
-		for e := kl.queuedWriters.Front(); e != nil; e = e.Next() {
+	if kl.queuedLockingRequests.Len() > 0 {
+		sb.SafeString("   queued locking requests:\n")
+		for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 			qg := e.Value.(*queuedGuard)
 			g := qg.guard
 			sb.Printf("    active: %t req: %d, strength: %s, txn: ",
@@ -1706,21 +1713,21 @@ func (kl *keyLocks) collectLockStateInfo(
 	defer kl.mu.Unlock()
 
 	// Don't include locks that have neither lock holders, nor claims, nor
-	// waiting readers/writers.
+	// waiting readers/locking requests.
 	if kl.isEmptyLock() {
 		return false, roachpb.LockStateInfo{}
 	}
 
-	// Filter out locks without waiting readers/writers unless explicitly
+	// Filter out locks without waiting readers/locking requests unless explicitly
 	// requested.
 	//
 	// TODO(arul): This should consider the active/inactive status of all queued
-	// writers. If all waiting writers are inactive (and there are no waiting
-	// readers either), we should consider the lock to be uncontended.
+	// locking requests. If all waiting requests are inactive (and there are no
+	// waiting readers either), we should consider the lock to be uncontended.
 	// See https://github.com/cockroachdb/cockroach/issues/103894.
 	if !includeUncontended && kl.waitingReaders.Len() == 0 &&
-		(kl.queuedWriters.Len() == 0 ||
-			(kl.queuedWriters.Len() == 1 && !kl.queuedWriters.Front().Value.(*queuedGuard).active)) {
+		(kl.queuedLockingRequests.Len() == 0 ||
+			(kl.queuedLockingRequests.Len() == 1 && !kl.queuedLockingRequests.Front().Value.(*queuedGuard).active)) {
 		return false, roachpb.LockStateInfo{}
 	}
 
@@ -1728,7 +1735,7 @@ func (kl *keyLocks) collectLockStateInfo(
 }
 
 // lockStateInfo converts receiver to the roachpb.LockStateInfo structure.
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 	var txnHolder *enginepb.TxnMeta
 
@@ -1743,10 +1750,10 @@ func (kl *keyLocks) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 		}
 	}
 
-	waiterCount := kl.waitingReaders.Len() + kl.queuedWriters.Len()
+	waiterCount := kl.waitingReaders.Len() + kl.queuedLockingRequests.Len()
 	lockWaiters := make([]lock.Waiter, 0, waiterCount)
 
-	// Add waiting readers before writers as they should run first.
+	// Add waiting readers before locking requests as they should run first.
 	for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
 		readerGuard := e.Value.(*lockTableGuardImpl)
 		readerGuard.mu.Lock()
@@ -1759,18 +1766,18 @@ func (kl *keyLocks) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 		readerGuard.mu.Unlock()
 	}
 
-	// Lastly, add queued writers in order.
-	for e := kl.queuedWriters.Front(); e != nil; e = e.Next() {
+	// Lastly, add queued locking requests, in order.
+	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 		qg := e.Value.(*queuedGuard)
-		writerGuard := qg.guard
-		writerGuard.mu.Lock()
+		g := qg.guard
+		g.mu.Lock()
 		lockWaiters = append(lockWaiters, lock.Waiter{
-			WaitingTxn:   writerGuard.txnMeta(),
+			WaitingTxn:   g.txnMeta(),
 			ActiveWaiter: qg.active,
 			Strength:     lock.Exclusive,
-			WaitDuration: now.Sub(writerGuard.mu.curLockWaitStart),
+			WaitDuration: now.Sub(g.mu.curLockWaitStart),
 		})
-		writerGuard.mu.Unlock()
+		g.mu.Unlock()
 	}
 
 	return roachpb.LockStateInfo{
@@ -1795,7 +1802,7 @@ func (kl *keyLocks) addToMetrics(m *LockTableMetrics, now time.Time) {
 		Held:                 kl.isLocked(),
 		HoldDurationNanos:    kl.lockHeldDuration(now).Nanoseconds(),
 		WaitingReaders:       int64(kl.waitingReaders.Len()),
-		WaitingWriters:       int64(kl.queuedWriters.Len()),
+		WaitingWriters:       int64(kl.queuedLockingRequests.Len()),
 		WaitDurationNanos:    totalWaitDuration.Nanoseconds(),
 		MaxWaitDurationNanos: maxWaitDuration.Nanoseconds(),
 	}
@@ -1808,16 +1815,16 @@ func (kl *keyLocks) addToMetrics(m *LockTableMetrics, now time.Time) {
 // inconsistencies with waitSelf and waitForDistinguished states that need
 // changing.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) informActiveWaiters() {
-	if kl.waitingReaders.Len() == 0 && kl.queuedWriters.Len() == 0 {
+	if kl.waitingReaders.Len() == 0 && kl.queuedLockingRequests.Len() == 0 {
 		return // no active waiters to speak of; early return
 	}
 	waitForState := waitingState{
-		kind:          waitFor,
-		key:           kl.key,
-		queuedWriters: kl.queuedWriters.Len(),
-		queuedReaders: kl.waitingReaders.Len(),
+		kind:                  waitFor,
+		key:                   kl.key,
+		queuedLockingRequests: kl.queuedLockingRequests.Len(),
+		queuedReaders:         kl.waitingReaders.Len(),
 	}
 	// TODO(arul): This is entirely busted once we have multiple lock holders.
 	// In such cases, there may be a request waiting not on the head of the
@@ -1838,7 +1845,7 @@ func (kl *keyLocks) informActiveWaiters() {
 		// NB: Note that if the distinguishedWaiter belongs to the same transaction
 		// that waiters in the lock wait queue are waiting on, then the lock cannot
 		// be held by it. This is because if it were, this request would no longer
-		// be waiting in lock wait queues (via a call to releaseWritersFromTxn).
+		// be waiting in lock wait queues (via a call to releaseLockingRequestsFromTxn).
 		// This is asserted below.
 		kl.distinguishedWaiter.isSameTxn(waitForState.txn) {
 		// Ensure that if we're trying to find a new distinguished waiter because
@@ -1858,7 +1865,8 @@ func (kl *keyLocks) informActiveWaiters() {
 		state := waitForState
 		// Since there are waiting readers, we could not have transitioned out of
 		// or into a state where the lock is held. This is because readers only wait
-		// for held locks -- they race with other {,non-}transactional writers.
+		// for held locks -- they race with other non-transactional writers and
+		// locking requests.
 		assert(state.held, "waiting readers should be empty if the lock isn't held")
 		g := e.Value.(*lockTableGuardImpl)
 		if findDistinguished {
@@ -1876,7 +1884,7 @@ func (kl *keyLocks) informActiveWaiters() {
 		g.maybeUpdateWaitingStateLocked(state, true /* notify */)
 		g.mu.Unlock()
 	}
-	for e := kl.queuedWriters.Front(); e != nil; e = e.Next() {
+	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 		qg := e.Value.(*queuedGuard)
 		if !qg.active {
 			continue
@@ -1885,7 +1893,7 @@ func (kl *keyLocks) informActiveWaiters() {
 		state := waitForState
 		if g.isSameTxn(waitForState.txn) {
 			if waitForState.held {
-				panic("writer from the lock holder txn should not be waiting in a wait queue")
+				panic("request from the lock holder txn should not be waiting in a wait queue")
 			}
 			state.kind = waitSelf
 		} else {
@@ -1928,7 +1936,7 @@ func (kl *keyLocks) informActiveWaiters() {
 // they use the concept of the transaction that has claimed a particular key as
 // the transaction to push.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) claimantTxn() (_ *enginepb.TxnMeta, held bool) {
 	if kl.isLocked() {
 		// We want the claimant transaction to remain the same unless there has been
@@ -1938,25 +1946,25 @@ func (kl *keyLocks) claimantTxn() (_ *enginepb.TxnMeta, held bool) {
 		// key.
 		return kl.holders.Front().Value.(*txnLock).txn, true
 	}
-	if kl.queuedWriters.Len() == 0 {
-		panic("no queued writers or lock holder; no one should be waiting on the lock")
+	if kl.queuedLockingRequests.Len() == 0 {
+		panic("no queued locking request or lock holder; no one should be waiting on the lock")
 	}
-	qg := kl.queuedWriters.Front().Value.(*queuedGuard)
+	qg := kl.queuedLockingRequests.Front().Value.(*queuedGuard)
 	return qg.guard.txnMeta(), false
 }
 
-// releaseWritersFromTxn removes all waiting writers for the key, referenced in
-// the receiver, that are part of the specified transaction.
+// releaseLockingRequestsFromTxn removes all locking requests waiting on the
+// key, referenced in the receiver, that are part of the specified transaction.
 //
-// REQUIRES: l.mu is locked.
-func (kl *keyLocks) releaseWritersFromTxn(txn *enginepb.TxnMeta) {
-	for e := kl.queuedWriters.Front(); e != nil; {
+// REQUIRES: kl.mu is locked.
+func (kl *keyLocks) releaseLockingRequestsFromTxn(txn *enginepb.TxnMeta) {
+	for e := kl.queuedLockingRequests.Front(); e != nil; {
 		qg := e.Value.(*queuedGuard)
 		curr := e
 		e = e.Next()
 		g := qg.guard
 		if g.isSameTxn(txn) {
-			kl.removeWriter(curr)
+			kl.removeLockingRequest(curr)
 		}
 	}
 }
@@ -1971,14 +1979,14 @@ func (kl *keyLocks) releaseWritersFromTxn(txn *enginepb.TxnMeta) {
 // the waiting state for other actively waiting requests as well; as such,
 // informActiveWaiters is more appropriate.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) tryMakeNewDistinguished() {
 	var g *lockTableGuardImpl
 	claimantTxn, _ := kl.claimantTxn()
 	if kl.waitingReaders.Len() > 0 {
 		g = kl.waitingReaders.Front().Value.(*lockTableGuardImpl)
-	} else if kl.queuedWriters.Len() > 0 {
-		for e := kl.queuedWriters.Front(); e != nil; e = e.Next() {
+	} else if kl.queuedLockingRequests.Len() > 0 {
+		for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 			qg := e.Value.(*queuedGuard)
 			// Only requests actively waiting at this lock should be considered for
 			// the distinguished distinction.
@@ -2004,7 +2012,7 @@ func (kl *keyLocks) tryMakeNewDistinguished() {
 // Returns true iff the keyLocks is empty, i.e., there is no lock holder and no
 // waiters.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) isEmptyLock() bool {
 	if kl.isLocked() {
 		return false // lock is held
@@ -2016,15 +2024,16 @@ func (kl *keyLocks) isEmptyLock() bool {
 	assert(len(kl.heldBy) == 0, "non-empty heldBy map for an unlocked key")
 	assert(kl.waitingReaders.Len() == 0, "keyLocks with waiting readers for unlocked key")
 	// Determine if the lock is empty or not by checking the list of queued
-	// writers.
-	return kl.queuedWriters.Len() == 0
+	// locking requests.
+	return kl.queuedLockingRequests.Len() == 0
 }
 
 // assertEmptyLock asserts that the keyLocks is empty. This condition must hold
 // for a lock to be safely removed from the tree. If it does not hold, requests
 // with a stale snapshot of the btree will still be able to enter the lock's
 // wait-queue, after which point they will never hear of lock updates.
-// REQUIRES: l.mu is locked.
+//
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) assertEmptyLock() {
 	if !kl.isEmptyLock() {
 		panic("keyLocks is not empty")
@@ -2032,7 +2041,8 @@ func (kl *keyLocks) assertEmptyLock() {
 }
 
 // assertEmptyLockUnlocked is like assertEmptyLock, but it locks the keyLocks.
-// REQUIRES: l.mu is not locked.
+//
+// REQUIRES: kl.mu is not locked.
 func (kl *keyLocks) assertEmptyLockUnlocked() {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
@@ -2043,7 +2053,7 @@ func (kl *keyLocks) assertEmptyLockUnlocked() {
 // held with durability replicated. If so, the first transaction that holds a
 // replicated lock is also returned.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) isAnyLockHeldReplicated() (bool, *enginepb.TxnMeta) {
 	if !kl.isLocked() {
 		return false, nil
@@ -2058,7 +2068,8 @@ func (kl *keyLocks) isAnyLockHeldReplicated() (bool, *enginepb.TxnMeta) {
 }
 
 // Returns the duration of time the lock has been tracked as held in the lock table.
-// REQUIRES: l.mu is locked.
+//
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) lockHeldDuration(now time.Time) time.Duration {
 	if !kl.isLocked() {
 		return time.Duration(0)
@@ -2075,8 +2086,10 @@ func (kl *keyLocks) lockHeldDuration(now time.Time) time.Duration {
 }
 
 // Returns the total amount of time all waiters in the queues of
-// readers and writers have been waiting on the lock.
-// REQUIRES: l.mu is locked.
+// readers and locking requests have been waiting on the key referenced in the
+// receiver.
+//
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.Duration) {
 	var totalWaitDuration time.Duration
 	var maxWaitDuration time.Duration
@@ -2090,7 +2103,7 @@ func (kl *keyLocks) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.
 		}
 		g.mu.Unlock()
 	}
-	for e := kl.queuedWriters.Front(); e != nil; e = e.Next() {
+	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 		qg := e.Value.(*queuedGuard)
 		g := qg.guard
 		g.mu.Lock()
@@ -2106,7 +2119,8 @@ func (kl *keyLocks) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.
 
 // Returns true iff the lock is currently held by the transaction with the
 // given id.
-// REQUIRES: l.mu is locked.
+//
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) isLockedBy(id uuid.UUID) bool {
 	if kl.isLocked() {
 		_, ok := kl.heldBy[id]
@@ -2119,7 +2133,7 @@ func (kl *keyLocks) isLockedBy(id uuid.UUID) bool {
 // or more transactions. Each transaction's locks may be held durably,
 // non-durably, or both.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) isLocked() bool {
 	return kl.holders.Len() != 0
 }
@@ -2127,7 +2141,7 @@ func (kl *keyLocks) isLocked() bool {
 // clearLockHeldBy removes the lock, if held, by the transaction referenced by
 // the supplied ID. It is a no-op if the lock isn't held by the transaction.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) clearLockHeldBy(ID uuid.UUID) {
 	e, held := kl.heldBy[ID]
 	if !held {
@@ -2146,7 +2160,7 @@ func (kl *keyLocks) clearAllLockHolders() {
 // acquired or discovered on the key referenced in the receiver for the first
 // time.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) lockAcquiredOrDiscovered(tl *txnLock) {
 	_, found := kl.heldBy[tl.txn.ID]
 	assert(!found, "lock was already being tracked for this key")
@@ -2175,7 +2189,7 @@ func (kl *keyLocks) lockAcquiredOrDiscovered(tl *txnLock) {
 // evaluate. The guard's state is modified to indicate if there are locks that
 // need resolution.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) scanAndMaybeEnqueue(g *lockTableGuardImpl, notify bool) (wait bool) {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
@@ -2245,14 +2259,14 @@ func (kl *keyLocks) scanAndMaybeEnqueue(g *lockTableGuardImpl, notify bool) (wai
 // constructWaitingState constructs the waiting state the supplied request
 // should use to wait in the receiver's lock wait-queues.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) constructWaitingState(g *lockTableGuardImpl) waitingState {
 	waitForState := waitingState{
-		kind:          waitFor,
-		key:           kl.key,
-		queuedWriters: kl.queuedWriters.Len(),
-		queuedReaders: kl.waitingReaders.Len(),
-		held:          true,
+		kind:                  waitFor,
+		key:                   kl.key,
+		queuedLockingRequests: kl.queuedLockingRequests.Len(),
+		queuedReaders:         kl.waitingReaders.Len(),
+		held:                  true,
 	}
 	txn, held := kl.claimantTxn()
 	waitForState.held = held
@@ -2270,7 +2284,7 @@ func (kl *keyLocks) constructWaitingState(g *lockTableGuardImpl) waitingState {
 // transaction already holds the lock with an equal or higher lock strength
 // compared to the one supplied. Otherwise, false is returned.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) alreadyHoldsLockAndIsAllowedToProceed(
 	g *lockTableGuardImpl, str lock.Strength,
 ) bool {
@@ -2295,12 +2309,13 @@ func (kl *keyLocks) alreadyHoldsLockAndIsAllowedToProceed(
 		// TODO(arul): We want to allow requests that are writing to keys that they
 		// hold exclusive locks on to "jump ahead" of any potential waiters. This
 		// prevents deadlocks. The logic here is a bandaid until we implement a
-		// solution for the general case of arbitrary lock upgrades
-		// (e.g. shared -> exclusive, etc.). We'll do so by prioritizing requests
-		// from transaction's that hold locks over transactions that don't when
-		// storing them in the list of queuedWriters. Instead of sorting the list
-		// of queuedWriters just based on sequence numbers alone, we'll instead use
-		// (belongsToALockHolderTxn, sequence number) to construct the sort order.
+		// solution for the general case of arbitrary lock upgrades (e.g. shared ->
+		// exclusive, etc.). We'll do so by prioritizing requests from transaction's
+		// that hold locks over transactions that don't when storing them in the
+		// list of queuedLockingRequests. Instead of sorting the list of
+		// queuedLockingRequests just based on sequence numbers alone, we'll instead
+		// use (belongsToALockHolderTxn, sequence number) to construct the sort
+		// order.
 		(str == lock.Intent && heldMode.Strength == lock.Exclusive)
 }
 
@@ -2313,7 +2328,7 @@ func (kl *keyLocks) alreadyHoldsLockAndIsAllowedToProceed(
 // non-conflicting. However, the caller may be responsible for cleaning them up
 // before proceeding.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 // REQUIRES: the transaction, to which the request belongs, should not be a lock
 // holder.
 func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
@@ -2394,7 +2409,7 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 				//
 				// NB: If we were to not defer to the stronger lock strength and start
 				// waiting here, we could potentially end up doing so in the wrong wait
-				// queue (queuedReaders vs. queuedWriters). There wouldn't be a
+				// queue (queuedReaders vs. queuedLockingRequests). There wouldn't be a
 				// correctness issue in doing so, but it isn't ideal.
 				//
 				// NB: Non-transactional requests do not make claims or acquire locks.
@@ -2429,7 +2444,7 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 // A boolean is returned indicating whether the read request conflicted with
 // the lock or not.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) maybeEnqueueNonLockingReadRequest(g *lockTableGuardImpl) (conflicts bool) {
 	assert(g.curStrength() == lock.None, "unexpected locking strength; expected read")
 	if !kl.conflictsWithLockHolders(g) {
@@ -2456,7 +2471,7 @@ func (kl *keyLocks) maybeEnqueueNonLockingReadRequest(g *lockTableGuardImpl) (co
 // configured bound the request is not enqueued; instead, a boolean indicating
 // this case is returned to the caller.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) enqueueLockingRequest(g *lockTableGuardImpl) (maxQueueLengthExceeded bool) {
 	assert(g.curStrength() != lock.None, "should only be called with a locking request")
 	g.mu.Lock()
@@ -2467,7 +2482,7 @@ func (kl *keyLocks) enqueueLockingRequest(g *lockTableGuardImpl) (maxQueueLength
 	// an inactive waiter at this lock and comes back around.
 	if _, inQueue := g.mu.locks[kl]; inQueue {
 		// Find the request; it must already be in the correct position.
-		for e := kl.queuedWriters.Front(); e != nil; e = e.Next() {
+		for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 			qqg := e.Value.(*queuedGuard)
 			if qqg.guard == g {
 				qqg.active = true // set the active status as true, in case it wasn't before
@@ -2482,10 +2497,10 @@ func (kl *keyLocks) enqueueLockingRequest(g *lockTableGuardImpl) (maxQueueLength
 	}
 
 	// Check if the lock's wait queue has room for one more request.
-	if g.maxWaitQueueLength > 0 && kl.queuedWriters.Len() >= g.maxWaitQueueLength {
+	if g.maxWaitQueueLength > 0 && kl.queuedLockingRequests.Len() >= g.maxWaitQueueLength {
 		// The wait-queue is longer than the request is willing to wait for.
 		// Instead of entering the queue, immediately reject the request. For
-		// simplicity, we are not finding the position of this writer in the
+		// simplicity, we are not finding the position of this request in the
 		// queue and rejecting the tail of the queue above the max length. That
 		// would be more fair, but more complicated, and we expect that the
 		// common case is that this waiter will be at the end of the queue.
@@ -2499,16 +2514,16 @@ func (kl *keyLocks) enqueueLockingRequest(g *lockTableGuardImpl) (maxQueueLength
 	// The request isn't in the queue. Add it in the correct position, based on
 	// its sequence number.
 	var e *list.Element
-	for e = kl.queuedWriters.Back(); e != nil; e = e.Prev() {
+	for e = kl.queuedLockingRequests.Back(); e != nil; e = e.Prev() {
 		qqg := e.Value.(*queuedGuard)
 		if qqg.guard.seqNum < qg.guard.seqNum {
 			break
 		}
 	}
 	if e == nil {
-		kl.queuedWriters.PushFront(qg)
+		kl.queuedLockingRequests.PushFront(qg)
 	} else {
-		kl.queuedWriters.InsertAfter(qg, e)
+		kl.queuedLockingRequests.InsertAfter(qg, e)
 	}
 	// This request may be a candidate to become a distinguished waiter if one
 	// doesn't exist yet; try making it such.
@@ -2525,7 +2540,7 @@ func (kl *keyLocks) enqueueLockingRequest(g *lockTableGuardImpl) (maxQueueLength
 // [1] A request that belongs to the lock's claimant transaction is not eligible
 // to become a distinguished waiter.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) maybeMakeDistinguishedWaiter(g *lockTableGuardImpl) {
 	if kl.distinguishedWaiter != nil {
 		return
@@ -2541,7 +2556,7 @@ func (kl *keyLocks) maybeMakeDistinguishedWaiter(g *lockTableGuardImpl) {
 // shouldRequestActivelyWait returns true iff the supplied request needs to
 // actively wait on the receiver.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 // REQUIRES: g.mu to be locked.
 func (kl *keyLocks) shouldRequestActivelyWait(g *lockTableGuardImpl) bool {
 	if g.curStrength() == lock.None {
@@ -2567,7 +2582,7 @@ func (kl *keyLocks) shouldRequestActivelyWait(g *lockTableGuardImpl) bool {
 	// not support UPDATE locks. Even if it did, there would be no correctness
 	// issue with what we're doing here, as long as the queue is maintained in
 	// sequence number order.
-	for e := kl.queuedWriters.Front(); e != nil; e = e.Next() {
+	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 		qqg := e.Value.(*queuedGuard)
 		if qqg.guard == g {
 			// We found our request while scanning from the front without finding any
@@ -2592,12 +2607,12 @@ func (kl *keyLocks) shouldRequestActivelyWait(g *lockTableGuardImpl) bool {
 // responsibility to detect this case and actually choose one. Typically, this
 // is done using a call to informActiveWaiters.
 //
-// [1] Only transactional, locking requests can lay claims. Non-transactional
-// writers cannot.
-// [2] While non-transactional writers cannot lay claims, they do need to be
-// removed from the receiver's wait queue before proceeding. We do that here.
+// [1] Only transactional, locking requests can establish claims.
+// Non-transactional writers cannot.
+// [2] While non-transactional writers cannot establish claims, they do need to
+// be removed from the receiver's wait queue before proceeding. We do that here.
 //
-// REQUIRES: l.mu to be locked.
+// REQUIRES: kl.mu to be locked.
 func (kl *keyLocks) claimBeforeProceeding(g *lockTableGuardImpl) {
 	assert(g.curStrength() != lock.None, "non-locking requests should not try to grab claims")
 
@@ -2619,7 +2634,7 @@ func (kl *keyLocks) claimBeforeProceeding(g *lockTableGuardImpl) {
 
 	// Find the request; iterate from the front, as requests proceeding are more
 	// likely to be closer to the front than the back.
-	for e := kl.queuedWriters.Front(); e != nil; e = e.Next() {
+	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 		qqg := e.Value.(*queuedGuard)
 		if qqg.guard == g {
 			// If the request was previously marked as a distinguished waiter, and is
@@ -2634,9 +2649,9 @@ func (kl *keyLocks) claimBeforeProceeding(g *lockTableGuardImpl) {
 				g.mu.Lock()
 				delete(g.mu.locks, kl)
 				g.mu.Unlock()
-				kl.queuedWriters.Remove(e)
+				kl.queuedLockingRequests.Remove(e)
 			} else {
-				// Transactional writer.
+				// Transactional locking request.
 				qqg.active = false // claim the lock
 			}
 			return
@@ -2748,30 +2763,23 @@ func (kl *keyLocks) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 		return nil
 	}
 
-	// NB: The lock isn't held, so the request trying to acquire the lock must be
-	// an (inactive) queued writer in the lock's wait queues. Typically, we expect
-	// this to be the first queued writer; the list of queued writers is
-	// maintained in lock table arrival order. When a lock transitions from held
-	// to released, the first of these writers is marked as inactive and allowed
-	// to proceed. This is done to uphold fairness between concurrent lock
-	// acquirers. However, in some rare cases[1], this may not be true -- i.e.,
-	// the request trying to acquire the lock here may not be the first queued
-	// writer. This does not violate any correctness properties. This is because
-	// the request must be holding latches, as it has proceeded to evaluation for
-	// it to be calling into this method. As such, it is isolated from the first
-	// inactive queued writer.
+	// NB: The key isn't locked, so the request trying to acquire the lock must
+	// be an (inactive) request in the receiver's queuedLockingRequests wait
+	// queue. Typically, the request has a (possibly joint) claim on the key.
+	// However, in some rare cases[1], this may not be true -- i.e. the request
+	// may have had its claim broken by a different request being sequenced
+	// through the lock table. This does not violate any correctness properties,
+	// because the request must be holding latches to have proceeded to evaluation
+	// and finally ended up here. That means this request is isolated from the
+	// request that broke its claim by latching.
 	//
-	// [1] Requests that run into conflicting locks drop their latches and enter
-	// its wait queues. Once the lock is released, and they can proceed with their
-	// scan, they do so without re-acquiring latches. In such cases, latches are
-	// acquired before evaluation. So they may insert themselves in front of
-	// another inactive waiting writer (which may or may not hold latches) if
-	// their arrival order dictates as such. The rare cases being talked about
-	// above are when the inactive waiting writer (in front of which the request
-	// inserted itself) was evaluating while holding latches and calls into this
-	// function once it finishes evaluation to actually acquire the lock.
+	// [1] Requests that run into locks drop their latches and enter its wait
+	// queues. Once the lock is released, and they can proceed with their scan,
+	// they do so without re-acquiring latches. So it is possible for requests to
+	// break claims of requests that hold latches without holding latches
+	// themselves.
 
-	kl.releaseWritersFromTxn(&acq.Txn)
+	kl.releaseLockingRequestsFromTxn(&acq.Txn)
 
 	// Sanity check that there aren't any waiting readers on this lock. There
 	// shouldn't be any, as the lock wasn't held.
@@ -2850,7 +2858,7 @@ func (kl *keyLocks) discoveredLock(
 		}
 
 	case lock.Intent, lock.Exclusive:
-		// Immediately enter the lock's queuedWriters list.
+		// Immediately enter the lock's queuedLockingRequests list.
 		// NB: this inactive waiter can be non-transactional.
 		g.mu.Lock()
 		_, presentHere := g.mu.locks[kl]
@@ -2869,16 +2877,16 @@ func (kl *keyLocks) discoveredLock(
 			}
 			// g is not necessarily first in the queue in the (rare) case (a) above.
 			var e *list.Element
-			for e = kl.queuedWriters.Front(); e != nil; e = e.Next() {
+			for e = kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 				qqg := e.Value.(*queuedGuard)
 				if qqg.guard.seqNum > g.seqNum {
 					break
 				}
 			}
 			if e == nil {
-				kl.queuedWriters.PushBack(qg)
+				kl.queuedLockingRequests.PushBack(qg)
 			} else {
-				kl.queuedWriters.InsertBefore(qg, e)
+				kl.queuedLockingRequests.InsertBefore(qg, e)
 			}
 		}
 	default:
@@ -2886,7 +2894,7 @@ func (kl *keyLocks) discoveredLock(
 	}
 
 	// If there are waiting requests from the same txn, they no longer need to wait.
-	kl.releaseWritersFromTxn(txn)
+	kl.releaseLockingRequestsFromTxn(txn)
 
 	// Active waiters need to be told about who they are waiting for.
 	kl.informActiveWaiters()
@@ -2948,13 +2956,13 @@ func (kl *keyLocks) tryClearLock(force bool) bool {
 		g.mu.Unlock()
 	}
 
-	// Clear queuedWriters.
-	for e := kl.queuedWriters.Front(); e != nil; {
+	// Clear queuedLockingRequests.
+	for e := kl.queuedLockingRequests.Front(); e != nil; {
 		qg := e.Value.(*queuedGuard)
 
 		curr := e
 		e = e.Next()
-		kl.queuedWriters.Remove(curr)
+		kl.queuedLockingRequests.Remove(curr)
 
 		g := qg.guard
 		g.mu.Lock()
@@ -2984,7 +2992,7 @@ func (kl *keyLocks) tryUpdateLock(up *roachpb.LockUpdate) (heldByTxn, gc bool) {
 	return kl.tryUpdateLockLocked(*up)
 }
 
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bool) {
 	if kl.isEmptyLock() {
 		// Already free. This can happen when an unreplicated lock is removed in
@@ -3103,7 +3111,8 @@ func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 
 // The lock holder timestamp has increased. Some of the waiters may no longer
 // need to wait.
-// REQUIRES: l.mu is locked.
+//
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) increasedLockTs(newTs hlc.Timestamp) {
 	distinguishedRemoved := false
 	for e := kl.waitingReaders.Front(); e != nil; {
@@ -3121,13 +3130,16 @@ func (kl *keyLocks) increasedLockTs(newTs hlc.Timestamp) {
 	}
 }
 
-// removeWriter removes the writer, referenced by the supplied list.Element,
-// from the lock's queuedWriters list. Returns whether the writer was the
-// distinguished waiter.
-func (kl *keyLocks) removeWriter(e *list.Element) bool {
+// removeLockingRequest removes the locking request (or non-transactional
+// writer), referenced by the supplied list.Element, from the lock's
+// queuedLockingRequests list. Returns whether the request was the distinguished
+// waiter or not.
+//
+// REQUIRES: kl.mu to be locked.
+func (kl *keyLocks) removeLockingRequest(e *list.Element) bool {
 	qg := e.Value.(*queuedGuard)
 	g := qg.guard
-	kl.queuedWriters.Remove(e)
+	kl.queuedLockingRequests.Remove(e)
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	delete(g.mu.locks, kl)
@@ -3159,11 +3171,11 @@ func (kl *keyLocks) removeReader(e *list.Element) bool {
 	return false
 }
 
-// A request known to the receiver is done. The request could be a waiting
-// reader or writer. Note that there is the possibility of a race and the g may
-// no longer be known to l, which we treat as a noop (this race is allowed since
-// we order l.mu > g.mu). Returns whether the keyLocks struct can be garbage
-// collected.
+// A request known to the receiver is done. The request could be a locking or
+// non-locking request. Note that there is the possibility of a race and the g
+// may no longer be known to l, which we treat as a noop (this race is allowed
+// since we order l.mu > g.mu). Returns whether the keyLocks struct can be
+// garbage collected.
 //
 // Acquires l.mu.
 func (kl *keyLocks) requestDone(g *lockTableGuardImpl) (gc bool) {
@@ -3178,13 +3190,13 @@ func (kl *keyLocks) requestDone(g *lockTableGuardImpl) (gc bool) {
 	delete(g.mu.locks, kl)
 	g.mu.Unlock()
 
-	// May be in queuedWriters or waitingReaders.
+	// May be in queuedLockingRequests or waitingReaders.
 	distinguishedRemoved := false
 	doneRemoval := false
-	for e := kl.queuedWriters.Front(); e != nil; e = e.Next() {
+	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 		qg := e.Value.(*queuedGuard)
 		if qg.guard == g {
-			kl.queuedWriters.Remove(e)
+			kl.queuedLockingRequests.Remove(e)
 			if qg.guard == kl.distinguishedWaiter {
 				distinguishedRemoved = true
 				kl.distinguishedWaiter = nil
@@ -3195,12 +3207,12 @@ func (kl *keyLocks) requestDone(g *lockTableGuardImpl) (gc bool) {
 	}
 
 	if !kl.isLocked() && doneRemoval {
-		// The head of the list of waiting writers should always be an inactive,
-		// transactional writer if the lock isn't held. That may no longer be true
-		// if the guy we removed above was serving this purpose; the call to
-		// maybeReleaseFirstTransactionalWriter should fix that. And if it wasn't,
-		// it'll be a no-op.
-		kl.maybeReleaseFirstTransactionalWriter()
+		// The first request in the queuedLockingRequests should always be an
+		// inactive, transactional locking request if the lock isn't held. That may
+		// no longer be true if the guy we removed above was serving this purpose;
+		// the call to maybeReleaseFirstLockingRequest should fix that. And if
+		// it wasn't, it'll be a no-op.
+		kl.maybeReleaseFirstLockingRequest()
 	}
 
 	if !doneRemoval {
@@ -3230,9 +3242,9 @@ func (kl *keyLocks) requestDone(g *lockTableGuardImpl) (gc bool) {
 // during the state transition from the Unreplicated durability to the
 // Replicated durability. This is possible because a Replicated lock is also
 // stored as an MVCC intent, so it does not need to also be stored in the
-// lockTable if writers are not queuing on it. This is beneficial because it
-// serves as a mitigation for #49973. Since we aren't currently great at
-// avoiding excessive contention on limited scans when locks are in the
+// lockTable if locking requests are not queuing on it. This is beneficial
+// because it serves as a mitigation for #49973. Since we aren't currently great
+// at avoiding excessive contention on limited scans when locks are in the
 // lockTable, it's better the keep locks out of the lockTable when possible.
 //
 // If any of the readers do truly contend with this lock even after their limit
@@ -3251,13 +3263,13 @@ func (kl *keyLocks) tryFreeLockOnReplicatedAcquire() bool {
 		return false
 	}
 
-	// Bail if the lock has waiting writers. It is not uncontended.
-	if kl.queuedWriters.Len() != 0 {
+	// Bail if the lock has waiting locking requests. It is not uncontended.
+	if kl.queuedLockingRequests.Len() != 0 {
 		return false
 	}
 
-	// The lock is uncontended by other writers, so we're safe to drop it.
-	// This may release readers who were waiting on the lock.
+	// The lock is uncontended by other locking requests, so we're safe to drop
+	// it. This may release non-locking readers who were waiting on the lock.
 	//
 	// TODO(arul): Once we support replicated shared locks, we only want to clear
 	// the lock holder that's promoting its durability from unreplicated to
@@ -3272,11 +3284,11 @@ func (kl *keyLocks) tryFreeLockOnReplicatedAcquire() bool {
 
 // releaseWaitersOnKeyUnlocked is called when the key, referenced in the
 // receiver, transitions from locked to unlocked to handle state transitions for
-// waiting{Readers,Writers}; if this results in there no longer being waiters on
-// this key (read: the receiver is empty), a boolean gc=true is returned,
-// indicating the receiver can be GC-ed by the caller.
+// waitingReaders and queuedLockingRequests; if this results in there no longer
+// being waiters on this key (read: the receiver is empty), a boolean gc=true is
+// returned, indicating the receiver can be GC-ed by the caller.
 //
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 func (kl *keyLocks) releaseWaitersOnKeyUnlocked() (gc bool) {
 	assert(!kl.isLocked(), "releaseWaitersOnKeyUnlocked should only be called on unheld locks")
 
@@ -3288,37 +3300,32 @@ func (kl *keyLocks) releaseWaitersOnKeyUnlocked() (gc bool) {
 		kl.removeReader(curr)
 	}
 
-	kl.maybeReleaseFirstTransactionalWriter()
+	kl.maybeReleaseFirstLockingRequest()
 
 	// We've already cleared waiting readers above. The lock can be released if
-	// there are no waiting writers, active or otherwise.
-	if kl.queuedWriters.Len() == 0 {
+	// there are no waiting locking requests, active or otherwise.
+	if kl.queuedLockingRequests.Len() == 0 {
 		kl.assertEmptyLock()
 		return true
 	}
 	return false
 }
 
-// maybeReleaseFirstTransactionalWriter goes through the list of writers waiting
-// in the receiver's lock wait queues and, if present and actively waiting,
-// releases the first transactional writer it finds. Releasing a transactional
-// writer entails marking it as inactive and nudging it via a call to notify().
+// maybeReleaseFirstLockingRequest goes through the list of locking requests waiting
+// in the receiver's wait queues and, if present and actively waiting,
+// releases the first locking request it finds. Releasing a locking request
+// entails marking it as inactive and nudging it with a call to notify().
 //
-// Any non-transactional writers at the head of the queue are also released. If
-// no transactional writers are to be found, the list of queued writers will be
-// empty when this function returns[1]. The function will no-op if the first
-// transactional writer is already marked inactive (i.e. there's no releasing to
-// do).
+// Any non-transactional writers at the head of the queue are also released. The
+// function will no-op if the first locking request is already marked inactive
+// (i.e. there's no releasing to do).
 //
-// [1] As if there are any requests in the list, they must be non-transactional,
-// and all of them will be released.
-//
-// REQUIRES: l.mu is locked.
+// REQUIRES: kl.mu is locked.
 // REQUIRES: the (receiver) lock must not be held.
 // REQUIRES: there should not be any waitingReaders in the lock's wait queues.
-func (kl *keyLocks) maybeReleaseFirstTransactionalWriter() {
+func (kl *keyLocks) maybeReleaseFirstLockingRequest() {
 	if kl.isLocked() {
-		panic("maybeReleaseFirstTransactionalWriter called when lock is held")
+		panic("maybeReleaseFirstLockingRequest called when lock is held")
 	}
 	if kl.waitingReaders.Len() != 0 {
 		panic("there cannot be waiting readers")
@@ -3326,25 +3333,25 @@ func (kl *keyLocks) maybeReleaseFirstTransactionalWriter() {
 
 	// The prefix of the queue that is non-transactional writers is done
 	// waiting.
-	for e := kl.queuedWriters.Front(); e != nil; {
+	for e := kl.queuedLockingRequests.Front(); e != nil; {
 		qg := e.Value.(*queuedGuard)
 		g := qg.guard
-		if g.txn != nil { // transactional writer
+		if g.txn != nil { // (transactional) locking request
 			break
 		}
 		curr := e
 		e = e.Next()
-		kl.removeWriter(curr)
+		kl.removeLockingRequest(curr)
 	}
 
-	if kl.queuedWriters.Len() == 0 {
-		return // no transactional writer
+	if kl.queuedLockingRequests.Len() == 0 {
+		return // no locking requests
 	}
 
-	// Check if the first (transactional) writer is active, and if it is, mark
-	// it as inactive. The call to doneActivelyWaitingAtLock should nudge it to
-	// pick up its scan from where it left off.
-	e := kl.queuedWriters.Front()
+	// Check if the first locking request is active, and if it is, mark it as
+	// inactive. The call to doneActivelyWaitingAtLock should nudge it to pick up
+	// its scan from where it left off.
+	e := kl.queuedLockingRequests.Front()
 	qg := e.Value.(*queuedGuard)
 	g := qg.guard
 	if qg.active {
@@ -3577,7 +3584,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		var lockSeqNum uint64
 		lockSeqNum, checkMaxLocks = t.locks.nextLockSeqNum()
 		l = &keyLocks{id: lockSeqNum, key: key}
-		l.queuedWriters.Init()
+		l.queuedLockingRequests.Init()
 		l.waitingReaders.Init()
 		l.holders.Init()
 		l.heldBy = make(map[uuid.UUID]*list.Element)
@@ -3646,7 +3653,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 		var lockSeqNum uint64
 		lockSeqNum, checkMaxLocks = t.locks.nextLockSeqNum()
 		l = &keyLocks{id: lockSeqNum, key: acq.Key}
-		l.queuedWriters.Init()
+		l.queuedLockingRequests.Init()
 		l.waitingReaders.Init()
 		l.holders.Init()
 		l.heldBy = make(map[uuid.UUID]*list.Element)
