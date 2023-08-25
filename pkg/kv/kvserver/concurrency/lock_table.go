@@ -3208,9 +3208,9 @@ func (kl *keyLocks) requestDone(g *lockTableGuardImpl) (gc bool) {
 		// The first request in the queuedLockingRequests should always be an
 		// inactive, transactional locking request if the lock isn't held. That may
 		// no longer be true if the guy we removed above was serving this purpose;
-		// the call to maybeReleaseFirstLockingRequest should fix that. And if
-		// it wasn't, it'll be a no-op.
-		kl.maybeReleaseFirstLockingRequest()
+		// the call to maybeReleaseCompatibleLockingRequests should fix that. And if
+		// it wasn't serving that purpose, it'll be a no-op.
+		kl.maybeReleaseCompatibleLockingRequests()
 	}
 
 	if !doneRemoval {
@@ -3298,7 +3298,7 @@ func (kl *keyLocks) releaseWaitersOnKeyUnlocked() (gc bool) {
 		kl.removeReader(curr)
 	}
 
-	kl.maybeReleaseFirstLockingRequest()
+	kl.maybeReleaseCompatibleLockingRequests()
 
 	// We've already cleared waiting readers above. The lock can be released if
 	// there are no waiting locking requests, active or otherwise.
@@ -3309,21 +3309,26 @@ func (kl *keyLocks) releaseWaitersOnKeyUnlocked() (gc bool) {
 	return false
 }
 
-// maybeReleaseFirstLockingRequest goes through the list of locking requests waiting
-// in the receiver's wait queues and, if present and actively waiting,
-// releases the first locking request it finds. Releasing a locking request
-// entails marking it as inactive and nudging it with a call to notify().
+// maybeReleaseCompatibleLockingRequests goes through the list of locking
+// requests waiting in the receiver's wait queue and releases all requests from
+// the head of the queue that are compatible with each other. Releasing[1] a
+// locking request entails marking it as inactive and nudging it by calling
+// notify(). The released request(s) are said to have established a (possibly
+// joint) claim.
 //
 // Any non-transactional writers at the head of the queue are also released. The
 // function will no-op if the first locking request is already marked inactive
 // (i.e. there's no releasing to do).
 //
+// [1] If the request is not actively waiting in the lock wait queue, it's a
+// noop for the request.
+//
 // REQUIRES: kl.mu is locked.
 // REQUIRES: the (receiver) lock must not be held.
 // REQUIRES: there should not be any waitingReaders in the lock's wait queues.
-func (kl *keyLocks) maybeReleaseFirstLockingRequest() {
+func (kl *keyLocks) maybeReleaseCompatibleLockingRequests() {
 	if kl.isLocked() {
-		panic("maybeReleaseFirstLockingRequest called when lock is held")
+		panic("maybeReleaseCompatibleLockingRequests called when lock is held")
 	}
 	if kl.waitingReaders.Len() != 0 {
 		panic("there cannot be waiting readers")
@@ -3349,21 +3354,40 @@ func (kl *keyLocks) maybeReleaseFirstLockingRequest() {
 	// Check if the first locking request is active, and if it is, mark it as
 	// inactive. The call to doneActivelyWaitingAtLock should nudge it to pick up
 	// its scan from where it left off.
-	e := kl.queuedLockingRequests.Front()
-	qg := e.Value
-	g := qg.guard
-	if qg.active {
-		qg.active = false // mark as inactive
-		if g == kl.distinguishedWaiter {
-			// We're only clearing the distinguishedWaiter for now; a new one will be
-			// selected below in the call to informActiveWaiters.
-			kl.distinguishedWaiter = nil
+
+	var mode lock.Mode
+	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
+		qg := e.Value
+		g := qg.guard
+
+		if mode.Empty() {
+			mode = qg.mode
+		} else {
+			if lock.Conflicts(mode, qg.mode, &qg.guard.lt.settings.SV) {
+				break
+			}
+			// NB: Once we add support for UPDATE locking strength, this logic
+			// will need to accumulate the strongest lock mode seen so far. For
+			// example, consider the following:
+			// waitQueue: [Shared, Update, Shared, Update, Exclusive]
+			//
+			// We want to release the first 3 requests (as they're compatible with
+			// each other), not the first 4.
 		}
-		g.mu.Lock()
-		g.doneActivelyWaitingAtLock()
-		g.mu.Unlock()
+
+		if qg.active {
+			qg.active = false // mark as inactive
+			if g == kl.distinguishedWaiter {
+				// We're only clearing the distinguishedWaiter for now; a new one will be
+				// selected below in the call to informActiveWaiters.
+				kl.distinguishedWaiter = nil
+			}
+			g.mu.Lock()
+			g.doneActivelyWaitingAtLock()
+			g.mu.Unlock()
+		}
+		// Else the waiter is already inactive.
 	}
-	// Else the waiter is already inactive.
 
 	// Tell the active waiters who they are waiting for.
 	kl.informActiveWaiters()
