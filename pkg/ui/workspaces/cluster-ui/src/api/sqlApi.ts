@@ -166,7 +166,8 @@ export function sqlApiErrorMessage(message: string): string {
 
   message = message.replace("run-query-via-api: ", "");
   if (message.includes(":")) {
-    return message.substring(message.indexOf(":"));
+    const idx = message.indexOf(":") + 1;
+    return idx < message.length ? message.substring(idx) : message;
   }
   return message;
 }
