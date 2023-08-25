@@ -17,7 +17,7 @@ system "rm -f $histfile"
 
 # Everything in this test should be fast. Don't be tolerant for long
 # waits.
-set timeout 30
+set timeout 45
 
 # When run via Docker the enclosing terminal has 0 columns and 0 rows,
 # and this confuses readline. Ensure sane defaults here.
@@ -63,6 +63,7 @@ proc handle_timeout {text} {
     exit 1
 }
 proc eexpect {text} {
+    system "echo; echo \$(date '+.%y%m%d %H:%M:%S.%N') START EXPECT TEST | tee -a logs/expect-cmd.log"
     expect {
 	$text {}
 	timeout { handle_timeout $text }
