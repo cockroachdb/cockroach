@@ -397,3 +397,29 @@ statement ok
 REVOKE SYSTEM ALL FROM testuser
 
 subtest end
+
+subtest view_system_table
+
+user testuser
+
+# Make sure testuser does not have privileges first.
+statement error user testuser does not have SELECT privilege on relation users
+SELECT * FROM system.users WHERE username = 'testuser'
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWSYSTEMTABLE TO testuser
+
+user testuser
+
+query TT
+SELECT username, "hashedPassword" FROM system.users WHERE username = 'testuser'
+----
+testuser  NULL
+
+# testuser still should not have write privileges.
+statement error user testuser does not have INSERT privilege on relation users
+INSERT INTO system.users VALUES ('cat', null, true, 200)
+
+subtest end
