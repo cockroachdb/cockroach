@@ -540,7 +540,7 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("users", "users_user_id_idx", false, 2, "username", "username", "ASC", true, true, true, 1),
 		}},
 		{"SHOW SCHEMAS FROM system", []preparedQueryTest{
-			baseTest.Results("crdb_internal", gosql.NullString{}).Others(4),
+			baseTest.Results("crdb_internal", "node").Others(4),
 		}},
 		{"SHOW CONSTRAINTS FROM system.users", []preparedQueryTest{
 			baseTest.Results("users", "primary", "PRIMARY KEY", "PRIMARY KEY (username ASC)", true).
