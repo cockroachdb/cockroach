@@ -140,7 +140,7 @@ func registerKV(r registry.Registry) {
 			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(computeConcurrency(opts)))
 			splits := " --splits=" + strconv.Itoa(computeNumSplits(opts))
 			if opts.duration == 0 {
-				opts.duration = 30 * time.Minute
+				opts.duration = 7 * time.Minute
 			}
 			duration := " --duration=" + ifLocal(c, "10s", opts.duration.String())
 			var readPercent string
