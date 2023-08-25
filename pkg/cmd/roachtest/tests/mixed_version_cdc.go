@@ -57,8 +57,6 @@ var (
 	targetDB    = "bank"
 	targetTable = "bank"
 
-	timeout = 30 * time.Minute
-
 	// teamcityAgentZone is the zone used in this test. Since this test
 	// runs a lot of queries from the TeamCity agent to CRDB nodes, we
 	// make sure to create roachprod nodes that are in the same region
@@ -76,10 +74,10 @@ func registerCDCMixedVersions(r registry.Registry) {
 	}
 	r.Add(registry.TestSpec{
 		Name:  "cdc/mixed-versions",
-		Owner: registry.OwnerTestEng,
+		Owner: registry.OwnerCDC,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
 		Cluster:         r.MakeClusterSpec(5, spec.Zones(zones), spec.Arch(vm.ArchAMD64)),
-		Timeout:         timeout,
+		Timeout:         30 * time.Minute,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCMixedVersions(ctx, t, c)
@@ -418,7 +416,18 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// NB: We rely on the testing framework to choose a random predecessor
 	// to upgrade from.
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, tester.crdbNodes)
+	mvt := mixedversion.NewTest(
+		ctx, t, t.L(), c, tester.crdbNodes,
+		// For now, we perform at most 1 upgrade in this test so that the
+		// lowest version we start from is 22.2. The reason for this is
+		// that, in 22.1, node draining errors were common and led to
+		// changefeeds failing. See #106878.
+		//
+		// TODO(renato): remove this restriction by not failing the test
+		// if the changefeed failed due to "node draining" errors while
+		// still in 22.1 or older.
+		mixedversion.MaxUpgrades(1),
+	)
 
 	cleanupKafka := tester.StartKafka(t, c)
 	defer cleanupKafka()
