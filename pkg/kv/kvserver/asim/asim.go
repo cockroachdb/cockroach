@@ -72,6 +72,10 @@ func (s *Simulator) State() state.State {
 	return s.state
 }
 
+func (s *Simulator) EventExecutor() scheduled.EventExecutor {
+	return s.eventExecutor
+}
+
 // NewSimulator constructs a valid Simulator.
 func NewSimulator(
 	duration time.Duration,

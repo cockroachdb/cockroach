@@ -129,15 +129,16 @@ func (f randTestingFramework) runRandTest() testResult {
 	history := simulator.History()
 	failed, reason := checkAssertions(ctx, history, f.s.assertions)
 	return testResult{
-		seed:         seed,
-		failed:       failed,
-		reason:       reason,
-		clusterGen:   cluster,
-		rangeGen:     ranges,
-		loadGen:      load,
-		eventGen:     staticEvents,
-		initialState: initialState,
-		initialTime:  initialTime,
+		seed:          seed,
+		failed:        failed,
+		reason:        reason,
+		clusterGen:    cluster,
+		rangeGen:      ranges,
+		loadGen:       load,
+		eventGen:      staticEvents,
+		initialState:  initialState,
+		initialTime:   initialTime,
+		eventExecutor: simulator.EventExecutor(),
 	}
 }
 

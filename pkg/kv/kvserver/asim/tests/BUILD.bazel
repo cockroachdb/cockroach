@@ -1,5 +1,28 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
+go_library(
+    name = "tests",
+    srcs = [
+        "default_settings.go",
+        "output.go",
+        "rand_framework.go",
+        "rand_gen.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/tests",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/kv/kvserver/asim/assertion",
+        "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/event",
+        "//pkg/kv/kvserver/asim/gen",
+        "//pkg/kv/kvserver/asim/history",
+        "//pkg/kv/kvserver/asim/scheduled",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/roachpb",
+    ],
+)
+
 go_test(
     name = "tests_test",
     srcs = [
@@ -25,27 +48,5 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_guptarohit_asciigraph//:asciigraph",
         "@com_github_stretchr_testify//require",
-    ],
-)
-
-go_library(
-    name = "tests",
-    srcs = [
-        "default_settings.go",
-        "output.go",
-        "rand_framework.go",
-        "rand_gen.go",
-    ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/tests",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/config/zonepb",
-        "//pkg/kv/kvserver/asim/assertion",
-        "//pkg/kv/kvserver/asim/config",
-        "//pkg/kv/kvserver/asim/event",
-        "//pkg/kv/kvserver/asim/gen",
-        "//pkg/kv/kvserver/asim/history",
-        "//pkg/kv/kvserver/asim/state",
-        "//pkg/roachpb",
     ],
 )
