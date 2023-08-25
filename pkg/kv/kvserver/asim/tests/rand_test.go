@@ -24,7 +24,7 @@ const (
 	defaultNumIterations = 3
 	defaultSeed          = int64(42)
 	defaultDuration      = 10 * time.Minute
-	defaultVerbosity     = false
+	defaultVerbosity     = OutputResultOnly
 )
 
 // TestRandomized is a randomized data-driven testing framework that validates
@@ -79,8 +79,8 @@ const (
 //    number of stores 4. sum of weights in the array should be equal to 1
 
 // 3. "eval" [seed=<int64>] [num_iterations=<int>] [duration=<time.Duration>]
-// [verbose=<bool>]
-// e.g. eval seed=20 duration=30m2s verbose=true
+// [verbose=(<[]("result_only","test_settings","initial_state","config_gen","topology","all")>)]
+// e.g. eval seed=20 duration=30m2s verbose=(test_settings,initial_state)
 //  - eval: generates a simulation based on the configuration set with the given
 //    commands.
 //  - seed(default value is int64(42)): used to create a new random number
@@ -88,8 +88,17 @@ const (
 //	- num_iterations(default value is 3): specifies the number of simulations to
 //	  run.
 //	- duration(default value is 10m): defines duration of each iteration.
-//	- verbose(default value is false): if set to true, plots all stat(as
-//	  specified by defaultStat) history.
+//	- verbose(default value is OutputResultOnly): used to set flags on what to
+//    show in the test output messages. By default, all details are displayed
+//    upon assertion failure.
+//    - result_only: only shows whether the test passed or failed, along with
+//    any failure messages
+//    - test_settings: displays settings used for the repeated tests
+//    - initial_state: displays the initial state of each test iteration
+//    - config_gen: displays the input configurations generated for each test
+//    iteration
+//    - topology: displays the topology of cluster configurations
+//    - all: display everything above
 
 // RandTestingFramework is initialized with specified testSetting and maintains
 // its state across all iterations. It repeats the test with different random
@@ -98,7 +107,7 @@ const (
 // 1. Generates a random configuration: based on whether randOption is on and
 // the specific settings for randomized generation.
 // 2. Executes the simulation and checks the assertions on the final state.
-// 3. Stores any outputs and assertion failures in a buffer.
+// 3. Stores any outputs and assertion failures in a slice.
 func TestRandomized(t *testing.T) {
 	dir := datapathutils.TestDataPath(t, "rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
@@ -163,8 +172,8 @@ func TestRandomized(t *testing.T) {
 					clusterGen:    cGenSettings,
 				}
 				f := newRandTestingFramework(settings)
-				f.runRandTestRepeated()
-				return f.printResults()
+				outputs := f.runRandTestRepeated()
+				return outputs.String()
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}

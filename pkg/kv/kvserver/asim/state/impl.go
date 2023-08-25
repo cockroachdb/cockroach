@@ -136,6 +136,29 @@ func (rm *rmap) initFirstRange() {
 	rm.rangeMap[rangeID] = rng
 }
 
+// PrettyPrint returns a pretty formatted string representation of the
+// state (more concise than String()).
+func (s *state) PrettyPrint() string {
+	builder := &strings.Builder{}
+	nStores := len(s.stores)
+	builder.WriteString(fmt.Sprintf("stores(%d)=[", nStores))
+	var storeIDs StoreIDSlice
+	for storeID := range s.stores {
+		storeIDs = append(storeIDs, storeID)
+	}
+	sort.Sort(storeIDs)
+
+	for i, storeID := range storeIDs {
+		store := s.stores[storeID]
+		builder.WriteString(store.PrettyPrint())
+		if i < nStores-1 {
+			builder.WriteString(",")
+		}
+	}
+	builder.WriteString("]")
+	return builder.String()
+}
+
 // String returns a string containing a compact representation of the state.
 // TODO(kvoli,lidorcarmel): Add a unit test for this function.
 func (s *state) String() string {
@@ -149,14 +172,22 @@ func (s *state) String() string {
 	})
 
 	nStores := len(s.stores)
-	iterStores := 0
 	builder.WriteString(fmt.Sprintf("stores(%d)=[", nStores))
-	for _, store := range s.stores {
+
+	// Sort the unordered map storeIDs by its key to ensure deterministic
+	// printing.
+	var storeIDs StoreIDSlice
+	for storeID := range s.stores {
+		storeIDs = append(storeIDs, storeID)
+	}
+	sort.Sort(storeIDs)
+
+	for i, storeID := range storeIDs {
+		store := s.stores[storeID]
 		builder.WriteString(store.String())
-		if iterStores < nStores-1 {
+		if i < nStores-1 {
 			builder.WriteString(",")
 		}
-		iterStores++
 	}
 	builder.WriteString("] ")
 
@@ -1315,19 +1346,32 @@ type store struct {
 	replicas  map[RangeID]ReplicaID
 }
 
+// PrettyPrint returns pretty formatted string representation of the store.
+func (s *store) PrettyPrint() string {
+	builder := &strings.Builder{}
+	builder.WriteString(fmt.Sprintf("s%dn%d=(replicas(%d))", s.storeID, s.nodeID, len(s.replicas)))
+	return builder.String()
+}
+
 // String returns a compact string representing the current state of the store.
 func (s *store) String() string {
 	builder := &strings.Builder{}
 	builder.WriteString(fmt.Sprintf("s%dn%d=(", s.storeID, s.nodeID))
 
-	nRepls := len(s.replicas)
-	iterRepls := 0
-	for rangeID, replicaID := range s.replicas {
+	// Sort the unordered map rangeIDs by its key to ensure deterministic
+	// printing.
+	var rangeIDs RangeIDSlice
+	for rangeID := range s.replicas {
+		rangeIDs = append(rangeIDs, rangeID)
+	}
+	sort.Sort(rangeIDs)
+
+	for i, rangeID := range rangeIDs {
+		replicaID := s.replicas[rangeID]
 		builder.WriteString(fmt.Sprintf("r%d:%d", rangeID, replicaID))
-		if iterRepls < nRepls-1 {
+		if i < len(s.replicas)-1 {
 			builder.WriteString(",")
 		}
-		iterRepls++
 	}
 	builder.WriteString(")")
 	return builder.String()
@@ -1381,17 +1425,24 @@ func (r *rng) String() string {
 	builder := &strings.Builder{}
 	builder.WriteString(fmt.Sprintf("r%d(%d)=(", r.rangeID, r.startKey))
 
-	nRepls := len(r.replicas)
-	iterRepls := 0
-	for storeID, replica := range r.replicas {
+	// Sort the unordered map storeIDs by its key to ensure deterministic
+	// printing.
+	var storeIDs StoreIDSlice
+	for storeID := range r.replicas {
+		storeIDs = append(storeIDs, storeID)
+	}
+	sort.Sort(storeIDs)
+
+	for i, storeID := range storeIDs {
+		replica := r.replicas[storeID]
 		builder.WriteString(fmt.Sprintf("s%d:r%d", storeID, replica.replicaID))
 		if r.leaseholder == replica.replicaID {
 			builder.WriteString("*")
 		}
-		if iterRepls < nRepls-1 {
+		if i < len(r.replicas)-1 {
 			builder.WriteString(",")
 		}
-		iterRepls++
+		i++
 	}
 	builder.WriteString(")")
 
