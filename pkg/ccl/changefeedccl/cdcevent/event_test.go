@@ -140,6 +140,7 @@ func TestEventDecoder(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
 	sqlDB.Exec(t, `
 CREATE TABLE foo (
@@ -420,6 +421,7 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 	// Use alter column type to force column reordering.
 	sqlDB.Exec(t, `SET enable_experimental_alter_column_type_general = true`)
 
@@ -751,5 +753,4 @@ func TestMakeRowFromTuple(t *testing.T) {
 		require.Equal(t, current.valAsString, tree.AsStringWithFlags(d, tree.FmtExport))
 		return nil
 	}))
-
 }
