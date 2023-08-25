@@ -1,0 +1,137 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package scheduled
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
+
+// EventExecutor is the exported interface for eventExecutor, responsible for
+// managing scheduled events, allowing event registration, tick-based
+// triggering. Please use NewExecutorWithNoEvents for proper initialization.
+type EventExecutor interface {
+	// RegisterScheduledEvent registers an event to be executed as part of
+	// eventExecutor.
+	RegisterScheduledEvent(ScheduledEvent)
+	// Start sorts the scheduled list chronologically, ready to execute events for
+	// simulation.
+	Start()
+	// TickEvents retrieves and invokes the underlying event function from the
+	// scheduled events at the given tick. It returns a boolean indicating if any
+	// assertion event failed during the tick, allowing for early exit.
+	TickEvents(context.Context, time.Time, state.State, history.History) bool
+	// PrintEventSummary returns a string summarizing the executed mutation and
+	// assertion events.
+	PrintEventSummary() string
+	// PrintEventsExecuted returns a detailed string representation of executed
+	// events including details of mutation events, assertion checks, and assertion
+	// results.
+	PrintEventsExecuted() string
+}
+
+// eventExecutor is the private implementation of the EventExecutor interface,
+// maintaining a list of scheduled events and an index for the next event to be
+// executed.
+type eventExecutor struct {
+	scheduledEvents ScheduledEventList
+	nextEventIndex  int
+}
+
+// NewExecutorWithNoEvents returns the exported interface.
+func NewExecutorWithNoEvents() EventExecutor {
+	return newExecutorWithNoEvents()
+}
+
+// newExecutorWithNoEvents returns the actual implementation of the
+// EventExecutor interface.
+func newExecutorWithNoEvents() *eventExecutor {
+	return &eventExecutor{
+		scheduledEvents: ScheduledEventList{},
+	}
+}
+
+// Start sorts the scheduled list chronologically, ready to execute events for
+// simulation.
+func (e *eventExecutor) Start() {
+	sort.Sort(e.scheduledEvents)
+}
+
+// PrintEventSummary returns a string summarizing the executed mutation and
+// assertion events.
+func (e *eventExecutor) PrintEventSummary() string {
+	mutationEvents, assertionEvents := 0, 0
+	for _, e := range e.scheduledEvents {
+		if e.IsMutationEvent() {
+			mutationEvents++
+		} else {
+			assertionEvents++
+		}
+	}
+	return fmt.Sprintf(
+		"number of mutation events=%d, number of assertion events=%d", mutationEvents, assertionEvents)
+}
+
+// PrintEventsExecuted returns a detailed string representation of executed
+// events including details of mutation events, assertion checks, and assertion
+// results.
+func (e *eventExecutor) PrintEventsExecuted() string {
+	return ""
+}
+
+// TickEvents retrieves and invokes the underlying event function from the
+// scheduled events at the given tick. It returns a boolean indicating if any
+// assertion event failed during the tick, allowing for early exit.
+func (e *eventExecutor) TickEvents(
+	ctx context.Context, tick time.Time, state state.State, history history.History,
+) (failureExists bool) {
+	// Assume the events are in sorted order and the event list is never added
+	// to.
+	for e.nextEventIndex < len(e.scheduledEvents) {
+		if !tick.Before(e.scheduledEvents[e.nextEventIndex].At) {
+			log.Infof(ctx, "applying event (scheduled=%s tick=%s)", e.scheduledEvents[e.nextEventIndex].At, tick)
+			scheduledEvent := e.scheduledEvents[e.nextEventIndex]
+			fn := scheduledEvent.TargetEvent.Func()
+			if scheduledEvent.IsMutationEvent() {
+				mutationFn, ok := fn.(event.MutationFunc)
+				if ok {
+					mutationFn(ctx, state)
+				} else {
+					panic("expected mutation type to hold mutationFunc but found something else")
+				}
+			} else {
+				assertionFn, ok := fn.(event.AssertionFunc)
+				if ok {
+					assertionFn(ctx, tick, history)
+				} else {
+					panic("expected assertion type to hold assertionFunc but found something else")
+				}
+			}
+			e.nextEventIndex++
+		} else {
+			break
+		}
+	}
+	return failureExists
+}
+
+// RegisterScheduledEvent registers an event to be executed as part of
+// eventExecutor.
+func (e *eventExecutor) RegisterScheduledEvent(scheduledEvent ScheduledEvent) {
+	e.scheduledEvents = append(e.scheduledEvents, scheduledEvent)
+}
