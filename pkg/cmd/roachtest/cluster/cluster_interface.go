@@ -73,6 +73,7 @@ type Cluster interface {
 	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string) ([]string, error)
 
 	// SQL clients to nodes.
+
 	Conn(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) *gosql.DB
 	ConnE(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) (*gosql.DB, error)
 
@@ -110,7 +111,7 @@ type Cluster interface {
 	IsLocal() bool
 	// IsSecure returns true iff the cluster uses TLS.
 	IsSecure() bool
-	// Returns CPU architecture of the nodes.
+	// Architecture returns CPU architecture of the nodes.
 	Architecture() vm.CPUArch
 
 	// Deleting CockroachDB data and logs on nodes.
