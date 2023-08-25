@@ -167,6 +167,7 @@ go_test(
         "alter_backup_schedule_test.go",
         "alter_backup_test.go",
         "backup_cloud_test.go",
+        "backup_intents_test.go",
         "backup_planning_test.go",
         "backup_tenant_test.go",
         "backup_test.go",
