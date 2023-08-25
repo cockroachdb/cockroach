@@ -43,6 +43,11 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// Note that the custom exit codes below are not exposed when running
+// roachtest on TeamCity. See `teamcity-roachtest-invoke.sh` for more
+// details. Also, if the exit codes here change, they need to updated
+// on that script accordingly.
+
 // ExitCodeTestsFailed is the exit code that results from a run of
 // roachtest in which the infrastructure worked, but at least one
 // test failed.
