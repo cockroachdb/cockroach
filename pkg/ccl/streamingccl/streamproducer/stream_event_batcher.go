@@ -57,7 +57,9 @@ func (seb *streamEventBatcher) addDelRange(d *kvpb.RangeFeedDeleteRange) {
 // that an update is newer than the tracked frontier and by checking for
 // duplicates within the inputEvents. This function assumes that the input events are
 // timestamp ordered and that the largest timestamp in the batch is the rangefeed frontier.
-func (seb *streamEventBatcher) addSpanConfigs(inputEvents []streampb.StreamedSpanConfigEntry) {
+func (seb *streamEventBatcher) addSpanConfigs(
+	inputEvents []streampb.StreamedSpanConfigEntry, inputFrontier hlc.Timestamp,
+) {
 
 	// eventSeenAtCurrentTimestamp is used to track unique events within the
 	// inputEvents at the current timestamp.
@@ -82,9 +84,7 @@ func (seb *streamEventBatcher) addSpanConfigs(inputEvents []streampb.StreamedSpa
 			seb.size += event.Size()
 		}
 	}
-	if len(seb.batch.SpanConfigs) > 0 {
-		seb.spanConfigFrontier = seb.batch.SpanConfigs[len(seb.batch.SpanConfigs)-1].Timestamp
-	}
+	seb.spanConfigFrontier = inputFrontier
 }
 
 func (seb *streamEventBatcher) getSize() int {
