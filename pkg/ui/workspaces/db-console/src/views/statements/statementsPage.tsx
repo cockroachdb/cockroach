@@ -261,6 +261,8 @@ export default withRouter(
         reqSortSetting: reqSortSetting.selector(state),
         stmtsTotalRuntimeSecs:
           state.cachedData?.statements?.data?.stmts_total_runtime_secs ?? 0,
+        oldestDataAvailable:
+          state.cachedData?.statements?.data?.oldest_aggregated_ts_returned,
       },
       activePageProps: mapStateToRecentStatementViewProps(state),
     }),
