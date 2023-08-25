@@ -1,0 +1,28 @@
+rand_cluster cluster_gen_type=multi_region
+----
+
+rand_ranges
+----
+
+rand_events type=cycle_via_hardcoded_survival_goals duration_to_assert_on_event=10m
+----
+
+eval duration=20m num_iterations=1 verbose=(events)
+----
+----------------------------------
+sample1: start running
+4 events executed:
+	executed at: 2022-03-21 11:00:00
+		event: set span config event with span={0000000000-9999999999}, config={134217728 536870912 {14400 [] false} false 5 3 [+region=US_East:1 +region=US_West:1 +region=EU:1] [+region=US_East] [{[+region=US_East]}] false false}
+	executed at: 2022-03-21 11:10:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			passed
+	executed at: 2022-03-21 11:10:00
+		event: set span config event with span={0000000000-9999999999}, config={134217728 536870912 {14400 [] false} false 5 5 [+region=US_East:1 +region=US_West:1 +region=EU:1] [+region=US_East:2] [{[+region=US_East]}] false false}
+	executed at: 2022-03-21 11:20:00
+		event: assertion checking event
+			1. assertion=conformance unavailable=0 under=0 over=0 violating=0 
+			passed
+sample1: pass
+----------------------------------

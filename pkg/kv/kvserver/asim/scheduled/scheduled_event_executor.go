@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
@@ -88,8 +89,31 @@ func (e *eventExecutor) PrintEventSummary() string {
 // PrintEventsExecuted returns a detailed string representation of executed
 // events including details of mutation events, assertion checks, and assertion
 // results.
+// For example,
+// 2 events scheduled:
+//
+//	executed at: 2006-01-02 15:04:05
+//		event: add node event
+//	executed at: 2006-01-02 15:04:05
+//		event: assertion checking event
+//			1.assertion=
+//			result=
+//			2.assertion=
+//			result
 func (e *eventExecutor) PrintEventsExecuted() string {
-	return ""
+	if e.scheduledEvents == nil {
+		panic("unexpected")
+	}
+	if len(e.scheduledEvents) == 0 {
+		return fmt.Sprintln("no events were scheduled")
+	} else {
+		buf := strings.Builder{}
+		buf.WriteString(fmt.Sprintf("%d events executed:\n", len(e.scheduledEvents)))
+		for _, event := range e.scheduledEvents {
+			buf.WriteString(fmt.Sprintln(event.String()))
+		}
+		return buf.String()
+	}
 }
 
 // TickEvents retrieves and invokes the underlying event function from the
@@ -120,7 +144,9 @@ func (e *eventExecutor) TickEvents(
 			} else {
 				assertionFn, ok := fn.(event.AssertionFunc)
 				if ok {
-					assertionFn(ctx, tick, history)
+					if !assertionFn(ctx, tick, history) && !failureExists {
+						failureExists = true
+					}
 				} else {
 					panic("expected assertion type to hold assertionFunc but found something else")
 				}
