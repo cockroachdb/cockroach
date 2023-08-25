@@ -738,3 +738,60 @@ SELECT 1 FROM t108901 WHERE
 statement ok
 RESET testing_optimizer_random_seed;
 RESET testing_optimizer_disable_rule_probability;
+
+subtest 109334_regr
+
+# Regression test for #109334
+
+statement ok
+CREATE TABLE IF NOT EXISTS t109334 AS
+        SELECT
+                1.7976931348623157e+308::FLOAT8 AS _float8,
+                1::FLOAT8 AS grouping_col
+        FROM
+                generate_series(1, 1) AS g;
+
+statement ok
+ALTER TABLE t109334 SPLIT AT VALUES (1), (10);
+
+statement ok
+ALTER TABLE t109334 SCATTER;
+
+# Check that var_pop applied to a single value never overflows.
+query FFI
+SELECT
+        _float8,
+        var_pop(_float8::FLOAT8)::FLOAT8,
+        count(*)
+FROM
+        t109334
+GROUP BY
+        _float8;
+----
+1.7976931348623157e+308  0  1
+
+statement ok
+INSERT INTO t109334 SELECT g*1.23456789, 2::FLOAT8 FROM generate_series(1, 50) AS g;
+
+statement ok
+ALTER TABLE t109334 SPLIT AT VALUES (1), (10), (100), (100000), (1000000), (10000000000), (100000000000);
+
+statement ok
+ALTER TABLE t109334 SCATTER;
+
+# Check that applying operations in the calculation of single pass squared
+# difference in a different order results in the same value as before,
+# though this may not be the case for all data sets. Slight precision
+# differences are expected in floating point calculations due to different
+# orders of evaluation.
+query FI rowsort
+SELECT
+        var_pop(_float8::FLOAT8)::FLOAT8,
+        count(*)
+FROM
+        t109334
+GROUP BY
+        grouping_col;
+----
+317.40587747271735  50
+0                   1
