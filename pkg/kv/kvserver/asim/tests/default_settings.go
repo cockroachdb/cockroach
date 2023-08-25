@@ -61,7 +61,7 @@ func defaultLoadGen() gen.BasicLoad {
 }
 
 const (
-	defaultRanges            = 1
+	defaultRanges            = 10
 	defaultPlacementType     = gen.Even
 	defaultReplicationFactor = 3
 	defaultBytes             = 0
@@ -87,23 +87,5 @@ func defaultAssertions() []SimulationAssertion {
 			violating:       0,
 			unavailable:     0,
 		},
-	}
-}
-
-const (
-	defaultStat                 = "replicas"
-	defaultHeight, defaultWidth = 15, 80
-)
-
-type plotSettings struct {
-	stat          string
-	height, width int
-}
-
-func defaultPlotSettings() plotSettings {
-	return plotSettings{
-		stat:   defaultStat,
-		height: defaultHeight,
-		width:  defaultWidth,
 	}
 }
