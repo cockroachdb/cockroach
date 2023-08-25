@@ -61,7 +61,7 @@ func (se SetSpanConfigEvent) Func() EventFunc {
 }
 
 func (se SetSpanConfigEvent) String() string {
-	return ""
+	return fmt.Sprintf("set span config event with span=%s, config=%s", se.Span.String(), se.Config.String())
 }
 
 func (ae AddNodeEvent) Func() EventFunc {
@@ -83,7 +83,7 @@ func (ae AddNodeEvent) Func() EventFunc {
 }
 
 func (ae AddNodeEvent) String() string {
-	return ""
+	return fmt.Sprintf("add node event with num_of_stores=%d, locality_string=%s", ae.NumStores, ae.LocalityString)
 }
 
 func (sne SetNodeLivenessEvent) Func() EventFunc {
@@ -96,7 +96,7 @@ func (sne SetNodeLivenessEvent) Func() EventFunc {
 }
 
 func (sne SetNodeLivenessEvent) String() string {
-	return "'"
+	return fmt.Sprintf("set node liveness event with nodeID=%d, liveness_status=%s", sne.NodeId, sne.LivenessStatus.String())
 }
 
 func (sce SetCapacityOverrideEvent) Func() EventFunc {
@@ -107,5 +107,5 @@ func (sce SetCapacityOverrideEvent) Func() EventFunc {
 }
 
 func (sce SetCapacityOverrideEvent) String() string {
-	return "'"
+	return fmt.Sprintf("set capacity override event with storeID=%d, capacity_override=%s", sce.StoreID, sce.CapacityOverride.String())
 }

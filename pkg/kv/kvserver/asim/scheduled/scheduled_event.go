@@ -11,6 +11,8 @@
 package scheduled
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
@@ -39,6 +41,13 @@ func (sel ScheduledEventList) Swap(i, j int) {
 type ScheduledEvent struct {
 	At          time.Time
 	TargetEvent event.Event
+}
+
+func (se ScheduledEvent) String() string {
+	buf := strings.Builder{}
+	buf.WriteString(fmt.Sprintf("\texecuted at: %s\n", se.At.Format("2006-01-02 15:04:05")))
+	buf.WriteString(fmt.Sprintf("\t\tevent: %s", se.TargetEvent.String()))
+	return buf.String()
 }
 
 // IsMutationEvent returns whether the scheduled event is a mutation event or an
