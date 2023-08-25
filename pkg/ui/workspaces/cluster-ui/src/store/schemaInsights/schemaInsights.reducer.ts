@@ -9,10 +9,10 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME, noopReducer } from "../utils";
+import { DOMAIN_NAME } from "../utils";
 import moment, { Moment } from "moment-timezone";
 import { InsightRecommendation } from "../../insights";
-import { SqlApiResponse } from "src/api";
+import { SchemaInsightReqParams, SqlApiResponse } from "src/api";
 
 export type SchemaInsightsState = {
   data: SqlApiResponse<InsightRecommendation[]>;
@@ -50,9 +50,8 @@ const schemaInsightsSlice = createSlice({
       state.valid = false;
       state.lastUpdated = moment.utc();
     },
-    // Define actions that don't change state.
-    refresh: noopReducer,
-    request: noopReducer,
+    refresh: (_, _action: PayloadAction<SchemaInsightReqParams>) => {},
+    request: (_, _action: PayloadAction<SchemaInsightReqParams>) => {},
   },
 });
 

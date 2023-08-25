@@ -26,7 +26,7 @@ import { fromHexString, withTimeout } from "./util";
 import { Format, Identifier, Join, SQL } from "./safesql";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { IndexUsageStatistic, recommendDropUnusedIndex } from "../insights";
-import { getLogger } from "../util";
+import { getLogger, indexUnusedDuration } from "../util";
 
 const { ZoneConfig } = cockroach.config.zonepb;
 const { ZoneConfigurationLevel } = cockroach.server.serverpb;
@@ -481,6 +481,7 @@ const getTableIndexUsageStats: TableDetailsQuery<IndexUsageStatistic> = {
       [new Identifier(dbName), new SQL(tableName)],
       new SQL("."),
     );
+    csIndexUnusedDuration = csIndexUnusedDuration ?? indexUnusedDuration;
     return {
       sql: Format(
         `WITH tableId AS (SELECT $1::regclass::int as table_id)
