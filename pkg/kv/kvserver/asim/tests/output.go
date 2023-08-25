@@ -117,6 +117,7 @@ func printTestSettings(t testSettings, staticSettings staticOptionSettings, buf 
 
 	if t.randOptions.staticEvents {
 		buf.WriteString(configStr("events", "randomized"))
+		buf.WriteString(fmt.Sprintf("\t%v\n", t.eventGen))
 	} else {
 		buf.WriteString(configStr("events", "static"))
 	}

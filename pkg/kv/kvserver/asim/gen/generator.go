@@ -46,6 +46,7 @@ type ClusterGen interface {
 	// and simulation settings provided.
 	Generate(seed int64, settings *config.SimulationSettings) state.State
 	String() string
+	Regions() []state.Region
 }
 
 // RangeGen provides a method to generate the initial range splits, range
@@ -161,6 +162,10 @@ func (lc LoadedCluster) String() string {
 	return fmt.Sprintf("loaded cluster with\n %v", lc.Info)
 }
 
+func (lc LoadedCluster) Regions() []state.Region {
+	return lc.Info.Regions
+}
+
 // BasicCluster implements the ClusterGen interace.
 type BasicCluster struct {
 	Nodes         int
@@ -178,6 +183,11 @@ func (bc BasicCluster) String() string {
 func (bc BasicCluster) Generate(seed int64, settings *config.SimulationSettings) state.State {
 	info := state.ClusterInfoWithStoreCount(bc.Nodes, bc.StoresPerNode)
 	return state.LoadClusterInfo(info, settings)
+}
+
+func (bc BasicCluster) Regions() []state.Region {
+	info := state.ClusterInfoWithStoreCount(bc.Nodes, bc.StoresPerNode)
+	return info.Regions
 }
 
 // LoadedRanges implements the RangeGen interface.

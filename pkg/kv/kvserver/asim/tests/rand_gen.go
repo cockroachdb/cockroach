@@ -13,10 +13,15 @@ package tests
 import (
 	"fmt"
 	"math/rand"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // randomClusterInfoGen returns a randomly picked predefined configuration.
@@ -260,3 +265,92 @@ func (c clusterGenSettings) String() string {
 const (
 	defaultClusterGenType = multiRegion
 )
+
+type eventSeriesType int
+
+const (
+	// Cycle through predefined region and zone survival configurations. Note
+	// that only cluster_gen_type=multi_region can execute this event.
+	cycleViaHardcodedSurvivalGoals eventSeriesType = iota
+)
+
+type eventGenSettings struct {
+	durationToAssertOnEvent time.Duration
+	eventsType              eventSeriesType
+}
+
+const (
+	defaultEventsType              = cycleViaHardcodedSurvivalGoals
+	defaultDurationToAssertOnEvent = 10 * time.Minute
+)
+
+func (e eventSeriesType) String() string {
+	switch e {
+	case cycleViaHardcodedSurvivalGoals:
+		return "cycle_via_hardcoded_survival_goals"
+	default:
+		panic("unknown event series type")
+	}
+}
+
+func getEventSeriesType(s string) eventSeriesType {
+	switch s {
+	case "cycle_via_hardcoded_survival_goals":
+		return cycleViaHardcodedSurvivalGoals
+	default:
+		panic(fmt.Sprintf("unknown event series type: %s", s))
+	}
+}
+
+func (e eventGenSettings) String() string {
+	return fmt.Sprintf("duration_to_assert_on_event=%s, type=%v",
+		e.durationToAssertOnEvent, e.eventsType)
+}
+
+func constructSetZoneConfigEventWithConformanceAssertion(
+	span roachpb.Span, config zonepb.ZoneConfig, durationToAssert time.Duration,
+) event.MutationWithAssertionEvent {
+	return event.MutationWithAssertionEvent{
+		MutationEvent: event.SetSpanConfigEvent{
+			Span:   span,
+			Config: config.AsSpanConfig(),
+		},
+		AssertionEvent: event.NewAssertionEvent([]assertion.SimulationAssertion{
+			assertion.ConformanceAssertion{
+				Underreplicated: 0,
+				Overreplicated:  0,
+				Violating:       0,
+				Unavailable:     0,
+			},
+		}),
+		DurationToAssert: durationToAssert,
+	}
+}
+
+func generateSurvivalGoalsEvents(
+	regions []state.Region, startTime time.Time, durationToAssert time.Duration,
+) gen.StaticEvents {
+	if len(regions) < 3 {
+		panic("only multi-region cluster with more than three regions can use cycle_via_hardcoded_survival_goals")
+	}
+
+	eventGen := gen.NewStaticEventsWithNoEvents()
+	regionsOne, regionTwo, regionThree := regions[0].Name, regions[1].Name, regions[2].Name
+	const numOfConfigs = 2
+	configs := [numOfConfigs]zonepb.ZoneConfig{state.GetZoneSurvivalConfig(regionsOne, regionTwo, regionThree),
+		state.GetRegionSurvivalConfig(regionsOne, regionTwo, regionThree)}
+
+	span := roachpb.Span{
+		Key:    state.MinKey.ToRKey().AsRawKey(),
+		EndKey: state.MaxKey.ToRKey().AsRawKey(),
+	}
+
+	delay := time.Duration(0)
+	// TODO(wenyihu6): enable adding event name tag when registering events for better format span config in output
+	for _, eachConfig := range configs {
+		eventGen.ScheduleMutationWithAssertionEvent(startTime, delay,
+			constructSetZoneConfigEventWithConformanceAssertion(span, eachConfig, durationToAssert))
+		delay += durationToAssert
+	}
+	return eventGen
+}
