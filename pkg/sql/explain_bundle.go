@@ -143,6 +143,7 @@ func buildStatementBundle(
 	placeholders *tree.PlaceholderInfo,
 	queryErr, payloadErr, commErr error,
 	sv *settings.Values,
+	c inFlightTraceCollector,
 ) diagnosticsBundle {
 	if plan == nil {
 		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
@@ -155,6 +156,7 @@ func buildStatementBundle(
 	b.addDistSQLDiagrams()
 	b.addExplainVec()
 	b.addTrace()
+	b.addInFlightTrace(c)
 	b.addEnv(ctx)
 	b.addErrors(queryErr, payloadErr, commErr)
 
@@ -400,6 +402,33 @@ The UI can then be accessed at http://localhost:16686/search`, b.stmt)
 		b.z.AddFile("trace-jaeger.txt", err.Error())
 	} else {
 		b.z.AddFile("trace-jaeger.json", jaegerJSON)
+	}
+}
+
+func (b *stmtBundleBuilder) addInFlightTrace(c inFlightTraceCollector) {
+	if b.flags.RedactValues {
+		return
+	}
+	for _, trace := range c.trace {
+		b.z.AddFile(fmt.Sprintf("inflight-trace-n%d.txt", trace.nodeID), trace.trace)
+		b.z.AddFile(fmt.Sprintf("inflight-trace-jaeger-n%d.json", trace.nodeID), trace.jaeger)
+	}
+	if len(c.trace) == 0 && len(c.errors) > 0 {
+		// Include all errors accumulated throughout the in-flight tracing if we
+		// weren't able to get even a single trace.
+		var sb strings.Builder
+		for j, err := range c.errors {
+			if j > 0 {
+				sb.WriteString("\n")
+			}
+			sb.WriteString(err.Error())
+		}
+		b.z.AddFile("inflight-trace-errors.txt", sb.String())
+	}
+	// Include the timeout trace if available.
+	for _, trace := range c.timeoutTrace {
+		b.z.AddFile(fmt.Sprintf("timeout-trace-n%d.txt", trace.nodeID), trace.trace)
+		b.z.AddFile(fmt.Sprintf("timeout-trace-jaeger-n%d.json", trace.nodeID), trace.jaeger)
 	}
 }
 
