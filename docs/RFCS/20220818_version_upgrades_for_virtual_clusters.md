@@ -1,4 +1,4 @@
-- Feature Name: Tenant version upgrades
+- Feature Name: Version upgrades for virtual clusters
 - Status: accepted
 - Start Date: 2022-08-18
 - Authors: knz with help from dt and ajw
@@ -10,11 +10,11 @@
 
 This RFC proposes a mechanism inside CockroachDB to orchestrate the
 initialization of system tables, then upgrading the logical cluster
-version seen by secondary tenants.
+version seen by VCs.
 
 This aims to fix an active correctness bug, for which we so far
 use a kludgy workaround in CC Serverless, and which will block
-a generalization of multi-tenancy to all deployments.
+a generalization of cluster virtualization to all deployments.
 
 <!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
 **Table of Contents**
@@ -50,11 +50,11 @@ In particular, the RFC depends on familiarity with the difference between:
 
 - *storage binary version* (SBV): the executable version(s) used in KV nodes.
 
-- *tenant logical versions* (TLV): the cluster version in each
-  secondary tenant (there may be several, and they can also be
+- *VC logical versions* (TLV): the cluster version in each
+  VC (there may be several, and they can also be
   separate from the cluster version in the system tenant).
 
-- *tenant binary version* (TBV): the executable version used for SQL servers (which can be different
+- *VC binary version* (TBV): the executable version used for SQL servers (which can be different
   from that used for KV nodes,
   [#84700](https://github.com/cockroachdb/cockroach/pull/84700)
   notwithstanding).
@@ -66,7 +66,7 @@ between them.
 # Motivation
 
 We need to do work in this area because while we *knew* we needed to
-maintain invariants (as described above) in multi-tenancy, we actually
+maintain invariants (as described above) with cluster virtualization, we actually
 failed to implement the code to check these invariants.
 
 In particular:
@@ -74,7 +74,7 @@ In particular:
 - it's trivially possible to violate invariant D, because we do not
   implement [the version
   interlock](../tech-notes/version_upgrades.md#enforcing-the-invariants-during-upgrades-in-single-tenancy)
-  in secondary tenants.
+  in VCs.
 
   So different SQL pods running at different binary versions can
   observe different cluster versions temporarily, and expose different
@@ -91,9 +91,8 @@ In particular:
   This is tracked here: https://github.com/cockroachdb/cockroach/issues/80992
 
 As a result of this lack of guardrails, it's possible to bring a
-multitenant cluster in an invalid state, where tenants are at a
-cluster version beyond the level of support they need from the KV
-layer.
+cluster in an invalid state, where VCs are at a cluster version beyond
+the level of support they need from the KV layer.
 
 This can cause serious UX pain and, in extreme case, outright data
 corruption.
@@ -102,7 +101,7 @@ corruption.
 
 In [this
 proposal](https://github.com/cockroachdb/cockroach/pull/84700) we are
-thinking about running multiple tenants inside the same process,
+thinking about running multiple VCs inside the same process,
 possibly shared with the KV layer.
 
 Does this simplify?
@@ -111,8 +110,8 @@ Alas, it does not: it only forces the TBV to remain equal to SBV, but
 it does not constraint the TLV to remain "behind" the SLV.
 
 Additionally, it's also possible for different nodes (running
-different SQL servers for the "app" tenant) to run at different TBVs, and
-the SQL layer for secondary tenants does not properly persist its TLV, so
+different SQL servers for the "app" VC) to run at different TBVs, and
+the SQL layer for VCs does not properly persist its TLV, so
 it's still possible for the TLV to briefly appear to move backward.
 
 So invariants D, E, F and G can still be violated.
@@ -134,27 +133,27 @@ value from the storage cluster.
 
 We are going to extend [the
 interlock](../tech-notes/version_upgrades.md#enforcing-the-invariants-during-upgrades-in-single-tenancy)
-previously implemented for single-tenancy to also work in secondary
-tenants:
+previously implemented without cluster virtualization to also work in
+VCs:
 
 - at all times, each SQL server will maintain an updated copy of the SLV of the
   storage cluster it's connected to. (This will use the rangefeed which we already
-  exploit in `settingswatcher` to import settings into tenants.).
+  exploit in `settingswatcher` to import settings into VCs.).
 
-- there will be a "migrate" function for secondary tenants (or, alternatively,
-  an implementation of the `Cluster` interface for secondary tenants),
+- there will be a "migrate" function for VCs (or, alternatively,
+  an implementation of the `Cluster` interface for VCs),
   i.e. an alternative implementation of `(*upgrademanager.Manager).Migrate()`
-  populated as `VersionUpgradeHook` in the `ExecutorConfig` for secondary tenants.
+  populated as `VersionUpgradeHook` in the `ExecutorConfig` for VCs.
 
   (Note: we already have a go interface, `upgrade.Cluster`. We have an
-  implementation for tenants, but it does not do enough)
+  implementation for VCs, but it does not do enough)
 
   - at the beginning of each TLV step, this new function will check that
     the storage cluster (SLV) is already at the same cluster version or newer.
   - it will also check (with a RPC across all the other SQL servers for
-    the same tenant) whether the TLV upgrade is permissible, that is,
+    the same VC) whether the TLV upgrade is permissible, that is,
     all other SQL servers are at a proper TBV.
-  - it will then run its cluster upgrade function (in the tenant keyspace) at the
+  - it will then run its cluster upgrade function (in the VC keyspace) at the
     current cluster version, and checkpoint as usual.
   - it will then re-check whether the TLV bump is permissible via a RPC
     to every other SQL server (TBV verification).
@@ -170,7 +169,7 @@ As a side-car to the work above (but not strictly required), we can also work to
 
 https://github.com/cockroachdb/cockroach/issues/73813
 
-This will also speed up the initialization of new tenants, and the start-up time of SQL servers.
+This will also speed up the initialization of new VCs, and the start-up time of SQL servers.
 
 ## Drawbacks
 
@@ -186,7 +185,7 @@ None known.
 
 We are extending the cluster version upgrade semantics to be the same
 in CC serverless tenants and (in the future) CC dedicated with
-multi-tenancy enabled.
+cluster virtualization enabled.
 
 # Unresolved questions
 
