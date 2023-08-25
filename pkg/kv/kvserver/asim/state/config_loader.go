@@ -14,8 +14,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"google.golang.org/protobuf/proto"
 )
 
 var SingleRegionClusterOptions = [...]string{"single_region", "single_region_multi_store"}
@@ -407,4 +409,89 @@ func LoadRangeInfo(s State, rangeInfos ...RangeInfo) {
 			}
 		}
 	}
+}
+
+func GetRegionSurvivalConfig(
+	regionOne string, regionTwo string, regionThree string,
+) zonepb.ZoneConfig {
+	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.NumReplicas = proto.Int32(5)
+	zoneConfig.NumVoters = proto.Int32(5)
+	zoneConfig.LeasePreferences = []zonepb.LeasePreference{
+		{
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionOne}},
+		},
+	}
+	zoneConfig.Constraints = []zonepb.ConstraintsConjunction{
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionOne},
+			},
+		},
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionTwo},
+			},
+		},
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionThree},
+			},
+		},
+	}
+	zoneConfig.VoterConstraints = []zonepb.ConstraintsConjunction{
+		{
+			NumReplicas: 2,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionOne},
+			},
+		},
+	}
+	return zoneConfig
+}
+
+func GetZoneSurvivalConfig(
+	regionOne string, regionTwo string, regionThree string,
+) zonepb.ZoneConfig {
+	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.NumReplicas = proto.Int32(5)
+	zoneConfig.NumVoters = proto.Int32(3)
+	zoneConfig.LeasePreferences = []zonepb.LeasePreference{{
+		Constraints: []zonepb.Constraint{
+			{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionOne},
+		},
+	}}
+
+	zoneConfig.Constraints = []zonepb.ConstraintsConjunction{
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionOne},
+			},
+		},
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionTwo},
+			},
+		},
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionThree},
+			},
+		},
+	}
+
+	zoneConfig.VoterConstraints = []zonepb.ConstraintsConjunction{{
+		Constraints: []zonepb.Constraint{
+			{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: regionOne},
+		},
+	},
+	}
+	return zoneConfig
 }

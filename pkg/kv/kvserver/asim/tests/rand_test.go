@@ -136,6 +136,15 @@ const (
 //	- height (default value is 15): height of the plot
 //	- width (default value is 80): width of the plot
 
+//  5. "rand_events" [type=<string>{cycle_via_hardcoded_survival_goals}]
+//  [duration_to_assert_on_event=<time.Duration>]
+//  e.g. rand_events type=cycle_via_hardcoded_survival_goals duration=5m
+//  - rand_events: generates interesting event series to scheduled in the
+//    simulation.
+//  - type: type of event sequence to be scheduled.
+//  - duration_to_assert_on_event: delay to add the assertion events post
+//    mutation events for mutation-assertion event series.
+
 // RandTestingFramework is initialized with specified testSetting and maintains
 // its state across all iterations. It repeats the test with different random
 // configurations. Each iteration in RandTestingFramework executes the following
@@ -150,6 +159,7 @@ func TestRandomized(t *testing.T) {
 		randOptions := testRandOptions{}
 		var rGenSettings rangeGenSettings
 		var cGenSettings clusterGenSettings
+		var eGenSettings eventGenSettings
 		staticOptionSettings := getDefaultStaticOptionSettings()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -157,6 +167,7 @@ func TestRandomized(t *testing.T) {
 				randOptions = testRandOptions{}
 				rGenSettings = rangeGenSettings{}
 				cGenSettings = clusterGenSettings{}
+				eGenSettings = eventGenSettings{}
 				staticOptionSettings = getDefaultStaticOptionSettings()
 				return ""
 			case "rand_cluster":
@@ -206,7 +217,15 @@ func TestRandomized(t *testing.T) {
 			case "rand_load":
 				return "unimplemented: randomized load"
 			case "rand_events":
-				return "unimplemented: randomized events"
+				randOptions.staticEvents = true
+				seriesType, durationToAssertOnEvent := defaultEventsType, defaultDurationToAssertOnEvent
+				scanIfExists(t, d, "type", &seriesType)
+				scanIfExists(t, d, "duration_to_assert_on_event", &durationToAssertOnEvent)
+				eGenSettings = eventGenSettings{
+					durationToAssertOnEvent: durationToAssertOnEvent,
+					eventsType:              seriesType,
+				}
+				return ""
 			case "rand_settings":
 				return "unimplemented: randomized settings"
 			case "eval":
@@ -227,6 +246,7 @@ func TestRandomized(t *testing.T) {
 					randOptions:   randOptions,
 					rangeGen:      rGenSettings,
 					clusterGen:    cGenSettings,
+					eventGen:      eGenSettings,
 				}
 				f := newRandTestingFramework(s, staticOptionSettings)
 				outputs := f.runRandTestRepeated()
