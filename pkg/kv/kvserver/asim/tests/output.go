@@ -74,12 +74,13 @@ type testResult struct {
 }
 
 type testResultsReport struct {
-	flags       OutputFlags
-	settings    testSettings
-	outputSlice []testResult
+	flags          OutputFlags
+	settings       testSettings
+	staticSettings staticOptionSettings
+	outputSlice    []testResult
 }
 
-func printTestSettings(t testSettings, buf *strings.Builder) {
+func printTestSettings(t testSettings, staticSettings staticOptionSettings, buf *strings.Builder) {
 	buf.WriteString(fmt.Sprintln("test settings"))
 	buf.WriteString(fmt.Sprintf("\tnum_iterations=%v duration=%s\n", t.numIterations, t.duration.Round(time.Second)))
 	divider := fmt.Sprintln("----------------------------------")
@@ -94,6 +95,7 @@ func printTestSettings(t testSettings, buf *strings.Builder) {
 		buf.WriteString(fmt.Sprintf("\t%v\n", t.clusterGen))
 	} else {
 		buf.WriteString(configStr("cluster", "static"))
+		buf.WriteString(fmt.Sprintf("\tnodes=%d, stores_per_node=%d\n", staticSettings.nodes, staticSettings.storesPerNode))
 	}
 
 	if t.randOptions.ranges {
@@ -101,12 +103,16 @@ func printTestSettings(t testSettings, buf *strings.Builder) {
 		buf.WriteString(fmt.Sprintf("\t%v\n", t.rangeGen))
 	} else {
 		buf.WriteString(configStr("ranges", "static"))
+		buf.WriteString(fmt.Sprintf("\tplacement_type=%v, ranges=%d, key_space=%d, replication_factor=%d, bytes=%d\n",
+			staticSettings.placementType, staticSettings.ranges, staticSettings.keySpace, staticSettings.replicationFactor, staticSettings.bytes))
 	}
 
 	if t.randOptions.load {
 		buf.WriteString(configStr("load", "randomized"))
 	} else {
 		buf.WriteString(configStr("load", "static"))
+		buf.WriteString(fmt.Sprintf("\trw_ratio=%0.2f, rate=%0.2f, min_block=%d, max_block=%d, min_key=%d, max_key=%d, skewed_access=%t\n",
+			staticSettings.rwRatio, staticSettings.rate, staticSettings.minBlock, staticSettings.maxBlock, staticSettings.minKey, staticSettings.maxKey, staticSettings.skewedAccess))
 	}
 
 	if t.randOptions.staticEvents {
@@ -128,7 +134,7 @@ func printTestSettings(t testSettings, buf *strings.Builder) {
 func (tr testResultsReport) String() string {
 	buf := strings.Builder{}
 	if tr.flags.Has(OutputTestSettings) {
-		printTestSettings(tr.settings, &buf)
+		printTestSettings(tr.settings, tr.staticSettings, &buf)
 	}
 	divider := fmt.Sprintln("----------------------------------")
 	for i, output := range tr.outputSlice {

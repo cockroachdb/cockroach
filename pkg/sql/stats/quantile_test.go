@@ -1348,7 +1348,10 @@ func TestQuantileOps(t *testing.T) {
 			if intSqMult0 != 0 {
 				t.Errorf("test case %d incorrect intSqMult0 %v expected 0", i, intSqMult0)
 			}
-			fixed := tc.q.fixMalformed()
+			fixed, err := tc.q.fixMalformed()
+			if err != nil {
+				t.Errorf("test case %d has an unexpected error: %s", i, err)
+			}
 			if !reflect.DeepEqual(fixed, tc.fixed) {
 				t.Errorf("test case %d incorrect fixed %v expected %v", i, fixed, tc.fixed)
 			}
@@ -1407,7 +1410,10 @@ func TestQuantileOpsRandom(t *testing.T) {
 			if intSqMult0 != 0 {
 				t.Errorf("seed %v quantile %v incorrect intSqMult0 %v expected 0", seed, q, intSqMult0)
 			}
-			fixed := q.fixMalformed()
+			fixed, err := q.fixMalformed()
+			if err != nil {
+				t.Errorf("seed %v quantile %v had an unexpected error: %s", seed, q, err)
+			}
 			intSqFixed := fixed.integrateSquared()
 			// This seems like it should run into floating point errors, but it hasn't
 			// yet, so yay?
