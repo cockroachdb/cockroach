@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -126,7 +125,6 @@ func TestStatusVarsTxnMetrics(t *testing.T) {
 		testFn(s, `node_id="1"`)
 	})
 	t.Run("tenant", func(t *testing.T) {
-		skip.WithIssue(t, 76378) // until CCL import
 		s := srv.ApplicationLayer()
 		// TODO(knz): why is the tenant label missing here?
 		testFn(s, `tenant=""`)
