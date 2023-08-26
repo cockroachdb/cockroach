@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -49,8 +48,6 @@ import (
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
