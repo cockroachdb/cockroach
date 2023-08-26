@@ -152,7 +152,7 @@ func (tr testResultsReport) String() string {
 			buf.WriteString(fmt.Sprintf("\t%v\n", output.eventGen))
 		}
 		if failed || tr.flags.Has(OutputInitialState) {
-			buf.WriteString(fmt.Sprintf("initial state at %s:\n", output.initialTime.String()))
+			buf.WriteString(fmt.Sprintf("initial state at %s:\n", output.initialTime.Format("2006-01-02 15:04:05")))
 			buf.WriteString(fmt.Sprintf("\t%v\n", output.initialState.PrettyPrint()))
 		}
 		if failed || tr.flags.Has(OutputTopology) {
