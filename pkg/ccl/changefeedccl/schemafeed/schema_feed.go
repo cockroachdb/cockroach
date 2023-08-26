@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -98,6 +97,11 @@ func New(
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = initialHighwater
 	m.mu.typeDeps = typeDependencyTracker{deps: make(map[descpb.ID][]descpb.ID)}
+	m.mu.lockedVersions = make(map[descpb.ID]descpb.DescriptorVersion)
+	_ = targets.EachTableID(func(id descpb.ID) error {
+		m.tableIDs = append(m.tableIDs, id)
+		return nil
+	})
 	return m
 }
 
@@ -117,6 +121,7 @@ type schemaFeed struct {
 	clock      *hlc.Clock
 	settings   *cluster.Settings
 	targets    changefeedbase.Targets
+	tableIDs   []descpb.ID
 	metrics    *Metrics
 	tolerances changefeedbase.CanHandle
 
@@ -162,11 +167,11 @@ type schemaFeed struct {
 		// we know no table events will occur.
 		pollingPaused bool
 
-		// The following two maps are memoization to help avoid map allocation
+		// The lockedVersions map is a memoization to help avoid map allocation
 		// on a hot path. It is by nature implementation details and should only
 		// be concerned by implementer of method pauseOrResumePolling.
-		allTableVersions1 map[descpb.ID]descpb.DescriptorVersion
-		allTableVersions2 map[descpb.ID]descpb.DescriptorVersion
+		lockedVersions   map[descpb.ID]descpb.DescriptorVersion
+		versionsLockedAt hlc.Timestamp
 	}
 }
 
@@ -292,14 +297,14 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 			return err
 		}
 		// Note that all targets are currently guaranteed to be tables.
-		return tf.targets.EachTableID(func(id descpb.ID) error {
+		for _, id := range tf.tableIDs {
 			tableDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, id)
 			if err != nil {
 				return err
 			}
 			initialDescs = append(initialDescs, tableDesc)
-			return nil
-		})
+		}
+		return nil
 	}
 
 	if err := tf.db.DescsTxn(ctx, initialTableDescsFn); err != nil {
@@ -446,32 +451,16 @@ func (tf *schemaFeed) peekOrPop(
 func (tf *schemaFeed) pauseOrResumePolling(
 	ctx context.Context, atOrBefore hlc.Timestamp,
 ) (hlc.Timestamp, error) {
-	// areAllLeasedTablesSchemaLockedAt returns true if all leased tables are
-	// schema locked at timestamp `ts`.
-	// It also updates input `versions` to record those table versions at `ts`.
-	areAllLeasedTablesSchemaLockedAt := func(
-		ts hlc.Timestamp, versions map[descpb.ID]descpb.DescriptorVersion,
-	) (bool, error) {
-		allWatchedTableSchemaLocked := true
-		err := tf.targets.EachTableID(func(id descpb.ID) error {
-			ld, err := tf.leaseMgr.Acquire(ctx, ts, id)
-			if err != nil {
-				return err
-			}
-			defer ld.Release(ctx)
-			if !ld.Underlying().(catalog.TableDescriptor).IsSchemaLocked() {
-				allWatchedTableSchemaLocked = false
-				return iterutil.StopIteration()
-			}
-			versions[id] = ld.Underlying().(catalog.TableDescriptor).GetVersion()
-			return nil
-		})
-		if errors.Is(err, catalog.ErrDescriptorDropped) {
-			// If a table is dropped and cause Acquire to fail, we mark it as terminal
-			// error, so we don't retry and let the changefeed job handle this error.
-			err = changefeedbase.WithTerminalError(err)
+	// tableDescriptorStateAt returns descriptor version and a bit indicating if schema
+	// is locked at specified timestamp
+	tableDescriptorStateAt := func(id descpb.ID, at hlc.Timestamp) (_ descpb.DescriptorVersion, isLocked bool, _ error) {
+		ld, err := tf.leaseMgr.Acquire(ctx, at, id)
+		if err != nil {
+			return 0, false, err
 		}
-		return allWatchedTableSchemaLocked, err
+		defer ld.Release(ctx)
+		td := ld.Underlying().(catalog.TableDescriptor)
+		return td.GetVersion(), td.IsSchemaLocked(), nil
 	}
 
 	tf.mu.Lock()
@@ -481,27 +470,43 @@ func (tf *schemaFeed) pauseOrResumePolling(
 		return atOrBefore, nil
 	}
 
-	if tf.mu.allTableVersions1 == nil {
-		tf.mu.allTableVersions1 = make(map[descpb.ID]descpb.DescriptorVersion)
-		tf.mu.allTableVersions2 = make(map[descpb.ID]descpb.DescriptorVersion)
-	}
-
 	// Always start with a stance to resume polling until we've proved otherwise.
 	tf.mu.pollingPaused = false
-	if ok, err := areAllLeasedTablesSchemaLockedAt(tf.mu.highWater, tf.mu.allTableVersions1); err != nil || !ok {
-		return atOrBefore, err
-	}
-	if ok, err := areAllLeasedTablesSchemaLockedAt(atOrBefore, tf.mu.allTableVersions2); err != nil || !ok {
-		return atOrBefore, err
-	}
-	if len(tf.mu.allTableVersions1) != len(tf.mu.allTableVersions2) {
-		return atOrBefore, nil
-	}
-	for id, version := range tf.mu.allTableVersions1 {
-		if version != tf.mu.allTableVersions2[id] {
-			return atOrBefore, nil
+
+	// Determine if table descriptor versions at highWater and at atOrBefore are
+	// both locked, and have the same versions.
+	allSame, err := func() (bool, error) {
+		for _, id := range tf.tableIDs {
+			// Use previously verified state.
+			highWaterVersion := tf.mu.lockedVersions[id]
+			if tf.mu.versionsLockedAt.Less(tf.mu.highWater) {
+				// Need to re-load locked versions at highWater.
+				v, isLocked, err := tableDescriptorStateAt(id, tf.mu.highWater)
+				if err != nil || !isLocked {
+					return false, err
+				}
+				tf.mu.lockedVersions[id] = v
+				highWaterVersion = v
+			}
+
+			v, isLocked, err := tableDescriptorStateAt(id, atOrBefore)
+			if err != nil || !isLocked || v != highWaterVersion {
+				return false, err
+			}
 		}
+		tf.mu.versionsLockedAt = tf.mu.highWater
+		return true, nil
+	}()
+
+	if err != nil || !allSame {
+		if errors.Is(err, catalog.ErrDescriptorDropped) {
+			// If a table is dropped and cause Acquire to fail, we mark it as terminal
+			// error, so we don't retry and let the changefeed job handle this error.
+			err = changefeedbase.WithTerminalError(err)
+		}
+		return atOrBefore, err
 	}
+
 	tf.mu.pollingPaused = true
 	return tf.mu.highWater, nil
 }
