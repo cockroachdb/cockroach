@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -575,6 +576,11 @@ func copyFromSourceToDestUntilTableEvent(
 	endTime hlc.Timestamp,
 	knobs TestingKnobs,
 ) error {
+	// Strip out tracing span from context (if any).
+	// This code runs on a hot path (event loop) -- even checks for
+	// log.ExpensiveLogEnabled are more expensive when we have real span.
+	ctx = tracing.ContextWithSpan(ctx, nil /* span */)
+
 	var (
 		scanBoundary errBoundaryReached
 		endTimeIsSet = !endTime.IsEmpty()
