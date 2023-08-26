@@ -89,55 +89,52 @@ num=3
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
 
 # -------------------------------------------------------------
-# Read-only request with WaitPolicy_Error hits lock. The request
+# Read-only request with lock timeout hits lock. The request
 # raises an error.
 # -------------------------------------------------------------
 
-new-request name=reqNoWait1 txn=txnNoWait ts=12,0 wait-policy=error
+new-request name=reqTimeout1 txn=txnNoWait ts=12,0 lock-timeout
   get key=k
 ----
 
-sequence req=reqNoWait1
+sequence req=reqTimeout1
 ----
-[4] sequence reqNoWait1: sequencing request
-[4] sequence reqNoWait1: acquiring latches
-[4] sequence reqNoWait1: scanning lock table for conflicting locks
-[4] sequence reqNoWait1: waiting in lock wait-queues
-[4] sequence reqNoWait1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
-[4] sequence reqNoWait1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = true
-[4] sequence reqNoWait1: pushing timestamp of txn 00000001 above 12.000000000,1
-[4] sequence reqNoWait1: pushee not abandoned
-[4] sequence reqNoWait1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
-[4] sequence reqNoWait1: sequencing complete, returned error: conflicting locks on ‹"k"› [reason=wait_policy]
+[4] sequence reqTimeout1: sequencing request
+[4] sequence reqTimeout1: acquiring latches
+[4] sequence reqTimeout1: scanning lock table for conflicting locks
+[4] sequence reqTimeout1: waiting in lock wait-queues
+[4] sequence reqTimeout1: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
+[4] sequence reqTimeout1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = true, priority enforcement = false, wait policy error = false
+[4] sequence reqTimeout1: pushing txn 00000001 to check if abandoned
+[4] sequence reqTimeout1: pushee not abandoned
+[4] sequence reqTimeout1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[4] sequence reqTimeout1: sequencing complete, returned error: conflicting locks on ‹"k"› [reason=lock_timeout]
 
 # -------------------------------------------------------------
-# Read-only request with WaitPolicy_Error hits abandoned lock.
+# Read-only request with lock timeout hits abandoned lock.
 # The request removes the abandoned unreplicated lock and proceeds.
 # -------------------------------------------------------------
-
-debug-advance-clock ts=123
-----
 
 on-txn-updated txn=txn1 status=committed
 ----
 [-] update txn: committing txn1
 [3] sequence req3: resolving intent ‹"k2"› for txn 00000001 with COMMITTED status
 [3] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"k3"› (queuedLockingRequests: 1, queuedReaders: 0)
-[3] sequence req3: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k2"› for 123.000s
+[3] sequence req3: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k2"› for 0.000s
 [3] sequence req3: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req3: pushing txn 00000002 to abort
 [3] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
 
-sequence req=reqNoWait1
+sequence req=reqTimeout1
 ----
-[5] sequence reqNoWait1: sequencing request
-[5] sequence reqNoWait1: acquiring latches
-[5] sequence reqNoWait1: scanning lock table for conflicting locks
-[5] sequence reqNoWait1: sequencing complete, returned guard
+[5] sequence reqTimeout1: sequencing request
+[5] sequence reqTimeout1: acquiring latches
+[5] sequence reqTimeout1: scanning lock table for conflicting locks
+[5] sequence reqTimeout1: sequencing complete, returned guard
 
-finish req=reqNoWait1
+finish req=reqTimeout1
 ----
-[-] finish reqNoWait1: finishing request
+[-] finish reqTimeout1: finishing request
 
 debug-lock-table
 ----
@@ -152,61 +149,61 @@ num=2
    distinguished req: 3
 
 # -------------------------------------------------------------
-# Read-write request with WaitPolicy_Error hits reservation
+# Read-write request with lock timeout hits reservation
 # holder. The request immediately raises an error instead of
 # waiting for the reservation holder.
 # -------------------------------------------------------------
 
-new-request name=reqNoWait2 txn=txnNoWait ts=12,0 wait-policy=error
+new-request name=reqTimeout2 txn=txnNoWait ts=12,0 lock-timeout
   put key=k2 value=v4
 ----
 
-sequence req=reqNoWait2
+sequence req=reqTimeout2
 ----
-[6] sequence reqNoWait2: sequencing request
-[6] sequence reqNoWait2: acquiring latches
-[6] sequence reqNoWait2: scanning lock table for conflicting locks
-[6] sequence reqNoWait2: waiting in lock wait-queues
-[6] sequence reqNoWait2: lock wait-queue event: wait for (distinguished) txn 00000003 running request @ key ‹"k2"› (queuedLockingRequests: 2, queuedReaders: 0)
-[6] sequence reqNoWait2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = true
-[6] sequence reqNoWait2: pushing txn 00000003 to abort
-[6] sequence reqNoWait2: pushee not abandoned
-[6] sequence reqNoWait2: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k2"› for 0.000s
-[6] sequence reqNoWait2: sequencing complete, returned error: conflicting locks on ‹"k2"› [reason=wait_policy]
+[6] sequence reqTimeout2: sequencing request
+[6] sequence reqTimeout2: acquiring latches
+[6] sequence reqTimeout2: scanning lock table for conflicting locks
+[6] sequence reqTimeout2: waiting in lock wait-queues
+[6] sequence reqTimeout2: lock wait-queue event: wait for (distinguished) txn 00000003 running request @ key ‹"k2"› (queuedLockingRequests: 2, queuedReaders: 0)
+[6] sequence reqTimeout2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = true, priority enforcement = false, wait policy error = false
+[6] sequence reqTimeout2: pushing txn 00000003 to check if abandoned
+[6] sequence reqTimeout2: pushee not abandoned
+[6] sequence reqTimeout2: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k2"› for 0.000s
+[6] sequence reqTimeout2: sequencing complete, returned error: conflicting locks on ‹"k2"› [reason=lock_timeout]
 
 # -------------------------------------------------------------
-# Read-only request with WaitPolicy_Error discovers lock. The
+# Read-only request with lock timeout discovers lock. The
 # request raises an error.
 # -------------------------------------------------------------
 
-new-request name=reqNoWait3 txn=txnNoWait ts=12,0 wait-policy=error
+new-request name=reqTimeout3 txn=txnNoWait ts=12,0 lock-timeout
   get key=k4
 ----
 
-sequence req=reqNoWait3
+sequence req=reqTimeout3
 ----
-[7] sequence reqNoWait3: sequencing request
-[7] sequence reqNoWait3: acquiring latches
-[7] sequence reqNoWait3: scanning lock table for conflicting locks
-[7] sequence reqNoWait3: sequencing complete, returned guard
+[7] sequence reqTimeout3: sequencing request
+[7] sequence reqTimeout3: acquiring latches
+[7] sequence reqTimeout3: scanning lock table for conflicting locks
+[7] sequence reqTimeout3: sequencing complete, returned guard
 
-handle-lock-conflict-error req=reqNoWait3 lease-seq=1
+handle-lock-conflict-error req=reqTimeout3 lease-seq=1
   lock txn=txn2 key=k4
 ----
-[8] handle lock conflict error reqNoWait3: handled conflicting locks on ‹"k4"›, released latches
+[8] handle lock conflict error reqTimeout3: handled conflicting locks on ‹"k4"›, released latches
 
-sequence req=reqNoWait3
+sequence req=reqTimeout3
 ----
-[9] sequence reqNoWait3: re-sequencing request
-[9] sequence reqNoWait3: acquiring latches
-[9] sequence reqNoWait3: scanning lock table for conflicting locks
-[9] sequence reqNoWait3: waiting in lock wait-queues
-[9] sequence reqNoWait3: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"k4"› (queuedLockingRequests: 0, queuedReaders: 1)
-[9] sequence reqNoWait3: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = true
-[9] sequence reqNoWait3: pushing timestamp of txn 00000002 above 12.000000000,1
-[9] sequence reqNoWait3: pushee not abandoned
-[9] sequence reqNoWait3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k4"› for 0.000s
-[9] sequence reqNoWait3: sequencing complete, returned error: conflicting locks on ‹"k4"› [reason=wait_policy]
+[9] sequence reqTimeout3: re-sequencing request
+[9] sequence reqTimeout3: acquiring latches
+[9] sequence reqTimeout3: scanning lock table for conflicting locks
+[9] sequence reqTimeout3: waiting in lock wait-queues
+[9] sequence reqTimeout3: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"k4"› (queuedLockingRequests: 0, queuedReaders: 1)
+[9] sequence reqTimeout3: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = true, priority enforcement = false, wait policy error = false
+[9] sequence reqTimeout3: pushing txn 00000002 to check if abandoned
+[9] sequence reqTimeout3: pushee not abandoned
+[9] sequence reqTimeout3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k4"› for 0.000s
+[9] sequence reqTimeout3: sequencing complete, returned error: conflicting locks on ‹"k4"› [reason=lock_timeout]
 
 debug-lock-table
 ----
@@ -223,55 +220,52 @@ num=3
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl
 
 # -------------------------------------------------------------
-# Read-only request with WaitPolicy_Error discovers abandoned
+# Read-only request with lock timeout discovers abandoned
 # lock. The request resolves the abandoned lock and proceeds.
 # -------------------------------------------------------------
-
-debug-advance-clock ts=123
-----
 
 on-txn-updated txn=txn2 status=aborted
 ----
 [-] update txn: aborting txn2
 [3] sequence req3: resolving intent ‹"k3"› for txn 00000002 with ABORTED status
 [3] sequence req3: lock wait-queue event: done waiting
-[3] sequence req3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k3"› for 123.000s
+[3] sequence req3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k3"› for 0.000s
 [3] sequence req3: acquiring latches
 [3] sequence req3: scanning lock table for conflicting locks
 [3] sequence req3: sequencing complete, returned guard
 
-new-request name=reqNoWait4 txn=txnNoWait ts=12,0 wait-policy=error
+new-request name=reqTimeout4 txn=txnNoWait ts=12,0 lock-timeout
   get key=k5
 ----
 
-sequence req=reqNoWait4
+sequence req=reqTimeout4
 ----
-[10] sequence reqNoWait4: sequencing request
-[10] sequence reqNoWait4: acquiring latches
-[10] sequence reqNoWait4: scanning lock table for conflicting locks
-[10] sequence reqNoWait4: sequencing complete, returned guard
+[10] sequence reqTimeout4: sequencing request
+[10] sequence reqTimeout4: acquiring latches
+[10] sequence reqTimeout4: scanning lock table for conflicting locks
+[10] sequence reqTimeout4: sequencing complete, returned guard
 
-handle-lock-conflict-error req=reqNoWait4 lease-seq=1
+handle-lock-conflict-error req=reqTimeout4 lease-seq=1
   lock txn=txn2 key=k5
 ----
-[11] handle lock conflict error reqNoWait4: handled conflicting locks on ‹"k5"›, released latches
+[11] handle lock conflict error reqTimeout4: handled conflicting locks on ‹"k5"›, released latches
 
-sequence req=reqNoWait4
+sequence req=reqTimeout4
 ----
-[12] sequence reqNoWait4: re-sequencing request
-[12] sequence reqNoWait4: acquiring latches
-[12] sequence reqNoWait4: scanning lock table for conflicting locks
-[12] sequence reqNoWait4: waiting in lock wait-queues
-[12] sequence reqNoWait4: lock wait-queue event: done waiting
-[12] sequence reqNoWait4: resolving a batch of 1 intent(s)
-[12] sequence reqNoWait4: resolving intent ‹"k5"› for txn 00000002 with ABORTED status
-[12] sequence reqNoWait4: acquiring latches
-[12] sequence reqNoWait4: scanning lock table for conflicting locks
-[12] sequence reqNoWait4: sequencing complete, returned guard
+[12] sequence reqTimeout4: re-sequencing request
+[12] sequence reqTimeout4: acquiring latches
+[12] sequence reqTimeout4: scanning lock table for conflicting locks
+[12] sequence reqTimeout4: waiting in lock wait-queues
+[12] sequence reqTimeout4: lock wait-queue event: done waiting
+[12] sequence reqTimeout4: resolving a batch of 1 intent(s)
+[12] sequence reqTimeout4: resolving intent ‹"k5"› for txn 00000002 with ABORTED status
+[12] sequence reqTimeout4: acquiring latches
+[12] sequence reqTimeout4: scanning lock table for conflicting locks
+[12] sequence reqTimeout4: sequencing complete, returned guard
 
-finish req=reqNoWait4
+finish req=reqTimeout4
 ----
-[-] finish reqNoWait4: finishing request
+[-] finish reqTimeout4: finishing request
 
 finish req=req3
 ----
@@ -285,6 +279,3 @@ num=1
 
 reset
 ----
-
-# For tests where a read-only WaitPolicy_Error request pushes a lower-priority
-# request, see refresh, which is an example of such a request.
