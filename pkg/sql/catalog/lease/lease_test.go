@@ -97,7 +97,6 @@ func init() {
 }
 
 func newLeaseTest(tb testing.TB, params base.TestServerArgs) *leaseTest {
-	params.DefaultTestTenant = base.TODOTestTenantDisabled
 	s, db, kvDB := serverutils.StartServer(tb, params)
 	leaseTest := &leaseTest{
 		TB:        tb,
