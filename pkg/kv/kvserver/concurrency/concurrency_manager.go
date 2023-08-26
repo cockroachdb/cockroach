@@ -361,7 +361,7 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 		// If necessary, wait in the txnWaitQueue for the pushee transaction to
 		// expire or to move to a finalized state.
 		t := req.Requests[0].GetPushTxn()
-		resp, err := m.twq.MaybeWaitForPush(ctx, t)
+		resp, err := m.twq.MaybeWaitForPush(ctx, t, req.WaitPolicy)
 		if err != nil {
 			return nil, err
 		} else if resp != nil {

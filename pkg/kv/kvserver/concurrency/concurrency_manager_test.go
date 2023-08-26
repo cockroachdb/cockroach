@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -99,6 +100,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "concurrency_manager"), func(t *testing.T, path string) {
 		c := newCluster()
+		if strings.HasSuffix(path, "_v23_1") {
+			v := clusterversion.ByKey(clusterversion.V23_1)
+			st := clustersettings.MakeTestingClusterSettingsWithVersions(v, v, true)
+			c = newClusterWithSettings(st)
+		}
 		c.enableTxnPushes()
 		m := concurrency.NewManager(c.makeConfig())
 		m.OnRangeLeaseUpdated(1, true /* isLeaseholder */) // enable
@@ -193,7 +199,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				// Each kvpb.Request is provided on an indented line.
 				reqs, reqUnions := scanRequests(t, d, c)
-				latchSpans, lockSpans := c.collectSpans(t, txn, ts, reqs)
+				latchSpans, lockSpans := c.collectSpans(t, txn, ts, waitPolicy, reqs)
 
 				c.requestsByName[reqName] = concurrency.Request{
 					Txn:                    txn,
@@ -359,7 +365,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 				reqs, _ := scanRequests(t, d, c)
-				latchSpans, lockSpans := c.collectSpans(t, g.Req.Txn, g.Req.Timestamp, reqs)
+				latchSpans, lockSpans := c.collectSpans(t, g.Req.Txn, g.Req.Timestamp, g.Req.WaitPolicy, reqs)
 				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(latchSpans, lockSpans))
 
 			case "is-key-locked-by-conflicting-txn":
@@ -687,11 +693,15 @@ type txnPush struct {
 }
 
 func newCluster() *cluster {
+	return newClusterWithSettings(clustersettings.MakeTestingClusterSettings())
+}
+
+func newClusterWithSettings(st *clustersettings.Settings) *cluster {
 	manual := timeutil.NewManualTime(timeutil.Unix(123, 0))
 	return &cluster{
 		nodeDesc:  &roachpb.NodeDescriptor{NodeID: 1},
 		rangeDesc: &roachpb.RangeDescriptor{RangeID: 1},
-		st:        clustersettings.MakeTestingClusterSettings(),
+		st:        st,
 		manual:    manual,
 		clock:     hlc.NewClockForTesting(manual),
 
@@ -785,8 +795,8 @@ func (c *cluster) PushTransaction(
 			pusheeTxn, _ = pusheeRecord.asTxn()
 			return pusheeTxn, nil
 		}
-		// If PUSH_TOUCH, return error instead of waiting.
-		if pushType == kvpb.PUSH_TOUCH {
+		// If PUSH_TOUCH or WaitPolicy_Error, return error instead of waiting.
+		if pushType == kvpb.PUSH_TOUCH || h.WaitPolicy == lock.WaitPolicy_Error {
 			log.Eventf(ctx, "pushee not abandoned")
 			err := kvpb.NewTransactionPushError(*pusheeTxn)
 			return nil, kvpb.NewError(err)
@@ -1032,10 +1042,10 @@ func (c *cluster) resetNamespace() {
 // collectSpans collects the declared spans for a set of requests.
 // Its logic mirrors that in Replica.collectSpans.
 func (c *cluster) collectSpans(
-	t *testing.T, txn *roachpb.Transaction, ts hlc.Timestamp, reqs []kvpb.Request,
+	t *testing.T, txn *roachpb.Transaction, ts hlc.Timestamp, wp lock.WaitPolicy, reqs []kvpb.Request,
 ) (latchSpans *spanset.SpanSet, lockSpans *lockspanset.LockSpanSet) {
 	latchSpans, lockSpans = &spanset.SpanSet{}, &lockspanset.LockSpanSet{}
-	h := kvpb.Header{Txn: txn, Timestamp: ts}
+	h := kvpb.Header{Txn: txn, Timestamp: ts, WaitPolicy: wp}
 	for _, req := range reqs {
 		if cmd, ok := batcheval.LookupCommand(req.Method()); ok {
 			cmd.DeclareKeys(c.rangeDesc, &h, req, latchSpans, lockSpans, 0)
