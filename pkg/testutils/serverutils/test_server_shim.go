@@ -105,6 +105,7 @@ func ShouldStartDefaultTestTenant(
 			panic(err)
 		}
 		if v {
+			t.Log(defaultTestTenantMessage + "\n(override via COCKROACH_TEST_TENANT)")
 			return base.TestTenantAlwaysEnabled
 		}
 		return base.InternalNonDefaultDecision
@@ -112,8 +113,12 @@ func ShouldStartDefaultTestTenant(
 
 	if globalDefaultSelectionOverride.isSet {
 		override := globalDefaultSelectionOverride.value
-		if issueNum, label := override.IssueRef(); issueNum != 0 {
-			t.Logf("cluster virtualization disabled package-wide due to issue: #%d (expected label: %s)", issueNum, label)
+		if baseArg.TestTenantAlwaysDisabled() {
+			if issueNum, label := override.IssueRef(); issueNum != 0 {
+				t.Logf("cluster virtualization disabled in global scope due to issue: #%d (expected label: %s)", issueNum, label)
+			}
+		} else {
+			t.Log(defaultTestTenantMessage + "\n(override via TestingSetDefaultTenantSelectionOverride)")
 		}
 		return override
 	}
