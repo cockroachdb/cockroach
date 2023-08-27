@@ -694,6 +694,13 @@ func resolveNumericColumnRefs(tab cat.Table, columns []tree.ColumnID) (ordinals 
 		cnt := tab.ColumnCount()
 		for ord < cnt {
 			col := tab.Column(ord)
+			if col.Kind() == cat.Inverted {
+				// An implicit inverted column refers to another column in the table
+				// with a Kind of `cat.Ordinary`. The inverted column should never be
+				// matched directly.
+				ord++
+				continue
+			}
 			if col.ColID() == cat.StableID(c) && col.Visibility() != cat.Inaccessible {
 				break
 			}

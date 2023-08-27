@@ -2044,3 +2044,19 @@ SELECT primes FROM cb WHERE primes && numbers ORDER BY primes
 statement ok
 CREATE TABLE t84569 (name_col NAME NOT NULL, INVERTED INDEX (name_col gin_trgm_ops));
 INSERT INTO t84569 (name_col) VALUES ('X'::NAME)
+
+# Regression test for #109399
+
+statement ok
+CREATE TABLE t109399 (name_col NAME NOT NULL, INVERTED INDEX (name_col gin_trgm_ops));
+INSERT INTO t109399 (name_col) VALUES ('X'::NAME);
+
+query T
+SELECT * FROM [124(1) AS foo(bar)];
+----
+X
+
+# The presence of an inverted index in a table should not cause selection of
+# an undefined column to cause an internal error.
+statement error pq: column \[3\] does not exist
+SELECT * FROM [124(3) AS foo(bar)];
