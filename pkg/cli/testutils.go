@@ -115,7 +115,10 @@ const testUserfileUploadTempDirPrefix = "test-userfile-upload-temp-dir-"
 
 func (c *TestCLI) fail(err error) {
 	if c.t != nil {
-		defer c.logScope.Close(c.t)
+		if c.logScope != nil {
+			c.logScope.Close(c.t)
+			c.logScope = nil
+		}
 		c.t.Fatal(err)
 	} else {
 		panic(err)

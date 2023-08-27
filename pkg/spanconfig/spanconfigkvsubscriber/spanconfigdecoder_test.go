@@ -17,12 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,13 +34,16 @@ import (
 // the system.span_configurations table.
 func TestDecodeSpanTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	ts, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer ts.Stopper().Stop(ctx)
 
 	const dummyTableName = "dummy_span_configurations"
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummyTableName))
 
 	var dummyTableID uint32
@@ -48,8 +51,11 @@ func TestDecodeSpanTargets(t *testing.T) {
 		`SELECT table_id FROM crdb_internal.tables WHERE name = '%s'`, dummyTableName),
 	).Scan(&dummyTableID)
 
-	key := tc.ScratchRange(t)
-	rng := tc.GetFirstStoreFromServer(t, 0).LookupReplica(keys.MustAddr(key))
+	key, err := ts.ScratchRange()
+	require.NoError(t, err)
+	store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+	rng := store.LookupReplica(keys.MustAddr(key))
 	span := rng.Desc().RSpan().AsRawSpanWithNoLocals()
 	conf := roachpb.SpanConfig{NumReplicas: 5, NumVoters: 3}
 
@@ -58,8 +64,8 @@ func TestDecodeSpanTargets(t *testing.T) {
 	tdb.Exec(t, fmt.Sprintf(`UPSERT INTO %s (start_key, end_key, config) VALUES ($1, $2, $3)`,
 		dummyTableName), span.Key, span.EndKey, buf)
 
-	k := keys.SystemSQLCodec.IndexPrefix(dummyTableID, keys.SpanConfigurationsTablePrimaryKeyIndexID)
-	rows, err := tc.Server(0).DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
+	k := ts.Codec().IndexPrefix(dummyTableID, keys.SpanConfigurationsTablePrimaryKeyIndexID)
+	rows, err := kvDB.Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 
@@ -81,12 +87,15 @@ func TestDecodeSpanTargets(t *testing.T) {
 // in the system.span_configurations table.
 func TestDecodeSystemTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
 	const dummyTableName = "dummy_span_configurations"
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb := sqlutils.MakeSQLRunner(db)
 
 	ts := func(nanos int) hlc.Timestamp {
 		return hlc.Timestamp{
@@ -134,8 +143,8 @@ func TestDecodeSystemTargets(t *testing.T) {
 			dummyTableName), encodedSp.Key, encodedSp.EndKey, buf)
 
 		// Read the record.
-		k := keys.SystemSQLCodec.IndexPrefix(dummyTableID, keys.SpanConfigurationsTablePrimaryKeyIndexID)
-		rows, err := tc.Server(0).DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
+		k := srv.Codec().IndexPrefix(dummyTableID, keys.SpanConfigurationsTablePrimaryKeyIndexID)
+		rows, err := kvDB.Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 		require.NoError(t, err)
 		require.Len(t, rows, 1)
 

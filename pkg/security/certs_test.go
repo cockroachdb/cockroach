@@ -396,9 +396,12 @@ func TestUseCerts(t *testing.T) {
 	params := base.TestServerArgs{
 		SSLCertsDir:       certsDir,
 		InsecureWebAccess: true,
+
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109498),
 	}
-	s, _, db := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, _, db := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Insecure mode.
 	clientContext := rpc.SecurityContextOptions{Insecure: true}
@@ -452,7 +455,8 @@ func TestUseCerts(t *testing.T) {
 	}
 
 	// Check KV connection.
-	if err := db.Put(context.Background(), "foo", "bar"); err != nil {
+	scratchKey := append(s.Codec().TenantPrefix(), roachpb.Key("foo")...)
+	if err := db.Put(context.Background(), scratchKey, "bar"); err != nil {
 		t.Error(err)
 	}
 }
@@ -488,9 +492,12 @@ func TestUseSplitCACerts(t *testing.T) {
 	params := base.TestServerArgs{
 		SSLCertsDir:       certsDir,
 		InsecureWebAccess: true,
+
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109498),
 	}
-	s, _, db := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, _, db := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Insecure mode.
 	clientContext := rpc.SecurityContextOptions{Insecure: true}
@@ -544,7 +551,8 @@ func TestUseSplitCACerts(t *testing.T) {
 	}
 
 	// Check KV connection.
-	if err := db.Put(context.Background(), "foo", "bar"); err != nil {
+	scratchKey := append(s.Codec().TenantPrefix(), roachpb.Key("foo")...)
+	if err := db.Put(context.Background(), scratchKey, "bar"); err != nil {
 		t.Error(err)
 	}
 
@@ -616,9 +624,12 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	params := base.TestServerArgs{
 		SSLCertsDir:       certsDir,
 		InsecureWebAccess: true,
+
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109498),
 	}
-	s, _, db := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, _, db := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Insecure mode.
 	clientContext := rpc.SecurityContextOptions{Insecure: true}
@@ -671,7 +682,8 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	}
 
 	// Check KV connection.
-	if err := db.Put(context.Background(), "foo", "bar"); err != nil {
+	scratchKey := append(s.Codec().TenantPrefix(), roachpb.Key("foo")...)
+	if err := db.Put(context.Background(), scratchKey, "bar"); err != nil {
 		t.Error(err)
 	}
 

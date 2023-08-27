@@ -85,11 +85,9 @@ go_test(
     embed = [":colflow"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
-        "//pkg/keys",
         "//pkg/kv",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",

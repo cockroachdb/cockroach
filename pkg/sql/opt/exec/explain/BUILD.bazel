@@ -62,9 +62,11 @@ go_test(
     embed = [":explain"],
     deps = [
         "//pkg/base",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/execinfra",
         "//pkg/sql/opt/cat",

@@ -35,8 +35,9 @@ func TestCacheInvalidation(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: false})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, s.AdvSQLAddr(), "TestCacheInvalidation" /* prefix */, url.UserPassword("testuser", "abc"),
@@ -195,11 +196,12 @@ func TestCacheSingleFlight(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	settings := s.ExecutorConfig().(sql.ExecutorConfig).Settings
-	c := s.ExecutorConfig().(sql.ExecutorConfig).SessionInitCache
+	settings := execCfg.Settings
+	c := execCfg.SessionInitCache
 
 	testuser := username.MakeSQLUsernameFromPreNormalizedString("test")
 

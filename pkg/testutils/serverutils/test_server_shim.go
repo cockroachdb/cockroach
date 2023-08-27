@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -42,22 +42,22 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// defaultTestTenantMessage is a message that is printed when a test is run with
-// the default test tenant. This is useful for debugging test failures.
+// defaultTestTenantMessage is a message that is printed when a test is run
+// under cluster virtualization. This is useful for debugging test failures.
 //
 // If you see this message, the test server was configured to route SQL queries
-// to a secondary tenant (virtual cluster). If you are only seeing a test
+// to a virtual cluster (secondary tenant). If you are only seeing a test
 // failure when this message appears, there may be a problem specific to cluster
 // virtualization or multi-tenancy.
 //
 // To investigate, consider using "COCKROACH_TEST_TENANT=true" to force-enable
-// just the secondary tenant in all runs (or, alternatively, "false" to
+// just the virtual cluster in all runs (or, alternatively, "false" to
 // force-disable), or use "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true"
 // to disable all random test variables altogether.`
 
-const defaultTestTenantMessage = `test server using tenant; see comment at top of test_server_shim.go for details.`
+const defaultTestTenantMessage = `automatically injected virtual cluster under test; see comment at top of test_server_shim.go for details.`
 
-var PreventStartTenantError = errors.New("attempting to manually start a server for a secondary tenant while " +
+var PreventStartTenantError = errors.New("attempting to manually start a virtual cluster while " +
 	"DefaultTestTenant is set to TestTenantProbabilisticOnly")
 
 // ShouldStartDefaultTestTenant determines whether a default test tenant
@@ -105,9 +105,22 @@ func ShouldStartDefaultTestTenant(
 			panic(err)
 		}
 		if v {
+			t.Log(defaultTestTenantMessage + "\n(override via COCKROACH_TEST_TENANT)")
 			return base.TestTenantAlwaysEnabled
 		}
 		return base.InternalNonDefaultDecision
+	}
+
+	if globalDefaultSelectionOverride.isSet {
+		override := globalDefaultSelectionOverride.value
+		if baseArg.TestTenantAlwaysDisabled() {
+			if issueNum, label := override.IssueRef(); issueNum != 0 {
+				t.Logf("cluster virtualization disabled in global scope due to issue: #%d (expected label: %s)", issueNum, label)
+			}
+		} else {
+			t.Log(defaultTestTenantMessage + "\n(override via TestingSetDefaultTenantSelectionOverride)")
+		}
+		return override
 	}
 
 	// Note: we ask the metamorphic framework for a "disable" value, instead
@@ -121,6 +134,22 @@ func ShouldStartDefaultTestTenant(
 		return base.TestTenantAlwaysEnabled
 	}
 	return base.InternalNonDefaultDecision
+}
+
+// globalDefaultSelectionOverride is used when an entire package needs
+// to override the probabilistic behavior.
+var globalDefaultSelectionOverride struct {
+	isSet bool
+	value base.DefaultTestTenantOptions
+}
+
+// TestingSetDefaultTenantSelectionOverride changes the global selection override.
+func TestingSetDefaultTenantSelectionOverride(v base.DefaultTestTenantOptions) func() {
+	globalDefaultSelectionOverride.isSet = true
+	globalDefaultSelectionOverride.value = v
+	return func() {
+		globalDefaultSelectionOverride.isSet = false
+	}
 }
 
 var srvFactoryImpl TestServerFactory
@@ -294,21 +323,21 @@ func StartSharedProcessTenant(
 // starting a test Tenant. The returned tenant IDs match those built
 // into the test certificates.
 func TestTenantID() roachpb.TenantID {
-	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[0])
+	return roachpb.MustMakeTenantID(securitytest.EmbeddedTenantIDs()[0])
 }
 
 // TestTenantID2 returns another roachpb.TenantID that can be used when
 // starting a test Tenant. The returned tenant IDs match those built
 // into the test certificates.
 func TestTenantID2() roachpb.TenantID {
-	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[1])
+	return roachpb.MustMakeTenantID(securitytest.EmbeddedTenantIDs()[1])
 }
 
 // TestTenantID3 returns another roachpb.TenantID that can be used when
 // starting a test Tenant. The returned tenant IDs match those built
 // into the test certificates.
 func TestTenantID3() roachpb.TenantID {
-	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[2])
+	return roachpb.MustMakeTenantID(securitytest.EmbeddedTenantIDs()[2])
 }
 
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters

@@ -21,6 +21,7 @@ go_test(
         "cpu:4",
     ],
     deps = [
+        "//pkg/base",
         "//pkg/build/bazel",
         "//pkg/ccl",
         "//pkg/security/securityassets",

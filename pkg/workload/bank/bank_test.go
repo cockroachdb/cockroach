@@ -16,14 +16,17 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 )
 
 func TestBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tests := []struct {
 		rows           int
@@ -40,9 +43,19 @@ func TestBank(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: `test`,
+
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109458),
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+
 	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE test`)
+
+	// To enable workloadsql.Split.
+	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("rows=%d/ranges=%d", test.rows, test.ranges), func(t *testing.T) {

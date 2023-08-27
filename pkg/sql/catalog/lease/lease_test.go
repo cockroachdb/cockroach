@@ -71,7 +71,8 @@ import (
 
 type leaseTest struct {
 	testing.TB
-	server                   serverutils.TestServerInterface
+	topServer                serverutils.TestServerInterface
+	server                   serverutils.ApplicationLayerInterface
 	db                       *gosql.DB
 	kvDB                     *kv.DB
 	nodes                    map[uint32]*lease.Manager
@@ -96,14 +97,14 @@ func init() {
 }
 
 func newLeaseTest(tb testing.TB, params base.TestServerArgs) *leaseTest {
-	params.DefaultTestTenant = base.TODOTestTenantDisabled
 	s, db, kvDB := serverutils.StartServer(tb, params)
 	leaseTest := &leaseTest{
-		TB:     tb,
-		server: s,
-		db:     db,
-		kvDB:   kvDB,
-		nodes:  map[uint32]*lease.Manager{},
+		TB:        tb,
+		topServer: s,
+		server:    s.ApplicationLayer(),
+		db:        db,
+		kvDB:      kvDB,
+		nodes:     map[uint32]*lease.Manager{},
 	}
 	if params.Knobs.SQLLeaseManager != nil {
 		leaseTest.leaseManagerTestingKnobs =
@@ -113,7 +114,7 @@ func newLeaseTest(tb testing.TB, params base.TestServerArgs) *leaseTest {
 }
 
 func (t *leaseTest) cleanup() {
-	t.server.Stopper().Stop(context.Background())
+	t.topServer.Stopper().Stop(context.Background())
 }
 
 func (t *leaseTest) getLeases(descID descpb.ID) string {
@@ -2236,10 +2237,9 @@ func TestIntentOnSystemConfigDoesNotPreventSchemaChange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
 
-	db := tc.ServerConn(0)
 	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
 

@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -38,10 +38,11 @@ import (
 // same way.
 func TestCrdbInternalDatumsToBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
 	types := []string{
 		"INT2", "INT4", "INT8",
 		"FLOAT4", "FLOAT8",
@@ -81,7 +82,7 @@ func TestCrdbInternalDatumsToBytes(t *testing.T) {
 		if util.RaceEnabled {
 			numRows = 2
 		}
-		tab := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", t.Name())
+		tab := desctestutils.TestingGetPublicTableDescriptor(kvDB, srv.ApplicationLayer().Codec(), "defaultdb", t.Name())
 		for i := 0; i < numRows; i++ {
 			var row []string
 			for _, col := range tab.WritableColumns() {
@@ -145,6 +146,7 @@ SELECT (SELECT count(DISTINCT (cols)) FROM t) -
 // Test that some data types cannot be key encoded.
 func TestCrdbInternalDatumsToBytesIllegalType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})

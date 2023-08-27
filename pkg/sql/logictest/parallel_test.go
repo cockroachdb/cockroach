@@ -88,7 +88,7 @@ func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, c
 
 func (t *parallelTest) getClient(nodeIdx, clientIdx int) *gosql.DB {
 	for len(t.clients[nodeIdx]) <= clientIdx {
-		db := t.cluster.Server(nodeIdx).SQLConn(t, "")
+		db := t.cluster.ApplicationLayer(nodeIdx).SQLConn(t, "")
 		sqlutils.MakeSQLRunner(db).Exec(t, "SET DATABASE = test")
 		t.clients[nodeIdx] = append(t.clients[nodeIdx], db)
 	}
@@ -186,7 +186,7 @@ func (t *parallelTest) setup(ctx context.Context, spec *parTestSpec) {
 
 	t.clients = make([][]*gosql.DB, spec.ClusterSize)
 	for i := range t.clients {
-		t.clients[i] = append(t.clients[i], t.cluster.ServerConn(i))
+		t.clients[i] = append(t.clients[i], t.cluster.ApplicationLayer(i).SQLConn(t, ""))
 	}
 	r0 := sqlutils.MakeSQLRunner(t.clients[0][0])
 
@@ -208,7 +208,9 @@ func (t *parallelTest) setup(ctx context.Context, spec *parTestSpec) {
 	// Disable the circuit breakers on this cluster because they can lead to
 	// rare test flakes since the machine is likely to be overloaded when
 	// running TestParallel.
-	r0.Exec(t, `SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold = '0s'`)
+	sqlutils.MakeSQLRunner(t.cluster.Server(0).SystemLayer().SQLConn(t, "")).Exec(
+		t, `SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold = '0s'`,
+	)
 
 	if testing.Verbose() || log.V(1) {
 		log.Infof(t.ctx, "Creating database")
@@ -246,6 +248,7 @@ func TestParallel(t *testing.T) {
 	failed := 0
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
+			defer log.Scope(t).Close(t)
 			pt := parallelTest{T: t, ctx: context.Background()}
 			pt.run(path)
 			total++

@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -588,7 +588,7 @@ func TestShowBackupTenantView(t *testing.T) {
 	defer cleanupFn()
 	srv := tc.Server(0)
 
-	_ = security.EmbeddedTenantIDs()
+	_ = securitytest.EmbeddedTenantIDs()
 
 	_, conn2 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(2)})
 	defer conn2.Close()
@@ -627,7 +627,7 @@ func TestShowBackupTenants(t *testing.T) {
 	srv := tc.Server(0)
 
 	// NB: tenant certs for 10, 11, 20 are embedded. See:
-	_ = security.EmbeddedTenantIDs()
+	_ = securitytest.EmbeddedTenantIDs()
 
 	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	defer conn10.Close()
