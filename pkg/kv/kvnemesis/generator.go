@@ -106,11 +106,23 @@ type ClientOperationConfig struct {
 	// GetMissingForUpdate is an operation that Gets a key that definitely
 	// doesn't exist using a locking read.
 	GetMissingForUpdate int
+	// GetMissingSkipLocked is an operation that Gets a key that definitely
+	// doesn't exist while skipping locked keys.
+	GetMissingSkipLocked int
+	// GetMissingForUpdateSkipLocked is an operation that Gets a key that
+	// definitely doesn't exist using a locking read while skipping locked keys.
+	GetMissingForUpdateSkipLocked int
 	// GetExisting is an operation that Gets a key that likely exists.
 	GetExisting int
 	// GetExistingForUpdate is an operation that Gets a key that likely exists
 	// using a locking read.
 	GetExistingForUpdate int
+	// GetExistingSkipLocked is an operation that Gets a key that likely exists
+	// while skipping locked keys.
+	GetExistingSkipLocked int
+	// GetExistingForUpdateSkipLocked is an operation that Gets a key that likely
+	// exists using a locking read while skipping locked keys.
+	GetExistingForUpdateSkipLocked int
 	// PutMissing is an operation that Puts a key that definitely doesn't exist.
 	PutMissing int
 	// PutExisting is an operation that Puts a key that likely exists.
@@ -120,12 +132,25 @@ type ClientOperationConfig struct {
 	// ScanForUpdate is an operation that Scans a key range that may contain
 	// values using a per-key locking scan.
 	ScanForUpdate int
+	// ScanSkipLocked is an operation that Scans a key range that may contain
+	// values while skipping locked keys.
+	ScanSkipLocked int
+	// ScanForUpdateSkipLocked is an operation that Scans a key range that may
+	// contain values using a per-key locking scan while skipping locked keys.
+	ScanForUpdateSkipLocked int
 	// ReverseScan is an operation that Scans a key range that may contain
 	// values in reverse key order.
 	ReverseScan int
 	// ReverseScanForUpdate is an operation that Scans a key range that may
 	// contain values using a per-key locking scan in reverse key order.
 	ReverseScanForUpdate int
+	// ReverseScanSkipLocked is an operation that Scans a key range that may
+	// contain values in reverse key order while skipping locked keys.
+	ReverseScanSkipLocked int
+	// ReverseScanForUpdateSkipLocked is an operation that Scans a key range that
+	// may contain values using a per-key locking scan in reverse key order while
+	// skipping locked keys.
+	ReverseScanForUpdateSkipLocked int
 	// DeleteMissing is an operation that Deletes a key that definitely doesn't exist.
 	DeleteMissing int
 	// DeleteExisting is an operation that Deletes a key that likely exists.
@@ -202,21 +227,27 @@ type ChangeZoneConfig struct {
 // yet pass (for example, if the new operation finds a kv bug or edge case).
 func newAllOperationsConfig() GeneratorConfig {
 	clientOpConfig := ClientOperationConfig{
-		GetMissing:                1,
-		GetMissingForUpdate:       1,
-		GetExisting:               1,
-		GetExistingForUpdate:      1,
-		PutMissing:                1,
-		PutExisting:               1,
-		Scan:                      1,
-		ScanForUpdate:             1,
-		ReverseScan:               1,
-		ReverseScanForUpdate:      1,
-		DeleteMissing:             1,
-		DeleteExisting:            1,
-		DeleteRange:               1,
-		DeleteRangeUsingTombstone: 1,
-		AddSSTable:                1,
+		GetMissing:                     1,
+		GetMissingForUpdate:            1,
+		GetExisting:                    1,
+		GetExistingForUpdate:           1,
+		GetExistingSkipLocked:          1,
+		GetExistingForUpdateSkipLocked: 1,
+		PutMissing:                     1,
+		PutExisting:                    1,
+		Scan:                           1,
+		ScanForUpdate:                  1,
+		ScanSkipLocked:                 1,
+		ScanForUpdateSkipLocked:        1,
+		ReverseScan:                    1,
+		ReverseScanForUpdate:           1,
+		ReverseScanSkipLocked:          1,
+		ReverseScanForUpdateSkipLocked: 1,
+		DeleteMissing:                  1,
+		DeleteExisting:                 1,
+		DeleteRange:                    1,
+		DeleteRangeUsingTombstone:      1,
+		AddSSTable:                     1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -300,6 +331,18 @@ func NewDefaultConfig() GeneratorConfig {
 	// #45586 has already been addressed.
 	config.Ops.ClosureTxn.CommitBatchOps.GetExisting = 0
 	config.Ops.ClosureTxn.CommitBatchOps.GetMissing = 0
+	// SkipLocked is a batch-level attribute, not an operation-level attribute. To
+	// avoid mixing skip locked and non-skip locked requests, we disable these ops
+	// in the batchOpConfig.
+	// TODO(nvanbenschoten): support multi-operation SkipLocked batches.
+	config.Ops.Batch.Ops.GetMissingSkipLocked = 0
+	config.Ops.Batch.Ops.GetMissingForUpdateSkipLocked = 0
+	config.Ops.Batch.Ops.GetExistingSkipLocked = 0
+	config.Ops.Batch.Ops.GetExistingForUpdateSkipLocked = 0
+	config.Ops.Batch.Ops.ScanSkipLocked = 0
+	config.Ops.Batch.Ops.ScanForUpdateSkipLocked = 0
+	config.Ops.Batch.Ops.ReverseScanSkipLocked = 0
+	config.Ops.Batch.Ops.ReverseScanForUpdateSkipLocked = 0
 	// AddSSTable cannot be used in transactions, nor in batches.
 	config.Ops.Batch.Ops.AddSSTable = 0
 	config.Ops.ClosureTxn.CommitBatchOps.AddSSTable = 0
@@ -483,18 +526,26 @@ func (g *generator) selectOp(rng *rand.Rand, contextuallyValid []opGen) Operatio
 func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig) {
 	addOpGen(allowed, randGetMissing, c.GetMissing)
 	addOpGen(allowed, randGetMissingForUpdate, c.GetMissingForUpdate)
+	addOpGen(allowed, randGetMissingSkipLocked, c.GetMissingSkipLocked)
+	addOpGen(allowed, randGetMissingForUpdateSkipLocked, c.GetMissingForUpdateSkipLocked)
 	addOpGen(allowed, randPutMissing, c.PutMissing)
 	addOpGen(allowed, randDelMissing, c.DeleteMissing)
 	if len(g.keys) > 0 {
 		addOpGen(allowed, randGetExisting, c.GetExisting)
 		addOpGen(allowed, randGetExistingForUpdate, c.GetExistingForUpdate)
+		addOpGen(allowed, randGetExistingSkipLocked, c.GetExistingSkipLocked)
+		addOpGen(allowed, randGetExistingForUpdateSkipLocked, c.GetExistingForUpdateSkipLocked)
 		addOpGen(allowed, randPutExisting, c.PutExisting)
 		addOpGen(allowed, randDelExisting, c.DeleteExisting)
 	}
 	addOpGen(allowed, randScan, c.Scan)
 	addOpGen(allowed, randScanForUpdate, c.ScanForUpdate)
+	addOpGen(allowed, randScanSkipLocked, c.ScanSkipLocked)
+	addOpGen(allowed, randScanForUpdateSkipLocked, c.ScanForUpdateSkipLocked)
 	addOpGen(allowed, randReverseScan, c.ReverseScan)
 	addOpGen(allowed, randReverseScanForUpdate, c.ReverseScanForUpdate)
+	addOpGen(allowed, randReverseScanSkipLocked, c.ReverseScanSkipLocked)
+	addOpGen(allowed, randReverseScanForUpdateSkipLocked, c.ReverseScanForUpdateSkipLocked)
 	addOpGen(allowed, randDelRange, c.DeleteRange)
 	addOpGen(allowed, randDelRangeUsingTombstone, c.DeleteRangeUsingTombstone)
 	addOpGen(allowed, randAddSSTable, c.AddSSTable)
@@ -508,9 +559,21 @@ func randGetMissing(_ *generator, rng *rand.Rand) Operation {
 	return get(randKey(rng))
 }
 
-func randGetMissingForUpdate(_ *generator, rng *rand.Rand) Operation {
-	op := get(randKey(rng))
+func randGetMissingForUpdate(g *generator, rng *rand.Rand) Operation {
+	op := randGetMissing(g, rng)
 	op.Get.ForUpdate = true
+	return op
+}
+
+func randGetMissingSkipLocked(g *generator, rng *rand.Rand) Operation {
+	op := randGetMissing(g, rng)
+	op.Get.SkipLocked = true
+	return op
+}
+
+func randGetMissingForUpdateSkipLocked(g *generator, rng *rand.Rand) Operation {
+	op := randGetMissingForUpdate(g, rng)
+	op.Get.SkipLocked = true
 	return op
 }
 
@@ -520,9 +583,20 @@ func randGetExisting(g *generator, rng *rand.Rand) Operation {
 }
 
 func randGetExistingForUpdate(g *generator, rng *rand.Rand) Operation {
-	key := randMapKey(rng, g.keys)
-	op := get(key)
+	op := randGetExisting(g, rng)
 	op.Get.ForUpdate = true
+	return op
+}
+
+func randGetExistingSkipLocked(g *generator, rng *rand.Rand) Operation {
+	op := randGetExisting(g, rng)
+	op.Get.SkipLocked = true
+	return op
+}
+
+func randGetExistingForUpdateSkipLocked(g *generator, rng *rand.Rand) Operation {
+	op := randGetExistingForUpdate(g, rng)
+	op.Get.SkipLocked = true
 	return op
 }
 
@@ -694,6 +768,18 @@ func randScanForUpdate(g *generator, rng *rand.Rand) Operation {
 	return op
 }
 
+func randScanSkipLocked(g *generator, rng *rand.Rand) Operation {
+	op := randScan(g, rng)
+	op.Scan.SkipLocked = true
+	return op
+}
+
+func randScanForUpdateSkipLocked(g *generator, rng *rand.Rand) Operation {
+	op := randScanForUpdate(g, rng)
+	op.Scan.SkipLocked = true
+	return op
+}
+
 func randReverseScan(g *generator, rng *rand.Rand) Operation {
 	op := randScan(g, rng)
 	op.Scan.Reverse = true
@@ -703,6 +789,18 @@ func randReverseScan(g *generator, rng *rand.Rand) Operation {
 func randReverseScanForUpdate(g *generator, rng *rand.Rand) Operation {
 	op := randReverseScan(g, rng)
 	op.Scan.ForUpdate = true
+	return op
+}
+
+func randReverseScanSkipLocked(g *generator, rng *rand.Rand) Operation {
+	op := randReverseScan(g, rng)
+	op.Scan.SkipLocked = true
+	return op
+}
+
+func randReverseScanForUpdateSkipLocked(g *generator, rng *rand.Rand) Operation {
+	op := randReverseScanForUpdate(g, rng)
+	op.Scan.SkipLocked = true
 	return op
 }
 
@@ -1093,6 +1191,10 @@ func getForUpdate(key string) Operation {
 	return Operation{Get: &GetOperation{Key: []byte(key), ForUpdate: true}}
 }
 
+func getSkipLocked(key string) Operation {
+	return Operation{Get: &GetOperation{Key: []byte(key), SkipLocked: true}}
+}
+
 func put(key string, seq kvnemesisutil.Seq) Operation {
 	return Operation{Put: &PutOperation{Key: []byte(key), Seq: seq}}
 }
@@ -1105,12 +1207,20 @@ func scanForUpdate(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), ForUpdate: true}}
 }
 
+func scanSkipLocked(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), SkipLocked: true}}
+}
+
 func reverseScan(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true}}
 }
 
 func reverseScanForUpdate(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForUpdate: true}}
+}
+
+func reverseScanSkipLocked(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, SkipLocked: true}}
 }
 
 func del(key string, seq kvnemesisutil.Seq) Operation {

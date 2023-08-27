@@ -76,7 +76,7 @@ func TestApplier(t *testing.T) {
 		require.NoError(t, w.Finish())
 	}
 
-	a := MakeApplier(env, db, db)
+	a := MakeApplier(env, db)
 
 	tests := []testCase{
 		{
@@ -92,7 +92,13 @@ func TestApplier(t *testing.T) {
 			"get-for-update", step(getForUpdate(k1)),
 		},
 		{
+			"get-skip-locked", step(getSkipLocked(k1)),
+		},
+		{
 			"scan-for-update", step(scanForUpdate(k1, k3)),
+		},
+		{
+			"scan-skip-locked", step(scanSkipLocked(k1, k3)),
 		},
 		{
 			"batch", step(batch(put(k1, 21), delRange(k2, k3, 22))),
@@ -102,6 +108,9 @@ func TestApplier(t *testing.T) {
 		},
 		{
 			"rscan-for-update", step(reverseScanForUpdate(k1, k2)),
+		},
+		{
+			"rscan-skip-locked", step(reverseScanSkipLocked(k1, k2)),
 		},
 		{
 			"del", step(del(k2, 1)),
@@ -119,16 +128,28 @@ func TestApplier(t *testing.T) {
 			"get-err", step(get(k1)),
 		},
 		{
+			"get-for-update-err", step(getForUpdate(k1)),
+		},
+		{
+			"get-skip-locked-err", step(getSkipLocked(k1)),
+		},
+		{
 			"put-err", step(put(k1, 1)),
 		},
 		{
 			"scan-for-update-err", step(scanForUpdate(k1, k3)),
 		},
 		{
+			"scan-skip-locked-err", step(scanSkipLocked(k1, k3)),
+		},
+		{
 			"rscan-err", step(reverseScan(k1, k3)),
 		},
 		{
 			"rscan-for-update-err", step(reverseScanForUpdate(k1, k3)),
+		},
+		{
+			"rscan-skip-locked-err", step(reverseScanSkipLocked(k1, k3)),
 		},
 		{
 			"del-err", step(del(k2, 1)),

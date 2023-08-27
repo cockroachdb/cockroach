@@ -108,13 +108,21 @@ func TestRandStep(t *testing.T) {
 			switch o := op.GetValue().(type) {
 			case *GetOperation:
 				if _, ok := keys[string(o.Key)]; ok {
-					if o.ForUpdate {
+					if o.SkipLocked && o.ForUpdate {
+						client.GetExistingForUpdateSkipLocked++
+					} else if o.SkipLocked {
+						client.GetExistingSkipLocked++
+					} else if o.ForUpdate {
 						client.GetExistingForUpdate++
 					} else {
 						client.GetExisting++
 					}
 				} else {
-					if o.ForUpdate {
+					if o.SkipLocked && o.ForUpdate {
+						client.GetMissingForUpdateSkipLocked++
+					} else if o.SkipLocked {
+						client.GetMissingSkipLocked++
+					} else if o.ForUpdate {
 						client.GetMissingForUpdate++
 					} else {
 						client.GetMissing++
@@ -127,14 +135,26 @@ func TestRandStep(t *testing.T) {
 					client.PutMissing++
 				}
 			case *ScanOperation:
-				if o.Reverse && o.ForUpdate {
-					client.ReverseScanForUpdate++
-				} else if o.Reverse {
-					client.ReverseScan++
-				} else if o.ForUpdate {
-					client.ScanForUpdate++
+				if o.Reverse {
+					if o.SkipLocked && o.ForUpdate {
+						client.ReverseScanForUpdateSkipLocked++
+					} else if o.SkipLocked {
+						client.ReverseScanSkipLocked++
+					} else if o.ForUpdate {
+						client.ReverseScanForUpdate++
+					} else {
+						client.ReverseScan++
+					}
 				} else {
-					client.Scan++
+					if o.SkipLocked && o.ForUpdate {
+						client.ScanForUpdateSkipLocked++
+					} else if o.SkipLocked {
+						client.ScanSkipLocked++
+					} else if o.ForUpdate {
+						client.ScanForUpdate++
+					} else {
+						client.Scan++
+					}
 				}
 			case *DeleteOperation:
 				if _, ok := keys[string(o.Key)]; ok {
