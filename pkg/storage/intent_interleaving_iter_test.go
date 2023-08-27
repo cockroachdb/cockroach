@@ -801,13 +801,7 @@ func TestRandomizedIntentInterleavingIter(t *testing.T) {
 // TODO(sumeer): configure engine such that benchmark has data in multiple levels.
 
 func writeBenchData(
-	b *testing.B,
-	eng Engine,
-	numKeys int,
-	versionsPerKey int,
-	intentKeyStride int,
-	prefix []byte,
-	separated bool,
+	b *testing.B, eng Engine, numKeys int, versionsPerKey int, intentKeyStride int, prefix []byte,
 ) {
 	batch := eng.NewBatch()
 	txnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(1000)))
@@ -821,13 +815,9 @@ func writeBenchData(
 			}
 			val, err := protoutil.Marshal(&meta)
 			require.NoError(b, err)
-			if separated {
-				eKey, _ :=
-					LockTableKey{Key: key, Strength: lock.Intent, TxnUUID: txnUUID}.ToEngineKey(nil)
-				require.NoError(b, batch.PutEngineKey(eKey, val))
-			} else {
-				require.NoError(b, batch.PutUnversioned(key, val))
-			}
+			eKey, _ :=
+				LockTableKey{Key: key, Strength: lock.Intent, TxnUUID: txnUUID}.ToEngineKey(nil)
+			require.NoError(b, batch.PutEngineKey(eKey, val))
 		}
 		for j := versionsPerKey; j >= 1; j-- {
 			require.NoError(b, batch.PutMVCC(
@@ -847,31 +837,27 @@ type benchState struct {
 	benchPrefix string
 	keyPrefix   roachpb.Key
 	eng         Engine
-	separated   bool
 }
 
 var numBenchKeys = 10000
 
 func intentInterleavingIterBench(b *testing.B, runFunc func(b *testing.B, state benchState)) {
-	for _, separated := range []bool{false, true} {
-		for _, versionsPerKey := range []int{1, 5} {
-			for _, intentKeyStride := range []int{1, 100, 1000000} {
-				for _, keyLength := range []int{10, 100} {
-					func() {
-						state := benchState{
-							benchPrefix: fmt.Sprintf(
-								"separated=%t/version=%d/intentStride=%d/keyLen=%d",
-								separated, versionsPerKey, intentKeyStride, keyLength),
-							keyPrefix: bytes.Repeat([]byte("k"), keyLength),
-							eng:       createTestPebbleEngine(),
-							separated: separated,
-						}
-						defer state.eng.Close()
-						writeBenchData(b, state.eng, numBenchKeys, versionsPerKey, intentKeyStride,
-							state.keyPrefix, separated)
-						runFunc(b, state)
-					}()
-				}
+	for _, versionsPerKey := range []int{1, 5} {
+		for _, intentKeyStride := range []int{1, 100, 1000000} {
+			for _, keyLength := range []int{10, 100} {
+				func() {
+					state := benchState{
+						benchPrefix: fmt.Sprintf(
+							"version=%d/intentStride=%d/keyLen=%d",
+							versionsPerKey, intentKeyStride, keyLength),
+						keyPrefix: bytes.Repeat([]byte("k"), keyLength),
+						eng:       createTestPebbleEngine(),
+					}
+					defer state.eng.Close()
+					writeBenchData(b, state.eng, numBenchKeys, versionsPerKey, intentKeyStride,
+						state.keyPrefix)
+					runFunc(b, state)
+				}()
 			}
 		}
 	}
@@ -883,14 +869,8 @@ func BenchmarkIntentInterleavingIterNext(b *testing.B) {
 	intentInterleavingIterBench(b, func(b *testing.B, state benchState) {
 		b.Run(state.benchPrefix,
 			func(b *testing.B) {
-				var iter MVCCIterator
 				opts := IterOptions{LowerBound: state.keyPrefix, UpperBound: state.keyPrefix.PrefixEnd()}
-				var err error
-				if state.separated {
-					iter, err = newIntentInterleavingIterator(state.eng, opts)
-				} else {
-					iter, err = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
-				}
+				iter, err := newIntentInterleavingIterator(state.eng, opts)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -925,15 +905,9 @@ func BenchmarkIntentInterleavingIterPrev(b *testing.B) {
 	intentInterleavingIterBench(b, func(b *testing.B, state benchState) {
 		b.Run(state.benchPrefix,
 			func(b *testing.B) {
-				var iter MVCCIterator
 				endKey := MVCCKey{Key: state.keyPrefix.PrefixEnd()}
 				opts := IterOptions{LowerBound: state.keyPrefix, UpperBound: endKey.Key}
-				var err error
-				if state.separated {
-					iter, err = newIntentInterleavingIterator(state.eng, opts)
-				} else {
-					iter, err = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
-				}
+				iter, err := newIntentInterleavingIterator(state.eng, opts)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -972,15 +946,9 @@ func BenchmarkIntentInterleavingSeekGEAndIter(b *testing.B) {
 					for i := 0; i < numBenchKeys; i += seekStride {
 						seekKeys = append(seekKeys, makeKey(state.keyPrefix, i))
 					}
-					var iter MVCCIterator
 					endKey := state.keyPrefix.PrefixEnd()
 					opts := IterOptions{LowerBound: state.keyPrefix, UpperBound: endKey}
-					var err error
-					if state.separated {
-						iter, err = newIntentInterleavingIterator(state.eng, opts)
-					} else {
-						iter, err = state.eng.NewMVCCIterator(MVCCKeyIterKind, opts)
-					}
+					iter, err := newIntentInterleavingIterator(state.eng, opts)
 					if err != nil {
 						b.Fatal(err)
 					}
