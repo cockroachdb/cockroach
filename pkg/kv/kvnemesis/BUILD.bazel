@@ -28,6 +28,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/concurrency/isolation",
+        "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/liveness",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
