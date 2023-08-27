@@ -21,13 +21,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -49,14 +51,21 @@ func startMonitorWithBudget(budget int64) *mon.BytesMonitor {
 // testing directly.
 func TestDBClientScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
 
-	db := tc.Server(0).DB()
+	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
+
 	beforeAny := db.Clock().Now()
-	scratchKey := tc.ScratchRange(t)
+
+	scratchKey := append(ts.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	_, _, err := srv.SplitRange(scratchKey)
+	require.NoError(t, err)
+
 	mkKey := func(k string) roachpb.Key {
 		return encoding.EncodeStringAscending(scratchKey, k)
 	}
@@ -65,7 +74,7 @@ func TestDBClientScan(t *testing.T) {
 	afterB := db.Clock().Now()
 	require.NoError(t, db.Put(ctx, mkKey("c"), 3))
 
-	dba, err := rangefeed.NewDBAdapter(db, tc.Server(0).ClusterSettings())
+	dba, err := rangefeed.NewDBAdapter(db, ts.ClusterSettings())
 	require.NoError(t, err)
 	sp := roachpb.Span{
 		Key:    scratchKey,
@@ -124,7 +133,7 @@ func TestDBClientScan(t *testing.T) {
 
 	// Verify parallel scan operations.
 	t.Run("parallel scan requests", func(t *testing.T) {
-		sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+		sqlDB := sqlutils.MakeSQLRunner(sqlDB)
 		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY)`)
 		defer func() {
 			sqlDB.Exec(t, `DROP TABLE foo`)
@@ -134,8 +143,8 @@ func TestDBClientScan(t *testing.T) {
 		sqlDB.Exec(t, "ALTER TABLE foo SPLIT AT VALUES (250), (500), (750)")
 
 		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			db, keys.SystemSQLCodec, "defaultdb", "foo")
-		fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+			db, ts.Codec(), "defaultdb", "foo")
+		fooSpan := fooDesc.PrimaryIndexSpan(ts.Codec())
 
 		// We expect 4 splits -- we'll start the scan with parallelism set to 3.
 		// We will block these scans from completion until we know that we have 3
@@ -169,7 +178,7 @@ func TestDBClientScan(t *testing.T) {
 
 	// Verify when errors occur during scan, only the failed spans are retried.
 	t.Run("scan retries failed spans", func(t *testing.T) {
-		sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+		sqlDB := sqlutils.MakeSQLRunner(sqlDB)
 		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY)`)
 		defer func() {
 			sqlDB.Exec(t, `DROP TABLE foo`)
@@ -179,8 +188,8 @@ func TestDBClientScan(t *testing.T) {
 		sqlDB.Exec(t, "ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(100, 900, 100))")
 
 		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			db, keys.SystemSQLCodec, "defaultdb", "foo")
-		fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+			db, ts.Codec(), "defaultdb", "foo")
+		fooSpan := fooDesc.PrimaryIndexSpan(ts.Codec())
 
 		scanData := struct {
 			syncutil.Mutex
@@ -192,7 +201,7 @@ func TestDBClientScan(t *testing.T) {
 		// We expect 11 splits.
 		// One span will fail.  Verify we retry only the spans that we have not attempted before.
 		var parallelism = 6
-		f := rangefeed.NewFactoryWithDB(tc.Server(0).Stopper(), dba, nil /* knobs */)
+		f := rangefeed.NewFactoryWithDB(ts.Stopper(), dba, nil /* knobs */)
 		scanComplete := make(chan struct{})
 		scanErr := make(chan error, 1)
 		retryScanErr := errors.New("retry scan")

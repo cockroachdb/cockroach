@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
@@ -34,10 +33,6 @@ import (
 func TestAdminAPIStatementDiagnosticsBundle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// To enable tenant servers until we can do this in main_test.go for
-	// all tests.
-	defer ccl.TestingEnableEnterprise()()
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -78,10 +73,6 @@ func TestCreateStatementDiagnosticsReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// To enable tenant servers until we can do this in main_test.go for
-	// all tests.
-	defer ccl.TestingEnableEnterprise()()
-
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -108,10 +99,6 @@ func TestCreateStatementDiagnosticsReport(t *testing.T) {
 func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// To enable tenant servers until we can do this in main_test.go for
-	// all tests.
-	defer ccl.TestingEnableEnterprise()()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -201,10 +188,6 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// To enable tenant servers until we can do this in main_test.go for
-	// all tests.
-	defer ccl.TestingEnableEnterprise()()
-
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -247,10 +230,6 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 func TestStatementDiagnosticsDoesNotReturnExpiredRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// To enable tenant servers until we can do this in main_test.go for
-	// all tests.
-	defer ccl.TestingEnableEnterprise()()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())

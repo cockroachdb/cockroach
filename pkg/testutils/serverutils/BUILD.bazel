@@ -22,7 +22,7 @@ go_library(
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/security",
+        "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server/decommissioning",
         "//pkg/server/serverpb",

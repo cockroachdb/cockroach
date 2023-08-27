@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package server_test
+package application_api_test
 
 import (
 	"context"
@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -39,7 +38,6 @@ import (
 func TestTelemetrySQLStatsIndependence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	var params base.TestServerArgs
@@ -104,7 +102,6 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 func TestEnsureSQLStatsAreFlushedForTelemetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -176,7 +173,6 @@ func TestEnsureSQLStatsAreFlushedForTelemetry(t *testing.T) {
 func TestSQLStatCollection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -297,7 +293,6 @@ func populateStats(t *testing.T, sqlDB *gosql.DB) {
 func TestClusterResetSQLStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 

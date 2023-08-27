@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -47,15 +46,16 @@ func TestColBatchScanMeta(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	sqlutils.CreateTable(t, sqlDB, "t",
 		"num INT PRIMARY KEY",
 		3, /* numRows */
 		sqlutils.ToRowFn(sqlutils.RowIdxFn))
 
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 
 	st := s.ClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
@@ -63,12 +63,12 @@ func TestColBatchScanMeta(t *testing.T) {
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
 
-	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
+	rootTxn := kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID())
 	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,
@@ -81,7 +81,7 @@ func TestColBatchScanMeta(t *testing.T) {
 	}
 	var fetchSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&fetchSpec, keys.SystemSQLCodec, td, td.GetPrimaryIndex(),
+		&fetchSpec, s.Codec(), td, td.GetPrimaryIndex(),
 		[]descpb.ColumnID{td.PublicColumns()[0].GetID()},
 	); err != nil {
 		t.Fatal(err)
@@ -91,7 +91,7 @@ func TestColBatchScanMeta(t *testing.T) {
 			TableReader: &execinfrapb.TableReaderSpec{
 				FetchSpec: fetchSpec,
 				Spans: []roachpb.Span{
-					td.PrimaryIndexSpan(keys.SystemSQLCodec),
+					td.PrimaryIndexSpan(s.Codec()),
 				},
 			}},
 		ResultTypes: types.OneIntCol,
@@ -128,8 +128,9 @@ func BenchmarkColBatchScan(b *testing.B) {
 	defer logScope.Close(b)
 	ctx := context.Background()
 
-	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	const numCols = 2
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
@@ -140,12 +141,12 @@ func BenchmarkColBatchScan(b *testing.B) {
 			numRows,
 			sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(42)),
 		)
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", tableName)
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			span := tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+			span := tableDesc.PrimaryIndexSpan(s.Codec())
 			var fetchSpec fetchpb.IndexFetchSpec
 			if err := rowenc.InitIndexFetchSpec(
-				&fetchSpec, keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndex(),
+				&fetchSpec, s.Codec(), tableDesc, tableDesc.GetPrimaryIndex(),
 				[]descpb.ColumnID{tableDesc.PublicColumns()[0].GetID(), tableDesc.PublicColumns()[1].GetID()},
 			); err != nil {
 				b.Fatal(err)
@@ -168,7 +169,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 				EvalCtx: &evalCtx,
 				Mon:     evalCtx.TestingMon,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
-				Txn:     kv.NewTxn(ctx, s.DB(), s.NodeID()),
+				Txn:     kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID()),
 				NodeID:  evalCtx.NodeID,
 			}
 

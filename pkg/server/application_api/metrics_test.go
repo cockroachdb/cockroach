@@ -60,8 +60,10 @@ func TestMetricsMetadata(t *testing.T) {
 func TestStatusVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+
+	s := srv.ApplicationLayer()
 
 	if body, err := srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"vars").String()); err != nil {
 		t.Fatal(err)
@@ -80,44 +82,64 @@ func TestStatusVars(t *testing.T) {
 func TestStatusVarsTxnMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer db.Close()
-	defer s.Stopper().Stop(context.Background())
 
-	if _, err := db.Exec("BEGIN;" +
-		"SAVEPOINT cockroach_restart;" +
-		"SELECT 1;" +
-		"RELEASE SAVEPOINT cockroach_restart;" +
-		"ROLLBACK;"); err != nil {
-		t.Fatal(err)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestTenantAlwaysEnabled,
+	})
+	defer srv.Stopper().Stop(context.Background())
+
+	testFn := func(s serverutils.ApplicationLayerInterface, expectedLabel string) {
+		db := s.SQLConn(t, "")
+
+		if _, err := db.Exec("BEGIN;" +
+			"SAVEPOINT cockroach_restart;" +
+			"SELECT 1;" +
+			"RELEASE SAVEPOINT cockroach_restart;" +
+			"ROLLBACK;"); err != nil {
+			t.Fatal(err)
+		}
+
+		body, err := srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"vars").String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if expected := []byte("sql_txn_begin_count{" + expectedLabel + "} 1"); !bytes.Contains(body, expected) {
+			t.Errorf("expected %q, got: %s", expected, body)
+		}
+		if expected := []byte("sql_restart_savepoint_count{" + expectedLabel + "} 1"); !bytes.Contains(body, expected) {
+			t.Errorf("expected %q, got: %s", expected, body)
+		}
+		if expected := []byte("sql_restart_savepoint_release_count{" + expectedLabel + "} 1"); !bytes.Contains(body, expected) {
+			t.Errorf("expected %q, got: %s", expected, body)
+		}
+		if expected := []byte("sql_txn_commit_count{" + expectedLabel + "} 1"); !bytes.Contains(body, expected) {
+			t.Errorf("expected %q, got: %s", expected, body)
+		}
+		if expected := []byte("sql_txn_rollback_count{" + expectedLabel + "} 0"); !bytes.Contains(body, expected) {
+			t.Errorf("expected %q, got: %s", expected, body)
+		}
 	}
 
-	body, err := srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"vars").String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Contains(body, []byte("sql_txn_begin_count{node_id=\"1\"} 1")) {
-		t.Errorf("expected `sql_txn_begin_count{node_id=\"1\"} 1`, got: %s", body)
-	}
-	if !bytes.Contains(body, []byte("sql_restart_savepoint_count{node_id=\"1\"} 1")) {
-		t.Errorf("expected `sql_restart_savepoint_count{node_id=\"1\"} 1`, got: %s", body)
-	}
-	if !bytes.Contains(body, []byte("sql_restart_savepoint_release_count{node_id=\"1\"} 1")) {
-		t.Errorf("expected `sql_restart_savepoint_release_count{node_id=\"1\"} 1`, got: %s", body)
-	}
-	if !bytes.Contains(body, []byte("sql_txn_commit_count{node_id=\"1\"} 1")) {
-		t.Errorf("expected `sql_txn_commit_count{node_id=\"1\"} 1`, got: %s", body)
-	}
-	if !bytes.Contains(body, []byte("sql_txn_rollback_count{node_id=\"1\"} 0")) {
-		t.Errorf("expected `sql_txn_rollback_count{node_id=\"1\"} 0`, got: %s", body)
-	}
+	t.Run("system", func(t *testing.T) {
+		s := srv.SystemLayer()
+		testFn(s, `node_id="1"`)
+	})
+	t.Run("tenant", func(t *testing.T) {
+		s := srv.ApplicationLayer()
+		// TODO(knz): why is the tenant label missing here?
+		testFn(s, `tenant=""`)
+	})
 }
 
 func TestSpanStatsResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer ts.Stopper().Stop(context.Background())
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// We are looking at the entire keyspace below.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(context.Background())
+	ts := srv.ApplicationLayer()
 
 	httpClient, err := ts.GetAdminHTTPClient()
 	if err != nil {
@@ -138,7 +160,7 @@ func TestSpanStatsResponse(t *testing.T) {
 	if err := httputil.PostJSON(httpClient, url, &request, &response); err != nil {
 		t.Fatal(err)
 	}
-	initialRanges, err := ts.ExpectedInitialRangeCount()
+	initialRanges, err := srv.ExpectedInitialRangeCount()
 	if err != nil {
 		t.Fatal(err)
 	}

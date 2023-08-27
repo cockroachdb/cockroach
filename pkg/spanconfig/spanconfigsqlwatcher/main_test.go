@@ -18,13 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 )
 
 func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	serverutils.InitTestServerFactory(server.TestServerFactory)
-	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	os.Exit(m.Run())
 }
 
