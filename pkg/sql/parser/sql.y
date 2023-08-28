@@ -6396,7 +6396,7 @@ privileges:
   }
 | privilege_list
   {
-     privList, err := privilege.ListFromStrings($1.nameList().ToStrings())
+     privList, err := privilege.ListFromStrings($1.nameList().ToStrings(), privilege.PurposeFromUserInput)
      if err != nil {
        return setErr(sqllex, err)
      }
