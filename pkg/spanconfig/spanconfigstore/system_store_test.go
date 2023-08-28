@@ -46,7 +46,7 @@ func TestSystemSpanConfigStoreCombine(t *testing.T) {
 
 	// Setup:
 	// System span configurations:
-	// Entire Keyspace: 100
+	// Backup Keyspace: 100
 	// System Tenant -> System Tenant: 120
 	// System Tenant -> Ten 10: 150
 	// System Tenant -> Ten 30: 500
@@ -128,11 +128,19 @@ func TestSystemSpanConfigStoreCombine(t *testing.T) {
 			expectedPTSs: []hlc.Timestamp{ts(1), ts(100), ts(500)},
 		},
 		{
-			// Only the system span config over the entire keyspace should apply to
-			// tenant 40.
+			// The cluster backup span config should apply to tenant 40.
 			key:          roachpb.RKey(append(keys.MakeTenantPrefix(roachpb.MustMakeTenantID(40)), byte('a'))),
 			expectedPTSs: []hlc.Timestamp{ts(1), ts(100)},
 		},
+		// The next two verify that the correct span config applies over outside of the cluster backup keyspace.
+		{
+			key:          roachpb.RKey(keys.MinKey),
+			expectedPTSs: []hlc.Timestamp{ts(1), ts(100), ts(120)},
+		},
+		//{
+		//	key:          roachpb.RKey(keys.TableDataMin),
+		//	expectedPTSs: []hlc.Timestamp{ts(1)},
+		//},
 	} {
 		// Combine with a span config that already has a PTS set on it.
 		conf, err := store.combine(tc.key, makeSystemSpanConfig(1))
