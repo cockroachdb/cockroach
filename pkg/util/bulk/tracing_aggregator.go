@@ -13,6 +13,7 @@ package bulk
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -121,6 +122,10 @@ var _ tracing.EventListener = &TracingAggregator{}
 func MakeTracingAggregatorWithSpan(
 	ctx context.Context, aggregatorName string, tracer *tracing.Tracer,
 ) (context.Context, *TracingAggregator) {
+	if tracing.SpanFromContext(ctx) == nil {
+		log.Warningf(ctx, "tracing aggregator %s cannot be created without a tracing span", aggregatorName)
+		return ctx, nil
+	}
 	agg := &TracingAggregator{}
 	aggCtx, aggSpan := tracing.EnsureChildSpan(ctx, tracer, aggregatorName,
 		tracing.WithEventListeners(agg))
