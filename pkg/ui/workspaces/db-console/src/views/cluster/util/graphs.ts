@@ -88,6 +88,7 @@ export function configureUPlotLineChart(
   setMetricsFixedWindow: (startMillis: number, endMillis: number) => void,
   getLatestXAxisDomain: () => AxisDomain,
   getLatestYAxisDomain: () => AxisDomain,
+  legendAsTooltip: boolean,
 ): uPlot.Options {
   const formattedRaw = formatMetricData(metrics, data);
   // Copy palette over since we mutate it in the `series` function
@@ -225,7 +226,7 @@ export function configureUPlotLineChart(
         range: () => getLatestYAxisDomain().extent,
       },
     },
-    plugins: [tooltipPlugin()],
+    plugins: legendAsTooltip ? [tooltipPlugin()] : null,
     hooks: {
       // setSelect is a hook that fires when a selection is made on the graph
       // by dragging a range to zoom.

@@ -175,7 +175,7 @@
     "ts-loader": "^6.2.1",
     "typescript": "5.1.6",
     "uglify-js": "^2.8.15",
-    "uplot": "^1.6.8",
+    "uplot": "^1.6.19",
     "url-loader": "4.1.1",
     "us-atlas": "^1.0.2",
     "webpack": "^4.41.5",
