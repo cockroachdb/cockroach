@@ -46,8 +46,9 @@ func enforceMaxLength(s string) string {
 }
 
 const (
-	robotLabel       = "O-robot"
-	testFailureLabel = "C-test-failure"
+	robotLabel          = "O-robot"
+	testFailureLabel    = "C-test-failure"
+	releaseBlockerLabel = "release-blocker"
 )
 
 // Label we expect when checking existing issues. Sometimes users open
@@ -74,7 +75,7 @@ func issueLabels(req PostRequest) []string {
 		return labels
 	}
 
-	return append(labels, testFailureLabel)
+	return append(labels, testFailureLabel, releaseBlockerLabel)
 }
 
 // context augments context.Context with a logger.
