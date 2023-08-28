@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/rand"
 	"net/url"
 	"sort"
 	"strings"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
@@ -51,6 +53,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -772,6 +776,162 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			require.Equal(t, expectedCount, len(stats), "testCase: %+v, stats: %+v", txn, stats)
 		}
 	})
+}
+
+// TestCollectedStatsCompareWithInsightsStats tests that execution stats assigned
+// to insights are equal to collected statement and transaction stats.
+func TestCollectedStatsCompareWithInsightsStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	st := cluster.MakeTestingClusterSettings()
+	monitor := mon.NewUnlimitedMonitor(
+		context.Background(),
+		"test",
+		mon.MemoryResource,
+		nil,
+		nil,
+		math.MaxInt64,
+		st,
+	)
+	// Construct the SQL Stats machinery.
+	insightsProvider := insights.New(st, insights.NewMetrics())
+	insightsProvider.Start(ctx, stopper)
+	sqlStats := sslocal.New(
+		st,
+		sqlstats.MaxMemSQLStatsStmtFingerprints,
+		sqlstats.MaxMemSQLStatsTxnFingerprints,
+		nil,
+		nil,
+		insightsProvider.Writer,
+		monitor,
+		nil,
+		nil,
+		insightsProvider.LatencyInformation(),
+	)
+	appStats := sqlStats.GetApplicationStats("" /* appName */, false /* internal */)
+	statsCollector := sslocal.NewStatsCollector(
+		st,
+		appStats,
+		sessionphase.NewTimes(),
+		nil, /* knobs */
+	)
+
+	// Generate single transaction and statement that relates to transaction.
+	statement := makeRandomStatementStat()
+	transaction := makeRandomTransactionStat()
+	transaction.CollectedExecStats = true
+	statement.TransactionID = transaction.TransactionID
+	statement.SessionID = transaction.SessionID
+	statement.Query = "SELECT _"
+
+	transaction.SessionData = &sessiondata.SessionData{
+		SessionData: sessiondatapb.SessionData{
+			UserProto:       username.RootUserName().EncodeProto(),
+			Database:        "defaultdb",
+			ApplicationName: "appname_findme",
+		},
+	}
+
+	// Collect stats for the simulated transaction.
+	txnFingerprintIDHash := util.MakeFNV64()
+	statsCollector.StartTransaction()
+
+	stmtFingerprintID, err := statsCollector.RecordStatement(
+		ctx,
+		appstatspb.StatementStatisticsKey{Query: statement.Query, Failed: true},
+		statement,
+	)
+	require.NoError(t, err)
+	txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
+
+	transactionFingerprintID := appstatspb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
+	statsCollector.EndTransaction(ctx, transactionFingerprintID)
+
+	err = statsCollector.RecordTransaction(ctx, transactionFingerprintID, transaction)
+	require.NoError(t, err)
+
+	// Gather the collected stats so that we can assert on them.
+	var stmtStats *appstatspb.CollectedStatementStatistics
+	err = statsCollector.IterateStatementStats(
+		ctx,
+		sqlstats.IteratorOptions{},
+		func(_ context.Context, s *appstatspb.CollectedStatementStatistics) error {
+			stmtStats = s
+			return nil
+		},
+	)
+	require.NoError(t, err)
+
+	var txnStats *appstatspb.CollectedTransactionStatistics
+	err = statsCollector.IterateTransactionStats(
+		ctx,
+		sqlstats.IteratorOptions{},
+		func(_ context.Context, s *appstatspb.CollectedTransactionStatistics) error {
+			txnStats = s
+			return nil
+		},
+	)
+	require.NoError(t, err)
+
+	var insight *insights.Insight
+	testutils.SucceedsWithin(t, func() error {
+		insightsProvider.Reader().IterateInsights(ctx, func(ctx context.Context, i *insights.Insight) {
+			insight = i
+		})
+		if insight == nil {
+			return fmt.Errorf("waiting for insight")
+		}
+		return nil
+	}, 3*time.Second)
+
+	// Compare Transaction Insight's stats with Transactions Stats
+	require.Equal(t, insight.Transaction.FingerprintID, txnStats.TransactionFingerprintID)
+	require.Equal(t, insight.Transaction.CommitLatSeconds.Seconds(), txnStats.Stats.CommitLat.Mean)
+	require.Equal(t, insight.Transaction.IdleLatSeconds.Seconds(), txnStats.Stats.IdleLat.Mean)
+	require.Equal(t, insight.Transaction.RetryLatSeconds.Seconds(), txnStats.Stats.RetryLat.Mean)
+	require.Equal(t, insight.Transaction.ServiceLatSeconds.Seconds(), txnStats.Stats.ServiceLat.Mean)
+	require.Equal(t, insight.Transaction.Contention.Seconds(), txnStats.Stats.ExecStats.ContentionTime.Mean)
+
+	require.Equal(t, float64(insight.Transaction.Stats.NetworkBytesSent), txnStats.Stats.ExecStats.NetworkBytes.Mean)
+	require.Equal(t, float64(insight.Transaction.Stats.NetworkMessagesSent), txnStats.Stats.ExecStats.NetworkMessages.Mean)
+	require.Equal(t, float64(insight.Transaction.Stats.MaxMemUsage), txnStats.Stats.ExecStats.MaxMemUsage.Mean)
+	require.Equal(t, float64(insight.Transaction.Stats.MaxDiskUsage), txnStats.Stats.ExecStats.MaxDiskUsage.Mean)
+
+	require.Equal(t, float64(insight.Transaction.MvccStats.StepCount), txnStats.Stats.ExecStats.MVCCIteratorStats.StepCount.Mean)
+	require.Equal(t, float64(insight.Transaction.MvccStats.StepCountInternal), txnStats.Stats.ExecStats.MVCCIteratorStats.StepCountInternal.Mean)
+	require.Equal(t, float64(insight.Transaction.MvccStats.RangeKeySkippedPoints), txnStats.Stats.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.Mean)
+	require.Equal(t, float64(insight.Transaction.MvccStats.RangeKeyCount), txnStats.Stats.ExecStats.MVCCIteratorStats.RangeKeyCount.Mean)
+	require.Equal(t, float64(insight.Transaction.MvccStats.RangeKeyContainedPoints), txnStats.Stats.ExecStats.MVCCIteratorStats.RangeKeyContainedPoints.Mean)
+	require.Equal(t, float64(insight.Transaction.MvccStats.PointCount), txnStats.Stats.ExecStats.MVCCIteratorStats.PointCount.Mean)
+	require.Equal(t, float64(insight.Transaction.MvccStats.PointsCoveredByRangeTombstones), txnStats.Stats.ExecStats.MVCCIteratorStats.PointsCoveredByRangeTombstones.Mean)
+	require.Equal(t, float64(insight.Transaction.MvccStats.KeyBytes), txnStats.Stats.ExecStats.MVCCIteratorStats.KeyBytes.Mean)
+	require.Equal(t, float64(insight.Transaction.MvccStats.ValueBytes), txnStats.Stats.ExecStats.MVCCIteratorStats.ValueBytes.Mean)
+	require.Equal(t, float64(insight.Transaction.MvccStats.BlockBytes), txnStats.Stats.ExecStats.MVCCIteratorStats.BlockBytes.Mean)
+	require.Equal(t, float64(insight.Transaction.MvccStats.BlockBytesInCache), txnStats.Stats.ExecStats.MVCCIteratorStats.BlockBytesInCache.Mean)
+	require.Equal(t, float64(insight.Transaction.MvccStats.SeekCount), txnStats.Stats.ExecStats.MVCCIteratorStats.SeekCount.Mean)
+	require.Equal(t, float64(insight.Transaction.MvccStats.SeekCountInternal), txnStats.Stats.ExecStats.MVCCIteratorStats.SeekCountInternal.Mean)
+
+	// Insight should contain single statement
+	require.Equal(t, len(insight.Statements), 1)
+	s := insight.Statements[0]
+	// Compare Statement Insight's stats with Statement Stats
+	require.Equal(t, s.LatencyInSeconds, stmtStats.Stats.ServiceLat.Mean)
+	require.Equal(t, s.ServiceLatSeconds, stmtStats.Stats.ServiceLat.Mean)
+	require.Equal(t, s.IdleLatSeconds, stmtStats.Stats.IdleLat.Mean)
+	require.Equal(t, s.ParseLatSeconds, stmtStats.Stats.ParseLat.Mean)
+	require.Equal(t, s.PlanLatSeconds, stmtStats.Stats.PlanLat.Mean)
+	require.Equal(t, s.RunLatSeconds, stmtStats.Stats.RunLat.Mean)
+
+	require.Equal(t, s.ErrorCode, stmtStats.Stats.LastErrorCode)
+	require.Equal(t, s.Nodes, stmtStats.Stats.Nodes)
+	require.Equal(t, float64(s.BytesRead), stmtStats.Stats.BytesRead.Mean)
+	require.Equal(t, float64(s.RowsRead), stmtStats.Stats.RowsRead.Mean)
+	require.Equal(t, float64(s.RowsWritten), stmtStats.Stats.RowsWritten.Mean)
 }
 
 func TestTxnStatsDiscardedAfterPrematureStatementExecutionAbortion(t *testing.T) {
@@ -1678,3 +1838,95 @@ func TestSQLStatsRegions(t *testing.T) {
 		})
 	}
 }
+
+func makeRandomStatementStat() sqlstats.RecordedStmtStats {
+	rng, _ := randutil.NewTestRand()
+	return sqlstats.RecordedStmtStats{
+		SessionID:            clusterunique.ID{Uint128: uint128.FromInts(rand.Uint64(), rand.Uint64())},
+		StatementID:          clusterunique.ID{Uint128: uint128.FromInts(rand.Uint64(), rand.Uint64())},
+		TransactionID:        uuid.FastMakeV4(),
+		AutoRetryCount:       rand.Int(),
+		AutoRetryReason:      fmt.Errorf(randutil.RandString(rng, rand.Intn(50), randutil.PrintableKeyAlphabet)),
+		RowsAffected:         rand.Int(),
+		IdleLatencySec:       rand.Float64(),
+		ParseLatencySec:      rand.Float64(),
+		PlanLatencySec:       rand.Float64(),
+		RunLatencySec:        rand.Float64(),
+		ServiceLatencySec:    rand.Float64(),
+		OverheadLatencySec:   rand.Float64(),
+		BytesRead:            rand.Int63(),
+		RowsRead:             rand.Int63(),
+		RowsWritten:          rand.Int63(),
+		Nodes:                []int64{1, 2, 3},
+		StatementType:        tree.TypeDDL,
+		Plan:                 nil,
+		PlanGist:             randutil.RandString(rng, rand.Intn(50), randutil.PrintableKeyAlphabet),
+		StatementError:       fmt.Errorf(randutil.RandString(rng, rand.Intn(50), randutil.PrintableKeyAlphabet)),
+		IndexRecommendations: []string{randutil.RandString(rng, rand.Intn(10), randutil.PrintableKeyAlphabet)}, // guarantees index recommendation insight
+		Query:                randutil.RandString(rng, rand.Intn(100), randutil.PrintableKeyAlphabet),
+		StartTime:            time.Now().Add(-2 * time.Second),
+		EndTime:              time.Now(),
+		FullScan:             rand.Intn(2) == 1,
+		ExecStats: &execstats.QueryLevelStats{
+			NetworkBytesSent:                   rand.Int63(),
+			MaxMemUsage:                        rand.Int63(),
+			MaxDiskUsage:                       rand.Int63(),
+			KVBytesRead:                        rand.Int63(),
+			KVPairsRead:                        rand.Int63(),
+			KVRowsRead:                         rand.Int63(),
+			KVBatchRequestsIssued:              rand.Int63(),
+			KVTime:                             time.Duration(rand.Intn(5000)),
+			MvccSteps:                          rand.Int63(),
+			MvccStepsInternal:                  rand.Int63(),
+			MvccSeeks:                          rand.Int63(),
+			MvccSeeksInternal:                  rand.Int63(),
+			MvccBlockBytes:                     rand.Int63(),
+			MvccBlockBytesInCache:              rand.Int63(),
+			MvccKeyBytes:                       rand.Int63(),
+			MvccValueBytes:                     rand.Int63(),
+			MvccPointCount:                     rand.Int63(),
+			MvccPointsCoveredByRangeTombstones: rand.Int63(),
+			MvccRangeKeyCount:                  rand.Int63(),
+			MvccRangeKeyContainedPoints:        rand.Int63(),
+			MvccRangeKeySkippedPoints:          rand.Int63(),
+			NetworkMessages:                    rand.Int63(),
+			ContentionTime:                     time.Duration(rand.Intn(5000)),
+			ContentionEvents:                   []kvpb.ContentionEvent{},
+			RUEstimate:                         rand.Int63(),
+			CPUTime:                            time.Duration(rand.Intn(5000)),
+			SqlInstanceIds:                     map[base.SQLInstanceID]struct{}{},
+			Regions:                            []string{randutil.RandString(rng, rand.Intn(10), randutil.PrintableKeyAlphabet)},
+		},
+		Indexes:  []string{randutil.RandString(rng, rand.Intn(10), randutil.PrintableKeyAlphabet)},
+		Database: randutil.RandString(rng, rand.Intn(10), randutil.PrintableKeyAlphabet),
+	}
+}
+
+func makeRandomTransactionStat() sqlstats.RecordedTxnStats {
+	rng, _ := randutil.NewTestRand()
+	return sqlstats.RecordedTxnStats{
+		SessionID:               clusterunique.ID{Uint128: uint128.FromInts(rand.Uint64(), rand.Uint64())},
+		TransactionID:           uuid.FastMakeV4(),
+		TransactionTimeSec:      rand.Float64(),
+		StartTime:               time.Now().Add(-2 * time.Second),
+		EndTime:                 time.Now(),
+		Committed:               rand.Intn(2) == 1,
+		ImplicitTxn:             rand.Intn(2) == 1,
+		RetryCount:              rand.Int63(),
+		AutoRetryReason:         fmt.Errorf(randutil.RandString(rng, rand.Intn(50), randutil.PrintableKeyAlphabet)),
+		StatementFingerprintIDs: []appstatspb.StmtFingerprintID{},
+		ServiceLatency:          time.Duration(rand.Intn(5000)),
+		RetryLatency:            time.Duration(rand.Intn(5000)),
+		CommitLatency:           time.Duration(rand.Intn(5000)),
+		IdleLatency:             time.Duration(rand.Intn(5000)),
+		RowsAffected:            rand.Int(),
+		CollectedExecStats:      rand.Intn(2) == 1,
+		ExecStats:               execstats.QueryLevelStats{},
+		RowsRead:                0,
+		RowsWritten:             0,
+		BytesRead:               0,
+		Priority:                0,
+		SessionData:             nil,
+	}
+}
+
