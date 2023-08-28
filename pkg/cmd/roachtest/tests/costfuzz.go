@@ -65,6 +65,7 @@ func registerCostFuzz(r registry.Registry) {
 					name: "costfuzz", setupName: setupName, run: runCostFuzzQuery,
 				})
 			},
+			ExtraLabels: []string{"O-rsg"},
 		})
 	}
 }

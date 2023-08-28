@@ -131,6 +131,7 @@ func TestCreatePostRequest(t *testing.T) {
 		clusterCreationFailed   bool
 		loadTeamsFailed         bool
 		localSSD                bool
+		extraLabels             []string
 		arch                    vm.CPUArch
 		failure                 failure
 		expectedPost            bool
@@ -138,7 +139,7 @@ func TestCreatePostRequest(t *testing.T) {
 		expectedSkipTestFailure bool
 		expectedParams          map[string]string
 	}{
-		{true, false, false, false, "", createFailure(errors.New("other")), true, false, false,
+		{true, false, false, false, nil, "", createFailure(errors.New("other")), true, false, false,
 			prefixAll(map[string]string{
 				"cloud":     "gce",
 				"encrypted": "false",
@@ -149,7 +150,7 @@ func TestCreatePostRequest(t *testing.T) {
 				"localSSD":  "false",
 			}),
 		},
-		{true, false, false, true, vm.ArchARM64, createFailure(errClusterProvisioningFailed), true, false, true,
+		{true, false, false, true, nil, vm.ArchARM64, createFailure(errClusterProvisioningFailed), true, false, true,
 			prefixAll(map[string]string{
 				"cloud":     "gce",
 				"encrypted": "false",
@@ -164,7 +165,7 @@ func TestCreatePostRequest(t *testing.T) {
 		// !nonReleaseBlocker and issue is an SSH flake. Also ensure that
 		// in the event of a failed cluster creation, nil `vmOptions` and
 		// `clusterImpl` are not dereferenced
-		{false, true, false, false, "", createFailure(rperrors.ErrSSH255), true, false, true,
+		{false, true, false, false, nil, "", createFailure(rperrors.ErrSSH255), true, false, true,
 			prefixAll(map[string]string{
 				"cloud": "gce",
 				"ssd":   "0",
@@ -172,9 +173,21 @@ func TestCreatePostRequest(t *testing.T) {
 			}),
 		},
 		//Simulate failure loading TEAMS.yaml
-		{true, false, true, false, "", createFailure(errors.New("other")), false, false, false, nil},
+		{true, false, true, false, nil, "", createFailure(errors.New("other")), false, false, false, nil},
 		//Error during post test assertions
-		{true, false, false, false, "", createFailure(errDuringPostAssertions), false, false, false, nil},
+		{true, false, false, false, nil, "", createFailure(errDuringPostAssertions), false, false, false, nil},
+		// Assert that extra labels in the test spec are added to the issue.
+		{true, false, false, false, []string{"foo-label"}, "", createFailure(errors.New("other")), true, false, false,
+			prefixAll(map[string]string{
+				"cloud":     "gce",
+				"encrypted": "false",
+				"fs":        "ext4",
+				"ssd":       "0",
+				"cpu":       "4",
+				"arch":      "amd64",
+				"localSSD":  "false",
+			}),
+		},
 	}
 
 	reg := makeTestRegistry(spec.GCE, "", "", false, false)
@@ -187,6 +200,7 @@ func TestCreatePostRequest(t *testing.T) {
 				Owner:             OwnerUnitTest,
 				Cluster:           clusterSpec,
 				NonReleaseBlocker: c.nonReleaseBlocker,
+				ExtraLabels:       c.extraLabels,
 			}
 
 			ti := &testImpl{
@@ -238,6 +252,9 @@ func TestCreatePostRequest(t *testing.T) {
 				}
 
 				require.True(t, contains(req.ExtraLabels, nil, "O-roachtest"))
+				for _, l := range c.extraLabels {
+					require.True(t, contains(req.ExtraLabels, nil, l), "expected extra label %q", l)
+				}
 				require.Equal(t, c.expectedReleaseBlocker, contains(req.ExtraLabels, nil, "release-blocker"))
 				require.Equal(t, c.expectedSkipTestFailure, req.SkipLabelTestFailure)
 
