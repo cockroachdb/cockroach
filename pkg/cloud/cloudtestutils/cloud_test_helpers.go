@@ -510,7 +510,7 @@ func CheckAntagonisticRead(
 ) {
 	rnd, _ := randutil.NewTestRand()
 
-	const basename = "test-antagonistic-read"
+	basename := fmt.Sprintf("test-antagonistic-read-%d", NewTestID())
 	data, cleanup := uploadData(t, testSettings, rnd, conf, basename)
 	defer cleanup()
 
