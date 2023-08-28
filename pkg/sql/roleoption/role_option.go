@@ -38,7 +38,7 @@ type RoleOption struct {
 // using a global privilege instead. Global privileges are inherited from role
 // to user, but role options are not.
 const (
-	_ Option = iota
+	UNKNOWN Option = iota
 	CREATEROLE
 	NOCREATEROLE
 	PASSWORD

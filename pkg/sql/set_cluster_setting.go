@@ -37,14 +37,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -69,47 +67,17 @@ type setClusterSettingNode struct {
 func checkPrivilegesForSetting(
 	ctx context.Context, p *planner, name settings.SettingName, action string,
 ) error {
-	// First check system privileges.
-	hasModify := false
-	hasSqlModify := false
-	hasView := false
-	if ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING, p.User()); err != nil {
+	hasModify, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
+	if err != nil {
 		return err
-	} else if ok {
-		hasModify = true
-		hasSqlModify = true
-		hasView = true
 	}
-	if !hasSqlModify {
-		if ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING, p.User()); err != nil {
-			return err
-		} else if ok {
-			hasSqlModify = true
-		}
+	hasSqlModify, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYSQLCLUSTERSETTING)
+	if err != nil {
+		return err
 	}
-	if !hasView {
-		if ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING, p.User()); err != nil {
-			return err
-		} else if ok {
-			hasView = true
-		}
-	}
-
-	// Fallback to role option if the user doesn't have the privilege.
-	if !hasModify {
-		ok, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
-		if err != nil {
-			return err
-		}
-		hasModify = hasModify || ok
-		hasView = hasView || ok
-	}
-	if !hasView {
-		ok, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
-		if err != nil {
-			return err
-		}
-		hasView = hasView || ok
+	hasView, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWCLUSTERSETTING)
+	if err != nil {
+		return err
 	}
 
 	isSqlSetting := strings.HasPrefix(string(name), "sql.defaults")
@@ -118,12 +86,12 @@ func checkPrivilegesForSetting(
 	if hasModify {
 		return nil
 	}
-	// If the user has sql modify they can do either action as long as its a sql.defaults
+	// If the user has sql modify, they can do either action as long as it's a sql.defaults
 	// setting.
 	if hasSqlModify && isSqlSetting {
 		return nil
 	}
-	// From this point, the user does not have modify or has sql modify but it is not a
+	// From this point, the user does not have modify or sql modify but it is not a
 	// sql.defaults setting so we can expect an error if the user wants to edit.
 	if action == "set" {
 		if !isSqlSetting {
