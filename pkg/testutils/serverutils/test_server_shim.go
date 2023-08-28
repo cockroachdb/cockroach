@@ -203,7 +203,7 @@ func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInter
 	}
 
 	if !allowAdditionalTenants {
-		s.DisableStartTenant(PreventStartTenantError)
+		s.TenantController().DisableStartTenant(PreventStartTenantError)
 	}
 
 	return s, nil
