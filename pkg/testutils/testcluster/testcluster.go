@@ -94,7 +94,7 @@ func (tc *TestCluster) Server(idx int) serverutils.TestServerInterface {
 func (tc *TestCluster) NodeIDs() []roachpb.NodeID {
 	nodeIds := make([]roachpb.NodeID, len(tc.Servers))
 	for i, s := range tc.Servers {
-		nodeIds[i] = s.NodeID()
+		nodeIds[i] = s.StorageLayer().NodeID()
 	}
 	return nodeIds
 }
@@ -112,7 +112,7 @@ func (tc *TestCluster) Stopper() *stop.Stopper {
 // StartedDefaultTestTenant returns whether this cluster started a default
 // test tenant.
 func (tc *TestCluster) StartedDefaultTestTenant() bool {
-	return tc.Servers[0].StartedDefaultTestTenant()
+	return tc.Servers[0].TenantController().StartedDefaultTestTenant()
 }
 
 // ApplicationLayer calls .ApplicationLayer() on the ith server in
@@ -151,7 +151,7 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 		go func(i int, s *stop.Stopper) {
 			defer wg.Done()
 			if s != nil {
-				quiesceCtx := logtags.AddTag(ctx, "n", tc.Servers[i].NodeID())
+				quiesceCtx := logtags.AddTag(ctx, "n", tc.Servers[i].StorageLayer().NodeID())
 				s.Quiesce(quiesceCtx)
 			}
 		}(i, s)
@@ -177,7 +177,7 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 		// example of this.
 		//
 		// [1]: cleanupSessionTempObjects
-		tracer := tc.Servers[i].Tracer()
+		tracer := tc.Servers[i].SystemLayer().Tracer()
 		testutils.SucceedsSoon(tc.t, func() error {
 			var sps []tracing.RegistrySpan
 			_ = tracer.VisitSpans(func(span tracing.RegistrySpan) error {
@@ -412,7 +412,7 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 			// We want to wait for stores for each server in order to have predictable
 			// store IDs. Otherwise, stores can be asynchronously bootstrapped in an
 			// unexpected order (#22342).
-			tc.WaitForNStores(t, i+1, tc.Servers[0].GossipI().(*gossip.Gossip))
+			tc.WaitForNStores(t, i+1, tc.Servers[0].StorageLayer().GossipI().(*gossip.Gossip))
 		}
 	}
 
@@ -477,8 +477,11 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 				stl := dsrv.StorageLayer()
 				// Note: we avoid using .RPCClientConn() here to avoid accumulating
 				// stopper closures in RAM during the SucceedsSoon iterations.
-				_, e := ssrv.RPCContext().GRPCDialNode(dsrv.SystemLayer().AdvRPCAddr(),
-					stl.NodeID(), rpc.DefaultClass).Connect(context.TODO())
+				_, e := ssrv.SystemLayer().RPCContext().GRPCDialNode(
+					dsrv.SystemLayer().AdvRPCAddr(),
+					stl.NodeID(),
+					rpc.DefaultClass,
+				).Connect(context.TODO())
 				err = errors.CombineErrors(err, e)
 			}
 		}
@@ -722,7 +725,7 @@ func (tc *TestCluster) LookupRangeOrFatal(
 func (tc *TestCluster) SplitRangeWithExpiration(
 	splitKey roachpb.Key, expirationTime hlc.Timestamp,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
-	return tc.Servers[0].SplitRangeWithExpiration(splitKey, expirationTime)
+	return tc.Servers[0].StorageLayer().SplitRangeWithExpiration(splitKey, expirationTime)
 }
 
 // SplitRange splits the range containing splitKey.
@@ -735,14 +738,14 @@ func (tc *TestCluster) SplitRangeWithExpiration(
 func (tc *TestCluster) SplitRange(
 	splitKey roachpb.Key,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
-	return tc.Servers[0].SplitRange(splitKey)
+	return tc.Servers[0].StorageLayer().SplitRange(splitKey)
 }
 
 // SplitRangeOrFatal is the same as SplitRange but will Fatal the test on error.
 func (tc *TestCluster) SplitRangeOrFatal(
 	t serverutils.TestFataler, splitKey roachpb.Key,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor) {
-	lhsDesc, rhsDesc, err := tc.Servers[0].SplitRange(splitKey)
+	lhsDesc, rhsDesc, err := tc.Servers[0].StorageLayer().SplitRange(splitKey)
 	if err != nil {
 		t.Fatalf(`splitting at %s: %+v`, splitKey, err)
 	}
@@ -751,7 +754,7 @@ func (tc *TestCluster) SplitRangeOrFatal(
 
 // MergeRanges merges the range containing leftKey with the range to its right.
 func (tc *TestCluster) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor, error) {
-	return tc.Servers[0].MergeRanges(leftKey)
+	return tc.Servers[0].StorageLayer().MergeRanges(leftKey)
 }
 
 // MergeRangesOrFatal is the same as MergeRanges but will Fatal the test on
@@ -768,7 +771,7 @@ func (tc *TestCluster) MergeRangesOrFatal(
 
 // Target returns a ReplicationTarget for the specified server.
 func (tc *TestCluster) Target(serverIdx int) roachpb.ReplicationTarget {
-	s := tc.Servers[serverIdx]
+	s := tc.Servers[serverIdx].StorageLayer()
 	return roachpb.ReplicationTarget{
 		NodeID:  s.NodeID(),
 		StoreID: s.GetFirstStoreID(),
@@ -796,13 +799,14 @@ func (tc *TestCluster) changeReplicas(
 	if err := testutils.SucceedsSoonError(func() error {
 		tc.t.Helper()
 		var beforeDesc roachpb.RangeDescriptor
-		if err := tc.Servers[0].DB().GetProto(
+		db := tc.Servers[0].SystemLayer().DB()
+		if err := db.GetProto(
 			ctx, keys.RangeDescriptorKey(startKey), &beforeDesc,
 		); err != nil {
 			return errors.Wrap(err, "range descriptor lookup error")
 		}
 		var err error
-		desc, err = tc.Servers[0].DB().AdminChangeReplicas(
+		desc, err = db.AdminChangeReplicas(
 			ctx, startKey.AsRawKey(), beforeDesc, kvpb.MakeReplicationChanges(changeType, targets...),
 		)
 		if kvserver.IsRetriableReplicationChangeError(err) {
@@ -1099,7 +1103,7 @@ func (tc *TestCluster) RebalanceVoterOrFatal(
 func (tc *TestCluster) TransferRangeLease(
 	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 ) error {
-	err := tc.Servers[0].DB().AdminTransferLease(context.TODO(),
+	err := tc.Servers[0].SystemLayer().DB().AdminTransferLease(context.TODO(),
 		rangeDesc.StartKey.AsRawKey(), dest.StoreID)
 	if err != nil {
 		return errors.Wrapf(err, "%q: transfer lease unexpected error", rangeDesc.StartKey)
@@ -1313,7 +1317,7 @@ func (tc *TestCluster) FindRangeLeaseEx(
 		return roachpb.LeaseInfo{}, hlc.ClockTimestamp{}, errors.Wrapf(err, "bad hint: %+v; no such node", hint)
 	}
 
-	return hintServer.GetRangeLease(ctx, rangeDesc.StartKey.AsRawKey(), queryPolicy)
+	return hintServer.StorageLayer().GetRangeLease(ctx, rangeDesc.StartKey.AsRawKey(), queryPolicy)
 }
 
 // FindRangeLeaseHolder is part of TestClusterInterface.
@@ -1344,7 +1348,7 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 // kv scratch space (it doesn't overlap system spans or SQL tables). The range
 // is lazily split off on the first call to ScratchRange.
 func (tc *TestCluster) ScratchRange(t serverutils.TestFataler) roachpb.Key {
-	scratchKey, err := tc.Servers[0].ScratchRange()
+	scratchKey, err := tc.Servers[0].StorageLayer().ScratchRange()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1355,7 +1359,7 @@ func (tc *TestCluster) ScratchRange(t serverutils.TestFataler) roachpb.Key {
 // suitable for use as kv scratch space and that has an expiration based lease.
 // The range is lazily split off on the first call to ScratchRangeWithExpirationLease.
 func (tc *TestCluster) ScratchRangeWithExpirationLease(t serverutils.TestFataler) roachpb.Key {
-	scratchKey, err := tc.Servers[0].ScratchRangeWithExpirationLease()
+	scratchKey, err := tc.Servers[0].StorageLayer().ScratchRangeWithExpirationLease()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1405,7 +1409,7 @@ func (tc *TestCluster) FindMemberServer(
 	storeID roachpb.StoreID,
 ) (serverutils.TestServerInterface, error) {
 	for _, server := range tc.Servers {
-		if server.GetStores().(*kvserver.Stores).HasStore(storeID) {
+		if server.StorageLayer().GetStores().(*kvserver.Stores).HasStore(storeID) {
 			return server, nil
 		}
 	}
@@ -1418,7 +1422,7 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*kvserver.Store
 	if err != nil {
 		return nil, err
 	}
-	return server.GetStores().(*kvserver.Stores).GetStore(storeID)
+	return server.StorageLayer().GetStores().(*kvserver.Stores).GetStore(storeID)
 }
 
 // WaitForFullReplication waits until all stores in the cluster
@@ -1449,7 +1453,7 @@ func (tc *TestCluster) WaitForFullReplication() error {
 	for r := retry.Start(opts); r.Next() && notReplicated; {
 		notReplicated = false
 		for _, s := range tc.Servers {
-			err := s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+			err := s.StorageLayer().GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 				if n := s.ClusterNodeCount(); n != len(tc.Servers) {
 					log.Infof(context.TODO(), "%s only sees %d/%d available nodes", s, n, len(tc.Servers))
 					notReplicated = true
@@ -1514,7 +1518,7 @@ func (tc *TestCluster) WaitFor5NodeReplication() error {
 // up till now. That would guarantee that zone configs set prior to this call
 // are applied.
 func (tc *TestCluster) WaitForZoneConfigPropagation() error {
-	now := tc.Server(0).Clock().Now()
+	now := tc.Server(0).SystemLayer().Clock().Now()
 	for _, s := range tc.Servers {
 		scs := s.SpanConfigKVSubscriber().(spanconfig.KVSubscriber)
 		if err := testutils.SucceedsSoonError(func() error {
@@ -1536,7 +1540,11 @@ func (tc *TestCluster) WaitForNodeStatuses(t serverutils.TestFataler) {
 		// Note: we avoid using .RPCClientConn() here to avoid accumulating
 		// stopper closures in RAM during the SucceedsSoon iterations.
 		srv := tc.Server(0).SystemLayer()
-		conn, err := srv.RPCContext().GRPCDialNode(srv.AdvRPCAddr(), tc.Server(0).NodeID(), rpc.DefaultClass).Connect(context.TODO())
+		conn, err := srv.RPCContext().GRPCDialNode(
+			srv.AdvRPCAddr(),
+			tc.Server(0).StorageLayer().NodeID(),
+			rpc.DefaultClass,
+		).Connect(context.TODO())
 		if err != nil {
 			return err
 		}
@@ -1564,7 +1572,7 @@ func (tc *TestCluster) WaitForNodeStatuses(t serverutils.TestFataler) {
 			// Not using s.NodeID() here, on purpose. s.NodeID() uses the
 			// in-RAM version in the RPC context, which is set earlier than
 			// the node descriptor.
-			if id := s.Node().(*server.Node).Descriptor.NodeID; !nodeIDs[id] {
+			if id := s.StorageLayer().Node().(*server.Node).Descriptor.NodeID; !nodeIDs[id] {
 				return fmt.Errorf("missing n%d in NodeStatus: %+v", id, response)
 			}
 		}
@@ -1620,9 +1628,11 @@ func (tc *TestCluster) ReadIntFromStores(key roachpb.Key) []int64 {
 		if tc.ServerStopped(i) {
 			continue
 		}
-		err := server.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+		sl := server.StorageLayer()
+		clock := server.SystemLayer().Clock()
+		err := sl.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 			valRes, err := storage.MVCCGet(context.Background(), s.TODOEngine(), key,
-				server.Clock().Now(), storage.MVCCGetOptions{})
+				clock.Now(), storage.MVCCGetOptions{})
 			if err != nil {
 				log.VEventf(context.Background(), 1, "store %d: error reading from key %s: %s", s.StoreID(), key, err)
 			} else if valRes.Value == nil {
@@ -1660,7 +1670,7 @@ func (tc *TestCluster) WaitForValues(t serverutils.TestFataler, key roachpb.Key,
 func (tc *TestCluster) GetFirstStoreFromServer(
 	t serverutils.TestFataler, server int,
 ) *kvserver.Store {
-	ts := tc.Servers[server]
+	ts := tc.Servers[server].StorageLayer()
 	store, pErr := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -1792,8 +1802,9 @@ func (tc *TestCluster) RestartServerWithInspect(
 						}
 						for i := 0; i < rpc.NumConnectionClasses; i++ {
 							class := rpc.ConnectionClass(i)
-							if _, err := s.NodeDialer().(*nodedialer.Dialer).Dial(ctx, s.NodeID(), class); err != nil {
-								return errors.Wrapf(err, "connecting n%d->n%d (class %v)", s.NodeID(), s.NodeID(), class)
+							sl := s.StorageLayer()
+							if _, err := sl.NodeDialer().(*nodedialer.Dialer).Dial(ctx, sl.NodeID(), class); err != nil {
+								return errors.Wrapf(err, "connecting n%d->n%d (class %v)", sl.NodeID(), sl.NodeID(), class)
 							}
 						}
 					}
