@@ -38,10 +38,10 @@ func (p *planner) getVirtualTabler() VirtualTabler {
 }
 
 func (p *planner) checkDDLAtomicity() error {
-	if !p.ExtendedEvalContext().TxnImplicit &&
+	if (!p.ExtendedEvalContext().TxnImplicit || !p.ExtendedEvalContext().TxnIsSingleStmt) &&
 		p.SessionData().StrictDDLAtomicity {
 		return errors.WithHint(unimplemented.NewWithIssue(42061,
-			"cannot run this DDL statement inside BEGIN..COMMIT as its atomicity cannot be guaranteed"),
+			"cannot run this DDL statement inside a multi-statement transaction as its atomicity cannot be guaranteed"),
 			"You can set the session variable 'strict_ddl_atomicity' to false if you are willing to accept atomicity violations.")
 	}
 	return nil
