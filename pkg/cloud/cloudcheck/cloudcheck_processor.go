@@ -12,6 +12,7 @@ package cloudcheck
 
 import (
 	"context"
+	cryptoRand "crypto/rand"
 	"fmt"
 	"io"
 	"math/rand"
@@ -113,7 +114,7 @@ func checkStorage(
 	}
 
 	buf := make([]byte, chunkSize)
-	_, _ = rand.Read(buf)
+	_, _ = cryptoRand.Read(buf)
 
 	var res result
 

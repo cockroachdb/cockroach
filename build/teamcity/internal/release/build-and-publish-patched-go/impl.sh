@@ -3,12 +3,12 @@
 set -xeuo pipefail
 
 # When updating to a new Go version, update all of these variables.
-GOVERS=1.19.10
+GOVERS=1.21.0
 GOLINK=https://go.dev/dl/go$GOVERS.src.tar.gz
-SRCSHASUM=13755bcce529747d5f2930dee034730c86d02bd3e521ab3e2bbede548d3b953f
+SRCSHASUM=818d46ede85682dd551ad378ef37a4d247006f12ec59b5b755601d2ce114369a
 # We mirror the upstream freebsd because we don't have a cross-compiler targeting it.
 GOFREEBSDLINK=https://go.dev/dl/go$GOVERS.freebsd-amd64.tar.gz
-FREEBSDSHASUM=0d22265662eaa9b8136223f8ab68f5c06c58c6a6311748fb810e830ebd17cbe2
+FREEBSDSHASUM=b8eaa36654625df799654f77f4af0ea7bd9e5e760ebe86e68fe7c484748ae995
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -23,7 +23,11 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     make \
     python-is-python3 \
     python3 \
-    python3.8-venv
+    python3.8-venv \
+    software-properties-common
+
+add-apt-repository ppa:longsleep/golang-backports
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends golang-go
 
 update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10

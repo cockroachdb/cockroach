@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-//go:build go1.20
+//go:build !go1.19
 
 package ctxutil
 

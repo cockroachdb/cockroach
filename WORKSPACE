@@ -8,12 +8,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "7ab77b5bd3ac04a65860b0e26f2855c977d463d8e9b5ce2458e516b110eb5eeb",
-    strip_prefix = "cockroachdb-rules_go-f1ab269",
+    sha256 = "824f524fed040e3844025a4274ad03523c38aabe1017c52f72e6d721311f07e3",
+    strip_prefix = "cockroachdb-rules_go-310eb8a",
     urls = [
-        # cockroachdb/rules_go as of f1ab26925b5da24119d38115a657f27a90288db5
-        # (upstream release-0.40 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-341-gf1ab269.tar.gz",
+        # cockroachdb/rules_go as of 310eb8ab3c7d53c21c8a5805d1ea77e39cf8552b
+        # (upstream release-0.41 plus a few patches).
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-352-g310eb8a.tar.gz",
     ]
 )
 
@@ -129,20 +129,20 @@ http_archive(
         "-p1",
     ],
     patches = [
-        "@io_bazel_rules_go//third_party:go_googleapis-deletebuild.patch",
-        "@io_bazel_rules_go//third_party:go_googleapis-directives.patch",
-        "@io_bazel_rules_go//third_party:go_googleapis-gazelle.patch",
         "@com_github_cockroachdb_cockroach//build/patches:go_googleapis.patch",
     ],
     sha256 = "ba694861340e792fd31cb77274eacaf6e4ca8bda97707898f41d8bebfd8a4984",
     strip_prefix = "googleapis-83c3605afb5a39952bf0a0809875d41cf2a558ca",
     # master, as of 2022-12-05
-    # NB: You may have to update this when bumping rules_go. Bumping to the same
-    # version in rules_go (go/private/repositories.bzl) is probably what you
-    # want to do.
     urls = [
         "https://storage.googleapis.com/public-bazel-artifacts/bazel/googleapis-83c3605afb5a39952bf0a0809875d41cf2a558ca.zip",
     ],
+)
+
+load("@go_googleapis//:repository_rules.bzl", "switched_rules_by_language")
+
+switched_rules_by_language(
+    name = "com_google_googleapis_imports",
 )
 
 # com_github_golang_mock handled in DEPS.bzl.
@@ -162,15 +162,15 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.19.10.darwin-amd64.tar.gz", "48361d76271f9a725942bdc17012ae9fef72359f7b0aa303deb1098e05ef818c"),
-        "darwin_arm64": ("go1.19.10.darwin-arm64.tar.gz", "7cc8ab7e8e1225b57f44ec8fb26bce70ddea8e076dfdf118ed63fef0c9ff19fb"),
-        "freebsd_amd64": ("go1.19.10.freebsd-amd64.tar.gz", "0d22265662eaa9b8136223f8ab68f5c06c58c6a6311748fb810e830ebd17cbe2"),
-        "linux_amd64": ("go1.19.10.linux-amd64.tar.gz", "dfc8a696686d00065ba374209a3a7858926641e0fb55741dd89c357446d69a1e"),
-        "linux_arm64": ("go1.19.10.linux-arm64.tar.gz", "e36d6ebfce3f244e245a2969f83d26c8dff2bf8b72207822d9d66829cd93d067"),
-        "windows_amd64": ("go1.19.10.windows-amd64.tar.gz", "dab9df83e0768ff96eddd85a4def88db05ce5a8a0c439abcecd066888906c516"),
+        "darwin_amd64": ("go1.21.0.darwin-amd64.tar.gz", "5f5fc609686c1a80c18fb5cc57a2251e2ce97a2a0d5da651fc2a4a0a3240deb3"),
+        "darwin_arm64": ("go1.21.0.darwin-arm64.tar.gz", "974b76bc36f8438d111201fc799a96ee03d7f2f1464a957cdff671d8f0aeac2e"),
+        "freebsd_amd64": ("go1.21.0.freebsd-amd64.tar.gz", "b8eaa36654625df799654f77f4af0ea7bd9e5e760ebe86e68fe7c484748ae995"),
+        "linux_amd64": ("go1.21.0.linux-amd64.tar.gz", "0a6cb41bad7ce4065cda66f39fa9bb55ae3f8e0c4bfd9ac452e68192bddc2308"),
+        "linux_arm64": ("go1.21.0.linux-arm64.tar.gz", "fcb3dc6a5cf5c8870b0407889d23d2aa4eb93f7b6f02a39fcd93f0883d2d5980"),
+        "windows_amd64": ("go1.21.0.windows-amd64.tar.gz", "50262e5cfeac027f4fde3cffdf6d7dce166ee754e7d980dc31f8ae374ae2c6c7"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20230614-165357/{}"],
-    version = "1.19.10",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20230828-221325/{}"],
+    version = "1.21.0",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the

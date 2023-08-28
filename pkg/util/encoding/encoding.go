@@ -921,6 +921,7 @@ func UnsafeConvertStringToBytes(s string) []byte {
 	// kosher because we know that EncodeBytes{,Descending} does
 	// not keep a reference to the value it encodes. The first
 	// step is getting access to the string internals.
+	//lint:ignore SA1019 deprecated but our FIPS builds still use Go 1.19.
 	hdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
 	// Next we treat the string data as a maximally sized array which we
 	// slice. This usage is safe because the pointer value remains in the string.
@@ -993,6 +994,7 @@ func EncodeStringDescending(b []byte, s string) []byte {
 	// kosher because we know that EncodeBytes{,Descending} does
 	// not keep a reference to the value it encodes. The first
 	// step is getting access to the string internals.
+	//lint:ignore SA1019 deprecated but our FIPS builds still use Go 1.19.
 	hdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
 	// Next we treat the string data as a maximally sized array which we
 	// slice. This usage is safe because the pointer value remains in the string.

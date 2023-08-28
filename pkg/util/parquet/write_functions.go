@@ -369,6 +369,7 @@ func unsafeGetBytes(s string) ([]byte, error) {
 	if len(s) == 0 {
 		return nil, nil
 	}
+	//lint:ignore SA1019 deprecated but our FIPS builds still use Go 1.19.
 	p := unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&s)).Data)
 	return (*[maxStrLen]byte)(p)[:len(s):len(s)], nil
 }
