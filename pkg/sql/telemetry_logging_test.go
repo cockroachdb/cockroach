@@ -436,7 +436,7 @@ func TestTelemetryLogging(t *testing.T) {
 		}
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -750,7 +750,7 @@ func TestTelemetryLoggingInternalEnabled(t *testing.T) {
 		`TRUNCATE TABLE system.public.transaction_statistics`,
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -861,7 +861,7 @@ func TestTelemetryLoggingInternalConsoleEnabled(t *testing.T) {
 		db.Exec(t, `SET application_name = $1`, tc.appName)
 		db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.internal_console.enabled = $1;`, tc.logInternalConsole)
 		db.Exec(t, query)
-		log.Flush()
+		log.FlushFiles()
 
 		entries, err := log.FetchEntriesFromFiles(
 			0,
@@ -964,7 +964,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -1168,7 +1168,7 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -1423,7 +1423,7 @@ func TestTelemetryScanCounts(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -1537,7 +1537,7 @@ $$`
 
 	db.Exec(t, stmt)
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,
@@ -1617,7 +1617,7 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 		`BEGIN`, `SELECT ‹1›`, `SELECT ‹2›`, `SELECT ‹3›`, `COMMIT`,
 	}
 
-	log.Flush()
+	log.FlushFiles()
 
 	entries, err := log.FetchEntriesFromFiles(
 		0,

@@ -12,6 +12,7 @@ package log
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -26,13 +27,54 @@ type flushSyncWriter interface {
 	io.Writer
 }
 
-// Flush explicitly flushes all pending log file I/O.
+// FlushFiles explicitly flushes all pending log file I/O.
 // See also flushDaemon() that manages background (asynchronous)
 // flushes, and signalFlusher() that manages flushes in reaction to a
 // user signal.
-func Flush() {
+func FlushFiles() {
 	_ = logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
 		l.lockAndFlushAndMaybeSync(true /*doSync*/)
+		return nil
+	})
+}
+
+// FlushAllSync explicitly flushes all asynchronous buffered logging sinks,
+// including pending log file I/O and buffered network sinks.
+//
+// NB: This is a synchronous operation, and will block until all flushes
+// have completed. Generally only recommended for use in crash reporting
+// and shutdown scenarios. Note that `tryForceSync` is best effort, so the
+// possibility exists that a buffered log sink is unable to block until
+// the flush completes. In such a case though, the expectation that a flush
+// is already imminent for that sink.
+//
+// Each sink we attempt to flush is attempted with a timeout.
+func FlushAllSync() {
+	FlushFiles()
+	_ = logging.allSinkInfos.iterBufferedSinks(func(bs *bufferedSink) error {
+		// Trigger a synchronous flush by calling output on the bufferedSink
+		// with a `tryForceSync` option.
+		doneCh := make(chan struct{})
+		go func() {
+			err := bs.output([]byte{}, sinkOutputOptions{tryForceSync: true})
+			if err != nil {
+				fmt.Printf("Error draining buffered log sink %T: %v\n", bs.child, err)
+			}
+			doneCh <- struct{}{}
+		}()
+		// Don't wait forever if the underlying sink happens to be unavailable.
+		// Set a timeout to avoid holding up the panic handle process for too long.
+		select {
+		case <-time.After(3 * time.Second):
+			fmt.Printf("Timed out waiting on buffered log sink %T to drain.\n", bs.child)
+		case <-doneCh:
+		}
+		// We don't want to let errors stop us from iterating and flushing
+		// the remaining buffered log sinks. Nor do we want to log the error
+		// using the logging system, as it's unlikely to make it to the
+		// destination sink anyway (there's a good chance we're flushing
+		// as part of handling a panic). If an error occurs, it will be displayed.
+		// Regardless, we return nil so the iteration continues.
 		return nil
 	})
 }
@@ -97,7 +139,7 @@ func signalFlusher() {
 	ch := sysutil.RefreshSignaledChan()
 	for sig := range ch {
 		Ops.Infof(context.Background(), "%s received, flushing logs", sig)
-		Flush()
+		FlushFiles()
 	}
 }
 
@@ -109,5 +151,5 @@ func signalFlusher() {
 func StartAlwaysFlush() {
 	logging.flushWrites.Set(true)
 	// There may be something in the buffers already; flush it.
-	Flush()
+	FlushFiles()
 }
