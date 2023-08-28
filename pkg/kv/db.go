@@ -266,7 +266,7 @@ type DB struct {
 	// SQL code that all uses kv.DB.
 	//
 	// TODO(sumeer,irfansharif): Find a home for these in the SQL layer.
-	// Especially SettingsValue.
+	// Especially SettingsValues.
 	SQLKVResponseAdmissionQ *admission.WorkQueue
 	AdmissionPacerFactory   admission.PacerFactory
 	SettingsValues          *settings.Values

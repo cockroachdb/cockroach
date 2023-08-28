@@ -858,7 +858,7 @@ func NewColOperator(
 					// would be to simply include all key columns into the set
 					// of needed for the fetch and to project them away in the
 					// ColBatchDirectScan.
-					if row.GetKeyLockingStrength(core.TableReader.LockingStrength) != lock.None ||
+					if row.GetKeyLockingStrength(ctx, core.TableReader.LockingStrength, flowCtx.EvalCtx.Settings) != lock.None ||
 						core.TableReader.LockingWaitPolicy == descpb.ScanLockingWaitPolicy_SKIP_LOCKED {
 						return false
 					}

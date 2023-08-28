@@ -11,14 +11,33 @@
 package row
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
 )
 
+// EnableSharedLockingStrength dictates whether to use SHARED locks when SQL
+// statements use the FOR {,KEY} SHARE modifiers. If set to true, locking reads
+// with strength lock.Shared are performed; otherwise, non-locking reads are
+// performed.
+var EnableSharedLockingStrength = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	"sql.locking.enable_shared_locks",
+	"enable shared locking strength when using FOR SHARE or FOR KEY SHARE modifiers",
+	false,
+	settings.WithPublic,
+)
+
 // GetKeyLockingStrength returns the configured per-key locking strength to use
 // for key-value scans.
-func GetKeyLockingStrength(lockStrength descpb.ScanLockingStrength) lock.Strength {
+func GetKeyLockingStrength(
+	ctx context.Context, lockStrength descpb.ScanLockingStrength, settings *cluster.Settings,
+) lock.Strength {
 	switch lockStrength {
 	case descpb.ScanLockingStrength_FOR_NONE:
 		return lock.None
@@ -27,8 +46,9 @@ func GetKeyLockingStrength(lockStrength descpb.ScanLockingStrength) lock.Strengt
 		// Promote to FOR_SHARE.
 		fallthrough
 	case descpb.ScanLockingStrength_FOR_SHARE:
-		// We currently perform no per-key locking when FOR_SHARE is used
-		// because Shared locks have not yet been implemented.
+		if settings.Version.IsActive(ctx, clusterversion.V23_2) && EnableSharedLockingStrength.Get(&settings.SV) {
+			return lock.Shared
+		}
 		return lock.None
 
 	case descpb.ScanLockingStrength_FOR_NO_KEY_UPDATE:

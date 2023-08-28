@@ -51,6 +51,7 @@ var _ storage.NextKVer = &KVFetcher{}
 // the memory account can be shared by the caller with other components (as long
 // as there is no concurrency).
 func newTxnKVFetcher(
+	ctx context.Context,
 	txn *kv.Txn,
 	bsHeader *kvpb.BoundedStalenessHeader,
 	reverse bool,
@@ -59,6 +60,7 @@ func newTxnKVFetcher(
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
+	st *cluster.Settings,
 ) *txnKVFetcher {
 	var sendFn sendFunc
 	var batchRequestsIssued int64
@@ -98,13 +100,14 @@ func newTxnKVFetcher(
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
 		kvPairsRead:                new(int64),
 		batchRequestsIssued:        &batchRequestsIssued,
+		settings:                   st,
 	}
 	fetcherArgs.admission.requestHeader = txn.AdmissionHeader()
 	fetcherArgs.admission.responseQ = txn.DB().SQLKVResponseAdmissionQ
 	fetcherArgs.admission.pacerFactory = txn.DB().AdmissionPacerFactory
 	fetcherArgs.admission.settingsValues = txn.DB().SettingsValues
 
-	return newTxnKVFetcherInternal(fetcherArgs)
+	return newTxnKVFetcherInternal(ctx, fetcherArgs)
 }
 
 // NewDirectKVBatchFetcher creates a new KVBatchFetcher that uses the
@@ -116,6 +119,7 @@ func newTxnKVFetcher(
 // the memory account can be shared by the caller with other components (as long
 // as there is no concurrency).
 func NewDirectKVBatchFetcher(
+	ctx context.Context,
 	txn *kv.Txn,
 	bsHeader *kvpb.BoundedStalenessHeader,
 	spec *fetchpb.IndexFetchSpec,
@@ -125,10 +129,11 @@ func NewDirectKVBatchFetcher(
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
+	st *cluster.Settings,
 ) KVBatchFetcher {
-	f := newTxnKVFetcher(
+	f := newTxnKVFetcher(ctx,
 		txn, bsHeader, reverse, lockStrength, lockWaitPolicy,
-		lockTimeout, acc, forceProductionKVBatchSize,
+		lockTimeout, acc, forceProductionKVBatchSize, st,
 	)
 	f.scanFormat = kvpb.COL_BATCH_RESPONSE
 	f.indexFetchSpec = spec
@@ -142,6 +147,7 @@ func NewDirectKVBatchFetcher(
 // the memory account can be shared by the caller with other components (as long
 // as there is no concurrency).
 func NewKVFetcher(
+	ctx context.Context,
 	txn *kv.Txn,
 	bsHeader *kvpb.BoundedStalenessHeader,
 	reverse bool,
@@ -150,10 +156,11 @@ func NewKVFetcher(
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
+	st *cluster.Settings,
 ) *KVFetcher {
-	return newKVFetcher(newTxnKVFetcher(
+	return newKVFetcher(newTxnKVFetcher(ctx,
 		txn, bsHeader, reverse, lockStrength, lockWaitPolicy,
-		lockTimeout, acc, forceProductionKVBatchSize,
+		lockTimeout, acc, forceProductionKVBatchSize, st,
 	))
 }
 
@@ -162,6 +169,7 @@ func NewKVFetcher(
 //
 // If maintainOrdering is true, then diskBuffer must be non-nil.
 func NewStreamingKVFetcher(
+	ctx context.Context,
 	distSender *kvcoord.DistSender,
 	stopper *stop.Stopper,
 	txn *kv.Txn,
@@ -188,7 +196,7 @@ func NewStreamingKVFetcher(
 		streamerBudgetAcc,
 		&kvPairsRead,
 		&batchRequestsIssued,
-		GetKeyLockingStrength(lockStrength),
+		GetKeyLockingStrength(ctx, lockStrength, st),
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {
@@ -203,7 +211,7 @@ func NewStreamingKVFetcher(
 		maxKeysPerRow,
 		diskBuffer,
 	)
-	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, kvFetcherMemAcc, &kvPairsRead, &batchRequestsIssued))
+	return newKVFetcher(newTxnKVStreamer(ctx, streamer, lockStrength, kvFetcherMemAcc, &kvPairsRead, &batchRequestsIssued, st))
 }
 
 func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {

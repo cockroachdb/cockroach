@@ -557,6 +557,7 @@ func NewColIndexJoin(
 		cFetcherMemoryLimit = int64(math.Ceil(float64(totalMemoryLimit) / 16.0))
 		streamerBudgetLimit := 14 * cFetcherMemoryLimit
 		kvFetcher = row.NewStreamingKVFetcher(
+			ctx,
 			flowCtx.Cfg.DistSender,
 			flowCtx.Stopper(),
 			txn,
@@ -575,6 +576,7 @@ func NewColIndexJoin(
 		)
 	} else {
 		kvFetcher = row.NewKVFetcher(
+			ctx,
 			txn,
 			nil,   /* bsHeader */
 			false, /* reverse */
@@ -583,6 +585,7 @@ func NewColIndexJoin(
 			flowCtx.EvalCtx.SessionData().LockTimeout,
 			kvFetcherMemAcc,
 			flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+			flowCtx.EvalCtx.Settings,
 		)
 	}
 

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
@@ -292,11 +293,16 @@ type newTxnKVFetcherArgs struct {
 	forceProductionKVBatchSize bool
 	kvPairsRead                *int64
 	batchRequestsIssued        *int64
+	settings                   *cluster.Settings
 
 	admission struct { // groups AC-related fields
-		requestHeader  kvpb.AdmissionHeader
-		responseQ      *admission.WorkQueue
-		pacerFactory   admission.PacerFactory
+		requestHeader kvpb.AdmissionHeader
+		responseQ     *admission.WorkQueue
+		pacerFactory  admission.PacerFactory
+		// TODO(arul): we're determining whether we're in a SQL pod or not based on
+		// if this field is set or not. This is quite annoying -- it means we can't
+		// just get rid of this field and grab settings.Values off the settings
+		// field above (which is always set).
 		settingsValues *settings.Values
 	}
 }
@@ -306,13 +312,13 @@ type newTxnKVFetcherArgs struct {
 // The passed-in memory account is owned by the fetcher throughout its lifetime
 // but is **not** closed - it is the caller's responsibility to close acc if it
 // is non-nil.
-func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
+func newTxnKVFetcherInternal(ctx context.Context, args newTxnKVFetcherArgs) *txnKVFetcher {
 	f := &txnKVFetcher{
 		sendFn: args.sendFn,
 		// Default to BATCH_RESPONSE. The caller will override if needed.
 		scanFormat:                 kvpb.BATCH_RESPONSE,
 		reverse:                    args.reverse,
-		lockStrength:               GetKeyLockingStrength(args.lockStrength),
+		lockStrength:               GetKeyLockingStrength(ctx, args.lockStrength, args.settings),
 		lockWaitPolicy:             GetWaitPolicy(args.lockWaitPolicy),
 		lockTimeout:                args.lockTimeout,
 		acc:                        args.acc,
@@ -350,6 +356,8 @@ func (f *txnKVFetcher) maybeInitAdmissionPacer(
 	if sv == nil {
 		// Only nil in tests and in SQL pods (we don't have admission pacing in
 		// the latter anyway).
+		// TODO(arul): The assumption that we're in a SQL pod if sv == nil is
+		// incredibly brittle.
 		return
 	}
 	admissionPri := admissionpb.WorkPriority(admissionHeader.Priority)

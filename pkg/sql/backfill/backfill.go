@@ -172,6 +172,7 @@ func (cb *ColumnBackfiller) init(
 			Spec:                       &spec,
 			TraceKV:                    traceKV,
 			ForceProductionKVBatchSize: cb.evalCtx.TestingKnobs.ForceProductionValues,
+			Settings:                   cb.evalCtx.Settings,
 		},
 	)
 }
@@ -857,6 +858,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			Spec:                       &spec,
 			TraceKV:                    traceKV,
 			ForceProductionKVBatchSize: ib.evalCtx.TestingKnobs.ForceProductionValues,
+			Settings:                   ib.evalCtx.Settings,
 		},
 	); err != nil {
 		return nil, nil, 0, err

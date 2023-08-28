@@ -25,6 +25,7 @@ go_library(
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/settings/cluster",
         "//pkg/sql/sessiondatapb",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
