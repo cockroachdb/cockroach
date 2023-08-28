@@ -41,7 +41,7 @@ func (p Pair) reversed() Pair { return Pair{A: p.B, B: p.A} }
 // democluster.transientCluster.
 type TestCluster interface {
 	NumServers() int
-	Server(i int) serverutils.TestServerInterface
+	Server(i int) serverutils.TestServerInterfaceRaw
 }
 
 // RoundTripLatency is the time to go from a region to another region and back.

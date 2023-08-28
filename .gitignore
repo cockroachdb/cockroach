@@ -60,6 +60,7 @@ pkg/ccl/backupccl/data_driven_generated_test.go
 pkg/ccl/backupccl/restore_memory_monitoring_generated_test.go
 pkg/ccl/backupccl/restore_entry_cover_generated_test.go
 pkg/ccl/backupccl/restore_mid_schema_change_generated_test.go
+pkg/testutils/serverutils/*_generated.go
 
 # Temporary directories during gomock generate
 **/gomock_reflect_*

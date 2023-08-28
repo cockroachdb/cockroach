@@ -67,7 +67,7 @@ import (
 )
 
 type serverEntry struct {
-	serverutils.TestServerInterface
+	serverutils.TestServerInterfaceRaw
 	adminClient    serverpb.AdminClient
 	nodeID         roachpb.NodeID
 	decommissioned bool
@@ -80,7 +80,7 @@ type transientCluster struct {
 	demoDir       string
 	useSockets    bool
 	stopper       *stop.Stopper
-	firstServer   serverutils.TestServerInterface
+	firstServer   serverutils.TestServerInterfaceRaw
 	servers       []serverEntry
 	tenantServers []serverutils.ApplicationLayerInterface
 	defaultDB     string
@@ -644,7 +644,7 @@ func (c *transientCluster) createAndAddNode(
 	if err != nil {
 		return nil, err
 	}
-	s := srv.(serverutils.TestServerInterface)
+	s := srv.(serverutils.TestServerInterfaceRaw)
 
 	// Ensure that this server gets stopped when the top level demo
 	// stopper instructs the cluster to stop.
@@ -669,7 +669,7 @@ func (c *transientCluster) createAndAddNode(
 
 	// Remember this server for the stop/restart primitives in the SQL
 	// shell.
-	c.servers = append(c.servers, serverEntry{TestServerInterface: s, nodeID: s.NodeID()})
+	c.servers = append(c.servers, serverEntry{TestServerInterfaceRaw: s, nodeID: s.NodeID()})
 
 	return rpcAddrReadyCh, nil
 }
@@ -1026,7 +1026,7 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 	if err != nil {
 		return err
 	}
-	if c.servers[serverIdx].TestServerInterface == nil {
+	if c.servers[serverIdx].TestServerInterfaceRaw == nil {
 		return errors.Errorf("node %d is already shut down", nodeID)
 	}
 	// This is possible if we re-assign c.s and make the other nodes to the new
@@ -1041,7 +1041,7 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 	if err := c.drainAndShutdown(ctx, c.servers[serverIdx].adminClient); err != nil {
 		return err
 	}
-	c.servers[serverIdx].TestServerInterface = nil
+	c.servers[serverIdx].TestServerInterfaceRaw = nil
 	c.servers[serverIdx].adminClient = nil
 	if c.demoCtx.Multitenant {
 		c.tenantServers[serverIdx] = nil
@@ -1129,7 +1129,7 @@ func (c *transientCluster) RestartNode(ctx context.Context, nodeID int32) error 
 	if err != nil {
 		return err
 	}
-	if c.servers[serverIdx].TestServerInterface != nil {
+	if c.servers[serverIdx].TestServerInterfaceRaw != nil {
 		return errors.Errorf("node %d is already running", nodeID)
 	}
 
@@ -1159,7 +1159,7 @@ func (c *transientCluster) startServerInternal(
 	if err != nil {
 		return 0, err
 	}
-	s := srv.(serverutils.TestServerInterface)
+	s := srv.(serverutils.TestServerInterfaceRaw)
 
 	// We want to only return after the server is ready.
 	readyCh := make(chan struct{})
@@ -1188,15 +1188,15 @@ func (c *transientCluster) startServerInternal(
 	}
 
 	c.servers[serverIdx] = serverEntry{
-		TestServerInterface: s,
-		adminClient:         serverpb.NewAdminClient(conn),
-		nodeID:              nodeID,
+		TestServerInterfaceRaw: s,
+		adminClient:            serverpb.NewAdminClient(conn),
+		nodeID:                 nodeID,
 	}
 
 	if c.demoCtx.Multitenant {
 		if err := c.startTenantService(ctx, serverIdx, false /* createTenant */); err != nil {
 			s.Stopper().Stop(ctx)
-			c.servers[serverIdx].TestServerInterface = nil
+			c.servers[serverIdx].TestServerInterfaceRaw = nil
 			c.servers[serverIdx].adminClient = nil
 			c.tenantServers[serverIdx] = nil
 			return 0, err
@@ -1889,7 +1889,7 @@ func (s unixSocketDetails) String() string {
 func (c *transientCluster) NumNodes() int {
 	numNodes := 0
 	for _, s := range c.servers {
-		if s.TestServerInterface != nil {
+		if s.TestServerInterfaceRaw != nil {
 			numNodes++
 		}
 	}
@@ -1900,8 +1900,8 @@ func (c *transientCluster) NumServers() int {
 	return len(c.servers)
 }
 
-func (c *transientCluster) Server(i int) serverutils.TestServerInterface {
-	return c.servers[i].TestServerInterface
+func (c *transientCluster) Server(i int) serverutils.TestServerInterfaceRaw {
+	return c.servers[i].TestServerInterfaceRaw
 }
 
 func (c *transientCluster) GetLocality(nodeID int32) string {
@@ -1916,7 +1916,7 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 	numNodesLive := 0
 	// First, list system tenant nodes.
 	for i, s := range c.servers {
-		if s.TestServerInterface == nil {
+		if s.TestServerInterfaceRaw == nil {
 			continue
 		}
 		numNodesLive++

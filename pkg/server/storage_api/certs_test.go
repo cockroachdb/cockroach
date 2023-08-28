@@ -25,8 +25,9 @@ import (
 func TestCertificatesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer ts.Stopper().Stop(context.Background())
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	ts := srv.ApplicationLayer()
 
 	var response serverpb.CertificatesResponse
 	if err := srvtestutils.GetStatusJSONProto(ts, "certificates/local", &response); err != nil {
