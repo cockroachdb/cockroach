@@ -710,7 +710,7 @@ func TestRandomClientGeneration(t *testing.T) {
 		return replicationtestutils.SSTMaker(t, keyValues)
 	})
 	randomStreamClient.RegisterInterception(cancelAfterCheckpoints)
-	randomStreamClient.RegisterInterception(validateFnWithValidator(t, streamValidator))
+	randomStreamClient.RegisterInterception(validateFnWithValidator(t, streamValidator, topo.Partitions))
 
 	out, err := runStreamIngestionProcessor(ctx, t, registry, ts.InternalDB().(descs.DB),
 		topo, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey,
@@ -883,16 +883,6 @@ func getStreamIngestionProcessor(
 	return sip, st, err
 }
 
-func resolvedSpansMinTS(resolvedSpans []jobspb.ResolvedSpan) hlc.Timestamp {
-	minTS := hlc.MaxTimestamp
-	for _, rs := range resolvedSpans {
-		if rs.Timestamp.Less(minTS) {
-			minTS = rs.Timestamp
-		}
-	}
-	return minTS
-}
-
 func noteKeyVal(
 	validator *streamClientValidator, keyVal roachpb.KeyValue, spec streamclient.SubscriptionToken,
 ) {
@@ -913,15 +903,38 @@ func noteKeyVal(
 }
 
 func validateFnWithValidator(
-	t *testing.T, validator *streamClientValidator,
+	t *testing.T, validator *streamClientValidator, partitions []streamclient.PartitionInfo,
 ) func(event streamingccl.Event, spec streamclient.SubscriptionToken) {
+	// The API of the cdctest.Validator interface is that you have to report resolved timestamp for
+	// the whole set of spans being tracked (in this case, we have one Validator per partition).
+	// For this reason, we need a frontier per partition and submit resolved
+	// timestamps for validation when the whole partition advances.
+	partitionFrontiers := make(map[string]*span.Frontier)
+	for _, partitionSpec := range partitions {
+		frontier, err := span.MakeFrontierAt(hlc.Timestamp{}, partitionSpec.Spans...)
+		if err != nil {
+			panic(err.Error())
+		}
+		partitionFrontiers[string(partitionSpec.SubscriptionToken)] = frontier
+	}
+
 	return func(event streamingccl.Event, spec streamclient.SubscriptionToken) {
 		switch event.Type() {
 		case streamingccl.CheckpointEvent:
-			resolvedTS := resolvedSpansMinTS(event.GetResolvedSpans())
-			err := validator.noteResolved(string(spec), resolvedTS)
-			if err != nil {
-				panic(err.Error())
+			frontier := partitionFrontiers[string(spec)]
+			var advanced bool
+			var err error
+			for _, rs := range event.GetResolvedSpans() {
+				advanced, err = frontier.Forward(rs.Span, rs.Timestamp)
+				if err != nil {
+					panic(err.Error())
+				}
+			}
+			if advanced {
+				err := validator.noteResolved(string(spec), frontier.Frontier())
+				if err != nil {
+					panic(err.Error())
+				}
 			}
 		case streamingccl.SSTableEvent:
 			kvs := storageutils.ScanSST(t, event.GetSSTable().Data)

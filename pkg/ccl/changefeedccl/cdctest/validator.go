@@ -26,7 +26,8 @@ import (
 type Validator interface {
 	// NoteRow accepts a changed row entry.
 	NoteRow(partition string, key, value string, updated hlc.Timestamp) error
-	// NoteResolved accepts a resolved timestamp entry.
+	// NoteResolved accepts a resolved timestamp entry. NB: This resolved
+	// timestamp should apply for all spans tracked by the validator.
 	NoteResolved(partition string, resolved hlc.Timestamp) error
 	// Failures returns any violations seen so far.
 	Failures() []string
