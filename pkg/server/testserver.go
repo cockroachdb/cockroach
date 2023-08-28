@@ -1079,7 +1079,11 @@ func (ts *testServer) StartSharedProcessTenant(
 	}
 
 	// Save the args for use if the server needs to be created.
-	ts.topLevelServer.serverController.testArgs[args.TenantName] = args
+	func() {
+		ts.topLevelServer.serverController.mu.Lock()
+		defer ts.topLevelServer.serverController.mu.Unlock()
+		ts.topLevelServer.serverController.mu.testArgs[args.TenantName] = args
+	}()
 
 	tenantRow, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryRow(
 		ctx, "testserver-check-tenant-active", nil, /* txn */
