@@ -337,18 +337,38 @@ func PrivilegesFromBitFields(
 	return ret, nil
 }
 
+// Purpose indicates the purpose of the resulting
+// privilege in ListFromStrings.
+type Purpose bool
+
+const (
+	// PurposeFromUserInput indicates that the privilege name came from user
+	// input and should be validated to make sure it refers to a real privilege.
+	PurposeFromUserInput Purpose = false
+
+	// PurposeFromSystemTable indicates that the privilege name came from a
+	// system table and should be ignored if it does not refer to a real
+	// privilege.
+	PurposeFromSystemTable Purpose = true
+)
+
 // ListFromStrings takes a list of strings and attempts to build a list of Kind.
 // We convert each string to uppercase and search for it in the ByName map.
-// If an entry is not found in ByName, it is ignored.
-func ListFromStrings(strs []string) (List, error) {
+// If an entry is not found in ByName, it is either ignored or reports an error
+// depending on the purpose.
+func ListFromStrings(strs []string, purpose Purpose) (List, error) {
 	ret := make(List, len(strs))
 	for i, s := range strs {
 		k, ok := ByName[strings.ToUpper(s)]
 		if !ok {
-			// Ignore an unknown privilege name. This is so that it is possible to
-			// backport new privileges onto older release branches, without causing
-			// mixed-version compatibility issues.
-			continue
+			// Ignore an unknown privilege name if it came from a system table. This
+			// is so that it is possible to backport new privileges onto older release
+			// branches, without causing mixed-version compatibility issues.
+			if purpose == PurposeFromSystemTable {
+				continue
+			} else if purpose == PurposeFromUserInput {
+				return nil, errors.Errorf("not a valid privilege: %q", s)
+			}
 		}
 		ret[i] = k
 	}
