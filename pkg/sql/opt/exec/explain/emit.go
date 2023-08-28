@@ -765,8 +765,12 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 
 	case invertedFilterOp:
 		a := n.args.(*invertedFilterArgs)
-		ob.Attr("inverted column", a.Input.Columns()[a.InvColumn].Name)
-		ob.Attr("num spans", len(a.InvFilter.SpansToRead))
+		if a.InvColumn != 0 {
+			ob.Attr("inverted column", a.Input.Columns()[a.InvColumn].Name)
+		}
+		if a.InvFilter != nil && len(a.InvFilter.SpansToRead) > 0 {
+			ob.Attr("num spans", len(a.InvFilter.SpansToRead))
+		}
 
 	case invertedJoinOp:
 		a := n.args.(*invertedJoinArgs)
