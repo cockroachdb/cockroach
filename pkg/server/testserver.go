@@ -372,6 +372,11 @@ func (ts *testServer) Stopper() *stop.Stopper {
 	return ts.stopper
 }
 
+// AppStopper is part of serverutils.ApplicationLayerInterface.
+func (ts *testServer) AppStopper() *stop.Stopper {
+	return ts.stopper
+}
+
 // GossipI is part of the serverutils.StorageLayerInterface.
 func (ts *testServer) GossipI() interface{} {
 	return ts.topLevelServer.gossip
@@ -561,9 +566,9 @@ func (ts *testServer) TenantStatusServer() interface{} {
 	return ts.status
 }
 
-// TestTenants provides information to tenant(s) that _may_ have been created
-func (ts *testServer) TestTenants() []serverutils.ApplicationLayerInterface {
-	return ts.testTenants
+// TestTenant provides access to the test tenant service.
+func (ts *testServer) TestTenant() serverutils.ApplicationLayerInterface {
+	return ts.testTenants[0]
 }
 
 // maybeStartDefaultTestTenant might start a test tenant. This can then be used
@@ -687,7 +692,7 @@ func (ts *testServer) Activate(ctx context.Context) error {
 		}
 		return nil
 	}
-	if err := maybeRunVersionUpgrade(ts.SystemLayer()); err != nil {
+	if err := maybeRunVersionUpgrade(ts); err != nil {
 		return err
 	}
 
@@ -701,7 +706,7 @@ func (ts *testServer) Activate(ctx context.Context) error {
 	}
 
 	if ts.StartedDefaultTestTenant() {
-		if err := maybeRunVersionUpgrade(ts.ApplicationLayer()); err != nil {
+		if err := maybeRunVersionUpgrade(ts.TestTenant()); err != nil {
 			return err
 		}
 	}
@@ -834,7 +839,7 @@ func (t *testTenant) SQLConnForUserE(userName string, dbName string) (*gosql.DB,
 	}
 	return openTestSQLConn(
 		userName, dbName, tenantName,
-		t.Stopper(),
+		t.AppStopper(),
 		t.pgL,
 		t.Cfg.SQLAdvertiseAddr,
 		t.Cfg.Insecure,
@@ -951,8 +956,8 @@ func (t *testTenant) ClusterSettings() *cluster.Settings {
 	return t.Cfg.Settings
 }
 
-// Stopper is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) Stopper() *stop.Stopper {
+// AppStopper is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) AppStopper() *stop.Stopper {
 	return t.sql.stopper
 }
 
@@ -2013,7 +2018,7 @@ func (ts *testServer) Tracer() *tracing.Tracer {
 func (ts *testServer) ForceTableGC(
 	ctx context.Context, database, table string, timestamp hlc.Timestamp,
 ) error {
-	return internalForceTableGC(ctx, ts.SystemLayer(), database, table, timestamp)
+	return internalForceTableGC(ctx, ts, database, table, timestamp)
 }
 
 func internalForceTableGC(
@@ -2446,7 +2451,7 @@ func newClientRPCContext(
 	ctx = logtags.AddTag(ctx, "user", user)
 	ctx = logtags.AddTag(ctx, "nsql", s.SQLInstanceID())
 
-	stopper := s.Stopper()
+	stopper := s.AppStopper()
 	if ctx.Done() == nil {
 		// The RPCContext initialization wants a cancellable context,
 		// since that will be used to stop async goroutines. Help

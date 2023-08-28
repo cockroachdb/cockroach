@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -274,7 +274,7 @@ func TestMultiRegionTenantRegions(t *testing.T) {
 			},
 		},
 	})
-	defer ten.Stopper().Stop(ctx)
+	defer ten.AppStopper().Stop(ctx)
 	defer tSQL.Close()
 	tenSQLDB := sqlutils.MakeSQLRunner(tSQL)
 
