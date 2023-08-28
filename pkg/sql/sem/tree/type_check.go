@@ -2619,7 +2619,7 @@ func typeCheckSameTypedExprs(
 		return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
 	default:
 		firstValidIdx := -1
-		firstValidType := types.Unknown
+		candidateType := types.Unknown
 		for i, ok := s.resolvableIdxs.Next(0); ok; i, ok = s.resolvableIdxs.Next(i + 1) {
 			typedExpr, err := exprs[i].TypeCheck(ctx, semaCtx, desired)
 			if err != nil {
@@ -2627,13 +2627,13 @@ func typeCheckSameTypedExprs(
 			}
 			typedExprs[i] = typedExpr
 			if returnType := typedExpr.ResolvedType(); returnType.Family() != types.UnknownFamily {
-				firstValidType = returnType
+				candidateType = returnType
 				firstValidIdx = i
 				break
 			}
 		}
 
-		if firstValidType.Family() == types.UnknownFamily {
+		if candidateType.Family() == types.UnknownFamily {
 			// We got to the end without finding a non-null expression.
 			switch {
 			case !constIdxs.Empty():
@@ -2653,35 +2653,63 @@ func typeCheckSameTypedExprs(
 		}
 
 		for i, ok := s.resolvableIdxs.Next(firstValidIdx + 1); ok; i, ok = s.resolvableIdxs.Next(i + 1) {
-			typedExpr, err := exprs[i].TypeCheck(ctx, semaCtx, firstValidType)
+			typedExpr, err := exprs[i].TypeCheck(ctx, semaCtx, candidateType)
 			if err != nil {
 				return nil, nil, err
 			}
 			// From the Postgres docs
 			// https://www.postgresql.org/docs/current/typeconv-union-case.html:
-			// If the candidate type can be implicitly converted to the other type,
-			// but not vice-versa, select the other type as the new candidate type.
-			if typ := typedExpr.ResolvedType(); cast.ValidCast(firstValidType, typ, cast.ContextImplicit) {
-				if !cast.ValidCast(typ, firstValidType, cast.ContextImplicit) {
-					firstValidType = typ
+			// If the candidate type can be implicitly converted to the other
+			// type, but not vice-versa, select the other type as the new
+			// candidate type.
+			if typ := typedExpr.ResolvedType(); cast.ValidCast(candidateType, typ, cast.ContextImplicit) {
+				if !cast.ValidCast(typ, candidateType, cast.ContextImplicit) {
+					candidateType = typ
 				}
 			}
-			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ.Family() == types.UnknownFamily) {
-				return nil, nil, unexpectedTypeError(exprs[i], firstValidType, typ)
+			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(candidateType) || typ.Family() == types.UnknownFamily) {
+				return nil, nil, unexpectedTypeError(exprs[i], candidateType, typ)
 			}
 			typedExprs[i] = typedExpr
 		}
 		if !constIdxs.Empty() {
-			if _, err := typeCheckSameTypedConsts(s, firstValidType, true); err != nil {
+			if _, err := typeCheckSameTypedConsts(s, candidateType, true); err != nil {
 				return nil, nil, err
 			}
 		}
 		if !placeholderIdxs.Empty() {
-			if _, err := typeCheckSameTypedPlaceholders(s, firstValidType); err != nil {
+			if _, err := typeCheckSameTypedPlaceholders(s, candidateType); err != nil {
 				return nil, nil, err
 			}
 		}
-		return typedExprs, firstValidType, nil
+		// Now that a candidate type has been selected, we may need to add
+		// implicit casts to expressions that do not match that type. We've
+		// already checked that all expressions either are of the candidate type
+		// or can be implicitly cast to the candidate type, so we don't need to
+		// check again.
+		// NOTE: We don't add this cast if any part of the candidate type is a
+		// tuple type, becuase we don't have a way to serialize this cast over
+		// DistSQL.
+		var hasNestedTupleType func(t *types.T) bool
+		hasNestedTupleType = func(t *types.T) bool {
+			switch t.Family() {
+			case types.TupleFamily:
+				return true
+			case types.ArrayFamily:
+				if hasNestedTupleType(t.ArrayContents()) {
+					return true
+				}
+			}
+			return false
+		}
+		if !hasNestedTupleType(candidateType) {
+			for i, e := range typedExprs {
+				if !e.ResolvedType().Identical(candidateType) {
+					typedExprs[i] = NewTypedCastExpr(e, candidateType)
+				}
+			}
+		}
+		return typedExprs, candidateType, nil
 	}
 }
 
