@@ -1930,7 +1930,7 @@ func TestConnectionMigration(t *testing.T) {
 	// Start first SQL pod.
 	tenant1, tenantDB1 := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
 	tenant1.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
-	defer tenant1.Stopper().Stop(ctx)
+	defer tenant1.AppStopper().Stop(ctx)
 	defer tenantDB1.Close()
 
 	// Start second SQL pod.
@@ -1939,7 +1939,7 @@ func TestConnectionMigration(t *testing.T) {
 		DisableCreateTenant: true,
 	})
 	tenant2.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
-	defer tenant2.Stopper().Stop(ctx)
+	defer tenant2.AppStopper().Stop(ctx)
 	defer tenantDB2.Close()
 
 	_, err = tenantDB1.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")

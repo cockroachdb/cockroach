@@ -68,6 +68,10 @@ type TestServerInterface interface {
 	// Activate is the service activation phase of Start().
 	Activate(context.Context) error
 
+	// Stopper returns the stopper used by the server.
+	// TODO(knz): replace uses by Stop().
+	Stopper() *stop.Stopper
+
 	// Stop stops the server. This must be called at the end of a test
 	// to avoid leaking resources.
 	Stop(context.Context)
@@ -258,8 +262,8 @@ type ApplicationLayerInterface interface {
 	// tenant server.
 	SettingsWatcher() interface{}
 
-	// Stopper returns the stopper used by the tenant.
-	Stopper() *stop.Stopper
+	// AppStopper returns the stopper used by the tenant.
+	AppStopper() *stop.Stopper
 
 	// Clock returns the clock used by the tenant.
 	Clock() *hlc.Clock
@@ -453,10 +457,10 @@ type TenantControlInterface interface {
 	// if the tenant record exists in KV.
 	WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error
 
-	// TestTenants returns the test tenants associated with the server.
+	// TestTenant returns the test tenant associated with the server.
 	//
-	// TODO(knz): rename to TestApplicationServices.
-	TestTenants() []ApplicationLayerInterface
+	// TODO(knz): rename to TestApplicationService.
+	TestTenant() ApplicationLayerInterface
 
 	// StartedDefaultTestTenant returns true if the server has started
 	// the service for the default test tenant.
@@ -541,12 +545,6 @@ type StorageLayerInterface interface {
 	// assuming no additional information is added outside of the normal bootstrap
 	// process.
 	ExpectedInitialRangeCount() (int, error)
-
-	// ForceTableGC sends a GCRequest for the ranges corresponding to a table.
-	//
-	// An error will be returned if the same table name exists in multiple schemas
-	// inside the specified database.
-	ForceTableGC(ctx context.Context, database, table string, timestamp hlc.Timestamp) error
 
 	// UpdateChecker returns the server's *diagnostics.UpdateChecker as an
 	// interface{}. The UpdateChecker periodically phones home to check for new

@@ -680,7 +680,7 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 
 	storage := slstorage.NewTestingStorage(
 		s.DB().AmbientContext,
-		s.Stopper(), s.Clock(), kvDB, s.Codec(), s.ClusterSettings(),
+		s.AppStopper(), s.Clock(), kvDB, s.Codec(), s.ClusterSettings(),
 		s.SettingsWatcher().(*settingswatcher.SettingsWatcher), table, timeutil.DefaultTimeSource{}.NewTimer,
 	)
 

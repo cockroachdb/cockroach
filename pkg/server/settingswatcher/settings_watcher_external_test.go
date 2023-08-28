@@ -164,7 +164,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	storage := &fakeStorage{}
 	sw := settingswatcher.New(s0.Clock(), fakeCodec, tenantSettings,
 		s0.ExecutorConfig().(sql.ExecutorConfig).RangeFeedFactory,
-		s0.Stopper(), storage)
+		s0.AppStopper(), storage)
 	require.NoError(t, sw.Start(ctx))
 	require.NoError(t, checkSettingsValuesMatch(s0.ClusterSettings(), tenantSettings))
 	for k, v := range toSet {
@@ -246,7 +246,7 @@ func TestSettingsWatcherWithOverrides(t *testing.T) {
 	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	ts := srv.ApplicationLayer()
-	stopper := ts.Stopper()
+	stopper := ts.AppStopper()
 
 	r := sqlutils.MakeSQLRunner(db)
 	// Set some settings (to verify handling of existing rows).

@@ -560,7 +560,7 @@ func TestReclaimLoop(t *testing.T) {
 	sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 
 	db := s.InternalDB().(descs.DB)
-	err := storage.RunInstanceIDReclaimLoop(ctx, s.Stopper(), ts, db, func() hlc.Timestamp {
+	err := storage.RunInstanceIDReclaimLoop(ctx, s.AppStopper(), ts, db, func() hlc.Timestamp {
 		return sessionExpiry
 	})
 	require.NoError(t, err)

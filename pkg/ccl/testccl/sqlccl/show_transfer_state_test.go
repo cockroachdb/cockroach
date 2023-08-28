@@ -37,7 +37,7 @@ func TestShowTransferState(t *testing.T) {
 	tenant, tenantDB := serverutils.StartTenant(t, s, base.TestTenantArgs{
 		TenantID: serverutils.TestTenantID(),
 	})
-	defer tenant.Stopper().Stop(ctx)
+	defer tenant.AppStopper().Stop(ctx)
 
 	_, err := tenantDB.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
 	require.NoError(t, err)

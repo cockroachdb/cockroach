@@ -1438,7 +1438,7 @@ func TestRUSettingsChanged(t *testing.T) {
 	tenant1, tenantDB1 := serverutils.StartTenant(t, s, base.TestTenantArgs{
 		TenantID: tenantID,
 	})
-	defer tenant1.Stopper().Stop(ctx)
+	defer tenant1.AppStopper().Stop(ctx)
 	defer tenantDB1.Close()
 
 	costClient, err := tenantcostclient.NewTenantSideCostController(tenant1.ClusterSettings(), tenantID, nil)
