@@ -801,19 +801,17 @@ func (g *lockTableGuardImpl) curLockMode() lock.Mode {
 
 // makeLockMode constructs and returns a lock mode.
 func makeLockMode(str lock.Strength, txn *roachpb.Transaction, ts hlc.Timestamp) lock.Mode {
+	iso := isolation.Serializable
+	if txn != nil {
+		iso = txn.IsoLevel
+	}
 	switch str {
 	case lock.None:
-		iso := isolation.Serializable
-		if txn != nil {
-			iso = txn.IsoLevel
-		}
 		return lock.MakeModeNone(ts, iso)
 	case lock.Shared:
-		assert(txn != nil, "only transactional requests can acquire shared locks")
 		return lock.MakeModeShared()
 	case lock.Exclusive:
-		assert(txn != nil, "only transactional requests can acquire exclusive locks")
-		return lock.MakeModeExclusive(ts, txn.IsoLevel)
+		return lock.MakeModeExclusive(ts, iso)
 	case lock.Intent:
 		return lock.MakeModeIntent(ts)
 	default:
