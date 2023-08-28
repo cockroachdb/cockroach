@@ -1341,7 +1341,7 @@ func (pic *primaryIndexChain) inflate(b BuildCtx) {
 // 7. (old != inter1 && inter1 != inter2 && inter2 == final), drop inter2
 // 8. (old != inter1 && inter1 != inter2 && inter2 != final), do nothing
 func (pic *primaryIndexChain) deflate(b BuildCtx) {
-	if !pic.isInflated() {
+	if !pic.isFullyInflated() {
 		return
 	}
 	tableID := pic.oldSpec.primary.TableID
@@ -1449,9 +1449,14 @@ func nonNilPrimaryIndexSpecSelector(spec *indexSpec) bool {
 	return spec.primary != nil
 }
 
-// isInflated return true if all new primary indexes are non-nil.
-func (pic *primaryIndexChain) isInflated() bool {
+// isFullyInflated return true if all new primary indexes are non-nil.
+func (pic *primaryIndexChain) isFullyInflated() bool {
 	return pic.inter1Spec.primary != nil && pic.inter2Spec.primary != nil && pic.finalSpec.primary != nil
+}
+
+// isInflatedAtAll return true if any new primary index is non-nil.
+func (pic *primaryIndexChain) isInflatedAtAll() bool {
+	return pic.inter1Spec.primary != nil || pic.inter2Spec.primary != nil || pic.finalSpec.primary != nil
 }
 
 // chainType returns the type of the chain.
