@@ -42,6 +42,7 @@ echo "Running tests"
 
 # TODO(radu): do we need --strip=never?
 bazel coverage \
+  --config=crosslinux \
   --@io_bazel_rules_go//go/config:cover_format=lcov --combined_report=lcov \
   --instrumentation_filter="//pkg/..." \
   ${targets}
