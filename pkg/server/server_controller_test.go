@@ -37,22 +37,23 @@ func TestServerController(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	ts := s.(*testServer)
+	sc := s.TenantController().ServerController().(*serverController)
+	ts := s.SystemLayer().(*testServer)
 
-	d, err := ts.serverController.getServer(ctx, "system")
+	d, err := sc.getServer(ctx, "system")
 	require.NoError(t, err)
 	if d.(*systemServerWrapper).server != ts.topLevelServer {
 		t.Fatal("expected wrapped system server")
 	}
 
-	d, err = ts.serverController.getServer(ctx, "somename")
+	d, err = sc.getServer(ctx, "somename")
 	require.Nil(t, d)
 	require.Error(t, err, `no tenant found with name "somename"`)
 
 	_, err = db.Exec("CREATE TENANT hello; ALTER TENANT hello START SERVICE SHARED")
 	require.NoError(t, err)
 
-	_, err = ts.serverController.getServer(ctx, "hello")
+	_, err = sc.getServer(ctx, "hello")
 	// TODO(knz): We're not really expecting an error here.
 	// The actual error seen will exist as long as in-memory
 	// servers use the standard KV connector.
