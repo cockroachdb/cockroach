@@ -73,7 +73,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 	manager := spanconfigmanager.New(
 		ts.InternalDB().(isql.DB),
 		ts.JobRegistry().(*jobs.Registry),
-		ts.Stopper(),
+		ts.AppStopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigReconciler().(spanconfig.Reconciler),
 		&spanconfig.TestingKnobs{
@@ -157,7 +157,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	manager := spanconfigmanager.New(
 		ts.InternalDB().(isql.DB),
 		ts.JobRegistry().(*jobs.Registry),
-		ts.Stopper(),
+		ts.AppStopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigReconciler().(spanconfig.Reconciler),
 		&spanconfig.TestingKnobs{
@@ -226,7 +226,7 @@ func TestManagerCheckJobConditions(t *testing.T) {
 	manager := spanconfigmanager.New(
 		ts.InternalDB().(isql.DB),
 		ts.JobRegistry().(*jobs.Registry),
-		ts.Stopper(),
+		ts.AppStopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigReconciler().(spanconfig.Reconciler),
 		&spanconfig.TestingKnobs{
@@ -326,7 +326,7 @@ func TestReconciliationJobErrorAndRecovery(t *testing.T) {
 	manager := spanconfigmanager.New(
 		ts.InternalDB().(isql.DB),
 		ts.JobRegistry().(*jobs.Registry),
-		ts.Stopper(),
+		ts.AppStopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigReconciler().(spanconfig.Reconciler),
 		&spanconfig.TestingKnobs{
@@ -420,7 +420,7 @@ func TestReconciliationUsesRightCheckpoint(t *testing.T) {
 	manager := spanconfigmanager.New(
 		ts.InternalDB().(isql.DB),
 		ts.JobRegistry().(*jobs.Registry),
-		ts.Stopper(),
+		ts.AppStopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigReconciler().(spanconfig.Reconciler),
 		nil,

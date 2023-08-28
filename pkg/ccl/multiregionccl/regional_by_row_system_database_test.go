@@ -42,7 +42,7 @@ sql.virtual_cluster.feature_access.multiregion.enabled = true;`)
 		TenantID:    serverutils.TestTenantID(),
 		UseDatabase: "defaultdb",
 	})
-	defer tenant.Stopper().Stop(ctx)
+	defer tenant.AppStopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(tenantDB)
 	tdb.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1";`)

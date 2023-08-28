@@ -535,7 +535,7 @@ func startTestTenant(
 	waitForTenantPodsActive(t, tenantServer, 1)
 	resetRetry := testingUseFastRetry()
 	return tenantID, tenantServer, tenantDB, func() {
-		tenantServer.Stopper().Stop(ctx)
+		tenantServer.AppStopper().Stop(ctx)
 		resetRetry()
 	}
 }

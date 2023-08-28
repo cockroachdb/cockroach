@@ -72,7 +72,7 @@ func TestCache(t *testing.T) {
 		s.RangeFeedFactory().(*rangefeed.Factory),
 		[]roachpb.Span{scratchSpan},
 	)
-	require.NoError(t, c.Start(ctx, s.Stopper()))
+	require.NoError(t, c.Start(ctx, s.AppStopper()))
 	readRowsAt := func(t *testing.T, ts hlc.Timestamp) []roachpb.KeyValue {
 		txn := kvDB.NewTxn(ctx, "test")
 		require.NoError(t, txn.SetFixedTimestamp(ctx, ts))

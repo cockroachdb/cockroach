@@ -826,12 +826,9 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			return ""
 
 		case "create-dummy-system-table":
-			db := ds.firstNode[lastCreatedCluster].DB()
-			execCfg := ds.firstNode[lastCreatedCluster].ExecutorConfig().(sql.ExecutorConfig)
-			testTenants := ds.firstNode[lastCreatedCluster].TestTenants()
-			if len(testTenants) > 0 {
-				execCfg = testTenants[0].ExecutorConfig().(sql.ExecutorConfig)
-			}
+			al := ds.firstNode[lastCreatedCluster].ApplicationLayer()
+			db := al.DB()
+			execCfg := al.ExecutorConfig().(sql.ExecutorConfig)
 			codec := execCfg.Codec
 			dummyTable := systemschema.SettingsTable
 			err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
