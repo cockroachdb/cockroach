@@ -1752,6 +1752,13 @@ func TestTenantLogic_set_time_zone(
 	runLogicTest(t, "set_time_zone")
 }
 
+func TestTenantLogic_shared_locks(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "shared_locks")
+}
+
 func TestTenantLogic_shift(
 	t *testing.T,
 ) {

@@ -1898,6 +1898,13 @@ func TestLogic_set_time_zone(
 	runLogicTest(t, "set_time_zone")
 }
 
+func TestLogic_shared_locks(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "shared_locks")
+}
+
 func TestLogic_shift(
 	t *testing.T,
 ) {
