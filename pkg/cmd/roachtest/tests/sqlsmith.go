@@ -322,6 +322,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 				}
 				runSQLSmith(ctx, t, c, setup, setting)
 			},
+			ExtraLabels: []string{"O-rsg"},
 		})
 	}
 

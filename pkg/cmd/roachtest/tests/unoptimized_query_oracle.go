@@ -69,6 +69,7 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 						},
 					})
 				},
+				ExtraLabels: []string{"O-rsg"},
 			})
 		}
 	}
