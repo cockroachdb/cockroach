@@ -295,6 +295,7 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 		hasModify := false
 		hasSqlModify := false
 		hasCreateRole := false
+		// TODO(109258): Refactor this to use HasGlobalPrivilegeOrRoleOption.
 		// Check system privileges.
 		if ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING, p.User()); err != nil {
 			return nil, err
