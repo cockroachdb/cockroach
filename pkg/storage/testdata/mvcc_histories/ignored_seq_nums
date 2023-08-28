@@ -16,14 +16,14 @@ with t=A
   txn_step  seq=40
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/11.000000000,0 -> /BYTES/c
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 
 # Mask a single write.
@@ -46,7 +46,7 @@ get: "k" -> /BYTES/b @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
 
 # Mask a write in the middle.
 
@@ -62,7 +62,7 @@ scan: "k/10" -> /BYTES/10 @11.000000000,0
 scan: "k/30" -> /BYTES/30 @11.000000000,0
 get: "k" -> /BYTES/c @11.000000000,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
 
 # Mask all the writes.
 
@@ -76,7 +76,7 @@ with t=A
 scan: "k"-"l" -> <no data>
 get: "k" -> <no data>
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
 
 # Disjoint masks.
 
@@ -91,7 +91,7 @@ scan: "k" -> /BYTES/b @11.000000000,0
 scan: "k/20" -> /BYTES/20 @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=2
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=2
 
 # A historical read before the ignored range should retrieve the
 # historical value visible at that point.
@@ -107,7 +107,7 @@ scan: "k" -> /BYTES/a @11.000000000,0
 scan: "k/10" -> /BYTES/10 @11.000000000,0
 get: "k" -> /BYTES/a @11.000000000,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=12} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=12} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
 
 # A historical read with an ignored range before it should hide
 # the historical value hidden at that point.
@@ -123,7 +123,7 @@ scan: "k" -> /BYTES/b @11.000000000,0
 scan: "k/20" -> /BYTES/20 @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=22} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=22} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
 
 # A historical read with an ignored range that overlaps should hide
 # the historical value hidden at that point.
@@ -140,7 +140,7 @@ scan: "k/10" -> /BYTES/10 @11.000000000,0
 scan: "k/20" -> /BYTES/20 @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=32} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=32} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
 
 # Do an intent push by advancing the transaction timestamp, while also having
 # a range of ignored seqnums. This should permanently delete the value at seqnum
@@ -158,20 +158,20 @@ with t=A
   check_intent    k=k
   get             k=k
 ----
-meta: "k" -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k" -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "k" -> /BYTES/b @11.000000000,0
 get: "k" -> /BYTES/b @11.000000000,0
-meta: "k" -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=20} ts=14.000000000,0 del=false klen=12 vlen=19 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k" -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=20} ts=14.000000000,0 del=false klen=12 vlen=19 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "k" -> /BYTES/b @14.000000000,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=32} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
-meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=20} ts=14.000000000,0 del=false klen=12 vlen=19 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=32} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=20} ts=14.000000000,0 del=false klen=12 vlen=19 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 
 # Ensure that the deleted value doesn't surface. Instead, if we ignore the
@@ -189,7 +189,7 @@ scan: "k/10" -> /BYTES/10 @11.000000000,0
 scan: "k/30" -> /BYTES/30 @11.000000000,0
 get: "k" -> /BYTES/a @14.000000000,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
 
 run ok
 with t=A
@@ -211,7 +211,7 @@ scan: "k/10" -> /BYTES/10 @11.000000000,0
 scan: "k/20" -> /BYTES/20 @11.000000000,0
 get: "k" -> /BYTES/b @14.000000000,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=25} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0 isn=1
 
 # Call mvccResolveWriteIntent with status=COMMITTED. This should fold the
 # intent while leaving the value unmodified.
@@ -225,16 +225,16 @@ with t=B
   txn_begin  ts=20
   get        k=k
 ----
-meta: "k" -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=20} ts=14.000000000,0 del=false klen=12 vlen=19 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k" -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=20} ts=14.000000000,0 del=false klen=12 vlen=19 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "k" -> /BYTES/b @14.000000000,0
 >> at end:
-txn: "B" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 
 
@@ -251,18 +251,18 @@ with t=B
   check_intent k=l
   get          k=l
 ----
-meta: "l" -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=30} ts=20.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "l" -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=30} ts=20.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "l" -> /BYTES/c @20.000000000,0
 >> at end:
-txn: "B" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
-meta: "l"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=30} ts=20.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "l"/0,0 -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=30} ts=20.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "l"/20.000000000,0 -> /BYTES/c
 
 
@@ -278,16 +278,16 @@ with t=B
   resolve_intent  k=l status=COMMITTED
   check_intent    k=l
 ----
-meta: "l" -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=30} ts=20.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "l" -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=30} ts=20.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "l" -> <no data>
 >> at end:
-txn: "B" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=35} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0 isn=1
+txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=35} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0 isn=1
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 error: (*withstack.withStack:) meta: "l" -> expected intent, found none
 
@@ -299,7 +299,7 @@ with t=C
 ----
 get: "l" -> <no data>
 >> at end:
-txn: "C" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=30.000000000,0 wto=false gul=0,0
+txn: "C" meta={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=30.000000000,0 wto=false gul=0,0
 
 
 # Put some values, then ignore all except the first, then do a commit. The
@@ -316,18 +316,18 @@ with t=C
   check_intent k=m
   get          k=m
 ----
-meta: "m" -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} ts=30.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "m" -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} ts=30.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "m" -> /BYTES/c @30.000000000,0
 >> at end:
-txn: "C" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=30.000000000,0 wto=false gul=0,0
+txn: "C" meta={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=30.000000000,0 wto=false gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
-meta: "m"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} ts=30.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "m"/0,0 -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} ts=30.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "m"/30.000000000,0 -> /BYTES/c
 
 
@@ -338,16 +338,16 @@ with t=C
   get             k=m
   resolve_intent  k=m status=COMMITTED
 ----
-meta: "m" -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} ts=30.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "m" -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} ts=30.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "m" -> /BYTES/a @30.000000000,0
 >> at end:
-txn: "C" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=30.000000000,0 wto=false gul=0,0 isn=1
+txn: "C" meta={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=30.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=30.000000000,0 wto=false gul=0,0 isn=1
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
 
@@ -366,19 +366,19 @@ with t=D
   get          k=n
 ----
 get: "m" -> /BYTES/a @30.000000000,0
-meta: "n" -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=30} ts=40.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "n" -> txn={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=30} ts=40.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "n" -> /BYTES/c @40.000000000,0
 >> at end:
-txn: "D" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0
+txn: "D" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
-meta: "n"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=30} ts=40.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "n"/0,0 -> txn={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=30} ts=40.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "n"/40.000000000,0 -> /BYTES/c
 
 
@@ -392,21 +392,21 @@ with t=D
   check_intent   k=n
   get            k=n
 ----
-meta: "n" -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=30} ts=40.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "n" -> txn={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=40.000000000,0 min=0,0 seq=30} ts=40.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "n" -> /BYTES/c @40.000000000,0
-meta: "n" -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=30} ts=45.000000000,0 del=false klen=12 vlen=20 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "n" -> txn={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=30} ts=45.000000000,0 del=false klen=12 vlen=20 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "n" -> /BYTES/c @45.000000000,0
 >> at end:
-txn: "D" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0
+txn: "D" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
-meta: "n"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=30} ts=45.000000000,0 del=false klen=12 vlen=20 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "n"/0,0 -> txn={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=30} ts=45.000000000,0 del=false klen=12 vlen=20 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
 
 # Ignore sequence numbers other than the current one, then commit. The value
@@ -421,17 +421,17 @@ with t=E
   txn_begin      ts=50
   get            k=n
 ----
-meta: "n" -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=30} ts=45.000000000,0 del=false klen=12 vlen=20 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "n" -> txn={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=30} ts=45.000000000,0 del=false klen=12 vlen=20 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "n" -> /BYTES/c @45.000000000,0
 get: "n" -> /BYTES/c @45.000000000,0
 >> at end:
-txn: "E" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
+txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
 data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
@@ -457,19 +457,19 @@ with t=E
 get: "n" -> /BYTES/c @45.000000000,0
 get: "o" -> <no data>
 >> at end:
-txn: "E" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
+txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
-meta: "n"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "n"/0,0 -> txn={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "n"/50.000000000,0 -> /BYTES/c
 data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
-meta: "o"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "o"/0,0 -> txn={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "o"/50.000000000,0 -> /BYTES/c
 
 
@@ -484,13 +484,13 @@ with t=E
 get: "n" -> /BYTES/c @45.000000000,0
 get: "o" -> <no data>
 >> at end:
-txn: "E" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
 data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
@@ -530,19 +530,19 @@ with t=E
   put             k=o v=c
   check_intent    k=o
 ----
-meta: "o" -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "o" -> txn={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 >> at end:
-txn: "E" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
 data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
-meta: "o"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "o"/0,0 -> txn={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=30} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}{20 /BYTES/b}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "o"/50.000000000,0 -> /BYTES/c
 
 
@@ -555,13 +555,13 @@ with t=E
 ----
 get: "o" -> <no data>
 >> at end:
-txn: "E" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=55.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
+txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=55.000000000,0 min=0,0 seq=30} lock=true stat=PENDING rts=50.000000000,0 wto=false gul=0,0 isn=1
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
 data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
@@ -585,20 +585,20 @@ with t=F k=o
   check_intent
   get
 ----
-meta: "o" -> txn={id=00000000 key="o" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "o" -> txn={id=00000006 key="o" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "o" -> /BYTES/b @50.000000000,0
 >> at end:
-txn: "F" meta={id=00000000 key="o" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0
+txn: "F" meta={id=00000006 key="o" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
 data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
-meta: "o"/0,0 -> txn={id=00000000 key="o" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "o"/0,0 -> txn={id=00000006 key="o" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=20} ts=50.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "o"/50.000000000,0 -> /BYTES/b
 
 
@@ -614,18 +614,18 @@ with t=F k=o
   check_intent
   get
 ----
-meta: "o" -> txn={id=00000000 key="o" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=10} ts=50.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "o" -> txn={id=00000006 key="o" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=10} ts=50.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
 get: "o" -> /BYTES/a @50.000000000,0
 >> at end:
-txn: "F" meta={id=00000000 key="o" iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0 isn=1
+txn: "F" meta={id=00000006 key="o" iso=Serializable pri=0.00000000 epo=0 ts=45.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=40.000000000,0 wto=false gul=0,0 isn=1
 data: "k"/14.000000000,0 -> {localTs=11.000000000,0}/BYTES/b
-meta: "k/10"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/10"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/10"/11.000000000,0 -> /BYTES/10
-meta: "k/20"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/20"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/20"/11.000000000,0 -> /BYTES/20
-meta: "k/30"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k/30"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=30} ts=11.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k/30"/11.000000000,0 -> /BYTES/30
 data: "m"/30.000000000,0 -> /BYTES/a
 data: "n"/45.000000000,0 -> {localTs=40.000000000,0}/BYTES/c
-meta: "o"/0,0 -> txn={id=00000000 key="o" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=10} ts=50.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "o"/0,0 -> txn={id=00000006 key="o" iso=Serializable pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=10} ts=50.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "o"/50.000000000,0 -> /BYTES/a
