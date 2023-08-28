@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
+	"github.com/cockroachdb/errors"
 )
 
 // SettingsDefaultOverrides documents the effect of several migrations that add
@@ -323,6 +324,20 @@ var upgrades = []upgradebase.Upgrade{
 		toCV(clusterversion.V23_2_RegionaLivenessTable),
 		upgrade.NoPrecondition,
 		createRegionLivenessTables,
+	),
+	upgrade.NewTenantUpgrade(
+		"start writing leases to a new hidden index",
+		toCV(clusterversion.V23_2_LeaseToSessionCreation),
+		upgrade.NoPrecondition,
+		NoTenantUpgradeFunc,
+	),
+	upgrade.NewTenantUpgrade(
+		"start writing leases to a new hidden index",
+		toCV(clusterversion.V23_2_LeaseWillOnlyHaveSessions),
+		upgrade.NoPrecondition,
+		func(ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps) error {
+			return errors.AssertionFailedf("force as stuck..")
+		},
 	),
 }
 

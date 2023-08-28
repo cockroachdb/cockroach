@@ -85,33 +85,46 @@ func (m *Manager) WaitForNoVersion(
 		// version of the descriptor.
 		// FIXME: Validate...
 		ie := m.storage.db.Executor()
-		leaseDesc := systemschema.LeaseTable()
-		stmt := `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND (crdb_internal.sql_liveness_is_alive("sessionID")))`
-		if !m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
-			leaseDesc = systemschema.V23_1_LeaseTable()
-			stmt = `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND expiration > $1)`
+		stmts := make([]string, 0, 2)
+		leaseDescs := make([]catalog.Descriptor, 0, 2)
+		if m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseToSessionCreation) {
+			leaseDescs = append(leaseDescs, systemschema.LeaseTable())
+			stmts = append(stmts, `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND (crdb_internal.sql_liveness_is_alive("sessionID")))`)
+		}
+		if !m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseWillOnlyHaveSessions) {
+			leaseDescs = append(leaseDescs, systemschema.V23_1_LeaseTable())
+			stmts = append(stmts, `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND expiration > $1)`)
 		}
 		now := m.storage.clock.Now()
-		stmt = fmt.Sprintf(stmt,
-			now.AsOfSystemTime(),
-			id)
-		var values tree.Datums
-		if err := ie.WithSyntheticDescriptors([]catalog.Descriptor{leaseDesc},
-			func() error {
-				var err error
-				values, err = ie.QueryRowEx(
-					ctx, "count-leases", nil, /* txn */
-					sessiondata.RootUserSessionDataOverride,
-					stmt, now.GoTime(),
-				)
+
+		var count int
+		for idx, stmt := range stmts {
+			stmt = fmt.Sprintf(stmt,
+				now.AsOfSystemTime(),
+				id)
+			if err := ie.WithSyntheticDescriptors(leaseDescs[idx:1],
+				func() error {
+					var err error
+					values, err := ie.QueryRowEx(
+						ctx, "count-leases", nil, /* txn */
+						sessiondata.RootUserSessionDataOverride,
+						stmt, now.GoTime(),
+					)
+					if err != nil {
+						return err
+					}
+					if values == nil {
+						return errors.New("failed to count leases")
+					}
+					count += int(tree.MustBeDInt(values[0]))
+					return nil
+				}); err != nil {
 				return err
-			}); err != nil {
-			return err
+			}
+			if count > 0 {
+				break
+			}
 		}
-		if values == nil {
-			return errors.New("failed to count leases")
-		}
-		count := int(tree.MustBeDInt(values[0]))
 		if count == 0 {
 			break
 		}

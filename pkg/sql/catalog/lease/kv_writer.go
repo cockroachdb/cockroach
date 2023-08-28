@@ -68,13 +68,13 @@ func (w *kvWriter) versionGuard(
 
 func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
 	return w.do(ctx, txn, l, func(guard settingswatcher.VersionGuard, b *kv.Batch) error {
-		if guard.IsActive(clusterversion.V23_2) {
+		if guard.IsActive(clusterversion.V23_2_LeaseToSessionCreation) {
 			err := w.currentWriter.Insert(ctx, b, false /*kvTrace */, leaseAsCurrentDatum(l)...)
 			if err != nil {
 				return err
 			}
 		}
-		if !guard.IsActive(clusterversion.V23_2) && guard.IsActive(clusterversion.V23_1_SystemRbrDualWrite) {
+		if !guard.IsActive(clusterversion.V23_2_LeaseWillOnlyHaveSessions) && guard.IsActive(clusterversion.V23_1_SystemRbrDualWrite) {
 			err := w.mrWriter.Insert(ctx, b, false /*kvTrace */, leaseAsRbrDatum(l)...)
 			if err != nil {
 				return err
@@ -92,13 +92,13 @@ func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) 
 
 func (w *kvWriter) deleteLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
 	return w.do(ctx, txn, l, func(guard settingswatcher.VersionGuard, b *kv.Batch) error {
-		if guard.IsActive(clusterversion.V23_2) {
+		if guard.IsActive(clusterversion.V23_2_LeaseToSessionCreation) {
 			err := w.currentWriter.Delete(ctx, b, false /*kvTrace */, leaseAsCurrentDatum(l)...)
 			if err != nil {
 				return err
 			}
 		}
-		if !guard.IsActive(clusterversion.V23_2) && guard.IsActive(clusterversion.V23_1_SystemRbrDualWrite) {
+		if !guard.IsActive(clusterversion.V23_2_LeaseWillOnlyHaveSessions) && guard.IsActive(clusterversion.V23_1_SystemRbrDualWrite) {
 			err := w.mrWriter.Delete(ctx, b, false /*kvTrace */, leaseAsRbrDatum(l)...)
 			if err != nil {
 				return err
