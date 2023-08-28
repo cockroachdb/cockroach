@@ -101,10 +101,11 @@ func TestManualReplication(t *testing.T) {
 		t.Fatalf("expected 3 replicas, got %+v", tableRangeDesc.InternalReplicas)
 	}
 	for i := 0; i < 3; i++ {
+		sl := tc.Servers[i].StorageLayer()
 		if _, ok := tableRangeDesc.GetReplicaDescriptor(
-			tc.Servers[i].GetFirstStoreID()); !ok {
+			sl.GetFirstStoreID()); !ok {
 			t.Fatalf("expected replica on store %d, got %+v",
-				tc.Servers[i].GetFirstStoreID(), tableRangeDesc.InternalReplicas)
+				sl.GetFirstStoreID(), tableRangeDesc.InternalReplicas)
 		}
 	}
 
@@ -114,7 +115,7 @@ func TestManualReplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if leaseHolder.StoreID != tc.Servers[0].GetFirstStoreID() {
+	if leaseHolder.StoreID != tc.Servers[0].StorageLayer().GetFirstStoreID() {
 		t.Fatalf("expected initial lease on server idx 0, but is on node: %+v",
 			leaseHolder)
 	}
@@ -132,7 +133,7 @@ func TestManualReplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if leaseHolder.StoreID != tc.Servers[1].GetFirstStoreID() {
+	if leaseHolder.StoreID != tc.Servers[1].StorageLayer().GetFirstStoreID() {
 		t.Fatalf("expected lease on server idx 1 (node: %d store: %d), but is on node: %+v",
 			tc.Server(1).NodeID(),
 			tc.Server(1).GetFirstStoreID(),
@@ -146,7 +147,10 @@ func TestBasicManualReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
+	tc := StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant},
+		ReplicationMode: base.ReplicationManual,
+	})
 	defer tc.Stopper().Stop(context.Background())
 
 	desc, err := tc.AddVoters(keys.MinKey, tc.Target(1), tc.Target(2))
@@ -179,7 +183,10 @@ func TestBasicAutoReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := StartTestCluster(t, 3, base.TestClusterArgs{ReplicationMode: base.ReplicationAuto})
+	tc := StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant},
+		ReplicationMode: base.ReplicationAuto,
+	})
 	defer tc.Stopper().Stop(context.Background())
 	// NB: StartTestCluster will wait for full replication.
 }
@@ -188,11 +195,13 @@ func TestStopServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Use insecure mode so our servers listen on util.IsolatedTestAddr
-	// and they fail cleanly instead of interfering with other tests.
-	// See https://github.com/cockroachdb/cockroach/issues/9256
 	tc := StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+
+			// We use Insecure: true because the .GetAdminHTTPClient() API
+			// does not currently work when called from two different servers
+			// in the same TestCluster.
 			Insecure: true,
 		},
 		ReplicationMode: base.ReplicationAuto,
@@ -200,7 +209,7 @@ func TestStopServer(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	// Connect to server 1, ensure it is answering requests over HTTP and GRPC.
-	server1 := tc.Server(1)
+	server1 := tc.Server(1).SystemLayer()
 	var response serverpb.JSONResponse
 
 	httpClient1, err := server1.GetUnauthenticatedHTTPClient()
@@ -250,11 +259,12 @@ func TestStopServer(t *testing.T) {
 	}
 
 	// Verify that request to Server 0 still works.
-	httpClient1, err = tc.Server(0).GetUnauthenticatedHTTPClient()
+	srv0 := tc.Server(0).SystemLayer()
+	httpClient1, err = srv0.GetUnauthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
-	url = tc.Server(0).AdminURL().WithPath("/_status/metrics/local").String()
+	url = srv0.AdminURL().WithPath("/_status/metrics/local").String()
 	if err := httputil.GetJSON(httpClient1, url, &response); err != nil {
 		t.Fatal(err)
 	}
@@ -289,6 +299,7 @@ func TestRestart(t *testing.T) {
 	ctx := context.Background()
 	tc := StartTestCluster(t, numServers,
 		base.TestClusterArgs{
+			ServerArgs:          base.TestServerArgs{DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant},
 			ReplicationMode:     base.ReplicationAuto,
 			ReusableListenerReg: lisReg,
 			ServerArgsPerNode:   stickyServerArgs,
@@ -337,6 +348,7 @@ func TestExpirationBasedLeases(t *testing.T) {
 	ctx := context.Background()
 	tc := StartTestCluster(t, 1,
 		base.TestClusterArgs{
+			ServerArgs:      base.TestServerArgs{DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant},
 			ReplicationMode: base.ReplicationManual,
 		})
 	defer tc.Stopper().Stop(ctx)
