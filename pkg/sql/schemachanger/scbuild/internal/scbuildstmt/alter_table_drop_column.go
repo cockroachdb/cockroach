@@ -239,14 +239,9 @@ func dropColumn(
 				_, _, ns := scpb.FindNamespace(b.QueryByID(col.TableID))
 				_, _, nsDep := scpb.FindNamespace(b.QueryByID(e.ViewID))
 				if nsDep.DatabaseID != ns.DatabaseID || nsDep.SchemaID != ns.SchemaID {
-					panic(errors.WithHintf(sqlerrors.NewDependentObjectErrorf(
-						"cannot drop column %q because view %q depends on it",
-						cn.Name, qualifiedName(b, e.ViewID)),
-						"you can drop %s instead.", nsDep.Name))
+					panic(sqlerrors.NewDependentBlocksOpError("drop", "column", cn.Name, "view", qualifiedName(b, e.ViewID)))
 				}
-				panic(sqlerrors.NewDependentObjectErrorf(
-					"cannot drop column %q because view %q depends on it",
-					cn.Name, nsDep.Name))
+				panic(sqlerrors.NewDependentBlocksOpError("drop", "column", cn.Name, "view", nsDep.Name))
 			}
 			dropCascadeDescriptor(b, e.ViewID)
 		case *scpb.Sequence:
