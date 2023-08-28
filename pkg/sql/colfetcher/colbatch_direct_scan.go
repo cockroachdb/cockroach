@@ -209,6 +209,7 @@ func NewColBatchDirectScan(
 	// should be able to modify the BatchRequest, but alas.
 	fetchSpec := spec.FetchSpec
 	fetcher := row.NewDirectKVBatchFetcher(
+		ctx,
 		flowCtx.Txn,
 		bsHeader,
 		&fetchSpec,
@@ -218,6 +219,7 @@ func NewColBatchDirectScan(
 		flowCtx.EvalCtx.SessionData().LockTimeout,
 		kvFetcherMemAcc,
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+		flowCtx.EvalCtx.Settings,
 	)
 	var hasDatumVec bool
 	for _, t := range tableArgs.typs {

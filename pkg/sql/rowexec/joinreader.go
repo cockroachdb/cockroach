@@ -530,6 +530,7 @@ func newJoinReader(
 		}
 		singleRowLookup := readerType == indexJoinReaderType || spec.LookupColumnsAreKey
 		streamingKVFetcher = row.NewStreamingKVFetcher(
+			ctx,
 			flowCtx.Cfg.DistSender,
 			flowCtx.Stopper(),
 			jr.txn,
@@ -569,6 +570,7 @@ func newJoinReader(
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 			SpansCanOverlap:            jr.spansCanOverlap,
+			Settings:                   flowCtx.EvalCtx.Settings,
 		},
 	); err != nil {
 		return nil, err

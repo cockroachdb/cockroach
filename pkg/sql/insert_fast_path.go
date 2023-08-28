@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -153,7 +154,7 @@ func (r *insertFastPathRun) inputRow(rowIdx int) tree.Datums {
 // addFKChecks adds Requests to fkBatch and entries in fkSpanInfo / fkSpanMap as
 // needed for checking foreign keys for the given row.
 func (r *insertFastPathRun) addFKChecks(
-	ctx context.Context, rowIdx int, inputRow tree.Datums,
+	ctx context.Context, rowIdx int, inputRow tree.Datums, settings *cluster.Settings,
 ) error {
 	for i := range r.fkChecks {
 		c := &r.fkChecks[i]
@@ -189,7 +190,7 @@ func (r *insertFastPathRun) addFKChecks(
 		if r.traceKV {
 			log.VEventf(ctx, 2, "FKScan %s", span)
 		}
-		lockStrength := row.GetKeyLockingStrength(descpb.ToScanLockingStrength(c.Locking.Strength))
+		lockStrength := row.GetKeyLockingStrength(ctx, descpb.ToScanLockingStrength(c.Locking.Strength), settings)
 		lockWaitPolicy := row.GetWaitPolicy(descpb.ToScanLockingWaitPolicy(c.Locking.WaitPolicy))
 		if r.fkBatch.Header.WaitPolicy != lockWaitPolicy {
 			return errors.AssertionFailedf(
@@ -310,7 +311,7 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 
 		// Add FK existence checks.
 		if len(n.run.fkChecks) > 0 {
-			if err := n.run.addFKChecks(params.ctx, rowIdx, inputRow); err != nil {
+			if err := n.run.addFKChecks(params.ctx, rowIdx, inputRow, params.ExecCfg().Settings); err != nil {
 				return false, err
 			}
 		}

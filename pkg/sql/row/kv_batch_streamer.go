@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -51,15 +52,17 @@ var _ KVBatchFetcher = &txnKVStreamer{}
 
 // newTxnKVStreamer creates a new txnKVStreamer.
 func newTxnKVStreamer(
+	ctx context.Context,
 	streamer *kvstreamer.Streamer,
 	lockStrength descpb.ScanLockingStrength,
 	acc *mon.BoundAccount,
 	kvPairsRead *int64,
 	batchRequestsIssued *int64,
+	st *cluster.Settings,
 ) KVBatchFetcher {
 	f := &txnKVStreamer{
 		streamer:   streamer,
-		keyLocking: GetKeyLockingStrength(lockStrength),
+		keyLocking: GetKeyLockingStrength(ctx, lockStrength, st),
 		acc:        acc,
 	}
 	f.kvBatchFetcherHelper.init(f.nextBatch, kvPairsRead, batchRequestsIssued)

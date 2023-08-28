@@ -345,6 +345,7 @@ func NewColBatchScan(
 		return nil, nil, err
 	}
 	kvFetcher := row.NewKVFetcher(
+		ctx,
 		flowCtx.Txn,
 		bsHeader,
 		spec.Reverse,
@@ -353,6 +354,7 @@ func NewColBatchScan(
 		flowCtx.EvalCtx.SessionData().LockTimeout,
 		kvFetcherMemAcc,
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+		flowCtx.EvalCtx.Settings,
 	)
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	fetcher.cFetcherArgs = cFetcherArgs{

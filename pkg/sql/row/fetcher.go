@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -316,6 +317,7 @@ type FetcherInitArgs struct {
 	// row is being processed. In practice, this means that span IDs must be
 	// passed in when SpansCanOverlap is true.
 	SpansCanOverlap bool
+	Settings        *cluster.Settings
 }
 
 // Init sets up a Fetcher for a given table and index.
@@ -445,6 +447,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			forceProductionKVBatchSize: args.ForceProductionKVBatchSize,
 			kvPairsRead:                &kvPairsRead,
 			batchRequestsIssued:        &batchRequestsIssued,
+			settings:                   args.Settings,
 		}
 		if args.Txn != nil {
 			fetcherArgs.sendFn = makeTxnKVFetcherDefaultSendFunc(args.Txn, &batchRequestsIssued)
@@ -453,7 +456,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			fetcherArgs.admission.pacerFactory = args.Txn.DB().AdmissionPacerFactory
 			fetcherArgs.admission.settingsValues = args.Txn.DB().SettingsValues
 		}
-		rf.kvFetcher = newKVFetcher(newTxnKVFetcherInternal(fetcherArgs))
+		rf.kvFetcher = newKVFetcher(newTxnKVFetcherInternal(ctx, fetcherArgs))
 	}
 
 	return nil

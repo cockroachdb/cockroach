@@ -159,6 +159,7 @@ func newTableReader(
 			Spec:                       &spec.FetchSpec,
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+			Settings:                   flowCtx.EvalCtx.Settings,
 		},
 	); err != nil {
 		return nil, err
