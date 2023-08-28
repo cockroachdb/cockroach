@@ -185,7 +185,7 @@ func (u *sqlActivityUpdater) TransferStatsToActivity(ctx context.Context) error 
 
 	// The counts are using AS OF SYSTEM TIME so the values may be slightly
 	// off. This is acceptable to increase the performance.
-	stmtRowCount, txnRowCount, totalStmtClusterExecCount, totalTxnClusterExecCount, err := u.getAostExecutionCount(ctx, aggTs)
+	stmtRowCount, txnRowCount, totalEstimatedStmtClusterExecSeconds, totalEstimatedTxnClusterExecSeconds, err := u.getAostExecutionCount(ctx, aggTs)
 	if err != nil {
 		return err
 	}
@@ -208,12 +208,12 @@ func (u *sqlActivityUpdater) TransferStatsToActivity(ctx context.Context) error 
 	// Just transfer all the stats to avoid overhead of getting
 	// the tops.
 	if stmtRowCount < (topLimit*numberOfTopColumns) && txnRowCount < (topLimit*numberOfTopColumns) {
-		return u.transferAllStats(ctx, aggTs, totalStmtClusterExecCount, totalTxnClusterExecCount)
+		return u.transferAllStats(ctx, aggTs, totalEstimatedStmtClusterExecSeconds, totalEstimatedTxnClusterExecSeconds)
 	}
 
 	// Only transfer the top sql.stats.activity.top.max for each of
 	// the 6 most popular columns
-	err = u.transferTopStats(ctx, aggTs, topLimit, totalStmtClusterExecCount, totalTxnClusterExecCount)
+	err = u.transferTopStats(ctx, aggTs, topLimit, totalEstimatedStmtClusterExecSeconds, totalEstimatedTxnClusterExecSeconds)
 	return err
 }
 
@@ -223,8 +223,8 @@ func (u *sqlActivityUpdater) TransferStatsToActivity(ctx context.Context) error 
 func (u *sqlActivityUpdater) transferAllStats(
 	ctx context.Context,
 	aggTs time.Time,
-	totalStmtClusterExecCount int64,
-	totalTxnClusterExecCount int64,
+	totalEstimatedStmtClusterExecSeconds float64,
+	totalEstimatedTxnClusterExecSeconds float64,
 ) error {
 	_, err := u.db.Executor().ExecEx(ctx,
 		"activity-flush-txn-transfer-all",
@@ -264,7 +264,7 @@ func (u *sqlActivityUpdater) transferAllStats(
                     fingerprint_id,
                     agg_interval));
 `,
-		totalTxnClusterExecCount,
+		totalEstimatedTxnClusterExecSeconds,
 		aggTs,
 	)
 
@@ -323,7 +323,7 @@ INTO system.public.statement_activity (aggregated_ts, fingerprint_id, transactio
                     plan,
                     index_recommendations));
 `,
-		totalStmtClusterExecCount,
+		totalEstimatedStmtClusterExecSeconds,
 		aggTs,
 	)
 
@@ -337,8 +337,8 @@ func (u *sqlActivityUpdater) transferTopStats(
 	ctx context.Context,
 	aggTs time.Time,
 	topLimit int64,
-	totalStmtClusterExecCount int64,
-	totalTxnClusterExecCount int64,
+	totalEstimatedStmtClusterExecSeconds float64,
+	totalEstimatedTxnClusterExecSeconds float64,
 ) (retErr error) {
 
 	// Deleting and inserting the activity tables needs to be done in the same
@@ -438,7 +438,7 @@ INTO system.public.transaction_activity
                     ts.fingerprint_id,
                     ts.agg_interval));
 `,
-			totalStmtClusterExecCount,
+			totalEstimatedTxnClusterExecSeconds,
 			aggTs,
 			topLimit,
 		)
@@ -556,7 +556,7 @@ INTO system.public.statement_activity
                     ss.plan,
                     ss.index_recommendations));
 `,
-			totalTxnClusterExecCount,
+			totalEstimatedStmtClusterExecSeconds,
 			aggTs,
 			topLimit,
 		)
@@ -576,40 +576,29 @@ func (u *sqlActivityUpdater) getAostExecutionCount(
 ) (
 	stmtRowCount int64,
 	txnRowCount int64,
-	totalStmtClusterExecCount int64,
-	totalTxnClusterExecCount int64,
+	totalEstimatedStmtClusterExecSeconds float64,
+	totalEstimatedTxnClusterExecSeconds float64,
 	retErr error,
 ) {
-
-	query := `
-SELECT row_count,
-       ex_sum
-FROM (SELECT count_rows():::int                     AS row_count,
-             COALESCE(sum(execution_count)::int, 0) AS ex_sum
-      FROM system.statement_statistics AS OF SYSTEM TIME follower_read_timestamp()
-      WHERE app_name not like '$ internal%' and aggregated_ts = $1
-      union all
-      SELECT
-          count_rows():::int AS row_count, COALESCE (sum(execution_count)::int, 0) AS ex_sum
-      FROM system.transaction_statistics AS OF SYSTEM TIME follower_read_timestamp()
-      WHERE app_name not like '$ internal%' and aggregated_ts = $1) AS OF SYSTEM TIME follower_read_timestamp()`
-
+	aost := "AS OF SYSTEM TIME follower_read_timestamp()"
 	if u.testingKnobs != nil {
 		// We repeat the query in order to avoid formatting the query every time.
-		aost := u.testingKnobs.GetAOSTClause()
-		query = fmt.Sprintf(`
+		aost = u.testingKnobs.GetAOSTClause()
+	}
+
+	query := fmt.Sprintf(`
 SELECT row_count,
        ex_sum
 FROM (SELECT count_rows():::int                     AS row_count,
-             COALESCE(sum(execution_count)::int, 0) AS ex_sum
+             COALESCE(sum(total_estimated_execution_time), 0) AS ex_sum
       FROM system.statement_statistics %[1]s
-      WHERE app_name not like '$ internal%%' and aggregated_ts = $1
+      WHERE aggregated_ts = $1
       union all
       SELECT
-          count_rows():::int AS row_count, COALESCE (sum(execution_count)::int, 0) AS ex_sum
+          count_rows():::int AS row_count, 
+          COALESCE (sum(total_estimated_execution_time), 0) AS ex_sum
       FROM system.transaction_statistics %[1]s
-      WHERE app_name not like '$ internal%%' and aggregated_ts = $1) %[1]s`, aost)
-	}
+      WHERE aggregated_ts = $1) %[1]s`, aost)
 
 	it, err := u.db.Executor().QueryIteratorEx(ctx,
 		"activity-flush-count",
@@ -625,18 +614,18 @@ FROM (SELECT count_rows():::int                     AS row_count,
 
 	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
-	stmtRowCount, totalStmtClusterExecCount, err = u.getExecutionCountFromRow(ctx, it)
+	stmtRowCount, totalEstimatedStmtClusterExecSeconds, err = u.getExecutionCountFromRow(ctx, it)
 	if err != nil {
 		return -1, -1, -1, -1, err
 	}
 
-	txnRowCount, totalTxnClusterExecCount, err = u.getExecutionCountFromRow(ctx, it)
-	return stmtRowCount, txnRowCount, totalStmtClusterExecCount, totalTxnClusterExecCount, err
+	txnRowCount, totalEstimatedTxnClusterExecSeconds, err = u.getExecutionCountFromRow(ctx, it)
+	return stmtRowCount, txnRowCount, totalEstimatedStmtClusterExecSeconds, totalEstimatedTxnClusterExecSeconds, err
 }
 
 func (u *sqlActivityUpdater) getExecutionCountFromRow(
 	ctx context.Context, iter isql.Rows,
-) (rowCount int64, totalExecutionCount int64, err error) {
+) (rowCount int64, totalEstimatedClusterExecSeconds float64, err error) {
 	ok, err := iter.Next(ctx)
 	if err != nil {
 		return -1, -1, err
@@ -651,7 +640,7 @@ func (u *sqlActivityUpdater) getExecutionCountFromRow(
 		return 0, 0, nil
 	}
 
-	return int64(tree.MustBeDInt(row[0])), int64(tree.MustBeDInt(row[1])), nil
+	return int64(tree.MustBeDInt(row[0])), float64(tree.MustBeDFloat(row[1])), nil
 }
 
 func (u *sqlActivityUpdater) getTimeNow() time.Time {
