@@ -243,6 +243,9 @@ func (f *PlanGistFactory) decodeOp() execOperator {
 
 func (f *PlanGistFactory) popChild() *Node {
 	l := len(f.nodeStack)
+	if l == 0 {
+		return nil
+	}
 	n := f.nodeStack[l-1]
 	f.nodeStack = f.nodeStack[:l-1]
 

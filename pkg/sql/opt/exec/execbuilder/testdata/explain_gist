@@ -189,3 +189,10 @@ SELECT crdb_internal.decode_plan_gist('AgGwAgQAgQIAAgAEBQITsAICAxgGDA==')
             └── • scan
                   table: ?@?
                   spans: 1+ spans
+
+# Regression test for #109560. Incorrectly formed plan gist should not cause
+# internal error.
+query T nosort
+SELECT crdb_internal.decode_external_plan_gist('Ag8f')
+----
+• union all

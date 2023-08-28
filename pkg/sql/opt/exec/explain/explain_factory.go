@@ -84,6 +84,13 @@ func (n *Node) Annotate(id exec.ExplainAnnotationID, value interface{}) {
 func newNode(
 	op execOperator, args interface{}, ordering exec.OutputOrdering, children ...*Node,
 ) (*Node, error) {
+	nonNilChildren := make([]*Node, 0, len(children))
+	for i := range children {
+		if children[i] != nil {
+			nonNilChildren = append(nonNilChildren, children[i])
+		}
+	}
+	children = nonNilChildren
 	inputNodeCols := make([]colinfo.ResultColumns, len(children))
 	for i := range children {
 		inputNodeCols[i] = children[i].Columns()
