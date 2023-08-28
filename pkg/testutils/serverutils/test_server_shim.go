@@ -113,7 +113,7 @@ func ShouldStartDefaultTestTenant(
 
 	if globalDefaultSelectionOverride.isSet {
 		override := globalDefaultSelectionOverride.value
-		if baseArg.TestTenantAlwaysDisabled() {
+		if override.TestTenantAlwaysDisabled() {
 			if issueNum, label := override.IssueRef(); issueNum != 0 {
 				t.Logf("cluster virtualization disabled in global scope due to issue: #%d (expected label: %s)", issueNum, label)
 			}
