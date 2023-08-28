@@ -25,7 +25,6 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -687,22 +685,12 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 }
 
-func skipLocalUnderArm64(cloud string) string {
-	if cloud == spec.Local && runtime.GOARCH == "arm64" {
-		// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-		return "Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888"
-	}
-	return ""
-}
-
 func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:      "cdc/tpcc-1000",
-		Owner:     registry.OwnerCDC,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/tpcc-1000",
+		Owner:           registry.OwnerCDC,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -715,12 +703,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/tpcc-1000/sink=null",
-		Owner:     registry.OwnerCDC,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/tpcc-1000/sink=null",
+		Owner:           registry.OwnerCDC,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		Tags:            []string{"manual"},
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -735,12 +721,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/initial-scan",
-		Owner:     registry.OwnerCDC,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/initial-scan",
+		Owner:           registry.OwnerCDC,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -754,12 +738,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/sink-chaos",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/sink-chaos",
+		Owner:           `cdc`,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -773,12 +755,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/crdb-chaos",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/crdb-chaos",
+		Owner:           `cdc`,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -799,10 +779,8 @@ func registerCDC(r registry.Registry) {
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -821,12 +799,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/cloud-sink-gcs/rangefeed=true",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/cloud-sink-gcs/rangefeed=true",
+		Owner:           `cdc`,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -845,12 +821,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:      "cdc/pubsub-sink",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/pubsub-sink",
+		Owner:           `cdc`,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -874,12 +848,10 @@ func registerCDC(r registry.Registry) {
 	// TODO(rui): Change to a shorter test as it just needs to validate
 	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
-		Name:      "cdc/pubsub-sink/assume-role",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/pubsub-sink/assume-role",
+		Owner:           `cdc`,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -904,12 +876,10 @@ func registerCDC(r registry.Registry) {
 	// TODO(rui): Change to a shorter test as it just needs to validate
 	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
-		Name:      "cdc/cloud-sink-gcs/assume-role",
-		Owner:     `cdc`,
-		Benchmark: true,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/cloud-sink-gcs/assume-role",
+		Owner:           `cdc`,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -947,23 +917,19 @@ func registerCDC(r registry.Registry) {
 		})
 	*/
 	r.Add(registry.TestSpec{
-		Name:      "cdc/kafka-auth",
-		Owner:     `cdc`,
-		Benchmark: true,
-		Skip:      skipLocalUnderArm64(r.Cloud()),
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(1, spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/kafka-auth",
+		Owner:           `cdc`,
+		Benchmark:       true,
+		Cluster:         r.MakeClusterSpec(1),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCKafkaAuth(ctx, t, c)
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:  "cdc/bank",
-		Owner: `cdc`,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
+		Name:            "cdc/bank",
+		Owner:           `cdc`,
+		Cluster:         r.MakeClusterSpec(4),
 		RequiresLicense: true,
 		Timeout:         30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1137,11 +1103,11 @@ func randomSerial() (*big.Int, error) {
 }
 
 const (
-	confluentDownloadURL = "https://storage.googleapis.com/cockroach-fixtures/tools/confluent-community-6.1.0.tar.gz"
-	confluentSHA256      = "53b0e2f08c4cfc55087fa5c9120a614ef04d306db6ec3bcd7710f89f05355355"
-	confluentInstallBase = "confluent-6.1.0"
+	confluentDownloadURL = "https://packages.confluent.io/archive/7.4/confluent-community-7.4.0.tar.gz"
+	confluentSHA256      = "cc3066e9b55c211664c6fb9314c553521a0cb0d5b78d163e74480bdc60256d75"
+	confluentInstallBase = "confluent-7.4.0"
 
-	confluentCLIVersion         = "1.26.0"
+	confluentCLIVersion         = "2.38.1"
 	confluentCLIDownloadURLBase = "https://s3-us-west-2.amazonaws.com/confluent.cloud/confluent-cli/archives"
 )
 
@@ -1172,6 +1138,9 @@ arch() {
   case "$arch" in
     x86_64)
       echo "amd64"
+      ;;
+    aarch64)
+      echo "arm64"
       ;;
     *)
       echo "$arch"
@@ -1218,6 +1187,9 @@ case "$PLATFORM" in
       ;;
     darwin/amd64)
       CONFLUENT_CLI_URL="${CONFLUENT_CLI_URL_BASE}/${CONFLUENT_CLI_VERSION}/confluent_v${CONFLUENT_CLI_VERSION}_darwin_amd64.tar.gz"
+      ;;
+    linux/arm64)
+      CONFLUENT_CLI_URL="${CONFLUENT_CLI_URL_BASE}/${CONFLUENT_CLI_VERSION}/confluent_v${CONFLUENT_CLI_VERSION}_linux_arm64.tar.gz"
       ;;
     *)
       echo "We don't know how to install the confluent CLI for \"${PLATFORM}\""
