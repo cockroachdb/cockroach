@@ -428,7 +428,7 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 			t.Fatal(cerr)
 		}
 
-		tc.WaitForNStores(t, tc.NumServers(), tc.Servers[0].GossipI().(*gossip.Gossip))
+		tc.WaitForNStores(t, tc.NumServers(), tc.Servers[0].StorageLayer().GossipI().(*gossip.Gossip))
 	}
 
 	if tc.clusterArgs.ReplicationMode == base.ReplicationManual {
