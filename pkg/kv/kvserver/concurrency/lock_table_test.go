@@ -707,7 +707,7 @@ func scanSpans(
 		}
 		strS := parts[0]
 		spanStr := parts[1]
-		str := getStrength(t, d, strS)
+		str := GetStrength(t, d, strS)
 		// Compute latch span access based on the supplied strength.
 		var sa spanset.SpanAccess
 		switch str {
@@ -756,10 +756,10 @@ func ScanIsoLevel(t *testing.T, d *datadriven.TestData) isolation.Level {
 func ScanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
 	var strS string
 	d.ScanArgs(t, "strength", &strS)
-	return getStrength(t, d, strS)
+	return GetStrength(t, d, strS)
 }
 
-func getStrength(t *testing.T, d *datadriven.TestData, strS string) lock.Strength {
+func GetStrength(t *testing.T, d *datadriven.TestData, strS string) lock.Strength {
 	switch strS {
 	case "none":
 		return lock.None

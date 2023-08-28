@@ -1,0 +1,643 @@
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=11,1 epoch=0
+----
+
+new-txn name=txn3 ts=9,1 epoch=0
+----
+
+new-txn name=txn4 ts=13,1 epoch=0
+----
+
+new-txn name=txn5 ts=13,1 epoch=0
+----
+
+
+# ------------------------------------------------------------------------------
+# Ensure multiple shared lock requests can proceed without conflicting on
+# latches.
+# ------------------------------------------------------------------------------
+
+new-request name=req1 txn=txn1 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+
+new-request name=req2 txn=txn3 ts=9,1
+  get key=a str=shared
+----
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+
+new-request name=req3 txn=txn2 ts=11,1
+  get key=a str=shared
+----
+
+sequence req=req3
+----
+[3] sequence req3: sequencing request
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: sequencing complete, returned guard
+
+debug-latch-manager
+----
+write count: 0
+ read count: 3
+
+# ------------------------------------------------------------------------------
+# Ensure non-locking reads do not conflict with shared locks on latches. We
+# test non-locking reads above, below, and at the timestamps at which shared
+# locking requests were issued.
+# ------------------------------------------------------------------------------
+
+new-request name=req4 txn=txn4 ts=13,1
+  get key=a str=none
+----
+
+sequence req=req4
+----
+[4] sequence req4: sequencing request
+[4] sequence req4: acquiring latches
+[4] sequence req4: scanning lock table for conflicting locks
+[4] sequence req4: sequencing complete, returned guard
+
+new-request name=req5 txn=txn5 ts=8,1
+  get key=a str=none
+----
+
+sequence req=req5
+----
+[5] sequence req5: sequencing request
+[5] sequence req5: acquiring latches
+[5] sequence req5: scanning lock table for conflicting locks
+[5] sequence req5: sequencing complete, returned guard
+
+new-request name=req6 txn=txn1 ts=10,1
+  get key=a str=none
+----
+
+sequence req=req6
+----
+[6] sequence req6: sequencing request
+[6] sequence req6: acquiring latches
+[6] sequence req6: scanning lock table for conflicting locks
+[6] sequence req6: sequencing complete, returned guard
+
+debug-latch-manager
+----
+write count: 0
+ read count: 6
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+finish req=req4
+----
+[-] finish req4: finishing request
+
+finish req=req5
+----
+[-] finish req5: finishing request
+
+finish req=req6
+----
+[-] finish req6: finishing request
+
+
+# ------------------------------------------------------------------------------
+# Ensure exclusive-locking reads do conflict with shared-locking reads on
+# latches. We test exclusive-locking reads above, below, and at the timestamp
+# at which the shared-locking requests were issued.
+# ------------------------------------------------------------------------------
+
+new-request name=req7 txn=txn1 ts=10,1
+  get key=a str=shared
+----
+
+new-request name=req8 txn=txn1 ts=10,1
+  get key=b str=shared
+----
+
+new-request name=req9 txn=txn1 ts=10,1
+  get key=c str=shared
+----
+
+sequence req=req7
+----
+[7] sequence req7: sequencing request
+[7] sequence req7: acquiring latches
+[7] sequence req7: scanning lock table for conflicting locks
+[7] sequence req7: sequencing complete, returned guard
+
+sequence req=req8
+----
+[8] sequence req8: sequencing request
+[8] sequence req8: acquiring latches
+[8] sequence req8: scanning lock table for conflicting locks
+[8] sequence req8: sequencing complete, returned guard
+
+sequence req=req9
+----
+[9] sequence req9: sequencing request
+[9] sequence req9: acquiring latches
+[9] sequence req9: scanning lock table for conflicting locks
+[9] sequence req9: sequencing complete, returned guard
+
+# exclusive_lock(ts) < shared_lock(ts)
+new-request name=req10 txn=txn3 ts=9,1
+  get key=a str=exclusive
+----
+
+sequence req=req10
+----
+[10] sequence req10: sequencing request
+[10] sequence req10: acquiring latches
+[10] sequence req10: waiting to acquire write latch ‹a›@9.000000000,1, held by read latch ‹a›@9223372036.854775807,2147483647
+[10] sequence req10: blocked on select in spanlatch.(*Manager).waitForSignal
+
+# exclusive_lock(ts) == shared_lock(ts)
+new-request name=req11 txn=txn1 ts=10,1
+  get key=b str=exclusive
+----
+
+sequence req=req11
+----
+[11] sequence req11: sequencing request
+[11] sequence req11: acquiring latches
+[11] sequence req11: waiting to acquire write latch ‹b›@10.000000000,1, held by read latch ‹b›@9223372036.854775807,2147483647
+[11] sequence req11: blocked on select in spanlatch.(*Manager).waitForSignal
+
+# exclusive_lock(ts) > shared_lock(ts)
+new-request name=req12 txn=txn2 ts=11,1
+  get key=c str=exclusive
+----
+
+sequence req=req12
+----
+[12] sequence req12: sequencing request
+[12] sequence req12: acquiring latches
+[12] sequence req12: waiting to acquire write latch ‹c›@11.000000000,1, held by read latch ‹c›@9223372036.854775807,2147483647
+[12] sequence req12: blocked on select in spanlatch.(*Manager).waitForSignal
+
+debug-latch-manager
+----
+write count: 3
+ read count: 3
+
+finish req=req7
+----
+[-] finish req7: finishing request
+[10] sequence req10: scanning lock table for conflicting locks
+[10] sequence req10: sequencing complete, returned guard
+
+finish req=req8
+----
+[-] finish req8: finishing request
+[11] sequence req11: scanning lock table for conflicting locks
+[11] sequence req11: sequencing complete, returned guard
+
+finish req=req9
+----
+[-] finish req9: finishing request
+[12] sequence req12: scanning lock table for conflicting locks
+[12] sequence req12: sequencing complete, returned guard
+
+finish req=req10
+----
+[-] finish req10: finishing request
+
+finish req=req11
+----
+[-] finish req11: finishing request
+
+finish req=req12
+----
+[-] finish req12: finishing request
+
+
+# ------------------------------------------------------------------------------
+# Ensure writes do conflict with shared locks on latches. We test writes above,
+# below, and at the timestamp at which the shared locking request was issued.
+# ------------------------------------------------------------------------------
+
+new-request name=req13 txn=txn1 ts=10,1
+  get key=a str=shared
+----
+
+new-request name=req14 txn=txn1 ts=10,1
+  get key=b str=shared
+----
+
+new-request name=req15 txn=txn1 ts=10,1
+  get key=c str=shared
+----
+
+sequence req=req13
+----
+[13] sequence req13: sequencing request
+[13] sequence req13: acquiring latches
+[13] sequence req13: scanning lock table for conflicting locks
+[13] sequence req13: sequencing complete, returned guard
+
+sequence req=req14
+----
+[14] sequence req14: sequencing request
+[14] sequence req14: acquiring latches
+[14] sequence req14: scanning lock table for conflicting locks
+[14] sequence req14: sequencing complete, returned guard
+
+sequence req=req15
+----
+[15] sequence req15: sequencing request
+[15] sequence req15: acquiring latches
+[15] sequence req15: scanning lock table for conflicting locks
+[15] sequence req15: sequencing complete, returned guard
+
+# write(ts) < shared_lock(ts)
+new-request name=req16 txn=txn3 ts=9,1
+  put key=a value=v
+----
+
+sequence req=req16
+----
+[16] sequence req16: sequencing request
+[16] sequence req16: acquiring latches
+[16] sequence req16: waiting to acquire write latch ‹a›@9.000000000,1, held by read latch ‹a›@9223372036.854775807,2147483647
+[16] sequence req16: blocked on select in spanlatch.(*Manager).waitForSignal
+
+# write(ts) == shared_lock(ts)
+new-request name=req17 txn=txn1 ts=10,1
+  put key=b value=v
+----
+
+sequence req=req17
+----
+[17] sequence req17: sequencing request
+[17] sequence req17: acquiring latches
+[17] sequence req17: waiting to acquire write latch ‹b›@10.000000000,1, held by read latch ‹b›@9223372036.854775807,2147483647
+[17] sequence req17: blocked on select in spanlatch.(*Manager).waitForSignal
+
+# write(ts) > shared_lock(ts)
+new-request name=req18 txn=txn2 ts=11,1
+  put key=c value=v
+----
+
+sequence req=req18
+----
+[18] sequence req18: sequencing request
+[18] sequence req18: acquiring latches
+[18] sequence req18: waiting to acquire write latch ‹c›@11.000000000,1, held by read latch ‹c›@9223372036.854775807,2147483647
+[18] sequence req18: blocked on select in spanlatch.(*Manager).waitForSignal
+
+debug-latch-manager
+----
+write count: 3
+ read count: 3
+
+finish req=req13
+----
+[-] finish req13: finishing request
+[16] sequence req16: scanning lock table for conflicting locks
+[16] sequence req16: sequencing complete, returned guard
+
+finish req=req14
+----
+[-] finish req14: finishing request
+[17] sequence req17: scanning lock table for conflicting locks
+[17] sequence req17: sequencing complete, returned guard
+
+finish req=req15
+----
+[-] finish req15: finishing request
+[18] sequence req18: scanning lock table for conflicting locks
+[18] sequence req18: sequencing complete, returned guard
+
+finish req=req16
+----
+[-] finish req16: finishing request
+
+finish req=req17
+----
+[-] finish req17: finishing request
+
+finish req=req18
+----
+[-] finish req18: finishing request
+
+# ------------------------------------------------------------------------------
+# Ensure shared-locking reads do not conflict with non-locking reads on latches.
+# We test shared-locking reads at, below, and above the non-locking read's
+# timestamp.
+# ------------------------------------------------------------------------------
+
+new-request name=req19 txn=txn1 ts=10,1
+  get key=a str=none
+----
+
+sequence req=req19
+----
+[19] sequence req19: sequencing request
+[19] sequence req19: acquiring latches
+[19] sequence req19: scanning lock table for conflicting locks
+[19] sequence req19: sequencing complete, returned guard
+
+# shared_lock(ts) < none(ts)
+new-request name=req20 txn=txn3 ts=9,1
+  get key=a str=shared
+----
+
+sequence req=req20
+----
+[20] sequence req20: sequencing request
+[20] sequence req20: acquiring latches
+[20] sequence req20: scanning lock table for conflicting locks
+[20] sequence req20: sequencing complete, returned guard
+
+# shared_lock(ts) == none(ts)
+new-request name=req21 txn=txn1 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req21
+----
+[21] sequence req21: sequencing request
+[21] sequence req21: acquiring latches
+[21] sequence req21: scanning lock table for conflicting locks
+[21] sequence req21: sequencing complete, returned guard
+
+# shared_lock(ts) > none(ts)
+new-request name=req22 txn=txn2 ts=11,1
+  get key=a str=shared
+----
+
+sequence req=req22
+----
+[22] sequence req22: sequencing request
+[22] sequence req22: acquiring latches
+[22] sequence req22: scanning lock table for conflicting locks
+[22] sequence req22: sequencing complete, returned guard
+
+debug-latch-manager
+----
+write count: 0
+ read count: 4
+
+finish req=req19
+----
+[-] finish req19: finishing request
+
+finish req=req20
+----
+[-] finish req20: finishing request
+
+finish req=req21
+----
+[-] finish req21: finishing request
+
+finish req=req22
+----
+[-] finish req22: finishing request
+
+# ------------------------------------------------------------------------------
+# Ensure shared-locking reads do conflict with exclusive-locking reads on
+# latches. We test shared-locking reads at, below, and above the
+# exclusive-locking read's timestamp.
+# ------------------------------------------------------------------------------
+
+new-request name=req23 txn=txn1 ts=10,1
+  get key=a str=exclusive
+----
+
+new-request name=req24 txn=txn1 ts=10,1
+  get key=b str=exclusive
+----
+
+new-request name=req25 txn=txn1 ts=10,1
+  get key=c str=exclusive
+----
+
+sequence req=req23
+----
+[23] sequence req23: sequencing request
+[23] sequence req23: acquiring latches
+[23] sequence req23: scanning lock table for conflicting locks
+[23] sequence req23: sequencing complete, returned guard
+
+sequence req=req24
+----
+[24] sequence req24: sequencing request
+[24] sequence req24: acquiring latches
+[24] sequence req24: scanning lock table for conflicting locks
+[24] sequence req24: sequencing complete, returned guard
+
+sequence req=req25
+----
+[25] sequence req25: sequencing request
+[25] sequence req25: acquiring latches
+[25] sequence req25: scanning lock table for conflicting locks
+[25] sequence req25: sequencing complete, returned guard
+
+# shared_lock(ts) < exclusive_lock(ts)
+new-request name=req26 txn=txn3 ts=9,1
+  get key=a str=shared
+----
+
+sequence req=req26
+----
+[26] sequence req26: sequencing request
+[26] sequence req26: acquiring latches
+[26] sequence req26: waiting to acquire read latch ‹a›@9223372036.854775807,2147483647, held by write latch ‹a›@10.000000000,1
+[26] sequence req26: blocked on select in spanlatch.(*Manager).waitForSignal
+
+# shared_lock(ts) == exclusive_lock(ts)
+new-request name=req27 txn=txn1 ts=10,1
+  get key=b str=shared
+----
+
+sequence req=req27
+----
+[27] sequence req27: sequencing request
+[27] sequence req27: acquiring latches
+[27] sequence req27: waiting to acquire read latch ‹b›@9223372036.854775807,2147483647, held by write latch ‹b›@10.000000000,1
+[27] sequence req27: blocked on select in spanlatch.(*Manager).waitForSignal
+
+# shared_lock(ts) > exclusive_lock(ts)
+new-request name=req28 txn=txn2 ts=11,1
+  get key=c str=shared
+----
+
+sequence req=req28
+----
+[28] sequence req28: sequencing request
+[28] sequence req28: acquiring latches
+[28] sequence req28: waiting to acquire read latch ‹c›@9223372036.854775807,2147483647, held by write latch ‹c›@10.000000000,1
+[28] sequence req28: blocked on select in spanlatch.(*Manager).waitForSignal
+
+debug-latch-manager
+----
+write count: 3
+ read count: 3
+
+finish req=req23
+----
+[-] finish req23: finishing request
+[26] sequence req26: scanning lock table for conflicting locks
+[26] sequence req26: sequencing complete, returned guard
+
+finish req=req24
+----
+[-] finish req24: finishing request
+[27] sequence req27: scanning lock table for conflicting locks
+[27] sequence req27: sequencing complete, returned guard
+
+finish req=req25
+----
+[-] finish req25: finishing request
+[28] sequence req28: scanning lock table for conflicting locks
+[28] sequence req28: sequencing complete, returned guard
+
+finish req=req26
+----
+[-] finish req26: finishing request
+
+finish req=req27
+----
+[-] finish req27: finishing request
+
+finish req=req28
+----
+[-] finish req28: finishing request
+
+# ------------------------------------------------------------------------------
+# Ensure shared-locking reads do conflict with writes on latches. We test
+# shared-locking reads at, below, and above the exclusive-locking read's
+# timestamp.
+# ------------------------------------------------------------------------------
+
+new-request name=req29 txn=txn1 ts=10,1
+  put key=a value=v
+----
+
+new-request name=req30 txn=txn1 ts=10,1
+  put key=b value=v
+----
+
+new-request name=req31 txn=txn1 ts=10,1
+  put key=c value=v
+----
+
+sequence req=req29
+----
+[29] sequence req29: sequencing request
+[29] sequence req29: acquiring latches
+[29] sequence req29: scanning lock table for conflicting locks
+[29] sequence req29: sequencing complete, returned guard
+
+sequence req=req30
+----
+[30] sequence req30: sequencing request
+[30] sequence req30: acquiring latches
+[30] sequence req30: scanning lock table for conflicting locks
+[30] sequence req30: sequencing complete, returned guard
+
+sequence req=req31
+----
+[31] sequence req31: sequencing request
+[31] sequence req31: acquiring latches
+[31] sequence req31: scanning lock table for conflicting locks
+[31] sequence req31: sequencing complete, returned guard
+
+# shared_lock(ts) < write(ts)
+new-request name=req32 txn=txn3 ts=9,1
+  get key=a str=shared
+----
+
+sequence req=req32
+----
+[32] sequence req32: sequencing request
+[32] sequence req32: acquiring latches
+[32] sequence req32: waiting to acquire read latch ‹a›@9223372036.854775807,2147483647, held by write latch ‹a›@10.000000000,1
+[32] sequence req32: blocked on select in spanlatch.(*Manager).waitForSignal
+
+# shared_lock(ts) == write(ts)
+new-request name=req33 txn=txn1 ts=10,1
+  get key=b str=shared
+----
+
+sequence req=req33
+----
+[33] sequence req33: sequencing request
+[33] sequence req33: acquiring latches
+[33] sequence req33: waiting to acquire read latch ‹b›@9223372036.854775807,2147483647, held by write latch ‹b›@10.000000000,1
+[33] sequence req33: blocked on select in spanlatch.(*Manager).waitForSignal
+
+# shared_lock(ts) > write(ts)
+new-request name=req34 txn=txn2 ts=11,1
+  get key=c str=shared
+----
+
+sequence req=req34
+----
+[34] sequence req34: sequencing request
+[34] sequence req34: acquiring latches
+[34] sequence req34: waiting to acquire read latch ‹c›@9223372036.854775807,2147483647, held by write latch ‹c›@10.000000000,1
+[34] sequence req34: blocked on select in spanlatch.(*Manager).waitForSignal
+
+debug-latch-manager
+----
+write count: 3
+ read count: 3
+
+finish req=req29
+----
+[-] finish req29: finishing request
+[32] sequence req32: scanning lock table for conflicting locks
+[32] sequence req32: sequencing complete, returned guard
+
+finish req=req30
+----
+[-] finish req30: finishing request
+[33] sequence req33: scanning lock table for conflicting locks
+[33] sequence req33: sequencing complete, returned guard
+
+finish req=req31
+----
+[-] finish req31: finishing request
+[34] sequence req34: scanning lock table for conflicting locks
+[34] sequence req34: sequencing complete, returned guard
+
+finish req=req32
+----
+[-] finish req32: finishing request
+
+finish req=req33
+----
+[-] finish req33: finishing request
+
+finish req=req34
+----
+[-] finish req34: finishing request
