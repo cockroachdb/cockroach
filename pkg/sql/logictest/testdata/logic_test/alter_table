@@ -3433,3 +3433,50 @@ set sql_safe_updates=false
 
 statement error pgcode 42P10 column "n" is referenced by.*
 alter table t_drop_cascade_with_key drop column n cascade;
+
+subtest end
+
+# This subtest ensures that if a schema change requires dropping an index,
+# primary or secondary, and that index is referenced in a UDF body or a view
+# query via index hinting, then we disallow such schema changes.
+subtest 108974
+
+statement ok
+CREATE TABLE t_108974_f(i INT PRIMARY KEY, j INT NOT NULL, k INT, INDEX (i,j));
+INSERT INTO t_108974_f SELECT p,p+1,p+2 FROM generate_series(1,100) AS tmp(p);
+CREATE TABLE t_108974_v(i INT PRIMARY KEY, j INT NOT NULL, k INT, INDEX (i,j));
+INSERT INTO t_108974_v SELECT p,p+1,p+2 FROM generate_series(1,100) AS tmp(p);
+CREATE FUNCTION f_108974() RETURNS RECORD LANGUAGE SQL AS
+$$
+SELECT i, j FROM t_108974_f;
+SELECT i, j FROM t_108974_f@t_108974_f_pkey;
+SELECT i, j FROM t_108974_f@t_108974_f_i_j_idx;
+SELECT i, j FROM t_108974_f@[0];
+SELECT i, j FROM t_108974_f@[1];
+SELECT i, j FROM t_108974_f@[2];
+$$;
+CREATE VIEW v_108974 AS SELECT i, j FROM t_108974_v@t_108974_v_pkey;
+SET sql_safe_updates = false;
+
+statement error pgcode 2BP01 pq: cannot drop index "t_108974_f_i_j_idx" because function "f_108974" depends on it
+DROP INDEX t_108974_f@t_108974_f_i_j_idx;
+
+statement error pgcode 2BP01 pq: cannot drop index "t_108974_f_pkey" because function "f_108974" depends on it
+ALTER TABLE t_108974_f ALTER PRIMARY KEY USING COLUMNS (j);
+
+statement error pgcode 2BP01 pq: cannot drop index "t_108974_v_pkey" because view "v_108974" depends on it
+ALTER TABLE t_108974_v ALTER PRIMARY KEY USING COLUMNS (j);
+
+statement error pgcode 2BP01 pq: cannot drop index "t_108974_f_pkey" because function "f_108974" depends on it
+ALTER TABLE t_108974_f ADD COLUMN p INT DEFAULT 30;
+
+statement error pgcode 2BP01 pq: cannot drop index "t_108974_v_pkey" because view "v_108974" depends on it
+ALTER TABLE t_108974_v ADD COLUMN p INT DEFAULT 30;
+
+statement error pgcode 2BP01 pq: cannot drop index "t_108974_f_pkey" because function "f_108974" depends on it
+ALTER TABLE t_108974_f DROP COLUMN k;
+
+statement error pgcode 2BP01 pq: cannot drop index "t_108974_v_pkey" because view "v_108974" depends on it
+ALTER TABLE t_108974_v DROP COLUMN k;
+
+subtest end

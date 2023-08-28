@@ -49,6 +49,10 @@ func (p *planner) addColumnImpl(
 		)
 	}
 
+	if err := p.disallowDroppingPrimaryIndexReferencedInUDFOrView(params.ctx, desc); err != nil {
+		return err
+	}
+
 	var colOwnedSeqDesc *tabledesc.Mutable
 	newDef, seqPrefix, seqName, seqOpts, err := params.p.processSerialLikeInColumnDef(params.ctx, d, tn)
 	if err != nil {
