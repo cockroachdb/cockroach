@@ -86,7 +86,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
-	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -2342,27 +2341,17 @@ CREATE TABLE crdb_internal.cluster_settings (
   key           STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasSqlModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING, p.User())
+		hasModify, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
 		if err != nil {
 			return err
 		}
-		hasModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING, p.User())
+		hasSqlModify, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYSQLCLUSTERSETTING)
 		if err != nil {
 			return err
 		}
-		hasView, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING, p.User())
+		hasView, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWCLUSTERSETTING)
 		if err != nil {
 			return err
-		}
-		if !hasModify {
-			if hasModify, err = p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING); err != nil {
-				return err
-			}
-		}
-		if !hasView {
-			if hasView, err = p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING); err != nil {
-				return err
-			}
 		}
 		if !hasModify && !hasSqlModify && !hasView {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
