@@ -8,6 +8,7 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
+	_ = x[UNKNOWN-0]
 	_ = x[CREATEROLE-1]
 	_ = x[NOCREATEROLE-2]
 	_ = x[PASSWORD-3]
@@ -40,6 +41,8 @@ func _() {
 
 func (i Option) String() string {
 	switch i {
+	case UNKNOWN:
+		return "UNKNOWN"
 	case CREATEROLE:
 		return "CREATEROLE"
 	case NOCREATEROLE:
