@@ -226,6 +226,13 @@ type DefaultTestTenantOptions struct {
 	// additional virtual clusters. (Default is to block.)
 	allowAdditionalTenants bool
 
+	// Whether implicit uses of the ApplicationLayerInterface or
+	// StorageLayerInterface result in warnings/notices.
+	//
+	// We use a "no" boolean, so that the default value results in "do
+	// warn".
+	noWarnImplicitInterfaces bool
+
 	// If test tenant is disabled, issue and label to link in log message.
 	issueNum int
 	label    string
@@ -267,13 +274,21 @@ var (
 
 	// TestControlsTenantsExplicitly is used when the test wants to
 	// manage its own secondary tenants and tenant servers.
-	TestControlsTenantsExplicitly = DefaultTestTenantOptions{testBehavior: ttDisabled, allowAdditionalTenants: true}
+	TestControlsTenantsExplicitly = DefaultTestTenantOptions{
+		testBehavior:             ttDisabled,
+		allowAdditionalTenants:   true,
+		noWarnImplicitInterfaces: true,
+	}
 
 	// TestIsSpecificToStorageLayerAndNeedsASystemTenant is used when
 	// the test needs to be given access to a SQL conn to a tenant with
 	// sufficient capabilities to access all the storage layer.
 	// (Initially that'd be "the" system tenant.)
-	TestIsSpecificToStorageLayerAndNeedsASystemTenant = DefaultTestTenantOptions{testBehavior: ttDisabled, allowAdditionalTenants: true}
+	TestIsSpecificToStorageLayerAndNeedsASystemTenant = DefaultTestTenantOptions{
+		testBehavior:             ttDisabled,
+		allowAdditionalTenants:   true,
+		noWarnImplicitInterfaces: true,
+	}
 
 	// TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs is used when
 	// a test wants to use a single set of testing knobs for both the
@@ -284,10 +299,6 @@ var (
 	// worth the cost of never running that test with the virtualization
 	// layer active.
 	TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs = TestIsSpecificToStorageLayerAndNeedsASystemTenant
-
-	// InternalNonDefaultDecision is a sentinel value used inside a
-	// mechanism in serverutils. Should not be used by tests directly.
-	InternalNonDefaultDecision = DefaultTestTenantOptions{testBehavior: ttDisabled, allowAdditionalTenants: true}
 )
 
 func (do DefaultTestTenantOptions) AllowAdditionalTenants() bool {
@@ -300,6 +311,13 @@ func (do DefaultTestTenantOptions) TestTenantAlwaysEnabled() bool {
 
 func (do DefaultTestTenantOptions) TestTenantAlwaysDisabled() bool {
 	return do.testBehavior == ttDisabled
+}
+
+// WarnImplicitInterfaces indicates whether to warn when the test code
+// uses ApplicationLayerInterface or StorageLayerInterface
+// implicitely.
+func (do DefaultTestTenantOptions) WarnImplicitInterfaces() bool {
+	return !do.noWarnImplicitInterfaces
 }
 
 func (do DefaultTestTenantOptions) IssueRef() (int, string) {
@@ -337,6 +355,19 @@ func TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(
 		issueNum:               issueNumber,
 		label:                  "C-bug",
 	}
+}
+
+// InternalNonDefaultDecision builds a sentinel value used inside a
+// mechanism in serverutils. Should not be used by tests directly.
+func InternalNonDefaultDecision(
+	baseArg DefaultTestTenantOptions, enable bool,
+) DefaultTestTenantOptions {
+	mode := ttDisabled
+	if enable {
+		mode = ttEnabled
+	}
+	baseArg.testBehavior = mode
+	return baseArg
 }
 
 var (

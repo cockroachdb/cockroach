@@ -219,7 +219,10 @@ func TestConcurrentZip(t *testing.T) {
 
 	// Three nodes. We want to see what `zip` thinks when one of the nodes is down.
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{Insecure: true},
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Insecure:          true,
+		},
 	})
 	defer tc.Stopper().Stop(ctx)
 
@@ -341,9 +344,12 @@ func TestUnavailableZip(t *testing.T) {
 
 	// Make a 3-node cluster, with an option to block replica requests.
 	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{Insecure: true,
-			Knobs: base.TestingKnobs{Store: knobs}},
-		})
+		base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+
+			Insecure: true,
+			Knobs:    base.TestingKnobs{Store: knobs},
+		}})
 	defer tc.Stopper().Stop(context.Background())
 
 	// Sanity test: check that a simple SQL operation works against node 1.
@@ -482,7 +488,10 @@ func TestPartialZip(t *testing.T) {
 
 	// Three nodes. We want to see what `zip` thinks when one of the nodes is down.
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{Insecure: true},
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Insecure:          true,
+		},
 	})
 	defer tc.Stopper().Stop(ctx)
 

@@ -355,7 +355,7 @@ type testServer struct {
 	disableStartTenantError error
 }
 
-var _ serverutils.TestServerInterface = &testServer{}
+var _ serverutils.TestServerInterfaceRaw = &testServer{}
 
 // Node returns the Node as an interface{}.
 func (ts *testServer) Node() interface{} {
@@ -566,7 +566,7 @@ func (ts *testServer) TenantStatusServer() interface{} {
 	return ts.status
 }
 
-// TestTenant provides access to the test tenant service.
+// TestTenant is part of serverutils.TenantControlInterface.
 func (ts *testServer) TestTenant() serverutils.ApplicationLayerInterface {
 	return ts.testTenants[0]
 }
@@ -763,6 +763,7 @@ type testTenant struct {
 	SQLCfg *SQLConfig
 	*httpTestServer
 	drain *drainServer
+	http  *httpServer
 
 	pgL *netutil.LoopbackListener
 
@@ -1259,6 +1260,16 @@ func (t *testTenant) HTTPAuthServer() interface{} {
 	return t.t.authentication
 }
 
+// HTTPServer is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) HTTPServer() interface{} {
+	return t.http
+}
+
+// SQLLoopbackListener is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SQLLoopbackListener() interface{} {
+	return t.pgL
+}
+
 func (ts *testServer) waitForTenantReadinessImpl(
 	ctx context.Context, tenantID roachpb.TenantID,
 ) error {
@@ -1580,6 +1591,7 @@ func (ts *testServer) StartTenant(
 		SQLCfg:         &sqlCfg,
 		pgPreServer:    sw.pgPreServer,
 		httpTestServer: hts,
+		http:           sw.http,
 		drain:          sw.drainServer,
 		pgL:            sw.loopbackPgL,
 	}, err
@@ -1981,29 +1993,6 @@ func (ts *testServer) StartedDefaultTestTenant() bool {
 	return len(ts.testTenants) > 0
 }
 
-// ApplicationLayer is part of the serverutils.TestServerInterface.
-func (ts *testServer) ApplicationLayer() serverutils.ApplicationLayerInterface {
-	if ts.StartedDefaultTestTenant() {
-		return ts.testTenants[0]
-	}
-	return ts
-}
-
-// StorageLayer is part of the serverutils.TestServerInterface.
-func (ts *testServer) StorageLayer() serverutils.StorageLayerInterface {
-	return ts
-}
-
-// TenantController is part of the serverutils.TestServerInterface.
-func (ts *testServer) TenantController() serverutils.TenantControlInterface {
-	return ts
-}
-
-// SystemLayer is part of the serverutils.TestServerInterface.
-func (ts *testServer) SystemLayer() serverutils.ApplicationLayerInterface {
-	return ts
-}
-
 // TracerI is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) TracerI() interface{} {
 	return ts.Tracer()
@@ -2192,6 +2181,21 @@ func (ts *testServer) PrivilegeChecker() interface{} {
 // HTTPAuthServer is part of the ApplicationLayerInterface.
 func (ts *testServer) HTTPAuthServer() interface{} {
 	return ts.t.authentication
+}
+
+// HTTPServer is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) HTTPServer() interface{} {
+	return ts.topLevelServer.http
+}
+
+// SQLLoopbackListener is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SQLLoopbackListener() interface{} {
+	return ts.topLevelServer.loopbackPgL
+}
+
+// ServerController is part of the serverutils.TenantControlInterface.
+func (ts *testServer) ServerController() interface{} {
+	return ts.topLevelServer.serverController
 }
 
 type testServerFactoryImpl struct{}
