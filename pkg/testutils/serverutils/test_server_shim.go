@@ -75,12 +75,6 @@ var PreventStartTenantError = errors.New("attempting to manually start a virtual
 func ShouldStartDefaultTestTenant(
 	t TestLogger, baseArg base.DefaultTestTenantOptions,
 ) (retval base.DefaultTestTenantOptions) {
-	defer func() {
-		if !(retval.TestTenantAlwaysEnabled() || retval.TestTenantAlwaysDisabled()) {
-			panic(errors.AssertionFailedf("programming error: no decision was actually taken"))
-		}
-	}()
-
 	// Explicit cases for enabling or disabling the default test tenant.
 	if baseArg.TestTenantAlwaysEnabled() {
 		return baseArg
@@ -242,6 +236,10 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 	if srvFactoryImpl == nil {
 		return nil, errors.AssertionFailedf("TestServerFactory not initialized. One needs to be injected " +
 			"from the package's TestMain()")
+	}
+	tcfg := params.DefaultTestTenant
+	if !(tcfg.TestTenantAlwaysEnabled() || tcfg.TestTenantAlwaysDisabled()) {
+		return nil, errors.AssertionFailedf("programming error: DefaultTestTenant does not contain a decision\n(maybe call ShouldStartDefaultTestTennat?)")
 	}
 
 	srv, err := srvFactoryImpl.New(params)
