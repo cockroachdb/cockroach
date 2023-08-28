@@ -19,7 +19,7 @@ txn_begin t=D ts=15,0
 txn_begin t=E ts=16,0
 ----
 >> at end:
-txn: "E" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=16.000000000,0 wto=false gul=0,0
+txn: "E" meta={id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=16.000000000,0 wto=false gul=0,0
 
 run ok
 put k=k1 v=v1 ts=11,0
@@ -32,14 +32,14 @@ add_lock k=k4 t=E
 ----
 >> at end:
 data: "k1"/11.000000000,0 -> /BYTES/v1
-meta: "k2"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0} ts=13.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k2"/0,0 -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0} ts=13.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k2"/13.000000000,0 -> /BYTES/v3
 data: "k2"/12.000000000,0 -> /BYTES/v2
-meta: "k3"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0} ts=14.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k3"/0,0 -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0} ts=14.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k3"/14.000000000,0 -> /BYTES/v4
 data: "k4"/15.000000000,0 -> /BYTES/v5
 data: "k5"/17.000000000,0 -> /BYTES/v6
-lock-table: {k4:00000000-0000-0000-0000-000000000005}
+lock-table: {k4:00000005-0000-0000-0000-000000000000}
 
 # Test cases:
 #
@@ -203,7 +203,7 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=13 k=k2 skipLocked
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
@@ -224,13 +224,13 @@ get: "k5" -> <no data>
 run ok
 scan ts=13 k=k1 end=k6 skipLocked
 ----
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
 scan ts=13 k=k1 end=k6 reverse skipLocked
 ----
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
@@ -278,13 +278,13 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=14 k=k2 skipLocked
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=14 k=k3 skipLocked
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
@@ -300,15 +300,15 @@ get: "k5" -> <no data>
 run ok
 scan ts=14 k=k1 end=k6 skipLocked
 ----
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
 scan ts=14 k=k1 end=k6 reverse skipLocked
 ----
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
@@ -319,7 +319,7 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=14 t=C k=k2 skipLocked
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
@@ -340,14 +340,14 @@ get: "k5" -> <no data>
 run ok
 scan ts=14 t=C k=k1 end=k6 skipLocked
 ----
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k3" -> /BYTES/v4 @14.000000000,0
 
 run ok
 scan ts=14 t=C k=k1 end=k6 reverse skipLocked
 ----
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: "k3" -> /BYTES/v4 @14.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
@@ -359,13 +359,13 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=15 k=k2 skipLocked
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=15 k=k3 skipLocked
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
@@ -381,16 +381,16 @@ get: "k5" -> <no data>
 run ok
 scan ts=15 k=k1 end=k6 skipLocked
 ----
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k4" -> /BYTES/v5 @15.000000000,0
 
 run ok
 scan ts=15 k=k1 end=k6 reverse skipLocked
 ----
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: "k4" -> /BYTES/v5 @15.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
@@ -402,13 +402,13 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=15 t=D k=k2 skipLocked
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=15 t=D k=k3 skipLocked
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
@@ -424,16 +424,16 @@ get: "k5" -> <no data>
 run ok
 scan ts=15 t=D k=k1 end=k6 skipLocked
 ----
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k4" -> /BYTES/v5 @15.000000000,0
 
 run ok
 scan ts=15 t=D k=k1 end=k6 reverse skipLocked
 ----
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: "k4" -> /BYTES/v5 @15.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
@@ -445,19 +445,19 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=16 k=k2 skipLocked
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=16 k=k3 skipLocked
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=16 k=k4 skipLocked
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run ok
@@ -468,17 +468,17 @@ get: "k5" -> <no data>
 run ok
 scan ts=16 k=k1 end=k6 skipLocked
 ----
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
-scan: intent "k4" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
 scan ts=16 k=k1 end=k6 reverse skipLocked
 ----
-scan: intent "k4" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
 run ok
@@ -489,13 +489,13 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=16 t=E k=k2 skipLocked
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=16 t=E k=k3 skipLocked
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
@@ -511,16 +511,16 @@ get: "k5" -> <no data>
 run ok
 scan ts=16 t=E k=k1 end=k6 skipLocked
 ----
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k4" -> /BYTES/v5 @15.000000000,0
 
 run ok
 scan ts=16 t=E k=k1 end=k6 reverse skipLocked
 ----
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: "k4" -> /BYTES/v5 @15.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
@@ -532,19 +532,19 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=17 k=k2 skipLocked
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=17 k=k3 skipLocked
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=17 k=k4 skipLocked
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run ok
@@ -555,18 +555,18 @@ get: "k5" -> /BYTES/v6 @17.000000000,0
 run ok
 scan ts=17 k=k1 end=k6 skipLocked
 ----
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
-scan: intent "k4" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k5" -> /BYTES/v6 @17.000000000,0
 
 run ok
 scan ts=17 k=k1 end=k6 reverse skipLocked
 ----
-scan: intent "k4" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: "k5" -> /BYTES/v6 @17.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
@@ -578,19 +578,19 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=18 k=k2 skipLocked
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=18 k=k3 skipLocked
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=18 k=k4 skipLocked
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run ok
@@ -601,18 +601,18 @@ get: "k5" -> /BYTES/v6 @17.000000000,0
 run ok
 scan ts=18 k=k1 end=k6 skipLocked
 ----
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
-scan: intent "k4" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k5" -> /BYTES/v6 @17.000000000,0
 
 run ok
 scan ts=18 k=k1 end=k6 reverse skipLocked
 ----
-scan: intent "k4" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: "k5" -> /BYTES/v6 @17.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 
@@ -625,19 +625,19 @@ error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timesta
 run ok
 get ts=10 k=k2 skipLocked failOnMoreRecent
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=10 k=k3 skipLocked failOnMoreRecent
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=10 k=k4 skipLocked failOnMoreRecent
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
@@ -667,19 +667,19 @@ error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k1" at timesta
 run ok
 get ts=11 k=k2 skipLocked failOnMoreRecent
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=11 k=k3 skipLocked failOnMoreRecent
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=11 k=k4 skipLocked failOnMoreRecent
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
@@ -708,19 +708,19 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=12 k=k2 skipLocked failOnMoreRecent
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=12 k=k3 skipLocked failOnMoreRecent
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=12 k=k4 skipLocked failOnMoreRecent
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
@@ -749,19 +749,19 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=12 t=A k=k2 skipLocked failOnMoreRecent
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=12 t=A k=k3 skipLocked failOnMoreRecent
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=12 t=A k=k4 skipLocked failOnMoreRecent
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
@@ -790,19 +790,19 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=13 k=k2 skipLocked failOnMoreRecent
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=13 k=k3 skipLocked failOnMoreRecent
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=13 k=k4 skipLocked failOnMoreRecent
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
@@ -836,13 +836,13 @@ get: "k2" -> /BYTES/v3 @13.000000000,0
 run ok
 get ts=13 t=B k=k3 skipLocked failOnMoreRecent
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=13 t=B k=k4 skipLocked failOnMoreRecent
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
@@ -871,19 +871,19 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=14 k=k2 skipLocked failOnMoreRecent
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=14 k=k3 skipLocked failOnMoreRecent
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=14 k=k4 skipLocked failOnMoreRecent
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
@@ -912,7 +912,7 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=14 t=C k=k2 skipLocked failOnMoreRecent
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
@@ -923,7 +923,7 @@ get: "k3" -> /BYTES/v4 @14.000000000,0
 run ok
 get ts=14 t=C k=k4 skipLocked failOnMoreRecent
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
@@ -952,19 +952,19 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=15 k=k2 skipLocked failOnMoreRecent
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=15 k=k3 skipLocked failOnMoreRecent
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=15 k=k4 skipLocked failOnMoreRecent
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
@@ -993,19 +993,19 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=15 t=D k=k2 skipLocked failOnMoreRecent
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=15 t=D k=k3 skipLocked failOnMoreRecent
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=15 t=D k=k4 skipLocked failOnMoreRecent
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
@@ -1034,19 +1034,19 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=16 k=k2 skipLocked failOnMoreRecent
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=16 k=k3 skipLocked failOnMoreRecent
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=16 k=k4 skipLocked failOnMoreRecent
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
@@ -1075,13 +1075,13 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=16 t=E k=k2 skipLocked failOnMoreRecent
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=16 t=E k=k3 skipLocked failOnMoreRecent
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
@@ -1115,19 +1115,19 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=17 k=k2 skipLocked failOnMoreRecent
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=17 k=k3 skipLocked failOnMoreRecent
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=17 k=k4 skipLocked failOnMoreRecent
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run error
@@ -1156,19 +1156,19 @@ get: "k1" -> /BYTES/v1 @11.000000000,0
 run ok
 get ts=18 k=k2 skipLocked failOnMoreRecent
 ----
-get: "k2" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+get: "k2" -> intent {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 get: "k2" -> <no data>
 
 run ok
 get ts=18 k=k3 skipLocked failOnMoreRecent
 ----
-get: "k3" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+get: "k3" -> intent {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
 get: "k3" -> <no data>
 
 run ok
 get ts=18 k=k4 skipLocked failOnMoreRecent
 ----
-get: "k4" -> intent {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+get: "k4" -> intent {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 get: "k4" -> <no data>
 
 run ok
@@ -1179,17 +1179,17 @@ get: "k5" -> /BYTES/v6 @17.000000000,0
 run ok
 scan ts=18 k=k1 end=k6 skipLocked failOnMoreRecent
 ----
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
-scan: intent "k4" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
 scan: "k1" -> /BYTES/v1 @11.000000000,0
 scan: "k5" -> /BYTES/v6 @17.000000000,0
 
 run ok
 scan ts=18 k=k1 end=k6 reverse skipLocked failOnMoreRecent
 ----
-scan: intent "k4" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
-scan: intent "k3" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
-scan: intent "k2" {id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
+scan: intent "k4" {id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0}
+scan: intent "k3" {id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0}
+scan: intent "k2" {id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0}
 scan: "k5" -> /BYTES/v6 @17.000000000,0
 scan: "k1" -> /BYTES/v1 @11.000000000,0

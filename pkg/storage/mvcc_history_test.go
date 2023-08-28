@@ -2179,7 +2179,7 @@ type evalCtx struct {
 	t                 *testing.T
 	td                *datadriven.TestData
 	txns              map[string]*roachpb.Transaction
-	txnCounter        uint128.Uint128
+	txnCounter        uint32
 	locks             map[string]*roachpb.Transaction
 	ms                *enginepb.MVCCStats
 	sstWriter         *storage.SSTWriter
@@ -2189,12 +2189,11 @@ type evalCtx struct {
 
 func newEvalCtx(ctx context.Context, engine storage.Engine) *evalCtx {
 	return &evalCtx{
-		ctx:        ctx,
-		st:         cluster.MakeTestingClusterSettings(),
-		engine:     engine,
-		txns:       make(map[string]*roachpb.Transaction),
-		txnCounter: uint128.FromInts(0, 1),
-		locks:      make(map[string]*roachpb.Transaction),
+		ctx:    ctx,
+		st:     cluster.MakeTestingClusterSettings(),
+		engine: engine,
+		txns:   make(map[string]*roachpb.Transaction),
+		locks:  make(map[string]*roachpb.Transaction),
 	}
 }
 
@@ -2419,7 +2418,7 @@ func (e *evalCtx) newTxn(
 	}
 	txn := &roachpb.Transaction{
 		TxnMeta: enginepb.TxnMeta{
-			ID:             uuid.FromUint128(e.txnCounter),
+			ID:             e.newTxnID(),
 			Key:            []byte(key),
 			WriteTimestamp: ts,
 			Sequence:       0,
@@ -2429,9 +2428,16 @@ func (e *evalCtx) newTxn(
 		GlobalUncertaintyLimit: globalUncertaintyLimit,
 		Status:                 roachpb.PENDING,
 	}
-	e.txnCounter = e.txnCounter.Add(1)
 	e.txns[txnName] = txn
 	return txn, nil
+}
+
+func (e *evalCtx) newTxnID() uuid.UUID {
+	// Generate txn IDs in the upper 32 bits of the UUID so that differences are
+	// visible in UUID.Short formatting, which is used by TxnMeta.String.
+	e.txnCounter++
+	hi := uint64(e.txnCounter) << 32
+	return uuid.FromUint128(uint128.Uint128{Hi: hi})
 }
 
 func (e *evalCtx) sst() *storage.SSTWriter {

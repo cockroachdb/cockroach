@@ -65,10 +65,10 @@ data: "a"/45.000000000,0 -> /<empty>
 data: "a"/44.000000000,0 -> /BYTES/abc
 data: "a/123"/45.000000000,0 -> /<empty>
 data: "a/123"/44.000000000,0 -> /BYTES/abc
-meta: "b"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/46.000000000,0 -> /<empty>
 data: "b"/44.000000000,0 -> /BYTES/abc
-meta: "b/123"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b/123"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b/123"/46.000000000,0 -> /<empty>
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
@@ -96,10 +96,10 @@ data: "a"/45.000000000,0 -> /<empty>
 data: "a"/44.000000000,0 -> /BYTES/abc
 data: "a/123"/45.000000000,0 -> /<empty>
 data: "a/123"/44.000000000,0 -> /BYTES/abc
-meta: "b"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/46.000000000,0 -> /<empty>
 data: "b"/44.000000000,0 -> /BYTES/abc
-meta: "b/123"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b/123"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b/123"/46.000000000,0 -> /<empty>
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/47.000000000,0 -> /<empty>
@@ -120,15 +120,15 @@ with t=A
   txn_remove
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=46.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=46.000000000,0 wto=false gul=0,0
 data: "a"/45.000000000,0 -> /<empty>
 data: "a"/44.000000000,0 -> /BYTES/abc
 data: "a/123"/45.000000000,0 -> /<empty>
 data: "a/123"/44.000000000,0 -> /BYTES/abc
-meta: "b"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/46.000000000,0 -> /<empty>
 data: "b"/44.000000000,0 -> /BYTES/abc
-meta: "b/123"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b/123"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b/123"/46.000000000,0 -> /<empty>
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/47.000000000,0 -> /<empty>
@@ -163,20 +163,20 @@ data: "a"/45.000000000,0 -> /<empty>
 data: "a"/44.000000000,0 -> /BYTES/abc
 data: "a/123"/45.000000000,0 -> /<empty>
 data: "a/123"/44.000000000,0 -> /BYTES/abc
-meta: "b"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/46.000000000,0 -> /<empty>
 data: "b"/44.000000000,0 -> /BYTES/abc
-meta: "b/123"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b/123"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=46.000000000,0 min=0,0 seq=0} ts=46.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b/123"/46.000000000,0 -> /<empty>
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/47.000000000,0 -> /<empty>
 data: "c"/44.000000000,0 -> /BYTES/abc
 data: "c/123"/47.000000000,0 -> /<empty>
 data: "c/123"/44.000000000,0 -> /BYTES/abc
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0} ts=48.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0} ts=48.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/48.000000000,0 -> /<empty>
 data: "d"/44.000000000,0 -> /BYTES/abc
-meta: "d/123"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0} ts=48.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d/123"/0,0 -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=48.000000000,0 min=0,0 seq=0} ts=48.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d/123"/48.000000000,0 -> /<empty>
 data: "d/123"/44.000000000,0 -> /BYTES/abc
 stats: key_count=8 key_bytes=224 val_count=16 val_bytes=264 gc_bytes_age=26008 intent_count=4 intent_bytes=48 separated_intent_count=4 intent_age=212
