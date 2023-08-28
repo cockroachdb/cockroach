@@ -355,7 +355,7 @@ type testServer struct {
 	disableStartTenantError error
 }
 
-var _ serverutils.TestServerInterface = &testServer{}
+var _ serverutils.TestServerInterfaceRaw = &testServer{}
 
 // Node returns the Node as an interface{}.
 func (ts *testServer) Node() interface{} {
@@ -566,7 +566,7 @@ func (ts *testServer) TenantStatusServer() interface{} {
 	return ts.status
 }
 
-// TestTenant provides access to the test tenant service.
+// TestTenant is part of serverutils.TenantControlInterface.
 func (ts *testServer) TestTenant() serverutils.ApplicationLayerInterface {
 	return ts.testTenants[0]
 }
@@ -1975,29 +1975,6 @@ func (ts *testServer) ExecutorConfig() interface{} {
 // StartedDefaultTestTenant is part of the serverutils.TenantControlInterface.
 func (ts *testServer) StartedDefaultTestTenant() bool {
 	return len(ts.testTenants) > 0
-}
-
-// ApplicationLayer is part of the serverutils.TestServerInterface.
-func (ts *testServer) ApplicationLayer() serverutils.ApplicationLayerInterface {
-	if ts.StartedDefaultTestTenant() {
-		return ts.testTenants[0]
-	}
-	return ts
-}
-
-// StorageLayer is part of the serverutils.TestServerInterface.
-func (ts *testServer) StorageLayer() serverutils.StorageLayerInterface {
-	return ts
-}
-
-// TenantController is part of the serverutils.TestServerInterface.
-func (ts *testServer) TenantController() serverutils.TenantControlInterface {
-	return ts
-}
-
-// SystemLayer is part of the serverutils.TestServerInterface.
-func (ts *testServer) SystemLayer() serverutils.ApplicationLayerInterface {
-	return ts
 }
 
 // TracerI is part of the serverutils.ApplicationLayerInterface.

@@ -100,9 +100,9 @@ func ShouldStartDefaultTestTenant(
 		}
 		if v {
 			t.Log(defaultTestTenantMessage + "\n(override via COCKROACH_TEST_TENANT)")
-			return base.TestTenantAlwaysEnabled
+			return base.InternalNonDefaultDecision(baseArg, true)
 		}
-		return base.InternalNonDefaultDecision
+		return base.InternalNonDefaultDecision(baseArg, false)
 	}
 
 	if globalDefaultSelectionOverride.isSet {
@@ -125,9 +125,9 @@ func ShouldStartDefaultTestTenant(
 		t.Log(defaultTestTenantMessage)
 	}
 	if enabled {
-		return base.TestTenantAlwaysEnabled
+		return base.InternalNonDefaultDecision(baseArg, true)
 	}
-	return base.InternalNonDefaultDecision
+	return base.InternalNonDefaultDecision(baseArg, false)
 }
 
 // globalDefaultSelectionOverride is used when an entire package needs
@@ -189,6 +189,13 @@ func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInter
 		return nil, err
 	}
 
+	if t != nil {
+		if w, ok := s.(*wrap); ok {
+			// Redirect the info/warning messages to the test logs.
+			w.loggerFn = t.Logf
+		}
+	}
+
 	ctx := context.Background()
 
 	if err := s.Start(ctx); err != nil {
@@ -245,6 +252,7 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 	if err != nil {
 		return nil, err
 	}
+	srv = wrapTestServer(srv.(TestServerInterfaceRaw), tcfg)
 	return srv.(TestServerInterface), nil
 }
 

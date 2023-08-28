@@ -43,13 +43,57 @@ import (
 	"google.golang.org/grpc"
 )
 
-// TestServerInterface defines test server functionality that tests need; it is
-// implemented by server.TestServer.
-type TestServerInterface interface {
+// TestServerInterfaceRaw is the interface of server.testServer.
+type TestServerInterfaceRaw interface {
+	TestServerController
 	StorageLayerInterface
-	ApplicationLayerInterface
 	TenantControlInterface
 
+	// in testServer, the base implementation of
+	// ApplicationLayerInterface always points to the system tenant.
+	ApplicationLayerInterface
+}
+
+type TestServerInterface interface {
+	TestServerController
+
+	// StorageLayerInterface is implemented by TestServerInterface
+	// for backward-compatibility with existing test code.
+	// New code should spell out their intent clearly by calling
+	// the .StorageLayer() method.
+	StorageLayerInterface
+
+	// ApplicationLayerInterface is implemented by TestServerInterface
+	// for backward-compatibility with existing test code.
+	// New code should spell out their intent clearly by calling
+	// the .ApplicationLayer() or .SystemLayer() methods directly.
+	ApplicationLayerInterface
+
+	// TenantControlInterface is implemented by TestServerInterface
+	// for backward-compatibility with existing test code.
+	// New code should spell out their intent clearly by calling
+	// the .TenantController() method.
+	TenantControlInterface
+
+	// ApplicationLayer returns the interface to the application layer that is
+	// exercised by the test. Depending on how the test server is started
+	// and (optionally) randomization, this can be either the SQL layer
+	// of a secondary tenant or that of the system tenant.
+	ApplicationLayer() ApplicationLayerInterface
+
+	// SystemLayer returns the interface to the application layer
+	// of the system tenant.
+	SystemLayer() ApplicationLayerInterface
+
+	// StorageLayer returns the interface to the storage layer.
+	StorageLayer() StorageLayerInterface
+
+	// TenantController returns the interface to the tenant controller.
+	TenantController() TenantControlInterface
+}
+
+// TestServerController defines the control interface for a test server.
+type TestServerController interface {
 	// Start runs the server. This is pre-called by StartServer().
 	// It is provided for tests that use the TestServerFactory directly
 	// (mostly 'cockroach demo').
@@ -79,22 +123,6 @@ type TestServerInterface interface {
 	// SetReadyFn can be configured to notify a test when the server is
 	// ready. This is only effective when called before Start().
 	SetReadyFn(fn func(bool))
-
-	// ApplicationLayer returns the interface to the application layer that is
-	// exercised by the test. Depending on how the test server is started
-	// and (optionally) randomization, this can be either the SQL layer
-	// of a secondary tenant or that of the system tenant.
-	ApplicationLayer() ApplicationLayerInterface
-
-	// SystemLayer returns the interface to the application layer
-	// of the system tenant.
-	SystemLayer() ApplicationLayerInterface
-
-	// StorageLayer returns the interface to the storage layer.
-	StorageLayer() StorageLayerInterface
-
-	// TenantController returns the interface to the tenant controller.
-	TenantController() TenantControlInterface
 
 	// BinaryVersionOverride returns the value of an override if set using
 	// TestingKnobs.
