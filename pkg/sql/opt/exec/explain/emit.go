@@ -779,9 +779,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		e.emitLockingPolicyWithPrefix("right ", a.RightLocking)
 
 	case invertedFilterOp:
-		a := n.args.(*invertedFilterArgs)
-		ob.Attr("inverted column", a.Input.Columns()[a.InvColumn].Name)
-		ob.Attr("num spans", len(a.InvFilter.SpansToRead))
+		// No details are encoded for inverted filters.
 
 	case invertedJoinOp:
 		a := n.args.(*invertedJoinArgs)
