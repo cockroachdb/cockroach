@@ -7418,9 +7418,9 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 				},
 			},
 		}
-		s, sqlDB, _ := serverutils.StartServer(t, params)
+		srv, sqlDB, _ := serverutils.StartServer(t, params)
+		defer srv.Stopper().Stop(ctx)
 		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
-		defer s.Stopper().Stop(ctx)
 
 		sqlRunner.Exec(t, tc.setupSQL)
 		atomic.StoreInt32(&shouldCount, 1)
@@ -7433,7 +7433,7 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 			count     int32 // accessed atomically
 			shouldRun int32 // accessed atomically
 
-			s     serverutils.ApplicationLayerInterface
+			srv   serverutils.TestServerInterface
 			sqlDB *gosql.DB
 			kvDB  *kv.DB
 		)
@@ -7455,8 +7455,8 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 				},
 			},
 		}
-		s, sqlDB, kvDB = serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(ctx)
+		srv, sqlDB, kvDB = serverutils.StartServer(t, params)
+		defer srv.Stopper().Stop(ctx)
 		_, err := sqlDB.Exec(tc.setupSQL)
 		require.NoError(t, err)
 		atomic.StoreInt32(&shouldRun, 1)

@@ -52,7 +52,7 @@ func TestWatcher(t *testing.T) {
 	w := tenantsettingswatcher.New(
 		ts.Clock(),
 		ts.ExecutorConfig().(sql.ExecutorConfig).RangeFeedFactory,
-		ts.Stopper(),
+		ts.AppStopper(),
 		ts.ClusterSettings(),
 	)
 	err := w.Start(ctx, ts.SystemTableIDResolver().(catalog.SystemTableIDResolver))

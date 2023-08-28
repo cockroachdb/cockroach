@@ -207,7 +207,7 @@ func TestTenantProcessDebugging(t *testing.T) {
 			TenantName: "processdebug",
 		})
 	require.NoError(t, err)
-	defer tenant.Stopper().Stop(ctx)
+	defer tenant.AppStopper().Stop(ctx)
 
 	t.Run("system tenant pprof", func(t *testing.T) {
 		httpClient, err := s.GetAdminHTTPClient()

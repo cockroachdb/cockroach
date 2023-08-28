@@ -97,7 +97,7 @@ func (ts *testState) start(t *testing.T) {
 }
 
 func (ts *testState) stop() {
-	ts.s.Stopper().Stop(context.Background())
+	ts.srv.Stopper().Stop(context.Background())
 }
 
 func (ts *testState) formatTime(tm time.Time) string {

@@ -286,7 +286,7 @@ COMMIT;`}
 SELECT checkpoint > extract(epoch from after)
   FROM checkpoint, after`,
 			[][]string{{"true"}})
-		tenant.Stopper().Stop(ctx)
+		tenant.AppStopper().Stop(ctx)
 	}
 
 	// Wait for the configs to be applied.
@@ -328,7 +328,7 @@ SELECT checkpoint > extract(epoch from after)
 			Locality: localities[i],
 		})
 		require.NoError(t, err)
-		defer tenant.Stopper().Stop(ctx)
+		defer tenant.AppStopper().Stop(ctx)
 		pgURL, cleanup, err := sqlutils.PGUrlWithOptionalClientCertsE(
 			tenant.AdvSQLAddr(), "tenantdata", url.UserPassword("foo", password),
 			false, // withClientCerts

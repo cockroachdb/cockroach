@@ -62,9 +62,11 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 			SkipWaitingForMVCCGC: true,
 		},
 	}
-	s, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
+	srv, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
-	defer s.Stopper().Stop(context.Background())
 
 	// Create a test table with a partitioned secondary index.
 	if err := tests.CreateKVTable(sqlDBRaw, "kv", numRows); err != nil {
@@ -74,7 +76,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 		PARTITION p1 VALUES IN (1),
 		PARTITION p2 VALUES IN (2)
 	)`)
-	codec := tenantOrSystemCodec(s)
+	codec := s.Codec()
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "kv")
 	index, err := catalog.MustFindIndexByName(tableDesc, "i")
 	if err != nil {

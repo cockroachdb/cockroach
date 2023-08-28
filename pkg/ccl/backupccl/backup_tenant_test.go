@@ -78,7 +78,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Destroy the tenant, then restore it.
-	tSrv.Stopper().Stop(ctx)
+	tSrv.AppStopper().Stop(ctx)
 	if _, err := sqlDB.DB.ExecContext(ctx, "ALTER TENANT [10] STOP SERVICE; DROP TENANT [10] IMMEDIATE"); err != nil {
 		t.Fatal(err)
 	}

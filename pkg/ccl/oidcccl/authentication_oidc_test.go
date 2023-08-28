@@ -33,27 +33,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func tenantOrSystemAdminURL(s serverutils.TestServerInterface) *serverutils.TestURL {
-	if len(s.TestTenants()) > 0 {
-		return s.TestTenants()[0].AdminURL()
-	}
-	return s.AdminURL()
-}
-
 func TestOIDCBadRequestIfDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	testCertsContext := s.NewClientRPCContext(ctx, username.TestUserName())
 
 	client, err := testCertsContext.GetHTTPClient()
 	require.NoError(t, err)
 
-	resp, err := client.Get(tenantOrSystemAdminURL(s).WithPath("/oidc/v1/login").String())
+	resp, err := client.Get(s.AdminURL().WithPath("/oidc/v1/login").String())
 	if err != nil {
 		t.Fatalf("could not issue GET request to admin server: %s", err)
 	}
@@ -69,8 +63,9 @@ func TestOIDCEnabled(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Set up a test OIDC server that serves the JSON discovery document
 	var issuer string
@@ -164,7 +159,7 @@ func TestOIDCEnabled(t *testing.T) {
 	}
 
 	t.Run("login redirect", func(t *testing.T) {
-		resp, err := client.Get(tenantOrSystemAdminURL(s).WithPath("/oidc/v1/login").String())
+		resp, err := client.Get(s.AdminURL().WithPath("/oidc/v1/login").String())
 		if err != nil {
 			t.Fatalf("could not issue GET request to admin server: %s", err)
 		}

@@ -505,7 +505,7 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	// test flakes, see #107499 for more info.
 	destroyedAddress := c.SrcURL.String()
 	require.NoError(t, c.SrcTenantConn.Close())
-	c.SrcTenantServer.Stopper().Stop(ctx)
+	c.SrcTenantServer.AppStopper().Stop(ctx)
 	c.SrcCluster.StopServer(0)
 
 	c.DestSysSQL.Exec(t, `RESUME JOB $1`, ingestionJobID)
