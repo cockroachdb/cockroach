@@ -247,16 +247,13 @@ func maybeFailOnDependentDescInRename(
 			if err != nil {
 				return err
 			}
-			depErr := sqlerrors.NewDependentObjectErrorf(
+			// Otherwise, we default to the view error message.
+			return errors.WithHintf(sqlerrors.NewDependentObjectErrorf(
 				"cannot rename %s because relation %q depends on relation %q",
 				renameDescType,
 				dependentDescQualifiedString,
 				tbTableName.String(),
-			)
-
-			// Otherwise, we default to the view error message.
-			return errors.WithHintf(depErr,
-				"you can drop %q instead", dependentDescQualifiedString)
+			), "consider dropping %q first", dependentDescQualifiedString)
 		}); err != nil {
 			return err
 		}

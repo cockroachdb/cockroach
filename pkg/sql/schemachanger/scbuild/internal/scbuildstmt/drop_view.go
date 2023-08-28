@@ -83,10 +83,7 @@ func maybePanicOnDependentView(b BuildCtx, ns *scpb.Namespace, backrefs ElementR
 	}
 	_, _, nsDep := scpb.FindNamespace(b.QueryByID(depView.ViewID))
 	if nsDep.DatabaseID != ns.DatabaseID {
-		panic(errors.WithHintf(sqlerrors.NewDependentObjectErrorf("cannot drop relation %q because view %q depends on it",
-			ns.Name, qualifiedName(b, depView.ViewID)),
-			"you can drop %s instead.", nsDep.Name))
+		panic(sqlerrors.NewDependentBlocksOpError("drop", "relation", ns.Name, "view", qualifiedName(b, depView.ViewID)))
 	}
-	panic(sqlerrors.NewDependentObjectErrorf("cannot drop relation %q because view %q depends on it",
-		ns.Name, nsDep.Name))
+	panic(sqlerrors.NewDependentBlocksOpError("drop", "relation", ns.Name, "view", nsDep.Name))
 }

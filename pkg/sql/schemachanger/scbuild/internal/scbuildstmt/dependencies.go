@@ -298,8 +298,8 @@ type ElementReferences interface {
 	// references in the given element. This includes the current element.
 	ForwardReferences(e scpb.Element) ElementResultSet
 
-	// BackReferences returns the set of elements to which we have back-references
-	// in the descriptor backing the given element. Back-references also include
+	// BackReferences finds all descriptors with a back-reference to descriptor `id`
+	// and return all elements that belong to them. Back-references also include
 	// children, in the case of databases and schemas.
 	BackReferences(id catid.DescID) ElementResultSet
 }
