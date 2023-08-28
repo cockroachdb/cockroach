@@ -63,6 +63,10 @@ var MVCCGCQueueEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+// RangeFeedRefreshInterval is injected from kvserver to avoid import cycles
+// when accessed from kvcoord.
+var RangeFeedRefreshInterval *settings.DurationSetting
+
 // CmdIDKey is a Raft command id. This will be logged unredacted - keep it random.
 type CmdIDKey string
 

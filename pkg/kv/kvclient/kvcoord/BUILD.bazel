@@ -49,6 +49,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/txnwait",
         "//pkg/multitenant",
         "//pkg/multitenant/tenantcostmodel",
