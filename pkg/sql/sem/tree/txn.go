@@ -258,12 +258,20 @@ func (node *TransactionModes) Merge(other TransactionModes) error {
 
 // BeginTransaction represents a BEGIN statement
 type BeginTransaction struct {
-	Modes TransactionModes
+	// FormatWithStart says whether this statement must be formatted with
+	// "START" rather than "BEGIN". This is needed if this statement is in a
+	// BEGIN ATOMIC block of a procedure or function.
+	FormatWithStart bool
+	Modes           TransactionModes
 }
 
 // Format implements the NodeFormatter interface.
 func (node *BeginTransaction) Format(ctx *FmtCtx) {
-	ctx.WriteString("BEGIN TRANSACTION")
+	if node.FormatWithStart {
+		ctx.WriteString("START TRANSACTION")
+	} else {
+		ctx.WriteString("BEGIN TRANSACTION")
+	}
 	ctx.FormatNode(&node.Modes)
 }
 
