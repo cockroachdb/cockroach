@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -296,6 +297,14 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 		err = updater.TransferStatsToActivity(ctx)
 		require.NoError(t, err)
 
+		var httpStmtsResp serverpb.StatementsResponse
+
+		// Hit query endpoint.
+		urlPath := fmt.Sprintf("combinedstmts?start=%d", stubTime.Unix())
+		require.NoError(t, srvtestutils.GetStatusJSONProtoWithAdminOption(srv, urlPath, &httpStmtsResp, false))
+		require.Equal(t, httpStmtsResp.StmtsSourceTable, "crdb_internal.statement_activity")
+		require.Equal(t, httpStmtsResp.TxnsSourceTable, "crdb_internal.transaction_activity")
+
 		maxRows := topLimit * 6 // Number of top columns to select from.
 		row := db.QueryRow(t,
 			`SELECT count_rows() FROM system.public.transaction_activity WHERE app_name LIKE 'TestSqlActivityUpdateJobLoop%'`)
@@ -334,6 +343,54 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 			require.Equal(t, 1, count, "missing fingerprint from statement_activity:%s", stmtToFind)
 
 		}
+
+		var txnTotalClusterExecutionSeconds float64
+		row = db.QueryRow(t, `SELECT sum(
+             (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
+             (statistics -> 'statistics' ->> 'cnt')::FLOAT
+          ) FROM system.public.transaction_statistics`)
+		row.Scan(&txnTotalClusterExecutionSeconds)
+		require.Greater(t, txnTotalClusterExecutionSeconds, float64(0), "transaction_statistics txnTotalClusterExecutionSeconds should be greater than 0: %d", txnTotalClusterExecutionSeconds)
+		require.Equal(t, httpStmtsResp.TxnsTotalRuntimeSecs, float32(txnTotalClusterExecutionSeconds))
+
+		var stmtTotalClusterExecutionSeconds float64
+		row = db.QueryRow(t, `SELECT sum(
+             (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
+             (statistics -> 'statistics' ->> 'cnt')::FLOAT
+          ) FROM system.public.statement_statistics`)
+		row.Scan(&stmtTotalClusterExecutionSeconds)
+		require.Greater(t, stmtTotalClusterExecutionSeconds, float64(0), "statement_statistics stmtTotalClusterExecutionSeconds should be greater than 0: %d", stmtTotalClusterExecutionSeconds)
+		require.Equal(t, httpStmtsResp.StmtsTotalRuntimeSecs, float32(stmtTotalClusterExecutionSeconds))
+
+		func() {
+			var txnTotalClusterExecutionSecondsActivityTbl float64
+			rows := db.Query(t, `SELECT distinct(execution_total_cluster_seconds) FROM system.public.transaction_activity`)
+			require.NoError(t, rows.Err())
+			defer rows.Close()
+			distinctCount := 0
+			for rows.Next() {
+				distinctCount++
+				require.NoError(t, rows.Scan(&txnTotalClusterExecutionSecondsActivityTbl))
+				require.Equal(t, txnTotalClusterExecutionSeconds, txnTotalClusterExecutionSecondsActivityTbl)
+			}
+			require.Equal(t, 1, distinctCount)
+		}()
+
+		func() {
+			var stmtTotalClusterExecutionSecondsActivityTbl float64
+			rows := db.Query(t, `SELECT distinct(execution_total_cluster_seconds) FROM system.public.statement_activity`)
+			require.NoError(t, rows.Err())
+			defer rows.Close()
+			distinctCount := 0
+			for rows.Next() {
+				distinctCount++
+				require.NoError(t, rows.Scan(&stmtTotalClusterExecutionSecondsActivityTbl))
+				require.Equal(t, stmtTotalClusterExecutionSeconds, stmtTotalClusterExecutionSecondsActivityTbl)
+			}
+
+			require.Equal(t, 1, distinctCount)
+		}()
+
 	}
 }
 
