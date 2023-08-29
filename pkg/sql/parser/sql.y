@@ -865,6 +865,9 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
     return u.val.(tree.ShowCreateFormatOption)
 }
+func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
+    return u.val.(*tree.BeginTransaction)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -11482,7 +11485,9 @@ transaction_stmt:
 begin_stmt:
   START TRANSACTION begin_transaction
   {
-    $$.val = $3.stmt()
+    s := $3.beginTransaction()
+    s.FormatWithStart = true
+    $$.val = s
   }
 | START error // SHOW HELP: BEGIN
 
