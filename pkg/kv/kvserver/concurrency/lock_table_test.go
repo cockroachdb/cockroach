@@ -1887,11 +1887,13 @@ func TestLockStateSafeFormat(t *testing.T) {
 	require.NoError(t, holder.unreplicatedInfo.acquire(lock.Exclusive, 1))
 	require.NoError(t, holder.unreplicatedInfo.acquire(lock.Shared, 3))
 	holder.replicatedInfo.ts = hlc.Timestamp{WallTime: 125, Logical: 1}
+	holder.replicatedInfo.acquire(lock.Intent)
+	holder.replicatedInfo.acquire(lock.Shared)
 	require.EqualValues(t,
-		" lock: ‹\"KEY\"›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: repl [Intent], unrepl [(str: Exclusive seq: 1), (str: Shared seq: 3)]\n",
+		" lock: ‹\"KEY\"›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: repl [Intent, Shared], unrepl [(str: Exclusive seq: 1), (str: Shared seq: 3)]\n",
 		redact.Sprint(l))
 	require.EqualValues(t,
-		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: repl [Intent], unrepl [(str: Exclusive seq: 1), (str: Shared seq: 3)]\n",
+		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: repl [Intent, Shared], unrepl [(str: Exclusive seq: 1), (str: Shared seq: 3)]\n",
 		redact.Sprint(l).Redact())
 }
 
