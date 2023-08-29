@@ -2839,3 +2839,35 @@ statement error unknown function: public\.LOWERCASE_HINT_ERROR_EXPLICIT_SCHEMA_F
 SELECT public."LOWERCASE_HINT_ERROR_EXPLICIT_SCHEMA_FN"();
 
 subtest end
+
+subtest r88374
+
+statement ok
+CREATE FUNCTION f88374(i INT2) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 2';
+
+statement ok
+CREATE FUNCTION f88374(i TEXT) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 2';
+
+statement error pgcode 42725 ambiguous call
+SELECT f88374(NULL);
+
+statement ok
+CREATE TABLE t88374 (a INT, b INT);
+
+statement ok
+INSERT INTO t88374 VALUES (1, NULL);
+
+statement ok
+CREATE FUNCTION g88374 (i INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$ SELECT a FROM t88374 WHERE b IS NOT DISTINCT FROM i $$;
+
+query I
+SELECT g88374(NULL);
+----
+1
+
+query I
+SELECT g88374(NULL::INT);
+----
+1
+
+subtest end

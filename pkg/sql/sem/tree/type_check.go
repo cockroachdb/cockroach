@@ -1104,6 +1104,7 @@ func (expr *FuncExpr) TypeCheck(
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 	}
 
+	var hasUDFOverload bool
 	var calledOnNullInputFns []overloadImpl
 	var notCalledOnNullInputFns []overloadImpl
 	for _, f := range fns {
@@ -1111,6 +1112,9 @@ func (expr *FuncExpr) TypeCheck(
 			calledOnNullInputFns = append(calledOnNullInputFns, f)
 		} else {
 			notCalledOnNullInputFns = append(notCalledOnNullInputFns, f)
+		}
+		if f.(QualifiedOverload).IsUDF {
+			hasUDFOverload = true
 		}
 	}
 
@@ -1154,7 +1158,7 @@ func (expr *FuncExpr) TypeCheck(
 	// NULL arguments, the function isn't a generator or aggregate builtin, and
 	// NULL is given as an argument.
 	if len(fns) > 0 && len(calledOnNullInputFns) == 0 && funcCls != GeneratorClass &&
-		funcCls != AggregateClass {
+		funcCls != AggregateClass && !hasUDFOverload {
 		for _, expr := range typedSubExprs {
 			if expr.ResolvedType().Family() == types.UnknownFamily {
 				return DNull, nil
