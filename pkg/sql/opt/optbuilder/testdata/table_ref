@@ -1,0 +1,20 @@
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  j JSON,
+  INVERTED INDEX (j)
+)
+----
+
+build
+SELECT * FROM [53 AS foo]
+----
+project
+ ├── columns: k:1!null j:2
+ └── scan t [as=foo]
+      └── columns: k:1!null j:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+
+build
+SELECT * FROM [53(5) AS foo]
+----
+error (42703): column [5] does not exist
