@@ -43,6 +43,7 @@ func registerTLP(r registry.Registry) {
 		Leases:          registry.MetamorphicLeases,
 		NativeLibs:      registry.LibGEOS,
 		Run:             runTLP,
+		ExtraLabels:     []string{"O-rsg"},
 	})
 }
 
