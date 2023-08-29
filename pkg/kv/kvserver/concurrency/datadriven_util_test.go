@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -169,12 +170,20 @@ func scanSingleRequest(
 		}
 		return enginepb.TxnSeq(n)
 	}
+	maybeGetStr := func() lock.Strength {
+		s, ok := fields["str"]
+		if !ok {
+			return lock.None
+		}
+		return concurrency.GetStrength(t, d, s)
+	}
 
 	switch cmd {
 	case "get":
 		var r kvpb.GetRequest
 		r.Sequence = maybeGetSeq()
 		r.Key = roachpb.Key(mustGetField("key"))
+		r.KeyLocking = maybeGetStr()
 		return &r
 
 	case "scan":
@@ -184,6 +193,7 @@ func scanSingleRequest(
 		if v, ok := fields["endkey"]; ok {
 			r.EndKey = roachpb.Key(v)
 		}
+		r.KeyLocking = maybeGetStr()
 		return &r
 
 	case "put":
