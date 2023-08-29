@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "gen",
-    srcs = ["generator.go"],
+    srcs = [
+        "event_generator.go",
+        "generator.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen",
     visibility = ["//visibility:public"],
     deps = [
@@ -10,6 +13,7 @@ go_library(
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/event",
         "//pkg/kv/kvserver/asim/metrics",
+        "//pkg/kv/kvserver/asim/scheduled",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
     ],
