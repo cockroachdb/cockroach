@@ -104,6 +104,11 @@ var histogramMetricsNames = map[string]struct{}{
 	"kv.replica_read_batch_evaluate.latency":    {},
 	"kv.replica_write_batch_evaluate.latency":   {},
 	"leases.requests.latency":                   {},
+	"changefeed.nprocs_flush_nanos":             {},
+	"changefeed.nprocs_consume_event_nanos":     {},
+	"rebalancing.replicas.queriespersecond":     {},
+	"rebalancing.replicas.cpunanospersecond":    {},
+	"sql.pre_serve.mem.max":                     {},
 }
 
 func allInternalTSMetricsNames() []string {
