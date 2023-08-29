@@ -373,6 +373,13 @@ func (s *KVSubscriber) GetProtectionTimestamps(
 	if err := s.mu.internal.ForEachOverlappingSpanConfig(ctx, sp,
 		func(sp roachpb.Span, config roachpb.SpanConfig) error {
 			for _, protection := range config.GCPolicy.ProtectionPolicies {
+				// If the current span is a subset of the key space we exclude from
+				// backups, then we ignore it. This avoids placing a protected timestamp
+				// and hold up GC on spans not needed for backup (i.e. NodeLiveness,
+				// Timeseries).
+				if keys.ExcludeFromBackupSpan.Contains(sp) {
+					continue
+				}
 				// If the SpanConfig that applies to this span indicates that the span
 				// is going to be excluded from backup, and the protection policy was
 				// written by a backup, then ignore it. This prevents the
