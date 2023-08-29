@@ -234,12 +234,13 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 			// definition, we are only supporting not visible non-unique indexes for
 			// rand. Since not visible indexes are pretty rare, we are assigning index
 			// visibility randomly with a float [0.0,1.0) 1/6 of the time.
-			indexDef.Invisibility = 0.0
+			indexDef.Invisibility.Value = 0.0
 			if notvisible := rng.Intn(6) == 0; notvisible {
-				indexDef.Invisibility = 1.0
+				indexDef.Invisibility.Value = 1.0
 				if allowPartiallyVisibleIndex {
 					if rng.Intn(2) == 0 {
-						indexDef.Invisibility = 1 - rng.Float64()
+						indexDef.Invisibility.Value = 1 - rng.Float64()
+						indexDef.Invisibility.FloatProvided = true
 					}
 				}
 			}

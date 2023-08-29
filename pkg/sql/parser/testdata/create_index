@@ -460,3 +460,11 @@ CREATE INDEX a ON b (c) VISIBILITY 0.20 -- normalized!
 CREATE INDEX a ON b (c) VISIBILITY 0.20 -- fully parenthesized
 CREATE INDEX a ON b (c) VISIBILITY 0.20 -- literals removed
 CREATE INDEX _ ON _ (_) VISIBILITY 0.20 -- identifiers removed
+
+parse
+CREATE INDEX ON t(a) VISIBILITY 7.379652426127388e-12
+----
+CREATE INDEX ON t (a) VISIBILITY 0.00 -- normalized!
+CREATE INDEX ON t (a) VISIBILITY 0.00 -- fully parenthesized
+CREATE INDEX ON t (a) VISIBILITY 0.00 -- literals removed
+CREATE INDEX ON _ (_) VISIBILITY 0.00 -- identifiers removed
