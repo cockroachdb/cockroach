@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	prometheusgo "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,7 +39,7 @@ func TestAggMetric(t *testing.T) {
 		scrape := func(ex *metric.PrometheusExporter) {
 			ex.ScrapeRegistry(r, true /* includeChildMetrics */)
 		}
-		require.NoError(t, ex.ScrapeAndPrintAsText(&in, scrape))
+		require.NoError(t, ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape))
 		var lines []string
 		for sc := bufio.NewScanner(&in); sc.Scan(); {
 			if !bytes.HasPrefix(sc.Bytes(), []byte{'#'}) {

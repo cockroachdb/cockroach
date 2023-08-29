@@ -31,8 +31,8 @@ const defaultWorkloadPort = 2112
 
 // Client is an interface allowing queries against Prometheus.
 type Client interface {
-	Query(ctx context.Context, query string, ts time.Time) (model.Value, promv1.Warnings, error)
-	QueryRange(ctx context.Context, query string, r promv1.Range) (model.Value, promv1.Warnings, error)
+	Query(ctx context.Context, query string, ts time.Time, opts ...promv1.Option) (model.Value, promv1.Warnings, error)
+	QueryRange(ctx context.Context, query string, r promv1.Range, opts ...promv1.Option) (model.Value, promv1.Warnings, error)
 }
 
 // ScrapeNode is a node to scrape from.
