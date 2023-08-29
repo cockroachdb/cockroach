@@ -13,10 +13,12 @@ package persistedsqlstats
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -104,28 +106,51 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 }
 
 func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, error) {
-	maxPersistedRows := float64(SQLStatsMaxPersistedRows.Get(&s.SQLStats.GetClusterSettings().SV))
+	// Doing a count check on every flush for every node adds a lot of overhead.
+	// To reduce the overhead only do the check once an hour by default.
+	intervalToCheck := sqlStatsLimitTableCheckInterval.Get(&s.cfg.Settings.SV)
+	if !s.lastSizeCheck.IsZero() && s.lastSizeCheck.Add(intervalToCheck).After(timeutil.Now()) {
+		log.Infof(ctx, "PersistedSQLStats.StmtsLimitSizeReached skipped with last check at: %s and check interval: %s", s.lastSizeCheck, intervalToCheck)
+		return false, nil
+	}
 
-	readStmt := `
-SELECT
-    count(*)
-FROM
-    system.statement_statistics
-`
-	readStmt += s.cfg.Knobs.GetAOSTClause()
+	maxPersistedRows := float64(SQLStatsMaxPersistedRows.Get(&s.cfg.Settings.SV))
+
+	// The statistics table is split into 8 shards. Instead of counting all the
+	// rows across all the shards the count can be limited to a single shard.
+	// Then check the size off that one shard. This reduces the risk of causing
+	// contention or serialization issues. The cleanup is done by the shard, so
+	// it should prevent the data from being skewed to a single shard.
+	randomShard := rand.Intn(systemschema.SQLStatsHashShardBucketCount)
+	readStmt := fmt.Sprintf(`SELECT count(*)
+      FROM system.statement_statistics
+      %s
+      WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = $1
+`, s.cfg.Knobs.GetAOSTClause())
+
 	row, err := s.cfg.DB.Executor().QueryRowEx(
 		ctx,
 		"fetch-stmt-count",
 		nil,
 		sessiondata.NodeUserSessionDataOverride,
 		readStmt,
+		randomShard,
 	)
 
 	if err != nil {
 		return false, err
 	}
 	actualSize := float64(tree.MustBeDInt(row[0]))
-	return actualSize > (maxPersistedRows * 1.5), nil
+	maxPersistedRowsByShard := maxPersistedRows / systemschema.SQLStatsHashShardBucketCount
+	isSizeLimitReached := actualSize > (maxPersistedRowsByShard * 1.5)
+	// If the table is over the limit do the check for every flush. This allows
+	// the flush to start again as soon as the data is within limits instead of
+	// needing to wait an hour.
+	if !isSizeLimitReached {
+		s.lastSizeCheck = timeutil.Now()
+	}
+
+	return isSizeLimitReached, nil
 }
 
 func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs time.Time) {
