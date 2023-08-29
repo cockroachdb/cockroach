@@ -10,8 +10,9 @@
 
 import { assert } from "chai";
 import { createStore } from "redux";
-import { rootActions, rootReducer } from "./reducers";
+import { rootReducer } from "./reducers";
 import { actions as sqlStatsActions } from "./sqlStats";
+import { rootActions } from "./rootActions";
 
 describe("rootReducer", () => {
   it("resets redux state on RESET_STATE action", () => {
