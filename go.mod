@@ -230,7 +230,7 @@ require (
 	golang.org/x/term v0.9.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	honnef.co/go/tools v0.4.3
+	honnef.co/go/tools v0.4.5
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
