@@ -226,6 +226,7 @@ func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc
 
 			deps = sctestdeps.NewTestDependencies(
 				sctestdeps.WithDescriptors(sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb).Catalog),
+				sctestdeps.WithSystemDatabaseDescriptor(),
 				sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
 				sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
 				sctestdeps.WithSessionData(sctestdeps.ReadSessionDataFromDB(t, tdb, func(
