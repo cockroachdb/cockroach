@@ -364,11 +364,12 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		storing = append(storing, col.Name)
 	}
 
-	visibility := 1.0
+	invisibility := tree.IndexInvisibility{Value: 0.0}
 	if notvisible := s.d6() == 1; notvisible {
-		visibility = 0.0
+		invisibility.Value = 1.0
 		if s.coin() {
-			visibility = s.rnd.Float64() // [0.0, 1.0)
+			invisibility.Value = s.rnd.Float64() // [0.0, 1.0)
+			invisibility.FloatProvided = true
 		}
 	}
 
@@ -380,7 +381,7 @@ func makeCreateIndex(s *Smither) (tree.Statement, bool) {
 		Storing:      storing,
 		Inverted:     inverted,
 		Concurrently: s.coin(),
-		Invisibility: 1 - visibility,
+		Invisibility: invisibility,
 	}, true
 }
 

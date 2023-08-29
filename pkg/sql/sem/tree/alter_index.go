@@ -70,7 +70,7 @@ func (node *AlterIndexPartitionBy) Format(ctx *FmtCtx) {
 // AlterIndexVisible represents a ALTER INDEX ... [VISIBLE | NOT VISIBLE] statement.
 type AlterIndexVisible struct {
 	Index        TableIndexName
-	Invisibility float64
+	Invisibility IndexInvisibility
 	IfExists     bool
 }
 
@@ -83,13 +83,12 @@ func (node *AlterIndexVisible) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF EXISTS ")
 	}
 	ctx.FormatNode(&node.Index)
-	invisibility := node.Invisibility
-
-	if invisibility == 0.0 {
-		ctx.WriteString(" VISIBLE")
-	} else if invisibility == 1.0 {
+	switch {
+	case node.Invisibility.FloatProvided:
+		ctx.WriteString(" VISIBILITY " + fmt.Sprintf("%.2f", 1-node.Invisibility.Value))
+	case node.Invisibility.Value == 1.0:
 		ctx.WriteString(" NOT VISIBLE")
-	} else {
-		ctx.WriteString(" VISIBILITY " + fmt.Sprintf("%.2f", 1-invisibility))
+	default:
+		ctx.WriteString(" VISIBLE")
 	}
 }

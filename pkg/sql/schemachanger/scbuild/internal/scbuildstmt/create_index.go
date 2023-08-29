@@ -86,7 +86,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	}
 	activeVersion := b.EvalCtx().Settings.Version.ActiveVersion(context.TODO())
 	if !activeVersion.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
-		n.Invisibility > 0.0 && n.Invisibility < 1.0 {
+		n.Invisibility.Value > 0.0 && n.Invisibility.Value < 1.0 {
 		panic(unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported"))
 	}
 	var idxSpec indexSpec
@@ -95,8 +95,8 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			IsUnique:       n.Unique,
 			IsInverted:     n.Inverted,
 			IsConcurrently: n.Concurrently,
-			IsNotVisible:   n.Invisibility != 0.0,
-			Invisibility:   n.Invisibility,
+			IsNotVisible:   n.Invisibility.Value != 0.0,
+			Invisibility:   n.Invisibility.Value,
 		},
 	}
 	var relation scpb.Element
