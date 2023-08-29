@@ -228,7 +228,12 @@ func (c *serverController) newServerForOrchestrator(
 	ctx context.Context, nameContainer *roachpb.TenantNameContainer, tenantStopper *stop.Stopper,
 ) (orchestratedServer, error) {
 	tenantName := nameContainer.Get()
-	testArgs := c.testArgs[tenantName]
+	var testArgs base.TestSharedProcessTenantArgs
+	func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		testArgs = c.mu.testArgs[tenantName]
+	}()
 
 	// Server does not exist yet: instantiate and start it.
 	idx := func() int {

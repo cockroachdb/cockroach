@@ -72,9 +72,6 @@ type serverController struct {
 	// st refers to the applicable cluster settings.
 	st *cluster.Settings
 
-	// testArgs is used when creating new tenant servers.
-	testArgs map[roachpb.TenantName]base.TestSharedProcessTenantArgs
-
 	// sendSQLRoutingError is a callback to use to report
 	// a tenant routing error to the incoming client.
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName)
@@ -94,6 +91,9 @@ type serverController struct {
 		// TODO(knz): Detect when the mapping of name to tenant ID has
 		// changed, and invalidate the entry.
 		servers map[roachpb.TenantName]serverState
+
+		// testArgs is used when creating new tenant servers.
+		testArgs map[roachpb.TenantName]base.TestSharedProcessTenantArgs
 
 		// nextServerIdx is the index to provide to the next call to
 		// newServerFn.
@@ -118,7 +118,6 @@ func newServerController(
 		nodeID:              parentNodeID,
 		logger:              logger,
 		st:                  st,
-		testArgs:            make(map[roachpb.TenantName]base.TestSharedProcessTenantArgs),
 		stopper:             parentStopper,
 		tenantServerCreator: tenantServerCreator,
 		sendSQLRoutingError: sendSQLRoutingError,
@@ -127,6 +126,7 @@ func newServerController(
 	c.mu.servers = map[roachpb.TenantName]serverState{
 		catconstants.SystemTenantName: c.orchestrator.makeServerStateForSystemTenant(systemTenantNameContainer, systemServer),
 	}
+	c.mu.testArgs = make(map[roachpb.TenantName]base.TestSharedProcessTenantArgs)
 	parentStopper.AddCloser(c)
 	return c
 }
