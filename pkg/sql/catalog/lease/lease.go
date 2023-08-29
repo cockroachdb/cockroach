@@ -102,7 +102,7 @@ func (m *Manager) WaitForNoVersion(
 			stmt = fmt.Sprintf(stmt,
 				now.AsOfSystemTime(),
 				id)
-			if err := ie.WithSyntheticDescriptors(leaseDescs[idx:1],
+			if err := ie.WithSyntheticDescriptors(leaseDescs[idx:idx+1],
 				func() error {
 					var err error
 					values, err := ie.QueryRowEx(
@@ -1292,6 +1292,7 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 		}
 		refreshTimer := timeutil.NewTimer()
 		defer refreshTimer.Stop()
+		sessionMigrationCompleted := false
 		refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
 		for {
 			select {
@@ -1302,9 +1303,18 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 				refreshTimer.Read = true
 				refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
 
-				// FIXME: Partially enable next
-				if !m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
-					m.refreshSomeLeases(ctx)
+				// Enable lease renewals until we only have session based leases.
+				if !m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseWillOnlyHaveSessions) {
+					refreshLeases := true
+					// If we are migrating over to session based leases are going to
+					// only do to one last refresh for expire.
+					if m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseToSessionCreation) {
+						refreshLeases = !sessionMigrationCompleted
+						sessionMigrationCompleted = true
+					}
+					if refreshLeases {
+						m.refreshSomeLeases(ctx)
+					}
 				}
 
 			}

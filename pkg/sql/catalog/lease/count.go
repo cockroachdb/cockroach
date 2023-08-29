@@ -76,7 +76,7 @@ func CountLeases(
 
 	for idx, stmt := range stmts {
 		var values tree.Datums
-		if err := executor.WithSyntheticDescriptors(leaseDescs[idx:1], func() error {
+		if err := executor.WithSyntheticDescriptors(leaseDescs[idx:idx+1], func() error {
 			var err error
 			values, err = executor.QueryRowEx(
 				ctx, "count-leases", nil, /* txn */
