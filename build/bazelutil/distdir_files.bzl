@@ -1114,7 +1114,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/gorm.io/gorm/io_gorm_gorm-v1.23.5.zip": "34219a6d2ac9b9c340f811e5863a98b150db6d1fd5b8f02777299863c1628e0f",
     "https://storage.googleapis.com/cockroach-godeps/gomod/gotest.tools/tools_gotest-v2.2.0+incompatible.zip": "55fab831b2660201183b54d742602563d4e17e7125ee75788a309a4f6cb7285e",
     "https://storage.googleapis.com/cockroach-godeps/gomod/gotest.tools/v3/tools_gotest_v3-v3.2.0.zip": "fe238394013ebf35c313b7de60c5df5b6271f7c5f982eb8eecefe324531a0f5f",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/honnef.co/go/tools/co_honnef_go_tools-v0.4.3.zip": "bdd216490737b6cd0fe2655f574415606136f56033cc9f95c9d077c0227aa71c",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/honnef.co/go/tools/co_honnef_go_tools-v0.4.5.zip": "3f7c266a830f3a0727ac0b85cd7cd74a765c05d337d73af20906219f1a4ec4c3",
     "https://storage.googleapis.com/cockroach-godeps/gomod/k8s.io/api/io_k8s_api-v0.22.5.zip": "18d095a1d1344a7ed43ccae0c5b77d2586e134ea9489b1821402d72f980f3564",
     "https://storage.googleapis.com/cockroach-godeps/gomod/k8s.io/apiextensions-apiserver/io_k8s_apiextensions_apiserver-v0.17.3.zip": "f3be44b21eaea21dbc2655f207f838a94e4ed63b24e5ce4f1d688c329b53c9ff",
     "https://storage.googleapis.com/cockroach-godeps/gomod/k8s.io/apimachinery/io_k8s_apimachinery-v0.22.5.zip": "1d624555825fb81d8bdae0c92a0aad07b3edea62dceedd49bc93a2024ed46467",
