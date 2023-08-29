@@ -1,0 +1,13 @@
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.tbl (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
+  PARTITION p34 VALUES IN ((3, 4)),
+  PARTITION p3d VALUES IN ((3, DEFAULT)),
+  PARTITION p56 VALUES IN ((5, 6)),
+  PARTITION p5d VALUES IN ((5, DEFAULT))
+);
+----
+
+translate database=db table=tbl
+----
+/Table/10{6-7}                             range default
