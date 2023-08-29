@@ -568,6 +568,10 @@ const (
 	// will get writes.
 	V23_2_LeaseWillOnlyHaveSessions
 
+	// V23_2_LeasesTableWithNewDesc leases table will now have user visible
+	// session IDs.
+	V23_2_LeasesTableWithNewDesc
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -995,6 +999,11 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_LeaseWillOnlyHaveSessions,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 24},
+	},
+
+	{
+		Key:     V23_2_LeasesTableWithNewDesc,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 26},
 	},
 
 	// *************************************************

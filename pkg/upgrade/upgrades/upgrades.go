@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
-	"github.com/cockroachdb/errors"
 )
 
 // SettingsDefaultOverrides documents the effect of several migrations that add
@@ -332,12 +331,16 @@ var upgrades = []upgradebase.Upgrade{
 		NoTenantUpgradeFunc,
 	),
 	upgrade.NewTenantUpgrade(
-		"start writing leases to a new hidden index",
+		"lease renewals are stopped so public the new version of the table",
 		toCV(clusterversion.V23_2_LeaseWillOnlyHaveSessions),
 		upgrade.NoPrecondition,
-		func(ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps) error {
-			return errors.AssertionFailedf("force as stuck..")
-		},
+		leaseWaitForSessionIDAdoption,
+	),
+	upgrade.NewTenantUpgrade(
+		"lease table format is updated to remove expiry",
+		toCV(clusterversion.V23_2_LeasesTableWithNewDesc),
+		upgrade.NoPrecondition,
+		updateLeaseTableDesc,
 	),
 }
 
