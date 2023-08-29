@@ -215,6 +215,11 @@ func (p *planner) createDatabase(
 
 	}
 
+	// TODO(jeffswenson): delete once region_livess is implemented (#107966)
+	if err := p.maybeUpdateSystemDBSurvivalGoal(ctx); err != nil {
+		return nil, false, err
+	}
+
 	return db, true, nil
 }
 
