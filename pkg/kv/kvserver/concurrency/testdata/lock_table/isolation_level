@@ -109,15 +109,15 @@ add-discovered r=req6 k=a txn=txn2
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
 
 add-discovered r=req7 k=b txn=txn2
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
 
 scan r=req6
 ----
