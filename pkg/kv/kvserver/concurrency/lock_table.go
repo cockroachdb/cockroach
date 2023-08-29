@@ -1129,7 +1129,12 @@ func (rlh *replicatedLockHolderInfo) safeFormat(sb *redact.StringBuilder) {
 	if rlh.isEmpty() {
 		return
 	}
-	sb.SafeString("repl")
+	sb.SafeString("repl [")
+	sb.Printf(
+		"%s",
+		redact.Safe(lock.Intent),
+	)
+	sb.SafeString("]")
 }
 
 // Per-key locks state in lockTableImpl.

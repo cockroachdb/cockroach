@@ -219,37 +219,37 @@ debug-lock-table
 ----
 num=16
  lock: "kRCHigh1"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh2"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh3"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh4"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal1"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal2"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal3"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal4"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh1"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh2"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh3"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh4"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSINormal1"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSINormal2"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSINormal3"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSINormal4"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
 
 # -------------------------------------------------------------
 # Pushee: isolation=serializable, priority=normal
@@ -390,29 +390,29 @@ debug-lock-table
 ----
 num=12
  lock: "kRCHigh1"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh2"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh3"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh4"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal1"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal2"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal3"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal4"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh1"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh2"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh3"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh4"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
 
 # -------------------------------------------------------------
 # Pushee: isolation=serializable, priority=high
@@ -551,21 +551,21 @@ debug-lock-table
 ----
 num=8
  lock: "kRCHigh1"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh2"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh3"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh4"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal1"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal2"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal3"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal4"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
 
 # -------------------------------------------------------------
 # Pushee: isolation=read-committed, priority=normal
@@ -699,13 +699,13 @@ debug-lock-table
 ----
 num=4
  lock: "kRCHigh1"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh2"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh3"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh4"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
 
 # -------------------------------------------------------------
 # Pushee: isolation=read-committed, priority=high
