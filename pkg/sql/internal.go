@@ -278,6 +278,11 @@ func (ie *InternalExecutor) initConnEx(
 	var ex *connExecutor
 	var err error
 	if txn == nil {
+		postSetupFn  := func(ex *connExecutor) {
+			// Inject any synthetic descriptors into the right after the
+			// internal executor is created.
+			ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
+		}
 		ex = ie.s.newConnExecutor(
 			ctx,
 			sdMutIterator,
@@ -287,7 +292,7 @@ func (ie *InternalExecutor) initConnEx(
 			&ie.s.InternalMetrics,
 			applicationStats,
 			ie.s.cfg.GenerateID(),
-			nil, /* postSetupFn */
+			postSetupFn,
 		)
 	} else {
 		ex, err = ie.newConnExecutorWithTxn(
