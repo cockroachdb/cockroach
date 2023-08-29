@@ -164,6 +164,9 @@ func (g *githubIssues) createPostRequest(
 	} else if !spec.NonReleaseBlocker {
 		labels = append(labels, "release-blocker")
 	}
+	if len(spec.ExtraLabels) > 0 {
+		labels = append(labels, spec.ExtraLabels...)
+	}
 
 	teams, err := g.teamLoader()
 	if err != nil {

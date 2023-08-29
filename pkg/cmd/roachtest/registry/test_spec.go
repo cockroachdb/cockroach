@@ -119,6 +119,10 @@ type TestSpec struct {
 	// fingerprint, i.e. the node count, the version, etc. that appear in the
 	// infix. This will get rid of this awkward prefix naming restriction.
 	SnapshotPrefix string
+
+	// ExtraLabels are test-specific labels that will be added to the Github
+	// issue created when a failure occurs, in addition to default labels.
+	ExtraLabels []string
 }
 
 // PostValidation is a type of post-validation that runs after a test completes.
