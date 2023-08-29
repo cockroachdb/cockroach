@@ -87,6 +87,7 @@ exp,benchmark
 3,ORMQueries/pg_my_temp_schema_multiple_times
 3,ORMQueries/pg_namespace
 4,ORMQueries/pg_type
+130-134,ORMQueries/prisma_column_descriptions
 13,Revoke/revoke_all_on_1_table
 17,Revoke/revoke_all_on_2_tables
 21,Revoke/revoke_all_on_3_tables

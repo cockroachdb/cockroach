@@ -68,6 +68,8 @@ type AggMetrics struct {
 	InternalRetryMessageCount *aggmetric.AggGauge
 	SchemaRegistrations       *aggmetric.AggCounter
 	SchemaRegistryRetries     *aggmetric.AggCounter
+	AggregatorProgress        *aggmetric.AggGauge
+	CheckpointProgress        *aggmetric.AggGauge
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -128,6 +130,55 @@ type sliMetrics struct {
 	InternalRetryMessageCount *aggmetric.Gauge
 	SchemaRegistrations       *aggmetric.Counter
 	SchemaRegistryRetries     *aggmetric.Counter
+	AggregatorProgress        *aggmetric.Gauge
+	CheckpointProgress        *aggmetric.Gauge
+
+	mu struct {
+		syncutil.Mutex
+		id         int64
+		resolved   map[int64]hlc.Timestamp
+		checkpoint map[int64]hlc.Timestamp
+	}
+}
+
+// closeId unregisters an id. The id can still be used after its closed, but
+// such usages will be noops.
+func (m *sliMetrics) closeId(id int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.mu.checkpoint, id)
+	delete(m.mu.resolved, id)
+}
+
+// setResolved writes a resolved timestamp entry for the given id.
+func (m *sliMetrics) setResolved(id int64, ts hlc.Timestamp) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.mu.resolved[id]; ok {
+		m.mu.resolved[id] = ts
+	}
+}
+
+// setCheckpoint writes a checkpoint timestamp entry for the given id.
+func (m *sliMetrics) setCheckpoint(id int64, ts hlc.Timestamp) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.mu.checkpoint[id]; ok {
+		m.mu.checkpoint[id] = ts
+	}
+}
+
+// claimId claims a unique ID.
+func (m *sliMetrics) claimId() int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	id := m.mu.id
+	// Seed entries with the zero timestamp and expect these to be
+	// ignored until a nonzero timestamp is written.
+	m.mu.checkpoint[id] = hlc.Timestamp{}
+	m.mu.resolved[id] = hlc.Timestamp{}
+	m.mu.id++
+	return id
 }
 
 // sinkDoesNotCompress is a sentinel value indicating the sink
@@ -383,7 +434,7 @@ var (
 	// for now.
 	metaChangefeedMaxBehindNanos = metric.Metadata{
 		Name:        "changefeed.max_behind_nanos",
-		Help:        "The most any changefeed's persisted checkpoint is behind the present",
+		Help:        "(Deprecated in favor of checkpoint_progress) The most any changefeed's persisted checkpoint is behind the present",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -544,6 +595,28 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAggregatorProgress := metric.Metadata{
+		Name:        "changefeed.aggregator_progress",
+		Help:        "The earliest timestamp up to which any aggregator is guaranteed to have emitted all values for",
+		Measurement: "Unix Timestamp Nanoseconds",
+		Unit:        metric.Unit_TIMESTAMP_NS,
+	}
+	metaCheckpointProgress := metric.Metadata{
+		Name:        "changefeed.checkpoint_progress",
+		Help:        "The earliest timestamp of any changefeed's persisted checkpoint (values prior to this timestamp will never need to be re-emitted)",
+		Measurement: "Unix Timestamp Nanoseconds",
+		Unit:        metric.Unit_TIMESTAMP_NS,
+	}
+
+	functionalGaugeMinFn := func(childValues []int64) int64 {
+		var min int64
+		for _, val := range childValues {
+			if min == 0 || (val != 0 && val < min) {
+				min = val
+			}
+		}
+		return min
+	}
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
@@ -606,6 +679,8 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		InternalRetryMessageCount: b.Gauge(metaInternalRetryMessageCount),
 		SchemaRegistryRetries:     b.Counter(metaSchemaRegistryRetriesCount),
 		SchemaRegistrations:       b.Counter(metaSchemaRegistryRegistrations),
+		AggregatorProgress:        b.FunctionalGauge(metaAggregatorProgress, functionalGaugeMinFn),
+		CheckpointProgress:        b.FunctionalGauge(metaCheckpointProgress, functionalGaugeMinFn),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -666,6 +741,29 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		SchemaRegistryRetries:     a.SchemaRegistryRetries.AddChild(scope),
 		SchemaRegistrations:       a.SchemaRegistrations.AddChild(scope),
 	}
+	sm.mu.resolved = make(map[int64]hlc.Timestamp)
+	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)
+	sm.mu.id = 1 // start the first id at 1 so we can detect intiialization
+
+	minTimestampGetter := func(m map[int64]hlc.Timestamp) func() int64 {
+		return func() int64 {
+			sm.mu.Lock()
+			defer sm.mu.Unlock()
+			var minTs int64
+			for _, hlcTs := range m {
+				// Ignore empty timestamps which new entries are seeded with.
+				if hlcTs.WallTime != 0 {
+					// Track the min timestamp.
+					if minTs == 0 || hlcTs.WallTime < minTs {
+						minTs = hlcTs.WallTime
+					}
+				}
+			}
+			return minTs
+		}
+	}
+	sm.AggregatorProgress = a.AggregatorProgress.AddFunctionalChild(minTimestampGetter(sm.mu.resolved), scope)
+	sm.CheckpointProgress = a.CheckpointProgress.AddFunctionalChild(minTimestampGetter(sm.mu.checkpoint), scope)
 
 	a.mu.sliMetrics[scope] = sm
 	return sm, nil
@@ -686,6 +784,8 @@ type Metrics struct {
 	ParallelConsumerConsumeNanos   metric.IHistogram
 	ParallelConsumerInFlightEvents *metric.Gauge
 
+	// This map and the MaxBehindNanos metric are deprecated in favor of
+	// CheckpointProgress which is stored in the sliMetrics.
 	mu struct {
 		syncutil.Mutex
 		id       int
