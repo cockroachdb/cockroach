@@ -136,3 +136,15 @@ var sqlStatsLimitTableSizeEnabled = settings.RegisterBoolSetting(
 		"to grow past sql.stats.persisted_rows.max",
 	true,
 )
+
+// sqlStatsLimitTableCheckInterval is the cluster setting the controls what
+// interval the check is done if the statement and transaction statistics
+// tables have grown past the sql.stats.persisted_rows.max.
+var sqlStatsLimitTableCheckInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"sql.stats.limit_table_size_check.interval",
+	"controls what interval the check is done if the statement and "+
+		"transaction statistics tables have grown past sql.stats.persisted_rows.max",
+	1*time.Hour,
+	settings.NonNegativeDuration,
+)
