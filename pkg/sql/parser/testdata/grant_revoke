@@ -596,3 +596,11 @@ DETAIL: source SQL:
 REVOKE SELECT ON ROLE foo, bar FROM blix
                       ^
 HINT: try \h REVOKE
+
+error
+GRANT CREATE, UNKNOWN_PRIV ON TABLE foo TO testuser
+----
+at or near "on": syntax error: not a valid privilege: "unknown_priv"
+DETAIL: source SQL:
+GRANT CREATE, UNKNOWN_PRIV ON TABLE foo TO testuser
+                           ^

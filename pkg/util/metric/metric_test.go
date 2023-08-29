@@ -194,6 +194,27 @@ func TestHistogram(t *testing.T) {
 	require.Equal(t, 17.5, h.ValueAtQuantileWindowed(50))
 	require.Equal(t, 75.0, h.ValueAtQuantileWindowed(80))
 	require.Equal(t, 100.0, h.ValueAtQuantileWindowed(99.99))
+
+	// Assert that native histogram schema is not defined
+	require.Nil(t, h.ToPrometheusMetric().Histogram.Schema)
+}
+
+func TestNativeHistogram(t *testing.T) {
+	defer func(enabled bool) {
+		nativeHistogramsEnabled = enabled
+	}(nativeHistogramsEnabled)
+	nativeHistogramsEnabled = true
+	h := NewHistogram(HistogramOptions{
+		Mode:     HistogramModePrometheus,
+		Metadata: Metadata{},
+		Duration: time.Hour,
+		BucketConfig: staticBucketConfig{
+			distribution: Exponential,
+		},
+	})
+
+	// Assert that native histogram schema is defined
+	require.NotNil(t, h.ToPrometheusMetric().Histogram.Schema)
 }
 
 func TestManualWindowHistogram(t *testing.T) {

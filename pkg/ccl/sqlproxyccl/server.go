@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	proxyproto "github.com/pires/go-proxyproto"
+	"github.com/prometheus/common/expfmt"
 )
 
 var (
@@ -106,11 +107,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleVars(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set(httputil.ContentTypeHeader, httputil.PlaintextContentType)
+	contentType := expfmt.Negotiate(r.Header)
+	w.Header().Set(httputil.ContentTypeHeader, string(contentType))
 	scrape := func(pm *metric.PrometheusExporter) {
 		pm.ScrapeRegistry(s.metricsRegistry, true /* includeChildMetrics*/)
 	}
-	if err := s.prometheusExporter.ScrapeAndPrintAsText(w, scrape); err != nil {
+	if err := s.prometheusExporter.ScrapeAndPrintAsText(w, contentType, scrape); err != nil {
 		log.Errorf(r.Context(), "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
