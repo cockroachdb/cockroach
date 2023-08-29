@@ -824,7 +824,8 @@ func TestDenylistUpdate(t *testing.T) {
 		time.Second, 5*time.Millisecond,
 		"Expected the connection to eventually fail",
 	)
-	require.Regexp(t, "closed|bad connection", err.Error())
+	require.Error(t, err)
+	require.Regexp(t, "(connection reset by peer|closed|bad connection)", err.Error())
 	require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
 }
 
@@ -1828,7 +1829,7 @@ func TestConnectionMigration(t *testing.T) {
 			t.Fatalf("require that pg_sleep query terminates")
 		case err = <-errCh:
 			require.Error(t, err)
-			require.Regexp(t, "(closed|bad connection)", err.Error())
+			require.Regexp(t, "(connection reset by peer|closed|bad connection)", err.Error())
 		}
 
 		require.EqualError(t, f.ctx.Err(), context.Canceled.Error())
