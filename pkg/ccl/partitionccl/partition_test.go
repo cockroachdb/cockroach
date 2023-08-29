@@ -1199,41 +1199,6 @@ func setupPartitioningTestCluster(
 	}
 }
 
-func TestInitialPartitioning(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// Skipping as part of test-infra-team flaky test cleanup.
-	skip.WithIssue(t, 49909)
-
-	// This test configures many sub-tests and is too slow to run under nightly
-	// race stress.
-	skip.UnderStressRace(t)
-	skip.UnderShort(t)
-
-	rng, _ := randutil.NewTestRand()
-	testCases := allPartitioningTests(rng)
-
-	ctx := context.Background()
-	db, sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
-	defer cleanup()
-
-	for _, test := range testCases {
-		if len(test.scans) == 0 {
-			continue
-		}
-		t.Run(test.name, func(t *testing.T) {
-			if err := test.parse(); err != nil {
-				t.Fatalf("%+v", err)
-			}
-			sqlDB.Exec(t, test.parsed.createStmt)
-			sqlDB.Exec(t, test.parsed.zoneConfigStmts)
-
-			testutils.SucceedsSoon(t, test.verifyScansFn(ctx, t, db))
-		})
-	}
-}
-
 func TestRepartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
