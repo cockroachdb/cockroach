@@ -13,6 +13,8 @@ package kvpb
 import (
 	"context"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	_ "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil" // see RequestHeader
@@ -728,6 +730,46 @@ func (sr *ReverseScanResponse) Verify(req Request) error {
 		}
 	}
 	return nil
+}
+
+// TruncatedRequestsString formats a slice of RequestUnions for printing,
+// limited to maxBytes bytes.
+func TruncatedRequestsString(reqs []RequestUnion, maxBytes int) string {
+	if maxBytes < len("<nil>") {
+		panic(errors.AssertionFailedf("maxBytes too low: %d", maxBytes))
+	}
+	if reqs == nil {
+		return "<nil>"
+	}
+	if len(reqs) == 0 {
+		return "[]"
+	}
+	var b strings.Builder
+	b.WriteRune('[')
+	b.WriteString(reqs[0].String())
+	for i := 1; i < len(reqs); i++ {
+		if b.Len() > maxBytes {
+			break
+		}
+		b.WriteRune(' ')
+		b.WriteString(reqs[i].String())
+	}
+	b.WriteRune(']')
+	str := b.String()
+	if len(str) > maxBytes {
+		str = str[:maxBytes-len("…]")]
+		// Check whether we truncated in the middle of a rune.
+		for len(str) > 1 {
+			if r, _ := utf8.DecodeLastRuneInString(str); r == utf8.RuneError {
+				// Shave off another byte and check again.
+				str = str[:len(str)-1]
+			} else {
+				break
+			}
+		}
+		return str + "…]"
+	}
+	return str
 }
 
 // Method implements the Request interface.

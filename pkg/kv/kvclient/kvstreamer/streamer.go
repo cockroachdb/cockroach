@@ -12,11 +12,13 @@ package kvstreamer
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -26,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitmap"
@@ -445,6 +448,11 @@ func (s *Streamer) Init(
 // from the previous invocation is prohibited.
 // TODO(yuzefovich): lift this restriction and introduce the pipelining.
 func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retErr error) {
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "Enqueue %d original requests: %s", len(reqs),
+			kvpb.TruncatedRequestsString(reqs, 1024),
+		)
+	}
 	if !s.coordinatorStarted {
 		var coordinatorCtx context.Context
 		coordinatorCtx, s.coordinatorCtxCancel = s.stopper.WithCancelOnQuiesce(ctx)
@@ -702,6 +710,13 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 	}
 
 	// Memory reservation was approved, so the requests are good to go.
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		reqStr := fmt.Sprintf("%v", requestsToServe)
+		if utf8.RuneCountInString(reqStr) > 1024 {
+			reqStr = util.TruncateString(reqStr, 1022) + "…]"
+		}
+		log.VEventf(ctx, 2, "enqueuing %d requests to serve: %s", len(requestsToServe), reqStr)
+	}
 	s.requestsToServe.enqueue(requestsToServe)
 	return nil
 }
@@ -714,11 +729,14 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 //
 // Calling GetResults() invalidates the results returned on the previous call.
 func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
+	log.VEvent(ctx, 2, "GetResults")
+	defer log.VEvent(ctx, 2, "exiting GetResults")
 	for {
 		results, allComplete, err := s.results.get(ctx)
 		if len(results) > 0 || allComplete || err != nil {
 			return results, err
 		}
+		log.VEvent(ctx, 2, "waiting in GetResults")
 		if err = s.results.wait(ctx); err != nil {
 			s.results.setError(err)
 			return nil, err
@@ -802,6 +820,8 @@ type workerCoordinator struct {
 // is insufficient. The function exits when an error is encountered by one of
 // the asynchronous requests.
 func (w *workerCoordinator) mainLoop(ctx context.Context) {
+	log.VEvent(ctx, 2, "starting coordinator main loop")
+	defer log.VEvent(ctx, 2, "exiting coordinator main loop")
 	defer w.s.waitGroup.Done()
 	for {
 		if err := w.waitForRequests(ctx); err != nil {
@@ -1009,6 +1029,10 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 	defer w.s.budget.mu.Unlock()
 
 	headOfLine := w.s.getNumRequestsInProgress() == 0
+	log.VEventf(
+		ctx, 2, "serving %d requests, max:%v head:%v",
+		w.s.requestsToServe.lengthLocked(), maxNumRequestsToIssue, headOfLine,
+	)
 	var budgetIsExhausted bool
 	for !w.s.requestsToServe.emptyLocked() && maxNumRequestsToIssue > 0 && !budgetIsExhausted {
 		singleRangeReqs := w.s.requestsToServe.nextLocked()
@@ -1044,6 +1068,10 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 				// We don't have enough budget available to serve this request,
 				// and there are other requests in progress, so we'll wait for
 				// some of them to finish.
+				log.VEventf(ctx, 2,
+					"pausing serving requests, remaining:%d, available:%d < min:%d",
+					w.s.requestsToServe.lengthLocked(), availableBudget, minAcceptableBudget,
+				)
 				return nil
 			}
 			budgetIsExhausted = true
@@ -1103,6 +1131,10 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 			// truncated targetBytes above to not exceed availableBudget, and
 			// we're holding the budget's mutex. Thus, the error indicates that
 			// the root memory pool has been exhausted.
+			log.VEventf(ctx, 2,
+				"pausing serving requests, remaining:%d, root memory pool exhausted (head:%v): %v",
+				w.s.requestsToServe.lengthLocked(), headOfLine, err,
+			)
 			if !headOfLine {
 				// There are some requests in progress, so we'll let them
 				// finish / be released.
@@ -1255,6 +1287,7 @@ func (w *workerCoordinator) performRequestAsync(
 				// ReadWithinUncertaintyIntervalError and there is only a single
 				// Streamer in a single local flow, attempt to transparently
 				// refresh.
+				log.VEventf(ctx, 2, "dropping response: error from kv: %v", pErr.GoError())
 				w.s.results.setError(pErr.GoError())
 				return
 			}
@@ -1268,6 +1301,7 @@ func (w *workerCoordinator) performRequestAsync(
 			// doesn't allow mutability.
 			fp, err := calculateFootprint(req, br)
 			if err != nil {
+				log.VEventf(ctx, 2, "dropping response: error calculating footprint: %v", err)
 				w.s.results.setError(err)
 				return
 			}
@@ -1299,6 +1333,9 @@ func (w *workerCoordinator) performRequestAsync(
 				// but not enough for that large row).
 				toConsume := -overaccountedTotal
 				if err = w.s.budget.consume(ctx, toConsume, headOfLine /* allowDebt */); err != nil {
+					log.VEventf(ctx, 2,
+						"dropping response: root memory pool exhausted (head:%v): %v", headOfLine, err,
+					)
 					// TODO(yuzefovich): rather than dropping the response
 					// altogether, consider blocking to wait for the budget to
 					// open up, up to some limit.
@@ -1338,6 +1375,7 @@ func (w *workerCoordinator) performRequestAsync(
 					CreateTime: w.requestAdmissionHeader.CreateTime,
 				}
 				if _, err = w.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
+					log.VEventf(ctx, 2, "dropping response: admission control: %v", err)
 					w.s.results.setError(err)
 					return
 				}
@@ -1472,6 +1510,7 @@ func processSingleRangeResponse(
 	processSingleRangeResults(ctx, s, req, br, fp)
 	if fp.hasIncomplete() {
 		resumeReq := buildResumeSingleRangeBatch(s, req, br, fp)
+		log.VEventf(ctx, 2, "adding resume batch %v", resumeReq)
 		s.requestsToServe.add(resumeReq)
 	}
 }
@@ -1487,8 +1526,16 @@ func processSingleRangeResults(
 	br *kvpb.BatchResponse,
 	fp singleRangeBatchResponseFootprint,
 ) {
+	log.VEventf(ctx, 2,
+		"responses:%d {footprint:%v overhead:%v resumeMem:%v gets:%v scans:%v incpGets:%v "+
+			"incpScans:%v startedScans:%v}",
+		len(br.Responses), fp.memoryFootprintBytes, fp.responsesOverhead, fp.resumeReqsMemUsage,
+		fp.numGetResults, fp.numScanResults, fp.numIncompleteGets, fp.numIncompleteScans,
+		fp.numStartedScans,
+	)
 	// If there are no results, this function has nothing to do.
 	if !fp.hasResults() {
+		log.VEvent(ctx, 2, "no results")
 		return
 	}
 
@@ -1523,7 +1570,10 @@ func processSingleRangeResults(
 	// the Streamer's one.
 	s.results.Lock()
 	defer s.results.Unlock()
-	defer s.results.doneAddingLocked(ctx)
+	defer func() {
+		numResults, signalled := s.results.doneAddingLocked(ctx)
+		log.VEventf(ctx, 2, "done adding results, buffered:%d signalled:%v", numResults, signalled)
+	}()
 
 	// memoryTokensBytes accumulates all reservations that are made for all
 	// Results created below. The accounting for these reservations has already
@@ -1542,6 +1592,7 @@ func processSingleRangeResults(
 			get := response
 			if get.ResumeSpan != nil {
 				// This Get wasn't completed.
+				log.VEvent(ctx, 2, "incomplete Get")
 				continue
 			}
 			// This Get was completed.
@@ -1574,6 +1625,7 @@ func processSingleRangeResults(
 				// multiple ranges and the last range has no data in it - we
 				// want to be able to set scanComplete field on such an empty
 				// Result).
+				log.VEvent(ctx, 2, "incomplete Scan")
 				continue
 			}
 			result := Result{
