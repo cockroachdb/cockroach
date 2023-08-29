@@ -13,12 +13,10 @@ package gen
 import (
 	"fmt"
 	"math/rand"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -60,15 +58,6 @@ type RangeGen interface {
 	String() string
 }
 
-// EventGen provides a  method to generate a list of events that will apply to
-// the simulated cluster. Currently, only delayed (fixed time) events are
-// supported.
-type EventGen interface {
-	// Generate returns a list of events, which should be exectued at the delay specified.
-	Generate(seed int64) event.DelayedEventList
-	String() string
-}
-
 // GenerateSimulation is a utility function that creates a new allocation
 // simulation using the provided state, workload, settings generators and seed.
 func GenerateSimulation(
@@ -83,13 +72,14 @@ func GenerateSimulation(
 	settings := settingsGen.Generate(seed)
 	s := clusterGen.Generate(seed, &settings)
 	s = rangeGen.Generate(seed, &settings, s)
+	eventExecutor := eventGen.Generate(seed, &settings)
 	return asim.NewSimulator(
 		duration,
 		loadGen.Generate(seed, &settings),
 		s,
 		&settings,
 		metrics.NewTracker(settings.MetricsInterval),
-		eventGen.Generate(seed)...,
+		eventExecutor,
 	)
 }
 
@@ -315,21 +305,4 @@ func (br BasicRanges) Generate(
 	rangesInfo := br.GetRangesInfo(br.PlacementType, len(s.Stores()), nil, []float64{})
 	br.LoadRangeInfo(s, rangesInfo)
 	return s
-}
-
-// StaticEvents implements the EventGen interface.
-// TODO(kvoli): introduce conditional events.
-type StaticEvents struct {
-	DelayedEvents event.DelayedEventList
-}
-
-func (se StaticEvents) String() string {
-	return fmt.Sprintf("number of static events generated=%d", len(se.DelayedEvents))
-}
-
-// Generate returns a list of events, exactly the same as the events
-// StaticEvents was created with.
-func (se StaticEvents) Generate(seed int64) event.DelayedEventList {
-	sort.Sort(se.DelayedEvents)
-	return se.DelayedEvents
 }
