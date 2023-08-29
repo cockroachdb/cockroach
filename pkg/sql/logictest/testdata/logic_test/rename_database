@@ -163,7 +163,7 @@ ALTER DATABASE u RENAME TO v
 statement ok
 CREATE VIEW v.v AS SELECT k,v FROM v.kv
 
-statement error cannot rename database because relation "v.public.v" depends on relation "v.public.kv"\s.*you can drop "v.public.v" instead
+statement error pq: cannot rename database because relation "v.public.v" depends on relation "v.public.kv"\s.*consider dropping "v.public.v" first
 ALTER DATABASE v RENAME TO u
 
 # Check that the default databases can be renamed like any other.

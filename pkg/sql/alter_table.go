@@ -1623,6 +1623,10 @@ func dropColumnImpl(
 		)
 	}
 
+	if err := params.p.disallowDroppingPrimaryIndexReferencedInUDFOrView(params.ctx, tableDesc); err != nil {
+		return nil, err
+	}
+
 	// If the dropped column uses a sequence, remove references to it from that sequence.
 	if colToDrop.NumUsesSequences() > 0 {
 		if err := params.p.removeSequenceDependencies(params.ctx, tableDesc, colToDrop); err != nil {

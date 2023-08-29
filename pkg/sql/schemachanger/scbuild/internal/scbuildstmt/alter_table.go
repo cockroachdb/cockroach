@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
@@ -180,6 +181,45 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 	}
 	maybeDropRedundantPrimaryIndexes(b, tbl.TableID)
 	maybeRewriteTempIDsInPrimaryIndexes(b, tbl.TableID)
+	disallowDroppingPrimaryIndexReferencedInUDFOrView(b, tbl.TableID, n.String())
+}
+
+// disallowDroppingPrimaryIndexReferencedInUDFOrView prevents dropping old (current)
+// primary index that is referenced explicitly via index hinting in UDF or View body.
+func disallowDroppingPrimaryIndexReferencedInUDFOrView(
+	b BuildCtx, tableID catid.DescID, stmtSQLString string,
+) {
+	chain := getPrimaryIndexChain(b, tableID)
+	if !chain.isInflatedAtAll() {
+		// No new primary index needs to be added at all, which means old/current
+		// primary index does not need to be dropped.
+		return
+	}
+
+	toBeDroppedIndexID := chain.oldSpec.primary.IndexID
+	toBeDroppedIndexName := chain.oldSpec.name.Name
+	b.BackReferences(tableID).Filter(publicTargetFilter).ForEachTarget(func(target scpb.TargetStatus, e scpb.Element) {
+		switch el := e.(type) {
+		case *scpb.FunctionBody:
+			for _, ref := range el.UsesTables {
+				if ref.TableID == tableID && ref.IndexID == toBeDroppedIndexID {
+					fnName := b.QueryByID(el.FunctionID).FilterFunctionName().MustGetOneElement().Name
+					panic(errors.WithDetail(
+						sqlerrors.NewDependentBlocksOpError("drop", "index", toBeDroppedIndexName, "function", fnName),
+						sqlerrors.PrimaryIndexSwapDetail))
+				}
+			}
+		case *scpb.View:
+			for _, ref := range el.ForwardReferences {
+				if ref.ToID == tableID && ref.IndexID == toBeDroppedIndexID {
+					viewName := b.QueryByID(el.ViewID).FilterNamespace().MustGetOneElement().Name
+					panic(errors.WithDetail(
+						sqlerrors.NewDependentBlocksOpError("drop", "index", toBeDroppedIndexName, "view", viewName),
+						sqlerrors.PrimaryIndexSwapDetail))
+				}
+			}
+		}
+	})
 }
 
 // maybeRewriteTempIDsInPrimaryIndexes is part of the post-processing
