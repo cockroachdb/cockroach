@@ -13,6 +13,8 @@ package kvstorage
 import (
 	"bytes"
 	"context"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -25,8 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3/raftpb"
 )
 
@@ -249,7 +249,7 @@ func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent
 func IterateRangeDescriptorsFromDisk(
 	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
 ) error {
-	log.Event(ctx, "beginning range descriptor iteration")
+	log.Info(ctx, "beginning range descriptor iteration")
 	// MVCCIterator over all range-local key-based data.
 	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
@@ -258,6 +258,11 @@ func IterateRangeDescriptorsFromDisk(
 	matchCount := 0
 	bySuffix := make(map[redact.RedactableString]int)
 	kvToDesc := func(kv roachpb.KeyValue) error {
+		const periodicReportCount = 1000000
+		if (allCount+1)%periodicReportCount == 0 {
+			log.Infof(ctx, "range descriptor iteration in progress: %d keys, %d range descriptors (by suffix: %v)",
+				allCount, matchCount, bySuffix)
+		}
 		allCount++
 		// Only consider range metadata entries; ignore others.
 		startKey, suffix, _, err := keys.DecodeRangeKey(kv.Key)
@@ -293,7 +298,7 @@ func IterateRangeDescriptorsFromDisk(
 
 	_, err := storage.MVCCIterate(ctx, reader, start, end, hlc.MaxTimestamp,
 		storage.MVCCScanOptions{Inconsistent: true}, kvToDesc)
-	log.Eventf(ctx, "iterated over %d keys to find %d range descriptors (by suffix: %v)",
+	log.Infof(ctx, "range descriptor iteration done: %d keys, %d range descriptors (by suffix: %v)",
 		allCount, matchCount, bySuffix)
 	return err
 }
