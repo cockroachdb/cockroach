@@ -1267,17 +1267,17 @@ https://www.postgresql.org/docs/9.5/catalog-pg-database.html`,
 					ownerOid,                    // datdba
 					// If there is a change in encoding value for the database we must update
 					// the definitions of getdatabaseencoding within pg_builtin.
-					builtins.DatEncodingUTFId,  // encoding
-					builtins.DatEncodingEnUTF8, // datcollate
-					builtins.DatEncodingEnUTF8, // datctype
-					tree.DBoolFalse,            // datistemplate
-					tree.DBoolTrue,             // datallowconn
-					negOneVal,                  // datconnlimit
-					oidZero,                    // datlastsysoid
-					tree.DNull,                 // datfrozenxid
-					tree.DNull,                 // datminmxid
-					oidZero,                    // dattablespace
-					tree.DNull,                 // datacl
+					builtins.DatEncodingUTFId,       // encoding
+					tree.NewDString(PgCompatLocale), // datcollate
+					tree.NewDString(PgCompatLocale), // datctype
+					tree.DBoolFalse,                 // datistemplate
+					tree.DBoolTrue,                  // datallowconn
+					negOneVal,                       // datconnlimit
+					oidZero,                         // datlastsysoid
+					tree.DNull,                      // datfrozenxid
+					tree.DNull,                      // datminmxid
+					oidZero,                         // dattablespace
+					tree.DNull,                      // datacl
 				)
 			})
 	},
