@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -469,15 +470,19 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	pss.Flush(ctx)
 	stmtStatsCount, txnStatsCount := countStats(t, sqlConn)
 
-	const additionalStatements = int64(3)
-	sqlConn.Exec(t, "SELECT 1")
-	sqlConn.Exec(t, "SELECT 1, 2")
-	sqlConn.Exec(t, "SELECT 1, 2, 3")
+	// Execute enough so all the shards will have data.
+	const additionalStatements = int64(systemschema.SQLStatsHashShardBucketCount*10) + 1
+	for i := int64(0); i < additionalStatements; i++ {
+		appName := fmt.Sprintf("TestSQLStatsPersistedLimitReached%d", i)
+		sqlConn.Exec(t, `SET application_name = $1`, appName)
+		sqlConn.Exec(t, "SELECT 1")
+	}
 
 	pss.Flush(ctx)
 	stmtStatsCountFlush2, txnStatsCountFlush2 := countStats(t, sqlConn)
 
-	// 2. After flushing and counting a second time, we should see at least 3 more rows.
+	// 2. After flushing and counting a second time, we should see at least
+	// 80 (8 shards * 10) more rows.
 	require.GreaterOrEqual(t, stmtStatsCountFlush2-stmtStatsCount, additionalStatements)
 	require.GreaterOrEqual(t, txnStatsCountFlush2-txnStatsCount, additionalStatements)
 
@@ -497,9 +502,23 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 		return nil
 	})
 
-	sqlConn.Exec(t, "SELECT 1, 2, 3, 4")
-	sqlConn.Exec(t, "SELECT 1, 2, 3, 4, 5")
-	sqlConn.Exec(t, "SELECT 1, 2, 3, 4, 6, 7")
+	// Set table size check interval to 1 second.
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.limit_table_size.check_interval='0.00001ms'")
+	testutils.SucceedsSoon(t, func() error {
+		var appliedSetting string
+		row := sqlConn.QueryRow(t, "SHOW CLUSTER SETTING sql.stats.limit_table_size.check_interval")
+		row.Scan(&appliedSetting)
+		if appliedSetting != "00:00:00" {
+			return errors.Newf("waiting for sql.stats.limit_table_size.check_interval to be applied: %s", appliedSetting)
+		}
+		return nil
+	})
+
+	for i := int64(0); i < additionalStatements; i++ {
+		appName := fmt.Sprintf("TestSQLStatsPersistedLimitReached2nd%d", i)
+		sqlConn.Exec(t, `SET application_name = $1`, appName)
+		sqlConn.Exec(t, "SELECT 1")
+	}
 
 	for _, enforceLimitEnabled := range []bool{true, false} {
 		boolStr := strconv.FormatBool(enforceLimitEnabled)
@@ -538,12 +557,20 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 	waitForFollowerReadTimestamp(t, sqlConn)
 	pss := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 
-	const minNumExpectedStmts = int64(3)
-	// Maximum number of persisted rows less than minNumExpectedStmts/1.5
-	const maxNumPersistedRows = 1
-	sqlConn.Exec(t, "SELECT 1")
-	sqlConn.Exec(t, "SELECT 1, 2")
-	sqlConn.Exec(t, "SELECT 1, 2, 3")
+	// It should be false since nothing has flushed. The table will be empty.
+	limitReached, err := pss.StmtsLimitSizeReached(ctx)
+	require.NoError(t, err)
+	require.False(t, limitReached)
+
+	const minNumExpectedStmts = int64(systemschema.SQLStatsHashShardBucketCount * 10)
+	// Maximum number of persisted rows less than minNumExpectedStmts/1.5.
+	const maxNumPersistedRows = 8
+	// Divided minNumExpectedStmts by 2 because the set and select are counted.
+	for i := int64(0); i < minNumExpectedStmts/2; i++ {
+		appName := fmt.Sprintf("TestSQLStatsPersistedLimitReached2nd%d", i)
+		sqlConn.Exec(t, `SET application_name = $1`, appName)
+		sqlConn.Exec(t, "SELECT 1")
+	}
 
 	pss.Flush(ctx)
 	stmtStatsCountFlush, _ := countStats(t, sqlConn)
@@ -563,6 +590,37 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 		return nil
 	})
 
+	// We need SucceedsSoon here for the follower read timestamp to catch up
+	// enough for this state to be reached.
+	testutils.SucceedsSoon(t, func() error {
+		row := sqlConn.QueryRow(t, "SELECT count_rows() FROM system.statement_statistics AS OF SYSTEM TIME follower_read_timestamp()")
+		var rowCount int64
+		row.Scan(&rowCount)
+		if rowCount < minNumExpectedStmts {
+			return errors.Newf("waiting for AOST query to return results")
+		}
+		return nil
+	})
+
+	// It should still return false because it only checks once an hour by default
+	// unless the previous run was over the limit.
+	limitReached, err = pss.StmtsLimitSizeReached(ctx)
+	require.NoError(t, err)
+	require.False(t, limitReached)
+
+	// Set table size check interval to .00001 second. So the next check doesn't
+	// use the cached value.
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.limit_table_size.check_interval='.0000001s'")
+	testutils.SucceedsSoon(t, func() error {
+		var appliedSetting string
+		row := sqlConn.QueryRow(t, "SHOW CLUSTER SETTING sql.stats.limit_table_size.check_interval")
+		row.Scan(&appliedSetting)
+		if appliedSetting != "00:00:00" {
+			return errors.Newf("waiting for sql.stats.limit_table_size.check_interval to be applied: %s", appliedSetting)
+		}
+		return nil
+	})
+
 	// Begin a transaction.
 	sqlConn.Exec(t, "BEGIN")
 	// Lock the table. Create a state of contention.
@@ -570,15 +628,13 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 
 	// Ensure that we can read from the table despite it being locked, due to the follower read (AOST).
 	// Expect that the number of statements in the table exceeds sql.stats.persisted_rows.max * 1.5
-	// (meaning that the limit will be reached) and no error. We need SucceedsSoon here for the follower
-	// read timestamp to catch up enough for this state to be reached.
-	testutils.SucceedsSoon(t, func() error {
-		limitReached, err := pss.StmtsLimitSizeReached(ctx)
-		if limitReached != true {
-			return errors.New("waiting for limit reached to be true")
-		}
-		return err
-	})
+	// (meaning that the limit will be reached) and no error. Loop to make sure that
+	// checking it multiple times still returns the correct value.
+	for i := 0; i < 3; i++ {
+		limitReached, err = pss.StmtsLimitSizeReached(ctx)
+		require.NoError(t, err)
+		require.True(t, limitReached, "limitReached should be true. Loop :%d", i)
+	}
 
 	// Close the transaction.
 	sqlConn.Exec(t, "COMMIT")
