@@ -16,6 +16,10 @@ var (
 	// EverythingSpan is a span that covers everything.
 	EverythingSpan = roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}
 
+	// ExcludeFromBackupSpan is a span that covers the keyspace that we exclude
+	// from full cluster backup and do not place protected timestamps on.
+	ExcludeFromBackupSpan = roachpb.Span{Key: roachpb.KeyMin, EndKey: TableDataMin}
+
 	// Meta1Span holds all first level addressing records.
 	Meta1Span = roachpb.Span{Key: roachpb.KeyMin, EndKey: Meta2Prefix}
 

@@ -81,6 +81,14 @@ func TestGetProtectionTimestamps(t *testing.T) {
 	// Mark sp43 as excluded from backup.
 	sp43Cfg.cfg.ExcludeDataFromBackup = true
 
+	excludedKeyspaceConfig := makeSpanAndSpanConfigWithProtectionPolicies(keys.ExcludeFromBackupSpan, []roachpb.ProtectionPolicy{
+		{ProtectedTimestamp: ts4},
+	})
+
+	nodelivenessKeyspaceConfig := makeSpanAndSpanConfigWithProtectionPolicies(keys.NodeLivenessSpan, []roachpb.ProtectionPolicy{
+		{ProtectedTimestamp: ts4},
+	})
+
 	const timeDeltaFromTS1 = 10
 	mc := hlc.NewManualClock(ts1.WallTime + timeDeltaFromTS1)
 	subscriber := New(
@@ -94,7 +102,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		nil,
 	)
 	m := &manualStore{
-		spanAndConfigs: []spanAndSpanConfig{sp42Cfg, sp43Cfg},
+		spanAndConfigs: []spanAndSpanConfig{sp42Cfg, sp43Cfg, excludedKeyspaceConfig, nodelivenessKeyspaceConfig},
 	}
 	subscriber.mu.internal = m
 
@@ -128,6 +136,42 @@ func TestGetProtectionTimestamps(t *testing.T) {
 			"span across two table spans",
 			func(t *testing.T, m *manualStore, subscriber *KVSubscriber) {
 				protections, _, err := subscriber.GetProtectionTimestamps(ctx, sp4243)
+				require.NoError(t, err)
+				sort.SliceIsSorted(protections, func(i, j int) bool {
+					return protections[i].Less(protections[j])
+				})
+				require.Equal(t, []hlc.Timestamp{ts1, ts2, ts4}, protections)
+			},
+		},
+		{
+			"ExcludeFromBackupSpan does not include PTS records",
+			func(t *testing.T, m *manualStore, subscriber *KVSubscriber) {
+				protections, _, err := subscriber.GetProtectionTimestamps(ctx, keys.ExcludeFromBackupSpan)
+				require.NoError(t, err)
+				sort.SliceIsSorted(protections, func(i, j int) bool {
+					return protections[i].Less(protections[j])
+				})
+				require.Empty(t, protections)
+			},
+		},
+		{
+			"NodeLivenessSpan does not include PTS records",
+			func(t *testing.T, m *manualStore, subscriber *KVSubscriber) {
+				protections, _, err := subscriber.GetProtectionTimestamps(ctx, keys.NodeLivenessSpan)
+				require.NoError(t, err)
+				sort.SliceIsSorted(protections, func(i, j int) bool {
+					return protections[i].Less(protections[j])
+				})
+				require.Empty(t, protections)
+			},
+		},
+		{
+			"span across back up boundary includes PTS records",
+			func(t *testing.T, m *manualStore, subscriber *KVSubscriber) {
+				protections, _, err := subscriber.GetProtectionTimestamps(
+					ctx,
+					roachpb.Span{Key: keys.MinKey, EndKey: sp43.EndKey},
+				)
 				require.NoError(t, err)
 				sort.SliceIsSorted(protections, func(i, j int) bool {
 					return protections[i].Less(protections[j])
