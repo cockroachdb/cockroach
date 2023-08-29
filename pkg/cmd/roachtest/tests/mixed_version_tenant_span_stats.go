@@ -47,7 +47,13 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 				t.Fatal("predecessor binary already includes RPC protobuf changes, this test is no longer needed -- remove me")
 			}
 
-			mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All())
+			mvt := mixedversion.NewTest(
+				ctx, t, t.L(), c, c.All(),
+				// This test only makes sense in 22.2 / 23.1 mixed-version
+				// state; therefore, we enforce a single upgrade on every test
+				// run.
+				mixedversion.NumUpgrades(1),
+			)
 
 			tableName := "test"
 			var startKey string
