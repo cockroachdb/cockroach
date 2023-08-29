@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -795,6 +797,75 @@ func TestInternalExecutorEncountersRetry(t *testing.T) {
 
 	// TODO(yuzefovich): add a test for when a schema change is done in-between
 	// the retries.
+}
+
+// TestInternalExecutorSyntheticDesc injects a synthetic descriptor
+// into a new transaction and confirms that existing descriptors are
+// replaced for both new and old transactions
+// (using isql.WithSyntheticDescriptors).
+func TestInternalExecutorSyntheticDesc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := createTestServerParams()
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := db.Exec("CREATE DATABASE test; CREATE TABLE test.t (c) AS SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+
+	idb := s.InternalDB().(*sql.InternalDB)
+	// Modify the existing descriptor for test, so that the column c is now known
+	// as blah.
+	syntheticDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, s.Codec(), "test", "t")
+	syntheticDesc.Columns[0].Name = "blah"
+	syntheticDesc.PrimaryIndex.StoreColumnNames[0] = "blah"
+	syntheticDesc.Families[0].ColumnNames[0] = "blah"
+	// Specify a nil txn, so that the internal executor layer creates
+	// a new transaction.
+	t.Run("inject synthetic descriptor in new txn",
+		func(t *testing.T) {
+			exec := idb.Executor()
+			require.NoError(t, exec.WithSyntheticDescriptors(catalog.Descriptors{syntheticDesc}, func() error {
+				row, err := exec.QueryRow(ctx, "query-column-name", nil, "SELECT create_statement FROM [SHOW CREATE TABLE test.t]")
+				require.NoError(t, err)
+				createStatement := row[0].(*tree.DString)
+				require.Equal(t,
+					`CREATE TABLE public.t (
+	blah INT8 NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+)`,
+					string(*createStatement))
+				return nil
+			}))
+		})
+
+	// Start a new txn and pass that into the internal executor, and
+	// confirm the synthetic descriptor is picked up.
+	t.Run("inject synthetic descriptor in existing txn",
+		func(t *testing.T) {
+			require.NoError(t,
+				idb.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					exec := idb.Executor()
+					return exec.WithSyntheticDescriptors(catalog.Descriptors{syntheticDesc}, func() error {
+						row, err := exec.QueryRow(ctx, "query-column-name", txn, "SELECT create_statement FROM [SHOW CREATE TABLE test.t]")
+						require.NoError(t, err)
+						createStatement := row[0].(*tree.DString)
+						require.Equal(t,
+							`CREATE TABLE public.t (
+	blah INT8 NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+)`,
+							string(*createStatement))
+						return nil
+					})
+				}),
+			)
+		})
 }
 
 // TODO(andrei): Test that descriptor leases are released by the
