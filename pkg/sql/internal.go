@@ -287,7 +287,9 @@ func (ie *InternalExecutor) initConnEx(
 			&ie.s.InternalMetrics,
 			applicationStats,
 			ie.s.cfg.GenerateID(),
-			nil, /* postSetupFn */
+			func(ex *connExecutor) {
+				ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
+			}, /* postSetupFn */
 		)
 	} else {
 		ex, err = ie.newConnExecutorWithTxn(
