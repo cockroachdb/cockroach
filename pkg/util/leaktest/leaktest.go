@@ -57,6 +57,12 @@ func interestingGoroutines() map[int64]string {
 			strings.Contains(stack, ").writeLoop(") ||
 			// Ignore the Sentry client, which is created lazily on first use.
 			strings.Contains(stack, "sentry-go.(*HTTPTransport).worker") ||
+			// Ignore pgconn which creates a goroutine to do an async cleanup.
+			strings.Contains(stack, "github.com/jackc/pgconn.(*PgConn).asyncClose.func1") ||
+			// Ignore pgconn which creates a goroutine to watch context cancellation.
+			strings.Contains(stack, "github.com/jackc/pgconn/internal/ctxwatch.(*ContextWatcher).Watch.func1") ||
+			// Ignore pq goroutine that watches for context cancellation.
+			strings.Contains(stack, "github.com/lib/pq.(*conn).watchCancel") ||
 			// Seems to be gccgo specific.
 			(runtime.Compiler == "gccgo" && strings.Contains(stack, "testing.T.Parallel")) ||
 			// Below are the stacks ignored by the upstream leaktest code.
