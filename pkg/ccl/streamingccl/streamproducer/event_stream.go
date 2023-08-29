@@ -23,20 +23,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/codahale/hdrhistogram"
 )
 
 type eventStream struct {
@@ -50,13 +55,31 @@ type eventStream struct {
 	data tree.Datums // Data to send to the consumer
 
 	// Fields below initialized when Start called.
-	rf          *rangefeed.RangeFeed          // Currently running rangefeed.
-	streamGroup ctxgroup.Group                // Context group controlling stream execution.
-	doneChan    chan struct{}                 // Channel signaled to close the stream loop.
-	eventsCh    chan kvcoord.RangeFeedMessage // Channel receiving rangefeed events.
-	errCh       chan error                    // Signaled when error occurs in rangefeed.
-	streamCh    chan tree.Datums              // Channel signaled to forward datums to consumer.
-	sp          *tracing.Span                 // Span representing the lifetime of the eventStream.
+	rf           *rangefeed.RangeFeed                      // Currently running rangefeed.
+	streamGroup  ctxgroup.Group                            // Context group controlling stream execution.
+	doneChan     chan struct{}                             // Channel signaled to close the stream loop.
+	eventsCh     chan kvcoord.RangeFeedMessage             // Channel receiving rangefeed events.
+	errCh        chan error                                // Signaled when error occurs in rangefeed.
+	streamCh     chan tree.Datums                          // Channel signaled to forward datums to consumer.
+	tracingAggCh chan *execinfrapb.TracingAggregatorEvents // Channel signaled to forward tracing aggregator events.
+	sp           *tracing.Span                             // Span representing the lifetime of the eventStream.
+
+	mu struct {
+		syncutil.Mutex
+
+		rangefeedEventReceiveWaitHist *hdrhistogram.Histogram
+		flushWaitHist                 *hdrhistogram.Histogram
+		sendEventWaitHist             *hdrhistogram.Histogram
+		betweenNextWaitHist           *hdrhistogram.Histogram
+		eventStreamStats              *EventStreamPerformanceStats
+	}
+
+	lastNextFinishedAt time.Time
+
+	// Aggregator that aggregates StructuredEvents emitted in the eventStreams'
+	// trace recording.
+	agg      *bulk.TracingAggregator
+	aggTimer *timeutil.Timer
 }
 
 var _ eval.ValueGenerator = (*eventStream)(nil)
@@ -174,6 +197,23 @@ func (s *eventStream) maybeSetError(err error) {
 }
 
 func (s *eventStream) startStreamProcessor(ctx context.Context, frontier *span.Frontier) {
+	log.Infof(ctx, "starting stream processors on %s", s.execCfg.NodeInfo.NodeID.SQLInstanceID().String())
+	// Set up a tracing aggregator that aggregates StructuredEvents emitted in the
+	// eventStreams' trace recording.
+	s.aggTimer = timeutil.NewTimer()
+	s.agg = bulk.TracingAggregatorForContext(ctx)
+	if s.agg != nil {
+		s.aggTimer.Reset(15 * time.Second)
+	}
+
+	// Context group responsible for coordinating rangefeed event production with
+	// ValueGenerator implementation that consumes rangefeed events and forwards
+	// them to the destination cluster consumer.
+	sp := tracing.SpanFromContext(ctx)
+	ctx, aggSp := sp.Tracer().StartSpanCtx(ctx, "eventStream.startStreamProcessor",
+		tracing.WithRecording(tracingpb.RecordingStructured), tracing.WithEventListeners(s.agg))
+	s.sp = aggSp
+
 	type ctxGroupFn = func(ctx context.Context) error
 
 	// withErrCapture wraps fn to capture and report error to the error channel.
@@ -198,14 +238,26 @@ func (s *eventStream) startStreamProcessor(ctx context.Context, frontier *span.F
 		}
 	}
 
-	// Context group responsible for coordinating rangefeed event production with
-	// ValueGenerator implementation that consumes rangefeed events and forwards them to the
-	// destination cluster consumer.
-	streamCtx, sp := tracing.ChildSpan(ctx, "event stream")
-	s.sp = sp
-	s.streamGroup = ctxgroup.WithContext(streamCtx)
+	s.mu.eventStreamStats = &EventStreamPerformanceStats{}
+	s.streamGroup = ctxgroup.WithContext(ctx)
 	s.streamGroup.GoCtx(withErrCapture(func(ctx context.Context) error {
 		return s.streamLoop(ctx, frontier)
+	}))
+
+	// None of the goroutines involved in aggregating or persisting stats should
+	// cause the eventStream to error out.
+	s.tracingAggCh = make(chan *execinfrapb.TracingAggregatorEvents)
+	s.streamGroup.GoCtx(withErrCapture(func(ctx context.Context) error {
+		if err := s.constructTracingAggregatorStats(ctx); err != nil {
+			log.Warningf(ctx, "error while constructing tracing aggregator stats: %v", err)
+		}
+		return nil
+	}))
+	s.streamGroup.GoCtx(withErrCapture(func(ctx context.Context) error {
+		if err := bulk.AggregateTracingStats(ctx, jobspb.JobID(s.streamID), s.execCfg.Settings, s.execCfg.InternalDB, s.tracingAggCh); err != nil {
+			log.Warningf(ctx, "error while aggregating tracing stats: %v", err)
+		}
+		return nil
 	}))
 
 	// TODO(yevgeniy): Add go routine to monitor stream job liveness.
@@ -214,12 +266,31 @@ func (s *eventStream) startStreamProcessor(ctx context.Context, frontier *span.F
 
 // Next implements tree.ValueGenerator interface.
 func (s *eventStream) Next(ctx context.Context) (bool, error) {
+	defer func() {
+		s.lastNextFinishedAt = timeutil.Now()
+	}()
+
+	timeSincePrevNext := timeutil.Since(s.lastNextFinishedAt)
+	beforeEventSend := timeutil.Now()
 	select {
 	case <-ctx.Done():
 		return false, ctx.Err()
 	case err := <-s.errCh:
 		return false, err
 	case s.data = <-s.streamCh:
+		s.mu.Lock()
+		log.Infof(ctx, "send wait: %s; aggregate: %s", timeutil.Since(beforeEventSend).String(),
+			s.mu.eventStreamStats.EventSendWait.String())
+		eventSendWait := timeutil.Since(beforeEventSend)
+		if err := s.mu.sendEventWaitHist.RecordValue(eventSendWait.Nanoseconds()); err != nil {
+			log.Warningf(ctx, "error recording send wait to histogram: %v", err)
+		}
+		s.mu.eventStreamStats.EventSendWait += eventSendWait
+		s.mu.eventStreamStats.LastSendTime = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		if err := s.mu.betweenNextWaitHist.RecordValue(timeSincePrevNext.Nanoseconds()); err != nil {
+			log.Warningf(ctx, "error recording between next to histogram: %v", err)
+		}
+		s.mu.Unlock()
 		return true, nil
 	}
 }
@@ -240,6 +311,8 @@ func (s *eventStream) Close(ctx context.Context) {
 		log.Errorf(ctx, "partition stream %d terminated with error %v", s.streamID, err)
 	}
 	s.sp.Finish()
+	s.aggTimer.Stop()
+	close(s.tracingAggCh)
 }
 
 func (s *eventStream) onValue(ctx context.Context, value *kvpb.RangeFeedValue) {
@@ -314,10 +387,29 @@ func (s *eventStream) flushEvent(ctx context.Context, event *streampb.StreamEven
 		return err
 	}
 
+	s.mu.Lock()
+	if event.Batch != nil {
+		s.mu.eventStreamStats.NumFlushedBatches++
+	} else {
+		s.mu.eventStreamStats.NumFlushedCheckpoints++
+	}
+	s.mu.Unlock()
+
+	beforeFlush := timeutil.Now()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case s.streamCh <- tree.Datums{tree.NewDBytes(tree.DBytes(data))}:
+		s.mu.Lock()
+		log.Infof(ctx, "flush wait: %s; aggregate: %s", timeutil.Since(beforeFlush).String(),
+			s.mu.eventStreamStats.FlushWait.String())
+		flushWait := timeutil.Since(beforeFlush)
+		if err := s.mu.flushWaitHist.RecordValue(flushWait.Nanoseconds()); err != nil {
+			log.Warningf(ctx, "error recording flush wait to histogram: %v", err)
+		}
+		s.mu.eventStreamStats.FlushWait += flushWait
+		s.mu.eventStreamStats.LastFlushTime = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		s.mu.Unlock()
 		return nil
 	case <-s.doneChan:
 		return nil
@@ -374,8 +466,14 @@ func (p *checkpointPacer) shouldCheckpoint(
 
 // Add a RangeFeedSSTable into current batch.
 func (s *eventStream) addSST(
-	sst *kvpb.RangeFeedSSTable, registeredSpan roachpb.Span, seb *streamEventBatcher,
+	ctx context.Context,
+	sst *kvpb.RangeFeedSSTable,
+	registeredSpan roachpb.Span,
+	seb *streamEventBatcher,
 ) error {
+	ctx, sp := tracing.ChildSpan(ctx, "eventStream.addSST")
+	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
+	defer sp.Finish()
 	// We send over the whole SSTable if the sst span is within
 	// the registered span boundaries.
 	if registeredSpan.Contains(sst.Span) {
@@ -390,6 +488,9 @@ func (s *eventStream) addSST(
 	// Extract the received SST to only contain data within the boundaries of
 	// matching registered span. Execute the specified operations on each MVCC
 	// key value and each MVCCRangeKey value in the trimmed SSTable.
+	s.mu.Lock()
+	s.mu.eventStreamStats.NumTrimmedSsts++
+	s.mu.Unlock()
 	return replicationutils.ScanSST(sst, registeredSpan,
 		func(mvccKV storage.MVCCKeyValue) error {
 			seb.addKV(&roachpb.KeyValue{
@@ -416,6 +517,18 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 	pacer := makeCheckpointPacer(s.spec.Config.MinCheckpointFrequency)
 	seb := makeStreamEventBatcher()
 
+	const (
+		sigFigs    = 1
+		minLatency = time.Microsecond
+		maxLatency = 100 * time.Second
+	)
+	s.mu.Lock()
+	s.mu.rangefeedEventReceiveWaitHist = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	s.mu.flushWaitHist = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	s.mu.sendEventWaitHist = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	s.mu.betweenNextWaitHist = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	s.mu.Unlock()
+
 	maybeFlushBatch := func(force bool) error {
 		if (force && seb.getSize() > 0) || seb.getSize() > int(s.spec.Config.BatchByteSize) {
 			defer func() {
@@ -434,14 +547,24 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 	// piggy-back on the fact that eventually, frontier must advance, and we must emit
 	// previously batched KVs prior to emitting checkpoint record.
 	for {
+		beforeEventReceived := timeutil.Now()
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-s.doneChan:
 			return nil
 		case ev := <-s.eventsCh:
+			s.mu.Lock()
+			waitTime := timeutil.Since(beforeEventReceived)
+			if err := s.mu.rangefeedEventReceiveWaitHist.RecordValue(waitTime.Nanoseconds()); err != nil {
+				log.Warningf(ctx, "failed to record event wait time to histogram: %v", err)
+			}
+			s.mu.eventStreamStats.EventReceiveWait += waitTime
+			s.mu.eventStreamStats.LastRecvTime = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			switch {
 			case ev.Val != nil:
+				s.mu.eventStreamStats.KvEvents++
+				s.mu.Unlock()
 				seb.addKV(&roachpb.KeyValue{
 					Key:   ev.Val.Key,
 					Value: ev.Val.Value,
@@ -450,6 +573,8 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 					return err
 				}
 			case ev.Checkpoint != nil:
+				s.mu.eventStreamStats.CheckpointEvents++
+				s.mu.Unlock()
 				advanced, err := frontier.Forward(ev.Checkpoint.Span, ev.Checkpoint.ResolvedTS)
 				if err != nil {
 					return err
@@ -465,7 +590,9 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 					}
 				}
 			case ev.SST != nil:
-				err := s.addSST(ev.SST, ev.RegisteredSpan, seb)
+				s.mu.eventStreamStats.SstEvents++
+				s.mu.Unlock()
+				err := s.addSST(ctx, ev.SST, ev.RegisteredSpan, seb)
 				if err != nil {
 					return err
 				}
@@ -473,12 +600,130 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 					return err
 				}
 			case ev.DeleteRange != nil:
+				s.mu.eventStreamStats.DeleteRangeEvents++
+				s.mu.Unlock()
 				seb.addDelRange(ev.DeleteRange)
 				if err := maybeFlushBatch(flushIfNeeded); err != nil {
 					return err
 				}
 			default:
 				return errors.AssertionFailedf("unexpected event")
+			}
+		}
+	}
+}
+
+func (s *eventStream) constructTracingAggregatorStats(ctx context.Context) error {
+	sp := tracing.SpanFromContext(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-s.doneChan:
+			return nil
+		case <-s.aggTimer.C:
+			s.aggTimer.Read = true
+			s.aggTimer.Reset(15 * time.Second)
+			if s.agg == nil {
+				return nil
+			}
+			if sp != nil {
+				s.mu.Lock()
+				s.mu.rangefeedEventReceiveWaitHist.Distribution()
+				s.mu.eventStreamStats.RangefeedEventWait = &HistogramData{
+					Min:   s.mu.rangefeedEventReceiveWaitHist.Min(),
+					P5:    s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(5),
+					P50:   s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(50),
+					P90:   s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(90),
+					P99:   s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(99),
+					P99_9: s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(99.9),
+					Max:   s.mu.rangefeedEventReceiveWaitHist.Max(),
+					Mean:  float32(s.mu.rangefeedEventReceiveWaitHist.Mean()),
+					Count: s.mu.rangefeedEventReceiveWaitHist.TotalCount(),
+				}
+				s.mu.eventStreamStats.FlushEventWait = &HistogramData{
+					Min:   s.mu.flushWaitHist.Min(),
+					P5:    s.mu.flushWaitHist.ValueAtQuantile(5),
+					P50:   s.mu.flushWaitHist.ValueAtQuantile(50),
+					P90:   s.mu.flushWaitHist.ValueAtQuantile(90),
+					P99:   s.mu.flushWaitHist.ValueAtQuantile(99),
+					P99_9: s.mu.flushWaitHist.ValueAtQuantile(99.9),
+					Max:   s.mu.flushWaitHist.Max(),
+					Mean:  float32(s.mu.flushWaitHist.Mean()),
+					Count: s.mu.flushWaitHist.TotalCount(),
+				}
+				s.mu.eventStreamStats.SendEventWait = &HistogramData{
+					Min:   s.mu.sendEventWaitHist.Min(),
+					P5:    s.mu.sendEventWaitHist.ValueAtQuantile(5),
+					P50:   s.mu.sendEventWaitHist.ValueAtQuantile(50),
+					P90:   s.mu.sendEventWaitHist.ValueAtQuantile(90),
+					P99:   s.mu.sendEventWaitHist.ValueAtQuantile(99),
+					P99_9: s.mu.sendEventWaitHist.ValueAtQuantile(99.9),
+					Max:   s.mu.sendEventWaitHist.Max(),
+					Mean:  float32(s.mu.sendEventWaitHist.Mean()),
+					Count: s.mu.sendEventWaitHist.TotalCount(),
+				}
+				s.mu.eventStreamStats.SinceNextWait = &HistogramData{
+					Min:   s.mu.betweenNextWaitHist.Min(),
+					P5:    s.mu.betweenNextWaitHist.ValueAtQuantile(5),
+					P50:   s.mu.betweenNextWaitHist.ValueAtQuantile(50),
+					P90:   s.mu.betweenNextWaitHist.ValueAtQuantile(90),
+					P99:   s.mu.betweenNextWaitHist.ValueAtQuantile(99),
+					P99_9: s.mu.betweenNextWaitHist.ValueAtQuantile(99.9),
+					Max:   s.mu.betweenNextWaitHist.Max(),
+					Mean:  float32(s.mu.betweenNextWaitHist.Mean()),
+					Count: s.mu.betweenNextWaitHist.TotalCount(),
+				}
+				for _, b := range s.mu.rangefeedEventReceiveWaitHist.Distribution() {
+					s.mu.eventStreamStats.RangefeedEventBars = append(s.mu.eventStreamStats.RangefeedEventBars, &Bar{
+						From:  b.From,
+						To:    b.To,
+						Count: b.Count,
+					})
+				}
+				for _, b := range s.mu.flushWaitHist.Distribution() {
+					s.mu.eventStreamStats.FlushEventBars = append(s.mu.eventStreamStats.FlushEventBars, &Bar{
+						From:  b.From,
+						To:    b.To,
+						Count: b.Count,
+					})
+				}
+				for _, b := range s.mu.sendEventWaitHist.Distribution() {
+					s.mu.eventStreamStats.SendEventBars = append(s.mu.eventStreamStats.SendEventBars, &Bar{
+						From:  b.From,
+						To:    b.To,
+						Count: b.Count,
+					})
+				}
+				sp.RecordStructured(s.mu.eventStreamStats)
+				s.mu.eventStreamStats = &EventStreamPerformanceStats{}
+				s.mu.Unlock()
+			}
+
+			log.Infof(ctx, "agg events being flushed by %s",
+				s.execCfg.NodeInfo.NodeID.SQLInstanceID().String())
+			aggEvents := &execinfrapb.TracingAggregatorEvents{
+				SQLInstanceID: s.execCfg.NodeInfo.NodeID.SQLInstanceID(),
+				FlowID:        execinfrapb.FlowID{},
+				Events:        make(map[string][]byte),
+			}
+			s.agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
+				var data []byte
+				var err error
+				if data, err = bulk.TracingAggregatorEventToBytes(ctx, event); err != nil {
+					// This should never happen but if it does skip the aggregated event.
+					log.Warningf(ctx, "failed to unmarshal aggregated event: %v", err.Error())
+					return
+				}
+				aggEvents.Events[name] = data
+			})
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-s.doneChan:
+				return nil
+			case s.tracingAggCh <- aggEvents:
 			}
 		}
 	}

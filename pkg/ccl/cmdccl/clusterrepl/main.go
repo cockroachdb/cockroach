@@ -190,6 +190,7 @@ func rawStream(
 		totalRowCount    int
 		intervalRowCount int
 	)
+	totalStart := timeutil.Now()
 	intervalStart := timeutil.Now()
 	for {
 		if !rows.Next() {
@@ -211,12 +212,13 @@ func rawStream(
 			var (
 				elapsedSeconds = timeutil.Since(intervalStart).Seconds()
 				bps            = humanizeutil.IBytes(int64(float64(intervalBytes) / elapsedSeconds))
+				eventRate      = float64(totalRowCount) / timeutil.Since(totalStart).Seconds()
 				total          = humanizeutil.IBytes(int64(totalBytes))
 				averageRowSize = humanizeutil.IBytes(int64(intervalBytes / intervalRowCount))
 			)
-			fmt.Printf("%s throughput: %s/s; total transfered: %s; average row size: %s\n",
+			fmt.Printf("%s throughput: %s/s; event rate: %s events/s; total transfered: %s; average row size: %s; total row count: %d\n",
 				timeutil.Now().Format(time.RFC3339),
-				bps, total, averageRowSize)
+				bps, eventRate, total, averageRowSize, totalRowCount)
 			intervalStart = timeutil.Now()
 			intervalBytes = 0
 			intervalRowCount = 0
@@ -278,9 +280,9 @@ func subscriptionConsumer(
 					total            = humanizeutil.IBytes(int64(totalBytes))
 					averageEventSize = humanizeutil.IBytes(int64(intervalBytes / intervalEventCount))
 				)
-				fmt.Printf("%s throughput: %s/s; total transfered: %s; average event size: %s; frontier: %s\n",
+				fmt.Printf("%s throughput: %s/s; total transfered: %s; average event size: %s; frontier: %s; totalEventCount: %d\n",
 					timeutil.Now().Format(time.RFC3339),
-					bps, total, averageEventSize, frontier.Frontier())
+					bps, total, averageEventSize, frontier.Frontier(), totalEventCount)
 				intervalStart = timeutil.Now()
 				intervalBytes = 0
 				intervalEventCount = 0

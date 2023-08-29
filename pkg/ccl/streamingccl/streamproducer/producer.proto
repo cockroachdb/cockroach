@@ -1,0 +1,67 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+syntax = "proto3";
+package cockroach.ccl.streamingccl.streamproducer;
+option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer";
+
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+message Bar {
+  option (gogoproto.goproto_stringer) = false;
+
+ int64 from = 1;
+ int64 to = 2;
+ int64 count = 3;
+}
+
+message HistogramData {
+  option (gogoproto.goproto_stringer) = false;
+
+  int64 min = 1;
+  int64 p5 = 2;
+  int64 p50 = 3;
+  int64 p90 = 4;
+  int64 p99 = 5;
+  int64 p99_9 = 6;
+  int64 max = 7;
+  float mean = 8;
+  int64 count = 9;
+}
+
+message EventStreamPerformanceStats {
+  option (gogoproto.goproto_stringer) = false;
+
+  int64 kv_events = 1;
+  int64 sst_events = 2;
+  int64 checkpoint_events = 3;
+  int64 delete_range_events = 4;
+  int64 num_trimmed_ssts = 5;
+  int64 num_flushed_batches = 12;
+  int64 num_flushed_checkpoints = 13;
+
+  int64 event_receive_wait = 6 [(gogoproto.casttype) = "time.Duration"];
+  int64 flush_wait = 7 [(gogoproto.casttype) = "time.Duration"];
+  int64 event_send_wait = 8 [(gogoproto.casttype) = "time.Duration"];
+
+  util.hlc.Timestamp last_recv_time = 9 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp last_flush_time = 10 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp last_send_time = 11 [(gogoproto.nullable) = false];
+
+  HistogramData rangefeed_event_wait = 14;
+  HistogramData flush_event_wait = 15;
+  HistogramData send_event_wait = 16;
+  HistogramData since_next_wait = 20;
+
+  repeated Bar rangefeed_event_bars = 17;
+  repeated Bar flush_event_bars = 18;
+  repeated Bar send_event_bars = 19;
+}
+
+

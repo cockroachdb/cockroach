@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -366,6 +367,10 @@ func decodeResolvedSpans(
 func (sf *streamIngestionFrontier) noteResolvedTimestamps(
 	resolvedSpanDatums rowenc.EncDatum,
 ) error {
+	ctx, sp := tracing.ChildSpan(sf.Ctx(), `noteResolvedTimestamps`)
+	_ = ctx
+	defer sp.Finish()
+
 	resolvedSpans, err := decodeResolvedSpans(&sf.alloc, resolvedSpanDatums)
 	if err != nil {
 		return err
@@ -391,7 +396,8 @@ func (sf *streamIngestionFrontier) noteResolvedTimestamps(
 // latest replicated time and partition-specific information to track
 // the status of each partition.
 func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
-	ctx := sf.Ctx()
+	ctx, sp := tracing.ChildSpan(sf.Ctx(), `maybeUpdatePartitionProgress`)
+	defer sp.Finish()
 	updateFreq := JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
 	if updateFreq == 0 || timeutil.Since(sf.lastPartitionUpdate) < updateFreq {
 		sf.updateLagMetric()

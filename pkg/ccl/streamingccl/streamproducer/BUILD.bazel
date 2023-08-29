@@ -1,15 +1,19 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "streamproducer",
     srcs = [
         "event_stream.go",
+        "event_stream_performance_stats.go",
         "producer_job.go",
         "replication_manager.go",
         "span_config_event_stream.go",
         "stream_event_batcher.go",
         "stream_lifetime.go",
     ],
+    embed = [":streamproducer_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer",
     visibility = ["//visibility:public"],
     deps = [
@@ -39,6 +43,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -50,17 +55,24 @@ go_library(
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/testutils",
+        "//pkg/util/bulk",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/span",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_codahale_hdrhistogram//:hdrhistogram",
+        "@com_github_gogo_protobuf//proto",
+        "@io_opentelemetry_go_otel//attribute",
     ],
 )
 
@@ -134,5 +146,28 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+proto_library(
+    name = "streamproducer_proto",
+    srcs = ["producer.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/hlc:hlc_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
+)
+
+go_proto_library(
+    name = "streamproducer_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer",
+    proto = ":streamproducer_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/hlc",
+        "@com_github_gogo_protobuf//gogoproto",
     ],
 )
