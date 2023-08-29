@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tests
+package assertion
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -24,54 +24,54 @@ import (
 	"github.com/montanaflynn/stats"
 )
 
-type thresholdType int
+type ThresholdType int
 
 const (
-	exactBound thresholdType = iota
-	upperBound
-	lowerBound
+	ExactBound ThresholdType = iota
+	UpperBound
+	LowerBound
 )
 
-// String returns the string representation of thresholdType.
-func (tht thresholdType) String() string {
+// String returns the string representation of ThresholdType.
+func (tht ThresholdType) String() string {
 	switch tht {
-	case exactBound:
+	case ExactBound:
 		return "="
-	case upperBound:
+	case UpperBound:
 		return "<"
-	case lowerBound:
+	case LowerBound:
 		return ">"
 	default:
 		panic("unknown threshold type")
 	}
 }
 
-// threshold is created by parsing CmdArgs array and is used for assertion to
-// validate user-defined threshold constraints.
-type threshold struct {
-	// value indicates the predefined threshold value specified by arguments.
-	value float64
-	// thresholdType indicates the predefined threshold bound type specified by
+// Threshold is created by parsing CmdArgs array and is used for assertion to
+// validate user-defined Threshold constraints.
+type Threshold struct {
+	// Value indicates the predefined Threshold value specified by arguments.
+	Value float64
+	// ThresholdType indicates the predefined Threshold bound type specified by
 	// arguments.
-	thresholdType thresholdType
+	ThresholdType ThresholdType
 }
 
-// String returns the string representation of threshold.
-func (th threshold) String() string {
-	return fmt.Sprintf("(%v%.2f)", th.thresholdType, th.value)
+// String returns the string representation of Threshold.
+func (th Threshold) String() string {
+	return fmt.Sprintf("(%v%.2f)", th.ThresholdType, th.Value)
 }
 
-// isViolated returns true if the threshold constraint is violated and false
+// isViolated returns true if the Threshold constraint is violated and false
 // otherwise. Note that if the provided actual value is NaN, the function
 // returns false.
-func (th threshold) isViolated(actual float64) bool {
-	switch th.thresholdType {
-	case upperBound:
-		return actual > th.value
-	case lowerBound:
-		return actual < th.value
-	case exactBound:
-		return actual != th.value
+func (th Threshold) isViolated(actual float64) bool {
+	switch th.ThresholdType {
+	case UpperBound:
+		return actual > th.Value
+	case LowerBound:
+		return actual < th.Value
+	case ExactBound:
+		return actual != th.Value
 	default:
 		panic("unknown threshold type")
 	}
@@ -83,43 +83,43 @@ type SimulationAssertion interface {
 	// Assert looks at a simulation run history and returns true if the
 	// assertion holds and false if not. When the assertion does not hold, the
 	// reason is also returned.
-	Assert(context.Context, asim.History) (holds bool, reason string)
+	Assert(context.Context, history.History) (holds bool, reason string)
 	// String returns the string representation of the assertion.
 	String() string
 }
 
-// steadyStateAssertion implements the SimulationAssertion interface. The
-// steadyStateAssertion declares an assertion. A common use case is to specify
+// SteadyStateAssertion implements the SimulationAssertion interface. The
+// SteadyStateAssertion declares an assertion. A common use case is to specify
 // an upper_bound for the type=steady threshold. With this configuration, the
-// given stat for each store must be no greater than threshold % of the mean
-// over the assertion ticks. This assertion is useful for when a cluster should
+// given Stat for each store must be no greater than Threshold % of the mean
+// over the assertion Ticks. This assertion is useful for when a cluster should
 // stop activity and converge after a period of initial activity. A natural
 // example is asserting that rebalancing activity reaches a steady state, so
 // there is not thrashing.
-type steadyStateAssertion struct {
-	ticks     int
-	stat      string
-	threshold threshold
+type SteadyStateAssertion struct {
+	Ticks     int
+	Stat      string
+	Threshold Threshold
 }
 
 // Assert looks at a simulation run history and returns true if the declared
-// stat's minimum/mean and maximum/mean meets the threshold constraint at each
+// Stat's minimum/mean and maximum/mean meets the Threshold constraint at each
 // assertion tick. If violated, holds is returned as false along with the
 // reason.
-func (sa steadyStateAssertion) Assert(
-	ctx context.Context, h asim.History,
+func (sa SteadyStateAssertion) Assert(
+	ctx context.Context, h history.History,
 ) (holds bool, reason string) {
 	m := h.Recorded
 	ticks := len(m)
-	if sa.ticks > ticks {
+	if sa.Ticks > ticks {
 		log.VInfof(ctx, 2,
 			"The history to run assertions against (%d) is shorter than "+
-				"the assertion duration (%d)", ticks, sa.ticks)
+				"the assertion duration (%d)", ticks, sa.Ticks)
 		return true, ""
 	}
 
 	ts := metrics.MakeTS(m)
-	statTs := ts[sa.stat]
+	statTs := ts[sa.Stat]
 
 	// Set holds to be true initially, holds is set to false if the steady
 	// state assertion doesn't hold on any store.
@@ -127,7 +127,7 @@ func (sa steadyStateAssertion) Assert(
 	buf := strings.Builder{}
 
 	for i, storeStats := range statTs {
-		trimmedStoreStats := storeStats[ticks-sa.ticks-1:]
+		trimmedStoreStats := storeStats[ticks-sa.Ticks-1:]
 		mean, _ := stats.Mean(trimmedStoreStats)
 		max, _ := stats.Max(trimmedStoreStats)
 		min, _ := stats.Min(trimmedStoreStats)
@@ -135,7 +135,7 @@ func (sa steadyStateAssertion) Assert(
 		maxMean := math.Abs(max/mean - 1)
 		minMean := math.Abs(min/mean - 1)
 
-		if sa.threshold.isViolated(maxMean) || sa.threshold.isViolated(minMean) {
+		if sa.Threshold.isViolated(maxMean) || sa.Threshold.isViolated(minMean) {
 			if holds {
 				fmt.Fprintf(&buf, "  %s\n", sa)
 				holds = false
@@ -149,16 +149,16 @@ func (sa steadyStateAssertion) Assert(
 }
 
 // String returns the string representation of the assertion.
-func (sa steadyStateAssertion) String() string {
+func (sa SteadyStateAssertion) String() string {
 	return fmt.Sprintf("steady state stat=%s threshold=%v ticks=%d",
-		sa.stat, sa.threshold, sa.ticks)
+		sa.Stat, sa.Threshold, sa.Ticks)
 }
 
-// balanceAssertion implements the SimulationAssertion interface. The
-// balanceAssertion declares an assertion. A common use case is to specify an
+// BalanceAssertion implements the SimulationAssertion interface. The
+// BalanceAssertion declares an assertion. A common use case is to specify an
 // upper_bound for the type=balance threshold. With this configuration, the
-// given stat across all stores must be no greater than the threshold for all
-// assertion ticks. This assertion is useful when a stat is being controlled,
+// given Stat across all Stores must be no greater than the Threshold for all
+// assertion Ticks. This assertion is useful when a Stat is being controlled,
 // such as QPS and a correct rebalancing algorithm should balance the stat.
 //
 // TODO(kvoli): Rationalize this assertion for multi-locality clusters with
@@ -183,37 +183,39 @@ func (sa steadyStateAssertion) String() string {
 // balance of the cluster doesn't make sense logically, the configuration
 // requires leaseholders are on s5,s6 so naturally they should have greater
 // load.
-type balanceAssertion struct {
-	ticks     int
-	stat      string
-	threshold threshold
+type BalanceAssertion struct {
+	Ticks     int
+	Stat      string
+	Threshold Threshold
 }
 
 // Assert looks at a simulation run history and returns true if the declared
-// stat's maximum/mean (over all stores) in the cluster meets the threshold
+// Stat's maximum/mean (over all stores) in the cluster meets the Threshold
 // constraint at each assertion tick. If violated, holds is returned as false
 // along with the reason.
-func (ba balanceAssertion) Assert(ctx context.Context, h asim.History) (holds bool, reason string) {
+func (ba BalanceAssertion) Assert(
+	ctx context.Context, h history.History,
+) (holds bool, reason string) {
 	m := h.Recorded
 	ticks := len(m)
-	if ba.ticks > ticks {
+	if ba.Ticks > ticks {
 		log.VInfof(ctx, 2,
 			"The history to run assertions against (%d) is shorter than "+
-				"the assertion duration (%d)", ticks, ba.ticks)
+				"the assertion duration (%d)", ticks, ba.Ticks)
 		return true, ""
 	}
 
 	ts := metrics.MakeTS(m)
-	statTs := metrics.Transpose(ts[ba.stat])
+	statTs := metrics.Transpose(ts[ba.Stat])
 
 	// Set holds to be true initially, holds is set to false if the steady
 	// state assertion doesn't hold on any store.
 	holds = true
 	buf := strings.Builder{}
 
-	// Check that the assertion holds for the last ba.ticks; from the most
-	// recent tick to recent tick - ba.ticks.
-	for tick := 0; tick < ba.ticks && tick < ticks; tick++ {
+	// Check that the assertion holds for the last ba.Ticks; from the most
+	// recent tick to recent tick - ba.Ticks.
+	for tick := 0; tick < ba.Ticks && tick < ticks; tick++ {
 		tickStats := statTs[ticks-tick-1]
 		mean, _ := stats.Mean(tickStats)
 		max, _ := stats.Max(tickStats)
@@ -221,8 +223,8 @@ func (ba balanceAssertion) Assert(ctx context.Context, h asim.History) (holds bo
 
 		log.VInfof(ctx, 2,
 			"Balance assertion: stat=%s, max/mean=%.2f, threshold=%+v raw=%v",
-			ba.stat, maxMeanRatio, ba.threshold, tickStats)
-		if ba.threshold.isViolated(maxMeanRatio) {
+			ba.Stat, maxMeanRatio, ba.Threshold, tickStats)
+		if ba.Threshold.isViolated(maxMeanRatio) {
 			if holds {
 				fmt.Fprintf(&buf, "  %s\n", ba)
 				holds = false
@@ -234,50 +236,50 @@ func (ba balanceAssertion) Assert(ctx context.Context, h asim.History) (holds bo
 }
 
 // String returns the string representation of the assertion.
-func (ba balanceAssertion) String() string {
+func (ba BalanceAssertion) String() string {
 	return fmt.Sprintf(
 		"balance stat=%s threshold=%v ticks=%d",
-		ba.stat, ba.threshold, ba.ticks)
+		ba.Stat, ba.Threshold, ba.Ticks)
 }
 
-// storeStatAssertion implements the SimulationAssertion interface. The
-// storeStatAssertion declares an assertion. A common use case is to specify an
+// StoreStatAssertion implements the SimulationAssertion interface. The
+// StoreStatAssertion declares an assertion. A common use case is to specify an
 // exact_bound for the type=stat threshold. With this configuration, the given
-// stat for each store in stores must be == threshold over the assertion ticks.
-type storeStatAssertion struct {
-	ticks     int
-	stat      string
-	stores    []int
-	threshold threshold
+// Stat for each store in stores must be == Threshold over the assertion Ticks.
+type StoreStatAssertion struct {
+	Ticks     int
+	Stat      string
+	Stores    []int
+	Threshold Threshold
 }
 
 // Assert looks at a simulation run history and returns true if the
 // assertion holds and false if not. When the assertion does not hold, the
 // reason is also returned.
-func (sa storeStatAssertion) Assert(
-	ctx context.Context, h asim.History,
+func (sa StoreStatAssertion) Assert(
+	ctx context.Context, h history.History,
 ) (holds bool, reason string) {
 	m := h.Recorded
 	ticks := len(m)
-	if sa.ticks > ticks {
+	if sa.Ticks > ticks {
 		log.VInfof(ctx, 2,
 			"The history to run assertions against (%d) is shorter than "+
-				"the assertion duration (%d)", ticks, sa.ticks)
+				"the assertion duration (%d)", ticks, sa.Ticks)
 		return true, ""
 	}
 
 	ts := metrics.MakeTS(m)
-	statTs := ts[sa.stat]
+	statTs := ts[sa.Stat]
 	holds = true
 	// Set holds to be true initially, holds is set to false if the steady
 	// state assertion doesn't hold on any store.
 	holds = true
 	buf := strings.Builder{}
 
-	for _, store := range sa.stores {
-		trimmedStoreStats := statTs[store-1][ticks-sa.ticks-1:]
+	for _, store := range sa.Stores {
+		trimmedStoreStats := statTs[store-1][ticks-sa.Ticks-1:]
 		for _, stat := range trimmedStoreStats {
-			if sa.threshold.isViolated(stat) {
+			if sa.Threshold.isViolated(stat) {
 				if holds {
 					holds = false
 					fmt.Fprintf(&buf, "  %s\n", sa)
@@ -292,28 +294,28 @@ func (sa storeStatAssertion) Assert(
 }
 
 // String returns the string representation of the assertion.
-func (sa storeStatAssertion) String() string {
+func (sa StoreStatAssertion) String() string {
 	return fmt.Sprintf("stat=%s value=%v ticks=%d",
-		sa.stat, sa.threshold, sa.ticks)
+		sa.Stat, sa.Threshold, sa.Ticks)
 }
 
-type conformanceAssertion struct {
-	underreplicated int
-	overreplicated  int
-	violating       int
-	unavailable     int
+type ConformanceAssertion struct {
+	Underreplicated int
+	Overreplicated  int
+	Violating       int
+	Unavailable     int
 }
 
-// conformanceAssertionSentinel declares a sentinel value which when any of the
-// conformanceAssertion parameters are set to, we ignore the conformance
+// ConformanceAssertionSentinel declares a sentinel value which when any of the
+// ConformanceAssertion parameters are set to, we ignore the conformance
 // reports value for that type of conformance.
-const conformanceAssertionSentinel = -1
+const ConformanceAssertionSentinel = -1
 
 // Assert looks at a simulation run history and returns true if the
 // assertion holds and false if not. When the assertion does not hold, the
 // reason is also returned.
-func (ca conformanceAssertion) Assert(
-	ctx context.Context, h asim.History,
+func (ca ConformanceAssertion) Assert(
+	ctx context.Context, h history.History,
 ) (holds bool, reason string) {
 	report := h.S.Report()
 	buf := strings.Builder{}
@@ -331,26 +333,26 @@ func (ca conformanceAssertion) Assert(
 		}
 	}
 
-	if ca.unavailable != conformanceAssertionSentinel &&
-		ca.unavailable != unavailable {
+	if ca.Unavailable != ConformanceAssertionSentinel &&
+		ca.Unavailable != unavailable {
 		maybeInitHolds()
 		buf.WriteString(PrintSpanConfigConformanceList(
 			"unavailable", report.Unavailable))
 	}
-	if ca.underreplicated != conformanceAssertionSentinel &&
-		ca.underreplicated != under {
+	if ca.Underreplicated != ConformanceAssertionSentinel &&
+		ca.Underreplicated != under {
 		maybeInitHolds()
 		buf.WriteString(PrintSpanConfigConformanceList(
 			"under replicated", report.UnderReplicated))
 	}
-	if ca.overreplicated != conformanceAssertionSentinel &&
-		ca.overreplicated != over {
+	if ca.Overreplicated != ConformanceAssertionSentinel &&
+		ca.Overreplicated != over {
 		maybeInitHolds()
 		buf.WriteString(PrintSpanConfigConformanceList(
 			"over replicated", report.OverReplicated))
 	}
-	if ca.violating != conformanceAssertionSentinel &&
-		ca.violating != violating {
+	if ca.Violating != ConformanceAssertionSentinel &&
+		ca.Violating != violating {
 		maybeInitHolds()
 		buf.WriteString(PrintSpanConfigConformanceList(
 			"violating constraints", report.ViolatingConstraints))
@@ -360,20 +362,20 @@ func (ca conformanceAssertion) Assert(
 }
 
 // String returns the string representation of the assertion.
-func (ca conformanceAssertion) String() string {
+func (ca ConformanceAssertion) String() string {
 	buf := strings.Builder{}
 	fmt.Fprintf(&buf, "conformance ")
-	if ca.unavailable != conformanceAssertionSentinel {
-		fmt.Fprintf(&buf, "unavailable=%d ", ca.unavailable)
+	if ca.Unavailable != ConformanceAssertionSentinel {
+		fmt.Fprintf(&buf, "unavailable=%d ", ca.Unavailable)
 	}
-	if ca.underreplicated != conformanceAssertionSentinel {
-		fmt.Fprintf(&buf, "under=%d ", ca.underreplicated)
+	if ca.Underreplicated != ConformanceAssertionSentinel {
+		fmt.Fprintf(&buf, "under=%d ", ca.Underreplicated)
 	}
-	if ca.overreplicated != conformanceAssertionSentinel {
-		fmt.Fprintf(&buf, "over=%d ", ca.overreplicated)
+	if ca.Overreplicated != ConformanceAssertionSentinel {
+		fmt.Fprintf(&buf, "over=%d ", ca.Overreplicated)
 	}
-	if ca.violating != conformanceAssertionSentinel {
-		fmt.Fprintf(&buf, "violating=%d ", ca.violating)
+	if ca.Violating != ConformanceAssertionSentinel {
+		fmt.Fprintf(&buf, "violating=%d ", ca.Violating)
 	}
 	return buf.String()
 }

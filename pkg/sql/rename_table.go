@@ -287,14 +287,7 @@ func (p *planner) dependentError(
 func (p *planner) dependentFunctionError(
 	typeName, objName string, fnDesc catalog.FunctionDescriptor, op string,
 ) error {
-	return errors.WithHintf(
-		sqlerrors.NewDependentObjectErrorf(
-			"cannot %s %s %q because function %q depends on it",
-			op, typeName, objName, fnDesc.GetName(),
-		),
-		"you can drop %s instead.",
-		fnDesc.GetName(),
-	)
+	return sqlerrors.NewDependentBlocksOpError(op, typeName, objName, "function", fnDesc.GetName())
 }
 
 func (p *planner) dependentViewError(
@@ -315,10 +308,7 @@ func (p *planner) dependentViewError(
 		}
 		viewName = viewFQName.FQString()
 	}
-	return errors.WithHintf(
-		sqlerrors.NewDependentObjectErrorf("cannot %s %s %q because view %q depends on it",
-			op, typeName, objName, viewName),
-		"you can drop %s instead.", viewName)
+	return sqlerrors.NewDependentBlocksOpError(op, typeName, objName, "view", viewName)
 }
 
 // checkForCrossDbReferences validates if any cross DB references

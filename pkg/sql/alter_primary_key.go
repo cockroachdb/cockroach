@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -64,6 +65,10 @@ func (p *planner) AlterPrimaryKey(
 			IsSharded:    alterPKNode.Sharded != nil,
 		},
 	); err != nil {
+		return err
+	}
+
+	if err := p.disallowDroppingPrimaryIndexReferencedInUDFOrView(ctx, tableDesc); err != nil {
 		return err
 	}
 
@@ -800,6 +805,28 @@ func setKeySuffixColumnIDsFromPrimary(
 				"primary key column %s cannot be present in an inverted index",
 				col.GetName(),
 			)
+		}
+	}
+	return nil
+}
+
+// disallowDroppingPrimaryIndexReferencedInUDFOrView returns an non-nil error
+// if current primary index is referenced explicitly in a UDF or view.
+// This is used for ADD COLUMN, DROP COLUMN, and ALTER PRIMARY KEY commands
+// because their implementation could need to drop the old/current primary index
+// and create new ones.
+func (p *planner) disallowDroppingPrimaryIndexReferencedInUDFOrView(
+	ctx context.Context, tableDesc *tabledesc.Mutable,
+) error {
+	currentPrimaryIndex := tableDesc.GetPrimaryIndex()
+	for _, tableRef := range tableDesc.DependedOnBy {
+		if tableRef.IndexID == currentPrimaryIndex.GetID() {
+			// canRemoveDependent with `DropDefault` will return the right error.
+			err := p.canRemoveDependent(
+				ctx, "index", currentPrimaryIndex.GetName(), tableDesc.ParentID, tableRef, tree.DropDefault)
+			if err != nil {
+				return errors.WithDetail(err, sqlerrors.PrimaryIndexSwapDetail)
+			}
 		}
 	}
 	return nil

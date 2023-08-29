@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -57,7 +58,7 @@ func TestAsimDeterministic(t *testing.T) {
 	// be larger than 3 keys per range.
 	keyspace := 3 * ranges
 	// Track the run to compare against for determinism.
-	var refRun asim.History
+	var refRun history.History
 
 	for run := 0; run < runs; run++ {
 		rwg := make([]workload.Generator, 1)

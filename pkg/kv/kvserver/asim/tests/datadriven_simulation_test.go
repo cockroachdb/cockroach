@@ -19,10 +19,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -170,8 +171,8 @@ func TestDataDriven(t *testing.T) {
 		}
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
 		eventGen := gen.StaticEvents{DelayedEvents: event.DelayedEventList{}}
-		assertions := []SimulationAssertion{}
-		runs := []asim.History{}
+		assertions := []assertion.SimulationAssertion{}
+		runs := []history.History{}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "gen_load":
@@ -294,32 +295,16 @@ func TestDataDriven(t *testing.T) {
 				return ""
 			case "set_liveness":
 				var nodeID int
-				var liveness string
 				var delay time.Duration
-				livenessStatus := 3
+				livenessStatus := livenesspb.NodeLivenessStatus_LIVE
 				scanArg(t, d, "node", &nodeID)
-				scanArg(t, d, "liveness", &liveness)
+				scanArg(t, d, "liveness", &livenessStatus)
 				scanIfExists(t, d, "delay", &delay)
-				switch liveness {
-				case "unknown":
-					livenessStatus = 0
-				case "dead":
-					livenessStatus = 1
-				case "unavailable":
-					livenessStatus = 2
-				case "live":
-					livenessStatus = 3
-				case "decommissioning":
-					livenessStatus = 4
-				case "draining":
-					livenessStatus = 5
-					panic(fmt.Sprintf("unkown liveness status: %s", liveness))
-				}
 				eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
 					EventFn: func(ctx context.Context, tick time.Time, s state.State) {
 						s.SetNodeLiveness(
 							state.NodeID(nodeID),
-							livenesspb.NodeLivenessStatus(livenessStatus),
+							livenessStatus,
 						)
 					},
 					At: settingsGen.Settings.StartTime.Add(delay),
@@ -413,45 +398,45 @@ func TestDataDriven(t *testing.T) {
 				case "balance":
 					scanArg(t, d, "stat", &stat)
 					scanArg(t, d, "ticks", &ticks)
-					assertions = append(assertions, balanceAssertion{
-						ticks:     ticks,
-						stat:      stat,
-						threshold: scanThreshold(t, d),
+					assertions = append(assertions, assertion.BalanceAssertion{
+						Ticks:     ticks,
+						Stat:      stat,
+						Threshold: scanThreshold(t, d),
 					})
 				case "steady":
 					scanArg(t, d, "stat", &stat)
 					scanArg(t, d, "ticks", &ticks)
-					assertions = append(assertions, steadyStateAssertion{
-						ticks:     ticks,
-						stat:      stat,
-						threshold: scanThreshold(t, d),
+					assertions = append(assertions, assertion.SteadyStateAssertion{
+						Ticks:     ticks,
+						Stat:      stat,
+						Threshold: scanThreshold(t, d),
 					})
 				case "stat":
 					var stores []int
 					scanArg(t, d, "stat", &stat)
 					scanArg(t, d, "ticks", &ticks)
 					scanArg(t, d, "stores", &stores)
-					assertions = append(assertions, storeStatAssertion{
-						ticks:     ticks,
-						stat:      stat,
-						threshold: scanThreshold(t, d),
-						stores:    stores,
+					assertions = append(assertions, assertion.StoreStatAssertion{
+						Ticks:     ticks,
+						Stat:      stat,
+						Threshold: scanThreshold(t, d),
+						Stores:    stores,
 					})
 				case "conformance":
 					var under, over, unavailable, violating int
-					under = conformanceAssertionSentinel
-					over = conformanceAssertionSentinel
-					unavailable = conformanceAssertionSentinel
-					violating = conformanceAssertionSentinel
+					under = assertion.ConformanceAssertionSentinel
+					over = assertion.ConformanceAssertionSentinel
+					unavailable = assertion.ConformanceAssertionSentinel
+					violating = assertion.ConformanceAssertionSentinel
 					scanIfExists(t, d, "under", &under)
 					scanIfExists(t, d, "over", &over)
 					scanIfExists(t, d, "unavailable", &unavailable)
 					scanIfExists(t, d, "violating", &violating)
-					assertions = append(assertions, conformanceAssertion{
-						underreplicated: under,
-						overreplicated:  over,
-						violating:       violating,
-						unavailable:     unavailable,
+					assertions = append(assertions, assertion.ConformanceAssertion{
+						Underreplicated: under,
+						Overreplicated:  over,
+						Violating:       violating,
+						Unavailable:     unavailable,
 					})
 				}
 				return ""

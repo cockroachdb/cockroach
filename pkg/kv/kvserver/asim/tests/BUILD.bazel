@@ -12,10 +12,11 @@ go_test(
     embed = [":tests"],
     deps = [
         "//pkg/kv/kvserver/allocator/allocatorimpl",
-        "//pkg/kv/kvserver/asim",
+        "//pkg/kv/kvserver/asim/assertion",
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/event",
         "//pkg/kv/kvserver/asim/gen",
+        "//pkg/kv/kvserver/asim/history",
         "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/liveness/livenesspb",
@@ -32,7 +33,6 @@ go_test(
 go_library(
     name = "tests",
     srcs = [
-        "assert.go",
         "default_settings.go",
         "output.go",
         "rand_framework.go",
@@ -41,15 +41,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/tests",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvserver/asim",
+        "//pkg/kv/kvserver/asim/assertion",
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/event",
         "//pkg/kv/kvserver/asim/gen",
-        "//pkg/kv/kvserver/asim/metrics",
+        "//pkg/kv/kvserver/asim/history",
         "//pkg/kv/kvserver/asim/state",
-        "//pkg/roachpb",
-        "//pkg/spanconfig/spanconfigtestutils",
-        "//pkg/util/log",
-        "@com_github_montanaflynn_stats//:stats",
     ],
 )
