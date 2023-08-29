@@ -82,6 +82,7 @@ type TenantStatusServer interface {
 	TenantRanges(context.Context, *TenantRangesRequest) (*TenantRangesResponse, error)
 	Regions(context.Context, *RegionsRequest) (*RegionsResponse, error)
 	HotRangesV2(context.Context, *HotRangesRequest) (*HotRangesResponseV2, error)
+	NetworkConnectivity(ctx context.Context, req *NetworkConnectivityRequest) (*NetworkConnectivityResponse, error)
 
 	// SpanStats is used to access MVCC stats from KV
 	SpanStats(context.Context, *roachpb.SpanStatsRequest) (*roachpb.SpanStatsResponse, error)

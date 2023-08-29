@@ -1967,6 +1967,19 @@ func (s *statusServer) NodeUI(
 	return &resp, nil
 }
 
+func (s *statusServer) NetworkConnectivity(
+	ctx context.Context, req *serverpb.NetworkConnectivityRequest,
+) (*serverpb.NetworkConnectivityResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.sqlServer.tenantConnect.NetworkConnectivity(ctx, req)
+}
+
 // NetworkConnectivity collects information about connections statuses across all nodes.
 func (s *systemStatusServer) NetworkConnectivity(
 	ctx context.Context, req *serverpb.NetworkConnectivityRequest,

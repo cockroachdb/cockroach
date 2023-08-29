@@ -1013,6 +1013,16 @@ func (c *connector) Query(
 	return
 }
 
+func (c *connector) NetworkConnectivity(
+	ctx context.Context, req *serverpb.NetworkConnectivityRequest,
+) (resp *serverpb.NetworkConnectivityResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.NetworkConnectivity(ctx, req)
+		return
+	})
+	return
+}
+
 // AddressResolver wraps a NodeDescStore interface in an adapter that allows it
 // be used as a nodedialer.AddressResolver. Addresses are resolved to a node's
 // address.
