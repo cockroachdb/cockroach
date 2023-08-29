@@ -458,6 +458,8 @@ var defaultSrcClusterSetting = map[string]string{
 	// Make all AddSSTable operation to trigger AddSSTable events.
 	`kv.bulk_io_write.small_write_size`: `'1'`,
 	`jobs.registry.interval.adopt`:      `'1s'`,
+	// Speed up span reconciliation
+	`spanconfig.reconciliation_job.checkpoint_interval`: `'100ms'`,
 }
 
 var defaultDestClusterSetting = map[string]string{
@@ -466,6 +468,7 @@ var defaultDestClusterSetting = map[string]string{
 	`bulkio.stream_ingestion.minimum_flush_interval`:       `'10ms'`,
 	`bulkio.stream_ingestion.cutover_signal_poll_interval`: `'100ms'`,
 	`jobs.registry.interval.adopt`:                         `'1s'`,
+	`spanconfig.reconciliation_job.checkpoint_interval`:    `'100ms'`,
 }
 
 func ConfigureClusterSettings(setting map[string]string) []string {

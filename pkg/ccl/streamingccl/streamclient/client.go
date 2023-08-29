@@ -173,7 +173,7 @@ func NewStreamClient(
 		if err != nil {
 			return nil, err
 		}
-		return NewStreamClient(ctx, addr, db)
+		return NewStreamClient(ctx, addr, db, opts...)
 	case RandomGenScheme:
 		streamClient, err = newRandomStreamClient(streamURL)
 		if err != nil {

@@ -22,9 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -34,18 +32,40 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// spanConfigIngestor listens for spanConfig updates relevant to the replicating
+// tenant and writes them transactionally to the span configurations table.
+//
+// As updates come in, the spanConfigIngestor buffers updates and deletes with
+// the same source side commit timestamp and writes them in a transaction  when
+// it observes a new update with a newer timestamp.
+//
+// The spanConfigIngestor assumes each replicated update is unique and in
+// timestamp order, which is enforced by the producer side
+// SpanConfigEventStream. This assumption simplifies ingestion logic which must
+// write updates and deletes with the same source side transaction commit
+// timestamp at the same new timestamp on the destination side. This invariant
+// ensures a span configuration's target (i.e. the span that a configuration
+// applies to) never overlaps with any other span configuration target. Else,
+// C2C would break the span config reconciliation system.
+//
+// TODO(msbutler): on an initial scan, we need to buffer up all updates and
+// write them to the span config table in one transaction, along with a delete
+// over the whole tenant key span. Since C2C does not lay a PTS on the source
+// side span config table, the initial scan on resumption may miss updates;
+// therefore, the only way to cleanly update the destination side span config
+// table is to write the latest state of the source table and delete all
+// existing state, in one transaction.
 type spanConfigIngestor struct {
-	accessor                    *spanconfigkvaccessor.KVAccessor
+	accessor                    spanconfig.KVAccessor
 	bufferedUpdates             []spanconfig.Record
 	bufferedDeletes             []spanconfig.Target
 	lastBufferedSourceTimestamp hlc.Timestamp
 	session                     sqlliveness.Session
-	cutoverSignal               cutoverProvider
-	cutoverCh                   chan struct{}
-	group                       ctxgroup.Group
+	stopperCh                   chan struct{}
 	settings                    *cluster.Settings
 	client                      streamclient.Client
 	rekeyer                     *backupccl.KeyRewriter
+	testingKnobs                *sql.StreamingTestingKnobs
 }
 
 func makeSpanConfigIngestor(
@@ -53,16 +73,8 @@ func makeSpanConfigIngestor(
 	execCfg *sql.ExecutorConfig,
 	ingestionJob *jobs.Job,
 	sourceTenantID roachpb.TenantID,
+	stopperCh chan struct{},
 ) (*spanConfigIngestor, error) {
-
-	accessor := spanconfigkvaccessor.New(
-		execCfg.DB,
-		execCfg.InternalDB.Executor(),
-		execCfg.Settings,
-		execCfg.Clock,
-		systemschema.SpanConfigurationsTableName.FQString(),
-		nil, /* knobs */
-	)
 
 	client, err := connectToActiveClient(ctx, ingestionJob, execCfg.InternalDB, streamclient.ForSpanConfigs())
 	if err != nil {
@@ -81,31 +93,16 @@ func makeSpanConfigIngestor(
 	if err != nil {
 		return nil, err
 	}
-
-	cutoverProvider := &cutoverFromJobProgress{
-		jobID: ingestionJob.ID(),
-		db:    execCfg.InternalDB,
-	}
 	log.Infof(ctx, "initialized span config ingestor")
 	return &spanConfigIngestor{
-		accessor:      accessor,
-		settings:      execCfg.Settings,
-		session:       ingestionJob.Session(),
-		cutoverSignal: cutoverProvider,
-		cutoverCh:     make(chan struct{}),
-		group:         ctxgroup.WithContext(ctx),
-		client:        client,
-		rekeyer:       rekeyer,
+		accessor:     execCfg.SpanConfigKVAccessor,
+		settings:     execCfg.Settings,
+		session:      ingestionJob.Session(),
+		client:       client,
+		rekeyer:      rekeyer,
+		stopperCh:    stopperCh,
+		testingKnobs: execCfg.StreamingTestingKnobs,
 	}, nil
-}
-
-func (sc *spanConfigIngestor) close(ctx context.Context) {
-	if err := sc.client.Close(ctx); err != nil {
-		log.Errorf(ctx, "error on client.close(): %s", err)
-	}
-	if err := sc.group.Wait(); err != nil {
-		log.Errorf(ctx, "error on close(): %s", err)
-	}
 }
 
 func (sc *spanConfigIngestor) ingestSpanConfigs(
@@ -116,31 +113,17 @@ func (sc *spanConfigIngestor) ingestSpanConfigs(
 		return err
 	}
 
-	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(sub.Subscribe)
-	g.GoCtx(sc.checkForCutover)
-
-	return sc.consumeSpanConfigs(ctx, sub)
-}
-
-func (sc *spanConfigIngestor) checkForCutover(ctx context.Context) error {
-	tick := time.NewTicker(cutoverSignalPollInterval.Get(&sc.settings.SV))
-	defer tick.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-tick.C:
-			cutoverReached, err := sc.cutoverSignal.cutoverReached(ctx)
-			if err != nil {
-				return err
+	group := ctxgroup.WithContext(ctx)
+	group.GoCtx(sub.Subscribe)
+	group.GoCtx(func(ctx context.Context) error {
+		defer func() {
+			if err := sc.client.Close(ctx); err != nil {
+				log.Errorf(ctx, "error on client.close(): %s", err)
 			}
-			if cutoverReached {
-				close(sc.cutoverCh)
-				return nil
-			}
-		}
-	}
+		}()
+		return sc.consumeSpanConfigs(ctx, sub)
+	})
+	return group.Wait()
 }
 
 func (sc *spanConfigIngestor) consumeSpanConfigs(
@@ -155,7 +138,7 @@ func (sc *spanConfigIngestor) consumeSpanConfigs(
 			if err := sc.consumeEvent(ctx, event); err != nil {
 				return err
 			}
-		case <-sc.cutoverCh:
+		case <-sc.stopperCh:
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
@@ -168,7 +151,7 @@ func (sc *spanConfigIngestor) consumeEvent(ctx context.Context, event streamingc
 	case streamingccl.SpanConfigEvent:
 		return sc.bufferRecord(ctx, event.GetSpanConfigEvent())
 	case streamingccl.CheckpointEvent:
-		return sc.flushEvents(ctx)
+		return sc.maybeFlushEvents(ctx)
 	default:
 		return errors.AssertionFailedf("received non span config update %s", event)
 	}
@@ -191,6 +174,7 @@ func (sc *spanConfigIngestor) bufferRecord(
 		return err
 	}
 	if !ok {
+		log.Warningf(ctx, "could not rekey this span as part of an ephemeral table %s", sourceSpan)
 		// No need to replicate the span cfgs for ephemeral tables in the app tenant
 		//
 		// TODO(msbutler): This error handling isn't ideal as the span for this span
@@ -199,10 +183,9 @@ func (sc *spanConfigIngestor) bufferRecord(
 		return nil
 	}
 	targetSpan := roachpb.Span{Key: destStartKey, EndKey: destEndKey}
-
-	if sc.lastBufferedSourceTimestamp.Less(update.Timestamp) && len(sc.bufferedUpdates) != 0 {
+	if sc.lastBufferedSourceTimestamp.Less(update.Timestamp) {
 		// If this event was originally written at a later timestamp than what's in the buffer, flush the buffer.
-		if err := sc.flushEvents(ctx); err != nil {
+		if err := sc.maybeFlushEvents(ctx); err != nil {
 			return err
 		}
 	}
@@ -219,14 +202,27 @@ func (sc *spanConfigIngestor) bufferRecord(
 	sc.lastBufferedSourceTimestamp = update.Timestamp
 	return nil
 }
+func (sc *spanConfigIngestor) maybeFlushEvents(ctx context.Context) error {
+	if len(sc.bufferedUpdates) != 0 || len(sc.bufferedDeletes) != 0 {
+		return sc.flushEvents(ctx)
+	}
+	return nil
+}
 
+// flushEvents writes all buffered events to the system span configuration table
+// in one transaction via kvAccesor.UpdateSpanConfigRecords.
 func (sc *spanConfigIngestor) flushEvents(ctx context.Context) error {
-	log.VEventf(ctx, 3, "flushing span config %d updates", len(sc.bufferedUpdates))
+	log.VEventf(ctx, 2, "flushing span config %d updates and %d deletes", len(sc.bufferedUpdates), len(sc.bufferedDeletes))
+	if sc.testingKnobs != nil && sc.testingKnobs.BeforeIngestSpanConfigFlush != nil {
+		sc.testingKnobs.BeforeIngestSpanConfigFlush(ctx, sc.bufferedUpdates, sc.bufferedDeletes)
+	}
+
 	retryOpts := retry.Options{
 		InitialBackoff: 1 * time.Second,
 		MaxBackoff:     5 * time.Second,
 		MaxRetries:     5,
 	}
+
 	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
 		sessionStart, sessionExpiration := sc.session.Start(), sc.session.Expiration()
 		if sessionExpiration.IsEmpty() {

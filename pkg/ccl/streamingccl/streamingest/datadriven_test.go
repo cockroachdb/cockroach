@@ -332,7 +332,8 @@ func TestDataDriven(t *testing.T) {
 				listQuery := fmt.Sprintf(
 					`SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)->'gcPolicy'->'ttlSeconds'
 FROM system.span_configurations
-WHERE start_key >= '\x%x' AND start_key <= '\x%x';`, startKey, endKey)
+WHERE start_key >= '\x%x' AND start_key <= '\x%x'
+ORDER BY start_key;`, startKey, endKey)
 				return ds.queryAsWithRetry(t, as, listQuery, d.Expected)
 
 			default:

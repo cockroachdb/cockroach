@@ -55,7 +55,7 @@ list-ttls as=source-system min_table_id=$min_table_id max_table_id=$max_table_id
 14400
 
 
-# FIGURE OUT HOW TO COMBINE THE SPANCONFIGS, CAUSING A DELETE
+# TODO (msbutler): figure out how to combine span configs, causing a span config delete.
 
 
 let $cutover as=source-system
