@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -253,4 +254,50 @@ func TestActivityTablesReset(t *testing.T) {
 
 	sqlDB.QueryRow(t, "SELECT count(*) FROM system.transaction_activity").Scan(&count)
 	require.Equal(t, 0 /* expected */, count)
+}
+
+func TestStmtStatsEnable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var params base.TestServerArgs
+	params.Knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
+	srv, conn, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+
+	// Set table size check interval to 1 second.
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.metrics.statement_details.enabled=false")
+	testutils.SucceedsSoon(t, func() error {
+		var appliedSetting string
+		row := sqlConn.QueryRow(t, "SHOW CLUSTER SETTING sql.metrics.statement_details.enabled")
+		row.Scan(&appliedSetting)
+		if appliedSetting != "false" {
+			return errors.Newf("waiting for sql.metrics.statement_details.enabled to be applied: %s", appliedSetting)
+		}
+		return nil
+	})
+
+	sqlConn.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+
+	appName := "TestStmtStatsEnable"
+	sqlConn.Exec(t, "SET application_name = $1", appName)
+
+	sqlConn.Exec(t, "SELECT count_rows() FROM crdb_internal.statement_statistics")
+	sqlConn.Exec(t, "SELECT count_rows() FROM crdb_internal.transaction_statistics")
+	sqlConn.Exec(t, "SELECT count_rows() FROM crdb_internal.statement_statistics WHERE app_name = $1", appName)
+	sqlConn.Exec(t, "SELECT count_rows() FROM crdb_internal.transaction_statistics WHERE app_name = $1", appName)
+
+	sqlConn.Exec(t, "SET application_name = $1", "ObserverTestStmtStatsEnable")
+	var count int
+	sqlConn.QueryRow(t,
+		"SELECT count(*) FROM crdb_internal.statement_statistics WHERE app_name = $1", appName).
+		Scan(&count)
+	require.Equal(t, 0 /* expected */, count)
+
+	sqlConn.QueryRow(t,
+		"SELECT count(*) FROM crdb_internal.transaction_statistics WHERE app_name = $1 AND (statistics->'execution_statistics'->>'cnt')::int > 0 ", appName).
+		Scan(&count)
+	require.Equal(t, 0 /* expected */, count, "statement execution stats collection is disabled there should be 0 rows. Actual: %d", count)
 }
