@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -48,24 +49,31 @@ import (
 // applies to) never overlaps with any other span configuration target. Else,
 // C2C would break the span config reconciliation system.
 //
-// TODO(msbutler): on an initial scan, we need to buffer up all updates and
-// write them to the span config table in one transaction, along with a delete
-// over the whole tenant key span. Since C2C does not lay a PTS on the source
-// side span config table, the initial scan on resumption may miss updates;
-// therefore, the only way to cleanly update the destination side span config
-// table is to write the latest state of the source table and delete all
-// existing state, in one transaction.
+// During the rangefeed initial scan, the spanConfigIngestor buffers up all
+// updates and writes them to the span config table in one transaction, along
+// with a delete over the whole tenant key span. The span configuration
+// ingestion does not create a PTS record for the source side span configuration
+// table to avoid the possibility of an errant physical replication job from
+// impacting a system table's GC. As a result, on resumption we must do a new
+// initial scan, rebuilding the config from scratch, to avoid missing data that
+// may have been GC'd.
 type spanConfigIngestor struct {
-	accessor                    spanconfig.KVAccessor
+	// State passed at creation.
+	accessor                 spanconfig.KVAccessor
+	session                  sqlliveness.Session
+	stopperCh                chan struct{}
+	settings                 *cluster.Settings
+	client                   streamclient.Client
+	rekeyer                  *backupccl.KeyRewriter
+	destinationTenantKeySpan roachpb.Span
+	db                       *kv.DB
+	testingKnobs             *sql.StreamingTestingKnobs
+
+	// Dynamic state maintained during ingestion.
+	initialScanComplete         bool
 	bufferedUpdates             []spanconfig.Record
 	bufferedDeletes             []spanconfig.Target
 	lastBufferedSourceTimestamp hlc.Timestamp
-	session                     sqlliveness.Session
-	stopperCh                   chan struct{}
-	settings                    *cluster.Settings
-	client                      streamclient.Client
-	rekeyer                     *backupccl.KeyRewriter
-	testingKnobs                *sql.StreamingTestingKnobs
 }
 
 func makeSpanConfigIngestor(
@@ -93,15 +101,20 @@ func makeSpanConfigIngestor(
 	if err != nil {
 		return nil, err
 	}
+
+	destTenantStartKey := keys.MakeTenantPrefix(details.DestinationTenantID)
+	destTenantSpan := roachpb.Span{Key: destTenantStartKey, EndKey: destTenantStartKey.PrefixEnd()}
 	log.Infof(ctx, "initialized span config ingestor")
 	return &spanConfigIngestor{
-		accessor:     execCfg.SpanConfigKVAccessor,
-		settings:     execCfg.Settings,
-		session:      ingestionJob.Session(),
-		client:       client,
-		rekeyer:      rekeyer,
-		stopperCh:    stopperCh,
-		testingKnobs: execCfg.StreamingTestingKnobs,
+		accessor:                 execCfg.SpanConfigKVAccessor,
+		settings:                 execCfg.Settings,
+		session:                  ingestionJob.Session(),
+		client:                   client,
+		rekeyer:                  rekeyer,
+		stopperCh:                stopperCh,
+		destinationTenantKeySpan: destTenantSpan,
+		db:                       execCfg.DB,
+		testingKnobs:             execCfg.StreamingTestingKnobs,
 	}, nil
 }
 
@@ -147,7 +160,7 @@ func (sc *spanConfigIngestor) consumeEvent(ctx context.Context, event streamingc
 	case streamingccl.SpanConfigEvent:
 		return sc.bufferRecord(ctx, event.GetSpanConfigEvent())
 	case streamingccl.CheckpointEvent:
-		return sc.maybeFlushEvents(ctx)
+		return sc.maybeFlushOnCheckpoint(ctx)
 	default:
 		return errors.AssertionFailedf("received non span config update %s", event)
 	}
@@ -179,11 +192,8 @@ func (sc *spanConfigIngestor) bufferRecord(
 		return nil
 	}
 	targetSpan := roachpb.Span{Key: destStartKey, EndKey: destEndKey}
-	if sc.lastBufferedSourceTimestamp.Less(update.Timestamp) {
-		// If this event was originally written at a later timestamp than what's in the buffer, flush the buffer.
-		if err := sc.maybeFlushEvents(ctx); err != nil {
-			return err
-		}
+	if err := sc.maybeFlushOnUpdate(ctx, update.Timestamp); err != nil {
+		return err
 	}
 	target := spanconfig.MakeTargetFromSpan(targetSpan)
 	if update.SpanConfig.Config.IsEmpty() {
@@ -198,9 +208,27 @@ func (sc *spanConfigIngestor) bufferRecord(
 	sc.lastBufferedSourceTimestamp = update.Timestamp
 	return nil
 }
-func (sc *spanConfigIngestor) maybeFlushEvents(ctx context.Context) error {
-	if len(sc.bufferedUpdates) != 0 || len(sc.bufferedDeletes) != 0 {
+
+func (sc *spanConfigIngestor) bufferIsEmpty() bool {
+	return len(sc.bufferedUpdates) == 0 && len(sc.bufferedDeletes) == 0
+}
+func (sc *spanConfigIngestor) maybeFlushOnUpdate(
+	ctx context.Context, updateTimestamp hlc.Timestamp,
+) error {
+	// If this event was originally written at a later timestamp and the initial scan has complete, flush the current buffer.
+	if sc.initialScanComplete &&
+		sc.lastBufferedSourceTimestamp.Less(updateTimestamp) &&
+		!sc.bufferIsEmpty() {
 		return sc.flushEvents(ctx)
+	}
+	return nil
+}
+
+func (sc *spanConfigIngestor) maybeFlushOnCheckpoint(ctx context.Context) error {
+	if !sc.bufferIsEmpty() {
+		return sc.flushEvents(ctx)
+	} else if !sc.initialScanComplete {
+		return errors.AssertionFailedf("a flush after the initial scan checkpoint must have data in it")
 	}
 	return nil
 }
@@ -209,10 +237,6 @@ func (sc *spanConfigIngestor) maybeFlushEvents(ctx context.Context) error {
 // in one transaction via kvAccesor.UpdateSpanConfigRecords.
 func (sc *spanConfigIngestor) flushEvents(ctx context.Context) error {
 	log.VEventf(ctx, 2, "flushing span config %d updates and %d deletes", len(sc.bufferedUpdates), len(sc.bufferedDeletes))
-	if sc.testingKnobs != nil && sc.testingKnobs.BeforeIngestSpanConfigFlush != nil {
-		sc.testingKnobs.BeforeIngestSpanConfigFlush(ctx, sc.bufferedUpdates, sc.bufferedDeletes)
-	}
-
 	retryOpts := retry.Options{
 		InitialBackoff: 1 * time.Second,
 		MaxBackoff:     5 * time.Second,
@@ -224,9 +248,18 @@ func (sc *spanConfigIngestor) flushEvents(ctx context.Context) error {
 		if sessionExpiration.IsEmpty() {
 			return errors.Errorf("sqlliveness session has expired")
 		}
-		err := sc.accessor.UpdateSpanConfigRecords(
-			ctx, sc.bufferedDeletes, sc.bufferedUpdates, sessionStart, sessionExpiration,
-		)
+		var err error
+		if !sc.initialScanComplete {
+			// The first flush will always contain all span configs found during the initial scan.
+			err = sc.flushInitialScan(ctx, sessionStart, sessionExpiration)
+		} else {
+			err = sc.accessor.UpdateSpanConfigRecords(
+				ctx, sc.bufferedDeletes, sc.bufferedUpdates, sessionStart, sessionExpiration,
+			)
+			if sc.testingKnobs != nil && sc.testingKnobs.RightAfterSpanConfigFlush != nil {
+				sc.testingKnobs.RightAfterSpanConfigFlush(ctx, sc.bufferedUpdates, sc.bufferedDeletes)
+			}
+		}
 		if err != nil {
 			if spanconfig.IsCommitTimestampOutOfBoundsError(err) {
 				// We expect the underlying sqlliveness session's expiration to be
@@ -239,7 +272,48 @@ func (sc *spanConfigIngestor) flushEvents(ctx context.Context) error {
 		}
 		break
 	}
+
 	sc.bufferedUpdates = sc.bufferedUpdates[:0]
 	sc.bufferedDeletes = sc.bufferedDeletes[:0]
 	return nil
+}
+
+// flushInitialScan flushes all contents from the source side rangefeed's
+// initial scan. The function assumes the buffer contains only updates from the
+// initial scan. To obey destination side span config invariants, the function
+// deletes all existing span config records related to the replicating tenant in
+// the same transaction that it writes all initial scan updates.
+func (sc *spanConfigIngestor) flushInitialScan(
+	ctx context.Context, sessionStart, sessionExpiration hlc.Timestamp,
+) error {
+	log.Infof(ctx, "flushing initial span configuration state (%d records)", len(sc.bufferedUpdates))
+
+	if len(sc.bufferedDeletes) != 0 {
+		return errors.AssertionFailedf("initial scan flush should not contain records to delete")
+	}
+	target := spanconfig.MakeTargetFromSpan(sc.destinationTenantKeySpan)
+	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		accessor := sc.accessor.WithTxn(ctx, txn)
+		existingRecords, err := accessor.GetSpanConfigRecords(ctx, []spanconfig.Target{target})
+		if err != nil {
+			return err
+		}
+		// Within the txn, we allocate a new buffer for deletes, instead of using
+		// sc.BufferedDeletes, because if the transaction retries, we don't want to
+		// worry about clearing the spanConfigIngestor's delete buffer.
+		bufferedDeletes := make([]spanconfig.Target, 0, len(existingRecords))
+		for _, record := range existingRecords {
+			bufferedDeletes = append(bufferedDeletes, record.GetTarget())
+		}
+		if err := accessor.UpdateSpanConfigRecords(
+			ctx, bufferedDeletes, sc.bufferedUpdates, sessionStart, sessionExpiration,
+		); err != nil {
+			return err
+		}
+		if sc.testingKnobs != nil && sc.testingKnobs.RightAfterSpanConfigFlush != nil {
+			sc.testingKnobs.RightAfterSpanConfigFlush(ctx, sc.bufferedUpdates, bufferedDeletes)
+		}
+		sc.initialScanComplete = true
+		return nil
+	})
 }
