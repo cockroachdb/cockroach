@@ -177,7 +177,8 @@ func (m *MockTransactionalSender) GetRetryableErr(
 }
 
 // ClearRetryableErr is part of the TxnSender interface.
-func (m *MockTransactionalSender) ClearRetryableErr(ctx context.Context) {
+func (m *MockTransactionalSender) ClearRetryableErr(ctx context.Context) error {
+	return nil
 }
 
 // IsSerializablePushAndRefreshNotPossible is part of the TxnSender interface.

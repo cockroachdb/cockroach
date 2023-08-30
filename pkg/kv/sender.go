@@ -208,8 +208,10 @@ type TxnSender interface {
 	// TxnSender usable again.
 	GetRetryableErr(ctx context.Context) *kvpb.TransactionRetryWithProtoRefreshError
 
-	// ClearRetryableErr clears the retryable error, if any.
-	ClearRetryableErr(ctx context.Context)
+	// ClearRetryableErr clears the retryable error. Returns an error if the
+	// TxnSender was not in a retryable error state or if the TxnSender was
+	// aborted.
+	ClearRetryableErr(ctx context.Context) error
 
 	// DisablePipelining instructs the TxnSender not to pipeline
 	// requests. It should rarely be necessary to call this method. It
