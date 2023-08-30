@@ -245,6 +245,7 @@ func RandString(rng *rand.Rand, length int, alphabet string) string {
 // value used. This function should be called from TestMain; individual tests
 // should not touch the seed of the global random number generator.
 func SeedForTests() {
+	//lint:ignore SA1019 deprecated
 	rand.Seed(globalSeed)
 	log.Printf("random seed: %v", globalSeed)
 }

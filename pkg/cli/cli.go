@@ -13,7 +13,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -29,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	// intentionally not all the workloads in pkg/ccl/workloadccl/allccl
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"       // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bulkingest" // registers workloads
@@ -51,9 +49,6 @@ import (
 // to be the body of an action package main `main` func elsewhere. It is
 // abstracted for reuse by duplicated `main` funcs in different distributions.
 func Main() {
-	// Seed the math/rand RNG from crypto/rand.
-	rand.Seed(randutil.NewPseudoSeed())
-
 	if len(os.Args) == 1 {
 		os.Args = append(os.Args, "help")
 	}

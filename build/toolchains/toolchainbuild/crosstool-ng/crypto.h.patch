@@ -1,0 +1,10 @@
+--- include/openssl/crypto.h
++++ include/openssl/crypto.h
+14c14,16
+< 
+---
+> #ifndef _GNU_SOURCE
+> # define _GNU_SOURCE
+> #endif
+558a561
+> 

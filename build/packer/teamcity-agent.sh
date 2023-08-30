@@ -77,9 +77,9 @@ tar --strip-components=1 -C /usr -xzf /tmp/cmake.tar.gz
 rm -f /tmp/cmake.tar.gz
 
 if [[ $ARCH = x86_64 ]]; then
-    curl -fsSL https://dl.google.com/go/go1.19.10.linux-amd64.tar.gz > /tmp/go.tgz
+    curl -fsSL https://dl.google.com/go/go1.20.7.linux-amd64.tar.gz > /tmp/go.tgz
     sha256sum -c - <<EOF
-8b045a483d3895c6edba2e90a9189262876190dbbd21756870cdd63821810677  /tmp/go.tgz
+f0a87f1bcae91c4b69f8dc2bc6d7e6bfcd7524fceec130af525058c0c17b1b44  /tmp/go.tgz
 EOF
     tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
     # Explicitly symlink the pinned version to /usr/bin.

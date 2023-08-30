@@ -1964,6 +1964,9 @@
         "only_files": {
             "cockroach/pkg/.*$": "first-party code",
             "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
+        },
+        "exclude_files": {
+            "pkg/util/goschedstats/runtime_go.*.go$": "patch code"
         }
     },
     "unreachable": {

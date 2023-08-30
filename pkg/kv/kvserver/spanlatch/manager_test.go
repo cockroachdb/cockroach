@@ -13,8 +13,8 @@ package spanlatch
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
-	"math/rand"
 	"strings"
 	"testing"
 	"time"

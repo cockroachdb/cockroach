@@ -57,6 +57,7 @@ exports_files([
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/json_test //pkg/util/json:json_test
 # gazelle:resolve go google.golang.org/genproto/googleapis/pubsub/v1 @org_golang_google_genproto//googleapis/pubsub/v1:pubsub
 # gazelle:resolve go google.golang.org/genproto/googleapis/cloud/kms/v1 @org_golang_google_genproto//googleapis/cloud/kms/v1:kms
+# gazelle:resolve go google.golang.org/genproto/googleapis/devtools/build/v1 @org_golang_google_genproto//googleapis/devtools/build/v1:build
 
 # See pkg/kv/kvpb/gen/BUILD.bazel for more details.
 #
