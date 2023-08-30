@@ -296,10 +296,7 @@ type JobsProfiler interface {
 	GenerateExecutionDetailsJSON(ctx context.Context, evalCtx *Context, jobID jobspb.JobID) ([]byte, error)
 
 	// RequestExecutionDetailFiles triggers the collection of execution details
-	// for the specified jobID that are then persisted to `system.job_info`. This
-	// currently includes the following pieces of information:
-	//
-	// - Latest DistSQL diagram of the job
+	// for the specified jobID that are then persisted to `system.job_info`.
 	RequestExecutionDetailFiles(ctx context.Context, jobID jobspb.JobID) error
 }
 
