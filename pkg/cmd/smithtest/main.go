@@ -66,7 +66,6 @@ func main() {
 		reduce:    *reduce,
 		github:    github.NewClient(nil),
 	}
-	rand.Seed(timeutil.Now().UnixNano())
 
 	setup.populateGitHubIssues(ctx)
 

@@ -26,11 +26,6 @@ import (
 
 var btreeMinDegree = flag.Int("btree_min_degree", DefaultBTreeMinimumDegree, "B-Tree minimum degree")
 
-func init() {
-	seed := timeutil.Now().Unix()
-	rand.Seed(seed)
-}
-
 // perm returns a random permutation of intervals whose range start is in the
 // range [0, n).
 func perm(n uint32) (out items) {
