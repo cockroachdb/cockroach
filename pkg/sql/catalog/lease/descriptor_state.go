@@ -186,7 +186,7 @@ func (t *descriptorState) upsertLeaseLocked(
 	// requiring some sort of clean up.
 	// FIXME: For expiration we should still clean up.
 	if toRelease.version == s.mu.lease.version &&
-		t.m.settings.Version.IsActive(ctx, clusterversion.V23_2) {
+		t.m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeasesTableWithNewDesc) {
 		toRelease = nil
 	}
 	return nil, toRelease, nil
