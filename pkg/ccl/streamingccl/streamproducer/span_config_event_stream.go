@@ -225,9 +225,16 @@ func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
 				spcfgEvent := ev.(*spanconfigkvsubscriber.BufferEvent)
 				target := spcfgEvent.Update.GetTarget()
 				if target.IsSystemTarget() {
-					// We skip replicating SystemTarget Span configs as they are created
-					// via the internal span config machinery, not via a public facing API
-					// (like the KVAccessor).
+					// We skip replicating SystemTarget Span configs as they are not
+					// necessary to replicate. System target span configurations are
+					// created to manage protected timestamps during system and app tenant
+					// cluster backups, and backups of tenants. There's no need to
+					// replicate protected timestamps for app tenant cluster backups, as
+					// replicated backup jobs will fail after cutover anyway.
+					//
+					// If a new application that uses SystemTargets requires replication,
+					// we'll need to special case the handling of these records. For now,
+					// don't worry about it.
 					continue
 				}
 				_, tenantID, err := keys.DecodeTenantPrefix(target.GetSpan().Key)
