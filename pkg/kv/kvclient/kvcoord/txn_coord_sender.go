@@ -774,6 +774,16 @@ func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
 func (tc *TxnCoordSender) handleRetryableErrLocked(
 	ctx context.Context, pErr *roachpb.Error,
 ) *roachpb.TransactionRetryWithProtoRefreshError {
+	// If the transaction is already in a retryable state and the provided error
+	// does not have a higher priority than the existing error, return the
+	// existing error instead of attempting to handle the retryable error. This
+	// prevents the TxnCoordSender from losing information about a higher
+	// priority error.
+	if tc.mu.txnState == txnRetryableError &&
+		kvpb.ErrPriority(pErr.GoError()) <= kvpb.ErrPriority(tc.mu.storedRetryableErr) {
+		return tc.mu.storedRetryableErr
+	}
+
 	// If the error is a transaction retry error, update metrics to
 	// reflect the reason for the restart. More details about the
 	// different error types are documented above on the metaRestart
@@ -829,8 +839,8 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 	if errTxnID != newTxn.ID {
 		// Remember that this txn is aborted to reject future requests.
 		tc.mu.txn.Status = roachpb.ABORTED
-		// Abort the old txn. The client is not supposed to use use this
-		// TxnCoordSender any more.
+		// Abort the old txn. The client is not supposed to use this
+		// TxnCoordSender anymore.
 		tc.interceptorAlloc.txnHeartbeater.abortTxnAsyncLocked(ctx)
 		tc.cleanupTxnLocked(ctx)
 		return retErr
@@ -1167,7 +1177,7 @@ func (tc *TxnCoordSender) GetLeafTxnInputState(
 	}
 
 	// Also mark the TxnCoordSender as "active".  This prevents changing
-	// the priority after a leaf has been created. It als conservatively
+	// the priority after a leaf has been created. It also conservatively
 	// ensures that Active() returns true if there's maybe a command
 	// being executed concurrently by a leaf.
 	tc.mu.active = true
