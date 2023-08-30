@@ -39,6 +39,7 @@ func _() {
 	_ = x[REPLICATION-29]
 	_ = x[MANAGETENANT-30]
 	_ = x[VIEWSYSTEMTABLE-31]
+	_ = x[largestKind-31]
 }
 
 func (i Kind) String() string {
