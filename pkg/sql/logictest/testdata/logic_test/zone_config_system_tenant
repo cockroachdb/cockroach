@@ -198,3 +198,10 @@ ORDER BY start_key
 /Table/110  90001
 /Table/111  1
 /Table/112  1
+
+subtest transactional_schemachanges
+
+statement ok
+ALTER RANGE meta CONFIGURE ZONE DISCARD; ALTER RANGE meta CONFIGURE ZONE DISCARD;
+
+subtest end

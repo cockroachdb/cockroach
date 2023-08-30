@@ -535,10 +535,7 @@ func (tc *Collection) WriteZoneConfigToBatch(
 		return err
 	}
 
-	if descID != keys.RootNamespaceID && !keys.IsPseudoTableID(uint32(descID)) {
-		return tc.AddUncommittedZoneConfig(descID, zc.ZoneConfigProto())
-	}
-	return nil
+	return tc.AddUncommittedZoneConfig(descID, zc.ZoneConfigProto())
 }
 
 // DeleteZoneConfigInBatch deletes zone config of the table.
@@ -555,9 +552,7 @@ func (tc *Collection) DeleteZoneConfigInBatch(
 		return err
 	}
 
-	if descID != keys.RootNamespaceID && !keys.IsPseudoTableID(uint32(descID)) {
-		tc.MarkUncommittedZoneConfigDeleted(descID)
-	}
+	tc.MarkUncommittedZoneConfigDeleted(descID)
 	return nil
 }
 
