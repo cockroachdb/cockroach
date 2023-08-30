@@ -60,12 +60,6 @@ const (
 	// virtually enqueued in below-raft admission queues and dequeued in
 	// priority order, but only empty elastic flow token buckets above-raft will
 	// block further elastic traffic from being admitted.
-	//
-	// TODO(irfansharif): We're potentially risking OOMs doing all this tracking
-	// for regular work, without coalescing state. With a bit of plumbing, for
-	// requests that bypass flow control we could fallback to using the non-AC
-	// raft encodings and avoid the potential OOMs. Address this as part of
-	// #95563.
 	ApplyToElastic ModeT = iota
 	// ApplyToAll uses flow control for both elastic and regular traffic,
 	// i.e. all work will wait for flow tokens to be available.
@@ -117,11 +111,12 @@ type Tokens int64
 // Controller provides flow control for replication traffic in KV, held at the
 // node-level.
 type Controller interface {
-	// Admit seeks admission to replicate data, regardless of size, for work
-	// with the given priority, create-time, and over the given stream. This
-	// blocks until there are flow tokens available or the stream disconnects,
-	// subject to context cancellation.
-	Admit(context.Context, admissionpb.WorkPriority, time.Time, ConnectedStream) error
+	// Admit seeks admission to replicate data, regardless of size, for work with
+	// the given priority, create-time, and over the given stream. This blocks
+	// until there are flow tokens available or the stream disconnects, subject to
+	// context cancellation. This returns true if the request was admitted through
+	// flow control. Ignore the first return type if err != nil
+	Admit(context.Context, admissionpb.WorkPriority, time.Time, ConnectedStream) (admitted bool, _ error)
 	// DeductTokens deducts (without blocking) flow tokens for replicating work
 	// with given priority over the given stream. Requests are expected to
 	// have been Admit()-ed first.
@@ -158,10 +153,11 @@ type Controller interface {
 // given priority, takes log position into account -- see
 // kvflowcontrolpb.AdmittedRaftLogEntries for more details).
 type Handle interface {
-	// Admit seeks admission to replicate data, regardless of size, for work
-	// with the given priority and create-time. This blocks until there are
-	// flow tokens available for all connected streams.
-	Admit(context.Context, admissionpb.WorkPriority, time.Time) error
+	// Admit seeks admission to replicate data, regardless of size, for work with
+	// the given priority and create-time. This blocks until there are flow tokens
+	// available for all connected streams. This returns true if the request was
+	// admitted through flow control. Ignore the first return type if err != nil.
+	Admit(context.Context, admissionpb.WorkPriority, time.Time) (admitted bool, _ error)
 	// DeductTokensFor deducts (without blocking) flow tokens for replicating
 	// work with given priority along connected streams. The deduction is
 	// tracked with respect to the specific raft log position it's expecting it

@@ -310,29 +310,41 @@ func (n *controllerImpl) AdmitKVWork(
 	// to continue even when throttling since there are often significant
 	// number of tokens available.
 	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
-		if !bypassAdmission &&
-			kvflowcontrol.Enabled.Get(&n.settings.SV) &&
-			n.settings.Version.IsActive(ctx, clusterversion.V23_2_UseACRaftEntryEntryEncodings) {
+		var admitted bool
+		attemptFlowControl := kvflowcontrol.Enabled.Get(&n.settings.SV) &&
+			n.settings.Version.IsActive(ctx, clusterversion.V23_2_UseACRaftEntryEntryEncodings)
+		if attemptFlowControl && !bypassAdmission {
 			kvflowHandle, found := n.kvflowHandles.Lookup(ba.RangeID)
 			if !found {
 				return Handle{}, nil
 			}
-			if err := kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime)); err != nil {
+			var err error
+			admitted, err = kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime))
+			if err != nil {
 				return Handle{}, err
+			} else if admitted {
+				// NB: It's possible for us to be waiting for available flow tokens
+				// for a different set of streams that the ones we'll eventually
+				// deduct tokens from, if the range experiences a split between now
+				// and the point of deduction. That's ok, there's no strong
+				// synchronization needed between these two points.
+				ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
+					AdmissionPriority:   int32(admissionInfo.Priority),
+					AdmissionCreateTime: admissionInfo.CreateTime,
+					AdmissionOriginNode: n.nodeID.Get(),
+				}
 			}
-			// NB: It's possible for us to be waiting for available flow tokens
-			// for a different set of streams that the ones we'll eventually
-			// deduct tokens from, if the range experiences a split between now
-			// and the point of deduction. That's ok, there's no strong
-			// synchronization needed between these two points.
-			ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
-				AdmissionPriority:   int32(admissionInfo.Priority),
-				AdmissionCreateTime: admissionInfo.CreateTime,
-				AdmissionOriginNode: n.nodeID.Get(),
-			}
-		} else {
+
+		}
+		// If flow control is disabled or if work bypasses flow control, we still
+		// subject it above-raft, leaseholder-only IO admission control.
+		if !attemptFlowControl || !admitted {
 			storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
 			if storeAdmissionQ != nil {
+				//  NB: Even though we would know here we're bypassing admission (via
+				//  `bypassAdmission`), we still have to explicitly invoke `.Admit()`.
+				//  We do it for correct token accounting (i.e. we deduct tokens without
+				//  blocking).
 				storeWorkHandle, err := storeAdmissionQ.Admit(
 					ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
 				if err != nil {
