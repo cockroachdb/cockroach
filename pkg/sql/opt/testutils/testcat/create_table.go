@@ -863,7 +863,7 @@ func (tt *Table) addIndexWithVersion(
 		IdxZone:      cat.EmptyZone(),
 		table:        tt,
 		version:      version,
-		Invisibility: def.Invisibility,
+		Invisibility: def.Invisibility.Value,
 	}
 
 	// Look for name suffixes indicating this is a mutation index.

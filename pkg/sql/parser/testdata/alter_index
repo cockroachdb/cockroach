@@ -431,3 +431,11 @@ ALTER INDEX db.t@i VISIBILITY 0.20 -- normalized!
 ALTER INDEX db.t@i VISIBILITY 0.20 -- fully parenthesized
 ALTER INDEX db.t@i VISIBILITY 0.20 -- literals removed
 ALTER INDEX _._@_ VISIBILITY 0.20 -- identifiers removed
+
+parse
+ALTER INDEX i VISIBILITY 7.379652426127388e-12
+----
+ALTER INDEX i VISIBILITY 0.00 -- normalized!
+ALTER INDEX i VISIBILITY 0.00 -- fully parenthesized
+ALTER INDEX i VISIBILITY 0.00 -- literals removed
+ALTER INDEX _ VISIBILITY 0.00 -- identifiers removed

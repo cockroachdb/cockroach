@@ -443,7 +443,7 @@ func alterTableAddUniqueWithoutIndex(
 			"partitioned unique constraints without an index are not supported",
 		))
 	}
-	if d.Invisibility != 0.0 {
+	if d.Invisibility.Value != 0.0 {
 		// Theoretically, this should never happen because this is not supported by
 		// the parser. This is just a safe check.
 		panic(pgerror.Newf(pgcode.FeatureNotSupported,
