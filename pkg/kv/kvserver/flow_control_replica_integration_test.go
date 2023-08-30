@@ -413,9 +413,9 @@ func newMockFlowHandle(
 
 func (m *mockFlowHandle) Admit(
 	ctx context.Context, pri admissionpb.WorkPriority, ct time.Time,
-) error {
+) (bool, error) {
 	m.t.Fatal("unimplemented")
-	return nil
+	return false, nil
 }
 
 func (m *mockFlowHandle) DeductTokensFor(
