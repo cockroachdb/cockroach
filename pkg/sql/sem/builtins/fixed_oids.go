@@ -1215,7 +1215,7 @@ var builtinOidsArray = []string{
 	1234: `array_positions(array: anyenum[], elem: anyenum) -> int[]`,
 	1235: `array_positions(array: tuple[], elem: tuple) -> int[]`,
 	1236: `soundex(source: string) -> string`,
-	1237: `difference(source: string, target: string) -> string`,
+	1237: `difference(source: string, target: string) -> int`,
 	1238: `levenshtein(source: string, target: string) -> int`,
 	1239: `levenshtein(source: string, target: string, ins_cost: int, del_cost: int, sub_cost: int) -> int`,
 	1240: `json_remove_path(val: jsonb, path: string[]) -> jsonb`,
