@@ -95,9 +95,9 @@ func startDistIngestion(
 	log.Infof(ctx, "producer job %d is active, planning DistSQL flow", streamID)
 	dsp := execCtx.DistSQLPlanner()
 
-	planner := replicationFlowPlanner{}
-
-	initialPlan, planCtx, err := planner.makePlan(
+	planner, err := makeReplicationFlowPlanner(
+		ctx,
+		dsp,
 		execCtx,
 		ingestionJob.ID(),
 		details,
@@ -105,8 +105,7 @@ func startDistIngestion(
 		replicatedTime,
 		streamProgress.Checkpoint,
 		initialScanTimestamp,
-		dsp.GatewayID(),
-	)(ctx, dsp)
+		dsp.GatewayID())
 	if err != nil {
 		return err
 	}
@@ -124,7 +123,7 @@ func startDistIngestion(
 	if err != nil {
 		return errors.Wrap(err, "failed to update job progress")
 	}
-	jobsprofiler.StorePlanDiagram(ctx, execCtx.ExecCfg().DistSQLSrv.Stopper, initialPlan, execCtx.ExecCfg().InternalDB,
+	jobsprofiler.StorePlanDiagram(ctx, execCtx.ExecCfg().DistSQLSrv.Stopper, planner.initialPlan, execCtx.ExecCfg().InternalDB,
 		ingestionJob.ID())
 
 	replanOracle := sql.ReplanOnCustomFunc(
@@ -135,17 +134,8 @@ func startDistIngestion(
 	)
 
 	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
-		initialPlan,
-		planner.makePlan(
-			execCtx,
-			ingestionJob.ID(),
-			details,
-			client,
-			replicatedTime,
-			streamProgress.Checkpoint,
-			initialScanTimestamp,
-			dsp.GatewayID(),
-		),
+		planner.initialPlan,
+		planner.generatePlan,
 		execCtx,
 		replanOracle,
 		func() time.Duration { return replanFrequency.Get(execCtx.ExecCfg().SV()) },
@@ -211,7 +201,7 @@ func startDistIngestion(
 
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *execCtx.ExtendedEvalContext()
-		dsp.Run(ctx, planCtx, noTxn, initialPlan, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+		dsp.Run(ctx, planner.initialPlanCtx, noTxn, planner.initialPlan, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 		return rw.Err()
 	}
 
@@ -223,8 +213,40 @@ func startDistIngestion(
 	return err
 }
 
+// makeReplicationFlowPlanner creates a replicationFlowPlanner and the initial physical plan.
+func makeReplicationFlowPlanner(
+	ctx context.Context,
+	dsp *sql.DistSQLPlanner,
+	execCtx sql.JobExecContext,
+	ingestionJobID jobspb.JobID,
+	details jobspb.StreamIngestionDetails,
+	client streamclient.Client,
+	previousReplicatedTime hlc.Timestamp,
+	checkpoint jobspb.StreamIngestionCheckpoint,
+	initialScanTimestamp hlc.Timestamp,
+	gatewayID base.SQLInstanceID,
+) (replicationFlowPlanner, error) {
+
+	planner := replicationFlowPlanner{}
+	planner.generatePlan = planner.constructPlanGenerator(execCtx, ingestionJobID, details, client, previousReplicatedTime, checkpoint, initialScanTimestamp, gatewayID)
+
+	var err error
+	planner.initialPlan, planner.initialPlanCtx, err = planner.generatePlan(ctx, dsp)
+	return planner, err
+
+}
+
+// replicationFlowPlanner can generate c2c physical plans. To populate the
+// replicationFlowPlanner's state correctly, it must be constructed via
+// makeReplicationFlowPlanner.
 type replicationFlowPlanner struct {
-	// initial contains the stream addresses found during the replicationFlowPlanner's first makePlan call.
+	// generatePlan generates a c2c physical plan.
+	generatePlan func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error)
+
+	initialPlan *sql.PhysicalPlan
+
+	initialPlanCtx *sql.PlanningCtx
+
 	initialStreamAddresses []string
 
 	srcTenantID roachpb.TenantID
@@ -241,7 +263,7 @@ func (p *replicationFlowPlanner) getSrcTenantID() (roachpb.TenantID, error) {
 	return p.srcTenantID, nil
 }
 
-func (p *replicationFlowPlanner) makePlan(
+func (p *replicationFlowPlanner) constructPlanGenerator(
 	execCtx sql.JobExecContext,
 	ingestionJobID jobspb.JobID,
 	details jobspb.StreamIngestionDetails,
