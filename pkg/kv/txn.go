@@ -1068,8 +1068,7 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) error {
 		// If the retryable error doesn't correspond to an aborted transaction,
 		// there's no need to switch out the transaction. We simply clear the
 		// retryable error and proceed.
-		txn.mu.sender.ClearRetryableErr(ctx)
-		return nil
+		return txn.mu.sender.ClearRetryableErr(ctx)
 	}
 
 	return txn.handleTransactionAbortedErrorLocked(ctx, retryErr)
@@ -1103,8 +1102,7 @@ func (txn *Txn) PrepareForPartialRetry(ctx context.Context) error {
 	log.VEventf(ctx, 2, "partially retrying transaction: %s because of a retryable error: %s",
 		txn.debugNameLocked(), retryErr)
 
-	txn.mu.sender.ClearRetryableErr(ctx)
-	return nil
+	return txn.mu.sender.ClearRetryableErr(ctx)
 }
 
 func (txn *Txn) checkRetryErrorTxnIDLocked(

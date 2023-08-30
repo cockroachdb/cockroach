@@ -1231,13 +1231,18 @@ func (tc *TxnCoordSender) GetRetryableErr(
 }
 
 // ClearRetryableErr is part of the TxnSender interface.
-func (tc *TxnCoordSender) ClearRetryableErr(ctx context.Context) {
+func (tc *TxnCoordSender) ClearRetryableErr(ctx context.Context) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	if tc.mu.txnState == txnRetryableError {
-		tc.mu.storedRetryableErr = nil
-		tc.mu.txnState = txnPending
+	if tc.mu.txnState != txnRetryableError {
+		return errors.AssertionFailedf("cannot clear retryable error, in state: %s", tc.mu.txnState)
 	}
+	if tc.mu.storedRetryableErr.PrevTxnAborted() {
+		return errors.AssertionFailedf("cannot clear retryable error, txn aborted: %s", tc.mu.txn)
+	}
+	tc.mu.txnState = txnPending
+	tc.mu.storedRetryableErr = nil
+	return nil
 }
 
 // IsSerializablePushAndRefreshNotPossible is part of the kv.TxnSender interface.
