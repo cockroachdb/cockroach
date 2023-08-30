@@ -3,12 +3,12 @@
 set -xeuo pipefail
 
 # When updating to a new Go version, update all of these variables.
-GOVERS=1.19.10
+GOVERS=1.20.7
 GOLINK=https://go.dev/dl/go$GOVERS.src.tar.gz
-SRCSHASUM=13755bcce529747d5f2930dee034730c86d02bd3e521ab3e2bbede548d3b953f
+SRCSHASUM=2c5ee9c9ec1e733b0dbbc2bdfed3f62306e51d8172bf38f4f4e542b27520f597
 # We mirror the upstream freebsd because we don't have a cross-compiler targeting it.
 GOFREEBSDLINK=https://go.dev/dl/go$GOVERS.freebsd-amd64.tar.gz
-FREEBSDSHASUM=0d22265662eaa9b8136223f8ab68f5c06c58c6a6311748fb810e830ebd17cbe2
+FREEBSDSHASUM=26918dcebf474a9e81ccf9f648cdf36968dfb76b481518cf615d78455dda4416
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -19,7 +19,6 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     curl \
     git \
     gnupg2 \
-    golang \
     make \
     python-is-python3 \
     python3 \
@@ -30,6 +29,13 @@ update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
 
 curl -fsSL $GOFREEBSDLINK -o /artifacts/go$GOVERS.freebsd-amd64.tar.gz
 echo "$FREEBSDSHASUM  /artifacts/go$GOVERS.freebsd-amd64.tar.gz" | sha256sum -c -
+
+curl -fsSL https://go.dev/dl/go1.20.7.linux-amd64.tar.gz -o golang.tar.gz \
+ && echo 'f0a87f1bcae91c4b69f8dc2bc6d7e6bfcd7524fceec130af525058c0c17b1b44  golang.tar.gz' | sha256sum -c - \
+ && rm -rf /usr/local/go && tar -C /usr/local -xzf golang.tar.gz \
+ && rm golang.tar.gz
+
+PATH=$PATH:/usr/local/go/bin
 
 # libtapi is required for later versions of MacOSX.
 git clone https://github.com/tpoechtrager/apple-libtapi.git
