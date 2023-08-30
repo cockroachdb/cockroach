@@ -1,14 +1,46 @@
 parse
 DECLARE
 BEGIN
+OPEN curs1;
+END
+----
+DECLARE
+BEGIN
+OPEN curs1;
+END
+
+parse
+DECLARE
+BEGIN
+OPEN curs1 FOR SELECT * FROM foo WHERE key = mykey;
+END
+----
+DECLARE
+BEGIN
+OPEN curs1 FOR SELECT * FROM foo WHERE key = mykey;
+END
+
+parse
+DECLARE
+BEGIN
+OPEN curs1 SCROLL FOR SELECT * FROM foo WHERE key = mykey;
+END
+----
+DECLARE
+BEGIN
+OPEN curs1 SCROLL FOR SELECT * FROM foo WHERE key = mykey;
+END
+
+parse
+DECLARE
+BEGIN
 OPEN curs1 NO SCROLL FOR SELECT * FROM foo WHERE key = mykey;
 END
 ----
 DECLARE
 BEGIN
-OPEN curs1 NO SCROLL FOR SELECT * FROM foo WHERE key = mykey
+OPEN curs1 NO SCROLL FOR SELECT * FROM foo WHERE key = mykey;
 END
-
 
 parse
 DECLARE
@@ -16,7 +48,4 @@ BEGIN
 OPEN curs2 SCROLL FOR EXECUTE SELECT $1, $2 FROM foo WHERE key = mykey USING hello, jojo;
 END
 ----
-DECLARE
-BEGIN
-OPEN curs2 SCROLL FOR EXECUTE SELECT $1, $2 FROM foo WHERE key = mykey  USING [hello jojo]
-END
+at or near "execute": syntax error: unimplemented: this syntax
