@@ -157,6 +157,10 @@ type TestingKnobs struct {
 	// on a remote node in a cluster fan-out. It is invoked by the nodeFn argument
 	// of server.iterateNodes.
 	IterateNodesNodeCallback func(ctx context.Context, nodeID roachpb.NodeID) error
+
+	// DialNodeCallback is used to mock dial errors when dialing a node. It is
+	// invoked by the dialNode method of server.serverIterator.
+	DialNodeCallback func(ctx context.Context, nodeID roachpb.NodeID) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
