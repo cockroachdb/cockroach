@@ -93,7 +93,7 @@ func IsActive() (active bool, firstUse string) {
 func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 	// Sanity check.
 	if active, firstUse := IsActive(); active {
-		panic(errors.Newf("logging already active; first use:\n%s", firstUse))
+		reportOrPanic(context.Background(), nil /* sv */, "logging already active; first use:\n%s", firstUse)
 	}
 
 	// Our own cancellable context to stop the secondary loggers below.
