@@ -1037,9 +1037,9 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
-	visibility := 1.0
+	invisibility := tree.IndexInvisibility{Value: 0.0}
 	if notvisible := og.randIntn(20) == 0; notvisible {
-		visibility = 0.0
+		invisibility.Value = 1.0
 		partiallyVisibleIndexNotSupported, err := isClusterVersionLessThan(
 			ctx, tx, clusterversion.ByKey(clusterversion.V23_2_PartiallyVisibleIndexes),
 		)
@@ -1048,7 +1048,8 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		}
 		if !partiallyVisibleIndexNotSupported {
 			if og.randIntn(2) == 0 {
-				visibility = og.params.rng.Float64()
+				invisibility.Value = 1 - og.params.rng.Float64()
+				invisibility.FloatProvided = true
 			}
 		}
 	}
@@ -1059,7 +1060,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		Unique:       og.randIntn(4) == 0,  // 25% UNIQUE
 		Inverted:     og.randIntn(10) == 0, // 10% INVERTED
 		IfNotExists:  og.randIntn(2) == 0,  // 50% IF NOT EXISTS
-		Invisibility: 1 - visibility,       // 5% NOT VISIBLE
+		Invisibility: invisibility,         // 5% NOT VISIBLE
 	}
 
 	regionColumn := ""
@@ -1394,7 +1395,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 				idxDef = &(def.(*tree.UniqueConstraintTableDef)).IndexTableDef
 			}
 			if idxDef != nil {
-				if indexVisibilityNotSupported && idxDef.Invisibility != 0 && idxDef.Invisibility != 1.0 {
+				if indexVisibilityNotSupported && idxDef.Invisibility.Value != 0 && idxDef.Invisibility.Value != 1.0 {
 					return true, nil
 				}
 				for _, col := range idxDef.Columns {

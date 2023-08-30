@@ -708,7 +708,7 @@ func addUniqueWithoutIndexTableDef(
 			"partitioned unique constraints without an index are not supported",
 		)
 	}
-	if d.Invisibility != 0.0 {
+	if d.Invisibility.Value != 0.0 {
 		// Theoretically, this should never happen because this is not supported by
 		// the parser. This is just a safe check.
 		return pgerror.Newf(pgcode.FeatureNotSupported,
@@ -1829,15 +1829,15 @@ func NewTableDesc(
 				return nil, err
 			}
 			if !version.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
-				d.Invisibility > 0.0 && d.Invisibility < 1.0 {
+				d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
 				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
-				NotVisible:       d.Invisibility != 0.0,
-				Invisibility:     d.Invisibility,
+				NotVisible:       d.Invisibility.Value != 0.0,
+				Invisibility:     d.Invisibility.Value,
 			}
 			if d.Inverted {
 				idx.Type = descpb.IndexDescriptor_INVERTED
@@ -1948,7 +1948,7 @@ func NewTableDesc(
 				return nil, err
 			}
 			if !version.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
-				d.Invisibility > 0.0 && d.Invisibility < 1.0 {
+				d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
 				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 			}
 			idx := descpb.IndexDescriptor{
@@ -1956,8 +1956,8 @@ func NewTableDesc(
 				Unique:           true,
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
-				NotVisible:       d.Invisibility != 0.0,
-				Invisibility:     d.Invisibility,
+				NotVisible:       d.Invisibility.Value != 0.0,
+				Invisibility:     d.Invisibility.Value,
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
@@ -2660,7 +2660,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					Inverted:     idx.GetType() == descpb.IndexDescriptor_INVERTED,
 					Storing:      make(tree.NameList, 0, idx.NumSecondaryStoredColumns()),
 					Columns:      make(tree.IndexElemList, 0, idx.NumKeyColumns()),
-					Invisibility: idx.GetInvisibility(),
+					Invisibility: tree.IndexInvisibility{Value: idx.GetInvisibility()},
 				}
 				numColumns := idx.NumKeyColumns()
 				if idx.IsSharded() {
