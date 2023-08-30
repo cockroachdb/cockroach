@@ -199,6 +199,9 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
 	}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	params.ServerArgs.Knobs.Streaming = &sql.StreamingTestingKnobs{
+		SkipSpanConfigReplication: true,
+	}
 
 	numNodes := 3
 	tc := testcluster.StartTestCluster(t, numNodes, params)

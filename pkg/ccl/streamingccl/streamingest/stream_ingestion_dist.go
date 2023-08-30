@@ -164,9 +164,28 @@ func startDistIngestion(
 		return nil
 	}
 
+	spanConfigIngestStopper := make(chan struct{})
+	streamSpanConfigs := func(ctx context.Context) error {
+		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.SkipSpanConfigReplication {
+			return nil
+		}
+		sourceTenantID, err := planner.getSrcTenantID()
+		if err != nil {
+			return err
+		}
+		ingestor, err := makeSpanConfigIngestor(ctx, execCtx.ExecCfg(), ingestionJob, sourceTenantID, spanConfigIngestStopper)
+		if err != nil {
+			return err
+		}
+		return ingestor.ingestSpanConfigs(ctx, details.SourceTenantName)
+	}
+
 	execInitialPlan := func(ctx context.Context) error {
-		defer stopReplanner()
-		defer close(tracingAggCh)
+		defer func() {
+			stopReplanner()
+			close(tracingAggCh)
+			close(spanConfigIngestStopper)
+		}()
 		ctx = logtags.AddTag(ctx, "stream-ingest-distsql", nil)
 
 		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
@@ -197,7 +216,7 @@ func startDistIngestion(
 	}
 
 	updateRunningStatus(ctx, ingestionJob, jobspb.Replicating, "physical replication running")
-	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner, tracingAggLoop)
+	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner, tracingAggLoop, streamSpanConfigs)
 	if errors.Is(err, sql.ErrPlanChanged) {
 		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
 	}
@@ -207,10 +226,19 @@ func startDistIngestion(
 type replicationFlowPlanner struct {
 	// initial contains the stream addresses found during the replicationFlowPlanner's first makePlan call.
 	initialStreamAddresses []string
+
+	srcTenantID roachpb.TenantID
 }
 
 func (p *replicationFlowPlanner) containsInitialStreamAddresses() bool {
 	return len(p.initialStreamAddresses) > 0
+}
+
+func (p *replicationFlowPlanner) getSrcTenantID() (roachpb.TenantID, error) {
+	if p.srcTenantID.InternalValue == 0 {
+		return p.srcTenantID, errors.AssertionFailedf("makeReplicationFlowPlanner must be called before p.getSrcID")
+	}
+	return p.srcTenantID, nil
 }
 
 func (p *replicationFlowPlanner) makePlan(
@@ -233,6 +261,8 @@ func (p *replicationFlowPlanner) makePlan(
 		if !p.containsInitialStreamAddresses() {
 			p.initialStreamAddresses = topology.StreamAddresses()
 		}
+
+		p.srcTenantID = topology.SourceTenantID
 
 		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg())
 		if err != nil {
