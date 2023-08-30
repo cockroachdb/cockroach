@@ -696,21 +696,35 @@ func TestTransactionUpdateStaging(t *testing.T) {
 
 // TestTransactionUpdateAbortedOldEpoch tests that Transaction.Update propagates
 // an ABORTED status even when that status comes from a proto with an old epoch.
-// Once a transaction is ABORTED, it will stay aborted, even if its coordinator
-// doesn't know this at the time that it increments its epoch and retries.
+// It also tests that Transaction.Update retains an ABORTED status even when it
+// is updated with a new epoch with a PENDING status. Either way, once a
+// transaction is ABORTED, it will stay aborted, even if its coordinator doesn't
+// know this at the time that it increments its epoch and retries.
 func TestTransactionUpdateAbortedOldEpoch(t *testing.T) {
-	txn := nonZeroTxn
-	txn.Status = ABORTED
+	txnAbort := nonZeroTxn
+	txnAbort.Status = ABORTED
 
-	txnRestart := txn
+	txnRestart := nonZeroTxn
 	txnRestart.Epoch++
 	txnRestart.Status = PENDING
-	txnRestart.Update(&txn)
 
-	expTxn := txn
-	expTxn.Epoch++
-	expTxn.Status = ABORTED
-	require.Equal(t, expTxn, txnRestart)
+	testCases := []struct {
+		name      string
+		recv, arg Transaction
+	}{
+		{name: "aborted receiver", recv: txnAbort, arg: txnRestart},
+		{name: "aborted argument", recv: txnRestart, arg: txnAbort},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.recv.Update(&tc.arg)
+
+			expTxn := nonZeroTxn
+			expTxn.Epoch++
+			expTxn.Status = ABORTED
+			require.Equal(t, expTxn, tc.recv)
+		})
+	}
 }
 
 func TestTransactionClone(t *testing.T) {
