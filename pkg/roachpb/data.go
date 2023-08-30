@@ -1216,15 +1216,16 @@ func (t *Transaction) BumpReadTimestamp(timestamp hlc.Timestamp) {
 // others) for the transaction. If t.ID is empty, then the transaction is
 // copied from o.
 func (t *Transaction) Update(o *Transaction) {
+	ctx := context.TODO()
 	if o == nil {
 		return
 	}
-	o.AssertInitialized(context.TODO())
+	o.AssertInitialized(ctx)
 	if t.ID == (uuid.UUID{}) {
 		*t = *o
 		return
 	} else if t.ID != o.ID {
-		log.Fatalf(context.Background(), "updating txn %s with different txn %s", t.String(), o.String())
+		log.Fatalf(ctx, "updating txn %s with different txn %s", t.String(), o.String())
 		return
 	}
 	if len(t.Key) == 0 {
@@ -1234,9 +1235,15 @@ func (t *Transaction) Update(o *Transaction) {
 
 	// Update epoch-scoped state, depending on the two transactions' epochs.
 	if t.Epoch < o.Epoch {
+		// Ensure that the transaction status makes sense. If the transaction
+		// has already been finalized, then it should remain finalized.
+		if !t.Status.IsFinalized() {
+			t.Status = o.Status
+		} else if t.Status == COMMITTED {
+			log.Warningf(ctx, "updating COMMITTED txn %s with txn at later epoch %s", t.String(), o.String())
+		}
 		// Replace all epoch-scoped state.
 		t.Epoch = o.Epoch
-		t.Status = o.Status
 		t.WriteTooOld = o.WriteTooOld
 		t.ReadTimestampFixed = o.ReadTimestampFixed
 		t.Sequence = o.Sequence
@@ -1254,7 +1261,7 @@ func (t *Transaction) Update(o *Transaction) {
 			}
 		case ABORTED:
 			if o.Status == COMMITTED {
-				log.Warningf(context.Background(), "updating ABORTED txn %s with COMMITTED txn %s", t.String(), o.String())
+				log.Warningf(ctx, "updating ABORTED txn %s with COMMITTED txn %s", t.String(), o.String())
 			}
 		case COMMITTED:
 			// Nothing to do.
@@ -1299,7 +1306,7 @@ func (t *Transaction) Update(o *Transaction) {
 			// aborted.
 			t.Status = ABORTED
 		case COMMITTED:
-			log.Warningf(context.Background(), "updating txn %s with COMMITTED txn at earlier epoch %s", t.String(), o.String())
+			log.Warningf(ctx, "updating txn %s with COMMITTED txn at earlier epoch %s", t.String(), o.String())
 		}
 	}
 
