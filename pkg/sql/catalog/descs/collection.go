@@ -535,7 +535,7 @@ func (tc *Collection) WriteZoneConfigToBatch(
 		return err
 	}
 
-	if descID != keys.RootNamespaceID && !keys.IsPseudoTableID(uint32(descID)) {
+	if !keys.IsPseudoTableID(uint32(descID)) {
 		return tc.AddUncommittedZoneConfig(descID, zc.ZoneConfigProto())
 	}
 	return nil
