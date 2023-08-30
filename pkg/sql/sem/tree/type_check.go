@@ -2667,11 +2667,6 @@ func typeCheckSameTypedExprs(
 					candidateType = typ
 				}
 			}
-			// TODO(mgartner): Remove this check now that we check the types
-			// below.
-			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(candidateType) || typ.Family() == types.UnknownFamily) {
-				return nil, nil, unexpectedTypeError(exprs[i], candidateType, typ)
-			}
 			typedExprs[i] = typedExpr
 		}
 		if !constIdxs.Empty() {
