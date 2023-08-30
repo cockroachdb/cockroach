@@ -145,7 +145,8 @@ func TestDataDriven(t *testing.T) {
 		}
 		execCfg := tenant.ExecCfg()
 
-		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+		var f func(t *testing.T, d *datadriven.TestData) string
+		f = func(t *testing.T, d *datadriven.TestData) string {
 			var generateSystemSpanConfigs bool
 			var descIDs []descpb.ID
 			switch d.Cmd {
@@ -297,11 +298,14 @@ func TestDataDriven(t *testing.T) {
 				allowGC = true
 				gcWaiter.Signal()
 				gcWaiter.L.Unlock()
+
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}
 
 			return ""
-		})
+		}
+
+		datadriven.RunTest(t, path, f)
 	})
 }
