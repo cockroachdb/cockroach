@@ -246,7 +246,7 @@ var (
 	// is attempted. This is the default behavior.
 	TestTenantProbabilisticOnly = DefaultTestTenantOptions{testBehavior: ttProb, allowAdditionalTenants: false}
 
-	// TestTenantProbabilisticOnly starts the test under a virtual
+	// TestTenantProbabilistic starts the test under a virtual
 	// cluster on a probabilistic basis. It allows the starting of
 	// additional virtual clusters.
 	TestTenantProbabilistic = DefaultTestTenantOptions{testBehavior: ttProb, allowAdditionalTenants: true}
