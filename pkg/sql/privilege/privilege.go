@@ -72,7 +72,12 @@ const (
 	REPLICATION              Kind = 29
 	MANAGETENANT             Kind = 30
 	VIEWSYSTEMTABLE          Kind = 31
+	largestKind                   = VIEWSYSTEMTABLE
 )
+
+var isDeprecatedKind = map[Kind]bool{
+	DEPRECATEDGRANT: true,
+}
 
 // Privilege represents a privilege parsed from an Access Privilege Inquiry
 // Function's privilege string argument.
@@ -137,7 +142,8 @@ var isDescriptorBacked = map[ObjectType]bool{
 
 // Predefined sets of privileges.
 var (
-	AllPrivileges         = List{ALL, CHANGEFEED, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, EXECUTE, BACKUP, RESTORE, EXTERNALIOIMPLICITACCESS, VIEWJOB}
+	// AllPrivileges is populated during init.
+	AllPrivileges         List
 	ReadData              = List{SELECT}
 	ReadWriteData         = List{SELECT, INSERT, DELETE, UPDATE}
 	ReadWriteSequenceData = List{SELECT, UPDATE, USAGE}
@@ -489,4 +495,13 @@ type Object interface {
 	// GetName returns the name of the object. For example, the name of a
 	// table, schema or database.
 	GetName() string
+}
+
+func init() {
+	for kind := ALL; kind <= largestKind; kind++ {
+		if isDeprecatedKind[kind] {
+			continue
+		}
+		AllPrivileges = append(AllPrivileges, kind)
+	}
 }
