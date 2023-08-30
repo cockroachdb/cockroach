@@ -21,16 +21,7 @@ package tests
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
-var activeRecordBlocklist = blocklist{
-	"ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_string_to_date":                                               "49329",
-	"ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_array":                                              "49329",
-	"ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol":                                             "49329",
-	"ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_using_datetime":                              "49329",
-	"ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_using_datetime_with_timestamptz_as_default":  "49329",
-	"ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_using_timestamp_with_timestamptz_as_default": "49329",
-	"ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_with_timestamptz_as_default":                 "49329",
-	"ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_with_timestamptz":                            "49329",
-}
+var activeRecordBlocklist = blocklist{}
 
 var activeRecordIgnoreList = blocklist{
 	"ActiveRecord::Coders::YAMLColumnTestWithSafeLoad#test_returns_string_unless_starts_with_dash":                    "flaky - sometimes attempts to call a method on nil",
