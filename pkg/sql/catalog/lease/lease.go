@@ -1421,17 +1421,23 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 		// doesn't implement AS OF SYSTEM TIME.
 
 		// Read orphaned leases.
-		// FIXME: HERE
 		const (
-			queryWithRegion = `
-SELECT "descID", version, "sessionID", crdb_region FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
+			queryWithSession = `SELECT "descID", version, "sessionID", crdb_region FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d`
+			queryWithRegion  = `
+SELECT "descID", version, expiration, crdb_region FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
 `
 			queryWithoutRegion = `
 SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
 `
 		)
-		query := queryWithRegion
+		query := queryWithSession
+		hasSession := true
+		if !m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseWillOnlyHaveSessions) {
+			hasSession = false
+			query = queryWithRegion
+		}
 		if !m.settings.Version.IsActive(ctx, clusterversion.V23_1_SystemRbrReadNew) {
+			hasSession = false
 			query = queryWithoutRegion
 		}
 		sqlQuery := fmt.Sprintf(query, timeThreshold, instanceID)
@@ -1456,10 +1462,18 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 			// Early exit?
 			row := rows[i]
 			wg.Add(1)
+			var session tree.DBytes
+			var expiration tree.DTimestamp
+			if hasSession {
+				session = tree.MustBeDBytes(row[2])
+			} else {
+				expiration = tree.MustBeDTimestamp(row[2])
+			}
 			lease := storedLease{
-				id:        descpb.ID(tree.MustBeDInt(row[0])),
-				version:   int(tree.MustBeDInt(row[1])),
-				sessionID: []byte(tree.MustBeDBytes(row[2])),
+				id:         descpb.ID(tree.MustBeDInt(row[0])),
+				version:    int(tree.MustBeDInt(row[1])),
+				sessionID:  []byte(session),
+				expiration: expiration,
 				// FIXME: SessionID
 			}
 			if len(row) == 4 {
