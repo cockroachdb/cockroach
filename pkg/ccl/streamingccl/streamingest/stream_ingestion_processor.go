@@ -10,7 +10,6 @@ package streamingest
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -330,11 +329,12 @@ func newStreamIngestionDataProcessor(
 			InputsToDrain: []execinfra.RowSource{},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				sip.close()
-				meta := sip.constructTracingAggregatorProducerMeta(ctx)
-				if meta == nil {
-					return nil
+				if sip.agg != nil {
+					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
+						sip.flowCtx.NodeID.SQLInstanceID(), sip.flowCtx.ID, sip.agg)
+					return []execinfrapb.ProducerMetadata{*meta}
 				}
-				return []execinfrapb.ProducerMetadata{*meta}
+				return nil
 			},
 		},
 	); err != nil {
@@ -342,36 +342,6 @@ func newStreamIngestionDataProcessor(
 	}
 
 	return sip, nil
-}
-
-func (sip *streamIngestionProcessor) constructTracingAggregatorProducerMeta(
-	ctx context.Context,
-) *execinfrapb.ProducerMetadata {
-	if sip.agg == nil {
-		return nil
-	}
-	aggEvents := &execinfrapb.TracingAggregatorEvents{
-		SQLInstanceID: sip.flowCtx.NodeID.SQLInstanceID(),
-		FlowID:        sip.flowCtx.ID,
-		Events:        make(map[string][]byte),
-	}
-	sip.agg.ForEachAggregatedEvent(func(name string, event bulkutil.TracingAggregatorEvent) {
-		msg, ok := event.(protoutil.Message)
-		if !ok {
-			// This should never happen but if it does skip the aggregated event.
-			log.Warningf(ctx, "event is not a protoutil.Message: %T", event)
-			return
-		}
-		data := make([]byte, msg.Size())
-		if _, err := msg.MarshalTo(data); err != nil {
-			// This should never happen but if it does skip the aggregated event.
-			log.Warningf(ctx, "failed to unmarshal aggregated event: %v", err.Error())
-			return
-		}
-		aggEvents.Events[name] = data
-	})
-
-	return &execinfrapb.ProducerMetadata{AggregatorEvents: aggEvents}
 }
 
 // Start launches a set of goroutines that read from the spans
@@ -397,14 +367,15 @@ func (sip *streamIngestionProcessor) constructTracingAggregatorProducerMeta(
 func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", sip.spec.JobID)
 	log.Infof(ctx, "starting ingest proc")
-	ctx = sip.StartInternal(ctx, streamIngestionProcessorName)
-
-	// Construct an Aggregator to aggregate and render AggregatorEvents emitted in
-	// sips' trace recording.
-	ctx, sip.agg = bulkutil.MakeTracingAggregatorWithSpan(ctx,
-		fmt.Sprintf("%s-aggregator", streamIngestionProcessorName), sip.EvalCtx.Tracer)
+	sip.agg = bulkutil.MakeTracingAggregator(ctx)
 	sip.aggTimer = timeutil.NewTimer()
-	sip.aggTimer.Reset(15 * time.Second)
+
+	// If the aggregator is nil, we do not want the timer to fire.
+	if sip.agg != nil {
+		sip.aggTimer.Reset(15 * time.Second)
+	}
+
+	ctx = sip.StartInternal(ctx, streamIngestionProcessorName, sip.agg)
 
 	sip.metrics = sip.flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics)
 
@@ -521,7 +492,8 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 	case <-sip.aggTimer.C:
 		sip.aggTimer.Read = true
 		sip.aggTimer.Reset(15 * time.Second)
-		return nil, sip.constructTracingAggregatorProducerMeta(sip.Ctx())
+		return nil, bulkutil.ConstructTracingAggregatorProducerMeta(sip.Ctx(),
+			sip.flowCtx.NodeID.SQLInstanceID(), sip.flowCtx.ID, sip.agg)
 	case err := <-sip.errCh:
 		sip.MoveToDraining(err)
 		return nil, sip.DrainHelper()
@@ -584,9 +556,6 @@ func (sip *streamIngestionProcessor) close() {
 	}
 	if sip.maxFlushRateTimer != nil {
 		sip.maxFlushRateTimer.Stop()
-	}
-	if sip.agg != nil {
-		sip.agg.Close()
 	}
 	sip.aggTimer.Stop()
 

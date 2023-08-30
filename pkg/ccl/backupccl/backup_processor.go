@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -173,11 +172,12 @@ func newBackupDataProcessor(
 			InputsToDrain: nil,
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				bp.close()
-				meta := bp.constructTracingAggregatorProducerMeta(ctx)
-				if meta == nil {
-					return nil
+				if bp.agg != nil {
+					meta := bulk.ConstructTracingAggregatorProducerMeta(ctx,
+						bp.flowCtx.NodeID.SQLInstanceID(), bp.flowCtx.ID, bp.agg)
+					return []execinfrapb.ProducerMetadata{*meta}
 				}
-				return []execinfrapb.ProducerMetadata{*meta}
+				return nil
 			},
 		}); err != nil {
 		return nil, err
@@ -188,15 +188,17 @@ func newBackupDataProcessor(
 // Start is part of the RowSource interface.
 func (bp *backupDataProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", bp.spec.JobID)
-	ctx = bp.StartInternal(ctx, backupProcessorName)
-	ctx, cancel := context.WithCancel(ctx)
 
 	// Construct an Aggregator to aggregate and render AggregatorEvents emitted in
 	// bps' trace recording.
-	ctx, bp.agg = bulk.MakeTracingAggregatorWithSpan(ctx,
-		fmt.Sprintf("%s-aggregator", backupProcessorName), bp.EvalCtx.Tracer)
+	bp.agg = bulk.MakeTracingAggregator(ctx)
 	bp.aggTimer = timeutil.NewTimer()
-	bp.aggTimer.Reset(15 * time.Second)
+	// If the aggregator is nil, we do not want the timer to fire.
+	if bp.agg != nil {
+		bp.aggTimer.Reset(15 * time.Second)
+	}
+	ctx = bp.StartInternal(ctx, backupProcessorName, bp.agg)
+	ctx, cancel := context.WithCancel(ctx)
 
 	bp.cancelAndWaitForWorker = func() {
 		cancel()
@@ -246,36 +248,6 @@ func (bp *backupDataProcessor) constructProgressProducerMeta(
 	return &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p}
 }
 
-func (bp *backupDataProcessor) constructTracingAggregatorProducerMeta(
-	ctx context.Context,
-) *execinfrapb.ProducerMetadata {
-	if bp.agg == nil {
-		return nil
-	}
-	aggEvents := &execinfrapb.TracingAggregatorEvents{
-		SQLInstanceID: bp.flowCtx.NodeID.SQLInstanceID(),
-		FlowID:        bp.flowCtx.ID,
-		Events:        make(map[string][]byte),
-	}
-	bp.agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
-		msg, ok := event.(protoutil.Message)
-		if !ok {
-			// This should never happen but if it does skip the aggregated event.
-			log.Warningf(ctx, "event is not a protoutil.Message: %T", event)
-			return
-		}
-		data := make([]byte, msg.Size())
-		if _, err := msg.MarshalTo(data); err != nil {
-			// This should never happen but if it does skip the aggregated event.
-			log.Warningf(ctx, "failed to unmarshal aggregated event: %v", err.Error())
-			return
-		}
-		aggEvents.Events[name] = data
-	})
-
-	return &execinfrapb.ProducerMetadata{AggregatorEvents: aggEvents}
-}
-
 // Next is part of the RowSource interface.
 func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if bp.State != execinfra.StateRunning {
@@ -292,16 +264,14 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 	case <-bp.aggTimer.C:
 		bp.aggTimer.Read = true
 		bp.aggTimer.Reset(15 * time.Second)
-		return nil, bp.constructTracingAggregatorProducerMeta(bp.Ctx())
+		return nil, bulk.ConstructTracingAggregatorProducerMeta(bp.Ctx(),
+			bp.flowCtx.NodeID.SQLInstanceID(), bp.flowCtx.ID, bp.agg)
 	}
 }
 
 func (bp *backupDataProcessor) close() {
 	bp.cancelAndWaitForWorker()
 	if bp.InternalClose() {
-		if bp.agg != nil {
-			bp.agg.Close()
-		}
 		bp.aggTimer.Stop()
 		bp.memAcc.Close(bp.Ctx())
 	}
