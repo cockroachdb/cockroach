@@ -629,7 +629,6 @@ func (s *eventStream) constructTracingAggregatorStats(ctx context.Context) error
 			}
 			if sp != nil {
 				s.mu.Lock()
-				s.mu.rangefeedEventReceiveWaitHist.Distribution()
 				s.mu.eventStreamStats.RangefeedEventWait = &HistogramData{
 					Min:   s.mu.rangefeedEventReceiveWaitHist.Min(),
 					P5:    s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(5),

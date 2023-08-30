@@ -34,7 +34,7 @@ var flushTracingAggregatorFrequency = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"jobs.aggregator_stats_flush_frequency",
 	"frequency at which the coordinator node processes and persists tracing aggregator stats to storage",
-	10*time.Minute,
+	30*time.Second,
 )
 
 // ConstructTracingAggregatorProducerMeta constructs a ProducerMetadata that

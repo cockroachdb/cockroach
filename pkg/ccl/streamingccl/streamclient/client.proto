@@ -1,0 +1,39 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+syntax = "proto3";
+package cockroach.ccl.streamingccl.streamclient;
+option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient";
+
+import "gogoproto/gogo.proto";
+
+message HistogramData {
+  option (gogoproto.goproto_stringer) = false;
+
+  int64 min = 1;
+  int64 p5 = 2;
+  int64 p50 = 3;
+  int64 p90 = 4;
+  int64 p99 = 5;
+  int64 p99_9 = 6;
+  int64 max = 7;
+  float mean = 8;
+  int64 count = 9;
+}
+
+message StreamSubscriptionStats {
+  option (gogoproto.goproto_stringer) = false;
+
+  int64 recvd_batches = 1;
+  int64 recvd_checkpoints = 2;
+  int64 stream_event_receive_wait = 3 [(gogoproto.casttype) = "time.Duration"];
+
+  HistogramData receive_wait = 4;
+}
+
+

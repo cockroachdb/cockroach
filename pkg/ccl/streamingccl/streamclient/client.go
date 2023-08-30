@@ -11,15 +11,21 @@ package streamclient
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Note on data APIs and datatypes.  As much as possible, the data that makes
@@ -267,6 +273,70 @@ func processOptions(opts []Option) *options {
 		o(ret)
 	}
 	return ret
+}
+
+func (h *HistogramData) String() string {
+	var b strings.Builder
+
+	b.WriteString(fmt.Sprintf("min: %.6f\n", float64(h.Min)/float64(time.Second)))
+	b.WriteString(fmt.Sprintf("max: %.6f\n", float64(h.Max)/float64(time.Second)))
+	b.WriteString(fmt.Sprintf("p5: %.6f\n", float64(h.P5)/float64(time.Second)))
+	b.WriteString(fmt.Sprintf("p50: %.6f\n", float64(h.P50)/float64(time.Second)))
+	b.WriteString(fmt.Sprintf("p90: %.6f\n", float64(h.P90)/float64(time.Second)))
+	b.WriteString(fmt.Sprintf("p99: %.6f\n", float64(h.P99)/float64(time.Second)))
+	b.WriteString(fmt.Sprintf("p99_9: %.6f\n", float64(h.P99_9)/float64(time.Second)))
+	b.WriteString(fmt.Sprintf("mean: %.6f\n", h.Mean/float32(time.Second)))
+	b.WriteString(fmt.Sprintf("count: %d\n", h.Count))
+
+	return b.String()
+}
+
+var _ bulk.TracingAggregatorEvent = &StreamSubscriptionStats{}
+var _ jobs.ProtobinExecutionDetailFile = &StreamSubscriptionStats{}
+
+func (m *StreamSubscriptionStats) Render() []attribute.KeyValue {
+	return nil
+}
+
+func (m *StreamSubscriptionStats) Identity() bulk.TracingAggregatorEvent {
+	return &StreamSubscriptionStats{}
+}
+
+func (m *StreamSubscriptionStats) Combine(other bulk.TracingAggregatorEvent) {
+	otherStats, ok := other.(*StreamSubscriptionStats)
+	if !ok {
+		panic(fmt.Sprintf("`other` is not of type StreamSubscriptionStats: %T", other))
+	}
+	m.RecvdBatches += otherStats.RecvdBatches
+	m.RecvdCheckpoints += otherStats.RecvdCheckpoints
+	m.StreamEventReceiveWait += otherStats.StreamEventReceiveWait
+	m.ReceiveWait = otherStats.ReceiveWait
+}
+
+func (m *StreamSubscriptionStats) ProtoName() string {
+	return proto.MessageName(m)
+}
+
+func (m *StreamSubscriptionStats) String() string {
+	totalStreamEventsRecvd := m.RecvdBatches + m.RecvdCheckpoints
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("recvd_batches: %d\n", m.RecvdBatches))
+	b.WriteString(fmt.Sprintf("recvd_checkpoints: %d\n", m.RecvdCheckpoints))
+	b.WriteString(fmt.Sprintf("recvd_total: %d\n", totalStreamEventsRecvd))
+
+	if totalStreamEventsRecvd > 0 {
+		waitPerEvent := m.StreamEventReceiveWait.Seconds() / float64(totalStreamEventsRecvd)
+		b.WriteString(fmt.Sprintf("average_wait_per_event: %.6f seconds per event\n", waitPerEvent))
+	}
+
+	b.WriteString(fmt.Sprintf("receive_wait: \n%s\n", m.ReceiveWait.String()))
+
+	return b.String()
+}
+
+func (m *StreamSubscriptionStats) ToText() []byte {
+	return []byte(m.String())
 }
 
 /*

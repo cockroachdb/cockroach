@@ -10,16 +10,33 @@ package streamclient
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/codahale/hdrhistogram"
 	"github.com/jackc/pgx/v4"
 )
 
 func subscribeInternal(
 	ctx context.Context, feed pgx.Rows, eventsChan chan streamingccl.Event, closeChan chan struct{},
 ) error {
+	ctx, sp := tracing.ChildSpan(ctx, "streamclient.subscribeInternal")
+	if sp != nil {
+		defer sp.Finish()
+	}
+
+	const (
+		sigFigs    = 1
+		minLatency = time.Microsecond
+		maxLatency = 100 * time.Second
+	)
+	receiveHistogram := hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	subscriptionStats := &StreamSubscriptionStats{}
 	// Get the next event from the cursor.
 	var bufferedEvent *streampb.StreamEvent
 	getNextEvent := func() (streamingccl.Event, error) {
@@ -27,11 +44,17 @@ func subscribeInternal(
 			return e, nil
 		}
 
+		beforeNext := timeutil.Now()
 		if !feed.Next() {
 			if err := feed.Err(); err != nil {
 				return nil, err
 			}
 			return nil, nil
+		}
+		timeSinceNext := timeutil.Since(beforeNext)
+		subscriptionStats.StreamEventReceiveWait += timeSinceNext
+		if err := receiveHistogram.RecordValue(timeSinceNext.Nanoseconds()); err != nil {
+			log.Warningf(ctx, "failed to record value in histogram: %v", err)
 		}
 		var data []byte
 		if err := feed.Scan(&data); err != nil {
@@ -41,14 +64,38 @@ func subscribeInternal(
 		if err := protoutil.Unmarshal(data, &streamEvent); err != nil {
 			return nil, err
 		}
+		if streamEvent.Batch != nil {
+			subscriptionStats.RecvdBatches++
+		} else {
+			subscriptionStats.RecvdCheckpoints++
+		}
 		bufferedEvent = &streamEvent
 		return parseEvent(bufferedEvent), nil
 	}
 
+	var lastAggregatorStatsEmitted time.Time
 	for {
 		event, err := getNextEvent()
 		if err != nil {
 			return err
+		}
+		if timeutil.Since(lastAggregatorStatsEmitted) > 10*time.Second {
+			lastAggregatorStatsEmitted = timeutil.Now()
+			if sp != nil {
+				subscriptionStats.ReceiveWait = &HistogramData{
+					Min:   receiveHistogram.Min(),
+					P5:    receiveHistogram.ValueAtQuantile(5),
+					P50:   receiveHistogram.ValueAtQuantile(50),
+					P90:   receiveHistogram.ValueAtQuantile(90),
+					P99:   receiveHistogram.ValueAtQuantile(99),
+					P99_9: receiveHistogram.ValueAtQuantile(99.9),
+					Max:   receiveHistogram.Max(),
+					Mean:  float32(receiveHistogram.Mean()),
+					Count: receiveHistogram.TotalCount(),
+				}
+				sp.RecordStructured(subscriptionStats)
+				subscriptionStats = &StreamSubscriptionStats{}
+			}
 		}
 		select {
 		case eventsChan <- event:
