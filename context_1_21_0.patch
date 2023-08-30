@@ -1,0 +1,69 @@
+diff --color -ru /opt/homebrew/Cellar/go/1.21.0/libexec/src/context/context.go ./context/context.go
+--- /opt/homebrew/Cellar/go/1.21.0/libexec/src/context/context.go	2023-08-30 12:04:49
++++ ./context/context.go	2023-08-30 16:08:48
+@@ -472,17 +472,7 @@
+ 
+ 	if p, ok := parentCancelCtx(parent); ok {
+ 		// parent is a *cancelCtx, or derives from one.
+-		p.mu.Lock()
+-		if p.err != nil {
+-			// parent has already been canceled
+-			child.cancel(false, p.err, p.cause)
+-		} else {
+-			if p.children == nil {
+-				p.children = make(map[canceler]struct{})
+-			}
+-			p.children[child] = struct{}{}
+-		}
+-		p.mu.Unlock()
++		p.addChild(child)
+ 		return
+ 	}
+ 
+@@ -510,6 +500,22 @@
+ 	}()
+ }
+ 
++// addChild adds child to the list of children.
++// NB: CockroachDB runtime patch.
++func (c *cancelCtx) addChild(child canceler) {
++	c.mu.Lock()
++	if c.err != nil {
++		// parent has already been canceled
++		child.cancel(false, c.err, c.cause)
++	} else {
++		if c.children == nil {
++			c.children = make(map[canceler]struct{})
++		}
++		c.children[child] = struct{}{}
++	}
++	c.mu.Unlock()
++}
++
+ type stringer interface {
+ 	String() string
+ }
+@@ -782,4 +788,21 @@
+ 			return c.Value(key)
+ 		}
+ 	}
+-}
++}
++
++// CockroachDB runtime patch.
++// PropagateCancel propagates cancellation signal from parent to child,
++// provided parent is one of the cancelCtx implementations.
++// Returns boolean indicating success.
++func PropagateCancel(parent Context, child any) bool {
++	p, ok := parentCancelCtx(parent)
++	if !ok {
++		return false
++	}
++	c, ok := child.(canceler)
++	if !ok {
++		return false
++	}
++	p.addChild(c)
++	return true
++}
+\ No newline at end of file

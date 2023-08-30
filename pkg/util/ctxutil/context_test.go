@@ -15,14 +15,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestWhenDone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	parent, cancelParent := context.WithCancel(context.Background())
 	done := make(chan struct{})
 
-	require.True(t, WhenDone(parent, func(err error) { close(done) }))
+	require.True(t, WhenDone(parent, func() { close(done) }))
 	cancelParent()
 	select {
 	case <-done:
@@ -32,6 +35,8 @@ func TestWhenDone(t *testing.T) {
 }
 
 func TestCanPropagateCancellation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	t.Run("withCancel", func(t *testing.T) {
 		parent, cancelParent := context.WithCancel(context.Background())
 		defer cancelParent()

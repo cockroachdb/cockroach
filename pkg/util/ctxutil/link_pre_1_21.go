@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-//go:build !go1.20
+//go:build !go1.21
 
 package ctxutil
 
@@ -20,19 +20,5 @@ import (
 // Gross hack to access internal context function.  Sometimes, go makes things
 // SO much more difficult than it needs to.
 
-// A canceler is a context type that can be canceled directly. The
-// implementations are *cancelCtx and *timerCtx.
-type canceler interface {
-	cancel(removeFromParent bool, err error)
-	Done() <-chan struct{}
-}
-
 //go:linkname context_propagateCancel context.propagateCancel
 func context_propagateCancel(parent context.Context, child canceler)
-
-//go:linkname context_removeChild context.removeChild
-func context_removeChild(parent context.Context, child canceler)
-
-func (c *whenDone) cancel(removeFromParent bool, err error) {
-	c.cancelWithCause(removeFromParent, err, nil)
-}
