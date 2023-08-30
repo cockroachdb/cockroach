@@ -1990,6 +1990,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 	// operates between keys "a" and "z" and expects a single split point at "b".
 	// See the call to setupMultipleRanges below.
 	storeKnobs.DisableLoadBasedSplitting = true
+	// Similarly, disable the merge queue to avoid unexpected merges.
+	storeKnobs.DisableMergeQueue = true
 
 	var refreshSpansCondenseFilter atomic.Value
 	s, _, _ := serverutils.StartServer(t,
