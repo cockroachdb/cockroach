@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -27,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -87,7 +90,7 @@ func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []backuppb.Back
 
 		for f := range backups[i].Files {
 			start := f*5 + r.Intn(4)
-			end := start + 1 + r.Intn(25)
+			end := start + r.Intn(25) // Intentionally testing files with zero size spans.
 			k := encoding.EncodeVarintAscending(backups[i].Spans[f*spans/files].Key, 1)
 			k = k[:len(k):len(k)]
 			backups[i].Files[f].Span.Key = encoding.EncodeVarintAscending(k, int64(start))
@@ -165,6 +168,11 @@ func checkRestoreCovering(
 					// Since file spans are end key inclusive, we have to check
 					// if the end key is in the covering.
 					requiredKey[f.Path] = f.Span.EndKey
+
+					if f.Span.EndKey.Compare(last) > 0 {
+						last = f.Span.EndKey
+						expectedPartitions++
+					}
 				}
 			}
 		}
@@ -229,7 +237,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 	}
 
 	// Setup and test the example in the comment of makeSimpleImportSpans.
-	spans := []roachpb.Span{sp("a", "f"), sp("f", "i"), sp("l", "m")}
+	spans := []roachpb.Span{sp("a", "f"), sp("f", "i"), sp("l", "p")}
 	backups := []backuppb.BackupManifest{
 		{Files: []backuppb.BackupManifest_File{f("a", "c", "1"), f("c", "e", "2"), f("h", "i", "3")}},
 		{Files: []backuppb.BackupManifest_File{f("b", "d", "4"), f("g", "i", "5")}},
@@ -252,18 +260,18 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 
 	cover := makeSimpleImportSpans(spans, backups, nil, emptySpanFrontier, nil, noSpanTargetSize)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
-		{Span: sp("a", "c\x00"), Files: paths("1", "2", "4", "6")},
-		{Span: sp("c\x00", "e\x00"), Files: paths("2", "4", "6")},
-		{Span: sp("e\x00", "f"), Files: paths("6")},
+		{Span: sp("a", "c"), Files: paths("1", "4", "6")},
+		{Span: sp("c", "e"), Files: paths("1", "2", "4", "6")},
+		{Span: sp("e", "f"), Files: paths("2", "6")},
 		{Span: sp("f", "i"), Files: paths("3", "5", "6", "8")},
-		{Span: sp("l", "m"), Files: paths("9")},
+		{Span: sp("l", "p"), Files: paths("9")},
 	}, cover)
 
 	coverSized := makeSimpleImportSpans(spans, backups, nil, emptySpanFrontier, nil, 2<<20)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: sp("a", "f"), Files: paths("1", "2", "4", "6")},
 		{Span: sp("f", "i"), Files: paths("3", "5", "6", "8")},
-		{Span: sp("l", "m"), Files: paths("9")},
+		{Span: sp("l", "p"), Files: paths("9")},
 	}, coverSized)
 
 	// check that introduced spans are properly elided
@@ -276,7 +284,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: sp("a", "f"), Files: paths("6")},
 		{Span: sp("f", "i"), Files: paths("3", "5", "6", "8")},
-		{Span: sp("l", "m"), Files: paths("9")},
+		{Span: sp("l", "p"), Files: paths("9")},
 	}, coverIntroduced)
 
 }
@@ -523,4 +531,159 @@ func TestRestoreEntryCover(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestRestoreEntryCover tests that the restore spans are correctly created
+// in the presence of files that have zero sized spans.
+func TestRestoreEntryCoverZeroSizeFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
+	defer cleanupFn()
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	c := makeCoverUtils(ctx, t, &execCfg)
+
+	emptySpanFrontier, err := spanUtils.MakeFrontier(roachpb.Span{})
+	require.NoError(t, err)
+
+	type simpleRestoreSpanEntry struct {
+		span  roachpb.Span
+		paths []string
+	}
+
+	type testCase struct {
+		name          string
+		requiredSpans []roachpb.Span
+		backupSpans   []roachpb.Spans
+		expectedCover []simpleRestoreSpanEntry
+	}
+
+	for _, tt := range []testCase{
+		{
+			name:          "file at start of span",
+			requiredSpans: []roachpb.Span{c.sp("a", "b")},
+			backupSpans: []roachpb.Spans{
+				{c.sp("a", "a")},
+			},
+			expectedCover: []simpleRestoreSpanEntry{
+				{span: c.sp("a", "b"), paths: []string{"1"}},
+			},
+		},
+		{
+			name:          "file at end of span",
+			requiredSpans: []roachpb.Span{c.sp("a", "b")},
+			backupSpans: []roachpb.Spans{
+				{c.sp("b", "b")},
+			},
+			expectedCover: []simpleRestoreSpanEntry{},
+		},
+		{
+			name:          "file at middle of span",
+			requiredSpans: []roachpb.Span{c.sp("a", "c")},
+			backupSpans: []roachpb.Spans{
+				{c.sp("b", "b")},
+			},
+			expectedCover: []simpleRestoreSpanEntry{
+				{span: c.sp("a", "c"), paths: []string{"1"}},
+			},
+		},
+		{
+			name:          "sz0 file at end of prev file",
+			requiredSpans: []roachpb.Span{c.sp("a", "f")},
+			backupSpans: []roachpb.Spans{
+				{c.sp("a", "b"), c.sp("b", "b"), c.sp("b", "c")},
+			},
+			expectedCover: []simpleRestoreSpanEntry{
+				{span: c.sp("a", "b"), paths: []string{"1"}},
+				{span: c.sp("b", "f"), paths: []string{"1", "2", "3"}},
+			},
+		},
+		{
+			name: "sz0 file contained by prev file",
+			requiredSpans: []roachpb.Span{
+				c.sp("a", "f"),
+			},
+			backupSpans: []roachpb.Spans{
+				{c.sp("a", "c"), c.sp("b", "b"), c.sp("b", "d")},
+			},
+			expectedCover: []simpleRestoreSpanEntry{
+				{span: c.sp("a", "c"), paths: []string{"1", "2", "3"}},
+				{span: c.sp("c", "f"), paths: []string{"1", "3"}},
+			},
+		},
+		{
+			name: "sz0 file contained by following file",
+			requiredSpans: []roachpb.Span{
+				c.sp("a", "f"),
+			},
+			backupSpans: []roachpb.Spans{
+				{c.sp("b", "b"), c.sp("b", "c"), c.sp("b", "d")},
+			},
+			expectedCover: []simpleRestoreSpanEntry{
+				{span: c.sp("a", "b"), paths: []string{"1"}},
+				{span: c.sp("b", "c"), paths: []string{"1", "2", "3"}},
+				{span: c.sp("c", "f"), paths: []string{"2", "3"}},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c := makeCoverUtils(ctx, t, &execCfg)
+			backups := c.makeManifests(tt.backupSpans)
+
+			cover := makeSimpleImportSpans(tt.requiredSpans, backups, nil, emptySpanFrontier, nil, noSpanTargetSize)
+
+			simpleCover := make([]simpleRestoreSpanEntry, len(cover))
+			for i, entry := range cover {
+				simpleCover[i] = simpleRestoreSpanEntry{
+					span: entry.Span,
+				}
+				for _, file := range entry.Files {
+					simpleCover[i].paths = append(simpleCover[i].paths, file.Path)
+				}
+			}
+
+			require.Equal(t, tt.expectedCover, simpleCover)
+		})
+	}
+}
+
+type coverutils struct {
+	dir cloudpb.ExternalStorage
+}
+
+func makeCoverUtils(ctx context.Context, t *testing.T, execCfg *sql.ExecutorConfig) coverutils {
+	es, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx,
+		fmt.Sprintf("nodelocal://1/mock%s", timeutil.Now().String()), username.RootUserName())
+	require.NoError(t, err)
+	dir := es.Conf()
+	return coverutils{
+		dir: dir,
+	}
+}
+
+func (c coverutils) sp(start, end string) roachpb.Span {
+	return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
+}
+
+func (c coverutils) makeManifests(manifests []roachpb.Spans) []backuppb.BackupManifest {
+	ms := make([]backuppb.BackupManifest, len(manifests))
+	fileCount := 1
+	for i, manifest := range manifests {
+		ms[i].StartTime = hlc.Timestamp{WallTime: int64(i)}
+		ms[i].EndTime = hlc.Timestamp{WallTime: int64(i + 1)}
+		ms[i].Files = make([]backuppb.BackupManifest_File, len(manifest))
+		ms[i].Dir = c.dir
+		for j, sp := range manifest {
+			ms[i].Files[j] = backuppb.BackupManifest_File{
+				Span: sp,
+				Path: fmt.Sprintf("%d", fileCount),
+
+				// Pretend every span has 1MB.
+				EntryCounts: roachpb.RowCount{DataSize: 1 << 20},
+			}
+			fileCount++
+		}
+	}
+	return ms
 }
