@@ -1796,7 +1796,11 @@ type StreamingTestingKnobs struct {
 
 	MockSpanConfigTableName *tree.TableName
 
+	BeforeIngestSpanConfigFlush func(ctx context.Context, bufferedUpdates []spanconfig.Record, bufferedDeletes []spanconfig.Target)
+
 	AfterResumerJobLoad func(err error) error
+
+	SkipSpanConfigReplication bool
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}

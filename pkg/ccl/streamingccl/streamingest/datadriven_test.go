@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -195,6 +198,9 @@ func TestDataDriven(t *testing.T) {
 			case "query-sql":
 				var as string
 				d.ScanArgs(t, "as", &as)
+				if d.HasArg("retry") {
+					ds.queryAsWithRetry(t, as, d.Input, d.Expected)
+				}
 				return ds.queryAs(t, as, d.Input)
 
 			case "compare-replication-results":
@@ -291,6 +297,44 @@ func TestDataDriven(t *testing.T) {
 					}
 				}
 				return ""
+			case "list-ttls":
+				var (
+					as string
+				)
+				d.ScanArgs(t, "as", &as)
+				var codec keys.SQLCodec
+				switch {
+				case strings.HasPrefix(as, "source"):
+					codec = keys.MakeSQLCodec(ds.replicationClusters.Args.SrcTenantID)
+				case strings.HasPrefix(as, "destination"):
+					codec = keys.MakeSQLCodec(ds.replicationClusters.Args.DestTenantID)
+				default:
+					t.Fatalf("%s does not begin with 'source' or 'destination'", as)
+				}
+
+				getTableID := func(arg string) uint32 {
+					var tableID string
+					d.ScanArgs(t, arg, &tableID)
+					varValue, ok := ds.vars[tableID]
+					if ok {
+						tableID = varValue
+					}
+					parsedID, err := strconv.Atoi(tableID)
+					if err != nil {
+						t.Fatalf("could not convert table ID %s", tableID)
+					}
+					return uint32(parsedID)
+				}
+
+				startKey := codec.TablePrefix(getTableID("min_table_id"))
+				endKey := codec.TablePrefix(getTableID("max_table_id"))
+
+				listQuery := fmt.Sprintf(
+					`SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)->'gcPolicy'->'ttlSeconds'
+FROM system.span_configurations
+WHERE start_key >= '\x%x' AND start_key <= '\x%x'
+ORDER BY start_key;`, startKey, endKey)
+				return ds.queryAsWithRetry(t, as, listQuery, d.Expected)
 
 			default:
 				t.Fatalf("unsupported instruction: %s", d.Cmd)
@@ -339,6 +383,18 @@ func (d *datadrivenTestState) queryAs(t *testing.T, as, query string) string {
 
 	output, err := sqlutils.RowsToDataDrivenOutput(rows)
 	require.NoError(t, err)
+	return output
+}
+
+func (d *datadrivenTestState) queryAsWithRetry(t *testing.T, as, query, expected string) string {
+	var output string
+	testutils.SucceedsSoon(t, func() error {
+		output = d.queryAs(t, as, query)
+		if output != expected {
+			return errors.Newf("latest output: %s\n expected: %s", output, expected)
+		}
+		return nil
+	})
 	return output
 }
 
