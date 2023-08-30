@@ -14,6 +14,7 @@ package lease
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"sync"
@@ -754,6 +755,9 @@ type Manager struct {
 	ambientCtx   log.AmbientContext
 	stopper      *stop.Stopper
 	sem          *quotapool.IntPool
+
+	// forceRefresh used to for a refresh of all descriptors
+	forceRefresh chan struct{}
 }
 
 const leaseConcurrencyLimit = 5
@@ -803,6 +807,7 @@ func NewLeaseManager(
 		ambientCtx:       ambientCtx,
 		stopper:          stopper,
 		sem:              quotapool.NewIntPool("lease manager", leaseConcurrencyLimit),
+		forceRefresh:     make(chan struct{}),
 	}
 	lm.storage.regionPrefix = &atomic.Value{}
 	lm.storage.regionPrefix.Store(enum.One)
@@ -1221,6 +1226,12 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 					evFunc(desc.DescriptorProto())
 				}
 
+				// Lease table updates will attempt to force a refresh
+				// of all leases.
+				if desc.GetID() == keys.LeaseTableID {
+					m.forceRefresh <- struct{}{}
+				}
+
 			case <-s.ShouldQuiesce():
 				return
 			}
@@ -1299,22 +1310,22 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 			case <-m.stopper.ShouldQuiesce():
 				return
 
+			case <-m.forceRefresh:
+				// If we are migrating over to session based leases are going to
+				// only do to one last refresh for expire.
+				if m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseToSessionCreation) &&
+					!m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseWillOnlyHaveSessions) {
+					if !sessionMigrationCompleted {
+						m.refreshSomeLeases(ctx, true /* ignore limit */)
+					}
+					sessionMigrationCompleted = true
+				}
 			case <-refreshTimer.C:
 				refreshTimer.Read = true
 				refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
-
 				// Enable lease renewals until we only have session based leases.
 				if !m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseWillOnlyHaveSessions) {
-					refreshLeases := true
-					// If we are migrating over to session based leases are going to
-					// only do to one last refresh for expire.
-					if m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseToSessionCreation) {
-						refreshLeases = !sessionMigrationCompleted
-						sessionMigrationCompleted = true
-					}
-					if refreshLeases {
-						m.refreshSomeLeases(ctx)
-					}
+					m.refreshSomeLeases(ctx, false /* ignore limit */)
 				}
 
 			}
@@ -1323,10 +1334,13 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 }
 
 // Refresh some of the current leases.
-func (m *Manager) refreshSomeLeases(ctx context.Context) {
+func (m *Manager) refreshSomeLeases(ctx context.Context, ignoreLimit bool) {
 	limit := leaseRefreshLimit.Get(&m.storage.settings.SV)
 	if limit <= 0 {
 		return
+	}
+	if ignoreLimit {
+		limit = math.MaxInt32
 	}
 	// Construct a list of descriptors needing their leases to be reacquired.
 	ids := func() []descpb.ID {

@@ -31,6 +31,17 @@ func leaseWaitForSessionIDAdoption(
 	// Wait for all leases to be expired and after this timestamp, which will
 	// guarantee an entry exists in the *new* index with session ID.
 	now := d.DB.KV().Clock().Now().GoTime()
+	// Before waiting signal we want to force a refresh.
+	if err := d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		leaseDesc, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, keys.LeaseTableID)
+		if err != nil {
+			return err
+		}
+		// Only bump the version number.
+		return txn.Descriptors().WriteDesc(ctx, false /*kv trace*/, leaseDesc, txn.KV())
+	}); err != nil {
+		return err
+	}
 	var rowCount int64 = 1
 	for r := retry.Start(retry.Options{MaxBackoff: time.Minute}); r.Next() && rowCount > 0; {
 		if err := d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -38,7 +49,7 @@ func leaseWaitForSessionIDAdoption(
 			// FIXME: Speed this up by using a settings hook
 			res, err := txn.QueryRow(ctx, "count-leases",
 				txn.KV(),
-				`SELECT count(*) FROM system.lease WHERE  expiration > current_timestamp AND expiration < $1 + '5 minutes'`,
+				`SELECT count(*) FROM system.lease WHERE  expiration > current_timestamp AND expiration < $1 + '4 minutes'`,
 				now)
 
 			if err != nil {
