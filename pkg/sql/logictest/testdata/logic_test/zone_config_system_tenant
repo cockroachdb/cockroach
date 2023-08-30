@@ -188,3 +188,10 @@ ORDER BY start_key
 90001
 1
 1
+
+subtest transactional_schemachanges
+
+statement ok
+ALTER RANGE meta CONFIGURE ZONE DISCARD; ALTER RANGE meta CONFIGURE ZONE DISCARD;
+
+subtest end
