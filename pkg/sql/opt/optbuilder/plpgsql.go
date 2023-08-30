@@ -152,7 +152,14 @@ func (b *plpgsqlBuilder) init(
 	b.ob = ob
 	b.colRefs = colRefs
 	b.params = params
-	b.decls = block.Decls
+	for i := range block.Decls {
+		switch dec := block.Decls[i].(type) {
+		case *ast.Declaration:
+			b.decls = append(b.decls, *dec)
+		case *ast.CursorDeclaration:
+			panic(unimplemented.New("bound cursors", "bound cursor declarations are not yet supported."))
+		}
+	}
 	b.returnType = returnType
 	b.varTypes = make(map[tree.Name]*types.T)
 	for _, dec := range b.decls {

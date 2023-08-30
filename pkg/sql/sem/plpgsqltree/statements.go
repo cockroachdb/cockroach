@@ -12,6 +12,7 @@ package plpgsqltree
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -57,7 +58,7 @@ func (s *StatementImpl) plpgsqlStmt() {}
 type Block struct {
 	StatementImpl
 	Label      string
-	Decls      []Declaration
+	Decls      []Statement
 	Body       []Statement
 	Exceptions []Exception
 }
@@ -131,6 +132,34 @@ func (s *Declaration) PlpgSQLStatementTag() string {
 }
 
 func (s *Declaration) WalkStmt(visitor StatementVisitor) {
+	visitor.Visit(s)
+}
+
+type CursorDeclaration struct {
+	StatementImpl
+	Name   Variable
+	Scroll tree.CursorScrollOption
+	Query  tree.Statement
+}
+
+func (s *CursorDeclaration) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString(string(s.Name))
+	switch s.Scroll {
+	case tree.Scroll:
+		ctx.WriteString(" SCROLL")
+	case tree.NoScroll:
+		ctx.WriteString(" NO SCROLL")
+	}
+	ctx.WriteString(" CURSOR FOR ")
+	s.Query.Format(ctx)
+	ctx.WriteString(";\n")
+}
+
+func (s *CursorDeclaration) PlpgSQLStatementTag() string {
+	return "decl_cursor_stmt"
+}
+
+func (s *CursorDeclaration) WalkStmt(visitor StatementVisitor) {
 	visitor.Visit(s)
 }
 
@@ -850,50 +879,25 @@ func (s *GetDiagnostics) WalkStmt(visitor StatementVisitor) {
 // stmt_open
 type Open struct {
 	StatementImpl
-	CurVar        int // TODO(drewk): this could just a Variable
-	CursorOptions uint32
-	// TODO(jane): This is temporary and we should remove it and use CurVar.
-	CursorName       string
-	WithExplicitExpr bool
-	// TODO(jane): Should be Expr
-	ArgQuery string
-	// TODO(jane): Should be Expr
-	Query string
-	// TODO(jane): Should be Expr
-	DynamicQuery string
-	// TODO(jane): Should be []Expr
-	Params []string
+	CurVar Variable
+	Scroll tree.CursorScrollOption
+	Query  tree.Statement
 }
 
 func (s *Open) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(
-		fmt.Sprintf(
-			"OPEN %s ",
-			s.CursorName,
-		))
-
-	opts := OptListFromBitField(s.CursorOptions)
-	for _, opt := range opts {
-		if opt.String() != "" {
-			ctx.WriteString(fmt.Sprintf("%s ", opt.String()))
-		}
+	ctx.WriteString("OPEN ")
+	s.CurVar.Format(ctx)
+	switch s.Scroll {
+	case tree.Scroll:
+		ctx.WriteString(" SCROLL")
+	case tree.NoScroll:
+		ctx.WriteString(" NO SCROLL")
 	}
-	if !s.WithExplicitExpr {
-		ctx.WriteString("FOR ")
-		if s.DynamicQuery != "" {
-			// TODO(drewk): Make sure placeholders are properly printed
-			ctx.WriteString(fmt.Sprintf("EXECUTE %s ", s.DynamicQuery))
-			if len(s.Params) != 0 {
-				// TODO(drewk): Dont print instances of multiple params with brackets `[...]`
-				ctx.WriteString(fmt.Sprintf("USING %s", s.Params))
-			}
-		} else {
-			ctx.WriteString(s.Query)
-		}
-	} else {
-		ctx.WriteString(s.ArgQuery)
+	if s.Query != nil {
+		ctx.WriteString(" FOR ")
+		s.Query.Format(ctx)
 	}
-	ctx.WriteString("\n")
+	ctx.WriteString(";\n")
 }
 
 func (s *Open) PlpgSQLStatementTag() string {
@@ -908,16 +912,37 @@ func (s *Open) WalkStmt(visitor StatementVisitor) {
 // stmt_move (where IsMove = true)
 type Fetch struct {
 	StatementImpl
-	Target           Variable
-	CurVar           int // TODO(drewk): this could just a Variable
-	Direction        FetchDirection
-	HowMany          int64
-	Expr             Expr
-	IsMove           bool
-	ReturnsMultiRows bool
+	Cursor tree.CursorStmt
+	Target []Variable
+	IsMove bool
 }
 
 func (s *Fetch) Format(ctx *tree.FmtCtx) {
+	if s.IsMove {
+		ctx.WriteString("MOVE ")
+	} else {
+		ctx.WriteString("FETCH ")
+	}
+	if dir := s.Cursor.FetchType.String(); dir != "" {
+		ctx.WriteString(dir)
+		ctx.WriteString(" ")
+	}
+	if s.Cursor.FetchType.HasCount() {
+		ctx.WriteString(strconv.Itoa(int(s.Cursor.Count)))
+		ctx.WriteString(" ")
+	}
+	ctx.WriteString("FROM ")
+	s.Cursor.Name.Format(ctx)
+	if s.Target != nil {
+		ctx.WriteString(" INTO ")
+		for i := range s.Target {
+			if i > 0 {
+				ctx.WriteString(", ")
+			}
+			s.Target[i].Format(ctx)
+		}
+	}
+	ctx.WriteString(";\n")
 }
 
 func (s *Fetch) PlpgSQLStatementTag() string {
@@ -934,13 +959,13 @@ func (s *Fetch) WalkStmt(visitor StatementVisitor) {
 // stmt_close
 type Close struct {
 	StatementImpl
-	CurVar int // TODO(drewk): this could just a Variable
+	CurVar Variable
 }
 
 func (s *Close) Format(ctx *tree.FmtCtx) {
-	// TODO(drewk): Pretty- Print the cursor identifier
-	ctx.WriteString("CLOSE a cursor\n")
-
+	ctx.WriteString("CLOSE ")
+	s.CurVar.Format(ctx)
+	ctx.WriteString(";\n")
 }
 
 func (s *Close) PlpgSQLStatementTag() string {
