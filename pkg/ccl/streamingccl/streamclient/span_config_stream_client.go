@@ -87,7 +87,6 @@ func (p *spanConfigStreamClient) Complete(
 }
 
 func (p *spanConfigStreamClient) Close(ctx context.Context) error {
-	// Close all the active subscriptions and disallow more usage.
 	close(p.subscription.closeChan)
 	return p.srcConn.Close(ctx)
 }
@@ -136,11 +135,23 @@ func (p *spanConfigStreamSubscription) Subscribe(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	rows, err := srcConn.Query(ctx, `SELECT crdb_internal.setup_span_configs_stream($1)`, p.tenantName)
+
+	cancelCtx, cancelFunc := context.WithCancel(ctx)
+	defer cancelFunc()
+	rows, err := srcConn.Query(cancelCtx, `SELECT crdb_internal.setup_span_configs_stream($1)`, p.tenantName)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	// For close to return, the ctx passed to the query above must be cancelled.
+	//
+	// TODO (msbutler): clean up how the implementations of
+	// subscription.Subscribe() return. It seems both the spanConfig and
+	// partitioned implementations require their contexts to be cancelled before
+	// returning, which is quite unfortunate.
+	defer func() {
+		cancelFunc()
+		rows.Close()
+	}()
 
 	p.err = subscribeInternal(ctx, rows, p.eventsChan, p.closeChan)
 	return p.err
