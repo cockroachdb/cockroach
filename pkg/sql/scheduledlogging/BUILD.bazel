@@ -37,6 +37,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
