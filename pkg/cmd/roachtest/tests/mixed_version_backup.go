@@ -89,11 +89,6 @@ var (
 	v231 = version.MustParse("v23.1.0")
 	v222 = version.MustParse("v22.2.0")
 
-	// minSupportedRestoreVersion is the version before which we do not
-	// attempt to restore backups taken in mixed-version as they might
-	// fail for known reasons. For more details, see #105900.
-	minSupportedRestoreVersion = version.MustParse("v22.2.9")
-
 	// systemTablesInFullClusterBackup includes all system tables that
 	// are included as part of a full cluster backup. It should include
 	// every table that opts-in to cluster backup (see `system_schema.go`).
@@ -1912,19 +1907,6 @@ func (mvb *mixedVersionBackup) verifyBackupCollection(
 	v := clusterupgrade.VersionMsg(version)
 	l.Printf("%s: verifying %s", v, collection.name)
 
-	// If we are attempting to verify a restore in mixed-version or in a
-	// predecessor version, we ensure that the predecessor version is at
-	// least `minSupportedRestoreVersion` before proceeding.
-	//
-	// Note that `version` will only be `clusterupgrade.MainVersion` at
-	// the end of the upgrade, when we are verifying all backups on a
-	// cluster comprised only of nodes running the current version.
-	lowestV := h.LowestBinaryVersion()
-	if version != clusterupgrade.MainVersion && !lowestV.AtLeast(minSupportedRestoreVersion) {
-		l.Printf("skipping restore because %s < %s", lowestV, minSupportedRestoreVersion)
-		return nil
-	}
-
 	// Defaults for the database where the backup will be restored,
 	// along with the expected names of the tables after restore.
 	restoreDB := fmt.Sprintf(
@@ -2149,6 +2131,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// that might exist in the cluster by the time the upgrade is
 				// attempted.
 				mixedversion.UpgradeTimeout(30*time.Minute),
+				mixedversion.AlwaysUseLatestPredecessors(),
 			)
 			testRNG := mvt.RNG()
 
