@@ -5204,6 +5204,46 @@ Support status: [reserved](#support-status)
 
 
 
+## RequestJobProfilerExecutionDetails
+
+`GET /_status/request_job_profiler_execution_details/{job_id}`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| job_id | [int64](#cockroach.server.serverpb.RequestJobProfilerExecutionDetailsRequest-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## GetJobProfilerExecutionDetails
 
 `GET /_status/job_profiler_execution_details/{job_id}`

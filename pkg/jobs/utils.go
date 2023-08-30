@@ -156,6 +156,24 @@ func JobExists(
 	return row != nil, nil
 }
 
+// JobCoordinatorID returns the coordinator node ID of the job.
+func JobCoordinatorID(
+	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, ex isql.Executor,
+) (int32, error) {
+	row, err := ex.QueryRow(ctx, "fetch-job-coordinator", txn, `SELECT claim_instance_id FROM system.jobs WHERE id = $1`, jobID)
+	if err != nil {
+		return 0, err
+	}
+	if row == nil {
+		return 0, errors.Errorf("coordinator not found for job %d", jobID)
+	}
+	coordinatorID, ok := tree.AsDInt(row[0])
+	if !ok {
+		return 0, errors.AssertionFailedf("expected coordinator ID to be an int, got %T", row[0])
+	}
+	return int32(coordinatorID), nil
+}
+
 // isJobTypeColumnDoesNotExistError returns true if the error is of the form
 // `column "job_type" does not exist`.
 func isJobTypeColumnDoesNotExistError(err error) bool {

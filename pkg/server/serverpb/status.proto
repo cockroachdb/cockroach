@@ -2076,6 +2076,12 @@ message NetworkConnectivityResponse {
   ];
 }
 
+message RequestJobProfilerExecutionDetailsRequest {
+  int64 job_id = 1;
+}
+
+message RequestJobProfilerExecutionDetailsResponse {}
+
  message GetJobProfilerExecutionDetailRequest {
    int64 job_id = 1;
    string filename = 2;
@@ -2560,6 +2566,12 @@ service Status {
   rpc NetworkConnectivity(NetworkConnectivityRequest) returns (NetworkConnectivityResponse) {
     option (google.api.http) = {
       get: "/_status/connectivity"
+    };
+  }
+
+  rpc RequestJobProfilerExecutionDetails(RequestJobProfilerExecutionDetailsRequest) returns(RequestJobProfilerExecutionDetailsResponse) {
+    option (google.api.http) = {
+      get: "/_status/request_job_profiler_execution_details/{job_id}"
     };
   }
 

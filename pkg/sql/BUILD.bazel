@@ -574,7 +574,6 @@ go_library(
         "//pkg/util/tracing",
         "//pkg/util/tracing/collector",
         "//pkg/util/tracing/tracingpb",
-        "//pkg/util/tracing/zipper",
         "//pkg/util/tsearch",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
