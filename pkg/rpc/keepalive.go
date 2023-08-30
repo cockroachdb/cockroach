@@ -40,6 +40,18 @@ import (
 var serverTimeout = envutil.EnvOrDefaultDuration(
 	"COCKROACH_RPC_SERVER_TIMEOUT", 2*base.NetworkTimeout)
 
+// serverKeepaliveInterval is the interval between server keepalive pings.
+// These are used both to keep the connection alive, and to detect and close
+// failed connections from the server-side. Keepalive pings are only sent and
+// checked if there is no other activity on the connection.
+//
+// We set this to 2x PingInterval, since we expect RPC heartbeats to be sent
+// regularly (obviating the need for the keepalive ping), and there's no point
+// sending keepalive pings until we've waited long enough for the RPC heartbeat
+// to show up.
+var serverKeepaliveInterval = envutil.EnvOrDefaultDuration(
+	"COCKROACH_RPC_SERVER_KEEPALIVE_INTERVAL", 2*base.PingInterval)
+
 // 10 seconds is the minimum keepalive interval permitted by gRPC.
 // Setting it to a value lower than this will lead to gRPC adjusting to this
 // value and annoyingly logging "Adjusting keepalive ping interval to minimum
@@ -61,7 +73,7 @@ var clientKeepalive = keepalive.ClientParameters{
 }
 var serverKeepalive = keepalive.ServerParameters{
 	// Send periodic pings on the connection when there is no other traffic.
-	Time: base.PingInterval,
+	Time: serverKeepaliveInterval,
 	// Close the connection if either a keepalive ping doesn't receive a response
 	// within the timeout, or a TCP send doesn't receive a TCP ack within the
 	// timeout (enforced by the OS via TCP_USER_TIMEOUT).
