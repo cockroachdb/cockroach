@@ -24,7 +24,7 @@ import (
 func TestWhenDoneCause(t *testing.T) {
 	parent, cancelParent := context.WithCancelCause(context.Background())
 	done := make(chan error, 1)
-	require.NoError(t, WhenDoneCause(parent, func(err error, cause error) { done <- cause }))
+	require.True(t, WhenDoneCause(parent, func(err error, cause error) { done <- cause }))
 
 	expectErr := errors.New("blarg")
 	cancelParent(expectErr)

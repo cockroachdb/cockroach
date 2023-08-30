@@ -12,6 +12,7 @@ package encoding
 
 import (
 	"bytes"
+	crypto_rand "crypto/rand"
 	"fmt"
 	"math"
 	"math/rand"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
+
 	// Blank import so projections are initialized correctly.
 	_ "github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -487,7 +489,7 @@ func TestDecodeInvalid(t *testing.T) {
 func testPeekLength(t *testing.T, encoded []byte) {
 	gLen := rand.Intn(10)
 	garbage := make([]byte, gLen)
-	_, _ = rand.Read(garbage)
+	_, _ = crypto_rand.Read(garbage)
 
 	var buf []byte
 	buf = append(buf, encoded...)

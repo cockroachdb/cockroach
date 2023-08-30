@@ -207,7 +207,6 @@ go_library(
         "//pkg/util/log/severity",
         "//pkg/util/netutil/addr",
         "//pkg/util/protoutil",
-        "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/sdnotify",
         "//pkg/util/stop",
