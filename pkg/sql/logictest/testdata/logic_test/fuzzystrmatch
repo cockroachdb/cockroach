@@ -35,22 +35,22 @@ SELECT soundex('hello world!')
 ----
 H464
 
-query TTT
+query TTI
 SELECT soundex('Anne'), soundex('Ann'), difference('Anne', 'Ann');
 ----
 A500 A500 4
 
-query TTT
+query TTI
 SELECT soundex('Anne'), soundex('Andrew'), difference('Anne', 'Andrew');
 ----
 A500 A536 2
 
-query TTT
+query TTI
 SELECT soundex('Anne'), soundex('Margaret'), difference('Anne', 'Margaret');
 ----
 A500 M626 0
 
-query TTTT
+query TTTI
 SELECT soundex('Anne'), soundex(NULL), difference('Anne', NULL), difference(NULL, 'Bob');
 ----
 A500  NULL  NULL  NULL
