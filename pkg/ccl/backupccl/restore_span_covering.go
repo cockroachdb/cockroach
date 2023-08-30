@@ -449,6 +449,8 @@ func generateAndSendImportSpans(
 		return err
 	}
 
+	var key roachpb.Key
+
 	fileIterByLayer := make([]bulk.Iterator[*backuppb.BackupManifest_File], 0, len(backups))
 	for layer := range backups {
 		iter, err := layerToBackupManifestFileIterFactory[layer].NewFileIter(ctx)
@@ -506,10 +508,16 @@ func generateAndSendImportSpans(
 					if err != nil {
 						return err
 					}
-					break
+
+					if key.Compare(span.EndKey) < 0 {
+						key = span.EndKey
+					} else {
+						break
+					}
+				} else {
+					key = startEndKeyIt.value()
 				}
 
-				key := startEndKeyIt.value()
 				if span.Key.Compare(key) >= 0 {
 					startEndKeyIt.next()
 					continue
@@ -674,18 +682,12 @@ func (i *fileSpanStartAndEndKeyIterator) next() {
 			break
 		}
 
-		if minItem.cmpEndKey {
-			minItem.fileIter.Next()
-			if ok, err := minItem.fileIter.Valid(); err != nil {
-				i.err = err
-				return
-			} else if ok {
-				minItem.cmpEndKey = false
-				minItem.file = minItem.fileIter.Value()
-				heap.Push(i.heap, minItem)
-			}
-		} else {
-			minItem.cmpEndKey = true
+		minItem.fileIter.Next()
+		if ok, err := minItem.fileIter.Valid(); err != nil {
+			i.err = err
+			return
+		} else if ok {
+			minItem.file = minItem.fileIter.Value()
 			heap.Push(i.heap, minItem)
 		}
 	}
@@ -725,26 +727,20 @@ func (i *fileSpanStartAndEndKeyIterator) reset() {
 		}
 
 		i.heap.fileHeapItems = append(i.heap.fileHeapItems, fileHeapItem{
-			fileIter:  iter,
-			file:      iter.Value(),
-			cmpEndKey: false,
+			fileIter: iter,
+			file:     iter.Value(),
 		})
 	}
 	heap.Init(i.heap)
 }
 
 type fileHeapItem struct {
-	fileIter  bulk.Iterator[*backuppb.BackupManifest_File]
-	file      *backuppb.BackupManifest_File
-	cmpEndKey bool
+	fileIter bulk.Iterator[*backuppb.BackupManifest_File]
+	file     *backuppb.BackupManifest_File
 }
 
 func (f fileHeapItem) key() roachpb.Key {
-	fspan := endKeyInclusiveSpan(f.file.Span)
-	if f.cmpEndKey {
-		return fspan.EndKey
-	}
-	return fspan.Key
+	return f.file.Span.Key
 }
 
 type fileHeap struct {
