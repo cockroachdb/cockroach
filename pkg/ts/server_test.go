@@ -368,8 +368,8 @@ func TestServerQueryTenant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// System tenant should aggregate across all tenants.
-	expectedSystemResult := &tspb.TimeSeriesQueryResponse{
+	// Undefined tenant ID should aggregate across all tenants.
+	expectedAggregatedResult := &tspb.TimeSeriesQueryResponse{
 		Results: []tspb.TimeSeriesQueryResponse_Result{
 			{
 				Query: tspb.Query{
@@ -408,7 +408,7 @@ func TestServerQueryTenant(t *testing.T) {
 
 	conn := s.RPCClientConn(t, username.RootUserName())
 	client := tspb.NewTimeSeriesClient(conn)
-	systemResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+	aggregatedResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 400 * 1e9,
 		EndNanos:   500 * 1e9,
 		Queries: []tspb.Query{
@@ -418,6 +418,70 @@ func TestServerQueryTenant(t *testing.T) {
 			},
 			{
 				Name: "test.metric",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range aggregatedResponse.Results {
+		sort.Strings(r.Sources)
+	}
+	require.Equal(t, expectedAggregatedResult, aggregatedResponse)
+
+	// Ssytem tenant ID should provide system tenant ts data.
+	systemID := roachpb.MustMakeTenantID(1)
+	expectedSystemResult := &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:     "test.metric",
+					Sources:  []string{"1"},
+					TenantID: systemID,
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          100.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          200.0,
+					},
+				},
+			},
+			{
+				Query: tspb.Query{
+					Name:     "test.metric",
+					Sources:  []string{"1", "10"},
+					TenantID: systemID,
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          300.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          600.0,
+					},
+				},
+			},
+		},
+	}
+
+	systemResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:     "test.metric",
+				Sources:  []string{"1"},
+				TenantID: systemID,
+			},
+			{
+				Name:     "test.metric",
+				TenantID: systemID,
 			},
 		},
 	})
