@@ -13,12 +13,15 @@ package scbuildstmt
 import (
 	"math"
 	"reflect"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -182,6 +185,52 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 	maybeDropRedundantPrimaryIndexes(b, tbl.TableID)
 	maybeRewriteTempIDsInPrimaryIndexes(b, tbl.TableID)
 	disallowDroppingPrimaryIndexReferencedInUDFOrView(b, tbl.TableID, n.String())
+	// TODO (xiang): Remove the following line for the next major release after v23.2,
+	// be it v24.1 or v23.3.
+	disableAlterTableMultipleCommandsOnV232(b, n, tbl.TableID)
+}
+
+// disableAlterTableMultipleCommandsOnV232 disables declarative schema changer
+// if processing this ALTER TABLE stmt requires building more than one new
+// primary indexes by default on v23.2, unless the mode is unsafe or ALTER TABLE
+// is forcefully turned on.
+func disableAlterTableMultipleCommandsOnV232(b BuildCtx, n *tree.AlterTable, tableID catid.DescID) {
+	chain := getPrimaryIndexChain(b, tableID)
+	chainTyp := chain.chainType()
+
+	// isAlterPKWithRowid returns true if the stmt is ALTER PK with rowid.
+	isAlterPKWithRowid := func() bool {
+		if chainTyp == twoNewPrimaryIndexesWithAlteredPKType {
+			_, _, inter2StoredCols := getSortedColumnIDsInIndexByKind(b, tableID, chain.inter2Spec.primary.IndexID)
+			_, _, finalStoredCols := getSortedColumnIDsInIndexByKind(b, tableID, chain.finalSpec.primary.IndexID)
+			inter2StoredColsAsSet := catalog.MakeTableColSet(inter2StoredCols...)
+			finalStoredColsAsSet := catalog.MakeTableColSet(finalStoredCols...)
+			diffSet := inter2StoredColsAsSet.Difference(finalStoredColsAsSet)
+			if diffSet.Len() == 1 {
+				colName := mustRetrieveColumnNameElem(b, tableID, diffSet.Ordered()[0]).Name
+				if strings.HasPrefix(colName, "rowid") {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	if chainTyp == twoNewPrimaryIndexesWithAlteredPKType ||
+		chainTyp == twoNewPrimaryIndexesWithAddAndDropColumnsType ||
+		chainTyp == threeNewPrimaryIndexesType {
+		if isAlterPKWithRowid() {
+			// This is the only exception that involves building more than one new
+			// primary indexes but we would enable by default, because it was already
+			// supported in v23.1.
+			return
+		}
+		newSchemaChangerMode := getDeclarativeSchemaChangerModeForStmt(b, n)
+		if newSchemaChangerMode != sessiondatapb.UseNewSchemaChangerUnsafe &&
+			newSchemaChangerMode != sessiondatapb.UseNewSchemaChangerUnsafeAlways {
+			panic(scerrors.NotImplementedErrorf(n, "statement has been disabled on v23.2"))
+		}
+	}
 }
 
 // disallowDroppingPrimaryIndexReferencedInUDFOrView prevents dropping old (current)
