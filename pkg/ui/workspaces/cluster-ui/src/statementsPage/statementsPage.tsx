@@ -763,6 +763,10 @@ export class StatementsPage extends React.Component<
               LoadingError({
                 statsType: "statements",
                 error: this.props.statementsResponse?.error,
+                sourceTables: this.props.statementsResponse?.data
+                  ?.stmts_source_table && [
+                  this.props.statementsResponse?.data?.stmts_source_table,
+                ],
               })
             }
           />
