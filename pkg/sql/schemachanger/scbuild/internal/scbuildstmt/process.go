@@ -167,10 +167,10 @@ func isFullySupportedWithFalsePositiveInternal(
 // embedded in the BuildCtx. Any error will be panicked.
 func Process(b BuildCtx, n tree.Statement) {
 	newSchemaChangerMode := b.EvalCtx().SessionData().NewSchemaChangerMode
-	// Check if the feature is either forced disabled or enabled,
-	// using a cluster setting.
-	disabledStatements := getSchemaChangerStatementControl(&b.ClusterSettings().SV)
-	if forcedEnabled := disabledStatements.CheckStatementControl(n); forcedEnabled {
+	// Check if the feature is either forcefully enabled or disabled, via a
+	// cluster setting.
+	stmtsForceControl := getStatementsForceControl(&b.ClusterSettings().SV)
+	if forcedEnabled := stmtsForceControl.CheckControl(n); forcedEnabled {
 		newSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 	}
 	// Run a few "quick checks" to see if the statement is not supported.
