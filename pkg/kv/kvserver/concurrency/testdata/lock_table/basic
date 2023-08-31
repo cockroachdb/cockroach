@@ -186,7 +186,7 @@ add-discovered r=req4 k=a txn=txn3
 ----
 num=4
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
    queued locking requests:
     active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
@@ -202,7 +202,7 @@ add-discovered r=req4 k=f txn=txn3
 ----
 num=5
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
    queued locking requests:
     active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
@@ -214,7 +214,7 @@ num=5
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
 
 # Note that guard state has not changed yet. Discovering these locks means the caller has to
 # scan again.
@@ -253,7 +253,7 @@ print
 ----
 num=5
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
    queued locking requests:
     active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 4
@@ -266,7 +266,7 @@ num=5
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
 
 query
 ----
@@ -391,7 +391,7 @@ dequeue r=req5
 ----
 num=5
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
    queued locking requests:
     active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 4
@@ -404,7 +404,7 @@ num=5
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
 
 # 100ms passes between req5 and req6
 time-tick ms=100
@@ -439,7 +439,7 @@ print
 ----
 num=5
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
    queued locking requests:
     active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 4
@@ -454,7 +454,7 @@ num=5
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
 
 metrics
 ----
@@ -594,7 +594,7 @@ print
 ----
 num=5
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
    queued locking requests:
     active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 4
@@ -611,7 +611,7 @@ num=5
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
 
 metrics
 ----
@@ -751,7 +751,7 @@ num=5
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
 
 guard-state r=req4
 ----
@@ -780,7 +780,7 @@ num=5
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "f"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 6.000000000,0, info: repl [Intent]
    waiting readers:
     req: 4, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 4
@@ -954,7 +954,7 @@ num=4
    queued locking requests:
     active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
    queued locking requests:
     active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 6
@@ -973,12 +973,12 @@ num=4
    queued locking requests:
     active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
    queued locking requests:
     active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 6
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
    queued locking requests:
     active: true req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 7
@@ -1000,12 +1000,12 @@ num=4
    queued locking requests:
     active: false req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
    queued locking requests:
     active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 6
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
    queued locking requests:
     active: true req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 7
@@ -1112,12 +1112,12 @@ dequeue r=req4
 ----
 num=3
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
    queued locking requests:
     active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 6
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
    queued locking requests:
     active: true req: 7, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 7
@@ -1148,7 +1148,7 @@ release txn=txn2 span=c,f
 ----
 num=3
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
    queued locking requests:
     active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 6
@@ -1170,7 +1170,7 @@ print
 ----
 num=3
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent]
    queued locking requests:
     active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 6
@@ -2087,7 +2087,7 @@ acquire r=req12 k=c durability=r strength=intent
 ----
 num=1
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl, unrepl [(str: Exclusive seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 11, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 11
@@ -2096,7 +2096,7 @@ dequeue r=req12
 ----
 num=1
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl, unrepl [(str: Exclusive seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,12, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
    queued locking requests:
     active: true req: 11, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 11

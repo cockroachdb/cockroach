@@ -1107,10 +1107,39 @@ func (ulh *unreplicatedLockHolderInfo) safeFormat(sb *redact.StringBuilder) {
 	sb.SafeString("]")
 }
 
-// Information about a lock holder for replicated locks. Notably, unlike
-// unreplicated locks, this does not include any sequence numbers.
+// Fixed length slice for all supported lock strengths for replicated locks. May
+// be used to iterate supported lock strengths in strength order (strongest to
+// weakest).
+var replicatedHolderStrengths = [...]lock.Strength{lock.Intent, lock.Exclusive, lock.Shared}
+
+// replicatedLockHolderStrengthToIndexMap returns a mapping between (strength,
+// index) pairs that can be used to index into the
+// replicatedLockHolderInfo.strengths array.
+//
+// Trying to use a lock strength that isn't supported with replicated locks to
+// index into the replicatedLockHolderInfo.strengths array will cause a runtime
+// error.
+var replicatedLockHolderStrengthToIndexMap = func() [lock.MaxStrength + 1]int {
+	var m [lock.MaxStrength + 1]int
+	// Initialize all to -1.
+	for str := range m {
+		m[str] = -1
+	}
+	// Set the indices of the valid strengths.
+	for i, str := range replicatedHolderStrengths {
+		m[str] = i
+	}
+	return m
+}()
+
+// Information about a lock holder for replicated locks.
 type replicatedLockHolderInfo struct {
-	// Lock strength is always lock.Intent.
+	// strengths tracks whether the lock is held with a particular strength or not.
+	// Notably, unlike unreplicated locks, we do not track the sequence number at
+	// which a lock was acquired with a particular strength. This way, we don't
+	// need to worry about keeping what's in the replicated lock table keyspace in
+	// sync with the in-memory lock table.
+	strengths [len(replicatedHolderStrengths)]bool
 
 	// The timestamp at which the replicated lock is held. Must not regress.
 	ts hlc.Timestamp
@@ -1118,18 +1147,57 @@ type replicatedLockHolderInfo struct {
 
 // clear removes previously tracked replicated lock holder information.
 func (rlh *replicatedLockHolderInfo) clear() {
+	rlh.resetStrengths()
 	rlh.ts = hlc.Timestamp{}
 }
 
 func (rlh *replicatedLockHolderInfo) isEmpty() bool {
-	return rlh.ts.IsEmpty()
+	for _, str := range replicatedHolderStrengths {
+		if rlh.held(str) { // lock is held
+			return false
+		}
+	}
+	assert(rlh.ts.IsEmpty(), "lock not held, timestamp should be empty")
+	return true
+}
+
+func (rlh *replicatedLockHolderInfo) resetStrengths() {
+	for strIdx := range rlh.strengths {
+		rlh.strengths[strIdx] = false
+	}
+}
+
+// acquire updates the tracking on the receiver to indicate a lock is held with
+// the supplied lock strength.
+func (rlh *replicatedLockHolderInfo) acquire(str lock.Strength) {
+	rlh.strengths[replicatedLockHolderStrengthToIndexMap[str]] = true
+}
+
+// held returns true if the receiver is held with the supplied lock strength.
+func (rlh *replicatedLockHolderInfo) held(str lock.Strength) bool {
+	return rlh.strengths[replicatedLockHolderStrengthToIndexMap[str]]
 }
 
 func (rlh *replicatedLockHolderInfo) safeFormat(sb *redact.StringBuilder) {
 	if rlh.isEmpty() {
 		return
 	}
-	sb.SafeString("repl")
+	sb.SafeString("repl [")
+	first := true
+	for _, str := range replicatedHolderStrengths {
+		if !rlh.held(str) {
+			continue
+		}
+		if !first {
+			sb.Printf(", ")
+		}
+		first = false
+		sb.Printf(
+			"%s",
+			redact.Safe(str),
+		)
+	}
+	sb.SafeString("]")
 }
 
 // Per-key locks state in lockTableImpl.
@@ -1404,6 +1472,7 @@ func (tl *txnLock) reacquireLock(acq *roachpb.LockAcquisition) error {
 		}
 	case lock.Replicated:
 		tl.replicatedInfo.ts.Forward(acq.Txn.WriteTimestamp)
+		tl.replicatedInfo.acquire(acq.Strength)
 	default:
 		panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
 	}
@@ -2794,6 +2863,7 @@ func (kl *keyLocks) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 		}
 	case lock.Replicated:
 		tl.replicatedInfo.ts = acq.Txn.WriteTimestamp
+		tl.replicatedInfo.acquire(acq.Strength)
 	default:
 		panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
 	}
@@ -2804,12 +2874,12 @@ func (kl *keyLocks) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 	return nil
 }
 
-// A replicated lock held by txn with timestamp ts was discovered by guard g
-// where g is trying to access this key with strength accessStrength.
-// Acquires l.mu.
+// discoveredLock is called with a lock that is discovered by guard g when trying
+// to access this key with strength accessStrength.
+//
+// Acquires kl.mu.
 func (kl *keyLocks) discoveredLock(
-	txn *enginepb.TxnMeta,
-	ts hlc.Timestamp,
+	foundLock *roachpb.Lock,
 	g *lockTableGuardImpl,
 	accessStrength lock.Strength,
 	notRemovable bool,
@@ -2824,22 +2894,23 @@ func (kl *keyLocks) discoveredLock(
 
 	var tl *txnLock
 	if kl.isLocked() {
-		e, found := kl.heldBy[txn.ID]
+		e, found := kl.heldBy[foundLock.Txn.ID]
 		tl = e.Value
 		if !found {
 			return errors.AssertionFailedf(
 				"discovered lock by different transaction (%s) than existing lock (see issue #63592): %s",
-				txn, kl)
+				foundLock.Txn, kl)
 		}
 		// TODO(arul): If the discovered lock indicates a newer epoch than what's
 		// being tracked, should we clear out unreplicatedLockInfo here?
 	} else {
-		tl = newTxnLock(txn, clock)
+		tl = newTxnLock(&foundLock.Txn, clock)
 		kl.lockAcquiredOrDiscovered(tl)
 	}
 
 	if tl.replicatedInfo.isEmpty() {
-		tl.replicatedInfo.ts = ts
+		tl.replicatedInfo.acquire(foundLock.Strength)
+		tl.replicatedInfo.ts = foundLock.Txn.WriteTimestamp
 	}
 
 	switch accessStrength {
@@ -2851,7 +2922,7 @@ func (kl *keyLocks) discoveredLock(
 		// the lock table. If not then it shouldn't have discovered the lock in
 		// the first place. Bugs here would cause infinite loops where the same
 		// lock is repeatedly re-discovered.
-		if g.ts.Less(ts) {
+		if foundLock.Strength != lock.Intent || g.ts.Less(foundLock.Txn.WriteTimestamp) {
 			return errors.AssertionFailedf("discovered non-conflicting lock")
 		}
 
@@ -2892,7 +2963,7 @@ func (kl *keyLocks) discoveredLock(
 	}
 
 	// If there are waiting requests from the same txn, they no longer need to wait.
-	kl.releaseLockingRequestsFromTxn(txn)
+	kl.releaseLockingRequestsFromTxn(&foundLock.Txn)
 
 	// Active waiters need to be told about who they are waiting for.
 	kl.informActiveWaiters()
@@ -3625,7 +3696,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		g.notRemovableLock = l
 		notRemovableLock = true
 	}
-	err = l.discoveredLock(&foundLock.Txn, foundLock.Txn.WriteTimestamp, g, str, notRemovableLock, g.lt.clock)
+	err = l.discoveredLock(foundLock, g, str, notRemovableLock, g.lt.clock)
 	// Can't release tree.mu until call l.discoveredLock() since someone may
 	// find an empty lock and remove it from the tree.
 	t.locks.mu.Unlock()

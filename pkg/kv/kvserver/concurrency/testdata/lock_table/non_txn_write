@@ -248,7 +248,7 @@ num=2
    queued locking requests:
     active: false req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
    queued locking requests:
     active: false req: 4, strength: Intent, txn: none
     active: false req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003

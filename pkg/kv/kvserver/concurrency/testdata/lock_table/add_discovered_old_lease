@@ -29,7 +29,7 @@ add-discovered r=req1 k=b txn=txn2 lease-seq=5
 ----
 num=1
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
 
 add-discovered r=req1 k=c txn=txn2 lease-seq=6
 ----
@@ -39,4 +39,4 @@ print
 ----
 num=1
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
