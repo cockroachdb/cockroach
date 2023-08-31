@@ -14,6 +14,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
+	"hash/fnv"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -261,6 +264,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		params.extendedEvalCtx.Codec.ForSystemTenant(),
 		params.p.logEvent,
 		params.p.descCollection.ReleaseLeases,
+		params.p.makeUnsafeSettingInterlockInfo(),
 	)
 	if err != nil {
 		return err
@@ -356,6 +360,7 @@ func writeSettingInternal(
 	forSystemTenant bool,
 	logFn func(context.Context, descpb.ID, logpb.EventPayload) error,
 	releaseLeases func(context.Context),
+	interlockInfo unsafeSettingInterlockInfo,
 ) (expectedEncodedValue string, err error) {
 	if err := func() error {
 		var reportedValue string
@@ -367,7 +372,6 @@ func writeSettingInternal(
 				return err
 			}
 		} else {
-
 			// Setting a non-DEFAULT value.
 			value, err := eval.Expr(ctx, evalCtx, value)
 			if err != nil {
@@ -377,11 +381,18 @@ func writeSettingInternal(
 				ctx, hook, db,
 				setting, user, st, value, forSystemTenant,
 				releaseLeases,
+				interlockInfo,
 			)
 			if err != nil {
 				return err
 			}
 		}
+
+		if setting.IsUnsafe() {
+			// Also mention the change in the non-structured DEV log.
+			log.Warningf(ctx, "unsafe setting changed: %q -> %v", name, reportedValue)
+		}
+
 		return logFn(ctx,
 			0, /* no target */
 			&eventpb.SetClusterSetting{
@@ -423,6 +434,7 @@ func writeNonDefaultSettingValue(
 	value tree.Datum,
 	forSystemTenant bool,
 	releaseLeases func(context.Context),
+	interlockInfo unsafeSettingInterlockInfo,
 ) (reportedValue string, expectedEncodedValue string, err error) {
 	// Stringify the value set by the statement for reporting in errors, logs etc.
 	reportedValue = tree.AsStringWithFlags(value, tree.FmtBareStrings)
@@ -444,6 +456,12 @@ func writeNonDefaultSettingValue(
 		}
 	} else {
 		// Modifying another setting than the version.
+		if setting.IsUnsafe() {
+			if err := unsafeSettingInterlock(ctx, st, setting, encoded, interlockInfo); err != nil {
+				return reportedValue, expectedEncodedValue, err
+			}
+		}
+
 		if _, err = db.Executor().ExecEx(
 			ctx, "update-setting", nil,
 			sessiondata.RootUserSessionDataOverride,
@@ -774,4 +792,69 @@ func toSettingString(
 	default:
 		return "", errors.Errorf("unsupported setting type %T", setting)
 	}
+}
+
+// unsafeSettingInterlockInfo contains information about the current
+// session that is used by the unsafe setting interlock system.
+type unsafeSettingInterlockInfo struct {
+	sessionID    clusterunique.ID
+	setNonce     func(context.Context, int32) error
+	interlockKey string
+	nonce        int32
+}
+
+func (p *planner) makeUnsafeSettingInterlockInfo() unsafeSettingInterlockInfo {
+	return unsafeSettingInterlockInfo{
+		sessionID:    p.ExtendedEvalContext().SessionID,
+		interlockKey: p.SessionData().UnsafeSettingInterlockKey,
+		nonce:        p.SessionData().UnsafeSettingInterlockNonce,
+		setNonce: func(ctx context.Context, nonce int32) error {
+			return p.applyOnSessionDataMutators(ctx, false /* local */, func(m sessionDataMutator) error {
+				m.SetUnsafeSettingInterlockNonce(nonce)
+				return nil
+			})
+		},
+	}
+}
+
+const interlockKeySessionVarName = "unsafe_setting_interlock_key"
+
+// unsafeSettingInterlock ensures that changes to unsafe settings are
+// doubly confirmed by the operator by a special value in a session
+// variable.
+func unsafeSettingInterlock(
+	ctx context.Context,
+	st *cluster.Settings,
+	setting settings.Setting,
+	encodedValue string,
+	info unsafeSettingInterlockInfo,
+) error {
+	// The interlock key is a combination of:
+	// - the session ID, so that different sessions need different keys.
+	// - a nonce different per SET CLUSTER SETTING statement, so that
+	//   subsequent statements using the same value need different keys.
+	// - the setting key, so that different settings need different
+	//   interlock keys.
+	// - the value.
+	h := fnv.New32()
+	h.Write([]byte(info.sessionID.String()))
+	fmt.Fprintf(h, "%d", info.nonce)
+	h.Write([]byte(setting.InternalKey()))
+	h.Write([]byte(encodedValue))
+	pastableKey := base64.StdEncoding.EncodeToString(h.Sum(nil))
+
+	if info.interlockKey != pastableKey {
+		return errors.WithDetailf(
+			pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"changing cluster setting %q may cause cluster instability or data corruption.\n"+
+					"To confirm the change, run the following command before trying again:\n\n"+
+					"   SET %s = '%s';\n\n",
+				setting.Name(), interlockKeySessionVarName, pastableKey,
+			),
+			"key: %s", pastableKey,
+		)
+	}
+	// Ensure that the next SET CLUSTER SETTING with the same value also
+	// requires a fresh key.
+	return info.setNonce(ctx, info.nonce+1)
 }

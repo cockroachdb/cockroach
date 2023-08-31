@@ -1,0 +1,100 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package sql_test
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
+)
+
+func TestSetUnsafeClusterSettingInterlock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	ts := s.ApplicationLayer()
+
+	defer settings.TestingSaveRegistry()()
+	setting := settings.RegisterBoolSetting(
+		settings.TenantWritable,
+		"my.unsafe.setting", "unused", false,
+		settings.WithUnsafe)
+
+	firstSession := ts.SQLConn(t, "")
+
+	// RESET on unsafe settings never get an error.
+	_, err := firstSession.Exec(fmt.Sprintf("RESET CLUSTER SETTING %s", setting.Name()))
+	require.NoError(t, err)
+
+	// Try changing the setting. We're expecting an error.
+	_, err = firstSession.Exec(fmt.Sprintf("SET CLUSTER SETTING %s = true", setting.Name()))
+	require.Error(t, err)
+	getKey := func(err error) string {
+		require.Contains(t, err.Error(), "may cause cluster instability")
+		pqErr, ok := err.(*pq.Error) // Change this if/when we change the driver for tests.
+		require.True(t, ok)
+		require.True(t, strings.HasPrefix(pqErr.Detail, "key:"), pqErr.Detail)
+		return strings.TrimPrefix(pqErr.Detail, "key: ")
+	}
+	key := getKey(err)
+
+	// Now set the key and try again. We're not expecting an error any more.
+	_, err = firstSession.Exec("SET unsafe_setting_interlock_key = $1", key)
+	require.NoError(t, err)
+	_, err = firstSession.Exec(fmt.Sprintf("SET CLUSTER SETTING %s = true", setting.Name()))
+	require.NoError(t, err)
+
+	// However, we can't reuse the key twice. We'd get a new key.
+	_, err = firstSession.Exec(fmt.Sprintf("SET CLUSTER SETTING %s = true", setting.Name()))
+	require.Error(t, err)
+	secondKey := getKey(err)
+	require.NotEqual(t, key, secondKey)
+
+	otherSession := ts.SQLConn(t, "")
+
+	// The first key produced in each session is different from other sessions.
+	_, err = otherSession.Exec(fmt.Sprintf("SET CLUSTER SETTING %s = true", setting.Name()))
+	require.Error(t, err)
+	otherFirstKey := getKey(err)
+	require.NotEqual(t, key, otherFirstKey)
+
+	// We also can't use a key from one session with another.
+	_, err = firstSession.Exec("SET unsafe_setting_interlock_key = $1", key)
+	require.NoError(t, err)
+
+	_, err = otherSession.Exec(fmt.Sprintf("SET CLUSTER SETTING %s = true", setting.Name()))
+	require.Error(t, err)
+	stillFirstKey := getKey(err)
+	require.Equal(t, otherFirstKey, stillFirstKey)
+
+	// A different cluster setting generates a different key.
+	otherSetting := settings.RegisterBoolSetting(
+		settings.TenantWritable,
+		"my.other.unsafe.setting", "unused", false,
+		settings.WithUnsafe)
+
+	_, err = otherSession.Exec(fmt.Sprintf("SET CLUSTER SETTING %s = true", otherSetting.Name()))
+	require.Error(t, err)
+	otherSettingKey := getKey(err)
+	require.NotEqual(t, otherSettingKey, otherFirstKey)
+}

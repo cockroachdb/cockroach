@@ -3642,6 +3642,14 @@ func (m *sessionDataMutator) SetDurableLockingForSerializable(val bool) {
 	m.data.DurableLockingForSerializable = val
 }
 
+func (m *sessionDataMutator) SetUnsafeSettingInterlockKey(val string) {
+	m.data.UnsafeSettingInterlockKey = val
+}
+
+func (m *sessionDataMutator) SetUnsafeSettingInterlockNonce(val int32) {
+	m.data.UnsafeSettingInterlockNonce = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
