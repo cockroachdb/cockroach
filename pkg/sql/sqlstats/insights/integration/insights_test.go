@@ -514,12 +514,12 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	// This connection will ensure the setting is changed for secondary tenant.
 
 	conn.Exec(t, "SET tracing = true;")
-	conn.Exec(t, "SET cluster setting sql.txn_stats.sample_rate  = 1;")
+	serverutils.SetClusterSetting(t, tc, "sql.txn_stats.sample_rate", "1")
 	// Reduce the resolution interval to speed up the test.
-	conn.Exec(t, `SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '100ms'`)
+	serverutils.SetClusterSetting(t, tc, "sql.contention.event_store.resolution_interval", "100ms")
 
 	// Set the insights detection threshold lower.
-	conn.Exec(t, "SET CLUSTER SETTING sql.insights.latency_threshold = '30ms'")
+	serverutils.SetClusterSetting(t, tc, "sql.insights.latency_threshold", "1ms")
 
 	conn.Exec(t, "CREATE TABLE t (id string PRIMARY KEY, s string);")
 
@@ -548,20 +548,20 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 
 	<-waitingTxStartedChan
 
-	_, errTxn = tx.ExecContext(ctx, "select pg_sleep(0.5);")
+	_, errTxn = tx.ExecContext(ctx, "select pg_sleep(.7);")
 	require.NoError(t, errTxn)
 	require.NoError(t, tx.Commit())
 
 	<-txnDoneChan
 
 	// Verify the approx run time was around 50ms. The pg_sleep should have blocked the stmt for at
-	// least 500ms, but since the stopwatch doesn't measure the runtime exactly we'll use a much
+	// least 1s, but since the stopwatch doesn't measure the runtime exactly we'll use a much
 	// smaller value that is >= the required insights threshold.
 	require.GreaterOrEqualf(t,
 		approxStmtRuntime.Elapsed().Milliseconds(), int64(100), "expected stmt to run for at least 100ms")
 
 	// Verify the table content is valid.
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		rows, err := conn.DB.QueryContext(ctx, `SELECT
 		query,
 		insight.contention::FLOAT,
@@ -629,21 +629,23 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 
 		if rowCount < 1 {
 			var queryStatsMsg string
-			var contentionMean string
+			var stats, txnEventContentionTime string
 			err = conn.DB.QueryRowContext(ctx, `
 			SELECT 
-				statistics->'execution_statistics'->'contentionTime'->> 'mean'
-			FROM crdb_internal.statement_statistics
-			WHERE metadata->>'query' like 'UPDATE t SET s =%'`).Scan(&contentionMean)
+				ss.statistics,
+				COALESCE(txn_contention.contention_duration::string, 'Not found')
+			FROM crdb_internal.statement_statistics ss
+			LEFT JOIN  crdb_internal.transaction_contention_events txn_contention on ss.fingerprint_id  = txn_contention.waiting_stmt_fingerprint_id
+			WHERE metadata->>'query' like 'UPDATE t SET s =%'`).Scan(&stats, &txnEventContentionTime)
 			if err != nil {
 				queryStatsMsg = fmt.Sprintf("attempted to get contention statistics for 'UPDATE' query: %s", err.Error())
 			} else {
-				queryStatsMsg = fmt.Sprintf("contention mean for the 'UPDATE' query: %+v", contentionMean)
+				queryStatsMsg = fmt.Sprintf("contention mean for the 'UPDATE' query: transaction_contention_events.contention_duration: %s, approxStmtRuntime: %s, stats %s", txnEventContentionTime, approxStmtRuntime.Elapsed(), stats)
 			}
 			return fmt.Errorf("cluster_execution_insights did not return any rows - %s", queryStatsMsg)
 		}
 		return nil
-	}, 10*time.Second)
+	})
 }
 
 // Testing that the index recommendation is included
