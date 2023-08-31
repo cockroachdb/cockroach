@@ -26,9 +26,7 @@ const (
 )
 
 var (
-	tokenParams = tokenParameters()
-	//jiraBasicTokenBase64 = base64.StdEncoding.EncodeToString([]byte(jiraDocsUserEmail + ":" + tokenParams.JiraToken))
-	//jiraAuthHeader       = fmt.Sprintf("Basic %s", jiraBasicTokenBase64)
+	tokenParams      = tokenParameters()
 	githubAuthHeader = fmt.Sprintf("Bearer %s", tokenParams.GitHubToken)
 )
 
@@ -52,7 +50,7 @@ func queryGraphQL(query string, queryVariables map[string]interface{}, out inter
 	if queryVariables != nil {
 		body["variables"] = queryVariables
 	}
-	err := httpRequest(graphQLURL, "POST", githubAuthHeader, nil, body, &out)
+	err := httpRequest(graphQLURL, "POST", "GitHub", nil, body, &out)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -60,28 +58,29 @@ func queryGraphQL(query string, queryVariables map[string]interface{}, out inter
 	return nil
 }
 
-//func queryJiraRESTAPI(
-//	apiEndpoint, method string,
-//	headers map[string]string,
-//	body map[string]interface{},
-//	out interface{},
-//) error {
-//	url := crlJiraBaseUrl + jiraRESTURLPart + apiEndpoint
-//	err := httpRequest(url, method, jiraAuthHeader, headers, body, &out)
-//	if err != nil {
-//		fmt.Println(err)
-//		return err
-//	}
-//	return nil
-//}
+func queryJiraRESTAPI(
+	apiEndpoint, method string,
+	headers map[string]string,
+	body map[string]interface{},
+	out interface{},
+) error {
+	url := crlJiraBaseUrl + jiraRESTURLPart + apiEndpoint
+	err := httpRequest(url, method, "Jira", headers, body, &out)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	return nil
+}
 
 func httpRequest(
-	url, method, authHeader string,
+	url, method, source string,
 	headers map[string]string,
 	body map[string]interface{},
 	out interface{},
 ) error {
 	requestBody, err := json.Marshal(body)
+	fmt.Printf("%#v\n", string(requestBody))
 	if err != nil {
 		return err
 	}
@@ -89,13 +88,23 @@ func httpRequest(
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", authHeader)
+	if source == "Jira" {
+		req.SetBasicAuth(jiraDocsUserEmail, tokenParams.JiraToken)
+	} else if source == "GitHub" {
+		req.Header.Set("Authorization", githubAuthHeader)
+	}
 	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		err = fmt.Errorf("Request failed with status: %s\n", res.Status)
+		fmt.Println(err)
 		return err
 	}
 	bs, err := io.ReadAll(res.Body)

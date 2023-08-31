@@ -12,6 +12,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -54,7 +55,9 @@ var (
 	bugFixRNRE             = regexp.MustCompile(`(?i)release note:? \(bug fix\):.*`)
 	releaseJustificationRE = regexp.MustCompile(`(?i)release justification:.*`)
 	prNumberRE             = regexp.MustCompile(`Related PR: \[?https://github.com/cockroachdb/cockroach/pull/(\d+)\D`)
+	prNumberHTMLRE         = regexp.MustCompile(`Related PR: <a href="https://github.com/cockroachdb/cockroach/pull/(\d+)\D`)
 	commitShaRE            = regexp.MustCompile(`Commit: \[?https://github.com/cockroachdb/cockroach/commit/(\w+)\W`)
+	commitShaHTMLRE        = regexp.MustCompile(`Commit: <a href="https://github.com/cockroachdb/cockroach/commit/(\w+)\W`)
 	exalateJiraRefRE       = regexp.MustCompile(exalateJiraRefPart)
 )
 
@@ -65,6 +68,14 @@ const (
 
 // the heart of the script to fetch and manipulate all data and create the individual docs issues
 func docsIssueGeneration(params queryParameters) {
+	var x map[int]map[string]string
+	_, _, err := searchJiraDocsIssuesSingle(params.StartTime, 100, 0, x)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Printf("%v\n", x)
+	os.Exit(0)
+
 	repoID, labelMap, err := searchDocsRepoLabels()
 	if err != nil {
 		fmt.Println(err)
@@ -77,6 +88,8 @@ func docsIssueGeneration(params queryParameters) {
 	if params.DryRun {
 		fmt.Printf("Start time: %#v\n", params.StartTime.Format(time.RFC3339))
 		fmt.Printf("End time: %#v\n", params.EndTime.Format(time.RFC3339))
+		fmt.Printf("Repo ID: %s\n", repoID)
+		fmt.Printf("Number of PRs found: %d\n", len(prs))
 		if len(docsIssues) > 0 {
 			fmt.Printf("Dry run is enabled. The following %d docs issue(s) would be created:\n", len(docsIssues))
 			fmt.Println(docsIssues)

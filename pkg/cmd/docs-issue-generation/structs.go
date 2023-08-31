@@ -138,6 +138,18 @@ type gqlCreateIssueMutation struct {
 	} `json:"data"`
 }
 
+type jiraIssueSearch struct {
+	StartAt    int `json:"startAt"`
+	MaxResults int `json:"maxResults"`
+	Total      int `json:"total"`
+	Issues     []struct {
+		Key            string `json:"key"`
+		RenderedFields struct {
+			Description string `json:"description"`
+		} `json:"renderedFields"`
+	} `json:"issues"`
+}
+
 type cockroachPR struct {
 	Title       string `json:"title"`
 	Number      int    `json:"number"`

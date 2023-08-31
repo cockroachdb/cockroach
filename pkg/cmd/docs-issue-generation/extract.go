@@ -11,9 +11,45 @@
 package main
 
 import (
+	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 )
+
+func parseDocsIssueBody(body string) (int, string, error) {
+	prMatches := prNumberRE.FindStringSubmatch(body)
+	if len(prMatches) < 2 {
+		return 0, "", fmt.Errorf("error: No PR number found in issue body")
+	}
+	prNumber, err := strconv.Atoi(prMatches[1])
+	if err != nil {
+		fmt.Println(err)
+		return 0, "", err
+	}
+	commitShaMatches := commitShaRE.FindStringSubmatch(body)
+	if len(commitShaMatches) < 2 {
+		return 0, "", fmt.Errorf("error: No commit SHA found in issue body")
+	}
+	return prNumber, commitShaMatches[1], nil
+}
+
+func extractPRNumberCommitFromDocsIssueBody(body string) (int, string, error) {
+	prMatches := prNumberHTMLRE.FindStringSubmatch(body)
+	if len(prMatches) < 2 {
+		return 0, "", fmt.Errorf("error: No PR number found in issue body")
+	}
+	prNumber, err := strconv.Atoi(prMatches[1])
+	if err != nil {
+		fmt.Println(err)
+		return 0, "", err
+	}
+	commitShaMatches := commitShaHTMLRE.FindStringSubmatch(body)
+	if len(commitShaMatches) < 2 {
+		return 0, "", fmt.Errorf("error: No commit SHA found in issue body")
+	}
+	return prNumber, commitShaMatches[1], nil
+}
 
 // extractStringsFromMessage takes in a commit message or PR body as well as two regular expressions. The first
 // regular expression checks for a valid formatted epic or issue reference. If one is found, it searches that exact

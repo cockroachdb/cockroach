@@ -12,10 +12,7 @@ package main
 
 import (
 	"fmt"
-	"strconv"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // searchDocsRepoLabels passes in a GitHub API token and returns the repo ID of the docs repo as well as a map
@@ -78,7 +75,7 @@ func searchDocsRepoLabelsSingle(cursor string, m map[string]string) (string, boo
 }
 
 func searchCockroachPRs(startTime time.Time, endTime time.Time) ([]cockroachPR, error) {
-	prCommitsToExclude, err := searchDocsIssues(startTime)
+	prCommitsToExclude, err := searchJiraDocsIssues(startTime)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -99,95 +96,11 @@ func searchCockroachPRs(startTime time.Time, endTime time.Time) ([]cockroachPR, 
 	return result, nil
 }
 
-// searchDocsIssues returns a map containing all the product change docs issues that have been created since the given
-// start time. For reference, it's structured as map[crdb_pr_number]map[crdb_commit]docs_pr_number.
-func searchDocsIssues(startTime time.Time) (map[int]map[string]int, error) {
-	var result = map[int]map[string]int{}
-	hasNextPage, nextCursor, err := searchDocsIssuesSingle(startTime, "", result)
-	if err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
-	for hasNextPage {
-		hasNextPage, nextCursor, err = searchDocsIssuesSingle(startTime, nextCursor, result)
-		if err != nil {
-			fmt.Println(err)
-			return nil, err
-		}
-	}
-	return result, nil
-}
-
-// searchDocsIssuesSingle searches one page of docs issues at a time. These docs issues will ultimately be excluded
-// from the PRs through which we iterate to create new product change docs issues. This function returns a bool to
-// check if there are more than 100 results, the cursor to query for the next page of results, and an error if
-// one exists.
-func searchDocsIssuesSingle(
-	startTime time.Time, cursor string, m map[int]map[string]int,
-) (bool, string, error) {
-	query := `query ($cursor: String, $ghSearchQuery: String!) {
-		search(first: 100, query: $ghSearchQuery, type: ISSUE, after: $cursor) {
-			nodes {
-				... on Issue {
-					number
-					body
-				}
-			}
-			pageInfo {
-				hasNextPage
-				endCursor
-			}
-		}
-	}`
-	var search gqlDocsIssue
-	today := timeutil.Now().Format(time.RFC3339)
-	queryVariables := map[string]interface{}{
-		"ghSearchQuery": fmt.Sprintf(`repo:%s/%s is:issue label:C-product-change created:%s..%s`, docsOrganization, docsRepo, startTime.Format(time.RFC3339), today),
-	}
-	if cursor != "" {
-		queryVariables["cursor"] = cursor
-	}
-	err := queryGraphQL(query, queryVariables, &search)
-	if err != nil {
-		fmt.Println(err)
-		return false, "", err
-	}
-	for _, x := range search.Data.Search.Nodes {
-		prNumber, commitSha, err := parseDocsIssueBody(x.Body)
-		if err != nil {
-			fmt.Println(err)
-		}
-		if prNumber != 0 && commitSha != "" {
-			_, ok := m[prNumber]
-			if !ok {
-				m[prNumber] = make(map[string]int)
-			}
-			m[prNumber][commitSha] = x.Number
-		}
-	}
-	pageInfo := search.Data.Search.PageInfo
-	return pageInfo.HasNextPage, pageInfo.EndCursor, nil
-}
-
-func parseDocsIssueBody(body string) (int, string, error) {
-	prMatches := prNumberRE.FindStringSubmatch(body)
-	if len(prMatches) < 2 {
-		return 0, "", fmt.Errorf("error: No PR number found in issue body")
-	}
-	prNumber, err := strconv.Atoi(prMatches[1])
-	if err != nil {
-		fmt.Println(err)
-		return 0, "", err
-	}
-	commitShaMatches := commitShaRE.FindStringSubmatch(body)
-	if len(commitShaMatches) < 2 {
-		return 0, "", fmt.Errorf("error: No commit SHA found in issue body")
-	}
-	return prNumber, commitShaMatches[1], nil
-}
-
 func searchCockroachPRsSingle(
-	startTime time.Time, endTime time.Time, cursor string, prCommitsToExclude map[int]map[string]int,
+	startTime time.Time,
+	endTime time.Time,
+	cursor string,
+	prCommitsToExclude map[int]map[string]string,
 ) (bool, string, []cockroachPR, error) {
 	var search gqlCockroachPR
 	var result []cockroachPR
@@ -241,7 +154,7 @@ func searchCockroachPRsSingle(
 		var commits []cockroachCommit
 		for _, y := range x.Commits.Edges {
 			matchingDocsIssue := prCommitsToExclude[x.Number][y.Node.Commit.Oid]
-			if nonBugFixRNRE.MatchString(y.Node.Commit.MessageBody) && matchingDocsIssue == 0 {
+			if nonBugFixRNRE.MatchString(y.Node.Commit.MessageBody) && matchingDocsIssue == "" {
 				commit := cockroachCommit{
 					Sha:             y.Node.Commit.Oid,
 					MessageHeadline: y.Node.Commit.MessageHeadline,
@@ -274,7 +187,7 @@ func searchCockroachPRsSingle(
 }
 
 func searchCockroachPRCommits(
-	pr int, cursor string, prCommitsToExclude map[int]map[string]int,
+	pr int, cursor string, prCommitsToExclude map[int]map[string]string,
 ) ([]cockroachCommit, error) {
 	hasNextPage, nextCursor, commits, err := searchCockroachPRCommitsSingle(pr, cursor, prCommitsToExclude)
 	if err != nil {
@@ -294,7 +207,7 @@ func searchCockroachPRCommits(
 }
 
 func searchCockroachPRCommitsSingle(
-	prNumber int, cursor string, prCommitsToExclude map[int]map[string]int,
+	prNumber int, cursor string, prCommitsToExclude map[int]map[string]string,
 ) (bool, string, []cockroachCommit, error) {
 	var result []cockroachCommit
 	var search gqlCockroachPRCommit
@@ -332,7 +245,7 @@ func searchCockroachPRCommitsSingle(
 	}
 	for _, x := range search.Data.Repository.PullRequest.Commits.Edges {
 		matchingDocsIssue := prCommitsToExclude[prNumber][x.Node.Commit.Oid]
-		if nonBugFixRNRE.MatchString(x.Node.Commit.MessageHeadline) && matchingDocsIssue == 0 {
+		if nonBugFixRNRE.MatchString(x.Node.Commit.MessageHeadline) && matchingDocsIssue == "" {
 			commit := cockroachCommit{
 				Sha:             x.Node.Commit.Oid,
 				MessageHeadline: x.Node.Commit.MessageHeadline,
