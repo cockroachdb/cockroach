@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -151,6 +152,7 @@ func fakeTopology(nls []sql.InstanceLocality) streamclient.Topology {
 // evenly.
 func TestSourceDestMatching(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -176,31 +178,31 @@ func TestSourceDestMatching(t *testing.T) {
 	}
 
 	// validatePairs tests that src-dst assignments are expected.
-	validatePairs := func(sipSpecs []*execinfrapb.StreamIngestionDataSpec, dstNodes []sql.InstanceLocality,
+	validatePairs := func(t *testing.T,
+		sipSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
 		expected map[pair]struct{}) {
-		for i, spec := range sipSpecs {
-
-			// SIPs are created in the order of the destination node ids
-			dstID := dstNodes[i].GetInstanceID()
+		for dstID, spec := range sipSpecs {
+			require.True(t, len(spec.PartitionSpecs) > 0, "empty node %s included in partition specs", dstID)
 			for srcID := range spec.PartitionSpecs {
 				srcIDNum, err := strconv.Atoi(srcID)
 				require.NoError(t, err)
-				_, ok := expected[pair{srcIDNum, int(dstID)}]
+				expectKey := pair{srcIDNum, int(dstID)}
+				_, ok := expected[expectKey]
 				require.True(t, ok, "Src %s,Dst %d do not match", srcID, dstID)
+				delete(expected, expectKey)
 			}
 		}
+		require.Equal(t, 0, len(expected), "expected matches not included")
 	}
 
 	// validateEvenDistribution tests that source node assignments were evenly
 	// distributed across destination nodes. This function is only called on test
 	// cases without an expected exact src-dst node match.
-	validateEvenDistribution := func(sipSpecs []*execinfrapb.StreamIngestionDataSpec, dstNodes []sql.InstanceLocality) {
-
+	validateEvenDistribution := func(t *testing.T, sipSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec, dstNodes []sql.InstanceLocality) {
+		require.Equal(t, len(sipSpecs), len(dstNodes))
 		dstNodeAssignmentCount := make(map[base.SQLInstanceID]int, len(dstNodes))
-		for i, spec := range sipSpecs {
-
-			// SIPs are created in the order of the destination node ids
-			dstID := dstNodes[i].GetInstanceID()
+		for dstID, spec := range sipSpecs {
+			dstNodeAssignmentCount[dstID] = 0
 			for range spec.PartitionSpecs {
 				dstNodeAssignmentCount[dstID]++
 			}
@@ -291,6 +293,12 @@ func TestSourceDestMatching(t *testing.T) {
 			srcNodes: nls(nl(1, "a=x"), nl(2, "a=y"), nl(3, "a=z"), nl(4, "a=x")),
 			dstNodes: nls(nl(99, "a=a"), nl(98, "a=b")),
 		},
+		{
+			name:          "ensure nodes with no work are not included in specs",
+			srcNodes:      nls(nl(1, "a=a")),
+			dstNodes:      nls(nl(99, "a=a"), nl(98, "a=b")),
+			expectedPairs: pairs(mkPair(1, 99)),
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeStreamAddress := streamingccl.StreamAddress("")
@@ -309,9 +317,9 @@ func TestSourceDestMatching(t *testing.T) {
 			)
 			require.NoError(t, err)
 			if len(tc.expectedPairs) > 0 {
-				validatePairs(sipSpecs, tc.dstNodes, tc.expectedPairs)
+				validatePairs(t, sipSpecs, tc.expectedPairs)
 			} else {
-				validateEvenDistribution(sipSpecs, tc.dstNodes)
+				validateEvenDistribution(t, sipSpecs, tc.dstNodes)
 			}
 		})
 	}
