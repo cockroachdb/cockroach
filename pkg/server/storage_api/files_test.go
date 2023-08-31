@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -103,18 +104,32 @@ func TestStatusGetFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if a, e := len(response.Files), testFilesNo; a != e {
-			t.Errorf("expected %d files(s), found %d", e, a)
+		if a, e := len(response.Files), testFilesNo; a < e {
+			t.Errorf("expected at least %d files(s), found %d", e, a)
 		}
 
-		for i, file := range response.Files {
-			expectedFileName := fmt.Sprintf("goroutine_dump%d.txt.gz", i)
-			if file.Name != expectedFileName {
-				t.Fatalf("expected file name %s, found %s", expectedFileName, file.Name)
-			}
-			expectedFileContents := []byte(fmt.Sprintf("Goroutine dump %d", i))
-			if !bytes.Equal(file.Contents, expectedFileContents) {
-				t.Fatalf("expected file contents %s, found %s", expectedFileContents, file.Contents)
+		// regex for goroutine files manually added
+		reDump, err := regexp.Compile(`goroutine_dump\d+.txt.gz`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// regex for goroutines dumped by goroutinedumper
+		reOOMDump, err := regexp.Compile("goroutine_dump.*.double_since_last_dump.*.txt.gz")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, file := range response.Files {
+			if !reDump.MatchString(file.Name) {
+				if !reOOMDump.MatchString(file.Name) {
+					t.Fatalf("expected file name of form %s or %s, found %s", reDump,
+						reOOMDump, file.Name)
+				}
+			} else {
+				expectedFileContents := []byte("Goroutine dump")
+				if !bytes.Contains(file.Contents, expectedFileContents) {
+					t.Fatalf("expected file to contain %s, found %s",
+						expectedFileContents, file.Contents)
+				}
 			}
 		}
 	})
