@@ -11,6 +11,7 @@ package spanconfigsqltranslatorccl
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -298,6 +299,18 @@ func TestDataDriven(t *testing.T) {
 				allowGC = true
 				gcWaiter.Signal()
 				gcWaiter.L.Unlock()
+
+			case "repartition":
+				var fromRelativePath, toRelativePath string
+				d.ScanArgs(t, "from", &fromRelativePath)
+				d.ScanArgs(t, "to", &toRelativePath)
+				parentDir := filepath.Dir(path)
+
+				fromAbsolutePath := filepath.Join(parentDir, fromRelativePath)
+				datadriven.RunTest(t, fromAbsolutePath, f)
+
+				toAbsolutePath := filepath.Join(parentDir, toRelativePath)
+				datadriven.RunTest(t, toAbsolutePath, f)
 
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
