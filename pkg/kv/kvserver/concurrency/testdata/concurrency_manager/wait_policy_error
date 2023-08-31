@@ -220,7 +220,7 @@ num=3
     active: true req: 3, strength: Intent, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 3
  lock: "k4"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent]
 
 # -------------------------------------------------------------
 # Read-only request with WaitPolicy_Error discovers abandoned
@@ -281,7 +281,7 @@ debug-lock-table
 ----
 num=1
  lock: "k4"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [holder finalized: aborted]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,1, info: repl [Intent] [holder finalized: aborted]
 
 reset
 ----
