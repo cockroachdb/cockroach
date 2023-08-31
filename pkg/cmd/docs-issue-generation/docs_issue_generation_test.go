@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -224,7 +224,7 @@ func TestConstructDocsIssues(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.testName, func(t *testing.T) {
-			defer testutils.TestingHook(&getJiraIssueFromGitHubIssue, func(org, repo string, issue int, token string) (string, error) {
+			defer testutils.TestingHook(&getJiraIssueFromGitHubIssue, func(org, repo string, issue int) (string, error) {
 				// getJiraIssueFromGitHubIssue requires a network call to the GitHub GraphQL API to calculate the Jira issue given
 				// a GitHub org/repo/issue. To help eliminate the need of a network call and minimize the chances of this test
 				// flaking, we define a pre-built map that is used to mock the network call and allow the tests to run as expected.
@@ -236,7 +236,7 @@ func TestConstructDocsIssues(t *testing.T) {
 				ghJiraIssueMap["cockroachdb"]["cockroach"][89941] = "CRDB-20505"
 				return ghJiraIssueMap[org][repo][issue], nil
 			})()
-			result := constructDocsIssues(tc.cockroachPRs, "")
+			result := constructDocsIssues(tc.cockroachPRs)
 			assert.Equal(t, tc.docsIssues, result)
 		})
 	}
@@ -445,7 +445,7 @@ must be used instead.`},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.prNum, func(t *testing.T) {
-			defer testutils.TestingHook(&getJiraIssueFromGitHubIssue, func(org, repo string, issue int, token string) (string, error) {
+			defer testutils.TestingHook(&getJiraIssueFromGitHubIssue, func(org, repo string, issue int) (string, error) {
 				var ghJiraIssueMap = make(map[string]map[string]map[int]string)
 				ghJiraIssueMap["cockroachdb"] = make(map[string]map[int]string)
 				ghJiraIssueMap["cockroachdb"]["cockroach"] = make(map[int]string)
@@ -453,7 +453,7 @@ must be used instead.`},
 				return ghJiraIssueMap[org][repo][issue], nil
 			})()
 			prNumInt, _ := strconv.Atoi(tc.prNum)
-			result := formatReleaseNotes(tc.commitMessage, prNumInt, tc.prBody, tc.sha, "")
+			result := formatReleaseNotes(tc.commitMessage, prNumInt, tc.prBody, tc.sha)
 			assert.Equal(t, tc.rns, result)
 		})
 	}
