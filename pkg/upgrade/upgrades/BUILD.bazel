@@ -117,6 +117,7 @@ go_test(
         "helpers_test.go",
         "json_forward_indexes_test.go",
         "key_visualizer_migration_test.go",
+        "leases_with_session_id_test.go",
         "main_test.go",
         "plan_gist_stmt_diagnostics_requests_test.go",
         "role_members_ids_migration_test.go",
