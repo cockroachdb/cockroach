@@ -1874,8 +1874,8 @@ func mvccPutInternal(
 				ValueSize:      uint32(origMetaValSize),
 			})
 		} else {
-			buf.meta = enginepb.MVCCMetadata{RawBytes: value.RawBytes}
-			metaKeySize, metaValSize, err = buf.putInlineMeta(writer, metaKey, &buf.meta)
+			buf.newMeta = enginepb.MVCCMetadata{RawBytes: value.RawBytes}
+			metaKeySize, metaValSize, err = buf.putInlineMeta(writer, metaKey, &buf.newMeta)
 		}
 		if opts.Stats != nil {
 			updateStatsForInline(opts.Stats, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
