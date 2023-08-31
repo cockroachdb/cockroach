@@ -1772,11 +1772,10 @@ func replayTransactionalWrite(
 			// If the previous value at the key wasn't written by this
 			// transaction, or it was hidden by a rolled back seqnum, we look at
 			// last committed value on the key. Since we want the last committed
-			// value on the key, we must make an inconsistent read so we ignore
-			// our previous intents here.
-			exVal, _, err = mvccGet(ctx, iter, key, timestamp, MVCCGetOptions{
-				Inconsistent: true,
-				Tombstones:   true,
+			// value on the key, we read below our previous intents here.
+			metaTimestamp := meta.Timestamp.ToTimestamp()
+			exVal, _, err = mvccGet(ctx, iter, key, metaTimestamp.Prev(), MVCCGetOptions{
+				Tombstones: true,
 			})
 			if err != nil {
 				return err
@@ -2038,11 +2037,10 @@ func mvccPutInternal(
 				// "last write outside txn"
 				// => use inconsistent mvccGetInternal to retrieve the last committed value at key.
 				//
-				// Since we want the last committed value on the key, we must make
-				// an inconsistent read so we ignore our previous intents here.
-				exVal, _, err = mvccGet(ctx, iter, key, readTimestamp, MVCCGetOptions{
-					Inconsistent: true,
-					Tombstones:   true,
+				// Since we want the last committed value on the key, we must
+				// read below our previous intents here.
+				exVal, _, err = mvccGet(ctx, iter, key, metaTimestamp.Prev(), MVCCGetOptions{
+					Tombstones: true,
 				})
 				if err != nil {
 					return false, err
