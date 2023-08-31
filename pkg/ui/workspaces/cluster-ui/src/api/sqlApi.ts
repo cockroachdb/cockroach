@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { fetchDataJSON } from "./fetchData";
+import { getLogger } from "../util";
 
 export type SqlExecutionRequest = {
   statements: SqlStatement[];
@@ -17,6 +18,7 @@ export type SqlExecutionRequest = {
   application_name?: string; // Defaults to '$ api-v2-sql'
   database?: string; // Defaults to system
   max_result_size?: number; // Default 10kib
+  separate_txns?: boolean;
 };
 
 export type SqlStatement = {
@@ -165,7 +167,8 @@ export function sqlApiErrorMessage(message: string): string {
 
   message = message.replace("run-query-via-api: ", "");
   if (message.includes(":")) {
-    return message.split(":")[1];
+    const idx = message.indexOf(":") + 1;
+    return idx < message.length ? message.substring(idx) : message;
   }
 
   return message;
@@ -184,28 +187,66 @@ export function createSqlExecutionRequest(
   };
 }
 
+export function isSeparateTxnError(message: string): boolean {
+  return !!message?.includes(
+    "separate transaction payload encountered transaction error",
+  );
+}
+
 export function isMaxSizeError(message: string): boolean {
   return !!message?.includes("max result size exceeded");
+}
+
+export function isPrivilegeError(code: string): boolean {
+  return code === "42501";
 }
 
 export function formatApiResult<ResultType>(
   results: ResultType,
   error: SqlExecutionErrorMessage,
   errorMessageContext: string,
+  shouldThrowOnQueryError = true,
 ): SqlApiResponse<ResultType> {
   const maxSizeError = isMaxSizeError(error?.message);
 
   if (error && !maxSizeError) {
-    throw new Error(
-      `Error while ${errorMessageContext}: ${sqlApiErrorMessage(
-        error?.message,
-      )}`,
-    );
+    if (shouldThrowOnQueryError) {
+      throw new Error(
+        `Error while ${errorMessageContext}: ${sqlApiErrorMessage(
+          error?.message,
+        )}`,
+      );
+    } else {
+      // Otherwise, just log.
+      getLogger().warn(
+        `Error while ${errorMessageContext}: ${sqlApiErrorMessage(
+          error?.message,
+        )}`,
+      );
+    }
   }
 
   return {
     maxSizeReached: maxSizeError,
     results: results,
+  };
+}
+
+export function combineQueryErrors(
+  errs: Error[],
+  sqlError?: SqlExecutionErrorMessage,
+): SqlExecutionErrorMessage {
+  if (errs.length === 0 && !sqlError) {
+    return;
+  }
+  const errMsgs = errs.map(err => `\n-` + sqlApiErrorMessage(err.message));
+  let sqlErrMsg = sqlError.message;
+  if (isSeparateTxnError(sqlErrMsg)) {
+    sqlErrMsg = "Encountered query error(s) fetching data:";
+  }
+  return {
+    ...sqlError,
+    message: [sqlErrMsg, ...errMsgs].join(``),
   };
 }
 

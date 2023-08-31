@@ -124,6 +124,14 @@ type AuthorizationAccessor interface {
 	// the role options table. Example: CREATEROLE instead of NOCREATEROLE.
 	// NOLOGIN instead of LOGIN.
 	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
+
+	// HasGlobalPrivilegeOrRoleOption returns a bool representing whether the current user
+	// has a global privilege or the corresponding legacy role option.
+	HasGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind) (bool, error)
+
+	// CheckGlobalPrivilegeOrRoleOption checks if the current user has a global privilege
+	// or the corresponding legacy role option, and returns an error if the user does not.
+	CheckGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind) error
 }
 
 var _ AuthorizationAccessor = &planner{}
@@ -811,6 +819,38 @@ func (p *planner) CheckRoleOption(ctx context.Context, roleOption roleoption.Opt
 	return nil
 }
 
+// HasGlobalPrivilegeOrRoleOption implements the AuthorizationAccessor interface.
+func (p *planner) HasGlobalPrivilegeOrRoleOption(
+	ctx context.Context, privilege privilege.Kind,
+) (bool, error) {
+	ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege, p.User())
+	if err != nil {
+		return false, err
+	}
+	if ok {
+		return true, nil
+	}
+	if roleOption, ok := roleoption.ByName[privilege.String()]; ok {
+		return p.HasRoleOption(ctx, roleOption)
+	}
+	return false, nil
+}
+
+// CheckGlobalPrivilegeOrRoleOption implements the AuthorizationAccessor interface.
+func (p *planner) CheckGlobalPrivilegeOrRoleOption(
+	ctx context.Context, privilege privilege.Kind,
+) error {
+	ok, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"user %s does not have %s privilege", p.User(), privilege)
+	}
+	return nil
+}
+
 // ConnAuditingClusterSettingName is the name of the cluster setting
 // for the cluster setting that enables pgwire-level connection audit
 // logs.
@@ -1004,31 +1044,11 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context)
 }
 
 func (p *planner) HasViewActivityRedacted(ctx context.Context) (bool, error) {
-	if hasViewRedacted, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED, p.User()); err != nil {
-		return false, err
-	} else if hasViewRedacted {
-		return true, nil
-	}
-	if hasViewRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED); err != nil {
-		return false, err
-	} else if hasViewRedacted {
-		return true, nil
-	}
-	return false, nil
+	return p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWACTIVITYREDACTED)
 }
 
 func (p *planner) HasViewActivity(ctx context.Context) (bool, error) {
-	if hasView, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY, p.User()); err != nil {
-		return false, err
-	} else if hasView {
-		return true, nil
-	}
-	if hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY); err != nil {
-		return false, err
-	} else if hasView {
-		return true, nil
-	}
-	return false, nil
+	return p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWACTIVITY)
 }
 
 func insufficientPrivilegeError(
