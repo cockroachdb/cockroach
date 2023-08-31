@@ -77,6 +77,10 @@ type Setting interface {
 	// settings are still accessible to users, but they don't get listed out when
 	// retrieving all settings.
 	Visibility() Visibility
+
+	// IsUnsafe returns whether the setting is unsafe, and thus requires
+	// a special interlock to set.
+	IsUnsafe() bool
 }
 
 // NonMaskedSetting is the exported interface of non-masked settings. A
