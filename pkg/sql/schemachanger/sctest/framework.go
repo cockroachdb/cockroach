@@ -465,7 +465,7 @@ func (e *stageExecStmt) Exec(
 			if err != nil {
 				if idx != len(e.stmts)-1 {
 					// We require that only the last statement in a stage-exec block can cause an error.
-					t.Fatalf("unexpected error encountered; only the last statement can cause an error")
+					t.Fatalf("unexpected error (only the last statement may expect an error): %v", err)
 				} else {
 					// Fail the test unless the error is expected (from e.expectedOutput), or
 					// "rewrite" is set, in which case we record the error and proceed.
@@ -487,8 +487,14 @@ func (e *stageExecStmt) Exec(
 			results := runner.QueryStr(t, boundSQL)
 			if !reflect.DeepEqual(results, expectedQueryResult) {
 				if !rewrite {
-					t.Fatalf("query '%s': expected:\n%v\ngot:\n%v\n",
-						stmt, sqlutils.MatrixToStr(expectedQueryResult), sqlutils.MatrixToStr(results))
+					t.Fatalf(
+						"query '%s' ($stageKey=%d,$successfulStageCount=%d): expected:\n%v\ngot:\n%v\n",
+						stmt,
+						stageVariables.stage.AsInt()*1000,
+						stageVariables.successfulStageCount,
+						sqlutils.MatrixToStr(expectedQueryResult),
+						sqlutils.MatrixToStr(results),
+					)
 				}
 				e.expectedOutput = sqlutils.MatrixToStr(results)
 			}
@@ -888,7 +894,7 @@ func executeSchemaChangeTxn(
 			err = e
 			return nil
 		default:
-			return errors.New("waiting for statements to execute")
+			return errors.Newf("waiting for statements to execute: %v", spec.Stmts)
 		}
 	})
 	return err
