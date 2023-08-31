@@ -232,6 +232,8 @@ AU_EAST
   AU_EAST_1
     └── [1 2 3]
 no events were scheduled
+validation result:
+	valid
 sample1: pass
 ----------------------------------
 sample2: start running
@@ -247,6 +249,8 @@ AU_EAST
   AU_EAST_1
     └── [1 2 3]
 no events were scheduled
+validation result:
+	valid
 sample2: pass
 ----------------------------------
 sample3: start running
@@ -262,6 +266,8 @@ AU_EAST
   AU_EAST_1
     └── [1 2 3]
 no events were scheduled
+validation result:
+	valid
 sample3: pass
 ----------------------------------
 

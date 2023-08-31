@@ -89,6 +89,8 @@ c
   c3
     └── [25 26 27 28]
 no events were scheduled
+validation result:
+	valid
 sample1: pass
 ----------------------------------
 sample2: start running
@@ -125,6 +127,8 @@ c
   c3
     └── [33 34 35 36]
 no events were scheduled
+validation result:
+	valid
 sample2: pass
 ----------------------------------
 sample3: start running
@@ -159,6 +163,8 @@ c
   c3
     └── [25 26 27 28]
 no events were scheduled
+validation result:
+	valid
 sample3: pass
 ----------------------------------
 
