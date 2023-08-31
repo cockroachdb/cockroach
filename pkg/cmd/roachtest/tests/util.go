@@ -33,7 +33,7 @@ import (
 // WaitFor3XReplication is like WaitForReplication but specifically requires
 // three as the minimum number of voters a range must be replicated on.
 func WaitFor3XReplication(ctx context.Context, t test.Test, db *gosql.DB) error {
-	return WaitForReplication(ctx, t, db, 3 /* replicationFactor */)
+	return WaitForReplication(ctx, t, db, 3 /* replicationFactor */, atLeastReplicationFactor)
 }
 
 // WaitForReady waits until the given nodes report ready via health checks.
@@ -77,20 +77,49 @@ func WaitForReady(
 	))
 }
 
-// WaitForReplication waits until all ranges in the system are on at least
-// replicationFactor voters.
+type waitForReplicationType int
+
+const (
+	_ waitForReplicationType = iota
+
+	// atleastReplicationFactor indicates all ranges in the system should have
+	// at least the replicationFactor number of replicas.
+	atLeastReplicationFactor
+
+	// exactlyReplicationFactor indicates that all ranges in the system should
+	// have exactly the replicationFactor number of replicas.
+	exactlyReplicationFactor
+)
+
+// WaitForReplication waits until all ranges in the system are on at least or
+// exactly replicationFactor number of voters, depending on the supplied
+// waitForReplicationType.
 func WaitForReplication(
-	ctx context.Context, t test.Test, db *gosql.DB, replicationFactor int,
+	ctx context.Context,
+	t test.Test,
+	db *gosql.DB,
+	replicationFactor int,
+	waitForReplicationType waitForReplicationType,
 ) error {
 	t.L().Printf("waiting for initial up-replication... (<%s)", 2*time.Minute)
 	tStart := timeutil.Now()
+	var compStr string
+	switch waitForReplicationType {
+	case exactlyReplicationFactor:
+		compStr = "="
+	case atLeastReplicationFactor:
+		compStr = "<"
+	default:
+		t.Fatalf("unknown type %v", waitForReplicationType)
+	}
 	var oldN int
 	for {
 		var n int
 		if err := db.QueryRowContext(
 			ctx,
 			fmt.Sprintf(
-				"SELECT count(1) FROM crdb_internal.ranges WHERE array_length(replicas, 1) < %d",
+				"SELECT count(1) FROM crdb_internal.ranges WHERE array_length(replicas, 1) %s %d",
+				compStr,
 				replicationFactor,
 			),
 		).Scan(&n); err != nil {
