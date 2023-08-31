@@ -1887,10 +1887,16 @@ func mvccPutInternal(
 		if opts.Txn != nil {
 			return false, errors.Errorf("%q: inline writes not allowed within transactions", metaKey)
 		}
-		var metaKeySize, metaValSize int64
-		if value, err = maybeGetValue(ctx, iter, key, value, ok, timestamp, valueFn); err != nil {
-			return false, err
+		if valueFn != nil {
+			var inlineVal optionalValue
+			if ok {
+				inlineVal = makeOptionalValue(roachpb.Value{RawBytes: buf.meta.RawBytes})
+			}
+			if value, err = valueFn(inlineVal); err != nil {
+				return false, err
+			}
 		}
+		var metaKeySize, metaValSize int64
 		if !value.IsPresent() {
 			metaKeySize, metaValSize, err = 0, 0, writer.ClearUnversioned(metaKey.Key, ClearOptions{
 				// NB: origMetaValSize is only populated by mvccGetMetadata if
