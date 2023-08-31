@@ -83,7 +83,8 @@ const (
 //	  4. sum of weights in the array should be equal to 1
 
 // 3. "eval" [seed=<int64>] [num_iterations=<int>] [duration=<time.Duration>]
-// [verbose=(<[]("result_only","test_settings","initial_state","config_gen","event","topology","all")>)]
+// [verbose=(<[]("result_only","test_settings","initial_state","config_gen",
+// "event","topology","validate","all")>)]
 // e.g. eval seed=20 duration=30m2s verbose=(test_settings,initial_state)
 //  - eval: generates a simulation based on the configuration set with the given
 //    commands.

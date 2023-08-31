@@ -404,7 +404,8 @@ func randomlySelectDataPlacement(randSource *rand.Rand) descpb.DataPlacement {
 // intervals defined by durationToAssert from the start time. These events apply
 // a randomly generated zone configuration followed by an assertion event. Note
 // that these random configurations might be unsatisfiable under the cluster
-// setup.
+// setup. To validate whether the configurations generated are satisfiable,
+// please use "eval" [verbose=validate].
 func generateRandomSurvivalGoalsEvents(
 	regions []state.Region,
 	startTime time.Time,
