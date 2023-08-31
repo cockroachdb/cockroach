@@ -24,8 +24,6 @@ import (
 // TracingAggregator. A TracingAggregatorEvent also implements the tracing.LazyTag interface
 // to render its information on the associated tracing span.
 type TracingAggregatorEvent interface {
-	tracing.LazyTag
-
 	// Identity returns a TracingAggregatorEvent that when combined with another
 	// event returns the other TracingAggregatorEvent unchanged.
 	Identity() TracingAggregatorEvent
@@ -41,8 +39,6 @@ type TracingAggregatorEvent interface {
 // A TracingAggregator can be used to aggregate and render AggregatorEvents that
 // are emitted as part of its tracing spans' recording.
 type TracingAggregator struct {
-	// sp is the tracing span managed by the TracingAggregator.
-	sp *tracing.Span
 	mu struct {
 		syncutil.Mutex
 		// aggregatedEvents is a mapping from the name identifying the
@@ -80,22 +76,14 @@ func (b *TracingAggregator) Notify(event tracing.Structured) tracing.EventConsum
 	eventName := bulkEvent.ProtoName()
 	if _, ok := b.mu.aggregatedEvents[bulkEvent.ProtoName()]; !ok {
 		b.mu.aggregatedEvents[eventName] = bulkEvent.Identity()
-		b.sp.SetLazyTagLocked(eventName, b.mu.aggregatedEvents[eventName])
 	}
 	b.mu.aggregatedEvents[eventName].Combine(bulkEvent)
 	return tracing.EventNotConsumed
 }
 
-// Close is responsible for finishing the TracingAggregator's tracing span.
-//
-// NOTE: it must be called exactly once.
-func (b *TracingAggregator) Close() {
-	b.sp.Finish()
-}
-
 // TracingAggregatorEventToBytes marshals an event into a byte slice.
 func TracingAggregatorEventToBytes(
-	ctx context.Context, event TracingAggregatorEvent,
+	_ context.Context, event TracingAggregatorEvent,
 ) ([]byte, error) {
 	msg, ok := event.(protoutil.Message)
 	if !ok {
@@ -113,27 +101,14 @@ func TracingAggregatorEventToBytes(
 
 var _ tracing.EventListener = &TracingAggregator{}
 
-// MakeTracingAggregatorWithSpan returns an instance of an TracingAggregator along with a
-// newly created child context. The TracingAggregator is registered as a
-// tracing.EventListener on the span associated with newly created context.
-//
-// The TracingAggregator instance is responsible for finishing the returned span, and
-// so the user must call Close().
-func MakeTracingAggregatorWithSpan(
-	ctx context.Context, aggregatorName string, tracer *tracing.Tracer,
-) (context.Context, *TracingAggregator) {
+// TracingAggregatorForContext creates a TracingAggregator if the provided
+// context has a tracing span.
+func TracingAggregatorForContext(ctx context.Context) *TracingAggregator {
 	if tracing.SpanFromContext(ctx) == nil {
-		log.Warningf(ctx, "tracing aggregator %s cannot be created without a tracing span", aggregatorName)
-		return ctx, nil
+		log.Warning(ctx, "tracing aggregator cannot be created without a tracing span")
+		return nil
 	}
 	agg := &TracingAggregator{}
-	aggCtx, aggSpan := tracing.EnsureChildSpan(ctx, tracer, aggregatorName,
-		tracing.WithEventListeners(agg))
-
-	agg.mu.Lock()
-	defer agg.mu.Unlock()
 	agg.mu.aggregatedEvents = make(map[string]TracingAggregatorEvent)
-	agg.sp = aggSpan
-
-	return aggCtx, agg
+	return agg
 }

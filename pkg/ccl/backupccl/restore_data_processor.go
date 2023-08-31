@@ -211,11 +211,12 @@ func newRestoreDataProcessor(
 			InputsToDrain: []execinfra.RowSource{input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				rd.ConsumerClosed()
-				meta := rd.constructTracingAggregatorProducerMeta(ctx)
-				if meta == nil {
-					return nil
+				if rd.agg != nil {
+					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
+						rd.flowCtx.NodeID.SQLInstanceID(), rd.flowCtx.ID, rd.agg)
+					return []execinfrapb.ProducerMetadata{*meta}
 				}
-				return []execinfrapb.ProducerMetadata{*meta}
+				return nil
 			},
 		}); err != nil {
 		return nil, err
@@ -226,14 +227,17 @@ func newRestoreDataProcessor(
 // Start is part of the RowSource interface.
 func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", rd.spec.JobID)
-	ctx = rd.StartInternal(ctx, restoreDataProcName)
+	rd.agg = bulkutil.TracingAggregatorForContext(ctx)
+	rd.aggTimer = timeutil.NewTimer()
+	// If the aggregator is nil, we do not want the timer to fire.
+	if rd.agg != nil {
+		rd.aggTimer.Reset(15 * time.Second)
+	}
+
+	ctx = rd.StartInternal(ctx, restoreDataProcName, rd.agg)
 	rd.input.Start(ctx)
 
 	ctx, cancel := context.WithCancel(ctx)
-	ctx, rd.agg = bulkutil.MakeTracingAggregatorWithSpan(ctx, fmt.Sprintf("%s-aggregator", restoreDataProcName), rd.EvalCtx.Tracer)
-	rd.aggTimer = timeutil.NewTimer()
-	rd.aggTimer.Reset(15 * time.Second)
-
 	rd.cancelWorkersAndWait = func() {
 		cancel()
 		_ = rd.phaseGroup.Wait()
@@ -687,31 +691,6 @@ func makeProgressUpdate(
 	return progDetails
 }
 
-func (rd *restoreDataProcessor) constructTracingAggregatorProducerMeta(
-	ctx context.Context,
-) *execinfrapb.ProducerMetadata {
-	if rd.agg == nil {
-		return nil
-	}
-	aggEvents := &execinfrapb.TracingAggregatorEvents{
-		SQLInstanceID: rd.flowCtx.NodeID.SQLInstanceID(),
-		FlowID:        rd.flowCtx.ID,
-		Events:        make(map[string][]byte),
-	}
-	rd.agg.ForEachAggregatedEvent(func(name string, event bulkutil.TracingAggregatorEvent) {
-		var data []byte
-		var err error
-		if data, err = bulkutil.TracingAggregatorEventToBytes(ctx, event); err != nil {
-			// This should never happen but if it does skip the aggregated event.
-			log.Warningf(ctx, "failed to unmarshal aggregated event: %v", err.Error())
-			return
-		}
-		aggEvents.Events[name] = data
-	})
-
-	return &execinfrapb.ProducerMetadata{AggregatorEvents: aggEvents}
-}
-
 // Next is part of the RowSource interface.
 func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if rd.State != execinfra.StateRunning {
@@ -738,7 +717,8 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 	case <-rd.aggTimer.C:
 		rd.aggTimer.Read = true
 		rd.aggTimer.Reset(15 * time.Second)
-		return nil, rd.constructTracingAggregatorProducerMeta(rd.Ctx())
+		return nil, bulkutil.ConstructTracingAggregatorProducerMeta(rd.Ctx(),
+			rd.flowCtx.NodeID.SQLInstanceID(), rd.flowCtx.ID, rd.agg)
 	case meta := <-rd.metaCh:
 		return nil, meta
 	case <-rd.Ctx().Done():
@@ -755,9 +735,6 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 	rd.cancelWorkersAndWait()
 
 	rd.qp.Close(rd.Ctx())
-	if rd.agg != nil {
-		rd.agg.Close()
-	}
 	rd.aggTimer.Stop()
 	rd.InternalClose()
 }

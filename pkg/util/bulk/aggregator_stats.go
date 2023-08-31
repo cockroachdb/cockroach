@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -34,6 +36,33 @@ var flushTracingAggregatorFrequency = settings.RegisterDurationSetting(
 	"frequency at which the coordinator node processes and persists tracing aggregator stats to storage",
 	10*time.Minute,
 )
+
+// ConstructTracingAggregatorProducerMeta constructs a ProducerMetadata that
+// contains all the aggregated events stored in the tracing aggregator.
+func ConstructTracingAggregatorProducerMeta(
+	ctx context.Context,
+	sqlInstanceID base.SQLInstanceID,
+	flowID execinfrapb.FlowID,
+	agg *TracingAggregator,
+) *execinfrapb.ProducerMetadata {
+	aggEvents := &execinfrapb.TracingAggregatorEvents{
+		SQLInstanceID: sqlInstanceID,
+		FlowID:        flowID,
+		Events:        make(map[string][]byte),
+	}
+
+	agg.ForEachAggregatedEvent(func(name string, event TracingAggregatorEvent) {
+		if data, err := TracingAggregatorEventToBytes(ctx, event); err != nil {
+			// This should never happen but if it does skip the aggregated event.
+			log.Warningf(ctx, "failed to unmarshal aggregated event: %v", err.Error())
+			return
+		} else {
+			aggEvents.Events[name] = data
+		}
+	})
+
+	return &execinfrapb.ProducerMetadata{AggregatorEvents: aggEvents}
+}
 
 // flushTracingStats persists the following files to the `system.job_info` table
 // for consumption by job observability tools:
