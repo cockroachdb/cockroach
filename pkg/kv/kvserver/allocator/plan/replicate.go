@@ -149,7 +149,7 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 	canTransferLeaseFrom CanTransferLeaseFrom,
 ) (shouldPlanChange bool, priority float64) {
 
-	log.KvDistribution.VEventf(ctx, 6,
+	log.KvDistribution.VInfof(ctx, 6,
 		"computing range action desc=%s config=%s",
 		desc, conf.String())
 	action, priority := rp.allocator.ComputeAction(ctx, rp.storePool, conf, desc)
@@ -252,7 +252,7 @@ func (rp ReplicaPlanner) PlanOneChange(
 		Op:      AllocationNoop{},
 		Replica: repl,
 	}
-	log.KvDistribution.VEventf(ctx, 6,
+	log.KvDistribution.VInfof(ctx, 6,
 		"planning range change desc=%s config=%s",
 		desc, conf.String())
 
@@ -263,7 +263,7 @@ func (rp ReplicaPlanner) PlanOneChange(
 	// NB: the replication layer ensures that the below operations don't cause
 	// unavailability; see kvserver.execChangeReplicasTxn.
 	action, allocatorPrio := rp.allocator.ComputeAction(ctx, rp.storePool, conf, desc)
-	log.KvDistribution.VEventf(ctx, 1, "next replica action: %s", action)
+	log.KvDistribution.VInfof(ctx, 1, "next replica action: %s", action)
 
 	var err error
 	var op AllocationOp

@@ -1444,7 +1444,7 @@ func (a *Allocator) allocateTargetFromList(
 		targetType,
 	)
 
-	log.KvDistribution.VEventf(ctx, 3, "allocate %s: %s", targetType, candidates)
+	log.KvDistribution.VInfof(ctx, 3, "allocate %s: %s", targetType, candidates)
 	if target := selector.selectOne(candidates); target != nil {
 		log.KvDistribution.VEventf(ctx, 3, "add target: %s", target)
 		details := decisionDetails{Target: target.compactString()}
@@ -1578,7 +1578,7 @@ func (a Allocator) RemoveTarget(
 	if bad := rankedCandidates.selectWorst(a.randGen); bad != nil {
 		for _, exist := range existingReplicas {
 			if exist.StoreID == bad.store.StoreID {
-				log.KvDistribution.VEventf(ctx, 3, "remove target: %s", bad)
+				log.KvDistribution.VInfof(ctx, 3, "remove target: %s", bad)
 				details := decisionDetails{Target: bad.compactString()}
 				detailsBytes, err := json.Marshal(details)
 				if err != nil {
@@ -2528,7 +2528,7 @@ func (a *Allocator) ShouldTransferLease(
 	sl, _, _ := storePool.GetStoreList(storepool.StoreFilterSuspect)
 	sl = sl.ExcludeInvalid(conf.Constraints)
 	sl = sl.ExcludeInvalid(conf.VoterConstraints)
-	log.KvDistribution.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=s%d):\n%s", leaseRepl.StoreID(), sl)
+	log.KvDistribution.VInfof(ctx, 3, "ShouldTransferLease (lease-holder=s%d):\n%s", leaseRepl.StoreID(), sl)
 
 	transferDec, _ := a.shouldTransferLeaseForAccessLocality(
 		ctx,
@@ -2551,7 +2551,7 @@ func (a *Allocator) ShouldTransferLease(
 		log.KvDistribution.Fatalf(ctx, "unexpected transfer decision %d", transferDec)
 	}
 
-	log.KvDistribution.VEventf(
+	log.KvDistribution.VInfof(
 		ctx, 3, "ShouldTransferLease decision (lease-holder=s%d): %t", leaseRepl.StoreID(), result,
 	)
 	return result
