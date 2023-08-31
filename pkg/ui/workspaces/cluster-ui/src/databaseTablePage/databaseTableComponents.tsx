@@ -17,10 +17,14 @@ import {
   minDate,
   performanceTuningRecipes,
 } from "../util";
-import { Timestamp } from "../timestamp";
+import { Timestamp, Timezone } from "../timestamp";
 import React, { useContext } from "react";
 import { Moment } from "moment-timezone";
-import { DatabaseTablePageDataDetails, IndexStat } from "./databaseTablePage";
+import {
+  DatabaseTablePageDataDetails,
+  Grant,
+  IndexStat,
+} from "./databaseTablePage";
 import { CircleFilled } from "../icon";
 import { Tooltip } from "antd";
 import "antd/lib/tooltip/style";
@@ -35,9 +39,15 @@ import { Search as IndexIcon } from "@cockroachlabs/icons";
 import { Breadcrumbs } from "../breadcrumbs";
 import { CaretRight } from "../icon/caretRight";
 import { CockroachCloudContext } from "../contexts";
+import { createSelector } from "@reduxjs/toolkit";
+import { ColumnDescriptor, SortedTable } from "../sortedtable";
 const cx = classNames.bind(styles);
 
-export const NameCell = ({
+export class DatabaseTableGrantsTable extends SortedTable<Grant> {}
+
+export class IndexUsageStatsTable extends SortedTable<IndexStat> {}
+
+const NameCell = ({
   indexStat,
   showIndexRecommendations,
   tableName,
@@ -220,3 +230,125 @@ export const FormatMVCCInfo = ({
     </>
   );
 };
+
+interface TableIndexStatsColumnsProps {
+  showIndexRecommendations: boolean;
+  isCockroachCloud: boolean;
+  dbName: string;
+  tableName: string;
+}
+
+export const getMemoizedTableIndexStatsColumns = createSelector(
+  (state: TableIndexStatsColumnsProps) => state.showIndexRecommendations,
+  (state: TableIndexStatsColumnsProps) => state.isCockroachCloud,
+  (state: TableIndexStatsColumnsProps) => state.dbName,
+  (state: TableIndexStatsColumnsProps) => state.tableName,
+  (
+    showIndexRecommendations,
+    isCockroachCloud,
+    dbName,
+    tableName,
+  ): ColumnDescriptor<IndexStat>[] => {
+    return getTableIndexStatsColumns(
+      showIndexRecommendations,
+      isCockroachCloud,
+      dbName,
+      tableName,
+    );
+  },
+);
+
+const getTableIndexStatsColumns = (
+  showIndexRecommendations: boolean,
+  isCockroachCloud: boolean,
+  dbName: string,
+  tableName: string,
+): ColumnDescriptor<IndexStat>[] => {
+  const indexStatsColumns: ColumnDescriptor<IndexStat>[] = [
+    {
+      name: "indexes",
+      title: "Indexes",
+      hideTitleUnderline: true,
+      className: cx("index-stats-table__col-indexes"),
+      cell: indexStat => (
+        <NameCell
+          indexStat={indexStat}
+          tableName={tableName}
+          showIndexRecommendations={showIndexRecommendations}
+        />
+      ),
+      sort: indexStat => indexStat.indexName,
+    },
+    {
+      name: "total reads",
+      title: "Total Reads",
+      hideTitleUnderline: true,
+      cell: indexStat => format.Count(indexStat.totalReads),
+      sort: indexStat => indexStat.totalReads,
+    },
+    {
+      name: "last used",
+      title: (
+        <>
+          Last Used <Timezone />
+        </>
+      ),
+      hideTitleUnderline: true,
+      className: cx("index-stats-table__col-last-used"),
+      cell: indexStat => <LastUsed indexStat={indexStat} />,
+      sort: indexStat => indexStat.lastUsed,
+    },
+  ];
+  if (showIndexRecommendations) {
+    indexStatsColumns.push({
+      name: "index recommendations",
+      title: (
+        <Tooltip
+          placement="bottom"
+          title="Index recommendations will appear if the system detects improper index usage, such as the occurrence of unused indexes. Following index recommendations may help improve query performance."
+        >
+          Index Recommendations
+        </Tooltip>
+      ),
+      cell: indexStat => <IndexRecCell indexStat={indexStat} />,
+      sort: indexStat => indexStat.indexRecommendations.length,
+    });
+    if (!isCockroachCloud) {
+      indexStatsColumns.push({
+        name: "action",
+        title: "",
+        cell: indexStat => (
+          <ActionCell
+            indexStat={indexStat}
+            databaseName={dbName}
+            tableName={tableName}
+          />
+        ),
+      });
+    }
+  }
+  return indexStatsColumns;
+};
+
+export const grantsColumns: ColumnDescriptor<Grant>[] = [
+  {
+    name: "username",
+    title: (
+      <Tooltip placement="bottom" title="The user name.">
+        User Name
+      </Tooltip>
+    ),
+    cell: grant => grant.user,
+    sort: grant => grant.user,
+  },
+  {
+    name: "privilege",
+    title: (
+      <Tooltip placement="bottom" title="The list of grants for the user.">
+        Grants
+      </Tooltip>
+    ),
+    cell: grant => grant.privileges.join(", "),
+    sort: grant => grant.privileges.join(", "),
+  },
+];
