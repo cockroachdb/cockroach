@@ -294,18 +294,17 @@ func (sf *streamIngestionFrontier) Next() (
 			break
 		}
 
-		if _, err := sf.noteResolvedTimestamps(row[0]); err != nil {
+		if err := sf.noteResolvedTimestamps(row[0]); err != nil {
 			sf.MoveToDraining(err)
 			break
 		}
 
-		if err := sf.maybeUpdatePartitionProgress(); err != nil {
-			log.Errorf(sf.Ctx(), "failed to update partition progress: %+v", err)
+		if err := sf.maybeUpdateProgress(); err != nil {
+			log.Errorf(sf.Ctx(), "failed to update progress: %+v", err)
 			sf.MoveToDraining(err)
 			break
 		}
 
-		// Send back a row to the job so that it can update the progress.
 		select {
 		case <-sf.Ctx().Done():
 			sf.MoveToDraining(sf.Ctx().Err())
@@ -363,42 +362,39 @@ func decodeResolvedSpans(
 	return &resolvedSpans, nil
 }
 
-// noteResolvedTimestamps processes a batch of resolved timestamp events, and
-// returns whether the frontier has moved forward after processing the batch.
+// noteResolvedTimestamps processes a batch of resolved timestamp events.
 func (sf *streamIngestionFrontier) noteResolvedTimestamps(
 	resolvedSpanDatums rowenc.EncDatum,
-) (bool, error) {
-	var frontierChanged bool
+) error {
 	resolvedSpans, err := decodeResolvedSpans(&sf.alloc, resolvedSpanDatums)
 	if err != nil {
-		return false, err
+		return err
 	}
 	for _, resolved := range resolvedSpans.ResolvedSpans {
 		// Inserting a timestamp less than the one the ingestion flow started at could
 		// potentially regress the job progress. This is not expected and thus we
 		// assert to catch such unexpected behavior.
 		if !resolved.Timestamp.IsEmpty() && resolved.Timestamp.Less(sf.replicatedTimeAtStart) {
-			return frontierChanged, errors.AssertionFailedf(
+			return errors.AssertionFailedf(
 				`got a resolved timestamp %s that is less than the frontier processor start time %s`,
 				redact.Safe(resolved.Timestamp), redact.Safe(sf.replicatedTimeAtStart))
 		}
 
-		changed, err := sf.frontier.Forward(resolved.Span, resolved.Timestamp)
-		if err != nil {
-			return false, err
+		if _, err := sf.frontier.Forward(resolved.Span, resolved.Timestamp); err != nil {
+			return err
 		}
-		frontierChanged = frontierChanged || changed
 	}
-
-	return frontierChanged, nil
+	return nil
 }
 
-// maybeUpdatePartitionProgress polls the frontier and updates the job progress with
-// partition-specific information to track the status of each partition.
-func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
+// maybeUpdateProgress updates the job progress with the
+// latest replicated time and partition-specific information to track
+// the status of each partition.
+func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	ctx := sf.Ctx()
 	updateFreq := JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
 	if updateFreq == 0 || timeutil.Since(sf.lastPartitionUpdate) < updateFreq {
+		sf.updateLagMetric()
 		return nil
 	}
 	f := sf.frontier
@@ -415,7 +411,7 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	partitionProgress := sf.partitionProgress
 
 	sf.lastPartitionUpdate = timeutil.Now()
-
+	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime)
 	if err := registry.UpdateJobWithTxn(ctx, jobID, nil, false, func(
 		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
@@ -482,10 +478,14 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	sf.metrics.JobProgressUpdates.Inc(1)
 	sf.persistedReplicatedTime = f.Frontier()
 	sf.metrics.FrontierCheckpointSpanCount.Update(int64(len(frontierResolvedSpans)))
+	sf.updateLagMetric()
+	return nil
+}
+
+func (sf *streamIngestionFrontier) updateLagMetric() {
 	if !sf.persistedReplicatedTime.IsEmpty() {
 		// Only update the frontier lag if the replicated time has been updated,
 		// implying the initial scan has completed.
 		sf.metrics.FrontierLagNanos.Update(timeutil.Since(sf.persistedReplicatedTime.GoTime()).Nanoseconds())
 	}
-	return nil
 }
