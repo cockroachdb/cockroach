@@ -688,7 +688,6 @@ func (r *testRunner) runWorker(
 			wStatus.SetTest(nil /* test */, testToRun)
 			c, vmCreateOpts, clusterCreateErr = allocateCluster(ctx, testToRun.spec, arch, testToRun.alloc, artifactsRootDir, wStatus)
 			if clusterCreateErr != nil {
-				clusterCreateErr = errors.Mark(clusterCreateErr, errClusterProvisioningFailed)
 				atomic.AddInt32(&r.numClusterErrs, 1)
 				shout(ctx, l, stdout, "Unable to create (or reuse) cluster for test %s due to: %s.",
 					testToRun.spec.Name, clusterCreateErr)
@@ -736,30 +735,47 @@ func (r *testRunner) runWorker(
 		}
 		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts)
 
-		if clusterCreateErr != nil {
-			// N.B. cluster creation must have failed...
-			// We don't want to prematurely abort the test suite since it's likely a transient issue.
-			// Instead, let's report an infrastructure issue, mark the test as failed and continue with the next test.
+		// handleClusterCreationFailure can be called when the `err` given
+		// occurred for reasons related to creating or setting up a
+		// cluster for a test.
+		handleClusterCreationFailure := func(err error) {
+			// Marking the error with this sentinel error allows the GitHub
+			// issue poster to detect this is an infrastructure flake and
+			// post the issue accordingly.
+			clusterError := errors.Mark(err, errClusterProvisioningFailed)
+			t.Error(clusterError)
 
-			// Generate failure reason and mark the test failed to preclude fetching (cluster) artifacts.
-			t.Error(clusterCreateErr)
 			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
 			if err := github.MaybePost(t, l, t.failureMsg()); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
+		}
+
+		if clusterCreateErr != nil {
+			// N.B. cluster creation failed. We mark the test as failed and
+			// continue with the next test.
+			handleClusterCreationFailure(clusterCreateErr)
 		} else {
 			// Now run the test.
 			l.PrintfCtx(ctx, "Starting test: %s:%d on cluster=%s (arch=%q)", testToRun.spec.Name, testToRun.runNum, c.Name(), arch)
 
 			c.setTest(t)
+
+			var setupErr error
 			if c.spec.NodeCount > 0 { // skip during tests
-				err = c.PutDefaultCockroach(ctx, l, t.Cockroach())
+				setupErr = c.PutDefaultCockroach(ctx, l, t.Cockroach())
 			}
-			if err == nil {
-				err = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
+			if setupErr == nil {
+				setupErr = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
 			}
 
-			if err == nil {
+			if setupErr != nil {
+				// If there was an error setting up the cluster (uploading
+				// initial files), we treat the error just like a cluster
+				// creation failure: the error is reported as an
+				// infrastructure flake, and we continue with the next test.
+				handleClusterCreationFailure(setupErr)
+			} else {
 				// Tell the cluster that, from now on, it will be run "on behalf of this
 				// test".
 				c.status("running test")
