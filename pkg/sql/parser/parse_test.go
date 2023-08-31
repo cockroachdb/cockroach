@@ -581,6 +581,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
 
 		{`SELECT 1 OPERATOR(public.+) 2`, 65017, ``, ``},
+
+		{`SELECT percentile_disc ( 0.50 ) WITHIN GROUP ( ORDER BY PRIMARY KEY tbl ) FROM tbl;`, 109847, `order by index`, ``},
+		{`SELECT percentile_disc ( 0.50 ) WITHIN GROUP ( ORDER BY INDEX_AFTER_ORDER_BY_BEFORE_AT INT . LIKE @ FAMILY );`, 109847, `order by index`, ``},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
