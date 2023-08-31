@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/scheduled"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/validator"
 )
 
 // OutputFlags sets flags for what to output in tests. If you want to add a flag
@@ -38,16 +39,17 @@ const (
 	// OutputTopology displays the topology of cluster configurations.
 	OutputTopology // 1 << 3: 0000 1000
 	// OutputEvents displays delayed events executed.
-	OutputEvents // 1 << 4: 0001 0000
+	OutputEvents   // 1 << 4: 0001 0000
+	OutputValidate // 1 << 5: 0010 0000
 	// OutputAll shows everything above.
-	OutputAll = (1 << (iota - 1)) - 1 // (1 << 5) - 1: 0001 1111
+	OutputAll = (1 << (iota - 1)) - 1 // (1 << 6) - 1: 0011 1111
 )
 
 // ScanFlags converts an array of input strings into a single flag.
 func (o OutputFlags) ScanFlags(inputs []string) OutputFlags {
 	dict := map[string]OutputFlags{"result_only": OutputResultOnly, "test_settings": OutputTestSettings,
 		"initial_state": OutputInitialState, "config_gen": OutputConfigGen, "topology": OutputTopology,
-		"events": OutputEvents, "all": OutputAll}
+		"events": OutputEvents, "validate": OutputValidate, "all": OutputAll}
 	flag := OutputResultOnly
 	for _, input := range inputs {
 		flag = flag.set(dict[input])
@@ -167,6 +169,9 @@ func (tr testResultsReport) String() string {
 		}
 		if failed || tr.flags.Has(OutputEvents) {
 			buf.WriteString(output.eventExecutor.PrintEventsExecuted())
+		}
+		if failed || tr.flags.Has(OutputValidate) {
+			buf.WriteString(validator.Validate(output.initialState, output.eventExecutor))
 		}
 		if failed {
 			buf.WriteString(fmt.Sprintf("sample%d: failed assertion\n%s\n", nthSample, output.reason))

@@ -41,6 +41,8 @@ type EventExecutor interface {
 	// events including details of mutation events, assertion checks, and assertion
 	// results.
 	PrintEventsExecuted() string
+	// ScheduledEvents returns the list of scheduled events.
+	ScheduledEvents() ScheduledEventList
 }
 
 // eventExecutor is the private implementation of the EventExecutor interface,
@@ -69,6 +71,11 @@ func newExecutorWithNoEvents() *eventExecutor {
 	return &eventExecutor{
 		scheduledEvents: ScheduledEventList{},
 	}
+}
+
+// ScheduledEvents returns the list of scheduled events.
+func (e *eventExecutor) ScheduledEvents() ScheduledEventList {
+	return e.scheduledEvents
 }
 
 // PrintEventSummary returns a string summarizing the executed mutation and
