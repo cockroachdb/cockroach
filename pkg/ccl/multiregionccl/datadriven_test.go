@@ -188,13 +188,17 @@ func TestMultiRegionDataDriven(t *testing.T) {
 				}
 				// Speed up closing of timestamps, in order to sleep less below before
 				// we can use follower_read_timestamp(). follower_read_timestamp() uses
-				// sum of the following settings.
+				// sum of the following settings. Also, disable all kvserver lease
+				// transfers other than those required to satisfy a lease preference.
+				// This prevents the lease shifting around too quickly, which leads to
+				// concurrent replication changes being proposed by prior leaseholders.
 				for _, stmt := range strings.Split(`
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.4s';
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s';
 SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s';
 SET CLUSTER SETTING kv.allocator.load_based_rebalancing = 'off';
-SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false
+SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false;
+SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 `,
 					";") {
 					_, err = sqlConn.Exec(stmt)
