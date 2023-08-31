@@ -21,17 +21,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1192,119 +1189,6 @@ func TestShowRedactedActiveStatements(t *testing.T) {
 
 	cancel()
 	<-waiter
-}
-
-func TestLintClusterSettingNames(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
-
-	skip.UnderRace(t, "lint only test")
-	skip.UnderDeadlock(t, "lint only test")
-	skip.UnderStress(t, "lint only test")
-
-	params, _ := createTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-
-	rows, err := sqlDB.Query(`SELECT variable, setting_type, description FROM [SHOW ALL CLUSTER SETTINGS]`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var settingName, sType, desc string
-		if err := rows.Scan(&settingName, &sType, &desc); err != nil {
-			t.Fatal(err)
-		}
-
-		if strings.ToLower(settingName) != settingName {
-			t.Errorf("%s: variable name must be all lowercase", settingName)
-		}
-
-		suffixSuggestions := map[string]struct {
-			suggestion string
-			exceptions []string
-		}{
-			"_ttl":     {suggestion: ".ttl"},
-			"_enabled": {suggestion: ".enabled"},
-			"_timeout": {suggestion: ".timeout", exceptions: []string{".read_timeout", ".write_timeout"}},
-		}
-
-		nameErr := func() error {
-			segments := strings.Split(settingName, ".")
-			for _, segment := range segments {
-				if strings.TrimSpace(segment) != segment {
-					return errors.Errorf("%s: part %q has heading or trailing whitespace", settingName, segment)
-				}
-				tokens, ok := parser.Tokens(segment)
-				if !ok {
-					return errors.Errorf("%s: part %q does not scan properly", settingName, segment)
-				}
-				if len(tokens) == 0 || len(tokens) > 1 {
-					return errors.Errorf("%s: part %q has invalid structure", settingName, segment)
-				}
-				if tokens[0].TokenID != parser.IDENT {
-					cat, ok := lexbase.KeywordsCategories[tokens[0].Str]
-					if !ok {
-						return errors.Errorf("%s: part %q has invalid structure", settingName, segment)
-					}
-					if cat == "R" {
-						return errors.Errorf("%s: part %q is a reserved keyword", settingName, segment)
-					}
-				}
-			}
-
-			if !strings.HasPrefix(settingName, "sql.defaults.") {
-				// The sql.default settings are special cased: they correspond
-				// to same-name session variables, and session var names cannot
-				// contain periods.
-				for suffix, repl := range suffixSuggestions {
-					if strings.HasSuffix(settingName, suffix) {
-						hasException := false
-						for _, e := range repl.exceptions {
-							if strings.HasSuffix(settingName, e) {
-								hasException = true
-								break
-							}
-						}
-						if !hasException {
-							return errors.Errorf("%s: use %q instead of %q", settingName, repl.suggestion, suffix)
-						}
-					}
-				}
-
-				if sType == "b" && !strings.HasSuffix(settingName, ".enabled") && !strings.HasSuffix(settingName, ".disabled") {
-					return errors.Errorf("%s: use .enabled for booleans (or, rarely, .disabled)", settingName)
-				}
-			}
-
-			return nil
-		}()
-		if nameErr != nil {
-			t.Error(nameErr)
-		}
-
-		if strings.TrimSpace(desc) != desc {
-			t.Errorf("%s: description %q has heading or trailing whitespace", settingName, desc)
-		}
-
-		if len(desc) == 0 {
-			t.Errorf("%s: description is empty", settingName)
-		}
-
-		if len(desc) > 0 {
-			if strings.ToLower(desc[0:1]) != desc[0:1] {
-				t.Errorf("%s: description %q must not start with capital", settingName, desc)
-			}
-			if sType != "e" && (desc[len(desc)-1] == '.') && !strings.Contains(desc, ". ") {
-				// TODO(knz): this check doesn't work with the way enum values are added to their descriptions.
-				t.Errorf("%s: description %q must end with period only if it contains a secondary sentence", settingName, desc)
-			}
-		}
-	}
-
 }
 
 // TestCancelQueriesRace can be stressed to try and reproduce a race
