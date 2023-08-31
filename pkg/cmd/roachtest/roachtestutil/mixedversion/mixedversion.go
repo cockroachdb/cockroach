@@ -140,6 +140,7 @@ var (
 		upgradeTimeout:         clusterupgrade.DefaultUpgradeTimeout,
 		minUpgrades:            1,
 		maxUpgrades:            3,
+		predecessorFunc:        release.RandomPredecessorHistory,
 	}
 )
 
@@ -240,9 +241,12 @@ type (
 		upgradeTimeout         time.Duration
 		minUpgrades            int
 		maxUpgrades            int
+		predecessorFunc        predecessorFunc
 	}
 
 	customOption func(*testOptions)
+
+	predecessorFunc func(*rand.Rand, *version.Version, int) ([]string, error)
 
 	// Test is the main struct callers of this package interact with.
 	Test struct {
@@ -270,12 +274,14 @@ type (
 		// hook in `Test.hooks.background`.
 		bgChans []shouldStop
 
+		// predecessorFunc computes the predecessor versions to be used in
+		// a test run. By default, random predecessors are used, but tests
+		// may choose to always use the latest predecessor as well.
+		predecessorFunc predecessorFunc
+
 		// test-only field, allowing us to avoid passing a test.Test
 		// implementation in the tests
 		_buildVersion *version.Version
-		// test-only field, allows us to have deterministic tests even as
-		// the predecessor data changes.
-		predecessorFunc func(*rand.Rand, *version.Version, int) ([]string, error)
 	}
 
 	shouldStop chan struct{}
@@ -336,6 +342,24 @@ func NumUpgrades(n int) customOption {
 	}
 }
 
+// AlwaysUseLatestPredecessors allows test authors to opt-out of
+// testing upgrades from random predecessor patch releases. The
+// default is to pick a random (non-withdrawn) patch release for
+// predecessors used in the test, as that better reflects upgrades
+// performed by customers. However, teams have the option to always
+// use the latest predecessor to avoid the burden of having to update
+// tests to account for issues that have already been fixed in
+// subsequent patch releases. If possible, this option should be
+// avoided, but it might be necessary in certain cases to reduce noise
+// in case the test is more susceptible to fail due to known bugs.
+func AlwaysUseLatestPredecessors() customOption {
+	return func(opts *testOptions) {
+		opts.predecessorFunc = func(_ *rand.Rand, v *version.Version, n int) ([]string, error) {
+			return release.LatestPredecessorHistory(v, n)
+		}
+	}
+}
+
 // NewTest creates a Test struct that users can use to create and run
 // a mixed-version roachtest.
 func NewTest(
@@ -371,7 +395,7 @@ func NewTest(
 		prng:            prng,
 		seed:            seed,
 		hooks:           &testHooks{prng: prng, crdbNodes: crdbNodes},
-		predecessorFunc: release.RandomPredecessorHistory,
+		predecessorFunc: opts.predecessorFunc,
 	}
 
 	assertValidTest(test, t.Fatal)
