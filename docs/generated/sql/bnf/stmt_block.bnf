@@ -2576,7 +2576,7 @@ table_ref ::=
 	| '[' row_source_extension_stmt ']' opt_ordinality opt_alias_clause
 
 sortby_list ::=
-	( sortby ) ( ( ',' sortby ) )*
+	( sortby | sortby_index ) ( ( ',' sortby | ',' sortby_index ) )*
 
 first_or_next ::=
 	'FIRST'
@@ -3181,7 +3181,9 @@ row_source_extension_stmt ::=
 
 sortby ::=
 	a_expr opt_asc_desc opt_nulls_order
-	| 'PRIMARY' 'KEY' table_name opt_asc_desc
+
+sortby_index ::=
+	'PRIMARY' 'KEY' table_name opt_asc_desc
 	| 'INDEX' table_name '@' index_name opt_asc_desc
 
 only_signed_fconst ::=
@@ -4470,6 +4472,7 @@ func_application_name ::=
 single_sort_clause ::=
 	'ORDER' 'BY' sortby
 	| 'ORDER' 'BY' sortby ',' sortby_list
+	| 'ORDER' 'BY' sortby_index ',' sortby_list
 
 window_specification ::=
 	'(' opt_existing_window_name opt_partition_clause opt_sort_clause opt_frame_clause ')'
