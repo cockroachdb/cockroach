@@ -1506,7 +1506,7 @@ const (
 // A set of five pre-defined acceptable types for primary index chains:
 // 1). noNewPrimaryIndex: "old, nil, nil, nil" (e.g. no add/drop column nor alter PK)
 // 2). oneNewPrimaryIndex: "old, nil, nil, final" (e.g. add column(s), or drop columns(s), or alter PK without rowid)
-// 3). twoNewPrimaryIndexesWithAlteredPK: "old, nil, inter2, final" (e.g. alter PK with rowid)
+// 3). twoNewPrimaryIndexesWithAlteredPK: "old, nil, inter2, final" (e.g. alter PK with rowid, or alter PK + drop column(s))
 // 4). twoNewPrimaryIndexesWithAddAndDropColumns: "old, inter1, nil, final" (e.g. add & drop column(s))
 // 5). threeNewPrimaryIndexes: "old, inter1, inter2, final" (e.g. add/drop column + alter PK)
 type chainType int

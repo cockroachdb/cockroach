@@ -166,13 +166,7 @@ func isFullySupportedWithFalsePositiveInternal(
 // Process dispatches on the statement type to populate the BuilderState
 // embedded in the BuildCtx. Any error will be panicked.
 func Process(b BuildCtx, n tree.Statement) {
-	newSchemaChangerMode := b.EvalCtx().SessionData().NewSchemaChangerMode
-	// Check if the feature is either forcefully enabled or disabled, via a
-	// cluster setting.
-	stmtsForceControl := getStatementsForceControl(&b.ClusterSettings().SV)
-	if forcedEnabled := stmtsForceControl.CheckControl(n); forcedEnabled {
-		newSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
-	}
+	newSchemaChangerMode := getDeclarativeSchemaChangerModeForStmt(b, n)
 	// Run a few "quick checks" to see if the statement is not supported.
 	if !IsFullySupportedWithFalsePositive(n, b.EvalCtx().Settings.Version.ActiveVersion(b),
 		newSchemaChangerMode) {
@@ -189,6 +183,23 @@ func Process(b BuildCtx, n tree.Statement) {
 		panic(err)
 	}
 	fn.Call(in)
+}
+
+// getDeclarativeSchemaChangerModeForStmt returns the mode specific for `n`.
+// It consults session variable `use_declarative_schema_changer` (blanket)
+// and possibly overwrite it with cluster setting
+// `sql.schema.force_declarative_statements` (per stmt).
+func getDeclarativeSchemaChangerModeForStmt(
+	b BuildCtx, n tree.Statement,
+) sessiondatapb.NewSchemaChangerMode {
+	ret := b.EvalCtx().SessionData().NewSchemaChangerMode
+	// Check if the feature is either forcefully enabled or disabled, via a
+	// cluster setting.
+	stmtsForceControl := getStatementsForceControl(&b.ClusterSettings().SV)
+	if forcedEnabled := stmtsForceControl.CheckControl(n); forcedEnabled {
+		ret = sessiondatapb.UseNewSchemaChangerUnsafe
+	}
+	return ret
 }
 
 var isV221Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
