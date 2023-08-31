@@ -21,6 +21,16 @@ func BuiltWithBazel() bool {
 	return false
 }
 
+// Return true iff called from a test run by Bazel.
+func TestByBazel() bool {
+	return false
+}
+
+// TestWrapped is not implemented.
+func TestWrapped() bool {
+	panic("not built with Bazel")
+}
+
 // FindBinary is not implemented.
 func FindBinary(pkg, name string) (string, bool) {
 	panic("not build with Bazel")
