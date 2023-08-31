@@ -1653,37 +1653,6 @@ func mvccPutUsingIter(
 	return err
 }
 
-// maybeGetValue returns either value (if valueFn is nil) or else the
-// result of calling valueFn on the data read at readTimestamp. The
-// function uses a non-transactional read, so uncertainty does not apply
-// and any intents (even the caller's own if the caller is operating on
-// behalf of a transaction), will result in a LockConflictError. Because
-// of this, the function is only called from places where intents have
-// already been considered.
-func maybeGetValue(
-	ctx context.Context,
-	iter MVCCIterator,
-	key roachpb.Key,
-	value roachpb.Value,
-	exists bool,
-	readTimestamp hlc.Timestamp,
-	valueFn func(optionalValue) (roachpb.Value, error),
-) (roachpb.Value, error) {
-	// If a valueFn is specified, read existing value using the iter.
-	if valueFn == nil {
-		return value, nil
-	}
-	var exVal optionalValue
-	if exists {
-		var err error
-		exVal, _, err = mvccGet(ctx, iter, key, readTimestamp, MVCCGetOptions{Tombstones: true})
-		if err != nil {
-			return roachpb.Value{}, err
-		}
-	}
-	return valueFn(exVal)
-}
-
 // MVCCScanDecodeKeyValue decodes a key/value pair returned in an MVCCScan
 // "batch" (this is not the RocksDB batch repr format), returning both the
 // key/value and the suffix of data remaining in the batch.
@@ -1900,10 +1869,16 @@ func mvccPutInternal(
 		if opts.Txn != nil {
 			return false, errors.Errorf("%q: inline writes not allowed within transactions", metaKey)
 		}
-		var metaKeySize, metaValSize int64
-		if value, err = maybeGetValue(ctx, iter, key, value, ok, timestamp, valueFn); err != nil {
-			return false, err
+		if valueFn != nil {
+			var inlineVal optionalValue
+			if ok {
+				inlineVal = makeOptionalValue(roachpb.Value{RawBytes: buf.meta.RawBytes})
+			}
+			if value, err = valueFn(inlineVal); err != nil {
+				return false, err
+			}
 		}
+		var metaKeySize, metaValSize int64
 		if !value.IsPresent() {
 			metaKeySize, metaValSize, err = 0, 0, writer.ClearUnversioned(metaKey.Key, ClearOptions{
 				// NB: origMetaValSize is only populated by mvccGetMetadata if
@@ -1912,8 +1887,8 @@ func mvccPutInternal(
 				ValueSize:      uint32(origMetaValSize),
 			})
 		} else {
-			buf.meta = enginepb.MVCCMetadata{RawBytes: value.RawBytes}
-			metaKeySize, metaValSize, err = buf.putInlineMeta(writer, metaKey, &buf.meta)
+			buf.newMeta = enginepb.MVCCMetadata{RawBytes: value.RawBytes}
+			metaKeySize, metaValSize, err = buf.putInlineMeta(writer, metaKey, &buf.newMeta)
 		}
 		if opts.Stats != nil {
 			updateStatsForInline(opts.Stats, key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize)
@@ -2187,9 +2162,21 @@ func mvccPutInternal(
 			writeTimestamp.Forward(metaTimestamp.Next())
 			writeTooOldErr := kvpb.NewWriteTooOldError(readTimestamp, writeTimestamp, key)
 			return false, writeTooOldErr
-		} else {
-			if value, err = maybeGetValue(ctx, iter, key, value, ok, readTimestamp, valueFn); err != nil {
-				return false, err
+		} else /* meta.Txn == nil && metaTimestamp.Less(readTimestamp) */ {
+			// If a valueFn is specified, read the existing value using iter.
+			if valueFn != nil {
+				exVal, _, err := mvccGet(ctx, iter, key, readTimestamp, MVCCGetOptions{
+					Tombstones: true,
+					// Unlike above, we know that there are no intents on this
+					// key, so we don't need to perform an inconsistent read.
+				})
+				if err != nil {
+					return false, err
+				}
+				value, err = valueFn(exVal)
+				if err != nil {
+					return false, err
+				}
 			}
 		}
 	} else {
