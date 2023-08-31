@@ -112,7 +112,13 @@ func TestMultiRegionDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// This test speeds up replication changes by proactively enqueuing replicas
+	// into various queues. This has the benefit of reducing the time taken after
+	// zone config changes, however the downside of added overhead. Disable the
+	// test under deadlock builds, as the test is slow and susceptible to
+	// (legitimate) timing issues on a deadlock build.
 	skip.UnderRace(t, "flaky test")
+	skip.UnderDeadlock(t, "flaky test")
 	ctx := context.Background()
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		if strings.Contains(path, "secondary_region") {
