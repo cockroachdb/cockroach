@@ -264,12 +264,11 @@ export default function Debug() {
       {disable_kv_level_advanced_debug && (
         <section className="section">
           <InlineAlert
-            title="Some advanced debug options are not available on secondary tenants."
+            title="Some advanced debug options are not available on virtual clusters."
             intent="warning"
             message={
               <span>
-                To access additional advanced debug options, please login using
-                system tenant credentials.
+                Contact your system operator to gain access to this interface.
               </span>
             }
           />
