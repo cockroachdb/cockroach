@@ -31,12 +31,12 @@ func TestAggregator(t *testing.T) {
 	ctx, root := tr.StartSpanCtx(ctx, "root", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer root.Finish()
 
-	ctx, agg := bulk.MakeTracingAggregatorWithSpan(ctx, "mockAggregator", tr)
-	aggSp := tracing.SpanFromContext(ctx)
-	defer agg.Close()
+	agg := bulk.TracingAggregatorForContext(ctx)
+	ctx, withListener := tr.StartSpanCtx(ctx, "withListener",
+		tracing.WithEventListeners(agg), tracing.WithParent(root))
+	defer withListener.Finish()
 
-	child := tr.StartSpan("child", tracing.WithParent(root),
-		tracing.WithEventListeners(agg))
+	child := tr.StartSpan("child", tracing.WithParent(withListener))
 	defer child.Finish()
 	child.RecordStructured(&backuppb.ExportStats{
 		NumFiles: 10,
@@ -61,19 +61,19 @@ func TestAggregator(t *testing.T) {
 
 	// We only expect to see the aggregated stats from the local children since we
 	// have not imported the remote children's Recording.
-	exportStats := &backuppb.ExportStats{}
-	exportStatsTag, found := aggSp.GetLazyTag(proto.MessageName(exportStats))
-	require.True(t, found)
-	var es *backuppb.ExportStats
-	var ok bool
-	if es, ok = exportStatsTag.(*backuppb.ExportStats); !ok {
-		t.Fatal("failed to cast LazyTag to expected type")
-	}
-	require.Equal(t, backuppb.ExportStats{
-		NumFiles: 30,
-		DataSize: 30,
-		Duration: 2 * time.Minute,
-	}, *es)
+	agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
+		require.Equal(t, name, proto.MessageName(&backuppb.ExportStats{}))
+		var es *backuppb.ExportStats
+		var ok bool
+		if es, ok = event.(*backuppb.ExportStats); !ok {
+			t.Fatal("failed to cast event to expected type")
+		}
+		require.Equal(t, backuppb.ExportStats{
+			NumFiles: 30,
+			DataSize: 30,
+			Duration: 2 * time.Minute,
+		}, *es)
+	})
 
 	// Import the remote recording into its parent.
 	rec := remoteChild.FinishAndGetConfiguredRecording()
@@ -81,16 +81,19 @@ func TestAggregator(t *testing.T) {
 
 	// Now, we expect the ExportStats from the remote child to show up in the
 	// aggregator.
-	exportStatsTag, found = aggSp.GetLazyTag(proto.MessageName(exportStats))
-	require.True(t, found)
-	if es, ok = exportStatsTag.(*backuppb.ExportStats); !ok {
-		t.Fatal("failed to cast LazyTag to expected type")
-	}
-	require.Equal(t, backuppb.ExportStats{
-		NumFiles: 60,
-		DataSize: 60,
-		Duration: 3 * time.Minute,
-	}, *es)
+	agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
+		require.Equal(t, name, proto.MessageName(&backuppb.ExportStats{}))
+		var es *backuppb.ExportStats
+		var ok bool
+		if es, ok = event.(*backuppb.ExportStats); !ok {
+			t.Fatal("failed to cast event to expected type")
+		}
+		require.Equal(t, backuppb.ExportStats{
+			NumFiles: 60,
+			DataSize: 60,
+			Duration: 3 * time.Minute,
+		}, *es)
+	})
 }
 
 func TestIngestionPerformanceStatsAggregation(t *testing.T) {
@@ -123,32 +126,32 @@ func TestIngestionPerformanceStatsAggregation(t *testing.T) {
 		}
 	}
 
-	requireStatsTag := func(aggSp *tracing.Span, expected *bulkpb.IngestionPerformanceStats) {
-		exportStatsTag, found := aggSp.GetLazyTag(expected.ProtoName())
-		require.True(t, found)
-		var actual *bulkpb.IngestionPerformanceStats
-		var ok bool
-		if actual, ok = exportStatsTag.(*bulkpb.IngestionPerformanceStats); !ok {
-			t.Fatal("failed to cast LazyTag to expected type")
-		}
-
-		require.Equal(t, expected, actual)
+	assertAggContainsStats := func(t *testing.T, agg *bulk.TracingAggregator, expected *bulkpb.IngestionPerformanceStats) {
+		agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
+			require.Equal(t, name, proto.MessageName(expected))
+			var actual *bulkpb.IngestionPerformanceStats
+			var ok bool
+			if actual, ok = event.(*bulkpb.IngestionPerformanceStats); !ok {
+				t.Fatal("failed to cast event to expected type")
+			}
+			require.Equal(t, expected, actual)
+		})
 	}
 
 	// First, start a root tracing span with a tracing aggregator.
 	ctx, root := tr.StartSpanCtx(ctx, "root", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer root.Finish()
-	ctx, agg := bulk.MakeTracingAggregatorWithSpan(ctx, "mockAggregator", tr)
-	aggSp := tracing.SpanFromContext(ctx)
-	defer agg.Close()
+	agg := bulk.TracingAggregatorForContext(ctx)
+	ctx, withListener := tr.StartSpanCtx(ctx, "withListener",
+		tracing.WithEventListeners(agg), tracing.WithParent(root))
+	defer withListener.Finish()
 
 	// Second, start a child span on the root that also has its own tracing
 	// aggregator.
-	_, child1 := tracing.ChildSpan(ctx, "child1")
-	defer child1.Finish()
-	child1Ctx, child1Agg := bulk.MakeTracingAggregatorWithSpan(ctx, "mockChildAggregator", tr)
-	child1AggSp := tracing.SpanFromContext(child1Ctx)
-	defer child1Agg.Close()
+	child1Agg := bulk.TracingAggregatorForContext(ctx)
+	child1Ctx, child1AggSp := tr.StartSpanCtx(ctx, "child1",
+		tracing.WithEventListeners(child1Agg), tracing.WithParent(withListener))
+	defer child1AggSp.Finish()
 
 	// In addition, start a child span on the first child span.
 	_, child1Child := tracing.ChildSpan(child1Ctx, "child1Child")
@@ -165,6 +168,6 @@ func TestIngestionPerformanceStatsAggregation(t *testing.T) {
 
 	// Verify that the root and child1 aggregators has the expected aggregated
 	// stats.
-	requireStatsTag(child1AggSp, makeEvent(3, map[roachpb.StoreID]time.Duration{1: 203, 2: 202}))
-	requireStatsTag(aggSp, makeEvent(6, map[roachpb.StoreID]time.Duration{1: 203, 2: 405, 3: 303}))
+	assertAggContainsStats(t, child1Agg, makeEvent(3, map[roachpb.StoreID]time.Duration{1: 203, 2: 202}))
+	assertAggContainsStats(t, agg, makeEvent(6, map[roachpb.StoreID]time.Duration{1: 203, 2: 405, 3: 303}))
 }
