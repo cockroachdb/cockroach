@@ -170,6 +170,13 @@ func TestLintClusterSettingNames(t *testing.T) {
 				}
 			}
 
+			if strings.Contains(settingName, "unsafe") && !setting.IsUnsafe() {
+				return errors.Errorf("%s: setting name contains \"unsafe\" but is not marked unsafe (hint: use option settings.WithUnsafe)", settingName)
+			}
+			if setting.IsUnsafe() && !strings.Contains(settingName, "unsafe") {
+				return errors.Errorf("%s: setting marked as unsafe but its name does not contain \"unsafe\"", settingName)
+			}
+
 			return nil
 		}()
 		if nameErr != nil {
@@ -218,6 +225,27 @@ func TestLintClusterSettingDescriptions(t *testing.T) {
 					t.Errorf("%s: setting descriptions cannot contain control character %q, %q", settingName, c, desc)
 				}
 			}
+		}
+	}
+}
+
+func TestLintClusterVisibility(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	skip.UnderRace(t, "lint only test")
+	skip.UnderDeadlock(t, "lint only test")
+	skip.UnderStress(t, "lint only test")
+
+	keys := settings.Keys(true /* forSystemTenant */)
+	for _, settingKey := range keys {
+		setting, ok := settings.LookupForLocalAccessByKey(settingKey, true /* forSystemTenant */)
+		if !ok {
+			t.Errorf("registry bug: setting with key %q not found", settingKey)
+			continue
+		}
+
+		if setting.IsUnsafe() && setting.Visibility() == settings.Public {
+			t.Errorf("%s: unsafe settings must not be public", setting.Name())
 		}
 	}
 }
