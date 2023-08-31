@@ -76,7 +76,7 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 		run(db, fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
 
 		// Wait for initial up-replication.
-		err := WaitForReplication(ctx, t, db, replicationFactor)
+		err := WaitForReplication(ctx, t, db, replicationFactor, atLeastReplicationFactor)
 		require.NoError(t, err)
 
 		// Ensure that leases are sent away from pinned node to avoid situation

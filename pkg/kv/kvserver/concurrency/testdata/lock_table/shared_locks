@@ -883,6 +883,57 @@ num=1
    queued locking requests:
     active: false req: 44, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
 
+# ------------------------------------------------------------------------------
+# Ensure a shared locking request can discover a replicated lock and queue
+# behind it. Subsequent locking requests should then queue up behind the
+# discovered lock.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+# We scan "a" using multiple lock strengths; lock discovery should pick the
+# highest (shared) as the strength with which to wait in the lock wait queue.
+new-request r=req45 txn=txn1 ts=10 spans=none@a+shared@a
+----
+
+scan r=req45
+----
+start-waiting: false
+
+add-discovered r=req45 k=a txn=txn2
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 45, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+
+# To make things slightly interesting, let another shared-locking request come
+# through before req45 re-scans. The new request should be the distinguished
+# waiter, because req45 was waiting inactively after it discovered the lock.
+new-request r=req46 txn=txn3 ts=10 spans=shared@a
+----
+
+scan r=req46
+----
+start-waiting: true
+
+scan r=req45
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: true req: 45, strength: Shared, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 46, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 46
+
 
 # TODO(arul): (non-exhaustive list) of shared lock state transitions that aren't
 # currently supported (and we need to add support for):
