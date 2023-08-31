@@ -371,7 +371,7 @@ func (r *Registry) resumeJob(
 	if opts, ok := getRegisterOptions(payload.Type()); ok && opts.disableTenantCostControl {
 		resumeCtx = multitenant.WithTenantCostControlExemption(resumeCtx)
 	}
-	if alreadyAdopted := r.addAdoptedJob(jobID, s, cancel); alreadyAdopted {
+	if alreadyAdopted := r.addAdoptedJob(jobID, s, cancel, resumer); alreadyAdopted {
 		// Not needing the context after all. Avoid leaking resources.
 		cancel()
 		return nil
@@ -401,7 +401,7 @@ func (r *Registry) resumeJob(
 // false, it means that the job is already registered as running and should not
 // be run again.
 func (r *Registry) addAdoptedJob(
-	jobID jobspb.JobID, session sqlliveness.Session, cancel context.CancelFunc,
+	jobID jobspb.JobID, session sqlliveness.Session, cancel context.CancelFunc, resumer Resumer,
 ) (alreadyAdopted bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -414,6 +414,7 @@ func (r *Registry) addAdoptedJob(
 		session: session,
 		cancel:  cancel,
 		isIdle:  false,
+		resumer: resumer,
 	}
 	return false
 }
