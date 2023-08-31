@@ -78,7 +78,7 @@ describe("<LineGraph>", function () {
     expect(root.length).toBe(1);
   });
 
-  it("should display an empty state if viewing the secondary tenant and there is no data", () => {
+  it("should display an empty state if viewing a virtual cluster and there is no data", () => {
     mockProps.tenantSource = "demoapp";
     const wrapper = linegraph({ ...mockProps }).dive() as ShallowWrapper<
       any,
