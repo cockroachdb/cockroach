@@ -129,6 +129,19 @@ var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 		return max
 	}())
 
+// The sub-level threshold at which to allow an increase in compaction
+// concurrency. The maximum is still controlled by
+// pebble.Options.MaxConcurrentCompactions. The default of 2 will allow an
+// additional compaction (so total 1 + 1 = 2 compactions) when the sub-level
+// count is 2, and increment concurrency by 1 whenever sub-level count
+// increases by 2 (so 1 + 3 = 4 compactions) when sub-level count is 6.
+// Admission control starts shaping regular traffic at a sub-level count of 5,
+// and elastic traffic at a sub-level count of 1, hence this default of 2. See
+// https://github.com/cockroachdb/pebble/issues/2832#issuecomment-1699743392
+// for some discussion on the bad behavior caused by not setting this option.
+var l0SubLevelCompactionConcurrency = envutil.EnvOrDefaultInt(
+	"COCKROACH_L0_SUB_LEVEL_CONCURRENCY", 2)
+
 // MakeValue returns the inline value.
 func MakeValue(meta enginepb.MVCCMetadata) roachpb.Value {
 	return roachpb.Value{RawBytes: meta.RawBytes}
