@@ -12,7 +12,6 @@ import { DatabasesListResponse, SqlExecutionErrorMessage } from "../api";
 import { DatabasesPageDataDatabase } from "../databasesPage";
 import {
   buildIndexStatToRecommendationsMap,
-  combineLoadingErrors,
   getNodesByRegionString,
   normalizePrivileges,
   normalizeRoles,
@@ -70,8 +69,6 @@ const deriveDatabaseDetails = (
   isTenant: boolean,
 ): DatabasesPageDataDatabase => {
   const dbStats = dbDetails?.data?.results.stats;
-  const sizeInBytes = dbStats?.spanStats?.approximate_disk_bytes || 0;
-  const rangeCount = dbStats?.spanStats.range_count || 0;
   const nodes = dbStats?.replicaData.replicas || [];
   const nodesByRegionString = getNodesByRegionString(
     nodes,
@@ -81,20 +78,14 @@ const deriveDatabaseDetails = (
   const numIndexRecommendations =
     dbStats?.indexStats.num_index_recommendations || 0;
 
-  const combinedErr = combineLoadingErrors(
-    dbDetails?.lastError,
-    dbDetails?.data?.maxSizeReached,
-    dbListError?.message,
-  );
-
   return {
     loading: !!dbDetails?.inFlight,
     loaded: !!dbDetails?.valid,
-    lastError: combinedErr,
+    requestError: dbDetails?.lastError,
+    queryError: dbDetails?.data?.results?.error,
     name: database,
-    sizeInBytes: sizeInBytes,
-    tableCount: dbDetails?.data?.results.tablesResp.tables?.length || 0,
-    rangeCount: rangeCount,
+    spanStats: dbStats?.spanStats,
+    tables: dbDetails?.data?.results.tablesResp,
     nodes: nodes,
     nodesByRegionString,
     numIndexRecommendations,

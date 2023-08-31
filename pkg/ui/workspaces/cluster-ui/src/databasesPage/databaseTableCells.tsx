@@ -9,6 +9,8 @@
 // licenses/APL.txt.
 
 import React, { useContext } from "react";
+import { Tooltip } from "antd";
+import "antd/lib/tooltip/style";
 import { CircleFilled } from "../icon";
 import { DatabasesPageDataDatabase } from "./databasesPage";
 import classNames from "classnames/bind";
@@ -17,12 +19,29 @@ import { EncodeDatabaseUri } from "../util";
 import { Link } from "react-router-dom";
 import { StackIcon } from "../icon/stackIcon";
 import { CockroachCloudContext } from "../contexts";
+import { checkInfoAvailable, getNetworkErrorMessage } from "../databases";
+import * as format from "../util/format";
+import { Caution } from "@cockroachlabs/icons";
 
 const cx = classNames.bind(styles);
 
 interface CellProps {
   database: DatabasesPageDataDatabase;
 }
+
+export const DiskSizeCell = ({ database }: CellProps): JSX.Element => {
+  return (
+    <>
+      {checkInfoAvailable(
+        database.requestError,
+        database.spanStats?.error,
+        database.spanStats?.approximate_disk_bytes
+          ? format.Bytes(database.spanStats?.approximate_disk_bytes)
+          : null,
+      )}
+    </>
+  );
+};
 
 export const IndexRecCell = ({ database }: CellProps): JSX.Element => {
   const text =
@@ -46,10 +65,28 @@ export const DatabaseNameCell = ({ database }: CellProps): JSX.Element => {
   const linkURL = isCockroachCloud
     ? `${location.pathname}/${database.name}`
     : EncodeDatabaseUri(database.name);
+  let icon = <StackIcon className={cx("icon--s", "icon--primary")} />;
+  if (database.requestError || database.queryError) {
+    icon = (
+      <Tooltip
+        overlayStyle={{ whiteSpace: "pre-line" }}
+        placement="bottom"
+        title={
+          database.requestError
+            ? getNetworkErrorMessage(database.requestError)
+            : database.queryError.message
+        }
+      >
+        <Caution className={cx("icon--s", "icon--warning")} />
+      </Tooltip>
+    );
+  }
   return (
-    <Link to={linkURL} className={cx("icon__container")}>
-      <StackIcon className={cx("icon--s", "icon--primary")} />
-      {database.name}
-    </Link>
+    <>
+      <Link to={linkURL} className={cx("icon__container")}>
+        {icon}
+        {database.name}
+      </Link>
+    </>
   );
 };

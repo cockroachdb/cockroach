@@ -962,7 +962,7 @@ func (p *planner) GetDetailsForSpanStats(
 	return p.QueryIteratorEx(
 		ctx,
 		"crdb_internal.database_span_stats",
-		sessiondata.NoSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		query,
 		args...,
 	)

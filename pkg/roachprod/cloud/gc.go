@@ -40,7 +40,16 @@ type status struct {
 
 func (s *status) add(c *Cluster, now time.Time) {
 	exp := c.ExpiresAt()
-	if exp.After(now) {
+	// Clusters without VMs shouldn't exist and are likely dangling resources.
+	if c.IsEmptyCluster() {
+		// Give a one-hour grace period to avoid any race conditions where a cluster
+		// was created but the VMs are still initializing.
+		if now.After(c.CreatedAt.Add(time.Hour)) {
+			s.destroy = append(s.destroy, c)
+		} else {
+			s.good = append(s.good, c)
+		}
+	} else if exp.After(now) {
 		if exp.Before(now.Add(2 * time.Hour)) {
 			s.warn = append(s.warn, c)
 		} else {
@@ -303,8 +312,8 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 	// Compile list of "bad vms" and destroy them.
 	var badVMs vm.List
 	for _, vm := range cloud.BadInstances {
-		// We only delete "bad vms" if they were created more than 1h ago.
-		if now.Sub(vm.CreatedAt) >= time.Hour {
+		// We skip fake VMs and only delete "bad vms" if they were created more than 1h ago.
+		if now.Sub(vm.CreatedAt) >= time.Hour && !vm.EmptyCluster {
 			badVMs = append(badVMs, vm)
 		}
 	}
