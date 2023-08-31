@@ -67,7 +67,7 @@ func BenchmarkTPCC(b *testing.B) {
 			}, cleanup
 		}),
 		setupStmt(`
-SET CLUSTER SETTING kv.raft_log.synchronization.disabled = true`),
+SET CLUSTER SETTING kv.raft_log.synchronization.unsafe.disabled = true`),
 	}
 
 	for _, opts := range []options{
