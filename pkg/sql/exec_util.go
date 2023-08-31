@@ -3649,6 +3649,10 @@ func (m *sessionDataMutator) SetSharedLockingForSerializable(val bool) {
 	m.data.SharedLockingForSerializable = val
 }
 
+func (m *sessionDataMutator) SetUnsafeSettingInterlockKey(val string) {
+	m.data.UnsafeSettingInterlockKey = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

@@ -449,6 +449,10 @@ message LocalOnlySessionData {
   // forms of DDL inside explicit txns).
   bool strict_ddl_atomicity = 111 [(gogoproto.customname) = "StrictDDLAtomicity"];
 
+  // UnsafeSettingInterlockKey needs to be set to a special string
+  // before SET CLUSTER SETTING is allowed on an unsafe setting.
+  string unsafe_setting_interlock_key = 113;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
