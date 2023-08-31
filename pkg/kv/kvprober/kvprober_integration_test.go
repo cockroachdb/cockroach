@@ -42,6 +42,7 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderShort(t)
+	skip.WithIssue(t, 109564)
 
 	ctx := context.Background()
 
