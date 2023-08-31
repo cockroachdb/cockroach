@@ -7,13 +7,11 @@
 # - roll it back it back non-mvcc
 # - run an inc backup and ensure we reintroduce the table spans
 
-# disabled to run within tenant as they don't have access to the
-# storage.mvcc.range_tombstones.enabled cluster setting
-new-cluster name=s1 beforeVersion=23_1_MVCCTombstones disable-tenant
+new-cluster name=s1
 ----
 
 ###########
-# Case 1: an incremental backup captures a non-mvcc rollback
+# set up
 ###########
 
 exec-sql
@@ -35,12 +33,6 @@ SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
 exec-sql
 SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = false;
 ----
-
-
-exec-sql
-SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = false;
-----
-
 
 exec-sql
 EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM baz;
@@ -163,8 +155,8 @@ ORDER BY
 ----
 d foo table 3 full
 d foofoo table 4 full
-d foo table 0 incremental
-d foofoo table 1 incremental
+d foo table 3 incremental
+d foofoo table 7 incremental
 
 query-sql
 SELECT
@@ -178,8 +170,8 @@ ORDER BY
 ----
 d foo table 3 full
 d foofoo table 4 full
-d foo table 0 incremental
-d foofoo table 1 incremental
+d foo table 3 incremental
+d foofoo table 7 incremental
 
 
 query-sql
@@ -194,8 +186,8 @@ ORDER BY
 ----
 d foo table 3 full
 d foofoo table 4 full
-d foo table 0 incremental
-d foofoo table 1 incremental
+d foo table 3 incremental
+d foofoo table 7 incremental
 
 
 # To verify the incremental backed up the pre-import state table, restore d and ensure all tables
@@ -240,11 +232,6 @@ INSERT INTO foofoo2 VALUES (10, 'x0');
 
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
-----
-
-
-exec-sql
-SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true;
 ----
 
 exec-sql
