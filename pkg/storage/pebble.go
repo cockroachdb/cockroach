@@ -571,8 +571,9 @@ func DefaultPebbleOptions() *pebble.Options {
 	}
 
 	opts := &pebble.Options{
-		Comparer:                    EngineComparer,
-		FS:                          vfs.Default,
+		Comparer: EngineComparer,
+		FS:       vfs.Default,
+		// A value of 2 triggers a compaction when there is 1 sub-level.
 		L0CompactionThreshold:       2,
 		L0StopWritesThreshold:       1000,
 		LBaseMaxBytes:               64 << 20, // 64 MB
@@ -584,6 +585,7 @@ func DefaultPebbleOptions() *pebble.Options {
 		BlockPropertyCollectors:     PebbleBlockPropertyCollectors,
 		FormatMajorVersion:          MinimumSupportedFormatVersion,
 	}
+	opts.Experimental.L0CompactionConcurrency = l0SubLevelCompactionConcurrency
 	// Automatically flush 10s after the first range tombstone is added to a
 	// memtable. This ensures that we can reclaim space even when there's no
 	// activity on the database generating flushes.
