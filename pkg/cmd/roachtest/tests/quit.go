@@ -202,10 +202,6 @@ ALTER TABLE t SPLIT AT TABLE generate_series(%[1]d,%[1]d-99,-1)`, i)); err != ni
 // checkNoLeases verifies that no range has a lease on the node
 // that's just been shut down.
 func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
-	// We need to use SQL against a node that's not the one we're
-	// shutting down.
-	otherNodeID := 1 + nodeID%q.c.Spec().NodeCount
-
 	// Now we're going to check two things:
 	//
 	// 1) *immediately*, that every range in the cluster has a lease
@@ -218,12 +214,21 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 	//    drain does not wait for followers to catch up.
 	//    https://github.com/cockroachdb/cockroach/issues/47100
 	//
+	//    Additionally, the way the test is architected right now has a tiny race:
+	//    when n3 has transferred the lease, the result is visible to n3, but we
+	//    are only checking the other nodes. Even if some of them must have acked
+	//    the raft log entry, there is an additional delay until they apply it. So
+	//    we may still, in this test, find that a node has drained and there is a
+	//    lease transfer that is not yet visible (= has applied) on any other
+	//    node. To work around this, we sleep for one second prior to checking.
+	//
 	// 2) *eventually* that every other node than nodeID has no range
 	//    replica whose lease refers to nodeID, i.e. the followers
 	//    have all caught up.
 	//    Note: when issue #47100 is fixed, this 2nd condition
 	//    must be true immediately -- drain is then able to wait
 	//    for all followers to learn who the new leaseholder is.
+	time.Sleep(time.Second)
 
 	if err := testutils.SucceedsSoonError(func() error {
 		// To achieve that, we ask first each range in turn for its range
@@ -248,18 +253,18 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 			// Get the report via HTTP.
 			// Flag -s is to remove progress on stderr, so that the buffer
 			// contains the JSON of the response and nothing else.
-			adminAddrs, err := q.c.InternalAdminUIAddr(ctx, q.t.L(), q.c.Node(otherNodeID))
+			adminAddrs, err := q.c.InternalAdminUIAddr(ctx, q.t.L(), q.c.Node(i))
 			if err != nil {
 				q.Fatal(err)
 			}
-			result, err := q.c.RunWithDetailsSingleNode(ctx, q.t.L(), q.c.Node(otherNodeID),
-				"curl", "-s", fmt.Sprintf("http://%s/_status/ranges/%d",
-					adminAddrs[0], i))
+			result, err := q.c.RunWithDetailsSingleNode(ctx, q.t.L(), q.c.Node(i),
+				"curl", "-s", fmt.Sprintf("http://%s/_status/ranges/local",
+					adminAddrs[0]))
 			if err != nil {
 				q.Fatal(err)
 			}
 			// Persist the response to artifacts to aid debugging. See #75438.
-			_ = os.WriteFile(filepath.Join(q.t.ArtifactsDir(), "status_ranges.json"),
+			_ = os.WriteFile(filepath.Join(q.t.ArtifactsDir(), fmt.Sprintf("status_ranges_n%d.json", i)),
 				[]byte(result.Stdout), 0644,
 			)
 			// We need just a subset of the response. Make an ad-hoc
@@ -342,10 +347,11 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 		q.Fatal(err)
 	}
 
+	// For good measure, also write to the table. This ensures it remains
+	// available. We pick a node that's not the drained node.
+	otherNodeID := 1 + nodeID%q.c.Spec().NodeCount
 	db := q.c.Conn(ctx, q.t.L(), otherNodeID)
 	defer db.Close()
-	// For good measure, also write to the table. This ensures it
-	// remains available.
 	if _, err := db.ExecContext(ctx, `UPDATE t SET y = y + 1`); err != nil {
 		q.Fatal(err)
 	}
