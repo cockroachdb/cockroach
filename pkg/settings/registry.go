@@ -14,8 +14,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 )
 
 // registry contains all defined settings, their types and default values.
@@ -271,24 +269,7 @@ func checkNameFound(keyOrName string) {
 // register adds a setting to the registry.
 func register(class Class, key InternalKey, desc string, s internalSetting) {
 	checkNameFound(string(key))
-	if len(desc) == 0 {
-		panic(fmt.Sprintf("setting missing description: %s", key))
-	}
-	if r, _ := utf8.DecodeRuneInString(desc); unicode.IsUpper(r) {
-		panic(fmt.Sprintf(
-			"setting descriptions should start with a lowercase letter: %q, %q", key, desc,
-		))
-	}
-	for _, c := range desc {
-		if c == unicode.ReplacementChar {
-			panic(fmt.Sprintf("setting descriptions must be valid UTF-8: %q, %q", key, desc))
-		}
-		if unicode.IsControl(c) {
-			panic(fmt.Sprintf(
-				"setting descriptions cannot contain control character %q: %q, %q", c, key, desc,
-			))
-		}
-	}
+
 	slot := slotIdx(len(registry))
 	s.init(class, key, desc, slot)
 	registry[key] = s

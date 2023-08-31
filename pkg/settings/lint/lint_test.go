@@ -14,6 +14,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	// Ensure that the CCL packages are imported to see all cluster settings.
@@ -95,6 +97,7 @@ func TestLintClusterSettingNames(t *testing.T) {
 	skip.UnderRace(t, "lint only test")
 	skip.UnderDeadlock(t, "lint only test")
 	skip.UnderStress(t, "lint only test")
+
 	keys := settings.Keys(true /* forSystemTenant */)
 	for _, settingKey := range keys {
 		setting, ok := settings.LookupForLocalAccessByKey(settingKey, true /* forSystemTenant */)
@@ -105,7 +108,6 @@ func TestLintClusterSettingNames(t *testing.T) {
 
 		sType := setting.Typ()
 		settingName := string(setting.Name())
-		desc := setting.Description()
 
 		if strings.ToLower(settingName) != settingName {
 			t.Errorf("%s: variable name must be all lowercase", settingName)
@@ -173,6 +175,26 @@ func TestLintClusterSettingNames(t *testing.T) {
 		if nameErr != nil {
 			t.Error(nameErr)
 		}
+	}
+}
+
+func TestLintClusterSettingDescriptions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	skip.UnderRace(t, "lint only test")
+	skip.UnderDeadlock(t, "lint only test")
+	skip.UnderStress(t, "lint only test")
+
+	keys := settings.Keys(true /* forSystemTenant */)
+	for _, settingKey := range keys {
+		setting, ok := settings.LookupForLocalAccessByKey(settingKey, true /* forSystemTenant */)
+		if !ok {
+			t.Errorf("registry bug: setting with key %q not found", settingKey)
+			continue
+		}
+		desc := setting.Description()
+		settingName := string(setting.Name())
+		sType := setting.Typ()
 
 		if strings.TrimSpace(desc) != desc {
 			t.Errorf("%s: description %q has heading or trailing whitespace", settingName, desc)
@@ -180,15 +202,21 @@ func TestLintClusterSettingNames(t *testing.T) {
 
 		if len(desc) == 0 {
 			t.Errorf("%s: description is empty", settingName)
-		}
-
-		if len(desc) > 0 {
-			if strings.ToLower(desc[0:1]) != desc[0:1] {
+		} else {
+			if r, _ := utf8.DecodeRuneInString(desc); unicode.IsUpper(r) {
 				t.Errorf("%s: description %q must not start with capital", settingName, desc)
 			}
 			if sType != "e" && (desc[len(desc)-1] == '.') && !strings.Contains(desc, ". ") {
 				// TODO(knz): this check doesn't work with the way enum values are added to their descriptions.
 				t.Errorf("%s: description %q must end with period only if it contains a secondary sentence", settingName, desc)
+			}
+			for _, c := range desc {
+				if c == unicode.ReplacementChar {
+					t.Errorf("%s: setting descriptions must be valid UTF-8: %q", settingName, desc)
+				}
+				if unicode.IsControl(c) {
+					t.Errorf("%s: setting descriptions cannot contain control character %q, %q", settingName, c, desc)
+				}
 			}
 		}
 	}
