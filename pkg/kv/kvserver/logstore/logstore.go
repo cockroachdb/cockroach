@@ -38,7 +38,8 @@ import (
 	"go.etcd.io/raft/v3/raftpb"
 )
 
-var disableSyncRaftLog = settings.RegisterBoolSetting(
+// DisableSyncRaftLog disables raft log synchronization and can cause data loss.
+var DisableSyncRaftLog = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.raft_log.disable_synchronization_unsafe",
 	"disables synchronization of Raft log writes to persistent storage. "+
@@ -233,7 +234,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	stats.PebbleBegin = timeutil.Now()
 	stats.PebbleBytes = int64(batch.Len())
 	wantsSync := len(m.Responses) > 0
-	willSync := wantsSync && !disableSyncRaftLog.Get(&s.Settings.SV)
+	willSync := wantsSync && !DisableSyncRaftLog.Get(&s.Settings.SV)
 	// Use the non-blocking log sync path if we are performing a log sync ...
 	nonBlockingSync := willSync &&
 		// and the cluster setting is enabled ...

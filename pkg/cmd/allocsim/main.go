@@ -538,13 +538,15 @@ func main() {
 		os.Exit(exitStatus)
 	}()
 
+	for i := 0; i < c.Cfg.NumNodes; i++ {
+		cfg := c.Cfg.PerNodeCfg[i]
+		cfg.ExtraEnv = append(cfg.ExtraEnv, "COCKROACH_DISABLE_RAFT_LOG_SYNCHRONIZATION_UNSAFE=true")
+		c.Cfg.PerNodeCfg[i] = cfg
+	}
+
 	c.Start(context.Background())
 	defer c.Close()
 	c.UpdateZoneConfig(1, 1<<20)
-	_, err := c.Nodes[0].DB().Exec("SET CLUSTER SETTING kv.raft_log.synchronization.disabled = true")
-	if err != nil {
-		log.Fatalf(context.Background(), "%v", err)
-	}
 	if len(config.Localities) != 0 {
 		a.runWithConfig(config)
 	} else {
