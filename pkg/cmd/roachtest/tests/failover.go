@@ -225,7 +225,9 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 5, onlyNodes: []int{3, 4, 5, 6, 7, 8, 9}})
 
 	// Wait for upreplication.
-	require.NoError(t, WaitForReplication(ctx, t, conn, 5 /* replicationFactor */))
+	require.NoError(
+		t, WaitForReplication(ctx, t, conn, 5 /* replicationFactor */, atLeastReplicationFactor),
+	)
 
 	// Create the kv database. If this is a read-only workload, populate it with
 	// 100.000 keys.
@@ -246,7 +248,9 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	relocateRanges(t, ctx, conn, `true`, []int{1, 2}, []int{3, 4, 5, 6, 7, 8, 9})
 
 	// Wait for upreplication of the new ranges.
-	require.NoError(t, WaitForReplication(ctx, t, conn, 5 /* replicationFactor */))
+	require.NoError(
+		t, WaitForReplication(ctx, t, conn, 5 /* replicationFactor */, atLeastReplicationFactor),
+	)
 
 	// Run workload on n10 via n1-n2 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
@@ -536,7 +540,9 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 
 	// Place all ranges on n1-n3 to start with, and wait for upreplication.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
-	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+	// NB: We want to ensure the system ranges are all down-replicated from their
+	// initial RF of 5, so pass in exactlyReplicationFactor below.
+	require.NoError(t, WaitForReplication(ctx, t, conn, 3, exactlyReplicationFactor))
 
 	// Disable the replicate queue. It can otherwise end up with stuck
 	// overreplicated ranges during rebalancing, because downreplication requires

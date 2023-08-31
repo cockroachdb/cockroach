@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -62,27 +61,18 @@ func (n noopSplitAndScatterer) scatter(
 	return n.scatterNode, nil
 }
 
-// adminSplitAndScatterer is used by dbSplitAndScatterer to run the actual KV
-// commands to split and scatter.
-type adminSplitAndScatterer interface {
-	AdminSplit(ctx context.Context, splitKey interface{}, expirationTime hlc.Timestamp, predicateKeys ...roachpb.Key) error
-	AdminScatter(ctx context.Context, key roachpb.Key, maxSize int64) (*kvpb.AdminScatterResponse, error)
-	Clock() *hlc.Clock
-	NonTransactionalSender() kv.Sender
-}
-
 // dbSplitAndScatter is the production implementation of this processor's
 // scatterer. It actually issues the split and scatter requests against the KV
 // layer.
 type dbSplitAndScatterer struct {
-	sas adminSplitAndScatterer
-	kr  *KeyRewriter
+	db *kv.DB
+	kr *KeyRewriter
 }
 
 var _ splitAndScatterer = dbSplitAndScatterer{}
 
-func makeSplitAndScatterer(sas adminSplitAndScatterer, kr *KeyRewriter) splitAndScatterer {
-	return dbSplitAndScatterer{sas: sas, kr: kr}
+func makeSplitAndScatterer(db *kv.DB, kr *KeyRewriter) splitAndScatterer {
+	return dbSplitAndScatterer{db: db, kr: kr}
 }
 
 // split implements splitAndScatterer.
@@ -92,26 +82,22 @@ func (s dbSplitAndScatterer) split(
 	if s.kr == nil {
 		return errors.AssertionFailedf("KeyRewriter was not set when expected to be")
 	}
-	if s.sas == nil {
+	if s.db == nil {
 		return errors.AssertionFailedf("split and scatterer's database was not set when expected")
 	}
 
-	expirationTime := s.sas.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+	expirationTime := s.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 	newSplitKey, err := rewriteBackupSpanKey(codec, s.kr, splitKey)
 	if err != nil {
 		return err
 	}
 	if splitAt, err := keys.EnsureSafeSplitKey(newSplitKey); err != nil {
-		// The key might be corrupt, and therefore we cannot guarantee it is a valid
-		// split key. The restore can still continue without this split. This error
-		// is not expected after #109483 is fixed.
-		log.Errorf(ctx, "failed splitting: %v", err)
-		return nil
+		// Ignore the error, not all keys are table keys.
 	} else if len(splitAt) != 0 {
 		newSplitKey = splitAt
 	}
 	log.VEventf(ctx, 1, "presplitting new key %+v", newSplitKey)
-	if err := s.sas.AdminSplit(ctx, newSplitKey, expirationTime); err != nil {
+	if err := s.db.AdminSplit(ctx, newSplitKey, expirationTime); err != nil {
 		return errors.Wrapf(err, "splitting key %s", newSplitKey)
 	}
 
@@ -125,7 +111,7 @@ func (s dbSplitAndScatterer) scatter(
 	if s.kr == nil {
 		return 0, errors.AssertionFailedf("KeyRewriter was not set when expected to be")
 	}
-	if s.sas == nil {
+	if s.db == nil {
 		return 0, errors.AssertionFailedf("split and scatterer's database was not set when expected")
 	}
 
@@ -156,7 +142,7 @@ func (s dbSplitAndScatterer) scatter(
 		MaxSize:         1, // don't scatter non-empty ranges on resume.
 	}
 
-	res, pErr := kv.SendWrapped(ctx, s.sas.NonTransactionalSender(), req)
+	res, pErr := kv.SendWrapped(ctx, s.db.NonTransactionalSender(), req)
 	if pErr != nil {
 		// TODO(dt): typed error.
 		if !strings.Contains(pErr.String(), "existing range size") {

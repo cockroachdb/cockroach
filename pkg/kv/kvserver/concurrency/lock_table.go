@@ -2913,8 +2913,7 @@ func (kl *keyLocks) discoveredLock(
 		tl.replicatedInfo.ts = foundLock.Txn.WriteTimestamp
 	}
 
-	switch accessStrength {
-	case lock.None:
+	if accessStrength == lock.None {
 		// Don't enter the lock's queuedReaders list, because all queued readers
 		// are expected to be active. Instead, wait until the next scan.
 
@@ -2925,8 +2924,7 @@ func (kl *keyLocks) discoveredLock(
 		if foundLock.Strength != lock.Intent || g.ts.Less(foundLock.Txn.WriteTimestamp) {
 			return errors.AssertionFailedf("discovered non-conflicting lock")
 		}
-
-	case lock.Intent, lock.Exclusive:
+	} else {
 		// Immediately enter the lock's queuedLockingRequests list.
 		// NB: this inactive waiter can be non-transactional.
 		g.mu.Lock()
@@ -2958,8 +2956,6 @@ func (kl *keyLocks) discoveredLock(
 				kl.queuedLockingRequests.InsertBefore(qg, e)
 			}
 		}
-	default:
-		panic(errors.AssertionFailedf("unhandled lock strength %s", accessStrength))
 	}
 
 	// If there are waiting requests from the same txn, they no longer need to wait.
