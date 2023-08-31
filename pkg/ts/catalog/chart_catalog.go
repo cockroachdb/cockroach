@@ -1570,6 +1570,18 @@ var charts = []sectionDescription{
 					"changefeed.schema_registry.registrations",
 				},
 			},
+			{
+				Title: "Changefeed Aggregator Progress",
+				Metrics: []string{
+					"changefeed.aggregator_progress",
+				},
+			},
+			{
+				Title: "Changefeed Checkpoint Progress",
+				Metrics: []string{
+					"changefeed.checkpoint_progress",
+				},
+			},
 		},
 	},
 	{
