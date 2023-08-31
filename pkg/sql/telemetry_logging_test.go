@@ -1632,6 +1632,7 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 	}
 
 	require.NotEmpty(t, entries)
+	var expectedTxnID string
 
 	// Attempt to find all expected logs.
 	for i, expected := range expectedQueries {
@@ -1642,6 +1643,15 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 				require.NoError(t, json.Unmarshal([]byte(e.Message), &sq))
 				require.Equalf(t, uint32(i), sq.StmtPosInTxn, "stmt=%s entries: %s", expected, entries)
 				found = true
+
+				if expected == "BEGIN" {
+					require.Equal(t, "", sq.TransactionID, "BEGIN should not have a transaction ID")
+				} else if expectedTxnID == "" {
+					require.NotEqualf(t, "", sq.TransactionID, "expected to find a transaction ID for %s", expected)
+					expectedTxnID = sq.TransactionID
+				} else {
+					require.Equalf(t, expectedTxnID, sq.TransactionID, "expected to find the same transaction ID for %s", expected)
+				}
 				break
 			}
 		}
