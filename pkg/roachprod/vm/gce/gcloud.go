@@ -36,12 +36,11 @@ import (
 )
 
 const (
-	defaultProject = "cockroach-ephemeral"
-	// ProviderName is gce.
+	defaultProject      = "cockroach-ephemeral"
 	ProviderName        = "gce"
-	DefaultImage        = "ubuntu-2004-focal-v20210603"
-	ARM64Image          = "ubuntu-2004-focal-arm64-v20230523"
-	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230302"
+	DefaultImage        = "ubuntu-2004-focal-v20230817"
+	ARM64Image          = "ubuntu-2004-focal-arm64-v20230817"
+	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
 	defaultImageProject = "ubuntu-os-cloud"
 	FIPSImageProject    = "ubuntu-os-pro-cloud"
 )
