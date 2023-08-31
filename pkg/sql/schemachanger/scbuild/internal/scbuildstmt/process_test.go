@@ -22,7 +22,7 @@ import (
 func TestSupportedStatements(t *testing.T) {
 	sv := &settings.Values{}
 	// Non-existent tags should error out.
-	require.Error(t, schemaChangerDisabledStatements.Validate(sv, "FAKE STATEMENT"))
+	require.Error(t, forceDeclarativeStatements.Validate(sv, "FAKE STATEMENT"))
 	// Generate the full set of statements
 	allTags := strings.Builder{}
 	noTags := strings.Builder{}
@@ -35,8 +35,8 @@ func TestSupportedStatements(t *testing.T) {
 		ret := typTag.Func.Call([]reflect.Value{reflect.New(typ.Elem())})
 		require.Equal(t, ret[0].String(), stmt.statementTag, "statement tag is different in AST")
 		// Validate all tags are supported.
-		require.NoError(t, schemaChangerDisabledStatements.Validate(sv, "+"+stmt.statementTag))
-		require.NoError(t, schemaChangerDisabledStatements.Validate(sv, "!"+stmt.statementTag))
+		require.NoError(t, forceDeclarativeStatements.Validate(sv, "+"+stmt.statementTag))
+		require.NoError(t, forceDeclarativeStatements.Validate(sv, "!"+stmt.statementTag))
 		// Validate all of them can be specified at once.
 		if !first {
 			allTags.WriteString(",")
@@ -48,6 +48,6 @@ func TestSupportedStatements(t *testing.T) {
 		noTags.WriteString("!")
 		noTags.WriteString(stmt.statementTag)
 	}
-	require.NoError(t, schemaChangerDisabledStatements.Validate(sv, allTags.String()))
-	require.NoError(t, schemaChangerDisabledStatements.Validate(sv, noTags.String()))
+	require.NoError(t, forceDeclarativeStatements.Validate(sv, allTags.String()))
+	require.NoError(t, forceDeclarativeStatements.Validate(sv, noTags.String()))
 }
