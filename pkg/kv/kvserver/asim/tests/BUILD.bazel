@@ -20,6 +20,7 @@ go_library(
         "//pkg/kv/kvserver/asim/history",
         "//pkg/kv/kvserver/asim/scheduled",
         "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/asim/validator",
         "//pkg/roachpb",
         "//pkg/sql",
         "//pkg/sql/catalog/catpb",
