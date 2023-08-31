@@ -769,6 +769,10 @@ func (r *testRunner) runWorker(
 				setupErr = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
 			}
 
+			if rand.Float64() < 0.5 {
+				setupErr = fmt.Errorf("failed due to randomness")
+			}
+
 			if setupErr != nil {
 				// If there was an error setting up the cluster (uploading
 				// initial files), we treat the error just like a cluster
