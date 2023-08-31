@@ -1,0 +1,2 @@
+repartition from=../partition/multi_col_range_partitioning to=../partition/multi_col_range_partitioning_maxvalue
+----
