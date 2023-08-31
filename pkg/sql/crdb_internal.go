@@ -1571,11 +1571,16 @@ CREATE TABLE crdb_internal.kv_protected_ts_records (
 						default:
 						}
 					}
-					ranges, _, err := p.DistSQLPlanner().distSender.AllRangeSpans(ctx, allSpans)
-					if err != nil {
+					nr := 0
+					if _, err := p.DistSQLPlanner().distSender.AllRangeSpans(ctx, allSpans,
+						func(s roachpb.Span) error {
+							nr++
+							return nil
+						},
+					); err != nil {
 						return err
 					}
-					numRanges = tree.NewDInt(tree.DInt(len(ranges)))
+					numRanges = tree.NewDInt(tree.DInt(nr))
 				}
 			}
 

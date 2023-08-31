@@ -525,8 +525,11 @@ type distResolver struct {
 
 func (r *distResolver) getRangesForSpans(
 	ctx context.Context, spans []roachpb.Span,
-) ([]roachpb.Span, error) {
-	spans, _, err := r.DistSender.AllRangeSpans(ctx, spans)
+) (ranges []roachpb.Span, _ error) {
+	_, err := r.DistSender.AllRangeSpans(ctx, spans, func(s roachpb.Span) error {
+		ranges = append(ranges, s)
+		return nil
+	})
 	return spans, err
 }
 
