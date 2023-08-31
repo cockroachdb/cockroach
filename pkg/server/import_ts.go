@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -73,9 +74,11 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 	// is not in use in the data set to import.
 	s.node.suppressNodeStatus.Set(true)
 
+	// Disable raft log synchronization to make the server generally faster.
+	logstore.DisableSyncRaftLog.Override(ctx, &s.cfg.Settings.SV, true)
+
 	// Disable writing of new timeseries, as well as roll-ups and deletion.
 	for _, stmt := range []string{
-		"SET CLUSTER SETTING kv.raft_log.synchronization.disabled = 'true';",
 		"SET CLUSTER SETTING timeseries.storage.enabled = 'false';",
 		"SET CLUSTER SETTING timeseries.storage.resolution_10s.ttl = '99999h';",
 		"SET CLUSTER SETTING timeseries.storage.resolution_30m.ttl = '99999h';",
