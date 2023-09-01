@@ -102,10 +102,17 @@ func (l *descriptorSet) findForExpiration(dropped bool) *descriptorVersionState 
 	exp := l.data[len(l.data)-1]
 	if len(l.data) > 1 && !dropped {
 		exp = l.data[len(l.data)-2]
+	} else if !dropped {
+		// Otherwise, there is a single non-dropped element
+		// avoid expiring.
+		return nil
 	}
 	exp.mu.Lock()
 	defer exp.mu.Unlock()
-	if exp.mu.refcount == 0 {
+	if exp.mu.refcount == 0 || exp.mu.session == nil {
+		return nil
+	}
+	if _, ok := exp.mu.session.(staticSession); ok {
 		return nil
 	}
 	return exp

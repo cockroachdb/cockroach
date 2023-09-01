@@ -63,6 +63,7 @@ go_library(
         "//pkg/sql/catalog/descidgen",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/schematelemetry/schematelemetrycontroller",
         "//pkg/sql/catalog/systemschema",

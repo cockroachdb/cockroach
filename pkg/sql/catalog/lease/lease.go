@@ -680,13 +680,13 @@ func purgeOldVersions(
 		if leaseToExpire != nil {
 			m.mu.Lock()
 			leaseToExpire.mu.Lock()
-			//sessionExpiry := leaseToExpire.mu.session.Expiration()
+			sessionExpiry := leaseToExpire.mu.session.Expiration()
 			leaseToExpire.mu.expiration = m.storage.db.KV().Clock().Now().AddDuration(LeaseDuration.Get(&m.storage.settings.SV))
 			// If the session had outlived our expiration, then use
 			// the session time.
-			/*if leaseToExpire.mu.expiration.Less(sessionExpiry) {
+			if leaseToExpire.mu.expiration.Less(sessionExpiry) {
 				leaseToExpire.mu.expiration = sessionExpiry
-			}*/
+			}
 			leaseToExpire.mu.session = nil
 			leaseToExpire.mu.Unlock()
 			if leaseToExpire.mu.lease != nil {
