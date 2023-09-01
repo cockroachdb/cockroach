@@ -50,15 +50,15 @@ var useDialback = settings.RegisterBoolSetting(
 
 var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", true)
 
-func getWindowSize(name string, c ConnectionClass, defaultSize int) int32 {
+func getWindowSize(ctx context.Context, name string, c ConnectionClass, defaultSize int) int32 {
 	const maxWindowSize = defaultWindowSize * 32
 	s := envutil.EnvOrDefaultInt(name, defaultSize)
 	if s > maxWindowSize {
-		log.Warningf(context.Background(), "%s value too large; trimmed to %d", name, maxWindowSize)
+		log.Warningf(ctx, "%s value too large; trimmed to %d", name, maxWindowSize)
 		s = maxWindowSize
 	}
 	if s <= defaultWindowSize {
-		log.Warningf(context.Background(),
+		log.Warningf(ctx,
 			"%s RPC will use dynamic window sizes due to %s value lower than %d", c, name, defaultSize)
 	}
 	return int32(s)
@@ -71,16 +71,22 @@ const (
 	maximumPingDurationMult = 2
 )
 
-var (
-	// for an RPC
-	initialWindowSize = getWindowSize(
+// For an RPC.
+func initialWindowSize(ctx context.Context) int32 {
+	return getWindowSize(ctx,
 		"COCKROACH_RPC_INITIAL_WINDOW_SIZE", DefaultClass, defaultWindowSize*32)
-	initialConnWindowSize = initialWindowSize * 16 // for a connection
+}
 
-	// for RangeFeed RPC
-	rangefeedInitialWindowSize = getWindowSize(
+// For a connection.
+func initialConnWindowSize(ctx context.Context) int32 {
+	return initialWindowSize(ctx) * 16
+}
+
+// For a RangeFeed RPC.
+func rangefeedInitialWindowSize(ctx context.Context) int32 {
+	return getWindowSize(ctx,
 		"COCKROACH_RANGEFEED_RPC_INITIAL_WINDOW_SIZE", RangefeedClass, 2*defaultWindowSize /* 128K */)
-)
+}
 
 // sourceAddr is the environment-provided local address for outgoing
 // connections.

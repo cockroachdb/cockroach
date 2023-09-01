@@ -50,7 +50,7 @@ func TestConsumeJoinToken(t *testing.T) {
 	var jt security.JoinToken
 	require.NoError(t, jt.UnmarshalText([]byte(token)))
 
-	dialOpts := rpc.GetAddJoinDialOptions(nil)
+	dialOpts := rpc.GetAddJoinDialOptions(ctx, nil)
 	conn, err := grpc.DialContext(ctx, s.RPCAddr(), dialOpts...)
 	require.NoError(t, err)
 	defer func() {
@@ -72,7 +72,7 @@ func TestConsumeJoinToken(t *testing.T) {
 	certPool := x509.NewCertPool()
 	certPool.AddCert(cert)
 
-	dialOpts = rpc.GetAddJoinDialOptions(certPool)
+	dialOpts = rpc.GetAddJoinDialOptions(ctx, certPool)
 	conn2, err := grpc.DialContext(ctx, s.RPCAddr(), dialOpts...)
 	require.NoError(t, err)
 	defer func() {

@@ -11,6 +11,7 @@
 package rpc
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"math"
@@ -25,7 +26,7 @@ import (
 // GetAddJoinDialOptions returns a standard list of DialOptions for use during
 // Add/Join operations.
 // TODO(aaron-crl): Possibly fold this into context.go.
-func GetAddJoinDialOptions(certPool *x509.CertPool) []grpc.DialOption {
+func GetAddJoinDialOptions(ctx context.Context, certPool *x509.CertPool) []grpc.DialOption {
 	// Populate the dialOpts.
 	var dialOpts []grpc.DialOption
 
@@ -42,8 +43,8 @@ func GetAddJoinDialOptions(certPool *x509.CertPool) []grpc.DialOption {
 		MinConnectTimeout: base.DialTimeout}))
 	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
 	dialOpts = append(dialOpts,
-		grpc.WithInitialWindowSize(initialWindowSize),
-		grpc.WithInitialConnWindowSize(initialConnWindowSize))
+		grpc.WithInitialWindowSize(initialWindowSize(ctx)),
+		grpc.WithInitialConnWindowSize(initialConnWindowSize(ctx)))
 
 	// Create a tls.Config that allows insecure mode if certPool is not set but
 	// requires it if certPool is set.

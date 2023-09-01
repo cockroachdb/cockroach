@@ -135,7 +135,7 @@ func TestSendToOneClient(t *testing.T) {
 	// checks to avoid log.Fatal.
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
-	s, err := rpc.NewServer(rpcContext)
+	s, err := rpc.NewServer(ctx, rpcContext)
 	require.NoError(t, err)
 	kvpb.RegisterInternalServer(s, Node(0))
 	ln, err := netutil.ListenAndServeGRPC(rpcContext.Stopper, s, util.TestAddr)
