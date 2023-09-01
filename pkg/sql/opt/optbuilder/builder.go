@@ -363,6 +363,9 @@ func (b *Builder) buildStmt(
 	case *tree.CreateRoutine:
 		return b.buildCreateFunction(stmt, inScope)
 
+	case *tree.Call:
+		panic(unimplemented.Newf("procedures", "procedures not supported"))
+
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)
 
