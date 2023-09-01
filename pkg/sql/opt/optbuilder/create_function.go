@@ -38,10 +38,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 	}
 
-	if cf.IsProcedure {
-		panic(unimplemented.New("CREATE PROCEDURE", "procedures not supported"))
-	}
-
 	sch, resName := b.resolveSchemaForCreateFunction(&cf.Name)
 	schID := b.factory.Metadata().AddSchema(sch)
 	cf.Name.ObjectNamePrefix = resName
