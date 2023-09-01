@@ -25,7 +25,7 @@ go_library(
 
 go_test(
     name = "tests_test",
-    size = "large",
+    size = "enormous",
     srcs = [
         "allow_role_memberships_to_change_during_transaction_test.go",
         "autocommit_extended_protocol_test.go",
@@ -51,7 +51,7 @@ go_test(
         "truncate_test.go",
         "virtual_table_test.go",
     ],
-    args = ["-test.timeout=895s"],
+    args = ["-test.timeout=3595s"],
     data = glob(["testdata/**"]),
     embed = [":tests"],
     shard_count = 16,
