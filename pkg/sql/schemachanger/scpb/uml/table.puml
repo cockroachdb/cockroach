@@ -170,6 +170,7 @@ Function :  FunctionID
 Function : []Params
 Function :  ReturnSet
 Function :  ReturnType
+Function :  IsProcedure
 
 object FunctionBody
 

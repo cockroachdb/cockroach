@@ -145,10 +145,11 @@ func (n *createFunctionNode) createNewFunction(
 	scDesc.AddFunction(
 		udfDesc.GetName(),
 		descpb.SchemaDescriptor_FunctionSignature{
-			ID:         udfDesc.GetID(),
-			ArgTypes:   paramTypes,
-			ReturnType: returnType,
-			ReturnSet:  udfDesc.ReturnType.ReturnSet,
+			ID:          udfDesc.GetID(),
+			ArgTypes:    paramTypes,
+			ReturnType:  returnType,
+			ReturnSet:   udfDesc.ReturnType.ReturnSet,
+			IsProcedure: udfDesc.IsProcedure,
 		},
 	)
 	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "Create Function"); err != nil {
@@ -303,6 +304,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 		pbParams,
 		returnType,
 		n.cf.ReturnType.IsSet,
+		n.cf.IsProcedure,
 		privileges,
 	)
 
