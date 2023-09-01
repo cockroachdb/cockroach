@@ -428,6 +428,10 @@ type Request struct {
 	// passed to SequenceReq. Only supplied to SequenceReq if the method is
 	// not also passed an exiting Guard.
 	LockSpans *lockspanset.LockSpanSet
+
+	// AdmissionHeader is the header in the requests BatchRequest. It is plumbed
+	// through for intent resolution admission control.
+	AdmissionHeader kvpb.AdmissionHeader
 }
 
 // Guard is returned from Manager.SequenceReq. The guard is passed back in to
@@ -835,7 +839,7 @@ type lockTableWaiter interface {
 	// ResolveDeferredIntents resolves the batch of intents if the provided
 	// error is nil. The batch of intents may be resolved more efficiently than
 	// if they were resolved individually.
-	ResolveDeferredIntents(context.Context, []roachpb.LockUpdate) *Error
+	ResolveDeferredIntents(context.Context, kvpb.AdmissionHeader, []roachpb.LockUpdate) *Error
 }
 
 // txnWaitQueue holds a collection of wait-queues for transaction records.

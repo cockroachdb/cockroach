@@ -503,7 +503,7 @@ func (m *managerImpl) HandleLockConflictError(
 	// If the discovery process collected a set of intents to resolve before the
 	// next evaluation attempt, do so.
 	if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
-		if err := m.ltw.ResolveDeferredIntents(ctx, toResolve); err != nil {
+		if err := m.ltw.ResolveDeferredIntents(ctx, g.Req.AdmissionHeader, toResolve); err != nil {
 			m.FinishReq(g)
 			return nil, err
 		}

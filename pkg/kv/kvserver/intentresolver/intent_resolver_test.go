@@ -229,7 +229,8 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 			}
 			txn := c.txn.Clone()
 			txn.LockSpans = append([]roachpb.Span{}, c.intentSpans...)
-			err := ir.CleanupTxnIntentsOnGCAsync(ctx, 1, txn, clock.Now(), onComplete)
+			err := ir.CleanupTxnIntentsOnGCAsync(
+				ctx, kvpb.AdmissionHeader{}, 1, txn, clock.Now(), onComplete)
 			if err != nil {
 				t.Fatalf("unexpected error sending async transaction")
 			}
@@ -283,12 +284,14 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 	}
 	// Running with allowSyncProcessing = false should result in an error and no
 	// requests being sent.
-	err := ir.CleanupIntentsAsync(context.Background(), testIntents, false)
+	err := ir.CleanupIntentsAsync(
+		context.Background(), kvpb.AdmissionHeader{}, testIntents, false)
 	assert.True(t, errors.Is(err, stop.ErrThrottled))
 	// Running with allowSyncProcessing = true should result in the synchronous
 	// processing of the intents resulting in no error and the consumption of the
 	// sendFuncs.
-	err = ir.CleanupIntentsAsync(context.Background(), testIntents, true)
+	err = ir.CleanupIntentsAsync(
+		context.Background(), kvpb.AdmissionHeader{}, testIntents, true)
 	assert.Nil(t, err)
 	assert.Equal(t, sf.len(), 0)
 }
@@ -337,7 +340,8 @@ func TestCleanupIntentsAsync(t *testing.T) {
 				Clock:   clock,
 			}
 			ir := newIntentResolverWithSendFuncs(cfg, sf, stopper)
-			err := ir.CleanupIntentsAsync(context.Background(), c.intents, true)
+			err := ir.CleanupIntentsAsync(
+				context.Background(), kvpb.AdmissionHeader{}, c.intents, true)
 			sf.drain(t)
 			stopper.Stop(context.Background())
 			assert.Nil(t, err, "error from CleanupIntentsAsync")
@@ -402,7 +406,7 @@ func TestCleanupMultipleIntentsAsync(t *testing.T) {
 		},
 	}
 	ir := newIntentResolverWithSendFuncs(cfg, sf, stopper)
-	err := ir.CleanupIntentsAsync(ctx, testIntents, false)
+	err := ir.CleanupIntentsAsync(ctx, kvpb.AdmissionHeader{}, testIntents, false)
 	sf.drain(t)
 	stopper.Stop(ctx)
 	assert.Nil(t, err)
@@ -752,7 +756,8 @@ func TestCleanupIntents(t *testing.T) {
 			c.cfg.Stopper = stopper
 			c.cfg.Clock = clock
 			ir := newIntentResolverWithSendFuncs(c.cfg, c.sendFuncs, stopper)
-			num, err := ir.CleanupIntents(context.Background(), c.intents, clock.Now(), kvpb.PUSH_ABORT)
+			num, err := ir.CleanupIntents(
+				context.Background(), kvpb.AdmissionHeader{}, c.intents, clock.Now(), kvpb.PUSH_ABORT)
 			assert.Equal(t, num, c.expectedNum, "number of resolved intents")
 			assert.Equal(t, err != nil, c.expectedErr, "error during CleanupIntents: %v", err)
 		})
@@ -799,7 +804,8 @@ func TestIntentResolutionTimeout(t *testing.T) {
 	// Intent resolution on unavailable range.
 	var cleanupIntentsErrFinished int32
 	go func() {
-		num, err := ir.CleanupIntents(context.Background(), makeTxnIntents(t, clock, 1), clock.Now(), kvpb.PUSH_ABORT)
+		num, err := ir.CleanupIntents(context.Background(), kvpb.AdmissionHeader{},
+			makeTxnIntents(t, clock, 1), clock.Now(), kvpb.PUSH_ABORT)
 		require.Error(t, err)
 		require.Equal(t, num, 0)
 		atomic.StoreInt32(&cleanupIntentsErrFinished, 1)
@@ -810,7 +816,8 @@ func TestIntentResolutionTimeout(t *testing.T) {
 	go func() {
 		// Ensure intent resolution occurs after that of the unavailable range.
 		<-c
-		num, err := ir.CleanupIntents(context.Background(), makeTxnIntents(t, clock, 1), clock.Now(), kvpb.PUSH_ABORT)
+		num, err := ir.CleanupIntents(context.Background(), kvpb.AdmissionHeader{},
+			makeTxnIntents(t, clock, 1), clock.Now(), kvpb.PUSH_ABORT)
 		require.NoError(t, err)
 		require.Equal(t, num, 1)
 		atomic.StoreInt32(&cleanupIntentsSuccessFinished, 1)
@@ -838,7 +845,8 @@ func newTransaction(
 		now = clock.Now()
 	}
 	txn := roachpb.MakeTransaction(
-		name, baseKey, isolation.Serializable, userPriority, now, offset, 1 /* coordinatorNodeID */)
+		name, baseKey, isolation.Serializable, userPriority, now, offset,
+		1 /* coordinatorNodeID */, 0)
 	return &txn
 }
 

@@ -39,6 +39,98 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Admission control and locking (including intents):
+//
+// Admission control (AC) has a work scheduling mechanism based on (tenantID,
+// priority, createTime), where the priority values are defined in
+// admissionpb.WorkPriority, and can be one of three values for user txns
+// {UserLowPri, NormalPri, UserHighPri} (NB: these priorities are different
+// from enginepb.TxnPriority used inside concurrency control). All internal
+// background work in CockroachDB uses a priority < NormalPri. The high level
+// goal is to provide performance isolation of different queries by one of two
+// methods:
+// - Using AC's tenantID, for fair sharing. AC's tenantID can be decoupled
+//   from the serverless concept of tenantID (though this is not done yet), so
+//   we consider this more general setup below.
+// - Using different priorities.
+//
+// A challenge here is that AC queueing is barely aware of concurrency
+// control, so we have a lock priority inversion problem. Our initial solution
+// addressed this in a crude manner: (a) using LockingPri (which is greater
+// than UserHighPri) for work from txns that have already acquired locks,
+// regardless of the txn's original priority, (b) not subjecting intent
+// resolution to AC. But (b) caused overload (see
+// https://github.com/cockroachdb/cockroach/issues/97108). And (a) violates
+// our isolation goals: e.g. a user A could be running write txns at
+// UserLowPri on some set of tables T_A, while another user B could be running
+// txns at NormalPri on an unrelated set of tables T_B, and user A will
+// interfere with user B since A's txns will get elevated to LockingPri.
+//
+// The priority inversion problem is complicated from a software structure
+// perspective, since it requires taking information from the lock table and
+// feeding it into AC queues. And there are more fundamental difficulties:
+//
+// - Distributed priority inversion: The AC queue on node n1 could have low
+//   priority work from txn T1 waiting behind high priority work from txn T2,
+//   and low priority work from txn T3 waiting on a lock already held by T1 in
+//   the lock table. There is no need for T1 to skip past T2 in the AC queue
+//   since T3 is similarly low priority, so the lock release will be delayed.
+//   But on node n2, a lock held by T3 could have T2 waiting for it to be
+//   released (and no AC queueing). Without distributed knowledge, we cannot
+//   notice this transitive dependency of T2 on T1, and therefore the need to
+//   elevate the priority of T1.
+//
+// - Importance inversion: Using tenantID to isolate different workloads could
+//   have tenant U1 with lower shares holding a lock and tenant U2 with higher
+//   shares waiting on that lock. That is, the general problem cannot be
+//   captured solely using priorities.
+//
+// We define the performance isolation goals of AC in a more limited manner,
+// to sidestep this problem.
+//
+// Performance isolation between user txns can be achieved using different
+// tenantID or different priority only for txns that touch different parts (in
+// some partitioning) of the key space, with a few exceptions:
+//
+// - Lower importance (smaller tenant share or lower priority) non-locking
+//   read txns can share the key space with higher importance read or write
+//   txns.
+//
+// - One can switch between lower importance and higher importance (and vice
+//   versa) txns on a part of the key space. If there is time overlap during
+//   this switch where both lower and higher importance txns are running,
+//   priority inversion can happen.
+//
+// These goals are achieved by the following set of mechanisms:
+//
+// - Txns that already hold locks/intents use an AC priority that is logically
+//   +1 of the original txn priority. Since there are gaps between the
+//   different user priorities (UserLowPri=-50, NormalPri=0, UserHighPri=50),
+//   work in one part of the key space that executes with NormalPri+1 will not
+//   get prioritized over another part of the key space executing at
+//   UserHighPri. And when different tenantIDs are being used for performance
+//   isolation, the priority is irrelevant. The actual implementation uses a
+//   step that is bigger than +1. See Txn.AdmissionHeader.
+//
+// - Intent resolution is subject to AC. The baseline (tenantID, priority,
+//   createTime) of intent resolution is that of the requester that is trying
+//   to resolve the intent. Adopting the same idea of +1, the intent
+//   resolution executes at priority+1.
+
+// SendImmediatelyBypassAdmissionControl sets the admission control behavior
+// for the less commonly used sendImmediately option. Since that option is
+// used when a waiter on the lock table is trying to resolve one intent, and
+// the waiter has already been admitted, the default is to bypass admission
+// control.
+var SendImmediatelyBypassAdmissionControl = settings.RegisterBoolSetting(
+	settings.SystemOnly, "kv.intent_resolver.send_immediately.bypass_admission_control.enabled",
+	"determines whether the sendImmediately option on intent resolution bypasses admission control",
+	true)
+
+var BatchBypassAdmissionControl = settings.RegisterBoolSetting(
+	settings.SystemOnly, "kv.intent_resolver.batch.bypass_admission_control.enabled",
+	"determined whether batched intent resolution bypasses admission control", false)
+
 const (
 	// defaultTaskLimit is the maximum number of asynchronous tasks
 	// that may be started by intentResolver. When this limit is reached
@@ -172,7 +264,8 @@ type IntentResolver struct {
 		// called directly after EndTxn evaluation or during GC of txn spans.
 		inFlightTxnCleanups map[uuid.UUID]struct{}
 	}
-	every log.EveryN
+	every                       log.EveryN
+	everyAdmissionHeaderMissing log.EveryN
 }
 
 func setConfigDefaults(c *Config) {
@@ -211,15 +304,16 @@ func (nrdc nopRangeDescriptorCache) Lookup(
 func New(c Config) *IntentResolver {
 	setConfigDefaults(&c)
 	ir := &IntentResolver{
-		clock:        c.Clock,
-		db:           c.DB,
-		stopper:      c.Stopper,
-		sem:          quotapool.NewIntPool("intent resolver", uint64(c.TaskLimit)),
-		every:        log.Every(time.Minute),
-		Metrics:      makeMetrics(),
-		rdc:          c.RangeDescriptorCache,
-		testingKnobs: c.TestingKnobs,
-		settings:     c.Settings,
+		clock:                       c.Clock,
+		db:                          c.DB,
+		stopper:                     c.Stopper,
+		sem:                         quotapool.NewIntPool("intent resolver", uint64(c.TaskLimit)),
+		every:                       log.Every(time.Minute),
+		Metrics:                     makeMetrics(),
+		rdc:                         c.RangeDescriptorCache,
+		testingKnobs:                c.TestingKnobs,
+		settings:                    c.Settings,
+		everyAdmissionHeaderMissing: log.Every(5 * time.Minute),
 	}
 	c.Stopper.AddCloser(ir.sem.Closer("stopper"))
 	ir.mu.inFlightPushes = map[uuid.UUID]int{}
@@ -500,7 +594,10 @@ func (ir *IntentResolver) runAsyncTask(
 // expired yet (i.e. they are not at least 5s old)? Should we filter
 // those out? If we don't, will this be too expensive for SKIP LOCKED?
 func (ir *IntentResolver) CleanupIntentsAsync(
-	ctx context.Context, intents []roachpb.Intent, allowSyncProcessing bool,
+	ctx context.Context,
+	admissionHeader kvpb.AdmissionHeader,
+	intents []roachpb.Intent,
+	allowSyncProcessing bool,
 ) error {
 	if len(intents) == 0 {
 		return nil
@@ -509,7 +606,7 @@ func (ir *IntentResolver) CleanupIntentsAsync(
 	return ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
 		err := timeutil.RunWithTimeout(ctx, "async intent resolution",
 			asyncIntentResolutionTimeout, func(ctx context.Context) error {
-				_, err := ir.CleanupIntents(ctx, intents, now, kvpb.PUSH_TOUCH)
+				_, err := ir.CleanupIntents(ctx, admissionHeader, intents, now, kvpb.PUSH_TOUCH)
 				return err
 			})
 		if err != nil && ir.every.ShouldLog() {
@@ -525,7 +622,11 @@ func (ir *IntentResolver) CleanupIntentsAsync(
 // subset of the intents may have been resolved, but zero will be
 // returned.
 func (ir *IntentResolver) CleanupIntents(
-	ctx context.Context, intents []roachpb.Intent, now hlc.Timestamp, pushType kvpb.PushTxnType,
+	ctx context.Context,
+	admissionHeader kvpb.AdmissionHeader,
+	intents []roachpb.Intent,
+	now hlc.Timestamp,
+	pushType kvpb.PushTxnType,
 ) (int, error) {
 	h := kvpb.Header{Timestamp: now}
 
@@ -582,7 +683,7 @@ func (ir *IntentResolver) CleanupIntents(
 		//   same situation as above.
 		//
 		// Thus, we must poison.
-		opts := ResolveOptions{Poison: true}
+		opts := ResolveOptions{Poison: true, AdmissionHeader: admissionHeader}
 		if pErr := ir.ResolveIntents(ctx, resolveIntents, opts); pErr != nil {
 			return 0, errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 		}
@@ -622,7 +723,9 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 			}
 			defer release()
 			if err := ir.cleanupFinishedTxnIntents(
-				ctx, rangeID, et.Txn, et.Poison, onComplete,
+				// The admission header is constructed using the completed
+				// transaction.
+				ctx, kv.AdmissionHeaderForLockUpdateForTxn(et.Txn), rangeID, et.Txn, et.Poison, onComplete,
 			); err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %v", err)
@@ -666,6 +769,7 @@ func (ir *IntentResolver) lockInFlightTxnCleanup(
 // It will not be called if an error is returned.
 func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 	ctx context.Context,
+	admissionHeader kvpb.AdmissionHeader,
 	rangeID roachpb.RangeID,
 	txn *roachpb.Transaction,
 	now hlc.Timestamp,
@@ -737,7 +841,8 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 			// Set onComplete to nil to disable the deferred call as the call has now
 			// been delegated to the callback passed to cleanupFinishedTxnIntents.
 			onComplete = nil
-			err := ir.cleanupFinishedTxnIntents(ctx, rangeID, txn, false /* poison */, onCleanupComplete)
+			err := ir.cleanupFinishedTxnIntents(
+				ctx, admissionHeader, rangeID, txn, false /* poison */, onCleanupComplete)
 			if err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %+v", err)
@@ -801,6 +906,7 @@ func (ir *IntentResolver) gcTxnRecord(
 // which is likely to be after this call returns in the case of success.
 func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	ctx context.Context,
+	admissionHeader kvpb.AdmissionHeader,
 	rangeID roachpb.RangeID,
 	txn *roachpb.Transaction,
 	poison bool,
@@ -814,7 +920,8 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 		}
 	}()
 	// Resolve intents.
-	opts := ResolveOptions{Poison: poison, MinTimestamp: txn.MinTimestamp}
+	opts := ResolveOptions{
+		Poison: poison, MinTimestamp: txn.MinTimestamp, AdmissionHeader: admissionHeader}
 	if pErr := ir.resolveIntents(ctx, (*txnLockUpdates)(txn), opts); pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 	}
@@ -859,6 +966,8 @@ type ResolveOptions struct {
 	// The original transaction timestamp from the earliest txn epoch; if
 	// supplied, resolution of intent ranges can be optimized in some cases.
 	MinTimestamp hlc.Timestamp
+	// AdmissionHeader of the caller.
+	AdmissionHeader kvpb.AdmissionHeader
 	// If set, instructs the IntentResolver to send the intent resolution requests
 	// immediately, instead of adding them to a batch and waiting for that batch
 	// to fill up with other intent resolution requests. This can be used to avoid
@@ -1007,11 +1116,20 @@ func (ir *IntentResolver) resolveIntents(
 	// Construct a slice of requests to send.
 	var singleReq [1]kvpb.Request //gcassert:noescape
 	reqs := resolveIntentReqs(intents, opts, singleReq[:])
-
+	h := opts.AdmissionHeader
+	if h == (kvpb.AdmissionHeader{}) && ir.everyAdmissionHeaderMissing.ShouldLog() {
+		log.Warningf(ctx, "empty admission header")
+	}
 	// Send the requests ...
 	if opts.sendImmediately {
+		bypassAdmission :=
+			ir.settings == nil || SendImmediatelyBypassAdmissionControl.Get(&ir.settings.SV)
+		if bypassAdmission {
+			h = kv.AdmissionHeaderForBypass(h)
+		}
 		// ... using a single batch.
 		b := &kv.Batch{}
+		b.AdmissionHeader = h
 		b.AddRawRequest(reqs...)
 		if err := ir.db.Run(ctx, b); err != nil {
 			return b.MustPErr()
@@ -1020,6 +1138,10 @@ func (ir *IntentResolver) resolveIntents(
 	}
 	// ... using their corresponding request batcher.
 	respChan := make(chan requestbatcher.Response, len(reqs))
+	batcherBypassAdmission := ir.settings == nil || BatchBypassAdmissionControl.Get(&ir.settings.SV)
+	if batcherBypassAdmission {
+		h = kv.AdmissionHeaderForBypass(h)
+	}
 	for _, req := range reqs {
 		var batcher *requestbatcher.RequestBatcher
 		switch req.Method() {
@@ -1031,7 +1153,7 @@ func (ir *IntentResolver) resolveIntents(
 			panic("unexpected")
 		}
 		rangeID := ir.lookupRangeID(ctx, req.Header().Key)
-		if err := batcher.SendWithChan(ctx, respChan, rangeID, req); err != nil {
+		if err := batcher.SendWithChan(ctx, respChan, rangeID, req, h); err != nil {
 			return kvpb.NewError(err)
 		}
 	}
