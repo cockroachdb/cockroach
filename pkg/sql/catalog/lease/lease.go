@@ -1190,10 +1190,23 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 // RangefeedLeases is not active.
 func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB) {
 	descUpdateCh := make(chan catalog.Descriptor)
-	m.watchForUpdates(ctx, descUpdateCh)
+	descDelCh := make(chan descpb.ID)
+	m.watchForUpdates(ctx, descUpdateCh, descDelCh)
 	_ = s.RunAsyncTask(ctx, "refresh-leases", func(ctx context.Context) {
 		for {
 			select {
+			case id := <-descDelCh:
+				// Descriptor is marked as deleted, so mark it for deletion or
+				// remove it if it's no longer in use.
+				_ = s.RunAsyncTask(ctx, "purge deleted descriptor", func(ctx context.Context) {
+					state := m.findNewest(id)
+					if state != nil {
+						if err := purgeOldVersions(ctx, db, id, true, state.GetVersion(), m); err != nil {
+							log.Warningf(ctx, "error purging leases for deleted descriptor %d",
+								id)
+						}
+					}
+				})
 			case desc := <-descUpdateCh:
 				// NB: We allow nil descriptors to be sent to synchronize the updating of
 				// descriptors.
@@ -1262,7 +1275,9 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 
 // watchForUpdates will watch a rangefeed on the system.descriptor table for
 // updates.
-func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- catalog.Descriptor) {
+func (m *Manager) watchForUpdates(
+	ctx context.Context, descUpdateCh chan<- catalog.Descriptor, descDelCh chan<- descpb.ID,
+) {
 	if log.V(1) {
 		log.Infof(ctx, "using rangefeeds for lease manager updates")
 	}
@@ -1275,6 +1290,15 @@ func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- catal
 		ctx context.Context, ev *kvpb.RangeFeedValue,
 	) {
 		if len(ev.Value.RawBytes) == 0 {
+			id, err := m.Codec().DecodeDescMetadataID(ev.Key)
+			if err != nil {
+				log.Infof(ctx, "unable to decode metadata key %v", ev.Key)
+				return
+			}
+			select {
+			case <-ctx.Done():
+			case descDelCh <- descpb.ID(id):
+			}
 			return
 		}
 		b, err := descbuilder.FromSerializedValue(&ev.Value)
