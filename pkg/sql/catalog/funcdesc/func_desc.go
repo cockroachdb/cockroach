@@ -66,6 +66,7 @@ func NewMutableFunctionDescriptor(
 	params []descpb.FunctionDescriptor_Parameter,
 	returnType *types.T,
 	returnSet bool,
+	isProcedure bool,
 	privs *catpb.PrivilegeDescriptor,
 ) Mutable {
 	return Mutable{
@@ -84,6 +85,7 @@ func NewMutableFunctionDescriptor(
 				Volatility:        catpb.DefaultFunctionVolatility,
 				LeakProof:         catpb.DefaultFunctionLeakProof,
 				NullInputBehavior: catpb.Function_CALLED_ON_NULL_INPUT,
+				IsProcedure:       isProcedure,
 				Privileges:        privs,
 				Version:           1,
 				ModificationTime:  hlc.Timestamp{},
@@ -689,13 +691,14 @@ func (desc *immutable) GetLanguage() catpb.Function_Language {
 
 func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	ret = &tree.Overload{
-		Oid:        catid.FuncIDToOID(desc.ID),
-		ReturnType: tree.FixedReturnType(desc.ReturnType.Type),
-		ReturnSet:  desc.ReturnType.ReturnSet,
-		Body:       desc.FunctionBody,
-		IsUDF:      true,
-		Version:    uint64(desc.Version),
-		Language:   desc.getCreateExprLang(),
+		Oid:         catid.FuncIDToOID(desc.ID),
+		ReturnType:  tree.FixedReturnType(desc.ReturnType.Type),
+		ReturnSet:   desc.ReturnType.ReturnSet,
+		Body:        desc.FunctionBody,
+		IsUDF:       true,
+		IsProcedure: desc.IsProcedure,
+		Version:     uint64(desc.Version),
+		Language:    desc.getCreateExprLang(),
 	}
 
 	argTypes := make(tree.ParamTypes, 0, len(desc.Params))

@@ -4621,6 +4621,10 @@ create_proc_stmt:
       Params: $6.routineParams(),
       Options: $8.routineOptions(),
       RoutineBody: $9.routineBody(),
+      ReturnType: tree.RoutineReturnType{
+        Type: types.Void,
+        IsSet: true,
+      },
     }
   }
 | CREATE opt_or_replace PROCEDURE error // SHOW HELP: CREATE PROCEDURE
