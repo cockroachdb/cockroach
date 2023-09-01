@@ -30,7 +30,7 @@ import (
 var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ \[\]]*(?:\[.*])?) (?P<result>\w+)\s+\[.+]$`)
 var sqlAlchemyReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\d+)_(?P<point>\d+)$`)
 
-var supportedSQLAlchemyTag = "2.0.2"
+var supportedSQLAlchemyTag = "2.0.20"
 
 // This test runs the SQLAlchemy dialect test suite against a single Cockroach
 // node.
