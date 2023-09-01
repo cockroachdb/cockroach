@@ -19,12 +19,7 @@ import (
 )
 
 // WhenDoneFunc is the callback invoked by context when it becomes done.
-// The callback is passed the error from the parent context.
-type WhenDoneFunc func(err error)
-
-// WhenDoneCauseFunc accepts context error (context.Err()) as well
-// as the cause for cancellation (cause is nil prior to go1.20).
-type WhenDoneCauseFunc func(err, cause error)
+type WhenDoneFunc func()
 
 // WhenDone arranges for the specified function to be invoked when
 // parent context becomes done and returns true.
@@ -34,6 +29,20 @@ type WhenDoneCauseFunc func(err, cause error)
 // context.WithTimeout/Deadline, then no additional goroutines are created.
 // Otherwise, a goroutine is spun up by context.Context to detect
 // parent cancellation.
+//
+// Please be careful when using this function on the parent context
+// that may already be done.  In particular, be mindful of the dangers of
+// the done function acquiring locks:
+//
+//	func bad(ctx context.Context) {
+//	   var l syncutil.Mutex
+//	   l.Lock()
+//	   defer l.Unlock()
+//	   ctxutil.WhenDone(ctx, func() {
+//	     l.Lock() // <-- Deadlock if ctx is already done.
+//	   })
+//	   return
+//	}
 func WhenDone(parent context.Context, done WhenDoneFunc) bool {
 	if parent.Done() == nil {
 		return false
@@ -48,7 +57,7 @@ func WhenDone(parent context.Context, done WhenDoneFunc) bool {
 		log.Fatalf(parent, "expected context that supports direct cancellation detection, found %T", parent)
 	}
 
-	c := &whenDone{Context: parent, notify: func(err, cause error) { done(err) }}
+	c := &whenDone{Context: parent, notify: done}
 	context_propagateCancel(parent, c)
 	return true
 }
@@ -74,14 +83,7 @@ func CanDirectlyDetectCancellation(parent context.Context) bool {
 
 type whenDone struct {
 	context.Context
-	notify WhenDoneCauseFunc
-}
-
-func (c *whenDone) cancelWithCause(removeFromParent bool, err, cause error) {
-	c.notify(err, cause)
-	if removeFromParent {
-		context_removeChild(c.Context, c)
-	}
+	notify WhenDoneFunc
 }
 
 //go:linkname context_cancelCtxKey context.cancelCtxKey
