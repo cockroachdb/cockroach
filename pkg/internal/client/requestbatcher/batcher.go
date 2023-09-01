@@ -276,10 +276,14 @@ func normalizedInFlightBackPressureLimit(cfg *Config) int {
 // insufficiently buffered channel can lead to deadlocks and unintended delays
 // processing requests inside the RequestBatcher.
 func (b *RequestBatcher) SendWithChan(
-	ctx context.Context, respChan chan<- Response, rangeID roachpb.RangeID, req kvpb.Request,
+	ctx context.Context,
+	respChan chan<- Response,
+	rangeID roachpb.RangeID,
+	req kvpb.Request,
+	admissionHeader kvpb.AdmissionHeader,
 ) error {
 	select {
-	case b.requestChan <- b.pool.newRequest(ctx, rangeID, req, respChan):
+	case b.requestChan <- b.pool.newRequest(ctx, rangeID, req, respChan, admissionHeader):
 		return nil
 	case <-b.cfg.Stopper.ShouldQuiesce():
 		return stop.ErrUnavailable
@@ -295,7 +299,7 @@ func (b *RequestBatcher) Send(
 	ctx context.Context, rangeID roachpb.RangeID, req kvpb.Request,
 ) (kvpb.Response, error) {
 	responseChan := b.pool.getResponseChan()
-	if err := b.SendWithChan(ctx, responseChan, rangeID, req); err != nil {
+	if err := b.SendWithChan(ctx, responseChan, rangeID, req, kvpb.AdmissionHeader{}); err != nil {
 		return nil, err
 	}
 	select {
@@ -565,6 +569,7 @@ type request struct {
 	req          kvpb.Request
 	rangeID      roachpb.RangeID
 	responseChan chan<- Response
+	header       kvpb.AdmissionHeader
 }
 
 type batch struct {
@@ -600,8 +605,14 @@ func (b *batch) batchRequest(cfg *Config) *kvpb.BatchRequest {
 		// Preallocate the Requests slice.
 		Requests: make([]kvpb.RequestUnion, 0, len(b.reqs)),
 	}
-	for _, r := range b.reqs {
+	var admissionHeader kvpb.AdmissionHeader
+	for i, r := range b.reqs {
 		req.Add(r.req)
+		if i == 0 {
+			admissionHeader = r.header
+		} else {
+			admissionHeader = kv.MergeAdmissionHeaderForBatch(admissionHeader, r.header)
+		}
 	}
 	if cfg.MaxKeysPerBatchReq > 0 {
 		req.MaxSpanRequestKeys = int64(cfg.MaxKeysPerBatchReq)
@@ -609,6 +620,7 @@ func (b *batch) batchRequest(cfg *Config) *kvpb.BatchRequest {
 	if cfg.TargetBytesPerBatchReq > 0 {
 		req.TargetBytes = cfg.TargetBytesPerBatchReq
 	}
+	req.AdmissionHeader = admissionHeader
 	return req
 }
 
@@ -643,7 +655,11 @@ func (p *pool) putResponseChan(r chan Response) {
 }
 
 func (p *pool) newRequest(
-	ctx context.Context, rangeID roachpb.RangeID, req kvpb.Request, responseChan chan<- Response,
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	req kvpb.Request,
+	responseChan chan<- Response,
+	admissionHeader kvpb.AdmissionHeader,
 ) *request {
 	r := p.requestPool.Get().(*request)
 	*r = request{
@@ -651,6 +667,7 @@ func (p *pool) newRequest(
 		rangeID:      rangeID,
 		req:          req,
 		responseChan: responseChan,
+		header:       admissionHeader,
 	}
 	return r
 }

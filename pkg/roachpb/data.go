@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -949,6 +950,7 @@ func MakeTransaction(
 	now hlc.Timestamp,
 	maxOffsetNs int64,
 	coordinatorNodeID int32,
+	admissionPriority admissionpb.WorkPriority,
 ) Transaction {
 	u := uuid.FastMakeV4()
 	// TODO(nvanbenschoten): technically, gul should be a synthetic timestamp.
@@ -971,6 +973,7 @@ func MakeTransaction(
 		LastHeartbeat:          now,
 		ReadTimestamp:          now,
 		GlobalUncertaintyLimit: gul,
+		AdmissionPriority:      int32(admissionPriority),
 	}
 }
 
@@ -1332,6 +1335,10 @@ func (t *Transaction) Update(o *Transaction) {
 
 	// Ratchet the transaction priority.
 	t.UpgradePriority(o.Priority)
+	// Defensive, since AdmissionPriority does not change. We have already
+	// handled the case of t being uninitialized at the beginning of this
+	// function.
+	t.AdmissionPriority = o.AdmissionPriority
 }
 
 // UpgradePriority sets transaction priority to the maximum of current

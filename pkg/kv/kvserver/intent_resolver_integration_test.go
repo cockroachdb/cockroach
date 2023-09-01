@@ -474,6 +474,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 						now.ToTimestamp(),
 						srv.Clock().MaxOffset().Nanoseconds(),
 						int32(srv.SQLInstanceID()),
+						0,
 					)
 					pusher := kv.NewTxnFromProto(ctx, db, srv.NodeID(), now, kv.RootTxn, &pusherProto)
 					if err := pusher.Put(ctx, txnKey, []byte("pushit")); err != nil {

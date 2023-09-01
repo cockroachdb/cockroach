@@ -501,6 +501,20 @@ message Transaction {
   repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 18
     [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
 
+  // Admission control (AC) fields. AC needs the tuple (TenantID, Priority,
+  // CreateTime). TenantID can be inferred from the key space that is being
+  // operated on (in the future we will generalize the AC concept of TenantID,
+  // but for now this is tied to the serverless concept), so does not need to
+  // be stored. CreateTime is the same as TxnMeta.MinTimestamp. So we only
+  // store the AdmissionPriority.
+
+  // AdmissionPriority is the priority assigned for admission control, at
+  // transaction creation time. It is immutable.
+  //
+  // TODO(sumeer): Use gogoproto.customtype to make this
+  // admissionpb.WorkPriority.
+  sint32 admission_priority = 19;
+
   reserved 3, 6, 9, 13, 14;
 }
 

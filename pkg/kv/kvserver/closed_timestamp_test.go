@@ -115,7 +115,7 @@ func TestClosedTimestampCanServe(t *testing.T) {
 			baWrite := &kvpb.BatchRequest{}
 			r := &kvpb.DeleteRequest{}
 			r.Key = desc.StartKey.AsRawKey()
-			txn := roachpb.MakeTransaction("testwrite", r.Key, isolation.Serializable, roachpb.NormalUserPriority, ts, 100, int32(tc.Server(0).SQLInstanceID()))
+			txn := roachpb.MakeTransaction("testwrite", r.Key, isolation.Serializable, roachpb.NormalUserPriority, ts, 100, int32(tc.Server(0).SQLInstanceID()), 0)
 			baWrite.Txn = &txn
 			baWrite.Add(r)
 			baWrite.RangeID = repls[0].RangeID
@@ -286,7 +286,7 @@ func TestClosedTimestampCantServeWithConflictingIntent(t *testing.T) {
 	// replica.
 	txnKey := desc.StartKey.AsRawKey()
 	txnKey = txnKey[:len(txnKey):len(txnKey)] // avoid aliasing
-	txn := roachpb.MakeTransaction("txn", txnKey, 0, 0, tc.Server(0).Clock().Now(), 0, int32(tc.Server(0).SQLInstanceID()))
+	txn := roachpb.MakeTransaction("txn", txnKey, 0, 0, tc.Server(0).Clock().Now(), 0, int32(tc.Server(0).SQLInstanceID()), 0)
 	var keys []roachpb.Key
 	for i := range repls {
 		key := append(txnKey, []byte(strconv.Itoa(i))...)
@@ -1369,7 +1369,7 @@ func verifyCanReadFromAllRepls(
 }
 
 func makeTxnReadBatchForDesc(desc roachpb.RangeDescriptor, ts hlc.Timestamp) *kvpb.BatchRequest {
-	txn := roachpb.MakeTransaction("txn", nil, 0, 0, ts, 0, 0)
+	txn := roachpb.MakeTransaction("txn", nil, 0, 0, ts, 0, 0, 0)
 
 	baRead := &kvpb.BatchRequest{}
 	baRead.Header.RangeID = desc.RangeID

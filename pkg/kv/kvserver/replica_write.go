@@ -222,7 +222,7 @@ func (r *Replica) executeWriteBatch(
 			}
 			if len(propResult.EncounteredIntents) > 0 {
 				if err := r.store.intentResolver.CleanupIntentsAsync(
-					ctx, propResult.EncounteredIntents, true, /* allowSync */
+					ctx, ba.AdmissionHeader, propResult.EncounteredIntents, true, /* allowSync */
 				); err != nil {
 					log.Warningf(ctx, "intent cleanup failed: %v", err)
 				}

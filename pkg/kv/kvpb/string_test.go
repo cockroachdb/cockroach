@@ -40,6 +40,7 @@ func TestBatchRequestString(t *testing.T) {
 		hlc.Timestamp{}, // now
 		0,               // maxOffsetNs
 		99,              // coordinatorNodeID
+		0,
 	)
 	txn.ID = uuid.NamespaceDNS
 	ba.Txn = &txn

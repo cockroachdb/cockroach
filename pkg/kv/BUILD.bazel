@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "kv",
     srcs = [
+        "admission.go",
         "batch.go",
         "db.go",
         "doc.go",
@@ -51,6 +52,7 @@ go_test(
     name = "kv_test",
     size = "medium",
     srcs = [
+        "admission_test.go",
         "client_test.go",
         "db_test.go",
         "main_test.go",
@@ -85,6 +87,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
