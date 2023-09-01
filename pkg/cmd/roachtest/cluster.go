@@ -2392,7 +2392,7 @@ func (c *clusterImpl) adminUIAddr(
 	l *logger.Logger, node option.NodeListOption, external bool,
 ) ([]string, error) {
 	var addrs []string
-	adminURLs, err := roachprod.AdminURL(l, c.MakeNodes(node), "", "",
+	adminURLs, err := roachprod.AdminURL(l, c.MakeNodes(node), "", 0, "",
 		external, false, false)
 	if err != nil {
 		return nil, err
