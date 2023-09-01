@@ -10,6 +10,7 @@ stmt ::=
 stmt_without_legacy_transaction ::=
 	preparable_stmt
 	| analyze_stmt
+	| call_stmt
 	| copy_stmt
 	| comment_stmt
 	| execute_stmt
@@ -62,6 +63,9 @@ preparable_stmt ::=
 analyze_stmt ::=
 	'ANALYZE' analyze_target
 	| 'ANALYSE' analyze_target
+
+call_stmt ::=
+	'CALL' proc_name '(' opt_expr_list ')'
 
 copy_stmt ::=
 	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_copy_options opt_where_clause
@@ -312,6 +316,13 @@ upsert_stmt ::=
 
 analyze_target ::=
 	table_name
+
+proc_name ::=
+	db_object_name
+
+opt_expr_list ::=
+	expr_list
+	| 
 
 table_name ::=
 	db_object_name
@@ -975,6 +986,9 @@ db_object_name ::=
 	simple_db_object_name
 	| complex_db_object_name
 
+expr_list ::=
+	( a_expr ) ( ( ',' a_expr ) )*
+
 name_list ::=
 	( name ) ( ( ',' name ) )*
 
@@ -1001,9 +1015,6 @@ index_name ::=
 
 standalone_index_name ::=
 	db_object_name
-
-expr_list ::=
-	( a_expr ) ( ( ',' a_expr ) )*
 
 unreserved_keyword ::=
 	'ABORT'
@@ -3000,10 +3011,6 @@ case_expr ::=
 
 operator_op ::=
 	all_op
-
-opt_expr_list ::=
-	expr_list
-	| 
 
 expr_tuple_unambiguous ::=
 	'(' ')'
