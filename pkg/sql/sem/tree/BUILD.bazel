@@ -22,6 +22,7 @@ go_library(
         "annotation.go",
         "backup.go",
         "batch.go",
+        "call.go",
         "changefeed.go",
         "col_name.go",
         "comment_on_column.go",

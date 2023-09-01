@@ -111,7 +111,7 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 		ctx.WriteString("FUNCTION ")
 	}
 	ctx.FormatNode(&node.Name)
-	ctx.WriteString("(")
+	ctx.WriteByte('(')
 	ctx.FormatNode(node.Params)
 	ctx.WriteString(")\n\t")
 	if !node.IsProcedure {
@@ -138,12 +138,12 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 		ctx.WriteString("$$")
 		for i, stmt := range node.BodyStatements {
 			if i > 0 {
-				ctx.WriteString(" ")
+				ctx.WriteByte(' ')
 			}
 			oldAnn := ctx.ann
 			ctx.ann = node.BodyAnnotations[i]
 			ctx.FormatNode(stmt)
-			ctx.WriteString(";")
+			ctx.WriteByte(';')
 			ctx.ann = oldAnn
 		}
 		ctx.WriteString("$$")

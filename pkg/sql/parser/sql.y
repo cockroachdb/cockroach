@@ -1413,7 +1413,8 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <str> cursor_name database_name index_name opt_index_name column_name insert_column_item statistics_name window_name opt_in_database
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
 %type <str> db_object_name_component
-%type <*tree.UnresolvedObjectName> table_name db_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
+%type <*tree.UnresolvedObjectName> table_name db_name standalone_index_name sequence_name type_name
+ %type <*tree.UnresolvedObjectName> view_name db_object_name simple_db_object_name complex_db_object_name proc_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
 %type <str> schema_name opt_in_schema
 %type <tree.ObjectNamePrefix>  qualifiable_schema_name opt_schema_name wildcard_pattern
@@ -4009,9 +4010,24 @@ opt_with_options:
     $$.val = nil
   }
 
-// CALL invokes a stored procedure. It is not currently supported in CRDB.
+// %Help: CALL - invoke a procedure
+// %Category: Misc
+// %Text: CALL <name> [ ( <exprs...> ) ]
+// %SeeAlso: CREATE PROCEDURE
 call_stmt:
-  CALL error { return unimplementedWithIssueDetail(sqllex, 17511, "call procedure") }
+  CALL proc_name '(' ')'
+  {
+    $$.val = &tree.Call{
+      Name: $2.unresolvedObjectName(),
+    }
+  }
+| CALL proc_name '(' expr_list ')'
+  {
+    $$.val = &tree.Call{
+      Name: $2.unresolvedObjectName(),
+      Exprs: $4.exprs(),
+    }
+  }
 
 // The COPY grammar in postgres has 3 different versions, all of which are supported by postgres:
 // 1) The "really old" syntax from v7.2 and prior
@@ -16344,6 +16360,8 @@ table_name:            db_object_name
 db_name:               db_object_name
 
 standalone_index_name: db_object_name
+
+proc_name:             db_object_name
 
 explain_option_name:   non_reserved_word
 

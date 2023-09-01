@@ -651,6 +651,15 @@ func (*BeginTransaction) StatementType() StatementType { return TypeTCL }
 func (*BeginTransaction) StatementTag() string { return "BEGIN" }
 
 // StatementReturnType implements the Statement interface.
+func (*Call) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*Call) StatementType() StatementType { return TypeTCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Call) StatementTag() string { return "CALL" }
+
+// StatementReturnType implements the Statement interface.
 func (*ControlJobs) StatementReturnType() StatementReturnType { return RowsAffected }
 
 // StatementType implements the Statement interface.
@@ -2219,6 +2228,7 @@ func (n *AlterSequence) String() string                       { return AsString(
 func (n *Analyze) String() string                             { return AsString(n) }
 func (n *Backup) String() string                              { return AsString(n) }
 func (n *BeginTransaction) String() string                    { return AsString(n) }
+func (n *Call) String() string                                { return AsString(n) }
 func (n *ControlJobs) String() string                         { return AsString(n) }
 func (n *ControlSchedules) String() string                    { return AsString(n) }
 func (n *ControlJobsForSchedules) String() string             { return AsString(n) }
