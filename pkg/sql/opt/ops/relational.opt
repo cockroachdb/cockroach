@@ -1221,6 +1221,13 @@ define OrdinalityPrivate {
 
     # ColID holds the id of the column introduced by this operator.
     ColID ColumnID
+
+    # ForDuplicateRemoval is `true` when the Ordinality is built as part of a
+    # query rewrite in order to remove duplicate entries, and the value returned
+    # by the Ordinality operation does not matter, as long as it's unique. It is
+    # `false` if this is built from a WITH ORDINALITY clause, where the value
+    # returned does matter.
+    ForDuplicateRemoval bool
 }
 
 # ProjectSet represents a relational operator which zips through a list of
