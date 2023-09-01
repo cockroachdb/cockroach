@@ -131,7 +131,7 @@ func (s *spanConfigEventStream) startStreamProcessor(ctx context.Context) {
 	// Context group responsible for coordinating rangefeed event production with
 	// ValueGenerator implementation that consumes rangefeed events and forwards them to the
 	// destination cluster consumer.
-	streamCtx, sp := tracing.ChildSpan(ctx, "event stream")
+	streamCtx, sp := tracing.ChildSpan(ctx, "span config event stream")
 	s.sp = sp
 	s.streamGroup = ctxgroup.WithContext(streamCtx)
 	s.streamGroup.GoCtx(withErrCapture(func(ctx context.Context) error {
@@ -174,7 +174,7 @@ func (s *spanConfigEventStream) Close(ctx context.Context) {
 func (s *spanConfigEventStream) handleUpdate(ctx context.Context, update rangefeedcache.Update) {
 	select {
 	case <-ctx.Done():
-		s.errCh <- ctx.Err()
+		log.Warningf(ctx, "rangefeedcache context cancelled with error %s", ctx.Err())
 	case s.updateCh <- update:
 		if update.Type == rangefeedcache.CompleteUpdate {
 			log.VInfof(ctx, 1, "completed initial scan")
