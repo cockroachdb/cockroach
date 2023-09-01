@@ -1,0 +1,8 @@
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.tbl (a INT PRIMARY KEY, b INT, INDEX b_idx (b));
+----
+
+translate database=db table=tbl
+----
+/Table/10{6-7}                             range default
