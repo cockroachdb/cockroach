@@ -3,28 +3,31 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "ctxutil",
     srcs = [
+        "canceler_1_19.go",
+        "canceler_1_20.go",
         "context.go",
-        "context_abi.go",
-        "context_abi_pre1_20.go",
+        "doc.go",
+        "link_1_21.go",
+        "link_1_21_bazel.go",
+        "link_pre_1_21.go",
+        "link_shared.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/ctxutil",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/buildutil",
         "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
     name = "ctxutil_test",
-    srcs = [
-        "context_cause_test.go",
-        "context_test.go",
-    ],
+    srcs = ["context_test.go"],
     args = ["-test.timeout=295s"],
     embed = [":ctxutil"],
     deps = [
-        "@com_github_cockroachdb_errors//:errors",
+        "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",
     ],
 )
