@@ -668,14 +668,31 @@ func purgeOldVersions(
 	}
 
 	removeInactives := func(dropped bool) {
-		leases := func() []*storedLease {
+		leases, leaseToExpire := func() (leasesToRemove []*storedLease, leasesToExpire *descriptorVersionState) {
 			t.mu.Lock()
 			defer t.mu.Unlock()
 			t.mu.takenOffline = dropped
-			return t.removeInactiveVersions()
+			return t.removeInactiveVersions(), t.mu.active.findForExpiration(dropped)
 		}()
 		for _, l := range leases {
 			releaseLease(ctx, l, m)
+		}
+		if leaseToExpire != nil {
+			m.mu.Lock()
+			leaseToExpire.mu.Lock()
+			//sessionExpiry := leaseToExpire.mu.session.Expiration()
+			leaseToExpire.mu.expiration = m.storage.db.KV().Clock().Now().AddDuration(LeaseDuration.Get(&m.storage.settings.SV))
+			// If the session had outlived our expiration, then use
+			// the session time.
+			/*if leaseToExpire.mu.expiration.Less(sessionExpiry) {
+				leaseToExpire.mu.expiration = sessionExpiry
+			}*/
+			leaseToExpire.mu.session = nil
+			leaseToExpire.mu.Unlock()
+			if leaseToExpire.mu.lease != nil {
+				m.mu.leasesToExpire = append(m.mu.leasesToExpire, leaseToExpire)
+			}
+			m.mu.Unlock()
 		}
 	}
 
@@ -738,6 +755,10 @@ type Manager struct {
 		syncutil.Mutex
 		// TODO(james): Track size of leased descriptors in memory.
 		descriptors map[descpb.ID]*descriptorState
+
+		// Session based leases that will be removed with expiry, since
+		// a new version has arrived.
+		leasesToExpire []*descriptorVersionState
 
 		// updatesResolvedTimestamp keeps track of a timestamp before which all
 		// descriptor updates have already been seen.
@@ -1327,7 +1348,43 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 				if !m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseWillOnlyHaveSessions) {
 					m.refreshSomeLeases(ctx, false /* ignore limit */)
 				}
+				if m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseWillOnlyHaveSessions) {
+					now := m.storage.db.KV().Clock().Now()
+					m.mu.Lock()
+					latest := -1
+					for i, desc := range m.mu.leasesToExpire {
+						if desc.hasExpired(now) {
+							latest = i
+						} else {
+							break
+						}
+					}
+					var leasesToDiscard []*descriptorVersionState
+					if latest >= 0 {
+						leasesToDiscard = m.mu.leasesToExpire[0 : latest+1]
+						m.mu.leasesToExpire = m.mu.leasesToExpire[latest+1:]
+					}
+					m.mu.Unlock()
 
+					if len(leasesToDiscard) > 0 {
+						if err := m.stopper.RunAsyncTask(ctx, "clearing expired session based leases from storage", func(ctx context.Context) {
+							for _, l := range leasesToDiscard {
+								l.mu.Lock()
+								leaseToDelete := l.mu.lease
+								l.mu.lease = nil
+								l.mu.Unlock()
+								// Its possible the reference count has concurrently,
+								// hit zero at the same time.
+								if leaseToDelete != nil {
+									m.storage.release(ctx, m.stopper, leaseToDelete)
+								}
+
+							}
+						}); err != nil {
+							log.Infof(ctx, "unable to delete leases from storage %s", err)
+						}
+					}
+				}
 			}
 		}
 	})

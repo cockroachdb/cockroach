@@ -94,6 +94,23 @@ func (l *descriptorSet) findNewest() *descriptorVersionState {
 	return l.data[len(l.data)-1]
 }
 
+func (l *descriptorSet) findForExpiration(dropped bool) *descriptorVersionState {
+	if len(l.data) == 0 {
+		return nil
+	}
+	// The latest version will be cleaned up if its dropped.
+	exp := l.data[len(l.data)-1]
+	if len(l.data) > 1 && !dropped {
+		exp = l.data[len(l.data)-2]
+	}
+	exp.mu.Lock()
+	defer exp.mu.Unlock()
+	if exp.mu.refcount == 0 {
+		return nil
+	}
+	return exp
+}
+
 func (l *descriptorSet) findVersion(version descpb.DescriptorVersion) *descriptorVersionState {
 	if len(l.data) == 0 {
 		return nil
