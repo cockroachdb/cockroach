@@ -44,23 +44,23 @@ select
 norm
 SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE y > 0 AND y <= 10
 ----
-select
+ordinality
  ├── columns: x:1(int!null) y:2(int!null) ordinality:5(int!null)
- ├── stats: [rows=100, distinct(2)=10, null(2)=0]
+ ├── stats: [rows=100]
  ├── key: (1)
  ├── fd: (1)-->(2,5), (5)-->(1,2)
- ├── ordinality
- │    ├── columns: x:1(int!null) y:2(int) ordinality:5(int!null)
- │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, distinct(2)=400, null(2)=0, distinct(5)=4000, null(5)=0]
- │    ├── key: (1)
- │    ├── fd: (1)-->(2,5), (5)-->(1,2)
- │    └── scan a
- │         ├── columns: x:1(int!null) y:2(int)
- │         ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, distinct(2)=400, null(2)=0]
- │         ├── key: (1)
- │         └── fd: (1)-->(2)
- └── filters
-      └── (y:2 > 0) AND (y:2 <= 10) [type=bool, outer=(2), constraints=(/2: [/1 - /10]; tight)]
+ └── select
+      ├── columns: x:1(int!null) y:2(int!null)
+      ├── stats: [rows=100, distinct(2)=10, null(2)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── stats: [rows=4000, distinct(1)=4000, null(1)=0, distinct(2)=400, null(2)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── (y:2 > 0) AND (y:2 <= 10) [type=bool, outer=(2), constraints=(/2: [/1 - /10]; tight)]
 
 norm
 SELECT 1 x FROM a WITH ORDINALITY

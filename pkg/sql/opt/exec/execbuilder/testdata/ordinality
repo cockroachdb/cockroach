@@ -91,9 +91,9 @@ vectorized: true
       spans: /"a\x00"-
 
 # Show that the primary key cannot be used with a PK predicate
-# outside of ordinalityNode.
+# outside of ordinalityNode when the source relation is ordered.
 query T
-EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM foo ORDER BY x) WITH ORDINALITY WHERE x > 'a'
 ----
 distribution: local
 vectorized: true
@@ -109,6 +109,7 @@ vectorized: true
     │
     └── • scan
           columns: (x)
+          ordering: +x
           estimated row count: 1,000 (missing stats)
           table: foo@foo_pkey
           spans: FULL SCAN

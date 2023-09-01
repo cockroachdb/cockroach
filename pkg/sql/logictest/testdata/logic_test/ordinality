@@ -69,11 +69,13 @@ b 2
 statement ok
 INSERT INTO foo(x) VALUES ('c')
 
+# The filter is pushed below the Ordinality, so rows are returned in
+# sequence starting at 1.
 query TI rowsort
 SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
 ----
-b 2
-c 3
+b  1
+c  2
 
 query TI rowsort
 SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality DESC
