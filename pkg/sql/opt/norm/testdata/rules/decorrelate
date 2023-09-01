@@ -419,24 +419,22 @@ project
       ├── inner-join (cross)
       │    ├── columns: column1:1!null i:3 rownum:10!null
       │    ├── fd: (10)-->(1)
-      │    ├── select
+      │    ├── ordinality
       │    │    ├── columns: column1:1!null rownum:10!null
       │    │    ├── cardinality: [0 - 3]
       │    │    ├── key: (10)
       │    │    ├── fd: (10)-->(1)
-      │    │    ├── ordinality
-      │    │    │    ├── columns: column1:1!null rownum:10!null
-      │    │    │    ├── cardinality: [3 - 3]
-      │    │    │    ├── key: (10)
-      │    │    │    ├── fd: (10)-->(1)
-      │    │    │    └── values
-      │    │    │         ├── columns: column1:1!null
-      │    │    │         ├── cardinality: [3 - 3]
-      │    │    │         ├── (1,)
-      │    │    │         ├── (1,)
-      │    │    │         └── (1,)
-      │    │    └── filters
-      │    │         └── column1:1 > 3 [outer=(1), constraints=(/1: [/4 - ]; tight)]
+      │    │    └── select
+      │    │         ├── columns: column1:1!null
+      │    │         ├── cardinality: [0 - 3]
+      │    │         ├── values
+      │    │         │    ├── columns: column1:1!null
+      │    │         │    ├── cardinality: [3 - 3]
+      │    │         │    ├── (1,)
+      │    │         │    ├── (1,)
+      │    │         │    └── (1,)
+      │    │         └── filters
+      │    │              └── column1:1 > 3 [outer=(1), constraints=(/1: [/4 - ]; tight)]
       │    ├── scan a
       │    │    └── columns: i:3
       │    └── filters (true)

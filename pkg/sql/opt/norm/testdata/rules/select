@@ -2108,3 +2108,384 @@ except-all
       ├── key: ()
       ├── fd: ()-->(2)
       └── (1.00,)
+
+# --------------------------------------------------
+# PushOrdinalityIntoSelect
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE trm (
+    id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+    trid UUID NOT NULL,
+    ts12 TIMESTAMP NOT NULL
+);
+----
+
+exec-ddl
+CREATE TABLE trrec (
+    id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+    trid STRING NOT NULL,
+    ts12 TIMESTAMP NOT NULL,
+    str16 STRING NULL,
+    INDEX trrec_idx5 (str16 ASC)
+);
+----
+
+exec-ddl
+CREATE TABLE trtab4 (
+    id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+    trid UUID NOT NULL,
+    dec1 DECIMAL(19,2) NOT NULL
+);
+----
+
+# A simple test case where the filter can be pushed through the ordinality.
+norm expect=PushSelectIntoOrdinality
+SELECT * FROM
+    (SELECT (SELECT x FROM xy WHERE y=version LIMIT 1), *
+        FROM information_schema.tables) WHERE table_name = 't1';
+----
+project
+ ├── columns: x:12 table_catalog:2!null table_schema:3!null table_name:4!null table_type:5!null is_insertable_into:6!null version:7
+ ├── fd: ()-->(4)
+ ├── distinct-on
+ │    ├── columns: table_catalog:2!null table_schema:3!null table_name:4!null table_type:5!null is_insertable_into:6!null version:7 xy.x:8 rownum:13!null
+ │    ├── grouping columns: rownum:13!null
+ │    ├── key: (13)
+ │    ├── fd: ()-->(4), (13)-->(2-8)
+ │    ├── left-join (hash)
+ │    │    ├── columns: table_catalog:2!null table_schema:3!null table_name:4!null table_type:5!null is_insertable_into:6!null version:7 xy.x:8 y:9 rownum:13!null
+ │    │    ├── key: (8,13)
+ │    │    ├── fd: ()-->(4), (13)-->(2,3,5-7), (8)-->(9)
+ │    │    ├── ordinality
+ │    │    │    ├── columns: table_catalog:2!null table_schema:3!null table_name:4!null table_type:5!null is_insertable_into:6!null version:7 rownum:13!null
+ │    │    │    ├── key: (13)
+ │    │    │    ├── fd: ()-->(4), (13)-->(2-7)
+ │    │    │    └── select
+ │    │    │         ├── columns: table_catalog:2!null table_schema:3!null table_name:4!null table_type:5!null is_insertable_into:6!null version:7
+ │    │    │         ├── fd: ()-->(4)
+ │    │    │         ├── scan tables
+ │    │    │         │    └── columns: table_catalog:2!null table_schema:3!null table_name:4!null table_type:5!null is_insertable_into:6!null version:7
+ │    │    │         └── filters
+ │    │    │              └── table_name:4 = 't1' [outer=(4), constraints=(/4: [/'t1' - /'t1']; tight), fd=()-->(4)]
+ │    │    ├── scan xy
+ │    │    │    ├── columns: xy.x:8!null y:9
+ │    │    │    ├── key: (8)
+ │    │    │    └── fd: (8)-->(9)
+ │    │    └── filters
+ │    │         └── y:9 = version:7 [outer=(7,9), constraints=(/7: (/NULL - ]; /9: (/NULL - ]), fd=(7)==(9), (9)==(7)]
+ │    └── aggregations
+ │         ├── const-agg [as=table_catalog:2, outer=(2)]
+ │         │    └── table_catalog:2
+ │         ├── const-agg [as=table_schema:3, outer=(3)]
+ │         │    └── table_schema:3
+ │         ├── const-agg [as=table_name:4, outer=(4)]
+ │         │    └── table_name:4
+ │         ├── const-agg [as=table_type:5, outer=(5)]
+ │         │    └── table_type:5
+ │         ├── const-agg [as=is_insertable_into:6, outer=(6)]
+ │         │    └── is_insertable_into:6
+ │         ├── const-agg [as=version:7, outer=(7)]
+ │         │    └── version:7
+ │         └── first-agg [as=xy.x:8, outer=(8)]
+ │              └── xy.x:8
+ └── projections
+      └── xy.x:8 [as=x:12, outer=(8)]
+
+# The filter on tr.str16 should be pushed into the val3 left lateral join.
+norm expect=PushSelectIntoOrdinality
+WITH
+  with2
+    AS (
+      SELECT
+        tq.trid, tq.dec1
+      FROM
+        trrec AS r INNER JOIN trtab4 AS tq ON r.id = tq.trid AND r.str16 = '12345'
+    )
+SELECT tr.id, tr.trid
+FROM
+  trrec AS tr
+  LEFT JOIN LATERAL (
+      SELECT  q.dec1 FROM with2 AS q WHERE tr.id = q.trid
+    ) AS q ON true
+  LEFT JOIN LATERAL (
+      SELECT
+        --tr.id, -- Previously, including this column allowed the filter on
+                 -- str16 to be pushed into the join, but this is no longer
+                 -- required.
+        m.ts12
+      FROM trm AS m WHERE tr.id = m.trid
+      ORDER BY m.ts12 DESC
+      LIMIT 1
+    ) AS val3 ON true
+WHERE
+  tr.str16 = '12345'
+;
+----
+project
+ ├── columns: id:12!null trid:13!null
+ ├── fd: (12)-->(13)
+ └── distinct-on
+      ├── columns: tr.id:12!null tr.trid:13!null rownum:25!null
+      ├── grouping columns: rownum:25!null
+      ├── internal-ordering: -22
+      ├── key: (25)
+      ├── fd: (12)-->(13), (25)-->(12,13)
+      ├── sort
+      │    ├── columns: tr.id:12!null tr.trid:13!null m.trid:21 m.ts12:22 rownum:25!null
+      │    ├── fd: (12)-->(13), (25)-->(12,13)
+      │    ├── ordering: -22
+      │    └── left-join (hash)
+      │         ├── columns: tr.id:12!null tr.trid:13!null m.trid:21 m.ts12:22 rownum:25!null
+      │         ├── fd: (12)-->(13), (25)-->(12,13)
+      │         ├── ordinality
+      │         │    ├── columns: tr.id:12!null tr.trid:13!null rownum:25!null
+      │         │    ├── key: (25)
+      │         │    ├── fd: (12)-->(13), (25)-->(12,13)
+      │         │    └── project
+      │         │         ├── columns: tr.id:12!null tr.trid:13!null
+      │         │         ├── fd: (12)-->(13)
+      │         │         └── left-join (hash)
+      │         │              ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null trid:18
+      │         │              ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+      │         │              ├── fd: ()-->(15), (12)-->(13)
+      │         │              ├── select
+      │         │              │    ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null
+      │         │              │    ├── key: (12)
+      │         │              │    ├── fd: ()-->(15), (12)-->(13)
+      │         │              │    ├── scan trrec [as=tr]
+      │         │              │    │    ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15
+      │         │              │    │    ├── key: (12)
+      │         │              │    │    └── fd: (12)-->(13,15)
+      │         │              │    └── filters
+      │         │              │         └── tr.str16:15 = '12345' [outer=(15), constraints=(/15: [/'12345' - /'12345']; tight), fd=()-->(15)]
+      │         │              ├── project
+      │         │              │    ├── columns: trid:18!null
+      │         │              │    ├── inner-join (hash)
+      │         │              │    │    ├── columns: r.id:1!null r.str16:4!null tq.trid:8!null
+      │         │              │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │         │              │    │    ├── fd: ()-->(4), (1)==(8), (8)==(1)
+      │         │              │    │    ├── select
+      │         │              │    │    │    ├── columns: r.id:1!null r.str16:4!null
+      │         │              │    │    │    ├── key: (1)
+      │         │              │    │    │    ├── fd: ()-->(4)
+      │         │              │    │    │    ├── scan trrec [as=r]
+      │         │              │    │    │    │    ├── columns: r.id:1!null r.str16:4
+      │         │              │    │    │    │    ├── key: (1)
+      │         │              │    │    │    │    └── fd: (1)-->(4)
+      │         │              │    │    │    └── filters
+      │         │              │    │    │         └── r.str16:4 = '12345' [outer=(4), constraints=(/4: [/'12345' - /'12345']; tight), fd=()-->(4)]
+      │         │              │    │    ├── scan trtab4 [as=tq]
+      │         │              │    │    │    └── columns: tq.trid:8!null
+      │         │              │    │    └── filters
+      │         │              │    │         └── r.id:1 = tq.trid:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      │         │              │    └── projections
+      │         │              │         └── tq.trid:8 [as=trid:18, outer=(8)]
+      │         │              └── filters
+      │         │                   └── tr.id:12 = trid:18 [outer=(12,18), constraints=(/12: (/NULL - ]; /18: (/NULL - ]), fd=(12)==(18), (18)==(12)]
+      │         ├── scan trm [as=m]
+      │         │    └── columns: m.trid:21!null m.ts12:22!null
+      │         └── filters
+      │              └── tr.id:12 = m.trid:21 [outer=(12,21), constraints=(/12: (/NULL - ]; /21: (/NULL - ]), fd=(12)==(21), (21)==(12)]
+      └── aggregations
+           ├── const-agg [as=tr.id:12, outer=(12)]
+           │    └── tr.id:12
+           └── const-agg [as=tr.trid:13, outer=(13)]
+                └── tr.trid:13
+
+# The filter on tr.str16 should be pushed into the val3 inner lateral join.
+norm expect=PushSelectIntoOrdinality
+WITH
+  with2
+    AS (
+      SELECT
+        tq.trid, tq.dec1
+      FROM
+        trrec AS r INNER JOIN trtab4 AS tq ON r.id = tq.trid AND r.str16 = '12345'
+    )
+SELECT tr.id, tr.trid
+FROM
+  trrec AS tr
+  INNER JOIN LATERAL (
+      SELECT  q.dec1 FROM with2 AS q WHERE tr.id = q.trid
+    ) AS q ON true
+  INNER JOIN LATERAL (
+      SELECT
+        --tr.id, -- Previously, including this column allowed the filter on
+                 -- str16 to be pushed into the join, but this is no longer
+                 -- required.
+        m.ts12
+      FROM trm AS m WHERE tr.id = m.trid
+      ORDER BY m.ts12 DESC
+      LIMIT 1
+    ) AS val3 ON true
+WHERE
+  tr.str16 = '12345'
+;
+----
+project
+ ├── columns: id:12!null trid:13!null
+ ├── fd: (12)-->(13)
+ └── distinct-on
+      ├── columns: tr.id:12!null tr.trid:13!null rownum:25!null
+      ├── grouping columns: rownum:25!null
+      ├── internal-ordering: -22 opt(12,13,21)
+      ├── key: (25)
+      ├── fd: (12)-->(13), (25)-->(12,13)
+      ├── sort
+      │    ├── columns: tr.id:12!null tr.trid:13!null m.trid:21!null m.ts12:22!null rownum:25!null
+      │    ├── fd: (12)-->(13), (25)-->(12,13), (12)==(21), (21)==(12)
+      │    ├── ordering: -22 opt(12,13,21) [actual: -22]
+      │    └── inner-join (hash)
+      │         ├── columns: tr.id:12!null tr.trid:13!null m.trid:21!null m.ts12:22!null rownum:25!null
+      │         ├── fd: (12)-->(13), (25)-->(12,13), (12)==(21), (21)==(12)
+      │         ├── ordinality
+      │         │    ├── columns: tr.id:12!null tr.trid:13!null rownum:25!null
+      │         │    ├── key: (25)
+      │         │    ├── fd: (12)-->(13), (25)-->(12,13)
+      │         │    └── project
+      │         │         ├── columns: tr.id:12!null tr.trid:13!null
+      │         │         ├── fd: (12)-->(13)
+      │         │         └── inner-join (hash)
+      │         │              ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null trid:18!null
+      │         │              ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │         │              ├── fd: ()-->(15), (12)-->(13), (12)==(18), (18)==(12)
+      │         │              ├── select
+      │         │              │    ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null
+      │         │              │    ├── key: (12)
+      │         │              │    ├── fd: ()-->(15), (12)-->(13)
+      │         │              │    ├── scan trrec [as=tr]
+      │         │              │    │    ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15
+      │         │              │    │    ├── key: (12)
+      │         │              │    │    └── fd: (12)-->(13,15)
+      │         │              │    └── filters
+      │         │              │         └── tr.str16:15 = '12345' [outer=(15), constraints=(/15: [/'12345' - /'12345']; tight), fd=()-->(15)]
+      │         │              ├── project
+      │         │              │    ├── columns: trid:18!null
+      │         │              │    ├── inner-join (hash)
+      │         │              │    │    ├── columns: r.id:1!null r.str16:4!null tq.trid:8!null
+      │         │              │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │         │              │    │    ├── fd: ()-->(4), (1)==(8), (8)==(1)
+      │         │              │    │    ├── select
+      │         │              │    │    │    ├── columns: r.id:1!null r.str16:4!null
+      │         │              │    │    │    ├── key: (1)
+      │         │              │    │    │    ├── fd: ()-->(4)
+      │         │              │    │    │    ├── scan trrec [as=r]
+      │         │              │    │    │    │    ├── columns: r.id:1!null r.str16:4
+      │         │              │    │    │    │    ├── key: (1)
+      │         │              │    │    │    │    └── fd: (1)-->(4)
+      │         │              │    │    │    └── filters
+      │         │              │    │    │         └── r.str16:4 = '12345' [outer=(4), constraints=(/4: [/'12345' - /'12345']; tight), fd=()-->(4)]
+      │         │              │    │    ├── scan trtab4 [as=tq]
+      │         │              │    │    │    └── columns: tq.trid:8!null
+      │         │              │    │    └── filters
+      │         │              │    │         └── r.id:1 = tq.trid:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      │         │              │    └── projections
+      │         │              │         └── tq.trid:8 [as=trid:18, outer=(8)]
+      │         │              └── filters
+      │         │                   └── tr.id:12 = trid:18 [outer=(12,18), constraints=(/12: (/NULL - ]; /18: (/NULL - ]), fd=(12)==(18), (18)==(12)]
+      │         ├── scan trm [as=m]
+      │         │    └── columns: m.trid:21!null m.ts12:22!null
+      │         └── filters
+      │              └── tr.id:12 = m.trid:21 [outer=(12,21), constraints=(/12: (/NULL - ]; /21: (/NULL - ]), fd=(12)==(21), (21)==(12)]
+      └── aggregations
+           ├── const-agg [as=tr.id:12, outer=(12)]
+           │    └── tr.id:12
+           └── const-agg [as=tr.trid:13, outer=(13)]
+                └── tr.trid:13
+
+# The filter on tr.str16 should be pushed into the val3 inner lateral join.
+norm expect=PushSelectIntoOrdinality
+WITH
+  with2
+    AS (
+      SELECT
+        tq.trid, tq.dec1
+      FROM
+        trrec AS r INNER JOIN trtab4 AS tq ON r.id = tq.trid AND r.str16 = '12345'
+    )
+SELECT tr.id, tr.trid
+FROM
+  trrec AS tr
+  INNER JOIN LATERAL (
+      SELECT  q.dec1 FROM with2 AS q WHERE tr.id = q.trid
+    ) AS q ON true
+  INNER JOIN LATERAL (
+      SELECT
+        --tr.id, -- Previously, including this column allowed the filter on
+                 -- str16 to be pushed into the join, but this is no longer
+                 -- required.
+        m.ts12
+      FROM trm AS m WHERE tr.id = m.trid
+      ORDER BY m.ts12 DESC
+      LIMIT 100
+    ) AS val3 ON true
+WHERE
+  tr.str16 = '12345'
+;
+----
+project
+ ├── columns: id:12!null trid:13!null
+ ├── fd: (12)-->(13)
+ └── select
+      ├── columns: tr.id:12!null tr.trid:13!null m.trid:21!null m.ts12:22!null row_num:25!null rownum:26!null
+      ├── fd: (12)-->(13), (26)-->(12,13), (12)==(21), (21)==(12)
+      ├── window partition=(26) ordering=-22 opt(12-17,19,21,26)
+      │    ├── columns: tr.id:12!null tr.trid:13!null m.trid:21!null m.ts12:22!null row_num:25 rownum:26!null
+      │    ├── fd: (12)-->(13), (26)-->(12,13), (12)==(21), (21)==(12)
+      │    ├── inner-join (hash)
+      │    │    ├── columns: tr.id:12!null tr.trid:13!null m.trid:21!null m.ts12:22!null rownum:26!null
+      │    │    ├── fd: (12)-->(13), (26)-->(12,13), (12)==(21), (21)==(12)
+      │    │    ├── ordinality
+      │    │    │    ├── columns: tr.id:12!null tr.trid:13!null rownum:26!null
+      │    │    │    ├── key: (26)
+      │    │    │    ├── fd: (12)-->(13), (26)-->(12,13)
+      │    │    │    └── project
+      │    │    │         ├── columns: tr.id:12!null tr.trid:13!null
+      │    │    │         ├── fd: (12)-->(13)
+      │    │    │         └── inner-join (hash)
+      │    │    │              ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null trid:18!null
+      │    │    │              ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │    │    │              ├── fd: ()-->(15), (12)-->(13), (12)==(18), (18)==(12)
+      │    │    │              ├── select
+      │    │    │              │    ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null
+      │    │    │              │    ├── key: (12)
+      │    │    │              │    ├── fd: ()-->(15), (12)-->(13)
+      │    │    │              │    ├── scan trrec [as=tr]
+      │    │    │              │    │    ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15
+      │    │    │              │    │    ├── key: (12)
+      │    │    │              │    │    └── fd: (12)-->(13,15)
+      │    │    │              │    └── filters
+      │    │    │              │         └── tr.str16:15 = '12345' [outer=(15), constraints=(/15: [/'12345' - /'12345']; tight), fd=()-->(15)]
+      │    │    │              ├── project
+      │    │    │              │    ├── columns: trid:18!null
+      │    │    │              │    ├── inner-join (hash)
+      │    │    │              │    │    ├── columns: r.id:1!null r.str16:4!null tq.trid:8!null
+      │    │    │              │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │    │    │              │    │    ├── fd: ()-->(4), (1)==(8), (8)==(1)
+      │    │    │              │    │    ├── select
+      │    │    │              │    │    │    ├── columns: r.id:1!null r.str16:4!null
+      │    │    │              │    │    │    ├── key: (1)
+      │    │    │              │    │    │    ├── fd: ()-->(4)
+      │    │    │              │    │    │    ├── scan trrec [as=r]
+      │    │    │              │    │    │    │    ├── columns: r.id:1!null r.str16:4
+      │    │    │              │    │    │    │    ├── key: (1)
+      │    │    │              │    │    │    │    └── fd: (1)-->(4)
+      │    │    │              │    │    │    └── filters
+      │    │    │              │    │    │         └── r.str16:4 = '12345' [outer=(4), constraints=(/4: [/'12345' - /'12345']; tight), fd=()-->(4)]
+      │    │    │              │    │    ├── scan trtab4 [as=tq]
+      │    │    │              │    │    │    └── columns: tq.trid:8!null
+      │    │    │              │    │    └── filters
+      │    │    │              │    │         └── r.id:1 = tq.trid:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      │    │    │              │    └── projections
+      │    │    │              │         └── tq.trid:8 [as=trid:18, outer=(8)]
+      │    │    │              └── filters
+      │    │    │                   └── tr.id:12 = trid:18 [outer=(12,18), constraints=(/12: (/NULL - ]; /18: (/NULL - ]), fd=(12)==(18), (18)==(12)]
+      │    │    ├── scan trm [as=m]
+      │    │    │    └── columns: m.trid:21!null m.ts12:22!null
+      │    │    └── filters
+      │    │         └── tr.id:12 = m.trid:21 [outer=(12,21), constraints=(/12: (/NULL - ]; /21: (/NULL - ]), fd=(12)==(21), (21)==(12)]
+      │    └── windows
+      │         └── row-number [as=row_num:25]
+      └── filters
+           └── row_num:25 <= 100 [outer=(25), constraints=(/25: (/NULL - /100]; tight)]
