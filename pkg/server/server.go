@@ -372,7 +372,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	// and after ValidateAddrs().
 	rpcContext.CheckCertificateAddrs(ctx)
 
-	grpcServer, err := newGRPCServer(rpcContext)
+	grpcServer, err := newGRPCServer(ctx, rpcContext)
 	if err != nil {
 		return nil, err
 	}

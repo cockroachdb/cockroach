@@ -79,7 +79,7 @@ func TestEventIngestionIntegration(t *testing.T) {
 			opts.Stopper = obsStop
 			opts.Settings = cluster.MakeTestingClusterSettings()
 			rpcContext := rpc.NewContext(ctx, opts)
-			grpcServer, err := rpc.NewServer(rpcContext)
+			grpcServer, err := rpc.NewServer(ctx, rpcContext)
 			require.NoError(t, err)
 			defer grpcServer.Stop()
 			logspb.RegisterLogsServiceServer(grpcServer, e)
