@@ -1832,7 +1832,8 @@ func IterateIDPrefixKeys(
 func IterateRangeDescriptorsFromDisk(
 	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
 ) error {
-	log.Event(ctx, "beginning range descriptor iteration")
+	log.Info(ctx, "beginning range descriptor iteration")
+
 	// MVCCIterator over all range-local key-based data.
 	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
@@ -1840,7 +1841,25 @@ func IterateRangeDescriptorsFromDisk(
 	allCount := 0
 	matchCount := 0
 	bySuffix := make(map[string]int)
+
+	var scanStats roachpb.ScanStats
+	opts := storage.MVCCScanOptions{
+		Inconsistent: true,
+		ScanStats:    &scanStats,
+	}
+	lastReportTime := timeutil.Now()
 	kvToDesc := func(kv roachpb.KeyValue) error {
+		const reportPeriod = 15 * time.Second
+		if timeutil.Since(lastReportTime) >= reportPeriod {
+			// Note: MVCCIterate scans and buffers 1000 keys at a time which could
+			// make the scan stats confusing. However, because this callback can't
+			// take a long time, it's very unlikely that we will log twice for the
+			// same batch of keys.
+			log.Infof(ctx, "range descriptor iteration in progress: %d keys, %d range descriptors (by suffix: %v); %v",
+				allCount, matchCount, bySuffix, &scanStats)
+			lastReportTime = timeutil.Now()
+		}
+
 		allCount++
 		// Only consider range metadata entries; ignore others.
 		_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
@@ -1866,10 +1885,9 @@ func IterateRangeDescriptorsFromDisk(
 		return err
 	}
 
-	_, err := storage.MVCCIterate(ctx, reader, start, end, hlc.MaxTimestamp,
-		storage.MVCCScanOptions{Inconsistent: true}, kvToDesc)
-	log.Eventf(ctx, "iterated over %d keys to find %d range descriptors (by suffix: %v)",
-		allCount, matchCount, bySuffix)
+	_, err := storage.MVCCIterate(ctx, reader, start, end, hlc.MaxTimestamp, opts, kvToDesc)
+	log.Infof(ctx, "range descriptor iteration done: %d keys, %d range descriptors (by suffix: %v); %s",
+		allCount, matchCount, bySuffix, &scanStats)
 	return err
 }
 
