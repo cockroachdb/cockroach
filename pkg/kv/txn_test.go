@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -834,4 +835,43 @@ func TestTxnCommitTriggers(t *testing.T) {
 			require.Equal(t, test.expTrigger, triggerVal)
 		})
 	}
+}
+
+type txnSenderLockingOverrideWrapper struct {
+	TxnSender
+}
+
+func (t txnSenderLockingOverrideWrapper) IsLocking() bool {
+	return true
+}
+
+func TestTransactionAdmissionHeader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockForTesting(nil)
+	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(),
+		newTestTxnFactory(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			br := ba.CreateReply()
+			return br, nil
+		}), clock, stopper)
+
+	txn := NewTxnWithAdmissionControl(
+		ctx, db, 0 /* gatewayNodeID */, kvpb.AdmissionHeader_FROM_SQL, admissionpb.NormalPri)
+	header := txn.AdmissionHeader()
+	expectedHeader := kvpb.AdmissionHeader{
+		Priority:   int32(admissionpb.NormalPri),
+		CreateTime: header.CreateTime,
+		Source:     kvpb.AdmissionHeader_FROM_SQL,
+	}
+	require.Equal(t, expectedHeader, header)
+	// MockTransactionalSender always return false from IsLocking, so wrap it to
+	// return true.
+	txn.mu.sender = txnSenderLockingOverrideWrapper{txn.mu.sender}
+	header = txn.AdmissionHeader()
+	expectedHeader.Priority = int32(admissionpb.LockingNormalPri)
+	require.Equal(t, expectedHeader, header)
 }

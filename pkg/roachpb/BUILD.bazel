@@ -32,6 +32,7 @@ go_library(
         "//pkg/settings",
         "//pkg/storage/enginepb",
         "//pkg/util",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/bitarray",
         "//pkg/util/duration",
         "//pkg/util/encoding",
