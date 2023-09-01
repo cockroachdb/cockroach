@@ -105,6 +105,34 @@ $input
     (ExtractUnboundConditions $filters $inputCols)
 )
 
+# PushSelectIntoUniqueKey pushes the Select operator into its UniqueKey input.
+# This is typically preferable because it allows the Select to be pushed into
+# operations beneath the UniqueKey, minimizing the number of rows subsequent
+# operations need to process and potentially pushing the Select down far enough
+# to enable constrained scans. This may also enable other normalization rules,
+# which match on Select expressions, to fire.
+[PushSelectIntoUniqueKey, Normalize]
+(Select
+    (UniqueKey $input:* $private:*)
+    $filters:[
+        ...
+        $item:* &
+            (IsBoundBy $item $inputCols:(OutputCols $input))
+        ...
+    ]
+)
+=>
+(Select
+    (UniqueKey
+        (Select
+            $input
+            (ExtractBoundConditions $filters $inputCols)
+        )
+        $private
+    )
+    (ExtractUnboundConditions $filters $inputCols)
+)
+
 # MergeSelectInnerJoin merges a Select operator with an InnerJoin input by
 # AND'ing the filter conditions of each and creating a new InnerJoin with that
 # On condition. This is only safe to do with InnerJoin in the general case
