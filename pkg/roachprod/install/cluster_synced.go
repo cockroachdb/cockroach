@@ -421,6 +421,7 @@ func (c *SyncedCluster) Signal(ctx context.Context, l *logger.Logger, sig int) e
 // cmdName and display specify the roachprod subcommand and a status message,
 // for output/logging. If wait is true, the command will wait for the processes
 // to exit, up to maxWait seconds.
+// TODO(herko): This command does not support tenants yet.
 func (c *SyncedCluster) kill(
 	ctx context.Context, l *logger.Logger, cmdName, display string, sig int, wait bool, maxWait int,
 ) error {
@@ -448,8 +449,8 @@ func (c *SyncedCluster) kill(
     done
     echo "${pid}: dead" >> %[1]s/roachprod.log
   done`,
-				c.LogDir(node), // [1]
-				maxWait,        // [2]
+				c.LogDir(node, "", 0), // [1]
+				maxWait,               // [2]
 			)
 		}
 
@@ -467,7 +468,7 @@ if [ -n "${pids}" ]; then
 %[5]s
 fi`,
 			cmdName,                   // [1]
-			c.LogDir(node),            // [2]
+			c.LogDir(node, "", 0),     // [2]
 			c.roachprodEnvRegex(node), // [3]
 			sig,                       // [4]
 			waitCmd,                   // [5]
@@ -1982,6 +1983,7 @@ func (c *SyncedCluster) Put(
 // <user> allows retrieval of logs from a roachprod cluster being run by another
 // user and assumes that the current user used to create c has the ability to
 // sudo into <user>.
+// TODO(herko): This command does not support tenants yet.
 func (c *SyncedCluster) Logs(
 	l *logger.Logger,
 	src, dest, user, filter, programFilter string,
@@ -2002,7 +2004,7 @@ func (c *SyncedCluster) Logs(
 		if c.IsLocal() {
 			// This here is a bit of a hack to guess that the parent of the log dir is
 			// the "home" for the local node and that the srcBase is relative to that.
-			localHome := filepath.Dir(c.LogDir(node))
+			localHome := filepath.Dir(c.LogDir(node, "", 0))
 			remote = filepath.Join(localHome, src) + "/"
 		} else {
 			logDir := src
