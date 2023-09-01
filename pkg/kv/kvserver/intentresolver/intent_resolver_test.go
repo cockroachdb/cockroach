@@ -762,6 +762,14 @@ func TestCleanupIntents(t *testing.T) {
 // TestIntentResolutionTimeout tests that running intent resolution with an
 // unavailable range eventually times out and finishes, and does not block
 // intent resolution on another available range.
+//
+// TODO(sumeer): this test clogs up batched intent resolution via an inflight
+// backpressure limit, which by default in no longer limited. But an inflight
+// backpressure limit does exist for GC of txn records. This test should
+// continue to exist until we have production experience with no inflight
+// backpressure for intent resolution. And after that we should create an
+// equivalent test for inflight backpressure for GC of txn records and remove
+// this test.
 func TestIntentResolutionTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

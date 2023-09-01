@@ -13,6 +13,7 @@ package intentresolver
 import (
 	"bytes"
 	"context"
+	"math"
 	"sort"
 	"time"
 
@@ -25,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -121,6 +124,7 @@ type Config struct {
 	Clock                *hlc.Clock
 	DB                   *kv.DB
 	Stopper              *stop.Stopper
+	Settings             *cluster.Settings
 	AmbientCtx           log.AmbientContext
 	TestingKnobs         kvserverbase.IntentResolverTestingKnobs
 	RangeDescriptorCache RangeCache
@@ -147,6 +151,7 @@ type IntentResolver struct {
 	db           *kv.DB
 	stopper      *stop.Stopper
 	testingKnobs kvserverbase.IntentResolverTestingKnobs
+	settings     *cluster.Settings
 	ambientCtx   log.AmbientContext
 	sem          *quotapool.IntPool // semaphore to limit async goroutines
 
@@ -213,6 +218,7 @@ func New(c Config) *IntentResolver {
 		Metrics:      makeMetrics(),
 		rdc:          c.RangeDescriptorCache,
 		testingKnobs: c.TestingKnobs,
+		settings:     c.Settings,
 	}
 	c.Stopper.AddCloser(ir.sem.Closer("stopper"))
 	ir.mu.inFlightPushes = map[uuid.UUID]int{}
@@ -221,22 +227,24 @@ func New(c Config) *IntentResolver {
 	if c.TestingKnobs.MaxIntentResolutionSendBatchTimeout != 0 {
 		intentResolutionSendBatchTimeout = c.TestingKnobs.MaxIntentResolutionSendBatchTimeout
 	}
-	inFlightBackpressureLimit := requestbatcher.DefaultInFlightBackpressureLimit
+	inFlightGCBackpressureLimit := requestbatcher.DefaultInFlightBackpressureLimit
 	if c.TestingKnobs.InFlightBackpressureLimit != 0 {
-		inFlightBackpressureLimit = c.TestingKnobs.InFlightBackpressureLimit
+		inFlightGCBackpressureLimit = c.TestingKnobs.InFlightBackpressureLimit
 	}
 	gcBatchSize := gcBatchSize
 	if c.TestingKnobs.MaxIntentResolutionBatchSize > 0 {
 		gcBatchSize = c.TestingKnobs.MaxGCBatchSize
 	}
 	ir.gcBatcher = requestbatcher.New(requestbatcher.Config{
-		AmbientCtx:                c.AmbientCtx,
-		Name:                      "intent_resolver_gc_batcher",
-		MaxMsgsPerBatch:           gcBatchSize,
-		MaxWait:                   c.MaxGCBatchWait,
-		MaxIdle:                   c.MaxGCBatchIdle,
-		MaxTimeout:                intentResolutionSendBatchTimeout,
-		InFlightBackpressureLimit: inFlightBackpressureLimit,
+		AmbientCtx:      c.AmbientCtx,
+		Name:            "intent_resolver_gc_batcher",
+		MaxMsgsPerBatch: gcBatchSize,
+		MaxWait:         c.MaxGCBatchWait,
+		MaxIdle:         c.MaxGCBatchIdle,
+		MaxTimeout:      intentResolutionSendBatchTimeout,
+		// NB: async GC work is not limited by ir.sem, so we do need an in-flight
+		// backpressure limit.
+		InFlightBackpressureLimit: func() int { return inFlightGCBackpressureLimit },
 		Stopper:                   c.Stopper,
 		Sender:                    c.DB.NonTransactionalSender(),
 	})
@@ -246,6 +254,10 @@ func New(c Config) *IntentResolver {
 		intentResolutionBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
 		intentResolutionRangeBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
 	}
+	inFlightLimit := inFlightLimitProvider{
+		settings:                         c.Settings,
+		testingInFlightBackpressureLimit: c.TestingKnobs.InFlightBackpressureLimit,
+	}
 	ir.irBatcher = requestbatcher.New(requestbatcher.Config{
 		AmbientCtx:                c.AmbientCtx,
 		Name:                      "intent_resolver_ir_batcher",
@@ -254,7 +266,7 @@ func New(c Config) *IntentResolver {
 		MaxWait:                   c.MaxIntentResolutionBatchWait,
 		MaxIdle:                   c.MaxIntentResolutionBatchIdle,
 		MaxTimeout:                intentResolutionSendBatchTimeout,
-		InFlightBackpressureLimit: inFlightBackpressureLimit,
+		InFlightBackpressureLimit: inFlightLimit.limit,
 		Stopper:                   c.Stopper,
 		Sender:                    c.DB.NonTransactionalSender(),
 	})
@@ -267,7 +279,7 @@ func New(c Config) *IntentResolver {
 		MaxWait:                   c.MaxIntentResolutionBatchWait,
 		MaxIdle:                   c.MaxIntentResolutionBatchIdle,
 		MaxTimeout:                intentResolutionSendBatchTimeout,
-		InFlightBackpressureLimit: inFlightBackpressureLimit,
+		InFlightBackpressureLimit: inFlightLimit.limit,
 		Stopper:                   c.Stopper,
 		Sender:                    c.DB.NonTransactionalSender(),
 	})
@@ -1091,4 +1103,40 @@ func (s intentsByTxn) Len() int      { return len(s) }
 func (s intentsByTxn) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 func (s intentsByTxn) Less(i, j int) bool {
 	return bytes.Compare(s[i].Txn.ID[:], s[j].Txn.ID[:]) < 0
+}
+
+// inFlightBackpressureLimitEnabled controls whether the intent resolving
+// requestbatcher.RequestBatchers created by the IntentResolver use an
+// in-flight backpressure limit of DefaultInFlightBackpressureLimit. The
+// default is false, i.e., there is no limit on in-flight requests. A limit on
+// in-flight requests is considered superfluous since we have two limits on
+// the number of active goroutines waiting to get their intent resolution
+// requests processed: the async goroutines, limited to 1000
+// (defaultTaskLimit), and the workload goroutines. Each waiter produces work
+// for a single range, and that work can typically be batched into a single
+// RPC (since requestbatcher.Config.MaxMsgsPerBatch is quite generous). In
+// the rare case where a single waiter produces numerous concurrent RPCs,
+// because of a large number of kvpb.Requests (note that wide
+// ResolveIntentRange cause pagination, and not concurrent RPCs), we have
+// already paid the memory cost of buffering these numerous kvpb.Requests, so
+// we may as well send them out.
+var inFlightBackpressureLimitEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.intent_resolver.batcher.in_flight_backpressure_limit.enabled",
+	"set to true to enable the use of DefaultInFlightBackpressureLimit",
+	false)
+
+type inFlightLimitProvider struct {
+	settings                         *cluster.Settings
+	testingInFlightBackpressureLimit int
+}
+
+func (p inFlightLimitProvider) limit() int {
+	if p.testingInFlightBackpressureLimit != 0 {
+		return p.testingInFlightBackpressureLimit
+	}
+	if p.settings == nil || inFlightBackpressureLimitEnabled.Get(&p.settings.SV) {
+		return requestbatcher.DefaultInFlightBackpressureLimit
+	}
+	return math.MaxInt32
 }
