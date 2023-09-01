@@ -135,7 +135,7 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 	intentHlc := hlc.Timestamp{
 		WallTime: intentTs.Nanoseconds(),
 	}
-	txn := roachpb.MakeTransaction("txn", key, isolation.Serializable, roachpb.NormalUserPriority, intentHlc, 1000, 0)
+	txn := roachpb.MakeTransaction("txn", key, isolation.Serializable, roachpb.NormalUserPriority, intentHlc, 1000, 0, 0)
 	require.NoError(t, storage.MVCCPut(ctx, eng, key, intentHlc, value, storage.MVCCWriteOptions{Txn: &txn}))
 	require.NoError(t, eng.Flush())
 
@@ -194,7 +194,7 @@ func TestIntentCleanupBatching(t *testing.T) {
 	}
 	for _, prefix := range txnPrefixes {
 		key := []byte{prefix, objectKeys[0]}
-		txn := roachpb.MakeTransaction("txn", key, isolation.Serializable, roachpb.NormalUserPriority, intentHlc, 1000, 0)
+		txn := roachpb.MakeTransaction("txn", key, isolation.Serializable, roachpb.NormalUserPriority, intentHlc, 1000, 0, 0)
 		for _, suffix := range objectKeys {
 			key := []byte{prefix, suffix}
 			require.NoError(t, storage.MVCCPut(ctx, eng, key, intentHlc, value, storage.MVCCWriteOptions{Txn: &txn}))

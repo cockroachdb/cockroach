@@ -139,6 +139,7 @@ func NewTxnWithAdmissionControl(
 		now.ToTimestamp(),
 		db.clock.MaxOffset().Nanoseconds(),
 		int32(db.ctx.NodeID.SQLInstanceID()),
+		priority,
 	)
 	txn := NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
 	txn.admissionHeader = kvpb.AdmissionHeader{
@@ -1638,22 +1639,8 @@ func (txn *Txn) DeferCommitWait(ctx context.Context) func(context.Context) error
 // of this transaction.
 func (txn *Txn) AdmissionHeader() kvpb.AdmissionHeader {
 	h := txn.admissionHeader
-	if txn.mu.sender.IsLocking() {
-		// Assign higher priority to requests by txns that are locking, so that
-		// they release locks earlier. Note that this is a crude approach, and is
-		// worse than priority inheritance used for locks in realtime systems. We
-		// do this because admission control does not have visibility into the
-		// exact locks held by waiters in the admission queue, and cannot compare
-		// that with priorities of waiting requests in the various lock table
-		// queues. This crude approach has shown some benefit in tpcc with 3000
-		// warehouses, where it halved the number of lock waiters, and increased
-		// the transaction throughput by 10+%. In that experiment 40% of the
-		// BatchRequests evaluated by KV had been assigned high priority due to
-		// locking.
-		if h.Priority < int32(admissionpb.LockingPri) {
-			h.Priority = int32(admissionpb.LockingPri)
-		}
-	}
+	h.Priority = int32(admissionpb.AdjustedPriorityWhenHoldingLocks(
+		admissionpb.WorkPriority(h.Priority)))
 	return h
 }
 

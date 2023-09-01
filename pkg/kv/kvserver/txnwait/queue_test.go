@@ -523,7 +523,7 @@ func TestMaybeWaitForPushWithContextCancellation(t *testing.T) {
 	q.Enable(1 /* leaseSeq */)
 
 	// Enqueue pushee transaction in the queue.
-	txn := roachpb.MakeTransaction("test", nil, 0, 0, cfg.Clock.Now(), 0, 0)
+	txn := roachpb.MakeTransaction("test", nil, 0, 0, cfg.Clock.Now(), 0, 0, 0)
 	q.EnqueueTxn(&txn)
 
 	// Mock out responses to any QueryTxn requests.
@@ -614,7 +614,7 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 	defer TestingOverrideTxnLivenessThreshold(time.Hour)()
 
 	// Enqueue pushee transaction in the queue.
-	txn := roachpb.MakeTransaction("test", nil, 0, 0, cfg.Clock.Now(), 0, 0)
+	txn := roachpb.MakeTransaction("test", nil, 0, 0, cfg.Clock.Now(), 0, 0, 0)
 	q.EnqueueTxn(&txn)
 
 	const numPushees = 3

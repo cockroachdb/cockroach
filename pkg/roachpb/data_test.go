@@ -438,7 +438,7 @@ func TestSetGetChecked(t *testing.T) {
 
 func TestTransactionBumpEpoch(t *testing.T) {
 	origNow := makeTS(10, 1)
-	txn := MakeTransaction("test", Key("a"), isolation.Serializable, 1, origNow, 0, 99)
+	txn := MakeTransaction("test", Key("a"), isolation.Serializable, 1, origNow, 0, 99, 0)
 	// Advance the txn timestamp.
 	txn.WriteTimestamp = txn.WriteTimestamp.Add(10, 2)
 	txn.BumpEpoch()
@@ -572,6 +572,11 @@ var nonZeroTxn = Transaction{
 
 func TestTransactionUpdate(t *testing.T) {
 	txn := nonZeroTxn
+	err := zerofields.NoZeroField(txn)
+	// It is normal for the AdmissionPriority to be zero.
+	require.ErrorContains(t, err, "expected AdmissionPriority field to be non-zero")
+	// Set the priority to non-zero to check that there is no error.
+	txn.AdmissionPriority = 1
 	if err := zerofields.NoZeroField(txn); err != nil {
 		t.Fatal(err)
 	}
@@ -2128,7 +2133,7 @@ func TestTxnLocksAsLockUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ts := hlc.Timestamp{WallTime: 1}
-	txn := MakeTransaction("hello", Key("k"), isolation.Serializable, 0, ts, 0, 99)
+	txn := MakeTransaction("hello", Key("k"), isolation.Serializable, 0, ts, 0, 99, 0)
 
 	txn.Status = COMMITTED
 	txn.IgnoredSeqNums = []enginepb.IgnoredSeqNumRange{{Start: 0, End: 0}}

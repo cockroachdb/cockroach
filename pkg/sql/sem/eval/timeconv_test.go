@@ -66,6 +66,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 			ts.ToTimestamp(),
 			0, // maxOffsetNs
 			1, // coordinatorNodeID
+			0,
 		)
 
 		ctx := eval.Context{
