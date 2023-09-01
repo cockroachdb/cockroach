@@ -5352,7 +5352,6 @@ enforce_home_region                                        off
 enforce_home_region_follower_reads_enabled                 off
 escape_string_warning                                      on
 expect_and_ignore_not_visible_columns_in_copy              off
-experimental_enable_auto_rehoming                          off
 experimental_enable_implicit_column_partitioning           off
 experimental_enable_temp_tables                            off
 experimental_enable_unique_without_index_constraints       on
@@ -5360,7 +5359,6 @@ experimental_hash_group_join_enabled                       off
 extra_float_digits                                         1
 force_savepoint_restart                                    off
 foreign_key_cascades_limit                                 10000
-idle_in_session_timeout                                    0
 idle_in_transaction_session_timeout                        0
 idle_session_timeout                                       0
 index_join_streamer_batch_size                             8.0 MiB
