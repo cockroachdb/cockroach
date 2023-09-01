@@ -1,0 +1,2 @@
+call_stmt ::=
+	'CALL' proc_name '(' opt_expr_list ')'
