@@ -417,3 +417,9 @@ func (c *CustomFuncs) addConjuncts(
 	}
 	return filters, true
 }
+
+// OrdinalityAllowsAnyOrdering returns true if the Ordinality expression allows
+// any ordering.
+func (c *CustomFuncs) OrdinalityAllowsAnyOrdering(private *memo.OrdinalityPrivate) (ok bool) {
+	return private.Ordering.Any()
+}
