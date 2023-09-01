@@ -355,7 +355,7 @@ type testServer struct {
 	disableStartTenantError error
 }
 
-var _ serverutils.TestServerInterface = &testServer{}
+var _ serverutils.TestServerInterfaceRaw = &testServer{}
 
 // Node returns the Node as an interface{}.
 func (ts *testServer) Node() interface{} {
@@ -369,6 +369,11 @@ func (ts *testServer) NodeID() roachpb.NodeID {
 
 // Stopper returns the embedded server's Stopper.
 func (ts *testServer) Stopper() *stop.Stopper {
+	return ts.stopper
+}
+
+// AppStopper is part of serverutils.ApplicationLayerInterface.
+func (ts *testServer) AppStopper() *stop.Stopper {
 	return ts.stopper
 }
 
@@ -561,9 +566,9 @@ func (ts *testServer) TenantStatusServer() interface{} {
 	return ts.status
 }
 
-// TestTenants provides information to tenant(s) that _may_ have been created
-func (ts *testServer) TestTenants() []serverutils.ApplicationLayerInterface {
-	return ts.testTenants
+// TestTenant is part of serverutils.TenantControlInterface.
+func (ts *testServer) TestTenant() serverutils.ApplicationLayerInterface {
+	return ts.testTenants[0]
 }
 
 // maybeStartDefaultTestTenant might start a test tenant. This can then be used
@@ -687,7 +692,7 @@ func (ts *testServer) Activate(ctx context.Context) error {
 		}
 		return nil
 	}
-	if err := maybeRunVersionUpgrade(ts.SystemLayer()); err != nil {
+	if err := maybeRunVersionUpgrade(ts); err != nil {
 		return err
 	}
 
@@ -701,7 +706,7 @@ func (ts *testServer) Activate(ctx context.Context) error {
 	}
 
 	if ts.StartedDefaultTestTenant() {
-		if err := maybeRunVersionUpgrade(ts.ApplicationLayer()); err != nil {
+		if err := maybeRunVersionUpgrade(ts.TestTenant()); err != nil {
 			return err
 		}
 	}
@@ -758,6 +763,7 @@ type testTenant struct {
 	SQLCfg *SQLConfig
 	*httpTestServer
 	drain *drainServer
+	http  *httpServer
 
 	pgL *netutil.LoopbackListener
 
@@ -834,7 +840,7 @@ func (t *testTenant) SQLConnForUserE(userName string, dbName string) (*gosql.DB,
 	}
 	return openTestSQLConn(
 		userName, dbName, tenantName,
-		t.Stopper(),
+		t.AppStopper(),
 		t.pgL,
 		t.Cfg.SQLAdvertiseAddr,
 		t.Cfg.Insecure,
@@ -951,8 +957,8 @@ func (t *testTenant) ClusterSettings() *cluster.Settings {
 	return t.Cfg.Settings
 }
 
-// Stopper is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) Stopper() *stop.Stopper {
+// AppStopper is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) AppStopper() *stop.Stopper {
 	return t.sql.stopper
 }
 
@@ -1252,6 +1258,16 @@ func (t *testTenant) PrivilegeChecker() interface{} {
 // HTTPAuthServer is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) HTTPAuthServer() interface{} {
 	return t.t.authentication
+}
+
+// HTTPServer is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) HTTPServer() interface{} {
+	return t.http
+}
+
+// SQLLoopbackListener is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) SQLLoopbackListener() interface{} {
+	return t.pgL
 }
 
 func (ts *testServer) waitForTenantReadinessImpl(
@@ -1575,6 +1591,7 @@ func (ts *testServer) StartTenant(
 		SQLCfg:         &sqlCfg,
 		pgPreServer:    sw.pgPreServer,
 		httpTestServer: hts,
+		http:           sw.http,
 		drain:          sw.drainServer,
 		pgL:            sw.loopbackPgL,
 	}, err
@@ -1976,29 +1993,6 @@ func (ts *testServer) StartedDefaultTestTenant() bool {
 	return len(ts.testTenants) > 0
 }
 
-// ApplicationLayer is part of the serverutils.TestServerInterface.
-func (ts *testServer) ApplicationLayer() serverutils.ApplicationLayerInterface {
-	if ts.StartedDefaultTestTenant() {
-		return ts.testTenants[0]
-	}
-	return ts
-}
-
-// StorageLayer is part of the serverutils.TestServerInterface.
-func (ts *testServer) StorageLayer() serverutils.StorageLayerInterface {
-	return ts
-}
-
-// TenantController is part of the serverutils.TestServerInterface.
-func (ts *testServer) TenantController() serverutils.TenantControlInterface {
-	return ts
-}
-
-// SystemLayer is part of the serverutils.TestServerInterface.
-func (ts *testServer) SystemLayer() serverutils.ApplicationLayerInterface {
-	return ts
-}
-
 // TracerI is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) TracerI() interface{} {
 	return ts.Tracer()
@@ -2013,7 +2007,7 @@ func (ts *testServer) Tracer() *tracing.Tracer {
 func (ts *testServer) ForceTableGC(
 	ctx context.Context, database, table string, timestamp hlc.Timestamp,
 ) error {
-	return internalForceTableGC(ctx, ts.SystemLayer(), database, table, timestamp)
+	return internalForceTableGC(ctx, ts, database, table, timestamp)
 }
 
 func internalForceTableGC(
@@ -2187,6 +2181,21 @@ func (ts *testServer) PrivilegeChecker() interface{} {
 // HTTPAuthServer is part of the ApplicationLayerInterface.
 func (ts *testServer) HTTPAuthServer() interface{} {
 	return ts.t.authentication
+}
+
+// HTTPServer is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) HTTPServer() interface{} {
+	return ts.topLevelServer.http
+}
+
+// SQLLoopbackListener is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) SQLLoopbackListener() interface{} {
+	return ts.topLevelServer.loopbackPgL
+}
+
+// ServerController is part of the serverutils.TenantControlInterface.
+func (ts *testServer) ServerController() interface{} {
+	return ts.topLevelServer.serverController
 }
 
 type testServerFactoryImpl struct{}
@@ -2446,7 +2455,7 @@ func newClientRPCContext(
 	ctx = logtags.AddTag(ctx, "user", user)
 	ctx = logtags.AddTag(ctx, "nsql", s.SQLInstanceID())
 
-	stopper := s.Stopper()
+	stopper := s.AppStopper()
 	if ctx.Done() == nil {
 		// The RPCContext initialization wants a cancellable context,
 		// since that will be used to stop async goroutines. Help

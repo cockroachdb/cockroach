@@ -644,7 +644,7 @@ func (c *transientCluster) createAndAddNode(
 	if err != nil {
 		return nil, err
 	}
-	s := srv.(serverutils.TestServerInterface)
+	s := &wrap{srv.(serverutils.TestServerInterfaceRaw)}
 
 	// Ensure that this server gets stopped when the top level demo
 	// stopper instructs the cluster to stop.
@@ -1159,7 +1159,7 @@ func (c *transientCluster) startServerInternal(
 	if err != nil {
 		return 0, err
 	}
-	s := srv.(serverutils.TestServerInterface)
+	s := &wrap{srv.(serverutils.TestServerInterfaceRaw)}
 
 	// We want to only return after the server is ready.
 	readyCh := make(chan struct{})
@@ -2143,3 +2143,16 @@ func (c *transientCluster) TenantName() string {
 	}
 	return catconstants.SystemTenantName
 }
+
+type wrap struct {
+	serverutils.TestServerInterfaceRaw
+}
+
+var _ serverutils.TestServerInterface = (*wrap)(nil)
+
+func (w *wrap) ApplicationLayer() serverutils.ApplicationLayerInterface {
+	return w.TestServerInterfaceRaw
+}
+func (w *wrap) SystemLayer() serverutils.ApplicationLayerInterface   { return w.TestServerInterfaceRaw }
+func (w *wrap) TenantController() serverutils.TenantControlInterface { return w.TestServerInterfaceRaw }
+func (w *wrap) StorageLayer() serverutils.StorageLayerInterface      { return w.TestServerInterfaceRaw }

@@ -58,7 +58,7 @@ func TestCopyOutTransaction(t *testing.T) {
 		url.User(username.RootUser),
 	)
 	require.NoError(t, err)
-	s.Stopper().AddCloser(stop.CloserFn(func() { cleanupGoDB() }))
+	s.AppStopper().AddCloser(stop.CloserFn(func() { cleanupGoDB() }))
 	config, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
 
@@ -126,7 +126,7 @@ func TestCopyOutRandom(t *testing.T) {
 		url.User(username.RootUser),
 	)
 	require.NoError(t, err)
-	s.Stopper().AddCloser(stop.CloserFn(func() { cleanupGoDB() }))
+	s.AppStopper().AddCloser(stop.CloserFn(func() { cleanupGoDB() }))
 	config, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
 	config.Database = sqlutils.TestDB

@@ -58,7 +58,9 @@ type OneWayLatency = time.Duration
 // error will be returned.
 func (m LatencyMap) Apply(tc TestCluster) error {
 	for i, n := 0, tc.NumServers(); i < n; i++ {
-		serv := tc.Server(i)
+		// TODO(#109869): This seems incorrect; what of the latency between
+		// SQL servers which use their own, separate RPC service?
+		serv := tc.Server(i).SystemLayer()
 		serverKnobs, ok := serv.TestingKnobs().Server.(*server.TestingKnobs)
 		if !ok {
 			return errors.AssertionFailedf(

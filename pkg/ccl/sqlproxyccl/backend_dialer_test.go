@@ -97,11 +97,11 @@ func TestBackendDialTLS(t *testing.T) {
 
 	tenant10 := roachpb.MustMakeTenantID(10)
 	sql10, _ := serverutils.StartTenant(t, storageServer, base.TestTenantArgs{TenantID: tenant10})
-	defer sql10.Stopper().Stop(ctx)
+	defer sql10.AppStopper().Stop(ctx)
 
 	tenant11 := roachpb.MustMakeTenantID(11)
 	sql11, _ := serverutils.StartTenant(t, storageServer, base.TestTenantArgs{TenantID: tenant11})
-	defer sql11.Stopper().Stop(ctx)
+	defer sql11.AppStopper().Stop(ctx)
 
 	tests := []struct {
 		name     string

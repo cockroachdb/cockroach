@@ -8964,10 +8964,7 @@ func TestRestorePauseOnError(t *testing.T) {
 
 	var forceFailure bool
 	for i := range tc.Servers {
-		jobRegistry := tc.Servers[i].JobRegistry()
-		if tc.StartedDefaultTestTenant() {
-			jobRegistry = tc.Servers[i].TestTenants()[0].JobRegistry()
-		}
+		jobRegistry := tc.Servers[i].ApplicationLayer().JobRegistry()
 
 		jobRegistry.(*jobs.Registry).TestingWrapResumerConstructor(
 			jobspb.TypeRestore,

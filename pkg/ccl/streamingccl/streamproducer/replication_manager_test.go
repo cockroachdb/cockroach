@@ -34,17 +34,13 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-
-	testTenants := s.TestTenants()
-	if len(testTenants) > 0 {
-		kvDB = testTenants[0].DB()
-		execCfg = testTenants[0].ExecutorConfig().(sql.ExecutorConfig)
-	}
 
 	var m sessiondatapb.MigratableSession
 	var sessionSerialized []byte

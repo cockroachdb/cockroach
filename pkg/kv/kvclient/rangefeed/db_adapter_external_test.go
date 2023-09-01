@@ -201,7 +201,7 @@ func TestDBClientScan(t *testing.T) {
 		// We expect 11 splits.
 		// One span will fail.  Verify we retry only the spans that we have not attempted before.
 		var parallelism = 6
-		f := rangefeed.NewFactoryWithDB(ts.Stopper(), dba, nil /* knobs */)
+		f := rangefeed.NewFactoryWithDB(ts.AppStopper(), dba, nil /* knobs */)
 		scanComplete := make(chan struct{})
 		scanErr := make(chan error, 1)
 		retryScanErr := errors.New("retry scan")

@@ -2748,8 +2748,6 @@ enforce_home_region                                        off                 N
 enforce_home_region_follower_reads_enabled                 off                 NULL      NULL        NULL        string
 escape_string_warning                                      on                  NULL      NULL        NULL        string
 expect_and_ignore_not_visible_columns_in_copy              off                 NULL      NULL        NULL        string
-experimental_distsql_planning                              off                 NULL      NULL        NULL        string
-experimental_enable_auto_rehoming                          off                 NULL      NULL        NULL        string
 experimental_enable_implicit_column_partitioning           off                 NULL      NULL        NULL        string
 experimental_enable_temp_tables                            off                 NULL      NULL        NULL        string
 experimental_enable_unique_without_index_constraints       on                  NULL      NULL        NULL        string
@@ -2757,7 +2755,6 @@ experimental_hash_group_join_enabled                       off                 N
 extra_float_digits                                         1                   NULL      NULL        NULL        string
 force_savepoint_restart                                    off                 NULL      NULL        NULL        string
 foreign_key_cascades_limit                                 10000               NULL      NULL        NULL        string
-idle_in_session_timeout                                    0                   NULL      NULL        NULL        string
 idle_in_transaction_session_timeout                        0                   NULL      NULL        NULL        string
 idle_session_timeout                                       0                   NULL      NULL        NULL        string
 index_join_streamer_batch_size                             8.0 MiB             NULL      NULL        NULL        string
@@ -2817,9 +2814,9 @@ serial_normalization                                       rowid               N
 server_encoding                                            UTF8                NULL      NULL        NULL        string
 server_version                                             13.0.0              NULL      NULL        NULL        string
 server_version_num                                         130000              NULL      NULL        NULL        string
-session_user                                               root                NULL      NULL        NULL        string
 show_primary_key_constraint_on_not_visible_columns         on                  NULL      NULL        NULL        string
 sql_safe_updates                                           off                 NULL      NULL        NULL        string
+ssl                                                        on                  NULL      NULL        NULL        string
 standard_conforming_strings                                on                  NULL      NULL        NULL        string
 statement_timeout                                          0                   NULL      NULL        NULL        string
 streamer_enabled                                           on                  NULL      NULL        NULL        string
@@ -2912,8 +2909,6 @@ enforce_home_region                                        off                 N
 enforce_home_region_follower_reads_enabled                 off                 NULL  user     NULL      off                 off
 escape_string_warning                                      on                  NULL  user     NULL      on                  on
 expect_and_ignore_not_visible_columns_in_copy              off                 NULL  user     NULL      off                 off
-experimental_distsql_planning                              off                 NULL  user     NULL      off                 off
-experimental_enable_auto_rehoming                          off                 NULL  user     NULL      off                 off
 experimental_enable_implicit_column_partitioning           off                 NULL  user     NULL      off                 off
 experimental_enable_temp_tables                            off                 NULL  user     NULL      off                 off
 experimental_enable_unique_without_index_constraints       on                  NULL  user     NULL      off                 off
@@ -2921,7 +2916,6 @@ experimental_hash_group_join_enabled                       off                 N
 extra_float_digits                                         1                   NULL  user     NULL      1                   2
 force_savepoint_restart                                    off                 NULL  user     NULL      off                 off
 foreign_key_cascades_limit                                 10000               NULL  user     NULL      10000               10000
-idle_in_session_timeout                                    0                   NULL  user     NULL      0s                  0s
 idle_in_transaction_session_timeout                        0                   NULL  user     NULL      0s                  0s
 idle_session_timeout                                       0                   NULL  user     NULL      0s                  0s
 index_join_streamer_batch_size                             8.0 MiB             NULL  user     NULL      8.0 MiB             8.0 MiB
@@ -2981,9 +2975,9 @@ serial_normalization                                       rowid               N
 server_encoding                                            UTF8                NULL  user     NULL      UTF8                UTF8
 server_version                                             13.0.0              NULL  user     NULL      13.0.0              13.0.0
 server_version_num                                         130000              NULL  user     NULL      130000              130000
-session_user                                               root                NULL  user     NULL      root                root
 show_primary_key_constraint_on_not_visible_columns         on                  NULL  user     NULL      on                  on
 sql_safe_updates                                           off                 NULL  user     NULL      off                 off
+ssl                                                        on                  NULL  user     NULL      on                  on
 standard_conforming_strings                                on                  NULL  user     NULL      on                  on
 statement_timeout                                          0                   NULL  user     NULL      0s                  0s
 streamer_enabled                                           on                  NULL  user     NULL      on                  on
@@ -3073,8 +3067,6 @@ enforce_home_region                                        NULL    NULL     NULL
 enforce_home_region_follower_reads_enabled                 NULL    NULL     NULL     NULL        NULL
 escape_string_warning                                      NULL    NULL     NULL     NULL        NULL
 expect_and_ignore_not_visible_columns_in_copy              NULL    NULL     NULL     NULL        NULL
-experimental_distsql_planning                              NULL    NULL     NULL     NULL        NULL
-experimental_enable_auto_rehoming                          NULL    NULL     NULL     NULL        NULL
 experimental_enable_implicit_column_partitioning           NULL    NULL     NULL     NULL        NULL
 experimental_enable_temp_tables                            NULL    NULL     NULL     NULL        NULL
 experimental_enable_unique_without_index_constraints       NULL    NULL     NULL     NULL        NULL
@@ -3082,7 +3074,6 @@ experimental_hash_group_join_enabled                       NULL    NULL     NULL
 extra_float_digits                                         NULL    NULL     NULL     NULL        NULL
 force_savepoint_restart                                    NULL    NULL     NULL     NULL        NULL
 foreign_key_cascades_limit                                 NULL    NULL     NULL     NULL        NULL
-idle_in_session_timeout                                    NULL    NULL     NULL     NULL        NULL
 idle_in_transaction_session_timeout                        NULL    NULL     NULL     NULL        NULL
 idle_session_timeout                                       NULL    NULL     NULL     NULL        NULL
 index_join_streamer_batch_size                             NULL    NULL     NULL     NULL        NULL
@@ -3145,9 +3136,9 @@ server_encoding                                            NULL    NULL     NULL
 server_version                                             NULL    NULL     NULL     NULL        NULL
 server_version_num                                         NULL    NULL     NULL     NULL        NULL
 session_id                                                 NULL    NULL     NULL     NULL        NULL
-session_user                                               NULL    NULL     NULL     NULL        NULL
 show_primary_key_constraint_on_not_visible_columns         NULL    NULL     NULL     NULL        NULL
 sql_safe_updates                                           NULL    NULL     NULL     NULL        NULL
+ssl                                                        NULL    NULL     NULL     NULL        NULL
 standard_conforming_strings                                NULL    NULL     NULL     NULL        NULL
 statement_timeout                                          NULL    NULL     NULL     NULL        NULL
 streamer_enabled                                           NULL    NULL     NULL     NULL        NULL

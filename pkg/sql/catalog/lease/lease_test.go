@@ -254,7 +254,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 			t.server.SettingsWatcher().(*settingswatcher.SettingsWatcher),
 			cfgCpy.Codec,
 			t.leaseManagerTestingKnobs,
-			t.server.Stopper(),
+			t.server.AppStopper(),
 			cfgCpy.RangeFeedFactory,
 		)
 		ctx := logtags.AddTag(context.Background(), "leasemgr", nodeID)

@@ -95,7 +95,7 @@ func TestRangeFeedIntegration(t *testing.T) {
 		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
 	}
 
-	f, err := rangefeed.NewFactory(ts.Stopper(), db, ts.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 	rows := make(chan *kvpb.RangeFeedValue)
 	initialScanDone := make(chan struct{})
@@ -188,7 +188,7 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 	_, _, err = srv.SplitRange(mkKey("b"))
 	require.NoError(t, err)
 
-	f, err := rangefeed.NewFactory(ts.Stopper(), db, ts.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	// mu protects secondWriteTS.
@@ -301,7 +301,7 @@ func TestWithOnCheckpoint(t *testing.T) {
 		closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
 	}
 
-	f, err := rangefeed.NewFactory(ts.Stopper(), db, ts.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	var mu syncutil.RWMutex
@@ -398,7 +398,7 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 		closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
 	}
 
-	f, err := rangefeed.NewFactory(ts.Stopper(), db, ts.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	rows := make(chan *kvpb.RangeFeedValue)
@@ -499,7 +499,7 @@ func TestWithOnSSTable(t *testing.T) {
 		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
 		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
 	}
-	f, err := rangefeed.NewFactory(tsrv.Stopper(), db, tsrv.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(tsrv.AppStopper(), db, tsrv.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	// We start the rangefeed over a narrower span than the AddSSTable (c-e vs
@@ -581,6 +581,7 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109473),
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					SmallEngineBlocks: smallEngineBlocks,
@@ -589,16 +590,20 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
-	srv := tc.Server(0)
+	tsrv := tc.Server(0)
+	srv := tsrv.ApplicationLayer()
 	db := srv.DB()
 
 	_, _, err := tc.SplitRange(roachpb.Key("a"))
 	require.NoError(t, err)
 	require.NoError(t, tc.WaitForFullReplication())
 
-	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
-	require.NoError(t, err)
-	f, err := rangefeed.NewFactory(srv.Stopper(), db, srv.ClusterSettings(), nil)
+	// Enable rangefeeds, otherwise the thing will retry until they are enabled.
+	for _, l := range []serverutils.ApplicationLayerInterface{srv, tsrv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
+
+	f, err := rangefeed.NewFactory(srv.AppStopper(), db, srv.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	// We start the rangefeed over a narrower span than the AddSSTable (c-e vs
@@ -687,7 +692,8 @@ func TestWithOnDeleteRange(t *testing.T) {
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
-	srv := tc.Server(0)
+	tsrv := tc.Server(0)
+	srv := tsrv.ApplicationLayer()
 	db := srv.DB()
 
 	_, _, err := tc.SplitRange(roachpb.Key("a"))
@@ -696,23 +702,26 @@ func TestWithOnDeleteRange(t *testing.T) {
 
 	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
 	require.NoError(t, err)
-	f, err := rangefeed.NewFactory(srv.Stopper(), db, srv.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(srv.AppStopper(), db, srv.ClusterSettings(), nil)
 	require.NoError(t, err)
 
+	mkKey := func(s string) string {
+		return string(append(srv.Codec().TenantPrefix(), roachpb.Key(s)...))
+	}
 	// We lay down a few MVCC range tombstones and points. The first range
 	// tombstone should not be visible, because initial scans do not emit
 	// tombstones, nor should the points covered by it. The second range tombstone
 	// should be visible, because catchup scans do emit tombstones. The range
 	// tombstone should be ordered after the initial point, but before the foo
 	// catchup point, and the previous values should respect the range tombstones.
-	require.NoError(t, db.Put(ctx, "covered", "covered"))
-	require.NoError(t, db.Put(ctx, "foo", "covered"))
-	require.NoError(t, db.DelRangeUsingTombstone(ctx, "a", "z"))
-	require.NoError(t, db.Put(ctx, "foo", "initial"))
+	require.NoError(t, db.Put(ctx, mkKey("covered"), "covered"))
+	require.NoError(t, db.Put(ctx, mkKey("foo"), "covered"))
+	require.NoError(t, db.DelRangeUsingTombstone(ctx, mkKey("a"), mkKey("z")))
+	require.NoError(t, db.Put(ctx, mkKey("foo"), "initial"))
 	rangeFeedTS := db.Clock().Now()
-	require.NoError(t, db.Put(ctx, "covered", "catchup"))
-	require.NoError(t, db.DelRangeUsingTombstone(ctx, "a", "z"))
-	require.NoError(t, db.Put(ctx, "foo", "catchup"))
+	require.NoError(t, db.Put(ctx, mkKey("covered"), "catchup"))
+	require.NoError(t, db.DelRangeUsingTombstone(ctx, mkKey("a"), mkKey("z")))
+	require.NoError(t, db.Put(ctx, mkKey("foo"), "catchup"))
 
 	// We start the rangefeed over a narrower span than the DeleteRanges (c-g),
 	// to ensure the DeleteRange event is truncated to the registration span.
@@ -721,7 +730,10 @@ func TestWithOnDeleteRange(t *testing.T) {
 	deleteRangeC := make(chan *kvpb.RangeFeedDeleteRange)
 	rowC := make(chan *kvpb.RangeFeedValue)
 
-	spans := []roachpb.Span{{Key: roachpb.Key("c"), EndKey: roachpb.Key("g")}}
+	spans := []roachpb.Span{{
+		Key:    append(srv.Codec().TenantPrefix(), roachpb.Key("c")...),
+		EndKey: append(srv.Codec().TenantPrefix(), roachpb.Key("g")...),
+	}}
 	r, err := f.RangeFeed(ctx, "test", spans, rangeFeedTS,
 		func(ctx context.Context, e *kvpb.RangeFeedValue) {
 			select {
@@ -750,7 +762,7 @@ func TestWithOnDeleteRange(t *testing.T) {
 	// range tombstone nor the covered points.
 	select {
 	case e := <-rowC:
-		require.Equal(t, roachpb.Key("foo"), e.Key)
+		require.Equal(t, roachpb.Key(mkKey("foo")), e.Key)
 		value, err := e.Value.GetBytes()
 		require.NoError(t, err)
 		require.Equal(t, "initial", string(value))
@@ -767,7 +779,10 @@ func TestWithOnDeleteRange(t *testing.T) {
 	// previous value.
 	select {
 	case e := <-deleteRangeC:
-		require.Equal(t, roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("g")}, e.Span)
+		require.Equal(t, roachpb.Span{
+			Key:    append(srv.Codec().TenantPrefix(), roachpb.Key("c")...),
+			EndKey: append(srv.Codec().TenantPrefix(), roachpb.Key("g")...),
+		}, e.Span)
 		require.NotEmpty(t, e.Timestamp)
 	case <-time.After(3 * time.Second):
 		require.Fail(t, "timed out waiting for DeleteRange event")
@@ -775,7 +790,7 @@ func TestWithOnDeleteRange(t *testing.T) {
 
 	select {
 	case e := <-rowC:
-		require.Equal(t, roachpb.Key("covered"), e.Key)
+		require.Equal(t, roachpb.Key(mkKey("covered")), e.Key)
 		value, err := e.Value.GetBytes()
 		require.NoError(t, err)
 		require.Equal(t, "catchup", string(value))
@@ -788,7 +803,7 @@ func TestWithOnDeleteRange(t *testing.T) {
 
 	select {
 	case e := <-rowC:
-		require.Equal(t, roachpb.Key("foo"), e.Key)
+		require.Equal(t, roachpb.Key(mkKey("foo")), e.Key)
 		value, err := e.Value.GetBytes()
 		require.NoError(t, err)
 		require.Equal(t, "catchup", string(value))
@@ -808,20 +823,23 @@ func TestWithOnDeleteRange(t *testing.T) {
 
 	// Send another DeleteRange, and wait for the rangefeed event. This should
 	// be truncated to the rangefeed bounds (c-g).
-	require.NoError(t, db.DelRangeUsingTombstone(ctx, "a", "z"))
+	require.NoError(t, db.DelRangeUsingTombstone(ctx, mkKey("a"), mkKey("z")))
 	select {
 	case e := <-deleteRangeC:
-		require.Equal(t, roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("g")}, e.Span)
+		require.Equal(t, roachpb.Span{
+			Key:    append(srv.Codec().TenantPrefix(), roachpb.Key("c")...),
+			EndKey: append(srv.Codec().TenantPrefix(), roachpb.Key("g")...),
+		}, e.Span)
 		require.NotEmpty(t, e.Timestamp)
 	case <-time.After(3 * time.Second):
 		require.Fail(t, "timed out waiting for DeleteRange event")
 	}
 
 	// A final point write should be emitted with a tombstone as the previous value.
-	require.NoError(t, db.Put(ctx, "foo", "final"))
+	require.NoError(t, db.Put(ctx, mkKey("foo"), "final"))
 	select {
 	case e := <-rowC:
-		require.Equal(t, roachpb.Key("foo"), e.Key)
+		require.Equal(t, roachpb.Key(mkKey("foo")), e.Key)
 		value, err := e.Value.GetBytes()
 		require.NoError(t, err)
 		require.Equal(t, "final", string(value))
@@ -883,7 +901,7 @@ func TestUnrecoverableErrors(t *testing.T) {
 			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, srv.SystemLayer().Clock().Now()))
 	}
 
-	f, err := rangefeed.NewFactory(ts.Stopper(), kvDB, ts.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.AppStopper(), kvDB, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	preGCThresholdTS := hlc.Timestamp{WallTime: 1}
@@ -954,7 +972,7 @@ func TestMVCCHistoryMutationError(t *testing.T) {
 	}
 
 	// Set up a rangefeed.
-	f, err := rangefeed.NewFactory(ts.Stopper(), db, ts.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 
 	var once sync.Once
@@ -1075,7 +1093,7 @@ func TestRangefeedWithLabelsOption(t *testing.T) {
 			m[defaultLabel.k] == defaultLabel.v && m[label1.k] == label1.v && m[label2.k] == label2.v
 	}
 
-	f, err := rangefeed.NewFactory(ts.Stopper(), db, ts.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 	initialScanDone := make(chan struct{})
 
@@ -1149,7 +1167,7 @@ func TestRangeFeedStartTimeExclusive(t *testing.T) {
 		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
 	}
 
-	f, err := rangefeed.NewFactory(ts.Stopper(), db, ts.ClusterSettings(), nil)
+	f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
 	require.NoError(t, err)
 	rows := make(chan *kvpb.RangeFeedValue)
 	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{span}, ts2,

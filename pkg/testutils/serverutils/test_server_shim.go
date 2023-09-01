@@ -75,12 +75,6 @@ var PreventStartTenantError = errors.New("attempting to manually start a virtual
 func ShouldStartDefaultTestTenant(
 	t TestLogger, baseArg base.DefaultTestTenantOptions,
 ) (retval base.DefaultTestTenantOptions) {
-	defer func() {
-		if !(retval.TestTenantAlwaysEnabled() || retval.TestTenantAlwaysDisabled()) {
-			panic(errors.AssertionFailedf("programming error: no decision was actually taken"))
-		}
-	}()
-
 	// Explicit cases for enabling or disabling the default test tenant.
 	if baseArg.TestTenantAlwaysEnabled() {
 		return baseArg
@@ -107,14 +101,14 @@ func ShouldStartDefaultTestTenant(
 		}
 		if v {
 			t.Log(defaultTestTenantMessage + "\n(override via COCKROACH_TEST_TENANT)")
-			return base.TestTenantAlwaysEnabled
+			return base.InternalNonDefaultDecision(baseArg, true)
 		}
-		return base.InternalNonDefaultDecision
+		return base.InternalNonDefaultDecision(baseArg, false)
 	}
 
 	if globalDefaultSelectionOverride.isSet {
 		override := globalDefaultSelectionOverride.value
-		if baseArg.TestTenantAlwaysDisabled() {
+		if override.TestTenantAlwaysDisabled() {
 			if issueNum, label := override.IssueRef(); issueNum != 0 {
 				t.Logf("cluster virtualization disabled in global scope due to issue: #%d (expected label: %s)", issueNum, label)
 			}
@@ -132,9 +126,9 @@ func ShouldStartDefaultTestTenant(
 		t.Log(defaultTestTenantMessage)
 	}
 	if enabled {
-		return base.TestTenantAlwaysEnabled
+		return base.InternalNonDefaultDecision(baseArg, true)
 	}
-	return base.InternalNonDefaultDecision
+	return base.InternalNonDefaultDecision(baseArg, false)
 }
 
 // globalDefaultSelectionOverride is used when an entire package needs
@@ -196,6 +190,13 @@ func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInter
 		return nil, err
 	}
 
+	if t != nil {
+		if w, ok := s.(*wrap); ok {
+			// Redirect the info/warning messages to the test logs.
+			w.loggerFn = t.Logf
+		}
+	}
+
 	ctx := context.Background()
 
 	if err := s.Start(ctx); err != nil {
@@ -203,7 +204,7 @@ func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInter
 	}
 
 	if !allowAdditionalTenants {
-		s.DisableStartTenant(PreventStartTenantError)
+		s.TenantController().DisableStartTenant(PreventStartTenantError)
 	}
 
 	return s, nil
@@ -243,11 +244,16 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 		return nil, errors.AssertionFailedf("TestServerFactory not initialized. One needs to be injected " +
 			"from the package's TestMain()")
 	}
+	tcfg := params.DefaultTestTenant
+	if !(tcfg.TestTenantAlwaysEnabled() || tcfg.TestTenantAlwaysDisabled()) {
+		return nil, errors.AssertionFailedf("programming error: DefaultTestTenant does not contain a decision\n(maybe call ShouldStartDefaultTestTenant?)")
+	}
 
 	srv, err := srvFactoryImpl.New(params)
 	if err != nil {
 		return nil, err
 	}
+	srv = wrapTestServer(srv.(TestServerInterfaceRaw), tcfg)
 	return srv.(TestServerInterface), nil
 }
 

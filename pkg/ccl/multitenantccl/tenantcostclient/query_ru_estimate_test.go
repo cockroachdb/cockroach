@@ -83,7 +83,7 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 			},
 		},
 	})
-	defer tenant1.Stopper().Stop(ctx)
+	defer tenant1.AppStopper().Stop(ctx)
 	defer tenantDB1.Close()
 	tdb := sqlutils.MakeSQLRunner(tenantDB1)
 	tdb.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false")

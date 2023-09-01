@@ -111,7 +111,7 @@ func TestValidateTargetTenantClusterVersion(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer upgradePod.Stopper().Stop(context.Background())
+			defer upgradePod.AppStopper().Stop(context.Background())
 
 			tmServer := upgradePod.MigrationServer().(*server.TenantMigrationServer)
 			req := &serverpb.ValidateTargetClusterVersionRequest{
@@ -223,7 +223,7 @@ func TestBumpTenantClusterVersion(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer tenant.Stopper().Stop(context.Background())
+			defer tenant.AppStopper().Stop(context.Background())
 
 			// Check to see our initial active cluster versions are what we
 			// expect.

@@ -105,7 +105,7 @@ func TestCacheBasic(t *testing.T) {
 		DB:       insqlDB,
 		Storage:  m,
 	})
-	require.NoError(t, c.Start(ctx, s.Stopper()))
+	require.NoError(t, c.Start(ctx, s.AppStopper()))
 
 	// Make sure that protected timestamp gets updated.
 	ts := waitForAsOfAfter(t, c, hlc.Timestamp{})
@@ -196,7 +196,7 @@ func TestRefresh(t *testing.T) {
 		DB:       db,
 		Storage:  m,
 	})
-	require.NoError(t, c.Start(ctx, s.Stopper()))
+	require.NoError(t, c.Start(ctx, s.AppStopper()))
 
 	t.Run("already up-to-date", func(t *testing.T) {
 		ts := waitForAsOfAfter(t, c, hlc.Timestamp{})
@@ -361,7 +361,7 @@ func TestQueryRecord(t *testing.T) {
 		DB:       db,
 		Storage:  storage,
 	})
-	require.NoError(t, c.Start(ctx, s.Stopper()))
+	require.NoError(t, c.Start(ctx, s.AppStopper()))
 
 	// Wait for the initial fetch.
 	waitForAsOfAfter(t, c, hlc.Timestamp{})
@@ -427,7 +427,7 @@ func TestIterate(t *testing.T) {
 		DB:       db,
 		Storage:  m,
 	})
-	require.NoError(t, c.Start(ctx, s.Stopper()))
+	require.NoError(t, c.Start(ctx, s.AppStopper()))
 
 	sp42 := tableSpan(s.Codec(), 42)
 	sp43 := tableSpan(s.Codec(), 43)
@@ -573,7 +573,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 				DB:       s.InternalDB().(isql.DB),
 				Storage:  storage,
 			})
-			require.NoError(t, c.Start(ctx, s.Stopper()))
+			require.NoError(t, c.Start(ctx, s.AppStopper()))
 
 			testCase.test(t, p, c, func(records ...*ptpb.Record) {
 				for _, r := range records {
@@ -606,7 +606,7 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 		DB:       db,
 		Storage:  m,
 	})
-	require.NoError(t, c.Start(ctx, s.Stopper()))
+	require.NoError(t, c.Start(ctx, s.AppStopper()))
 
 	// Make sure that the initial state has been fetched.
 	ts := waitForAsOfAfter(t, c, hlc.Timestamp{})

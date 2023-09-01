@@ -40,7 +40,7 @@ func TestGCJobGetsMarkedIdle(t *testing.T) {
 	tenant, tenantDB := serverutils.StartTenant(t, s, base.TestTenantArgs{
 		TenantID: serverutils.TestTenantID(),
 	})
-	defer tenant.Stopper().Stop(ctx)
+	defer tenant.AppStopper().Stop(ctx)
 	defer tenantDB.Close()
 
 	sqlutils.MakeSQLRunner(mainDB).Exec(t,
