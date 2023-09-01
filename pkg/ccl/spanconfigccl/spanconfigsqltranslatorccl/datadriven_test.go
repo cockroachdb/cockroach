@@ -106,16 +106,26 @@ func TestDataDriven(t *testing.T) {
 		// test cluster).
 		ManagerDisableJobCreation: true,
 	}
+	tsArgs := func(attr string) base.TestServerArgs {
+		return base.TestServerArgs{
+			// Test fails when run within a tenant. More investigation
+			// is required. Tracked with #76378.
+			DisableDefaultTestTenant: true,
+			Knobs: base.TestingKnobs{
+				GCJob:      gcTestingKnobs,
+				SpanConfig: scKnobs,
+			},
+			StoreSpecs: []base.StoreSpec{
+				{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
+			},
+		}
+	}
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				// Test fails when run within a tenant. More investigation
-				// is required. Tracked with #76378.
-				DisableDefaultTestTenant: true,
-				Knobs: base.TestingKnobs{
-					GCJob:      gcTestingKnobs,
-					SpanConfig: scKnobs,
-				},
+		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+			ServerArgsPerNode: map[int]base.TestServerArgs{
+				0: tsArgs("n1"),
+				1: tsArgs("n2"),
+				2: tsArgs("n3"),
 			},
 		})
 		defer tc.Stopper().Stop(ctx)
