@@ -64,6 +64,9 @@ func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{})
 	case *livenesspb.NodeLivenessStatus:
 		d.ScanArgs(t, key, &tmp)
 		*dest = getNodeLivenessStatus(tmp)
+	case *eventSeriesType:
+		d.ScanArgs(t, key, &tmp)
+		*dest = getEventSeriesType(tmp)
 	default:
 		require.Fail(t, "unsupported type %T", dest)
 	}
