@@ -392,7 +392,7 @@ func setupDecommissionBench(
 		// import can saturate snapshots and leave underreplicated system ranges
 		// struggling.
 		// See GH issue #101532 for longer term solution.
-		if err := WaitForReplication(ctx, t, db, 3); err != nil {
+		if err := WaitForReplication(ctx, t, db, 3, atLeastReplicationFactor); err != nil {
 			t.Fatal(err)
 		}
 
