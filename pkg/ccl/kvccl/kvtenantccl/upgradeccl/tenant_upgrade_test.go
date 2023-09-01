@@ -127,7 +127,7 @@ func TestTenantUpgrade(t *testing.T) {
 		db.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{v2.String()}})
 
 		t.Log("restart the tenant")
-		tenantServer.Stopper().Stop(ctx)
+		tenantServer.AppStopper().Stop(ctx)
 		tenantServer, err := ts.StartTenant(ctx, base.TestTenantArgs{
 			TenantID: roachpb.MustMakeTenantID(initialTenantID),
 		})
@@ -150,7 +150,7 @@ func TestTenantUpgrade(t *testing.T) {
 			"SHOW CLUSTER SETTING version", [][]string{{v2.String()}})
 
 		t.Log("restart the new tenant")
-		tenant.Stopper().Stop(ctx)
+		tenant.AppStopper().Stop(ctx)
 		var err error
 		tenant, err = ts.StartTenant(ctx, base.TestTenantArgs{
 			TenantID: roachpb.MustMakeTenantID(postUpgradeTenantID),
@@ -274,7 +274,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 										// Wait until we are sure the stopper is quiescing.
 										for {
 											select {
-											case <-tenant.Stopper().ShouldQuiesce():
+											case <-tenant.AppStopper().ShouldQuiesce():
 												return nil
 											default:
 												continue
@@ -314,7 +314,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		go func() {
 			<-tenantStopperChannel
 			t.Log("received async notification to stop tenant")
-			tenant.Stopper().Stop(ctx)
+			tenant.AppStopper().Stop(ctx)
 			t.Log("tenant stopped")
 			waitForTenantClose <- struct{}{}
 		}()
@@ -344,9 +344,9 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			[][]string{{v1.String()}})
 
 		t.Log("restart the tenant")
-		tenant.Stopper().Stop(ctx)
+		tenant.AppStopper().Stop(ctx)
 		tenant, conn = startAndConnectToTenant(t, initialTenantID)
-		defer tenant.Stopper().Stop(ctx)
+		defer tenant.AppStopper().Stop(ctx)
 		db = sqlutils.MakeSQLRunner(conn)
 
 		// Keep trying to resume the stopper channel until the channel is closed,
@@ -380,6 +380,6 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			"SELECT * FROM t", [][]string{{"1"}, {"2"}})
 		db.CheckQueryResults(t,
 			"SHOW CLUSTER SETTING version", [][]string{{v2.String()}})
-		tenant.Stopper().Stop(ctx)
+		tenant.AppStopper().Stop(ctx)
 	})
 }

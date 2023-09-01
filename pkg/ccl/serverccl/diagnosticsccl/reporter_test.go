@@ -84,7 +84,7 @@ func TestTenantReport(t *testing.T) {
 	require.NotZero(t, len(last.FeatureUsage))
 
 	// Call PeriodicallyReportDiagnostics and ensure it sends out a report.
-	reporter.PeriodicallyReportDiagnostics(ctx, tenant.Stopper())
+	reporter.PeriodicallyReportDiagnostics(ctx, tenant.AppStopper())
 	testutils.SucceedsSoon(t, func() error {
 		if rt.diagServer.NumRequests() != 2 {
 			return errors.Errorf("did not receive a diagnostics report")

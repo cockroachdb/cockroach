@@ -69,7 +69,7 @@ func TestDataDriven(t *testing.T) {
 		ts := srv.ApplicationLayer()
 
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
-		ctx, cancel := ts.Stopper().WithCancelOnQuiesce(ctx)
+		ctx, cancel := ts.AppStopper().WithCancelOnQuiesce(ctx)
 		defer cancel()
 		schemaFeeds := map[int]schemafeed.SchemaFeed{}
 		parseTargets := func(t *testing.T, in string) (targets changefeedbase.Targets) {

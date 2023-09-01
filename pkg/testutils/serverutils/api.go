@@ -43,13 +43,57 @@ import (
 	"google.golang.org/grpc"
 )
 
-// TestServerInterface defines test server functionality that tests need; it is
-// implemented by server.TestServer.
-type TestServerInterface interface {
+// TestServerInterfaceRaw is the interface of server.testServer.
+type TestServerInterfaceRaw interface {
+	TestServerController
 	StorageLayerInterface
-	ApplicationLayerInterface
 	TenantControlInterface
 
+	// in testServer, the base implementation of
+	// ApplicationLayerInterface always points to the system tenant.
+	ApplicationLayerInterface
+}
+
+type TestServerInterface interface {
+	TestServerController
+
+	// StorageLayerInterface is implemented by TestServerInterface
+	// for backward-compatibility with existing test code.
+	// New code should spell out their intent clearly by calling
+	// the .StorageLayer() method.
+	StorageLayerInterface
+
+	// ApplicationLayerInterface is implemented by TestServerInterface
+	// for backward-compatibility with existing test code.
+	// New code should spell out their intent clearly by calling
+	// the .ApplicationLayer() or .SystemLayer() methods directly.
+	ApplicationLayerInterface
+
+	// TenantControlInterface is implemented by TestServerInterface
+	// for backward-compatibility with existing test code.
+	// New code should spell out their intent clearly by calling
+	// the .TenantController() method.
+	TenantControlInterface
+
+	// ApplicationLayer returns the interface to the application layer that is
+	// exercised by the test. Depending on how the test server is started
+	// and (optionally) randomization, this can be either the SQL layer
+	// of a secondary tenant or that of the system tenant.
+	ApplicationLayer() ApplicationLayerInterface
+
+	// SystemLayer returns the interface to the application layer
+	// of the system tenant.
+	SystemLayer() ApplicationLayerInterface
+
+	// StorageLayer returns the interface to the storage layer.
+	StorageLayer() StorageLayerInterface
+
+	// TenantController returns the interface to the tenant controller.
+	TenantController() TenantControlInterface
+}
+
+// TestServerController defines the control interface for a test server.
+type TestServerController interface {
 	// Start runs the server. This is pre-called by StartServer().
 	// It is provided for tests that use the TestServerFactory directly
 	// (mostly 'cockroach demo').
@@ -68,6 +112,10 @@ type TestServerInterface interface {
 	// Activate is the service activation phase of Start().
 	Activate(context.Context) error
 
+	// Stopper returns the stopper used by the server.
+	// TODO(knz): replace uses by Stop().
+	Stopper() *stop.Stopper
+
 	// Stop stops the server. This must be called at the end of a test
 	// to avoid leaking resources.
 	Stop(context.Context)
@@ -75,22 +123,6 @@ type TestServerInterface interface {
 	// SetReadyFn can be configured to notify a test when the server is
 	// ready. This is only effective when called before Start().
 	SetReadyFn(fn func(bool))
-
-	// ApplicationLayer returns the interface to the application layer that is
-	// exercised by the test. Depending on how the test server is started
-	// and (optionally) randomization, this can be either the SQL layer
-	// of a secondary tenant or that of the system tenant.
-	ApplicationLayer() ApplicationLayerInterface
-
-	// SystemLayer returns the interface to the application layer
-	// of the system tenant.
-	SystemLayer() ApplicationLayerInterface
-
-	// StorageLayer returns the interface to the storage layer.
-	StorageLayer() StorageLayerInterface
-
-	// TenantController returns the interface to the tenant controller.
-	TenantController() TenantControlInterface
 
 	// BinaryVersionOverride returns the value of an override if set using
 	// TestingKnobs.
@@ -182,6 +214,12 @@ type ApplicationLayerInterface interface {
 	// HTTPAuthServer returns the authserver.Server as an interface{}.
 	HTTPAuthServer() interface{}
 
+	// HTTPserver returns the server.httpServer as an interface{}.
+	HTTPServer() interface{}
+
+	// SQLLoopbackListener returns the *netutil.LoopbackListener as an interface{}.
+	SQLLoopbackListener() interface{}
+
 	// SQLServer returns the *sql.Server as an interface{}.
 	SQLServer() interface{}
 
@@ -258,8 +296,8 @@ type ApplicationLayerInterface interface {
 	// tenant server.
 	SettingsWatcher() interface{}
 
-	// Stopper returns the stopper used by the tenant.
-	Stopper() *stop.Stopper
+	// AppStopper returns the stopper used by the tenant.
+	AppStopper() *stop.Stopper
 
 	// Clock returns the clock used by the tenant.
 	Clock() *hlc.Clock
@@ -453,14 +491,17 @@ type TenantControlInterface interface {
 	// if the tenant record exists in KV.
 	WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error
 
-	// TestTenants returns the test tenants associated with the server.
+	// TestTenant returns the test tenant associated with the server.
 	//
-	// TODO(knz): rename to TestApplicationServices.
-	TestTenants() []ApplicationLayerInterface
+	// TODO(knz): rename to TestApplicationService.
+	TestTenant() ApplicationLayerInterface
 
 	// StartedDefaultTestTenant returns true if the server has started
 	// the service for the default test tenant.
 	StartedDefaultTestTenant() bool
+
+	// ServerController returns the *server.serverController as an interface{}
+	ServerController() interface{}
 }
 
 // StorageLayerInterface defines accessors to the storage layer of a
@@ -541,12 +582,6 @@ type StorageLayerInterface interface {
 	// assuming no additional information is added outside of the normal bootstrap
 	// process.
 	ExpectedInitialRangeCount() (int, error)
-
-	// ForceTableGC sends a GCRequest for the ranges corresponding to a table.
-	//
-	// An error will be returned if the same table name exists in multiple schemas
-	// inside the specified database.
-	ForceTableGC(ctx context.Context, database, table string, timestamp hlc.Timestamp) error
 
 	// UpdateChecker returns the server's *diagnostics.UpdateChecker as an
 	// interface{}. The UpdateChecker periodically phones home to check for new
