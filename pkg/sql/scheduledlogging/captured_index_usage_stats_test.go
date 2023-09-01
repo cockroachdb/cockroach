@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -98,18 +99,12 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	// Configure the delay between each emission of index usage stats logs.
 	telemetryCaptureIndexUsageStatsLoggingDelay.Override(context.Background(), &settings.SV, stubLoggingDelay)
 
-	scheduleCompleteChan := make(chan struct{})
-
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 		Knobs: base.TestingKnobs{
 			CapturedIndexUsageStatsKnobs: &CaptureIndexUsageStatsTestingKnobs{
 				getLoggingDuration: sd.getLoggingDuration,
 				getOverlapDuration: sd.getOverlapDuration,
-				onScheduleComplete: func() {
-					scheduleCompleteChan <- struct{}{}
-					<-scheduleCompleteChan
-				},
 			},
 		},
 	})
@@ -158,18 +153,14 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	expectedTotalNumEntriesInSingleInterval := 8
 	expectedNumberOfIndividualIndexEntriesInSingleInterval := 1
 
-	// Wait for channel value from end of 1st schedule.
-	<-scheduleCompleteChan
-
 	// Check the expected number of entries from the 1st schedule.
-	require.NoError(t, checkNumTotalEntriesAndNumIndexEntries(t,
-		expectedIndexNames,
-		expectedTotalNumEntriesInSingleInterval,
-		expectedNumberOfIndividualIndexEntriesInSingleInterval,
-		scheduleCompleteChan,
-	), "error encountered checking the number of total entries and number of index entries")
-
-	scheduleCompleteChan <- struct{}{}
+	testutils.SucceedsSoon(t, func() error {
+		return checkNumTotalEntriesAndNumIndexEntries(t,
+			expectedIndexNames,
+			expectedTotalNumEntriesInSingleInterval,
+			expectedNumberOfIndividualIndexEntriesInSingleInterval,
+		)
+	})
 
 	// Expect number of total entries to hold 2 times the number of entries in a
 	// single interval.
@@ -182,18 +173,14 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	stubLoggingDuration := stubScheduleInterval * 2
 	sd.setLoggingDuration(stubLoggingDuration)
 
-	// Wait for channel value from end of 2nd schedule.
-	<-scheduleCompleteChan
-
 	// Check the expected number of entries from the 2nd schedule.
-	require.NoError(t, checkNumTotalEntriesAndNumIndexEntries(t,
-		expectedIndexNames,
-		expectedTotalNumEntriesAfterTwoIntervals,
-		expectedNumberOfIndividualIndexEntriesAfterTwoIntervals,
-		scheduleCompleteChan,
-	), "error encountered checking the number of total entries and number of index entries")
-
-	scheduleCompleteChan <- struct{}{}
+	testutils.SucceedsSoon(t, func() error {
+		return checkNumTotalEntriesAndNumIndexEntries(t,
+			expectedIndexNames,
+			expectedTotalNumEntriesAfterTwoIntervals,
+			expectedNumberOfIndividualIndexEntriesAfterTwoIntervals,
+		)
+	})
 
 	// Expect number of total entries to hold 3 times the number of entries in a
 	// single interval.
@@ -202,21 +189,17 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	// entries in a single interval.
 	expectedNumberOfIndividualIndexEntriesAfterThreeIntervals := expectedNumberOfIndividualIndexEntriesInSingleInterval * 3
 
-	// Wait for channel value from end of 3rd schedule.
-	<-scheduleCompleteChan
-
 	// Check the expected number of entries from the 3rd schedule.
-	require.NoError(t, checkNumTotalEntriesAndNumIndexEntries(t,
-		expectedIndexNames,
-		expectedTotalNumEntriesAfterThreeIntervals,
-		expectedNumberOfIndividualIndexEntriesAfterThreeIntervals,
-		scheduleCompleteChan,
-	), "error encountered checking the number of total entries and number of index entries")
+	testutils.SucceedsSoon(t, func() error {
+		return checkNumTotalEntriesAndNumIndexEntries(t,
+			expectedIndexNames,
+			expectedTotalNumEntriesAfterThreeIntervals,
+			expectedNumberOfIndividualIndexEntriesAfterThreeIntervals,
+		)
+	})
 
 	// Stop capturing index usage statistics.
 	telemetryCaptureIndexUsageStatsEnabled.Override(context.Background(), &settings.SV, false)
-
-	scheduleCompleteChan <- struct{}{}
 
 	// Iterate through entries, ensure that the timestamp difference between each
 	// schedule is as expected.
@@ -280,7 +263,6 @@ func checkNumTotalEntriesAndNumIndexEntries(
 	expectedIndexNames []string,
 	expectedTotalEntries int,
 	expectedIndividualIndexEntries int,
-	scheduleCompleteChan chan struct{},
 ) error {
 	log.Flush()
 	// Fetch log entries.
@@ -292,13 +274,11 @@ func checkNumTotalEntriesAndNumIndexEntries(
 		log.WithMarkedSensitiveData,
 	)
 	if err != nil {
-		close(scheduleCompleteChan)
 		return err
 	}
 
 	// Assert that we have the correct number of entries.
 	if expectedTotalEntries != len(entries) {
-		close(scheduleCompleteChan)
 		return errors.Newf("expected %d total entries, got %d", expectedTotalEntries, len(entries))
 	}
 
@@ -307,7 +287,7 @@ func checkNumTotalEntriesAndNumIndexEntries(
 	for _, e := range entries {
 		t.Logf("checking entry: %v", e)
 		// Check that the entry has a tag for a node ID of 1.
-		if !strings.Contains(e.Tags, `n1`) {
+		if !strings.Contains(e.Tags, `n1`) && !strings.Contains(e.Tags, `nsql1`) {
 			t.Fatalf("expected the entry's tags to include n1, but include got %s", e.Tags)
 		}
 
@@ -316,7 +296,6 @@ func checkNumTotalEntriesAndNumIndexEntries(
 		}
 		err := json.Unmarshal([]byte(e.Message), &s)
 		if err != nil {
-			close(scheduleCompleteChan)
 			t.Fatal(err)
 		}
 		countByIndex[s.IndexName] = countByIndex[s.IndexName] + 1
@@ -325,13 +304,11 @@ func checkNumTotalEntriesAndNumIndexEntries(
 	t.Logf("found index counts: %+v", countByIndex)
 
 	if expected, actual := expectedTotalEntries/expectedIndividualIndexEntries, len(countByIndex); actual != expected {
-		close(scheduleCompleteChan)
 		return errors.Newf("expected %d indexes, got %d", expected, actual)
 	}
 
 	for idxName, c := range countByIndex {
 		if c != expectedIndividualIndexEntries {
-			close(scheduleCompleteChan)
 			return errors.Newf("for index %s: expected entry count %d, got %d",
 				idxName, expectedIndividualIndexEntries, c)
 		}
@@ -339,7 +316,6 @@ func checkNumTotalEntriesAndNumIndexEntries(
 
 	for _, idxName := range expectedIndexNames {
 		if _, ok := countByIndex[idxName]; !ok {
-			close(scheduleCompleteChan)
 			return errors.Newf("no entry found for index %s", idxName)
 		}
 	}
