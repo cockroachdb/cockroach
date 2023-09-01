@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -43,14 +44,18 @@ func leaseWaitForSessionIDAdoption(
 		return err
 	}
 	var rowCount int64 = 1
+	d.LeaseManager.Codec()
 	for r := retry.Start(retry.Options{MaxBackoff: time.Minute}); r.Next() && rowCount > 0; {
 		if err := d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			duration := lease.LeaseDuration.Get(&d.Settings.SV)
+			jitter := lease.LeaseJitterFraction.Get(&d.Settings.SV)
+			duration = time.Duration(float64(duration) * (1 - jitter))
 			// FIXME: This isn't crash safe :eyes:
 			// FIXME: Speed this up by using a settings hook
 			res, err := txn.QueryRow(ctx, "count-leases",
 				txn.KV(),
-				`SELECT count(*) FROM system.lease WHERE  expiration > current_timestamp AND expiration < $1 + '4 minutes'`,
-				now)
+				`SELECT count(*) FROM system.lease WHERE  expiration > current_timestamp AND expiration < $1`,
+				now.Add(duration))
 
 			if err != nil {
 				return err
