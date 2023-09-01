@@ -2004,6 +2004,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		AmbientCtx:           s.cfg.AmbientCtx,
 		TestingKnobs:         s.cfg.TestingKnobs.IntentResolverKnobs,
 		RangeDescriptorCache: intentResolverRangeCache,
+		Settings:             s.cfg.Settings,
 	})
 	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
 
