@@ -1451,3 +1451,70 @@ func TestJobRecordMissingUsername(t *testing.T) {
 		assert.EqualError(t, err, "job record missing username; could not make payload")
 	}
 }
+
+func TestGetClaimedResumerFromRegistry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	intervalOverride := time.Millisecond
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// Ensure no other jobs are created and adoptions and cancellations are quick
+		Knobs: base.TestingKnobs{
+			SpanConfig: &spanconfig.TestingKnobs{
+				ManagerDisableJobCreation: true,
+			},
+			JobsTestingKnobs: &TestingKnobs{
+				IntervalOverrides: TestingIntervalOverrides{
+					Adopt:  &intervalOverride,
+					Cancel: &intervalOverride,
+				},
+			},
+			KeyVisualizer: &keyvisualizer.TestingKnobs{
+				SkipJobBootstrap: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	idb := s.InternalDB().(isql.DB)
+	r := s.JobRegistry().(*Registry)
+
+	resumeStartChan := make(chan struct{})
+	resumeErrChan := make(chan error)
+	defer close(resumeErrChan)
+	var counter int
+	RegisterConstructor(jobspb.TypeImport, func(_ *Job, cs *cluster.Settings) Resumer {
+		return FakeResumer{
+			OnResume: func(ctx context.Context) error {
+				resumeStartChan <- struct{}{}
+				return <-resumeErrChan
+			},
+			FailOrCancel: func(ctx context.Context) error {
+				counter++
+				return nil
+			},
+		}
+	}, UsesTenantCostControl)
+
+	createJob := func() *Job {
+		jobID := r.MakeJobID()
+		require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err := r.CreateJobWithTxn(ctx, Record{
+				Details:  jobspb.ImportDetails{},
+				Progress: jobspb.ImportProgress{},
+				Username: username.TestUserName(),
+			}, jobID, txn)
+			return err
+		}))
+		job, err := r.LoadJob(ctx, jobID)
+		require.NoError(t, err)
+		<-resumeStartChan
+		return job
+	}
+
+	job1 := createJob()
+	resumer, err := r.GetResumerForClaimedJob(job1.ID())
+	require.NoError(t, err)
+	require.NoError(t, resumer.OnFailOrCancel(ctx, nil, nil))
+	require.Equal(t, 1, counter)
+}

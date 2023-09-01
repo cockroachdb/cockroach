@@ -53,6 +53,7 @@ type indexes struct {
 	unique      bool
 	payload     int
 	cycleLength uint64
+	workload    string
 }
 
 func init() {
@@ -72,6 +73,10 @@ var indexesMeta = workload.Meta{
 		g.flags.IntVar(&g.payload, `payload`, 64, `Size of the unindexed payload column.`)
 		g.flags.Uint64Var(&g.cycleLength, `cycle-length`, math.MaxUint64,
 			`Number of keys repeatedly accessed by each writer through upserts.`)
+		g.flags.StringVar(&g.workload, `workload`, `upsert`,
+			`Statement for workers to run [upsert, insert, update]. Defaults to upsert. `+
+				`Insert statements will fail if run after an insert or upsert workload with the same --seed. `+
+				`Update statements will fail unless run after an insert or upsert workload with the same --seed.`)
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -165,8 +170,22 @@ func (w *indexes) Ops(
 		return workload.QueryLoad{}, err
 	}
 
+	var stmt string
+	switch strings.ToLower(w.workload) {
+	case `upsert`:
+		stmt = `UPSERT INTO indexes VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
+	case `insert`:
+		stmt = `INSERT INTO indexes VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
+	case `update`:
+		stmt = `UPDATE indexes
+                SET col0 = $2, col1 = $3, col2 = $4, col3 = $5, col4 = $6, col5 = $7,
+                    col6 = $8, col7 = $9, col8 = $10, col9 = $11, payload = $12
+                WHERE key = $1`
+	default:
+		return workload.QueryLoad{}, errors.Errorf("unknown workload: %q", w.workload)
+	}
+
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
-	const stmt = `UPSERT INTO indexes VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		op := &indexesOp{
 			config: w,
@@ -211,8 +230,14 @@ func (o *indexesOp) run(ctx context.Context) error {
 	}
 
 	start := timeutil.Now()
-	_, err := o.stmt.Exec(ctx, args...)
+	res, err := o.stmt.Exec(ctx, args...)
 	elapsed := timeutil.Since(start)
 	o.hists.Get(`write`).Record(elapsed)
-	return err
+	if err != nil {
+		return err
+	}
+	if rows := res.RowsAffected(); rows != 1 {
+		return errors.Errorf("expected 1 row affected, saw %d", rows)
+	}
+	return nil
 }

@@ -51,11 +51,13 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-// adoptedJobs represents a the epoch and cancelation of a job id being run
-// by the registry.
+// adoptedJobs represents the epoch and cancellation of a job id being run by
+// the registry.
 type adoptedJob struct {
 	session sqlliveness.Session
 	isIdle  bool
+	// Reference to the Resumer that is currently running the job.
+	resumer Resumer
 	// Calling the func will cancel the context the job was resumed with.
 	cancel context.CancelFunc
 }
@@ -887,7 +889,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 		// Using a new context allows for independent lifetimes and cancellation.
 		resumerCtx, cancel = r.makeCtx()
 
-		if alreadyAdopted := r.addAdoptedJob(jobID, j.session, cancel); alreadyAdopted {
+		if alreadyAdopted := r.addAdoptedJob(jobID, j.session, cancel, resumer); alreadyAdopted {
 			log.Fatalf(
 				ctx,
 				"job %d: was just created but found in registered adopted jobs",
@@ -1887,6 +1889,19 @@ func (r *Registry) cancelRegisteredJobContext(jobID jobspb.JobID) bool {
 		aj.cancel()
 	}
 	return ok
+}
+
+// GetResumerForClaimedJob returns the resumer of the jobID if the registry has
+// a claim on the job.
+func (r *Registry) GetResumerForClaimedJob(jobID jobspb.JobID) (Resumer, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	aj, ok := r.mu.adoptedJobs[jobID]
+	if !ok {
+		return nil, &JobNotFoundError{jobID: jobID}
+	}
+	return aj.resumer, nil
 }
 
 func (r *Registry) getClaimedJob(jobID jobspb.JobID) (*Job, error) {
