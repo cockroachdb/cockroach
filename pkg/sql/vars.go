@@ -1379,7 +1379,6 @@ var varGen = map[string]sessionVar{
 
 	// See https://www.postgresql.org/docs/9.4/runtime-config-connection.html
 	`ssl`: {
-		Hidden: true,
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().IsSSL), nil
 		},
@@ -1399,6 +1398,7 @@ var varGen = map[string]sessionVar{
 	// In PG this is a pseudo-function used with SELECT, not SHOW.
 	// See https://www.postgresql.org/docs/10/static/functions-info.html
 	`session_user`: {
+		Hidden: true,
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return evalCtx.SessionData().User().Normalized(), nil
 		},
