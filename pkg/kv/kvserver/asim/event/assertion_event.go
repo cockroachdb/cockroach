@@ -12,6 +12,8 @@ package event
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
@@ -40,6 +42,14 @@ type assertionResult struct {
 	reason string
 }
 
+func (ar assertionResult) String() string {
+	if ar.holds {
+		return "passed"
+	} else {
+		return fmt.Sprintf("failed: %s", ar.reason)
+	}
+}
+
 // NewAssertionEvent is assertionEvent's constructor. It ensures proper
 // initialization of assertionResults, preventing panics like accessing a nil
 // pointer.
@@ -54,7 +64,26 @@ func NewAssertionEvent(assertions []assertion.SimulationAssertion) assertionEven
 // String provides a string representation of an assertion event. It is called
 // when the event executor summarizes the executed events in the end.
 func (ag assertionEvent) String() string {
-	return ""
+	if ag.result == nil {
+		panic("unexpected nil")
+	}
+	if len(ag.assertions) == 0 {
+		return "no assertions were registered"
+	}
+	if len(*ag.result) != len(ag.assertions) {
+		return "assertions were not executed; likely due to short test duration."
+	}
+
+	buf := &strings.Builder{}
+	buf.WriteString("assertion checking event\n")
+	for i, a := range ag.assertions {
+		buf.WriteString(fmt.Sprintf("\t\t\t%d. assertion=%s\n", i+1, a))
+		buf.WriteString(fmt.Sprintf("\t\t\t%v", (*ag.result)[i]))
+		if i != len(ag.assertions)-1 {
+			buf.WriteString("\n")
+		}
+	}
+	return buf.String()
 }
 
 // Func returns an assertion event function that runs the assertions defined in

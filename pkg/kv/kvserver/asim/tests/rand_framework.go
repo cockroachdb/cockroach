@@ -41,6 +41,7 @@ type testSettings struct {
 	randOptions   testRandOptions
 	clusterGen    clusterGenSettings
 	rangeGen      rangeGenSettings
+	eventGen      eventGenSettings
 }
 
 type randTestingFramework struct {
@@ -103,11 +104,13 @@ func (f randTestingFramework) getStaticSettings() gen.StaticSettings {
 	return gen.StaticSettings{}
 }
 
-func (f randTestingFramework) getStaticEvents() gen.StaticEvents {
+func (f randTestingFramework) getStaticEvents(
+	cluster gen.ClusterGen, settings gen.StaticSettings,
+) gen.StaticEvents {
 	if !f.s.randOptions.staticEvents {
 		return f.defaultStaticEventsGen()
 	}
-	return gen.StaticEvents{}
+	return f.randomEventSeriesGen(cluster, settings)
 }
 
 // runRandTest creates randomized configurations based on the specified test
@@ -118,7 +121,7 @@ func (f randTestingFramework) runRandTest() testResult {
 	ranges := f.getRanges()
 	load := f.getLoad()
 	staticSettings := f.getStaticSettings()
-	staticEvents := f.getStaticEvents()
+	staticEvents := f.getStaticEvents(cluster, staticSettings)
 	seed := f.s.randSource.Int63()
 	simulator := gen.GenerateSimulation(f.s.duration, cluster, ranges, load, staticSettings, staticEvents, seed)
 	initialState, initialTime := simulator.State(), simulator.Curr()
@@ -126,15 +129,16 @@ func (f randTestingFramework) runRandTest() testResult {
 	history := simulator.History()
 	failed, reason := checkAssertions(ctx, history, f.s.assertions)
 	return testResult{
-		seed:         seed,
-		failed:       failed,
-		reason:       reason,
-		clusterGen:   cluster,
-		rangeGen:     ranges,
-		loadGen:      load,
-		eventGen:     staticEvents,
-		initialState: initialState,
-		initialTime:  initialTime,
+		seed:          seed,
+		failed:        failed,
+		reason:        reason,
+		clusterGen:    cluster,
+		rangeGen:      ranges,
+		loadGen:       load,
+		eventGen:      staticEvents,
+		initialState:  initialState,
+		initialTime:   initialTime,
+		eventExecutor: simulator.EventExecutor(),
 	}
 }
 
@@ -257,5 +261,16 @@ func (f randTestingFramework) randomBasicRangesGen() gen.RangeGen {
 		}
 	default:
 		panic("unknown ranges placement type")
+	}
+}
+
+func (f randTestingFramework) randomEventSeriesGen(
+	cluster gen.ClusterGen, settings gen.StaticSettings,
+) gen.StaticEvents {
+	switch eventsType := f.s.eventGen.eventsType; eventsType {
+	case cycleViaHardcodedSurvivalGoals:
+		return generateSurvivalGoalsEvents(cluster.Regions(), settings.Settings.StartTime, f.s.eventGen.durationToAssertOnEvent)
+	default:
+		panic("unknown event series type")
 	}
 }
