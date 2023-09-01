@@ -424,8 +424,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`ALTER AGGREGATE a`, 74775, `alter aggregate`, ``},
 
-		{`CALL foo`, 17511, `call procedure`, ``},
-
 		{`CREATE AGGREGATE a`, 74775, `create aggregate`, ``},
 		{`CREATE CAST a`, 0, `create cast`, ``},
 		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`, ``},
