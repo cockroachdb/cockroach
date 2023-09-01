@@ -70,6 +70,7 @@ FILES = [
     "backup_options",
     "begin_stmt",
     "begin_transaction",
+    "call_stmt",
     "cancel_all_jobs_stmt",
     "cancel_job",
     "cancel_query",
