@@ -1145,14 +1145,24 @@ https://www.postgresql.org/docs/9.5/infoschema-sequences.html`,
 				if !table.IsSequence() {
 					return nil
 				}
+				typ := "INT8"
+				precision := 64
+				switch table.GetSequenceOpts().AsIntegerType {
+				case "INT2":
+					precision = 16
+					typ = "INT2"
+				case "INT4":
+					precision = 32
+					typ = "INT4"
+				}
 				return addRow(
-					tree.NewDString(db.GetName()),    // catalog
-					tree.NewDString(sc.GetName()),    // schema
-					tree.NewDString(table.GetName()), // name
-					tree.NewDString("bigint"),        // type
-					tree.NewDInt(64),                 // numeric precision
-					tree.NewDInt(2),                  // numeric precision radix
-					tree.NewDInt(0),                  // numeric scale
+					tree.NewDString(db.GetName()),      // catalog
+					tree.NewDString(sc.GetName()),      // schema
+					tree.NewDString(table.GetName()),   // name
+					tree.NewDString(typ),               // integer type, one of ["INT2", "INT4", "INT8"]
+					tree.NewDInt(tree.DInt(precision)), // numeric precision
+					tree.NewDInt(2),                    // numeric precision radix
+					tree.NewDInt(0),                    // numeric scale
 					tree.NewDString(strconv.FormatInt(table.GetSequenceOpts().Start, 10)),     // start value
 					tree.NewDString(strconv.FormatInt(table.GetSequenceOpts().MinValue, 10)),  // min value
 					tree.NewDString(strconv.FormatInt(table.GetSequenceOpts().MaxValue, 10)),  // max value
