@@ -26,6 +26,7 @@ BackReferencedIDs:
 ElementState:
 - Function:
     functionId: 110
+    isProcedure: false
     params:
     - class:
         class: IN

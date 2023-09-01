@@ -229,6 +229,9 @@ type Overload struct {
 	// IsUDF is set to true when this is a user-defined function overload built
 	// using CREATE FUNCTION. Note: Body can be empty even if IsUDF is true.
 	IsUDF bool
+	// IsProcedure is set to true when this is a user-defined procedure built
+	// using CREATE PROCEDURE.
+	IsProcedure bool
 	// Body is the SQL string body of a function. It can be set even if IsUDF is
 	// false if a builtin function is defined using a SQL string.
 	Body string
