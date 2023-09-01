@@ -394,7 +394,7 @@ func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
 
 	// Otherwise, wrap the input in an Ordinality operator.
 	colID := c.f.Metadata().AddColumn("rownum", types.Int)
-	private := memo.OrdinalityPrivate{ColID: colID}
+	private := memo.OrdinalityPrivate{ColID: colID, ForDuplicateRemoval: true}
 	return c.f.ConstructOrdinality(in, &private)
 }
 

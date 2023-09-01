@@ -417,3 +417,10 @@ func (c *CustomFuncs) addConjuncts(
 	}
 	return filters, true
 }
+
+// ForDuplicateRemoval returns true if the Ordinality expression was constructed
+// for the purposes of duplicate removal, and the actual values returned does
+// not matter.
+func (c *CustomFuncs) ForDuplicateRemoval(private *memo.OrdinalityPrivate) (ok bool) {
+	return private.ForDuplicateRemoval
+}
