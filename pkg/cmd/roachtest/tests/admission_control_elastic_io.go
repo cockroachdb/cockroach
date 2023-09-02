@@ -60,23 +60,27 @@ func registerElasticIO(r registry.Registry) {
 				WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
 				WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
 				WithGrafanaDashboardJSON(grafana.ChangefeedAdmissionControlGrafana)
-			err := c.StartGrafana(ctx, t.L(), promCfg)
-			require.NoError(t, err)
+			require.NoError(t, c.StartGrafana(ctx, t.L(), promCfg))
+
 			promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
 			require.NoError(t, err)
+
 			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
 
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, crdbNodes))
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workAndPromNode))
+
 			startOpts := option.DefaultStartOptsNoBackups()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 				"--vmodule=io_load_listener=2")
 			settings := install.MakeClusterSettings()
 			c.Start(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes))
+
 			setAdmissionControl(ctx, t, c, true)
 			duration := 30 * time.Minute
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
+
 			m.Go(func(ctx context.Context) error {
 				dur := " --duration=" + duration.String()
 				url := fmt.Sprintf(" {pgurl:1-%d}", crdbNodes)
@@ -86,6 +90,7 @@ func registerElasticIO(r registry.Registry) {
 				c.Run(ctx, c.Node(workAndPromNode), cmd)
 				return nil
 			})
+
 			m.Go(func(ctx context.Context) error {
 				const subLevelMetric = "storage_l0_sublevels"
 				getMetricVal := func(metricName string) (float64, error) {
@@ -110,6 +115,7 @@ func registerElasticIO(r registry.Registry) {
 					// Unreachable.
 					panic("unreachable")
 				}
+
 				now := timeutil.Now()
 				endTime := now.Add(duration)
 				// We typically see fluctuations from 1 to 5 sub-levels because the

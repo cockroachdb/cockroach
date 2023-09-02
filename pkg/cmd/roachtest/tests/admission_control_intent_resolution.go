@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -58,45 +57,52 @@ func registerIntentResolutionOverload(r registry.Registry) {
 			promCfg.WithPrometheusNode(c.Node(promNode).InstallNodes()[0]).
 				WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
 				WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
-				WithGrafanaDashboardJSON(grafana.ChangefeedAdmissionControlGrafana)
-			err := c.StartGrafana(ctx, t.L(), promCfg)
-			require.NoError(t, err)
+				WithGrafanaDashboard("https://go.crdb.dev/p/index-admission-control-grafana")
+			require.NoError(t, c.StartGrafana(ctx, t.L(), promCfg))
+
 			promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
 			require.NoError(t, err)
+
 			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
 
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, crdbNodes))
+
 			startOpts := option.DefaultStartOptsNoBackups()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 				"--vmodule=io_load_listener=2")
 			settings := install.MakeClusterSettings()
 			c.Start(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes))
+
 			setAdmissionControl(ctx, t, c, true)
+
 			t.Status("running txn")
 			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
+
 			m.Go(func(ctx context.Context) error {
 				db := c.Conn(ctx, t.L(), crdbNodes)
 				defer db.Close()
-				_, err := db.Exec(`CREATE TABLE test_table(id integer PRIMARY KEY, t TEXT)`)
-				if err != nil {
+				if _, err := db.Exec(`CREATE TABLE test_table(id integer PRIMARY KEY, t TEXT)`); err != nil {
 					return err
 				}
+
 				tx, err := db.BeginTx(ctx, &gosql.TxOptions{})
 				if err != nil {
 					return err
 				}
+
 				query := `INSERT INTO test_table(id, t) SELECT i, sha512(random()::text) FROM ` +
 					`generate_series(0, 75000000) AS t(i);`
-				_, err = tx.ExecContext(ctx, query)
-				if err != nil {
+				if _, err := tx.ExecContext(ctx, query); err != nil {
 					return err
 				}
+
 				t.Status("intents created, committing txn")
-				err = tx.Commit()
-				if err != nil {
+				if err := tx.Commit(); err != nil {
 					return err
 				}
+
 				t.Status("waiting for async intent resolution to complete")
+
 				const subLevelMetric = "storage_l0_sublevels"
 				const intentCountMetric = "intentcount"
 				getMetricVal := func(metricName string) (float64, error) {
@@ -120,6 +126,7 @@ func registerIntentResolutionOverload(r registry.Registry) {
 					// Unreachable.
 					panic("unreachable")
 				}
+
 				// Loop for up to 20 minutes. Intents take ~10min to resolve, and
 				// we're padding by another 10min.
 				const subLevelThreshold = 20
@@ -147,8 +154,10 @@ func registerIntentResolutionOverload(r registry.Registry) {
 						break
 					}
 				}
+
 				t.Status(fmt.Sprintf("done waiting errors: %d successes: %d, intent-count: %d",
 					numErrors, numSuccesses, latestIntentCount))
+
 				if latestIntentCount > 20 {
 					t.Fatalf("too many intents left")
 				}
