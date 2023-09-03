@@ -102,6 +102,9 @@ func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	reStripFileLinePrefix := regexp.MustCompile(`^[^ ]+ `)
+	// Scan stats (shown after loading the range descriptors) can be different in
+	// race builds.
+	reStripScanStats := regexp.MustCompile(`scan stats: .*$`)
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		e := newEnv(t)
@@ -124,8 +127,11 @@ func TestDataDriven(t *testing.T) {
 					if !printTrace || !strings.Contains(string(l.Message), "kvstorage") {
 						continue
 					}
+					msg := string(l.Message)
+					msg = reStripFileLinePrefix.ReplaceAllString(msg, ``)
+					msg = reStripScanStats.ReplaceAllString(msg, `scan stats: <redacted>`)
 
-					fmt.Fprintln(&buf, reStripFileLinePrefix.ReplaceAllString(string(l.Message), ``))
+					fmt.Fprintln(&buf, msg)
 				}
 				if buf.Len() == 0 {
 					fmt.Fprintln(&buf, "ok")

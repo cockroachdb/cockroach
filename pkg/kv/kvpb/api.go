@@ -1902,31 +1902,38 @@ func (c *TenantConsumption) Sub(other *TenantConsumption) {
 	}
 }
 
-func humanizePointCount(n uint64) redact.SafeString {
-	return redact.SafeString(humanize.SI(float64(n), ""))
+func humanizeCount(n uint64) redact.SafeString {
+	value, prefix := humanize.ComputeSI(float64(n))
+	return redact.SafeString(humanize.Ftoa(value) + prefix)
 }
 
 // SafeFormat implements redact.SafeFormatter.
 func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("scan stats: stepped %d times (%d internal); seeked %d times (%d internal); "+
+	w.Printf("scan stats: stepped %s times (%s internal); seeked %s times (%s internal); "+
 		"block-bytes: (total %s, cached %s); "+
 		"points: (count %s, key-bytes %s, value-bytes %s, tombstoned: %s) "+
 		"ranges: (count %s), (contained-points %s, skipped-points %s) "+
-		"evaluated requests: %d gets, %d scans, %d reverse scans",
-		s.NumInterfaceSteps, s.NumInternalSteps, s.NumInterfaceSeeks, s.NumInternalSeeks,
+		"evaluated requests: %s gets, %s scans, %s reverse scans",
+		humanizeCount(s.NumInterfaceSteps),
+		humanizeCount(s.NumInternalSteps),
+		humanizeCount(s.NumInterfaceSeeks),
+		humanizeCount(s.NumInternalSeeks),
 		humanizeutil.IBytes(int64(s.BlockBytes)),
 		humanizeutil.IBytes(int64(s.BlockBytesInCache)),
-		humanizePointCount(s.PointCount),
+		humanizeCount(s.PointCount),
 		humanizeutil.IBytes(int64(s.KeyBytes)),
 		humanizeutil.IBytes(int64(s.ValueBytes)),
-		humanizePointCount(s.PointsCoveredByRangeTombstones),
-		humanizePointCount(s.RangeKeyCount),
-		humanizePointCount(s.RangeKeyContainedPoints),
-		humanizePointCount(s.RangeKeySkippedPoints),
-		s.NumGets, s.NumScans, s.NumReverseScans)
+		humanizeCount(s.PointsCoveredByRangeTombstones),
+		humanizeCount(s.RangeKeyCount),
+		humanizeCount(s.RangeKeyContainedPoints),
+		humanizeCount(s.RangeKeySkippedPoints),
+		humanizeCount(s.NumGets),
+		humanizeCount(s.NumScans),
+		humanizeCount(s.NumReverseScans),
+	)
 	if s.SeparatedPointCount != 0 {
 		w.Printf(" separated: (count: %s, bytes: %s, bytes-fetched: %s)",
-			humanizePointCount(s.SeparatedPointCount),
+			humanizeCount(s.SeparatedPointCount),
 			humanizeutil.IBytes(int64(s.SeparatedPointValueBytes)),
 			humanizeutil.IBytes(int64(s.SeparatedPointValueBytesFetched)))
 	}
