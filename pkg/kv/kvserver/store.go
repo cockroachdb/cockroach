@@ -2014,10 +2014,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		}
 	}
 
-	// Start Raft processing goroutines.
-	s.cfg.Transport.Listen(s.StoreID(), s)
-	s.processRaft(ctx)
-
 	// Register a callback to unquiesce any ranges with replicas on a
 	// node transitioning from non-live to live.
 	if s.cfg.NodeLiveness != nil {
@@ -2089,6 +2085,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			s.applyAllFromSpanConfigStore(ctx)
 		})
 	}
+
+	// Start Raft processing goroutines.
+	s.cfg.Transport.Listen(s.StoreID(), s)
+	s.processRaft(ctx)
 
 	if !s.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
 		s.startLeaseRenewer(ctx)
