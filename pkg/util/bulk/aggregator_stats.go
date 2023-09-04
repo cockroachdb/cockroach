@@ -78,55 +78,57 @@ func flushTracingStats(
 	db isql.DB,
 	perNodeStats map[execinfrapb.ComponentID]map[string][]byte,
 ) error {
-	clusterWideAggregatorStats := make(map[string]TracingAggregatorEvent)
-	asOf := timeutil.Now().Format("20060102_150405.00")
+	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		clusterWideAggregatorStats := make(map[string]TracingAggregatorEvent)
+		asOf := timeutil.Now().Format("20060102_150405.00")
 
-	var clusterWideSummary bytes.Buffer
-	for component, nameToEvent := range perNodeStats {
-		clusterWideSummary.WriteString(fmt.Sprintf("## SQL Instance ID: %s; Flow ID: %s\n\n",
-			component.SQLInstanceID.String(), component.FlowID.String()))
-		for name, event := range nameToEvent {
-			// Write a proto file per tag. This machine-readable file can be consumed
-			// by other places we want to display this information egs: annotated
-			// DistSQL diagrams, DBConsole etc.
-			filename := fmt.Sprintf("%s/%s",
-				component.SQLInstanceID.String(), asOf)
-			msg, err := protoreflect.DecodeMessage(name, event)
-			if err != nil {
-				clusterWideSummary.WriteString(fmt.Sprintf("invalid protocol message: %v", err))
-				// If we failed to decode the event write the error to the file and
-				// carry on.
-				continue
-			}
+		var clusterWideSummary bytes.Buffer
+		for component, nameToEvent := range perNodeStats {
+			clusterWideSummary.WriteString(fmt.Sprintf("## SQL Instance ID: %s; Flow ID: %s\n\n",
+				component.SQLInstanceID.String(), component.FlowID.String()))
+			for name, event := range nameToEvent {
+				// Write a proto file per tag. This machine-readable file can be consumed
+				// by other places we want to display this information egs: annotated
+				// DistSQL diagrams, DBConsole etc.
+				filename := fmt.Sprintf("%s/%s",
+					component.SQLInstanceID.String(), asOf)
+				msg, err := protoreflect.DecodeMessage(name, event)
+				if err != nil {
+					clusterWideSummary.WriteString(fmt.Sprintf("invalid protocol message: %v", err))
+					// If we failed to decode the event write the error to the file and
+					// carry on.
+					continue
+				}
 
-			if err := jobs.WriteProtobinExecutionDetailFile(ctx, filename, msg, db, jobID); err != nil {
-				return err
-			}
+				if err := jobs.WriteProtobinExecutionDetailFile(ctx, filename, msg, txn, jobID); err != nil {
+					return err
+				}
 
-			// Construct a single text file that contains information on a per-node
-			// basis as well as a cluster-wide aggregate.
-			clusterWideSummary.WriteString(fmt.Sprintf("# %s\n", name))
+				// Construct a single text file that contains information on a per-node
+				// basis as well as a cluster-wide aggregate.
+				clusterWideSummary.WriteString(fmt.Sprintf("# %s\n", name))
 
-			aggEvent := msg.(TracingAggregatorEvent)
-			clusterWideSummary.WriteString(aggEvent.String())
-			clusterWideSummary.WriteString("\n")
+				aggEvent := msg.(TracingAggregatorEvent)
+				clusterWideSummary.WriteString(aggEvent.String())
+				clusterWideSummary.WriteString("\n")
 
-			if _, ok := clusterWideAggregatorStats[name]; ok {
-				clusterWideAggregatorStats[name].Combine(aggEvent)
-			} else {
-				clusterWideAggregatorStats[name] = aggEvent
+				if _, ok := clusterWideAggregatorStats[name]; ok {
+					clusterWideAggregatorStats[name].Combine(aggEvent)
+				} else {
+					clusterWideAggregatorStats[name] = aggEvent
+				}
 			}
 		}
-	}
 
-	for tag, event := range clusterWideAggregatorStats {
-		clusterWideSummary.WriteString("## Cluster-wide\n\n")
-		clusterWideSummary.WriteString(fmt.Sprintf("# %s\n", tag))
-		clusterWideSummary.WriteString(event.String())
-	}
+		for tag, event := range clusterWideAggregatorStats {
+			clusterWideSummary.WriteString("## Cluster-wide\n\n")
+			clusterWideSummary.WriteString(fmt.Sprintf("# %s\n", tag))
+			clusterWideSummary.WriteString(event.String())
+		}
 
-	filename := fmt.Sprintf("aggregatorstats.%s.txt", asOf)
-	return jobs.WriteExecutionDetailFile(ctx, filename, clusterWideSummary.Bytes(), db, jobID)
+		filename := fmt.Sprintf("aggregatorstats.%s.txt", asOf)
+		return jobs.WriteExecutionDetailFile(ctx, filename, clusterWideSummary.Bytes(), txn, jobID)
+	})
 }
 
 // AggregateTracingStats listens for AggregatorEvents on a channel and
