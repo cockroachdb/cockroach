@@ -48,6 +48,7 @@ var (
 	listPattern           string
 	secure                = false
 	tenantName            string
+	tenantInstance        int
 	extraSSHOptions       = ""
 	nodeEnv               []string
 	tag                   string
@@ -210,6 +211,8 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	_ = startTenantCmd.MarkFlagRequired("host-cluster")
 	startTenantCmd.Flags().IntVarP(&startOpts.TenantID,
 		"tenant-id", "t", startOpts.TenantID, "tenant ID")
+	startTenantCmd.Flags().IntVar(&startOpts.TenantInstance,
+		"tenant-instance", 0, "specific tenant instance to connect to")
 
 	stopCmd.Flags().IntVar(&sig, "sig", sig, "signal to pass to kill")
 	stopCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
@@ -345,6 +348,8 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd} {
 		cmd.Flags().StringVar(&tenantName,
 			"tenant-name", "", "specific tenant to connect to")
+		cmd.Flags().IntVar(&tenantInstance,
+			"tenant-instance", 0, "specific tenant instance to connect to")
 	}
 
 }
