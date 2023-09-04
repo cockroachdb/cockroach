@@ -236,7 +236,9 @@ func (e *executionDetailsBuilder) addLabelledGoroutines(ctx context.Context) {
 		return
 	}
 	filename := fmt.Sprintf("goroutines.%s.txt", timeutil.Now().Format("20060102_150405.00"))
-	if err := jobs.WriteExecutionDetailFile(ctx, filename, resp.Data, e.db, e.jobID); err != nil {
+	if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return jobs.WriteExecutionDetailFile(ctx, filename, resp.Data, txn, e.jobID)
+	}); err != nil {
 		log.Errorf(ctx, "failed to write goroutine for job %d: %v", e.jobID, err.Error())
 	}
 }
@@ -253,9 +255,11 @@ func (e *executionDetailsBuilder) addDistSQLDiagram(ctx context.Context) {
 	if row != nil && row[0] != tree.DNull {
 		dspDiagramURL := string(tree.MustBeDString(row[0]))
 		filename := fmt.Sprintf("distsql.%s.html", timeutil.Now().Format("20060102_150405.00"))
-		if err := jobs.WriteExecutionDetailFile(ctx, filename,
-			[]byte(fmt.Sprintf(`<meta http-equiv="Refresh" content="0; url=%s">`, dspDiagramURL)),
-			e.db, e.jobID); err != nil {
+		if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return jobs.WriteExecutionDetailFile(ctx, filename,
+				[]byte(fmt.Sprintf(`<meta http-equiv="Refresh" content="0; url=%s">`, dspDiagramURL)),
+				txn, e.jobID)
+		}); err != nil {
 			log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %v", e.jobID, err.Error())
 		}
 	}
@@ -278,7 +282,9 @@ func (e *executionDetailsBuilder) addClusterWideTraces(ctx context.Context) {
 	}
 
 	filename := fmt.Sprintf("trace.%s.zip", timeutil.Now().Format("20060102_150405.00"))
-	if err := jobs.WriteExecutionDetailFile(ctx, filename, zippedTrace, e.db, e.jobID); err != nil {
+	if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return jobs.WriteExecutionDetailFile(ctx, filename, zippedTrace, txn, e.jobID)
+	}); err != nil {
 		log.Errorf(ctx, "failed to write traces for job %d: %v", e.jobID, err.Error())
 	}
 }
