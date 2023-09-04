@@ -2475,7 +2475,7 @@ func (r *restoreResumer) dropDescriptors(
 		if !details.DescriptorsPublished {
 			if got, exp := mutableTables[i].Version, details.TableDescs[i].Version; got != exp {
 				log.Errorf(ctx, "version changed for restored descriptor %d before "+
-					"drop: got %d, expected %d", mutableTables[i].GetVersion(), got, exp)
+					"drop: got %d, expected %d", mutableTables[i].GetID(), got, exp)
 			}
 		}
 
