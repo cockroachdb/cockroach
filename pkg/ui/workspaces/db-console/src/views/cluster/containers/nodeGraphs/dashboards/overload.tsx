@@ -86,26 +86,18 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="LSM L0 Health"
+      title="IO Overload"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`The number of files and sublevels within Level 0.`}
+      tooltip={`The number of sublevels/files in L0 normalized by admission thresholds.`}
     >
-      <Axis label="count">
+      <Axis label="IO Overload">
         {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}
-              name="cr.store.storage.l0-sublevels"
-              title={
-                "L0 Sublevels " + nodeDisplayName(nodeDisplayNameByID, nid)
-              }
-              sources={storeIDsForNode(storeIDsByNodeID, nid)}
-            />
-            <Metric
-              key={nid}
-              name="cr.store.storage.l0-num-files"
-              title={"L0 Files " + nodeDisplayName(nodeDisplayNameByID, nid)}
+              name="cr.store.admission.io.overload"
+              title={"IO Overload " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={storeIDsForNode(storeIDsByNodeID, nid)}
             />
           </>
@@ -152,6 +144,101 @@ export default function (props: GraphDashboardProps) {
             sources={[nid]}
             nonNegativeRate
           />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Flow Tokens Wait Time: 75th percentile"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+    >
+      <Axis units={AxisUnits.Duration} label="p75 flow token wait duration">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.kvadmission.flow_controller.regular_wait_duration-p75"
+              title={
+                "Regular flow token wait time " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+              downsampleMax
+            />
+            <Metric
+              key={nid}
+              name="cr.node.kvadmission.flow_controller.elastic_wait_duration-p75"
+              title={
+                "Elastic flow token wait time " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+              downsampleMax
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Requests Waiting For Flow Tokens"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+    >
+      <Axis label="Count">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.kvadmission.flow_controller.regular_requests_waiting"
+              title={
+                "Regular requests waiting " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+            <Metric
+              key={nid}
+              name="cr.node.kvadmission.flow_controller.elastic_requests_waiting"
+              title={
+                "Elastic requests waiting " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Blocked Replication Streams"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+    >
+      <Axis label="Count">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.kvadmission.flow_controller.regular_blocked_stream_count"
+              title={
+                "Blocked regular streams " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+            <Metric
+              key={nid}
+              name="cr.node.kvadmission.flow_controller.elastic_blocked_stream_count"
+              title={
+                "Blocked elastic streams " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+          </>
         ))}
       </Axis>
     </LineGraph>,
