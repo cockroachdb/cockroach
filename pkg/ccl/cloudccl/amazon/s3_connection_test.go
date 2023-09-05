@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // import External Connection providers.
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -39,14 +39,12 @@ func TestS3ExternalConnection(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 
-	params := base.TestClusterArgs{}
-	params.ServerArgs.ExternalIODir = dir
+	ts, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+	})
+	defer ts.Stopper().Stop(context.Background())
 
-	tc := testcluster.StartTestCluster(t, 1, params)
-	defer tc.Stopper().Stop(context.Background())
-
-	tc.WaitForNodeLiveness(t)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	// Setup some dummy data.
 	sqlDB.Exec(t, `CREATE DATABASE foo`)
@@ -194,14 +192,11 @@ func TestAWSKMSExternalConnection(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 
-	params := base.TestClusterArgs{}
-	params.ServerArgs.ExternalIODir = dir
-
-	tc := testcluster.StartTestCluster(t, 1, params)
-	defer tc.Stopper().Stop(context.Background())
-
-	tc.WaitForNodeLiveness(t)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	ts, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+	})
+	defer ts.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	// Setup some dummy data.
 	sqlDB.Exec(t, `CREATE DATABASE foo`)
@@ -304,14 +299,11 @@ func TestAWSKMSExternalConnectionAssumeRole(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 
-	params := base.TestClusterArgs{}
-	params.ServerArgs.ExternalIODir = dir
-
-	tc := testcluster.StartTestCluster(t, 1, params)
-	defer tc.Stopper().Stop(context.Background())
-
-	tc.WaitForNodeLiveness(t)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	ts, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+	})
+	defer ts.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	// Setup some dummy data.
 	sqlDB.Exec(t, `CREATE DATABASE foo`)
