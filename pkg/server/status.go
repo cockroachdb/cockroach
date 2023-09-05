@@ -479,6 +479,8 @@ type statusServer struct {
 	// 256 concurrent queries actively running on a node, then it would
 	// take 2^16 seconds (18 hours) to hit any one of them.
 	cancelSemaphore *quotapool.IntPool
+
+	knobs *TestingKnobs
 }
 
 // systemStatusServer is an extension of the standard
@@ -565,6 +567,7 @@ func newStatusServer(
 	internalExecutor *sql.InternalExecutor,
 	serverIterator ServerIterator,
 	clock *hlc.Clock,
+	knobs *TestingKnobs,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	if !rpcCtx.TenantID.IsSystem() {
@@ -591,6 +594,7 @@ func newStatusServer(
 
 		// See the docstring on cancelSemaphore for details about this initialization.
 		cancelSemaphore: quotapool.NewIntPool("pgwire-cancel", 256),
+		knobs:           knobs,
 	}
 
 	return server
@@ -636,6 +640,7 @@ func newSystemStatusServer(
 		internalExecutor,
 		serverIterator,
 		clock,
+		knobs,
 	)
 
 	return &systemStatusServer{
@@ -686,6 +691,11 @@ func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, er
 func (s *statusServer) dialNode(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (serverpb.StatusClient, error) {
+	if s.knobs != nil && s.knobs.DialNodeCallback != nil {
+		if err := s.knobs.DialNodeCallback(ctx, nodeID); err != nil {
+			return nil, err
+		}
+	}
 	conn, err := s.serverIterator.dialNode(ctx, serverID(nodeID))
 	if err != nil {
 		return nil, err
@@ -1614,7 +1624,7 @@ func (s *statusServer) fetchProfileFromAllNodes(
 	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
 		statusClient := client.(serverpb.StatusClient)
 		var pd *profData
-		err = timeutil.RunWithTimeout(ctx, opName, 1*time.Minute, func(ctx context.Context) error {
+		err := timeutil.RunWithTimeout(ctx, opName, 1*time.Minute, func(ctx context.Context) error {
 			resp, err := statusClient.Profile(ctx, &serverpb.ProfileRequest{
 				NodeId:              fmt.Sprintf("%d", nodeID),
 				Type:                req.Type,

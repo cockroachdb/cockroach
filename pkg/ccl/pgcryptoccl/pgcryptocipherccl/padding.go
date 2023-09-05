@@ -1,14 +1,12 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package pgcryptocipher
+package pgcryptocipherccl
 
 import (
 	"bytes"
@@ -25,10 +23,14 @@ func pkcsPad(data []byte, blockSize int) ([]byte, error) {
 		return nil, errors.Newf("invalid block size for PKCS padding: %d", blockSize)
 	}
 
-	paddingLen := blockSize - len(data)%blockSize
-	padding := bytes.Repeat([]byte{byte(paddingLen)}, paddingLen)
+	paddedData := make([]byte, len(data))
+	copy(paddedData, data)
 
-	return append(data, padding...), nil
+	paddingSize := blockSize - len(data)%blockSize
+	padding := bytes.Repeat([]byte{byte(paddingSize)}, paddingSize)
+	paddedData = append(paddedData, padding...)
+
+	return paddedData, nil
 }
 
 // pkcsUnpad removes the padding added by pkcsPad.
