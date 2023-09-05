@@ -91,6 +91,7 @@ go_test(
     embed = [":descs"],
     deps = [
         "//pkg/base",
+        "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver",
         "//pkg/security/securityassets",
