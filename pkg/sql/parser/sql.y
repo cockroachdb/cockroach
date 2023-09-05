@@ -1543,7 +1543,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <tree.Expr> numeric_only
 %type <tree.AliasClause> alias_clause opt_alias_clause func_alias_clause opt_func_alias_clause
 %type <bool> opt_ordinality opt_compact
-%type <*tree.Order> sortby
+%type <*tree.Order> sortby sortby_index
 %type <tree.IndexElem> index_elem index_elem_options create_as_param
 %type <tree.TableExpr> table_ref numeric_table_ref func_table
 %type <tree.Exprs> rowsfrom_list
@@ -12734,7 +12734,16 @@ single_sort_clause:
   {
     $$.val = tree.OrderBy([]*tree.Order{$3.order()})
   }
+| ORDER BY sortby_index
+  {
+    return unimplementedWithIssueDetail(sqllex, 109847, "order by index")
+  }
 | ORDER BY sortby ',' sortby_list
+  {
+    sqllex.Error("multiple ORDER BY clauses are not supported in this function")
+    return 1
+  }
+| ORDER BY sortby_index ',' sortby_list
   {
     sqllex.Error("multiple ORDER BY clauses are not supported in this function")
     return 1
@@ -12745,9 +12754,34 @@ sortby_list:
   {
     $$.val = []*tree.Order{$1.order()}
   }
+| sortby_index
+  {
+    $$.val = []*tree.Order{$1.order()}
+  }
 | sortby_list ',' sortby
   {
     $$.val = append($1.orders(), $3.order())
+  }
+| sortby_list ',' sortby_index
+  {
+    $$.val = append($1.orders(), $3.order())
+  }
+
+sortby_index:
+  PRIMARY KEY table_name opt_asc_desc
+  {
+    name := $3.unresolvedObjectName().ToTableName()
+    $$.val = &tree.Order{OrderType: tree.OrderByIndex, Direction: $4.dir(), Table: name}
+  }
+| INDEX_AFTER_ORDER_BY_BEFORE_AT table_name '@' index_name opt_asc_desc
+  {
+    name := $2.unresolvedObjectName().ToTableName()
+    $$.val = &tree.Order{
+      OrderType: tree.OrderByIndex,
+      Direction: $5.dir(),
+      Table:     name,
+      Index:     tree.UnrestrictedName($4),
+    }
   }
 
 sortby:
@@ -12761,21 +12795,6 @@ sortby:
       Expr:       $1.expr(),
       Direction:  dir,
       NullsOrder: nullsOrder,
-    }
-  }
-| PRIMARY KEY table_name opt_asc_desc
-  {
-    name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Order{OrderType: tree.OrderByIndex, Direction: $4.dir(), Table: name}
-  }
-| INDEX_AFTER_ORDER_BY_BEFORE_AT table_name '@' index_name opt_asc_desc
-  {
-    name := $2.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Order{
-      OrderType: tree.OrderByIndex,
-      Direction: $5.dir(),
-      Table:     name,
-      Index:     tree.UnrestrictedName($4),
     }
   }
 
