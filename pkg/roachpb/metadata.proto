@@ -485,18 +485,65 @@ message GCHint {
   // which doesn't carry this hint, because we know that the entire span is
   // probably not covered by range tombstones.
   //
-  // TODO(pavelkalinnikov): this hint is also used for two other purposes,
-  // factor them out.
+  // TODO(pavelkalinnikov): this is used for one other purpose, factor it out.
   //
-  //  - Upper layers can set this hint if they want to expedite GC process for
-  //  this range. For example, on deleting a SQL table/index, the schema change
-  //  job is blocked until GC removes the data entirely, so it sets the hint.
-  //  This case is buggy, see #107931.
-  //
-  //  - When this hint is set, it is likely that adjacent ranges have it too,
-  //  especially in bulk deletion situations. Once the GC queue sees this hint,
-  //  it scans meta to find all the ranges that have it set too, and GC them
-  //  with higher priority / lower delay. Ultimately, this reduces the cost of
-  //  Pebble compactions that can be triggered by writing range tombstones.
+  // When this hint is set, it is likely that adjacent ranges have it too,
+  // especially in bulk deletion situations. Once the GC queue sees this hint,
+  // it scans meta to find all the ranges that have it set too, and GC them with
+  // higher priority / lower delay. Ultimately, this reduces the cost of Pebble
+  // compactions that can be triggered by writing range tombstones.
   optional util.hlc.Timestamp latest_range_delete_timestamp = 1 [(gogoproto.nullable) = false];
+
+  // MinDeleteTimestamp is the lowest timestamp for which some data in the range
+  // must be garbage collected when its TTL expires.
+  //
+  // Typically, this is left up to the MVCC GC job to decide when to delete
+  // data. Because of the way the GC scoring works, it may take a long time
+  // until the deletion happens. Some upper layer jobs require a more timely
+  // deletion. For example, when a SQL table/index is dropped, there is a schema
+  // change job waiting on the GC.
+  //
+  // We carry this hint to help expedite GC in such cases. When the current time
+  // is past MinDeleteTimestamp+TTL, garbage collection is triggered shortly.
+  //
+  // It is possible that there are multiple timestamps for which some data must
+  // be deleted, e.g. if multiple SQL tables touching the same Range are
+  // deleted. We could carry all such timestamps in this GCHint for accuracy,
+  // but we would need extra measures to prevent uncontrollable growth of this
+  // list, and excessive number of GC runs it could cause.
+  //
+  // Instead, we compress this list of timestamps to a pair of min and max. We
+  // need to preserve the absolute max, because otherwise the deletion of the
+  // data under this timestamp may never be expedited.
+  //
+  // We also need to preserve the min, or some timestamp > min within a bounded
+  // distance from min. If we don't do so, then it's possible to prevent
+  // expedited GC by updating the max timestamp to higher and higher values,
+  // always within the TTL.
+  //
+  // With such a structure of the hint, we have a couple of guarantees:
+  //
+  //  1. The number of expedited GC runs on this range does not exceed 2 per TTL.
+  //
+  // Worst case: min < max < min+TTL = now. GC runs at time now = min+TTL, and
+  // maybe at max+TTL or later time. Since any new write is at timestamp >= now,
+  // the next GC run after these two is at least TTL away from now.
+  //
+  //  2. The max delay of expedited GC is close to one TTL, i.e. in the worst
+  //     case the GC will run at timestamp + 2*TTL.
+  //
+  // Worst case: now = max = min+TTL. GC runs at time now and clears the min
+  // timestamp. The only remaining timestamp (max) is min+TTL. The next possible
+  // expedited GC run is thus at min+2*TTL. We may have omitted some timestamps
+  // between min and max, and they are now <= 2*TTL away from the next GC run.
+  optional util.hlc.Timestamp min_delete_timestamp = 2 [(gogoproto.nullable) = false];
+  // MaxDeleteTimestamp is the highest timestamp for which some data in the
+  // range must be garbage collected when its TTL expires.
+  //
+  // INVARIANT: if MinDeleteTimestamp is empty, then MaxDeleteTimestamp is empty.
+  // INVARIANT: if MaxDeleteTimestamp is set, it exceeds MinDeleteTimestamp.
+  //
+  // NB: if MinDeleteTimestamp is set and MaxDeleteTimestamp is empty, it means
+  // there is only one pending deletion timestamp.
+  optional util.hlc.Timestamp max_delete_timestamp = 3 [(gogoproto.nullable) = false];
 }

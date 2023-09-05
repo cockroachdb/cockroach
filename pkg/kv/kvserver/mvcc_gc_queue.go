@@ -501,14 +501,16 @@ func makeMVCCGCQueueScoreImpl(
 		r.FinalScore++
 	}
 
+	if shouldRunGC(hint, gcTTL, now) {
+		r.ShouldQueue = true
+	}
+
 	maybeRangeDel := suspectedFullRangeDeletion(ms)
 	hasActiveGCHint := gcHintedRangeDelete(hint, gcTTL, now)
-
 	if hasActiveGCHint && (maybeRangeDel || ms.ContainsEstimates > 0) {
 		// We have GC hint allowing us to collect range and we either satisfy
 		// heuristic that indicate no live data or we have estimates and we assume
 		// hint is correct.
-		r.ShouldQueue = canAdvanceGCThreshold
 		r.FinalScore = deleteRangePriority
 	}
 
@@ -521,12 +523,26 @@ func makeMVCCGCQueueScoreImpl(
 	return r
 }
 
+// gcHintedRangeDelete returns true iff GC should be run because the entire
+// range keyspace is likely covered by range tombstones.
 func gcHintedRangeDelete(hint roachpb.GCHint, ttl time.Duration, now hlc.Timestamp) bool {
-	deleteTimestamp := hint.LatestRangeDeleteTimestamp
-	if deleteTimestamp.IsEmpty() {
-		return false
-	}
-	return deleteTimestamp.Add(ttl.Nanoseconds(), 0).Less(now)
+	return canGC(hint.LatestRangeDeleteTimestamp, ttl, now)
+}
+
+// shouldRunGC returns whether the GCHint suggests running GC.
+func shouldRunGC(hint roachpb.GCHint, ttl time.Duration, now hlc.Timestamp) bool {
+	// NB: the check below is redundant, we could just check MinDeleteTimestamp.
+	// However, in versions <= 23.1 we only set LatestRangeDeleteTimestamp to
+	// carry both kinds of hints. We must take it into account until all GCHints
+	// are written by newer versions.
+	return canGC(hint.MinDeleteTimestamp, ttl, now) ||
+		canGC(hint.LatestRangeDeleteTimestamp, ttl, now)
+}
+
+// canGC returns true iff the given timestamp can be garbage-collected at the
+// given moment in time, provided the configured data TTL.
+func canGC(t hlc.Timestamp, ttl time.Duration, now hlc.Timestamp) bool {
+	return t.IsSet() && t.Add(ttl.Nanoseconds(), 0).Less(now)
 }
 
 // suspectedFullRangeDeletion checks for ranges where there's no live data and

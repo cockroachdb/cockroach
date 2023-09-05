@@ -636,7 +636,8 @@ func TestGCScoreWithHint(t *testing.T) {
 			liveData: 1000,
 			garbage:  10,
 			hintTs:   now.Add(-ttl.Nanoseconds()-1, 0),
-			shouldGC: false,
+			shouldGC: true,
+			priority: 0.5984328537234342,
 		},
 	} {
 		t.Run(d.name, func(t *testing.T) {
