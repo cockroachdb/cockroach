@@ -79,46 +79,48 @@ import (
 //   - "release" [record-id=<int>]
 //     Releases the protected timestamp record with id.
 func TestDataDriven(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+	t.Cleanup(leaktest.AfterTest(t))
+	t.Cleanup(func() {
+		log.Scope(t).Close(t)
+	})
 
 	ctx := context.Background()
-
-	gcWaiter := sync.NewCond(&syncutil.Mutex{})
-	allowGC := true
-	gcTestingKnobs := &sql.GCJobTestingKnobs{
-		RunBeforeResume: func(_ jobspb.JobID) error {
-			gcWaiter.L.Lock()
-			for !allowGC {
-				gcWaiter.Wait()
-			}
-			gcWaiter.L.Unlock()
-			return nil
-		},
-		SkipWaitingForMVCCGC: true,
-	}
-	scKnobs := &spanconfig.TestingKnobs{
-		// Instead of relying on the GC job to wait out TTLs and clear out
-		// descriptors, let's simply exclude dropped tables to simulate
-		// descriptors no longer existing. See comment on
-		// ExcludeDroppedDescriptorsFromLookup for more details.
-		ExcludeDroppedDescriptorsFromLookup: true,
-		// We run the reconciler manually in this test (through the span config
-		// test cluster).
-		ManagerDisableJobCreation: true,
-	}
-	tsArgs := func(attr string) base.TestServerArgs {
-		return base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				GCJob:      gcTestingKnobs,
-				SpanConfig: scKnobs,
-			},
-			StoreSpecs: []base.StoreSpec{
-				{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
-			},
-		}
-	}
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+		t.Parallel() // SAFE FOR TESTING
+		gcWaiter := sync.NewCond(&syncutil.Mutex{})
+		allowGC := true
+		gcTestingKnobs := &sql.GCJobTestingKnobs{
+			RunBeforeResume: func(_ jobspb.JobID) error {
+				gcWaiter.L.Lock()
+				for !allowGC {
+					gcWaiter.Wait()
+				}
+				gcWaiter.L.Unlock()
+				return nil
+			},
+			SkipWaitingForMVCCGC: true,
+		}
+		scKnobs := &spanconfig.TestingKnobs{
+			// Instead of relying on the GC job to wait out TTLs and clear out
+			// descriptors, let's simply exclude dropped tables to simulate
+			// descriptors no longer existing. See comment on
+			// ExcludeDroppedDescriptorsFromLookup for more details.
+			ExcludeDroppedDescriptorsFromLookup: true,
+			// We run the reconciler manually in this test (through the span config
+			// test cluster).
+			ManagerDisableJobCreation: true,
+		}
+		tsArgs := func(attr string) base.TestServerArgs {
+			return base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					GCJob:      gcTestingKnobs,
+					SpanConfig: scKnobs,
+				},
+				StoreSpecs: []base.StoreSpec{
+					{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
+				},
+			}
+		}
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				// Fails with nil pointer dereference. Tracked with #76378 and #106818.
