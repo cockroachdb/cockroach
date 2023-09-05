@@ -113,9 +113,9 @@ func TestDataDriven(t *testing.T) {
 		}
 		tsArgs := func(attr string) base.TestServerArgs {
 			return base.TestServerArgs{
-			// Test fails when run within a tenant. More investigation
-			// is required. Tracked with #76378.
-			DisableDefaultTestTenant: true,
+				// Test fails when run within a tenant. More investigation
+				// is required. Tracked with #76378.
+				DisableDefaultTestTenant: true,
 				Knobs: base.TestingKnobs{
 					GCJob:      gcTestingKnobs,
 					SpanConfig: scKnobs,
@@ -125,7 +125,12 @@ func TestDataDriven(t *testing.T) {
 				},
 			}
 		}
-		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		// Use 1 node by default to make tests run faster.
+		nodes := 1
+		if strings.Contains(path, "3node") {
+			nodes = 3
+		}
+		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{
 			ServerArgsPerNode: map[int]base.TestServerArgs{
 				0: tsArgs("n1"),
 				1: tsArgs("n2"),
