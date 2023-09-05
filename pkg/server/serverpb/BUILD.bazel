@@ -72,6 +72,7 @@ go_proto_library(
         "//pkg/server/status/statuspb",
         "//pkg/sql/appstatspb",
         "//pkg/sql/catalog/descpb",  # keep
+        "//pkg/sql/clusterunique",  # keep
         "//pkg/sql/contentionpb",
         "//pkg/sql/execinfrapb",  # keep
         "//pkg/sql/pgwire/pgwirecancel",  # keep

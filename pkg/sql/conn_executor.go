@@ -641,6 +641,11 @@ func (s *Server) GetInsightsReader() insights.Reader {
 	return s.insights.Reader()
 }
 
+// GetInsightsWriter returns the insights.Writer for the current sql.Server.
+func (s *Server) GetInsightsWriter(internal bool) insights.Writer {
+	return s.insights.Writer(internal)
+}
+
 // GetSQLStatsProvider returns the provider for the sqlstats subsystem.
 func (s *Server) GetSQLStatsProvider() sqlstats.Provider {
 	return s.sqlStats
