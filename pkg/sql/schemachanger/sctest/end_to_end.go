@@ -107,23 +107,20 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 				// for end-to-end side-effect testing, so we ignore them.
 				break
 			case "test":
-				stmts, execStmts := parseStmts()
+				stmts, _ := parseStmts()
 				require.Lessf(t, numTestStatementsObserved, 1, "only one test per-file.")
 				numTestStatementsObserved++
 				stmtSqls := make([]string, 0, len(stmts))
 				for _, stmt := range stmts {
 					stmtSqls = append(stmtSqls, stmt.SQL)
 				}
-				// Keep test cluster in sync.
-				defer execStmts()
 
-				// Wait for any jobs due to previous schema changes to finish.
-				sctestdeps.WaitForNoRunningSchemaChanges(t, tdb)
-				var deps *sctestdeps.TestState
 				// Create test dependencies and execute the schema changer.
 				// The schema changer test dependencies do not hold any reference to the
 				// test cluster, here the SQLRunner is only used to populate the mocked
 				// catalog state.
+				// It is declared here because it's used in its initialization below.
+				var deps *sctestdeps.TestState
 				// Set up a reference provider factory for the purpose of proper
 				// dependency resolution.
 				execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
