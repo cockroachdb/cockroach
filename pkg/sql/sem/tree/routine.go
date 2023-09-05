@@ -120,6 +120,9 @@ type RoutineExpr struct {
 	// to avoid nesting execution. This is necessary for performant PLpgSQL loops.
 	TailCall bool
 
+	// Procedure is true if the routine is a procedure being invoked by CALL.
+	Procedure bool
+
 	// ExceptionHandler holds the information needed to handle errors if an
 	// exception block was defined.
 	ExceptionHandler *RoutineExceptionHandler
@@ -136,6 +139,7 @@ func NewTypedRoutineExpr(
 	multiColOutput bool,
 	generator bool,
 	tailCall bool,
+	procedure bool,
 	exceptionHandler *RoutineExceptionHandler,
 ) *RoutineExpr {
 	return &RoutineExpr{
@@ -148,6 +152,7 @@ func NewTypedRoutineExpr(
 		MultiColOutput:    multiColOutput,
 		Generator:         generator,
 		TailCall:          tailCall,
+		Procedure:         procedure,
 		ExceptionHandler:  exceptionHandler,
 	}
 }

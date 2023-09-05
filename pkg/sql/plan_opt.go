@@ -358,6 +358,7 @@ func (opc *optPlanningCtx) reset(ctx context.Context) {
 	// support it for all statements in principle, but it would increase the
 	// surface of potential issues (conditions we need to detect to invalidate a
 	// cached memo).
+	// TODO(mgartner): Enable memo caching for CALL statements.
 	switch p.stmt.AST.(type) {
 	case *tree.ParenSelect, *tree.Select, *tree.SelectClause, *tree.UnionClause, *tree.ValuesClause,
 		*tree.Insert, *tree.Update, *tree.Delete, *tree.CannedOptPlan:

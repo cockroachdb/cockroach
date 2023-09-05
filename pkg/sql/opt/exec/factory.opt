@@ -780,3 +780,8 @@ define LiteralValues {
 define ShowCompletions {
     Command *tree.ShowCompletions
 }
+
+# Call implements CALL for invoking a procedure.
+define Call {
+    Proc *tree.RoutineExpr
+}
