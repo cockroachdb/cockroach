@@ -36,6 +36,7 @@ type Handle struct {
 	tc      *testcluster.TestCluster
 	ts      map[roachpb.TenantID]*Tenant
 	scKnobs *spanconfig.TestingKnobs
+	sysDB   *sqlutils.SQLRunner
 }
 
 // NewHandle returns a new Handle.
@@ -47,6 +48,7 @@ func NewHandle(
 		tc:      tc,
 		ts:      make(map[roachpb.TenantID]*Tenant),
 		scKnobs: scKnobs,
+		sysDB:   sqlutils.MakeSQLRunner(tc.Server(0).SystemLayer().SQLConn(t, "")),
 	}
 }
 
@@ -56,11 +58,12 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 	testServer := h.tc.Server(0)
 	tenantState := &Tenant{t: h.t}
 	if tenID == roachpb.SystemTenantID {
-		tenantState.ApplicationLayerInterface = testServer
-		tenantState.db = sqlutils.MakeSQLRunner(h.tc.ServerConn(0))
+		sl := testServer.SystemLayer()
+		tenantState.ApplicationLayerInterface = sl
+		tenantState.db = h.sysDB
 		tenantState.cleanup = func() {} // noop
 	} else {
-		serverGCJobKnobs := testServer.TestingKnobs().GCJob
+		serverGCJobKnobs := testServer.SystemLayer().TestingKnobs().GCJob
 		tenantGCJobKnobs := sql.GCJobTestingKnobs{SkipWaitingForMVCCGC: true}
 		if serverGCJobKnobs != nil {
 			tenantGCJobKnobs = *serverGCJobKnobs.(*sql.GCJobTestingKnobs)
@@ -74,7 +77,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 			},
 		}
 		var err error
-		tenantState.ApplicationLayerInterface, err = testServer.StartTenant(ctx, tenantArgs)
+		tenantState.ApplicationLayerInterface, err = testServer.TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(h.t, err)
 
 		tenantSQLDB := tenantState.SQLConn(h.t, "")
@@ -117,8 +120,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 func (h *Handle) AllowSecondaryTenantToSetZoneConfigurations(t *testing.T, tenID roachpb.TenantID) {
 	_, found := h.LookupTenant(tenID)
 	require.True(t, found)
-	sqlDB := sqlutils.MakeSQLRunner(h.tc.ServerConn(0))
-	sqlDB.Exec(
+	h.sysDB.Exec(
 		t,
 		"ALTER TENANT [$1] SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true",
 		tenID.ToUint64(),

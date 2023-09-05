@@ -79,7 +79,6 @@ import (
 //     Releases the protected timestamp record with id.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -118,6 +117,8 @@ func TestDataDriven(t *testing.T) {
 		}
 	}
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+		defer log.Scope(t).Close(t)
+
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				// Fails with nil pointer dereference. Tracked with #76378 and #106818.
