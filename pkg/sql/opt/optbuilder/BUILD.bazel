@@ -29,6 +29,7 @@ go_library(
         "orderby.go",
         "partial_index.go",
         "plpgsql.go",
+        "procedure.go",
         "project.go",
         "scalar.go",
         "scope.go",
