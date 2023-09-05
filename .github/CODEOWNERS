@@ -329,7 +329,13 @@
 /pkg/kv/kvserver/txnwait/               @cockroachdb/kv-prs
 /pkg/kv/kvserver/uncertainty/           @cockroachdb/kv-prs
 
-/pkg/ccl/spanconfigccl/      @cockroachdb/kv-prs
+/pkg/ccl/spanconfigccl/                            @cockroachdb/kv-prs @cockroachdb/sql-foundations
+/pkg/ccl/spanconfigccl/spanconfigkvaccessorccl/    @cockroachdb/kv-prs
+/pkg/ccl/spanconfigccl/spanconfiglimiterccl/       @cockroachdb/sql-foundations
+/pkg/ccl/spanconfigccl/spanconfigreconcilerccl/    @cockroachdb/sql-foundations
+/pkg/ccl/spanconfigccl/spanconfigsplitterccl/      @cockroachdb/sql-foundations
+/pkg/ccl/spanconfigccl/spanconfigsqltranslatorccl/ @cockroachdb/sql-foundations
+/pkg/ccl/spanconfigccl/spanconfigsqlwatcherccl/    @cockroachdb/sql-foundations
 
 /pkg/ccl/storageccl/engineccl   @cockroachdb/storage
 /pkg/storage/                   @cockroachdb/storage
@@ -509,7 +515,21 @@
 /pkg/security/               @cockroachdb/prodsec @cockroachdb/server-prs
 /pkg/security/clientsecopts/ @cockroachdb/sql-foundations @cockroachdb/prodsec
 #!/pkg/settings/             @cockroachdb/unowned
-/pkg/spanconfig/             @cockroachdb/kv-prs
+/pkg/spanconfig/                         @cockroachdb/kv-prs @cockroachdb/sql-foundations 
+/pkg/spanconfig/spanconfigbounds/        @cockroachdb/sql-foundations
+/pkg/spanconfig/spanconfigjob/           @cockroachdb/sql-foundations
+/pkg/spanconfig/spanconfigkvaccessor/    @cockroachdb/kv-prs
+/pkg/spanconfig/spanconfigkvsubscriber/  @cockroachdb/kv-prs
+/pkg/spanconfig/spanconfiglimiter/       @cockroachdb/sql-foundations
+/pkg/spanconfig/spanconfigmanager/       @cockroachdb/sql-foundations
+/pkg/spanconfig/spanconfigptsreader/     @cockroachdb/kv-prs
+/pkg/spanconfig/spanconfigreconciler/    @cockroachdb/kv-prs
+/pkg/spanconfig/spanconfigreporter/      @cockroachdb/kv-prs
+/pkg/spanconfig/spanconfigsplitter/      @cockroachdb/kv-prs
+/pkg/spanconfig/spanconfigsqltranslator/ @cockroachdb/sql-foundations
+/pkg/spanconfig/spanconfigsqlwatcher/    @cockroachdb/sql-foundations
+/pkg/spanconfig/spanconfigstore/         @cockroachdb/kv-prs
+/pkg/spanconfig/spanconfigtestutils/     @cockroachdb/kv-prs @cockroachdb/sql-foundations
 /pkg/repstream/              @cockroachdb/disaster-recovery
 #!/pkg/testutils/              @cockroachdb/test-eng-noreview
 /pkg/testutils/reduce/       @cockroachdb/sql-queries-prs
