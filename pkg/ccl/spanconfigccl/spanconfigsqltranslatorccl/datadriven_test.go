@@ -113,9 +113,9 @@ func TestDataDriven(t *testing.T) {
 		}
 		tsArgs := func(attr string) base.TestServerArgs {
 			return base.TestServerArgs{
-			// Test fails when run within a tenant. More investigation
-			// is required. Tracked with #76378.
-			DisableDefaultTestTenant: true,
+				// Test fails when run within a tenant. More investigation
+				// is required. Tracked with #76378.
+				DisableDefaultTestTenant: true,
 				Knobs: base.TestingKnobs{
 					GCJob:      gcTestingKnobs,
 					SpanConfig: scKnobs,
