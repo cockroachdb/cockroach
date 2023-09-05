@@ -65,6 +65,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/contentionpb:contentionpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",
@@ -78,6 +79,7 @@ go_proto_library(
     proto = ":insights_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/contentionpb",
         "//pkg/util/uuid",  # keep
         "@com_github_gogo_protobuf//gogoproto",
     ],

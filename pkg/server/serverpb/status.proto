@@ -2005,6 +2005,9 @@ message ListExecutionInsightsRequest {
   string node_id = 1 [
     (gogoproto.customname) = "NodeID"
   ];
+  // with_contention_info specifies whether additional contention info is
+  // added to statement insights or not.
+  bool with_contention_info = 2;
 }
 
 message ListExecutionInsightsResponse {
@@ -2020,6 +2023,21 @@ message ListExecutionInsightsResponse {
   ];
 }
 
+// StatementExecutionInsightsRequest requests a list of statement execution insights that match
+// specified statement ID or fingerprint ID in case they're specified.
+message StatementExecutionInsightsRequest {
+  bytes statement_id = 1 [(gogoproto.customname) = "StatementID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID"];
+  uint64 stmt_fingerprint_id = 2 [(gogoproto.customname) = "StmtFingerprintID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.StmtFingerprintID"];
+  google.protobuf.Timestamp start_time = 3 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp end_time = 4 [(gogoproto.stdtime) = true];
+}
+
+// StatementExecutionInsightsResponse returns list of requested statement execution insights.
+message StatementExecutionInsightsResponse {
+  repeated cockroach.sql.insights.Statement statement_insights = 1;
+}
 
 message CriticalNodesRequest {}
 message CriticalNodesResponse {
@@ -2574,6 +2592,13 @@ service Status {
     (ListJobProfilerExecutionDetailsResponse) {
     option (google.api.http) = {
       get: "/_status/list_job_profiler_execution_details/{job_id}"
+    };
+  }
+
+  rpc StatementExecutionInsights(StatementExecutionInsightsRequest) returns (StatementExecutionInsightsResponse) {
+    option (google.api.http) = {
+      post: "/_status/insights/statements"
+      body: "*"
     };
   }
 }
