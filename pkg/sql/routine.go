@@ -26,6 +26,30 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// A callNode executes a procedure.
+type callNode struct {
+	proc *tree.RoutineExpr
+}
+
+var _ planNode = &callNode{}
+
+// startExec implements the planNode interface.
+func (d *callNode) startExec(params runParams) error {
+	// Until OUT and INOUT parameters are supported, all procedures return no
+	// results, so we can ignore the results of the routine.
+	_, err := eval.Expr(params.ctx, params.EvalContext(), d.proc)
+	return err
+}
+
+// Next implements the planNode interface.
+func (d *callNode) Next(params runParams) (bool, error) { return false, nil }
+
+// Values implements the planNode interface.
+func (d *callNode) Values() tree.Datums { return nil }
+
+// Close implements the planNode interface.
+func (d *callNode) Close(ctx context.Context) {}
+
 // EvalRoutineExpr returns the result of evaluating the routine. It calls the
 // routine's ForEachPlan closure to generate a plan for each statement in the
 // routine, then runs the plans. The resulting value of the last statement in
@@ -208,10 +232,15 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 		ctx, sp := tracing.ChildSpan(ctx, opName)
 		defer sp.Finish()
 
-		// If this is the last statement, use the rowResultWriter created above.
-		// Otherwise, use a rowResultWriter that drops all rows added to it.
+		// If this is the last statement and it is not a procedure, use the
+		// rowResultWriter created above. Otherwise, use a rowResultWriter that
+		// drops all rows added to it.
+		//
+		// We can use a droppingResultWriter for all statements in a procedure
+		// because we do not yet allow OUT or INOUT parameters, so a procedure
+		// never returns values.
 		var w rowResultWriter
-		if isFinalPlan {
+		if isFinalPlan && !g.expr.Procedure {
 			w = rrw
 		} else {
 			w = &droppingResultWriter{}

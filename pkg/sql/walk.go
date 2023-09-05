@@ -370,6 +370,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterRoleSetNode{}):                        "alter role set var",
 	reflect.TypeOf(&applyJoinNode{}):                           "apply join",
 	reflect.TypeOf(&bufferNode{}):                              "buffer",
+	reflect.TypeOf(&callNode{}):                                "call",
 	reflect.TypeOf(&cancelQueriesNode{}):                       "cancel queries",
 	reflect.TypeOf(&cancelSessionsNode{}):                      "cancel sessions",
 	reflect.TypeOf(&cdcValuesNode{}):                           "wrapped streaming node",
