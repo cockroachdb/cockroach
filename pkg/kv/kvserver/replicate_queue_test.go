@@ -1031,23 +1031,26 @@ func getLeaseholderStore(
 func TestReplicateQueueDeadNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 76996)
 	skip.UnderRace(t, "takes a long time or times out under race")
 
 	ctx := context.Background()
 
+	// Disable the replicate queue for all ranges except the scratch range. This
+	// speeds up the test, as the queue only needs to up-replicate the dead
+	// replica (non-voter) for a single range.
+	var scratchRangeID int64
+	atomic.StoreInt64(&scratchRangeID, -1)
 	var livenessTrap atomic.Value
-	setupFn := func(t *testing.T) (*testcluster.TestCluster, roachpb.RangeDescriptor) {
+
+	setupFn := func(t *testing.T) (*testcluster.TestCluster, roachpb.RangeDescriptor, func(bool)) {
 		tc := testcluster.StartTestCluster(t, 5,
 			base.TestClusterArgs{
-				ReplicationMode: base.ReplicationAuto,
+				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
-					ScanMinIdleTime: time.Millisecond,
-					ScanMaxIdleTime: time.Millisecond,
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
-							ReplicaPlannerKnobs: plan.ReplicaPlannerTestingKnobs{
-								DisableReplicaRebalancing: true,
+							BaseQueueDisabledBypassFilter: func(rangeID roachpb.RangeID) bool {
+								return rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID))
 							},
 						},
 						SpanConfig: &spanconfig.TestingKnobs{
@@ -1066,14 +1069,21 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 				},
 			},
 		)
-		_, err := tc.ServerConn(0).Exec(
-			`SET CLUSTER SETTING server.failed_reservation_timeout='1ms'`)
-		require.NoError(t, err)
-
 		// Setup a scratch range on a test cluster with 2 non-voters and 1 voter.
 		scratchKey := tc.ScratchRange(t)
 		scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
-		_, err = tc.ServerConn(0).Exec(
+		atomic.StoreInt64(&scratchRangeID, int64(scratchRange.RangeID))
+
+		toggleDisabledQueueBypassFn := func(active bool) {
+			if active {
+				atomic.StoreInt64(&scratchRangeID, int64(scratchRange.RangeID))
+			} else {
+				atomic.StoreInt64(&scratchRangeID, -1)
+			}
+		}
+
+		toggleDisabledQueueBypassFn(true /* active */)
+		_, err := tc.ServerConn(0).Exec(
 			`ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = 3, num_voters = 1`,
 		)
 		require.NoError(t, err)
@@ -1085,7 +1095,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 			}
 			return ok
 		}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond)
-		return tc, scratchRange
+		return tc, scratchRange, toggleDisabledQueueBypassFn
 	}
 
 	markDead := func(nodeIDs []roachpb.NodeID) {
@@ -1107,7 +1117,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 	// 2. Kill the 2 nodes that have the non-voters.
 	// 3. Check that those non-voters are replaced.
 	t.Run("replace", func(t *testing.T) {
-		tc, scratchRange := setupFn(t)
+		tc, scratchRange, _ := setupFn(t)
 		defer tc.Stopper().Stop(ctx)
 
 		// Check the value of non-voter metrics from leaseholder store prior to removals.
@@ -1175,18 +1185,18 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 	// AllocatorRemoveDeadNonVoter` code path. The test does the following:
 	//
 	// 1. Instantiate a range with 1 voter and 2 non-voters on a 5-node cluster.
-	// 2. Turn off the replicateQueue
+	// 2. Turn off the queue bypasss (disable replicate queue processing).
 	// 3. Change the zone configs such that there should be no non-voters --
 	// the two existing non-voters should now be considered "over-replicated"
 	// by the system.
 	// 4. Kill the nodes that have non-voters.
-	// 5. Turn on the replicateQueue
+	// 5. Turn on the queue bypass (enable the replicate queue processing).
 	// 6. Make sure that the non-voters are downreplicated from the dead nodes.
 	t.Run("remove", func(t *testing.T) {
-		tc, scratchRange := setupFn(t)
+		tc, scratchRange, toggleDisabledQueueBypassFn := setupFn(t)
 		defer tc.Stopper().Stop(ctx)
 
-		toggleReplicationQueues(tc, false)
+		toggleDisabledQueueBypassFn(false /* active */)
 		_, err := tc.ServerConn(0).Exec(
 			// Remove all non-voters.
 			"ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1",
@@ -1216,8 +1226,8 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 
 		beforeNodeIDs := getNonVoterNodeIDs(scratchRange)
 		markDead(beforeNodeIDs)
+		toggleDisabledQueueBypassFn(true /* active */)
 
-		toggleReplicationQueues(tc, true)
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
 			if err != nil {
