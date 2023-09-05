@@ -375,8 +375,9 @@ func (cg *kvStoreTokenChildGranter) storeWriteDone(
 	// it. The one difference is that post token adjustments, if we observe the
 	// granter was previously exhausted but is no longer so, we're allowed to
 	// admit other waiting requests.
-	return cg.parent.storeReplicatedWorkAdmittedLocked(
+	additionalTokensTaken := cg.parent.storeReplicatedWorkAdmittedLocked(
 		cg.workClass, originalTokens, storeReplicatedWorkAdmittedInfo(doneInfo), true /* canGrantAnother */)
+	return additionalTokensTaken
 }
 
 // storeReplicatedWorkAdmitted implements granterWithStoreReplicatedWorkAdmitted.
@@ -466,7 +467,7 @@ func (sg *kvStoreTokenGranter) subtractTokensLocked(
 		if count > 0 {
 			sg.tokensTakenMetric.Inc(count)
 		} else {
-			sg.tokensReturnedMetric.Inc(-count)
+			sg.tokensReturnedMetric.Inc(count)
 		}
 	}
 	if count > 0 && avail > 0 && sg.coordMu.availableIOTokens <= 0 {
