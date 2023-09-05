@@ -4600,7 +4600,7 @@ create_func_stmt:
   RETURNS opt_return_table opt_return_set routine_return_type
   opt_create_routine_opt_list opt_routine_body
   {
-    name := $4.unresolvedObjectName().ToFunctionName()
+    name := $4.unresolvedObjectName().ToRoutineName()
     $$.val = &tree.CreateRoutine{
       IsProcedure: false,
       Replace: $2.bool(),
@@ -4629,7 +4629,7 @@ create_proc_stmt:
   CREATE opt_or_replace PROCEDURE routine_create_name '(' opt_routine_param_with_default_list ')'
   opt_create_routine_opt_list opt_routine_body
   {
-    name := $4.unresolvedObjectName().ToFunctionName()
+    name := $4.unresolvedObjectName().ToRoutineName()
     $$.val = &tree.CreateRoutine{
       IsProcedure: true,
       Replace: $2.bool(),
@@ -4927,14 +4927,14 @@ function_with_paramtypes:
   db_object_name func_params
   {
     $$.val = tree.FuncObj{
-      FuncName: $1.unresolvedObjectName().ToFunctionName(),
+      FuncName: $1.unresolvedObjectName().ToRoutineName(),
       Params: $2.routineParams(),
     }
   }
   | db_object_name
   {
     $$.val = tree.FuncObj{
-      FuncName: $1.unresolvedObjectName().ToFunctionName(),
+      FuncName: $1.unresolvedObjectName().ToRoutineName(),
     }
   }
 

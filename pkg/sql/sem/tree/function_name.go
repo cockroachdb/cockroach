@@ -98,7 +98,7 @@ func (ref *ResolvableFunctionReference) Resolve(
 	case *UnresolvedName:
 		if resolver == nil {
 			// If a resolver is not provided, just try to fetch a builtin function.
-			fn, err := t.ToFunctionName()
+			fn, err := t.ToRoutineName()
 			if err != nil {
 				return nil, err
 			}
