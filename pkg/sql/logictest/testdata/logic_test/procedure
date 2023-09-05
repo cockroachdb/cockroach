@@ -10,5 +10,13 @@ SELECT d->'function'->'isProcedure' FROM (
 ----
 true
 
+statement ok
+CREATE SEQUENCE s
+
+statement ok
+CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS $$
+  SELECT nextval('s');
+$$
+
 statement error pgcode 0A000 unimplemented: procedures not supported
-CALL err()
+CALL p()
