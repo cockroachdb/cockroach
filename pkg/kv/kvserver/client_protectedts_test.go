@@ -180,6 +180,15 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 		Target:    ptpb.MakeSchemaObjectsTarget([]descpb.ID{getTableID()}),
 	}
 	require.NoError(t, ptsWithDB.Protect(ctx, &ptsRec))
+	// Verify that the record did indeed make its way down into KV where the
+	// replica can read it from.
+	ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
+	require.NoError(
+		t,
+		ptutil.TestingVerifyProtectionTimestampExistsOnSpans(
+			ctx, t, s0, ptsReader, ptsRec.Timestamp, ptsRec.DeprecatedSpans,
+		),
+	)
 	upsertUntilBackpressure()
 	// We need to be careful choosing a time. We're a little limited because the
 	// ttl is defined in seconds and we need to wait for the threshold to be
@@ -201,16 +210,6 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	require.Regexp(t, "(?s)done with GC evaluation for 0 keys", trace.String())
 	thresh := thresholdFromTrace(trace)
 	require.Truef(t, thresh.Less(ptsRec.Timestamp), "threshold: %v, protected %v %q", thresh, ptsRec.Timestamp, trace)
-
-	// Verify that the record did indeed make its way down into KV where the
-	// replica can read it from.
-	ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
-	require.NoError(
-		t,
-		ptutil.TestingVerifyProtectionTimestampExistsOnSpans(
-			ctx, t, s0, ptsReader, ptsRec.Timestamp, ptsRec.DeprecatedSpans,
-		),
-	)
 
 	// Make a new record that is doomed to fail.
 	failedRec := ptsRec
