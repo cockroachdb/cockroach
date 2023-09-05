@@ -58,7 +58,7 @@ func (h *Handle) SetSQLDBForUser(tenantID roachpb.TenantID, user string) func() 
 		return resetToRootUser
 	}
 
-	userSQLDB := h.tc.Server(0).SQLConnForUser(h.t, user, "")
+	userSQLDB := tenantState.ApplicationLayerInterface.SQLConnForUser(h.t, user, "")
 	tenantState.curDB = sqlutils.MakeSQLRunner(userSQLDB)
 	tenantState.userToDB[user] = tenantState.curDB
 
