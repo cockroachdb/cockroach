@@ -434,7 +434,7 @@ func WaitForTenantCapabilities(
 		missingCapabilityError := func(capID tenantcapabilities.ID) error {
 			return errors.Newf("%stenant %s cap %q not at expected value", errPrefix, tenID, capID)
 		}
-		capabilities, found := s.TenantCapabilitiesReader().GetCapabilities(tenID)
+		capabilities, found := s.StorageLayer().TenantCapabilitiesReader().GetCapabilities(tenID)
 		if !found {
 			return errors.Newf("%scapabilities not ready for tenant %v", errPrefix, tenID)
 		}
