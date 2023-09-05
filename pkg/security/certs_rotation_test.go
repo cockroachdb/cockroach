@@ -67,9 +67,13 @@ func TestRotateCerts(t *testing.T) {
 	params := base.TestServerArgs{
 		SSLCertsDir:       certsDir,
 		InsecureWebAccess: true,
+
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110007),
 	}
-	s := serverutils.StartServerOnly(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv := serverutils.StartServerOnly(t, params)
+	defer srv.Stopper().Stop(context.Background())
+
+	s := srv.ApplicationLayer()
 
 	// Client test function.
 	clientTest := func(httpClient http.Client) error {
