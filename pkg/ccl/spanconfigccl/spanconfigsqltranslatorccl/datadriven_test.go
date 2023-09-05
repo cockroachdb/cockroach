@@ -121,7 +121,12 @@ func TestDataDriven(t *testing.T) {
 				},
 			}
 		}
-		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		// Use 1 node by default to make tests run faster.
+		nodes := 1
+		if strings.Contains(path, "3node") {
+			nodes = 3
+		}
+		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				// Fails with nil pointer dereference. Tracked with #76378 and #106818.
 				DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(106818),
