@@ -65,6 +65,29 @@ func (c *adminPrivilegeChecker) RequireViewActivityPermission(ctx context.Contex
 		roleoption.VIEWACTIVITY)
 }
 
+// RequireViewActivityRedactedPermission is part of the CheckerForRPCHandlers interface.
+func (c *adminPrivilegeChecker) RequireViewActivityRedactedPermission(
+	ctx context.Context,
+) (err error) {
+	userName, isAdmin, err := c.GetUserAndRole(ctx)
+	if err != nil {
+		return srverrors.ServerError(ctx, err)
+	}
+	if isAdmin {
+		return nil
+	}
+	hasViewRedacted, err := c.HasPrivilegeOrRoleOption(ctx, userName, privilege.VIEWACTIVITYREDACTED)
+	if err != nil {
+		return srverrors.ServerError(ctx, err)
+	}
+	if hasViewRedacted {
+		return nil
+	}
+	return grpcstatus.Errorf(
+		codes.PermissionDenied, "this operation requires the %s system privilege",
+		roleoption.VIEWACTIVITYREDACTED)
+}
+
 // RequireViewActivityOrViewActivityRedactedPermission's error return is a gRPC error.
 func (c *adminPrivilegeChecker) RequireViewActivityOrViewActivityRedactedPermission(
 	ctx context.Context,

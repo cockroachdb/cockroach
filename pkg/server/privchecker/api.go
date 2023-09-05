@@ -42,6 +42,7 @@ type CheckerForRPCHandlers interface {
 	// privilege or role option.
 	// Its error return is a gRPC error.
 	RequireViewActivityPermission(ctx context.Context) error
+	RequireViewActivityRedactedPermission(ctx context.Context) error
 
 	RequireViewActivityOrViewActivityRedactedPermission(ctx context.Context) error
 	RequireViewClusterSettingOrModifyClusterSettingPermission(ctx context.Context) error

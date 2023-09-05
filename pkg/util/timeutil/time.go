@@ -11,6 +11,7 @@
 package timeutil
 
 import (
+	"math"
 	"strings"
 	"time"
 	"unsafe"
@@ -123,4 +124,10 @@ func ReplaceLibPQTimePrefix(s string) string {
 		return "1970-01-01" + s[len(LibPQTimePrefix):]
 	}
 	return s
+}
+
+// IsOverlappingTimeRanges returns True in case time ranges are overlapping,
+// otherwise returns false.
+func IsOverlappingTimeRanges(startA, endA, startB, endB time.Time) bool {
+	return math.Max(float64(startA.Unix()), float64(startB.Unix())) < math.Min(float64(endA.Unix()), float64(endB.Unix()))
 }
