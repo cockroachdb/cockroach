@@ -14,8 +14,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -57,7 +55,6 @@ func (s *statusServer) StatementExecutionInsights(
 	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
 		return nil, err
 	}
-
 	resp := &serverpb.StatementExecutionInsightsResponse{
 		Statements: make([]*serverpb.StatementExecutionInsightsResponse_Statement, 0),
 	}
