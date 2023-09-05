@@ -308,6 +308,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.RecursiveCTEExpr:
 		ep, err = b.buildRecursiveCTE(t)
 
+	case *memo.CallExpr:
+		panic(unimplemented.Newf("procedures", "procedures not supported"))
+
 	case *memo.ExplainExpr:
 		ep, err = b.buildExplain(t)
 
