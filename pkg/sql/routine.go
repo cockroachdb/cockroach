@@ -26,6 +26,34 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// A callNode executes a procedure.
+type callNode struct {
+	proc *tree.RoutineExpr
+}
+
+var _ planNode = &callNode{}
+
+// startExec implements the planNode interface.
+func (d *callNode) startExec(params runParams) error {
+	// Until OUT and INOUT parameters are supported, all procedures return no
+	// results, so we can ignore the results of the routine.
+	// TODO(mgartner): If there are no OUT or INOUT parameters we should always
+	// use the dropping result writer (see below), even for the last statement
+	// in the procedure. There is no need to store the results of the last
+	// statement in memory since we are disgarding them here.
+	_, err := eval.Expr(params.ctx, params.EvalContext(), d.proc)
+	return err
+}
+
+// Next implements the planNode interface.
+func (d *callNode) Next(params runParams) (bool, error) { return false, nil }
+
+// Values implements the planNode interface.
+func (d *callNode) Values() tree.Datums { return nil }
+
+// Close implements the planNode interface.
+func (d *callNode) Close(ctx context.Context) {}
+
 // EvalRoutineExpr returns the result of evaluating the routine. It calls the
 // routine's ForEachPlan closure to generate a plan for each statement in the
 // routine, then runs the plans. The resulting value of the last statement in
