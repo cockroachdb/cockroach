@@ -3989,6 +3989,170 @@ func (s *statusServer) TransactionContentionEvents(
 	return resp, nil
 }
 
+func (s *statusServer) TransactionContentionEventsWithDetails(
+	ctx context.Context, req *serverpb.TransactionContentionEventsWithDetailsRequest,
+) (*serverpb.TransactionContentionEventsWithDetailsResponse, error) {
+	ctx = s.AnnotateCtx(authserver.ForwardSQLIdentityThroughRPCCalls(ctx))
+
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	if roachpb.NodeID(s.serverIterator.getID()) == 0 {
+		return nil, status.Errorf(codes.Unavailable, "nodeID not set")
+	}
+
+	if len(req.NodeID) > 0 {
+		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			localResp := s.localTransactionContentionEvents(false)
+			contEvents := make([]*serverpb.ContentionEvent, len(localResp.Events))
+			for i, e := range localResp.Events {
+				event, err := s.getContentionEventWithDetails(ctx, e)
+				if err != nil {
+					return nil, err
+				}
+				contEvents[i] = event
+			}
+			return &serverpb.TransactionContentionEventsWithDetailsResponse{
+				Events: contEvents,
+			}, nil
+		}
+
+		statusClient, err := s.dialNode(ctx, requestedNodeID)
+		if err != nil {
+			return nil, err
+		}
+		return statusClient.TransactionContentionEventsWithDetails(ctx, req)
+	}
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		statusClient, err := s.dialNode(ctx, nodeID)
+		return statusClient, err
+	}
+
+	rpcCallFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		return statusClient.TransactionContentionEventsWithDetails(ctx, &serverpb.TransactionContentionEventsWithDetailsRequest{
+			NodeID: "local",
+		})
+	}
+
+	resp := &serverpb.TransactionContentionEventsWithDetailsResponse{
+		Events:         make([]*serverpb.ContentionEvent, 0),
+		ErrorsByNodeID: make(map[roachpb.NodeID]string),
+	}
+
+	if err := s.iterateNodes(ctx, "txn contention events with details for node",
+		noTimeout,
+		dialFn,
+		rpcCallFn,
+		func(nodeID roachpb.NodeID, nodeResp interface{}) {
+			txnContentionEvents := nodeResp.(*serverpb.TransactionContentionEventsWithDetailsResponse)
+			resp.Events = append(resp.Events, txnContentionEvents.Events...)
+		},
+		func(nodeID roachpb.NodeID, nodeFnError error) {
+			resp.ErrorsByNodeID[nodeID] = nodeFnError.Error()
+		},
+	); err != nil {
+		return nil, err
+	}
+
+	sort.Slice(resp.Events, func(i, j int) bool {
+		return resp.Events[i].CollectionTs.Before(*resp.Events[j].CollectionTs)
+	})
+
+	return resp, nil
+}
+
+func (b *baseStatusServer) getContentionEventWithDetails(
+	ctx context.Context, event contentionpb.ExtendedContentionEvent,
+) (*serverpb.ContentionEvent, error) {
+	if err := b.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	hasViewRedacted := false
+	if err := b.privilegeChecker.RequireViewActivityRedactedPermission(ctx); err == nil {
+		hasViewRedacted = true
+	}
+	var key roachpb.Key
+	var prettyKey string
+	if !hasViewRedacted {
+		key = event.BlockingEvent.Key
+		prettyKey = keys.PrettyPrint(nil /* valDirs */, event.BlockingEvent.Key)
+	}
+	var tableName, indexName, dbName, schemaName string
+	err := b.sqlServer.internalDB.Txn(b.rpcCtx.MasterCtx, func(ctx context.Context, txn isql.Txn) error {
+		if event.BlockingEvent.Key.Equal(roachpb.Key{}) {
+			return nil
+		}
+		_, tableID, err := b.sqlServer.execCfg.Codec.DecodeTablePrefix(event.BlockingEvent.Key)
+		if err != nil {
+			return err
+		}
+		_, _, indexID, err := b.sqlServer.execCfg.Codec.DecodeIndexPrefix(event.BlockingEvent.Key)
+		if err != nil {
+			return err
+		}
+		desc := descs.FromTxn(txn)
+		var tableDesc catalog.TableDescriptor
+		tableDesc, err = desc.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
+		if err != nil {
+			return nil //nolint:returnerrcheck
+		}
+		tableName = tableDesc.GetName()
+
+		idxDesc, err := catalog.MustFindIndexByID(tableDesc, descpb.IndexID(indexID))
+		if err != nil {
+			indexName = fmt.Sprintf("[dropped index id: %d]", indexID)
+		}
+		if idxDesc != nil {
+			indexName = idxDesc.GetName()
+		}
+
+		dbDesc, err := desc.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
+		if err != nil {
+			dbName = "[dropped database]"
+		}
+		if dbDesc != nil {
+			dbName = dbDesc.GetName()
+		}
+
+		schemaDesc, err := desc.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
+		if err != nil {
+			schemaName = "[dropped schema]"
+		}
+		if schemaDesc != nil {
+			schemaName = schemaDesc.GetName()
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &serverpb.ContentionEvent{
+		Key:                      key,
+		PrettyKey:                prettyKey,
+		BlockingTxnID:            event.BlockingEvent.TxnMeta.ID,
+		BlockingTxnFingerprintID: event.BlockingTxnFingerprintID,
+		Duration:                 &event.BlockingEvent.Duration,
+		WaitingTxnID:             &event.WaitingTxnID,
+		WaitingTxnFingerprintID:  event.WaitingTxnFingerprintID,
+		CollectionTs:             &event.CollectionTs,
+		WaitingStmtFingerprintID: event.WaitingStmtFingerprintID,
+		WaitingStmtID:            &event.WaitingStmtID,
+		DatabaseName:             dbName,
+		SchemaName:               schemaName,
+		IndexName:                indexName,
+		TableName:                tableName,
+	}, nil
+}
+
 // GetJobProfilerExecutionDetails reads all the stored execution details for a
 // given job ID.
 func (s *statusServer) GetJobProfilerExecutionDetails(

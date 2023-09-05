@@ -71,6 +71,7 @@ go_library(
         "statement_diagnostics_requests.go",
         "statements.go",
         "status.go",
+        "status_insights.go",
         "status_local_file_retrieval.go",
         "sticky_vfs.go",
         "stop_trigger.go",
