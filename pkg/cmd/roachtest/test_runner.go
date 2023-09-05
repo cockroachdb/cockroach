@@ -304,7 +304,7 @@ func (r *testRunner) Run(
 
 	qp := quotapool.NewIntPool("cloud cpu", uint64(clustersOpt.cpuQuota))
 	l := lopt.l
-	runID = generateRunID(clustersOpt.user)
+	runID = generateRunID(clustersOpt)
 	shout(ctx, l, lopt.stdout, "%s: %s", VmLabelTestRunID, runID)
 	var wg sync.WaitGroup
 
@@ -397,13 +397,13 @@ func numConcurrentClusterCreations() int {
 }
 
 // This will be added as a label to all cluster nodes when the
-// cluster is registered.
-func generateRunID(user string) string {
-	uniqueId := os.Getenv("TC_BUILD_ID")
-	if uniqueId == "" {
-		uniqueId = fmt.Sprintf("%d", timeutil.Now().Unix())
+// cluster is registered. `clusterOpt.clusterID` is conveniently
+// set to the TC Build ID when running on TeamCity.
+func generateRunID(cOpts clustersOpt) string {
+	if cOpts.clusterID == "" {
+		return fmt.Sprintf("%s-%d", cOpts.user, timeutil.Now().Unix())
 	}
-	return fmt.Sprintf("%s-%s", user, uniqueId)
+	return fmt.Sprintf("%s-%s", cOpts.user, cOpts.clusterID)
 }
 
 // defaultClusterAllocator is used by workers to create new clusters (or to attach
@@ -544,6 +544,9 @@ func (r *testRunner) runWorker(
 	// When this method returns we'll destroy the cluster we had at the time.
 	// Note that, if debug was set, c has been set to nil.
 	defer func() {
+		// TODO (miral): Consider removing the test_run_id label here, as
+		// currently, is only removed when a cluster is unregistered, via c.Destroy()
+		// but not when the cluster is preserved via a debug mode.
 		wStatus.SetTest(nil /* test */, testToRunRes{noWork: true})
 		wStatus.SetStatus("worker done")
 		wStatus.SetCluster(nil)
@@ -931,12 +934,12 @@ func (r *testRunner) runTest(
 	github *githubIssues,
 ) error {
 
-	runID := t.Name()
+	testRunID := t.Name()
 	if runCount > 1 {
-		runID += fmt.Sprintf("#%d", runNum)
+		testRunID += fmt.Sprintf("#%d", runNum)
 	}
 	if !teamCity {
-		shout(ctx, l, stdout, "=== RUN   %s", runID)
+		shout(ctx, l, stdout, "=== RUN   %s", testRunID)
 	}
 
 	r.status.Lock()
@@ -947,13 +950,25 @@ func (r *testRunner) runTest(
 	t.runnerID = goid.Get()
 
 	s := t.Spec().(*registry.TestSpec)
-	_ = c.addLabels(map[string]string{
-		VmLabelTestName: s.Name,
-	})
-	defer func() {
-		_ = c.removeLabels([]string{VmLabelTestName})
-		t.end = timeutil.Now()
 
+	grafanaAvailable := s.Cluster.Cloud == spec.GCE
+	if err := c.addLabels(map[string]string{VmLabelTestName: testRunID}); err != nil {
+		shout(ctx, l, stdout, "failed to add label to cluster [%s] - %s", c.Name(), err)
+		grafanaAvailable = false
+	}
+
+	defer func() {
+		t.end = timeutil.Now()
+		if err := c.removeLabels([]string{VmLabelTestName}); err != nil {
+			shout(ctx, l, stdout, "failed to remove label from cluster [%s] - %s", c.Name(), err)
+		}
+
+		if grafanaAvailable {
+			// Links to the dashboard overview for this test where a user can then navigate
+			// to a preferred dashboard. Add 2 minutes to show complete metrics in grafana.
+			l.Printf("grafana metrics available at: https://go.crdb.dev/roachtest-grafana/%s/%s/%d/%d",
+				vm.SanitizeLabel(runID), vm.SanitizeLabel(testRunID), t.start.UnixMilli(), t.end.Add(2*time.Minute).UnixMilli())
+		}
 		// We only have to record panics if the panic'd value is not the sentinel
 		// produced by t.Fatal*(). We may see calls to t.Fatal from this goroutine
 		// during the post-flight checks; the test itself runs on a different
@@ -979,7 +994,7 @@ func (r *testRunner) runTest(
 			// separately for skipped tests. The duration of the test is passed to ##teamcity[testFinished...] for
 			// accurate reporting in the TC UI.
 			if teamCity {
-				shout(ctx, l, stdout, "##teamcity[testStarted name='%s' flowId='%s']", t.Name(), runID)
+				shout(ctx, l, stdout, "##teamcity[testStarted name='%s' flowId='%s']", t.Name(), testRunID)
 			}
 
 			durationStr := fmt.Sprintf("%.2fs", t.duration().Seconds())
@@ -990,21 +1005,21 @@ func (r *testRunner) runTest(
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 					// TeamCity regards the test as successful.
 					shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
-						s.Name, teamCityEscape(output), runID)
+						s.Name, teamCityEscape(output), testRunID)
 				}
 
-				shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", runID, durationStr, output)
+				shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", testRunID, durationStr, output)
 
 				if err := github.MaybePost(t, l, output); err != nil {
 					shout(ctx, l, stdout, "failed to post issue: %s", err)
 				}
 			} else {
-				shout(ctx, l, stdout, "--- PASS: %s (%s)", runID, durationStr)
+				shout(ctx, l, stdout, "--- PASS: %s (%s)", testRunID, durationStr)
 			}
 
 			if teamCity {
 				shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s' duration='%d']",
-					t.Name(), runID, t.duration().Milliseconds())
+					t.Name(), testRunID, t.duration().Milliseconds())
 			}
 		}
 
@@ -1102,6 +1117,12 @@ func (r *testRunner) runTest(
 
 	var timedOut bool
 
+	if grafanaAvailable {
+		// Shout this to the log and stdout to make it available to anyone watching the test via CI or locally.
+		// At this point, we don't have an end time, so default to a 30 minute window from the start time.
+		shout(ctx, l, stdout, "grafana metrics available at: https://go.crdb.dev/roachtest-grafana/%s/%s/%d/%d",
+			vm.SanitizeLabel(runID), vm.SanitizeLabel(testRunID), t.start.UnixMilli(), t.start.Add(30*time.Minute).UnixMilli())
+	}
 	select {
 	case <-testReturnedCh:
 		s := "successfully"
@@ -1142,10 +1163,10 @@ func (r *testRunner) runTest(
 		l.Printf("skipping post test assertions as test failed")
 	}
 
+	l.Printf("running test teardown (test-teardown.log)")
 	// From now on, all logging goes to test-teardown.log to give a clear separation between
 	// operations originating from the test vs the harness. The only error that can originate here
 	// is from artifact collection, which is best effort and for which we do not fail the test.
-	l.Printf("running test teardown (test-teardown.log)")
 	replaceLogger("test-teardown")
 	if err := r.teardownTest(ctx, t, c, timedOut); err != nil {
 		l.Printf("error during test teardown: %v; see test-teardown.log for details", err)

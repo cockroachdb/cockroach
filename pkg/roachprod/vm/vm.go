@@ -650,18 +650,20 @@ func DNSSafeAccount(account string) string {
 }
 
 // SanitizeLabel returns a version of the string that can be used as a label.
+// This takes the lowest common denominator of the label requirements;
+// GCE: "The value can only contain lowercase letters, numeric characters, underscores and dashes.
+// The value can be at most 63 characters long"
 func SanitizeLabel(label string) string {
 	// Replace any non-alphanumeric characters with hyphens
 	re := regexp.MustCompile("[^a-zA-Z0-9]+")
 	label = re.ReplaceAllString(label, "-")
-
-	// Remove any leading or trailing hyphens
-	label = strings.Trim(label, "-")
+	label = strings.ToLower(label)
 
 	// Truncate the label to 63 characters (the maximum allowed by GCP)
 	if len(label) > 63 {
 		label = label[:63]
 	}
-
+	// Remove any leading or trailing hyphens
+	label = strings.Trim(label, "-")
 	return label
 }
