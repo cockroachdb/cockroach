@@ -116,10 +116,12 @@ func ShouldStartDefaultTestTenant(
 		return override
 	}
 
+	const alwaysEnabled = true
+
 	// Note: we ask the metamorphic framework for a "disable" value, instead
 	// of an "enable" value, because it probabilistically returns its default value
 	// more often than not and that is what we want.
-	enabled := !util.ConstantWithMetamorphicTestBoolWithoutLogging("disable-test-tenant", false)
+	enabled := alwaysEnabled || !util.ConstantWithMetamorphicTestBoolWithoutLogging("disable-test-tenant", false)
 	if enabled && t != nil {
 		t.Log(defaultTestTenantMessage)
 	}
