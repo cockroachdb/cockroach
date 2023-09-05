@@ -1476,6 +1476,7 @@ func (ts *testServer) StartTenant(
 	baseCfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
 	baseCfg.DisableTLSForHTTP = params.DisableTLSForHTTP
 	baseCfg.EnableDemoLoginEndpoint = params.EnableDemoLoginEndpoint
+	baseCfg.DefaultZoneConfig = ts.Cfg.DefaultZoneConfig
 
 	// Waiting for capabilities can time To avoid paying this cost in all
 	// cases, we only set the nodelocal storage capability if the caller has
