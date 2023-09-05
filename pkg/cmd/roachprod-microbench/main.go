@@ -115,7 +115,18 @@ func makeCompareCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return c.publishToGoogleSheets(metricMaps)
+
+		links, err := c.publishToGoogleSheets(metricMaps)
+		if err != nil {
+			return err
+		}
+		if config.slackToken != "" {
+			err = c.postToSlack(links, metricMaps)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
 	cmd := &cobra.Command{
@@ -126,6 +137,7 @@ func makeCompareCommand() *cobra.Command {
 		RunE:  runCmdFunc,
 	}
 	cmd.Flags().StringVar(&config.sheetDesc, "sheet-desc", "", "append a description to the sheet title when doing a comparison")
+	cmd.Flags().StringVar(&config.slackToken, "slack-token", "", "pass a slack token to post the results to a slack channel")
 	return cmd
 }
 
