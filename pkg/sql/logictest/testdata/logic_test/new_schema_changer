@@ -1531,3 +1531,104 @@ SET CLUSTER SETTING sql.schema.force_declarative_statements='+CREATE SEQUENCE'
 skipif config local-mixed-22.2-23.1
 statement ok
 EXPLAIN (DDL) CREATE SEQUENCE sq2
+
+subtest end
+
+# This subtest ensures ALTER TABLE with multiple ADD COLUMN, DROP COLUMN, and/or
+# ALTER PK is disabled with declarative schema changer by default, unless
+# `use_declarative_schema_changer = (unsafe|unsafe_always)` or
+# `sql.schema.force_declarative_statements='+ALTER TABLE'`.
+# TODO (xiang): Enable it by default on the next major release after v23.2, be it v24.1 or v23.3.
+subtest 108870
+
+statement ok
+SET sql_safe_updates = false;
+SET use_declarative_schema_changer = 'on';
+
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements = '';
+
+statement ok
+CREATE TABLE t_108870 (i INT PRIMARY KEY, j INT NOT NULL);
+
+# Ensure ALTER TABLE with only ADD COLUMN, only DROP COLUMN, or only ALTER PK can use declarative schema changer.
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 DROP COLUMN j;
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ADD COLUMN k INT DEFAULT 40;
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ADD COLUMN k INT DEFAULT 40, ADD COLUMN p INT DEFAULT 50;
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j);
+
+# Ensure ALTER TABLE with multiple ADD COLUMN, DROP COLUMN, and/or ALTER PK cannot use declarative schema changer.
+skipif config local-mixed-22.2-23.1
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
+
+skipif config local-mixed-22.2-23.1
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE t_108870 DROP COLUMN j, ADD COLUMN k INT DEFAULT 30;
+
+skipif config local-mixed-22.2-23.1
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE t_108870 ADD COLUMN k INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j);
+
+skipif config local-mixed-22.2-23.1
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN k INT DEFAULT 30;
+
+# Ensure we can enable it in declarative schema changer with cluster setting
+# sql.schema.force_declarative_statements.
+skipif config local-mixed-22.2-23.1
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='+ALTER TABLE';
+
+statement ok
+SET use_declarative_schema_changer = 'on';
+
+skipif config local-mixed-22.2-23.1
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
+
+skipif config local-mixed-22.2-23.1
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 DROP COLUMN j, ADD COLUMN k INT DEFAULT 30;
+
+skipif config local-mixed-22.2-23.1
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ADD COLUMN k INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j);
+
+skipif config local-mixed-22.2-23.1
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN k INT DEFAULT 30;
+
+# Ensure we can also enable it in declarative schema changer with session variable
+# use_declarative_schema_changer.
+skipif config local-mixed-22.2-23.1
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='';
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always';
+
+skipif config local-mixed-22.2-23.1
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
+
+skipif config local-mixed-22.2-23.1
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 DROP COLUMN j, ADD COLUMN k INT DEFAULT 30;
+
+skipif config local-mixed-22.2-23.1
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ADD COLUMN k INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j);
+
+skipif config local-mixed-22.2-23.1
+statement ok
+EXPLAIN (DDL) ALTER TABLE t_108870 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN k INT DEFAULT 30;
+
+subtest end
