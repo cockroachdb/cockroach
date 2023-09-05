@@ -1480,6 +1480,8 @@ func (ts *testServer) StartTenant(
 	baseCfg.EnableDemoLoginEndpoint = params.EnableDemoLoginEndpoint
 	baseCfg.TestingInsecureWebAccess = ts.Cfg.TestingInsecureWebAccess
 	baseCfg.DefaultZoneConfig = ts.Cfg.DefaultZoneConfig
+	baseCfg.HeapProfileDirName = ts.Cfg.BaseConfig.HeapProfileDirName
+	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
 
 	// Waiting for capabilities can time To avoid paying this cost in all
 	// cases, we only set the nodelocal storage capability if the caller has
