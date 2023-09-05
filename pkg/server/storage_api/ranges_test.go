@@ -32,12 +32,18 @@ func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer kvserver.EnableLeaseHistoryForTesting(100)()
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer ts.Stopper().Stop(context.Background())
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110019),
+	})
+	defer srv.Stopper().Stop(context.Background())
+	ts := srv.ApplicationLayer()
+
+	// TODO(#110019): grant a special capability to the secondary tenant
+	// before the endpoint can be accessed.
 
 	t.Run("test ranges response", func(t *testing.T) {
 		// Perform a scan to ensure that all the raft groups are initialized.
-		if _, err := ts.DB().Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+		if _, err := srv.SystemLayer().DB().Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 			t.Fatal(err)
 		}
 
@@ -100,12 +106,17 @@ func TestRangesResponse(t *testing.T) {
 	})
 }
 
-func TestTenantRangesResponse(t *testing.T) {
+// TestTenantRangesSecurity checks that the storage layer properly zeroes out
+// if it's missing a tenant ID in the TenantRanges back-end RPC.
+func TestTenantRangesSecurity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer ts.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.SystemLayer()
 
 	t.Run("returns error when TenantID not set in ctx", func(t *testing.T) {
 		rpcStopper := stop.NewStopper()
@@ -122,13 +133,19 @@ func TestRangeResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer kvserver.EnableLeaseHistoryForTesting(100)()
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer ts.Stopper().Stop(context.Background())
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110018),
+	})
+	defer srv.Stopper().Stop(context.Background())
+	ts := srv.ApplicationLayer()
 
 	// Perform a scan to ensure that all the raft groups are initialized.
-	if _, err := ts.DB().Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+	if _, err := srv.SystemLayer().DB().Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 		t.Fatal(err)
 	}
+
+	// TODO(#110018): grant a special capability to the secondary tenant
+	// before the endpoint can be accessed.
 
 	var response serverpb.RangeResponse
 	if err := srvtestutils.GetStatusJSONProto(ts, "range/1", &response); err != nil {
@@ -149,7 +166,7 @@ func TestRangeResponse(t *testing.T) {
 
 	// The response should include just the one range.
 	if e, a := 1, len(node1Response.Infos); e != a {
-		t.Errorf("got the wrong number of ranges in the response, expected %d, actual %d", e, a)
+		t.Fatalf("got the wrong number of ranges in the response, expected %d, actual %d", e, a)
 	}
 
 	info := node1Response.Infos[0]

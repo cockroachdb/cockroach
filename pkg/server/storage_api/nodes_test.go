@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // TestStatusJson verifies that status endpoints return expected Json results.
@@ -86,9 +88,25 @@ func TestStatusJson(t *testing.T) {
 func TestNodeStatusResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-	node := s.Node().(*server.Node)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110023),
+	})
+	defer srv.Stopper().Stop(context.Background())
+
+	if srv.TenantController().StartedDefaultTestTenant() {
+		// Enable access to the nodes endpoint for the test tenant.
+		_, err := srv.SystemLayer().SQLConn(t, "").Exec(
+			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+
+		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanViewNodeInfo: "true",
+		}, "")
+	}
+
+	s := srv.ApplicationLayer()
+
+	node := srv.StorageLayer().Node().(*server.Node)
 
 	wrapper := serverpb.NodesResponse{}
 
@@ -187,11 +205,25 @@ func TestNodesGRPCResponse(t *testing.T) {
 
 	ctx := context.Background()
 
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110023),
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	if srv.TenantController().StartedDefaultTestTenant() {
+		// Enable access to the nodes endpoint for the test tenant.
+		_, err := srv.SystemLayer().SQLConn(t, "").Exec(
+			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+
+		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanViewNodeInfo: "true",
+		}, "")
+	}
 
 	var request serverpb.NodesRequest
 
+	s := srv.ApplicationLayer()
 	client := s.GetStatusClient(t)
 
 	response, err := client.Nodes(ctx, &request)

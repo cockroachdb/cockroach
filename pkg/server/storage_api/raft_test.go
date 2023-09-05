@@ -27,8 +27,11 @@ import (
 func TestRaftDebug(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.SystemLayer()
 
 	var resp serverpb.RaftDebugResponse
 	if err := srvtestutils.GetStatusJSONProto(s, "raft", &resp); err != nil {
