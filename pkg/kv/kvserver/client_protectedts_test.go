@@ -183,11 +183,8 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	// Verify that the record did indeed make its way down into KV where the
 	// replica can read it from.
 	ptsReader := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().ProtectedTimestampReader
-	require.NoError(
-		t,
-		ptutil.TestingVerifyProtectionTimestampExistsOnSpans(
-			ctx, t, s0, ptsReader, ptsRec.Timestamp, ptsRec.DeprecatedSpans,
-		),
+	ptutil.TestingWaitForProtectedTimestampToExistOnSpans(
+		ctx, t, s0, ptsReader, ptsRec.Timestamp, ptsRec.DeprecatedSpans,
 	)
 	upsertUntilBackpressure()
 	// We need to be careful choosing a time. We're a little limited because the
@@ -223,11 +220,8 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	// Verify that the record did indeed make its way down into KV where the
 	// replica can read it from. We then verify (below) that the failed record
 	// does not affect the ability to GC.
-	require.NoError(
-		t,
-		ptutil.TestingVerifyProtectionTimestampExistsOnSpans(
-			ctx, t, s0, ptsReader, failedRec.Timestamp, failedRec.DeprecatedSpans,
-		),
+	ptutil.TestingWaitForProtectedTimestampToExistOnSpans(
+		ctx, t, s0, ptsReader, failedRec.Timestamp, failedRec.DeprecatedSpans,
 	)
 
 	// Add a new record that is after the old record.
@@ -236,11 +230,8 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	laterRec.Timestamp = afterWrites
 	laterRec.Timestamp.Logical = 0
 	require.NoError(t, ptsWithDB.Protect(ctx, &laterRec))
-	require.NoError(
-		t,
-		ptutil.TestingVerifyProtectionTimestampExistsOnSpans(
-			ctx, t, s0, ptsReader, laterRec.Timestamp, laterRec.DeprecatedSpans,
-		),
+	ptutil.TestingWaitForProtectedTimestampToExistOnSpans(
+		ctx, t, s0, ptsReader, laterRec.Timestamp, laterRec.DeprecatedSpans,
 	)
 
 	// Release the record that had succeeded and ensure that GC eventually
