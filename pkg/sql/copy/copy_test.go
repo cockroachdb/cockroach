@@ -88,17 +88,20 @@ const csvData = `%d|155190|7706|1|17|21168.23|0.04|0.02|N|O|1996-03-13|1996-02-1
 
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	for _, vectorize := range []string{"on", "off"} {
 		for _, atomic := range []string{"on", "off"} {
 			for _, fastPath := range []string{"on", "off"} {
 				datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-					s := serverutils.StartServerOnly(t, base.TestServerArgs{
+					defer log.Scope(t).Close(t)
+
+					srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 						Settings: cluster.MakeTestingClusterSettings(),
 					})
-					defer s.Stopper().Stop(ctx)
+					defer srv.Stopper().Stop(ctx)
+
+					s := srv.ApplicationLayer()
 
 					url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 					defer cleanup()
@@ -157,7 +160,7 @@ func TestDataDriven(t *testing.T) {
 								require.NoError(t, err, "%s\n%s\n", d.Cmd, d.Input)
 								rows, err := conn.Query(ctx,
 									`SELECT
-						  regexp_replace(message, '/Table/[0-9]*/', '/Table/<>/')
+						  regexp_replace(message, '(/Tenant/[0-9]*)?/Table/[0-9]*/', '/Table/<>/')
 						FROM [SHOW KV TRACE FOR SESSION]
 						WHERE message LIKE '%Put % -> %'`)
 								defer func() {
@@ -243,11 +246,11 @@ func expandErrorString(err error) string {
 // batches are in separate transactions when non atomic mode is enabled.
 func TestCopyFromTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	testutils.RunTrueAndFalse(t, "disableAutoCommitDuringExec", func(t *testing.T, b bool) {
-		s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		defer log.Scope(t).Close(t)
+		srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 			Settings: cluster.MakeTestingClusterSettings(),
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
@@ -255,7 +258,9 @@ func TestCopyFromTransaction(t *testing.T) {
 				},
 			},
 		})
-		defer s.Stopper().Stop(ctx)
+		defer srv.Stopper().Stop(ctx)
+
+		s := srv.ApplicationLayer()
 
 		url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
 		defer cleanup()
@@ -399,8 +404,10 @@ func TestCopyFromTimeout(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
 
 	pgURL, cleanup := sqlutils.PGUrl(
 		t,
