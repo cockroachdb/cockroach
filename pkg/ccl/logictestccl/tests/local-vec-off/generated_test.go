@@ -92,6 +92,13 @@ func TestCCLLogic_partitioning_enum(
 	runCCLLogicTest(t, "partitioning_enum")
 }
 
+func TestCCLLogic_pgcrypto_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "pgcrypto_builtins")
+}
+
 func TestCCLLogic_redact_descriptor(
 	t *testing.T,
 ) {

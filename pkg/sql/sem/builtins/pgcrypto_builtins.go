@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/pgcrypto"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -41,6 +42,13 @@ func init() {
 		registerBuiltin(k, v, tree.NormalClass, enforceClass)
 	}
 }
+
+const cipherSupportedCipherTypeInfo = "The cipher type must have the format `<algorithm>[-<mode>][/pad:<padding>]` where:\n" +
+	"* `<algorithm>` is `aes`\n" +
+	"* `<mode>` is `cbc` (default)\n" +
+	"* `<padding>` is `pkcs` (default) or `none`"
+
+const cipherRequiresEnterpriseLicenseInfo = "This function requires an enterprise license on a CCL distribution."
 
 var pgcryptoBuiltins = map[string]builtinDefinition{
 
@@ -59,6 +67,61 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 				return tree.NewDString(hash), nil
 			},
 			Info:       "Generates a hash based on a password and salt. The hash algorithm and number of rounds if applicable are encoded in the salt.",
+			Volatility: volatility.Immutable,
+		},
+	),
+
+	"decrypt": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "data", Typ: types.Bytes},
+				{Name: "key", Typ: types.Bytes},
+				{Name: "type", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				data := []byte(tree.MustBeDBytes(args[0]))
+				key := []byte(tree.MustBeDBytes(args[1]))
+				cipherType := string(tree.MustBeDString(args[2]))
+				decryptedData, err := pgcrypto.Decrypt(ctx, evalCtx, data, key, cipherType)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(decryptedData)), nil
+			},
+			Info: "Decrypt `data` with `key` using the cipher method specified by `type`." +
+				"\n\n" + cipherSupportedCipherTypeInfo +
+				"\n\n" + cipherRequiresEnterpriseLicenseInfo,
+			Volatility: volatility.Immutable,
+		},
+	),
+
+	"decrypt_iv": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "data", Typ: types.Bytes},
+				{Name: "key", Typ: types.Bytes},
+				{Name: "iv", Typ: types.Bytes},
+				{Name: "type", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				data := []byte(tree.MustBeDBytes(args[0]))
+				key := []byte(tree.MustBeDBytes(args[1]))
+				iv := []byte(tree.MustBeDBytes(args[2]))
+				cipherType := string(tree.MustBeDString(args[3]))
+				decryptedData, err := pgcrypto.DecryptIV(ctx, evalCtx, data, key, iv, cipherType)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(decryptedData)), nil
+			},
+			Info: "Decrypt `data` with `key` using the cipher method specified by `type`. " +
+				"If the mode is CBC, the provided `iv` will be used. Otherwise, it will be ignored." +
+				"\n\n" + cipherSupportedCipherTypeInfo +
+				"\n\n" + cipherRequiresEnterpriseLicenseInfo,
 			Volatility: volatility.Immutable,
 		},
 	),
@@ -101,6 +164,61 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 			},
 			Info: "Computes a binary hash of the given `data`. `type` is the algorithm " +
 				"to use (md5, sha1, sha224, sha256, sha384, or sha512).",
+			Volatility: volatility.Immutable,
+		},
+	),
+
+	"encrypt": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "data", Typ: types.Bytes},
+				{Name: "key", Typ: types.Bytes},
+				{Name: "type", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				data := []byte(tree.MustBeDBytes(args[0]))
+				key := []byte(tree.MustBeDBytes(args[1]))
+				cipherType := string(tree.MustBeDString(args[2]))
+				encryptedData, err := pgcrypto.Encrypt(ctx, evalCtx, data, key, cipherType)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(encryptedData)), nil
+			},
+			Info: "Encrypt `data` with `key` using the cipher method specified by `type`." +
+				"\n\n" + cipherSupportedCipherTypeInfo +
+				"\n\n" + cipherRequiresEnterpriseLicenseInfo,
+			Volatility: volatility.Immutable,
+		},
+	),
+
+	"encrypt_iv": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "data", Typ: types.Bytes},
+				{Name: "key", Typ: types.Bytes},
+				{Name: "iv", Typ: types.Bytes},
+				{Name: "type", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				data := []byte(tree.MustBeDBytes(args[0]))
+				key := []byte(tree.MustBeDBytes(args[1]))
+				iv := []byte(tree.MustBeDBytes(args[2]))
+				cipherType := string(tree.MustBeDString(args[3]))
+				encryptedData, err := pgcrypto.EncryptIV(ctx, evalCtx, data, key, iv, cipherType)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(encryptedData)), nil
+			},
+			Info: "Encrypt `data` with `key` using the cipher method specified by `type`. " +
+				"If the mode is CBC, the provided `iv` will be used. Otherwise, it will be ignored." +
+				"\n\n" + cipherSupportedCipherTypeInfo +
+				"\n\n" + cipherRequiresEnterpriseLicenseInfo,
 			Volatility: volatility.Immutable,
 		},
 	),

@@ -1,14 +1,12 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package pgcryptocipher
+package pgcryptocipherccl
 
 import (
 	"testing"
@@ -68,9 +66,9 @@ func TestParseCipherMethod(t *testing.T) {
 
 		// Invalid values
 		"aes/pad=pkcs": `cipher method has wrong format: "aes/pad=pkcs"`,
-		"aescbc":       `cipher method has unsupported algorithm: "aescbc"`,
-		"aes-ctr":      `cipher method has unsupported mode: "ctr"`,
-		"aes/pad:zero": `cipher method has unsupported padding: "zero"`,
+		"aescbc":       `cipher method has invalid algorithm: "aescbc"`,
+		"aes-ctr":      `cipher method has invalid mode: "ctr"`,
+		"aes/pad:zero": `cipher method has invalid padding: "zero"`,
 	} {
 		t.Run(input, func(t *testing.T) {
 			_, err := parseCipherMethod(input)

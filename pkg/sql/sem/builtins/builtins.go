@@ -7786,16 +7786,12 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				if err != nil {
 					return nil, err
 				}
-
 				if !isAdmin {
 					return nil, errors.New("must be admin to request a job profiler bundle")
 				}
 
 				jobID := int(tree.MustBeDInt(args[0]))
-				if err := evalCtx.JobsProfiler.RequestExecutionDetailFiles(
-					ctx,
-					jobspb.JobID(jobID),
-				); err != nil {
+				if err := evalCtx.JobsProfiler.RequestExecutionDetailFiles(ctx, jobspb.JobID(jobID)); err != nil {
 					return nil, err
 				}
 

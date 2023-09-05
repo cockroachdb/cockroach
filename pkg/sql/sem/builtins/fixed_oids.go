@@ -2453,6 +2453,10 @@ var builtinOidsArray = []string{
 	2482: `bitmask_xor(a: varbit, b: string) -> varbit`,
 	2483: `bitmask_xor(a: string, b: varbit) -> varbit`,
 	2484: `oidvectortypes(vector: oidvector) -> string`,
+	2485: `encrypt(data: bytes, key: bytes, type: string) -> bytes`,
+	2486: `encrypt_iv(data: bytes, key: bytes, iv: bytes, type: string) -> bytes`,
+	2487: `decrypt(data: bytes, key: bytes, type: string) -> bytes`,
+	2488: `decrypt_iv(data: bytes, key: bytes, iv: bytes, type: string) -> bytes`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

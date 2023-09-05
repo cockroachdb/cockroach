@@ -107,9 +107,7 @@ func checkForPlanDiagrams(
 	})
 }
 
-// TestJobsExecutionDetails tests that a job's execution details are retrieved
-// and rendered correctly.
-func TestJobsExecutionDetails(t *testing.T) {
+func TestShowJobsWithExecutionDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -224,7 +222,7 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 	})
 
 	t.Run("execution details for invalid job ID", func(t *testing.T) {
-		runner.ExpectErr(t, `job -123 not found; cannot request execution details`, `SELECT crdb_internal.request_job_execution_details(-123)`)
+		runner.ExpectErr(t, `coordinator not found for job -123`, `SELECT crdb_internal.request_job_execution_details(-123)`)
 	})
 
 	t.Run("read/write terminal trace", func(t *testing.T) {
@@ -321,6 +319,10 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
 	expectedDiagrams := 1
+	writtenDiagram := make(chan struct{})
+	defer close(writtenDiagram)
+	continueCh := make(chan struct{})
+	defer close(continueCh)
 	jobs.RegisterConstructor(jobspb.TypeImport, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return fakeExecResumer{
 			OnResume: func(ctx context.Context) error {
@@ -329,6 +331,8 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 				p.PhysicalInfrastructure = infra
 				jobsprofiler.StorePlanDiagram(ctx, s.Stopper(), &p, s.InternalDB().(isql.DB), j.ID())
 				checkForPlanDiagrams(ctx, t, s.InternalDB().(isql.DB), j.ID(), expectedDiagrams)
+				writtenDiagram <- struct{}{}
+				<-continueCh
 				if err := execCfg.JobRegistry.CheckPausepoint("fakeresumer.pause"); err != nil {
 					return err
 				}
@@ -344,22 +348,25 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 		runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'fakeresumer.pause'`)
 		var importJobID int
 		runner.QueryRow(t, `IMPORT INTO t CSV DATA ('nodelocal://1/foo') WITH DETACHED`).Scan(&importJobID)
-		jobutils.WaitForJobToPause(t, runner, jobspb.JobID(importJobID))
+		<-writtenDiagram
 
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		files := listExecutionDetails(t, s, jobspb.JobID(importJobID))
-		require.Len(t, files, 5)
-		require.Regexp(t, "[0-9]/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb", files[0])
-		require.Regexp(t, "[0-9]/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb", files[1])
-		require.Regexp(t, "distsql\\..*\\.html", files[2])
-		require.Regexp(t, "goroutines\\..*\\.txt", files[3])
-		require.Regexp(t, "trace\\..*\\.zip", files[4])
+		require.Len(t, files, 3)
+		require.Regexp(t, "distsql\\..*\\.html", files[0])
+		require.Regexp(t, "goroutines\\..*\\.txt", files[1])
+		require.Regexp(t, "trace\\..*\\.zip", files[2])
+
+		continueCh <- struct{}{}
+		jobutils.WaitForJobToPause(t, runner, jobspb.JobID(importJobID))
 
 		// Resume the job, so it can write another DistSQL diagram and goroutine
 		// snapshot.
 		runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
 		expectedDiagrams = 2
 		runner.Exec(t, `RESUME JOB $1`, importJobID)
+		<-writtenDiagram
+		continueCh <- struct{}{}
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		files = listExecutionDetails(t, s, jobspb.JobID(importJobID))
