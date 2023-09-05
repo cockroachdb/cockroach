@@ -1414,7 +1414,7 @@ func TestDBAddSSTable(t *testing.T) {
 		defer srv.Stopper().Stop(ctx)
 		s := srv.ApplicationLayer()
 		tr := s.TracerI().(*tracing.Tracer)
-		store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+		store, err := srv.StorageLayer().GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 		require.NoError(t, err)
 		runTestDBAddSSTable(ctx, t, db, tr, store)
 	})

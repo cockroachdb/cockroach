@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -436,42 +435,38 @@ func TestExportRequestWithCPULimitResumeSpans(t *testing.T) {
 
 	ctx := context.Background()
 	rng, _ := randutil.NewTestRand()
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			UseDatabase: "test",
-			Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
-					for _, ru := range request.Requests {
-						if _, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
-							h := admission.ElasticCPUWorkHandleFromContext(ctx)
-							if h == nil {
-								t.Fatalf("expected context to have CPU work handle")
-							}
-							h.TestingOverrideOverLimit(func() (bool, time.Duration) {
-								if rng.Float32() > 0.5 {
-									return true, 0
-								}
-								return false, 0
-							})
+
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: "test",
+		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
+			TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+				for _, ru := range request.Requests {
+					if _, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
+						h := admission.ElasticCPUWorkHandleFromContext(ctx)
+						if h == nil {
+							t.Fatalf("expected context to have CPU work handle")
 						}
+						h.TestingOverrideOverLimit(func() (bool, time.Duration) {
+							if rng.Float32() > 0.5 {
+								return true, 0
+							}
+							return false, 0
+						})
 					}
-					return nil
-				},
-			}},
-		},
+				}
+				return nil
+			},
+		}},
 	})
+	defer srv.Stopper().Stop(context.Background())
 
-	defer tc.Stopper().Stop(context.Background())
-
-	s := tc.ApplicationLayer(0)
+	s := srv.ApplicationLayer()
 
 	sql.SecondaryTenantSplitAtEnabled.Override(context.Background(), &s.ClusterSettings().SV, true)
 	sql.SecondaryTenantScatterEnabled.Override(context.Background(), &s.ClusterSettings().SV, true)
 
-	sqlDB := tc.Conns[0]
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	kvDB := s.DB()
 
 	const (
 		initRows = 1000
@@ -502,12 +497,15 @@ func TestExportGCThreshold(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-	kvDB := tc.Server(0).DB()
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+
+	startKey := append(ts.Codec().TenantPrefix(), bootstrap.TestingUserTableDataMin()...)
+	endKey := append(ts.Codec().TenantPrefix(), keys.MaxKey...)
 
 	req := &kvpb.ExportRequest{
-		RequestHeader: kvpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
+		RequestHeader: kvpb.RequestHeader{Key: startKey, EndKey: endKey},
 		StartTime:     hlc.Timestamp{WallTime: -1},
 	}
 	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
