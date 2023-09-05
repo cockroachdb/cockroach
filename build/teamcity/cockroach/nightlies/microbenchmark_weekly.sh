@@ -15,6 +15,7 @@
 #   BENCH_EXCLUDE: comma-separated list of benchmarks to exclude (default: none)
 #   TEST_ARGS: additional arguments to pass to the test binary (default: none)
 #   ROACHPROD_CREATE_ARGS: additional arguments to pass to `roachprod create` (default: none)
+#   MICROBENCH_SLACK_TOKEN: token to use to post to slack (default: none)
 
 set -exuo pipefail
 
@@ -84,5 +85,6 @@ fi
 # Generate sheets if comparing
 if [[ -n "${GCS_COMPARE_BINARIES}" ]] ; then
   ./bin/roachprod-microbench compare "$output_dir/0" "$output_dir/1" \
+    ${MICROBENCH_SLACK_TOKEN:+--slack-token="$MICROBENCH_SLACK_TOKEN"} \
     --sheet-desc="$SHEET_DESCRIPTION" 2>&1 | tee "$output_dir/sheets.txt"
 fi
