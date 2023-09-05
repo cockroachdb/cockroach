@@ -56,7 +56,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 	testServer := h.tc.Server(0)
 	tenantState := &Tenant{t: h.t}
 	if tenID == roachpb.SystemTenantID {
-		tenantState.ApplicationLayerInterface = testServer
+		tenantState.ApplicationLayerInterface = testServer.ApplicationLayer()
 		tenantState.db = sqlutils.MakeSQLRunner(h.tc.ServerConn(0))
 		tenantState.cleanup = func() {} // noop
 	} else {
