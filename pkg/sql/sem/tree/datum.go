@@ -1481,7 +1481,7 @@ func (d *DCollatedString) CompareError(ctx CompareContext, other Datum) (int, er
 		return 1, nil
 	}
 	v, ok := ctx.UnwrapDatum(other).(*DCollatedString)
-	if !ok || !d.ResolvedType().Equivalent(other.ResolvedType()) {
+	if !ok || !lex.LocaleNamesAreEqual(d.Locale, v.Locale) {
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
 	res := bytes.Compare(d.Key, v.Key)
