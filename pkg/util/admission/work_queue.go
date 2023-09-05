@@ -564,6 +564,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	if !info.ReplicatedWorkInfo.Enabled {
 		enabledSetting := admissionControlEnabledSettings[q.workKind]
 		if enabledSetting != nil && !enabledSetting.Get(&q.settings.SV) {
+			q.metrics.recordBypassedAdmission(info.Priority)
 			return false, nil
 		}
 	}
@@ -618,6 +619,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.admitMu.Unlock()
 		q.granter.tookWithoutPermission(info.RequestedCount)
 		q.metrics.incAdmitted(info.Priority)
+		q.metrics.recordBypassedAdmission(info.Priority)
 		return true, nil
 	}
 	// Work is subject to admission control.
@@ -1755,6 +1757,16 @@ func (m *WorkQueueMetrics) recordFinishWait(priority admissionpb.WorkPriority, d
 	priorityStats := m.getOrCreate(priority)
 	priorityStats.WaitQueueLength.Dec(1)
 	priorityStats.WaitDurations.RecordValue(dur.Nanoseconds())
+}
+
+func (m *WorkQueueMetrics) recordBypassedAdmission(priority admissionpb.WorkPriority) {
+	// For work that either bypasses admission queues (because of the nature of
+	// the work itself or because certain queues are disabled), we'll explicit
+	// record a zero wait duration so that the histogram percentiles remain
+	// accurate.
+	m.total.WaitDurations.RecordValue(0)
+	priorityStats := m.getOrCreate(priority)
+	priorityStats.WaitDurations.RecordValue(0)
 }
 
 // MetricStruct implements the metric.Struct interface.
