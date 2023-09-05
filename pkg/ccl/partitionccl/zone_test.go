@@ -386,11 +386,14 @@ func TestZoneConfigAppliesToTemporaryIndex(t *testing.T) {
 		},
 	}
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+
+	s := srv.ApplicationLayer()
+
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	codec := s.ApplicationLayer().Codec()
-	sv := &s.ApplicationLayer().ClusterSettings().SV
+	codec := s.Codec()
+	sv := &s.ClusterSettings().SV
 	sql.SecondaryTenantZoneConfigsEnabled.Override(context.Background(), sv, true)
 
 	if _, err := sqlDB.Exec(`
