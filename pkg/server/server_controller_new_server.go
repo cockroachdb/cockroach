@@ -246,6 +246,8 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.SpanConfigsDisabled = kvServerCfg.BaseConfig.SpanConfigsDisabled
 	baseCfg.EnableDemoLoginEndpoint = kvServerCfg.BaseConfig.EnableDemoLoginEndpoint
 	baseCfg.DefaultZoneConfig = kvServerCfg.BaseConfig.DefaultZoneConfig
+	baseCfg.HeapProfileDirName = kvServerCfg.BaseConfig.HeapProfileDirName
+	baseCfg.GoroutineDumpDirName = kvServerCfg.BaseConfig.GoroutineDumpDirName
 
 	// TODO(knz): use a single network interface for all tenant servers.
 	// See: https://github.com/cockroachdb/cockroach/issues/92524
