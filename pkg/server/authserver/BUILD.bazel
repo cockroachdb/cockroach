@@ -63,6 +63,7 @@ go_test(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security",
