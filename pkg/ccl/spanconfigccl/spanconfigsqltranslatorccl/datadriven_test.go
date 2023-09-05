@@ -129,8 +129,7 @@ func TestDataDriven(t *testing.T) {
 		}
 		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				// Fails with nil pointer dereference. Tracked with #76378 and #106818.
-				DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(106818),
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			},
 			ServerArgsPerNode: map[int]base.TestServerArgs{
 				0: tsArgs("n1"),
