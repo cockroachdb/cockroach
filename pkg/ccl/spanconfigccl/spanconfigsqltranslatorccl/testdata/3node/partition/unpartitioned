@@ -1,0 +1,10 @@
+exec-sql
+CREATE DATABASE IF NOT EXISTS db;
+CREATE TABLE IF NOT EXISTS db.tbl (a INT PRIMARY KEY);
+ALTER TABLE db.tbl PARTITION BY NOTHING;
+ALTER TABLE db.tbl CONFIGURE ZONE DISCARD;
+----
+
+translate database=db table=tbl
+----
+/Table/10{6-7}                             range default
