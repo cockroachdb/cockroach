@@ -38,7 +38,8 @@ func TestBenignNotifyFn(t *testing.T) {
 			fn("foo")
 			fn("foo")
 			result := buf.String()
-			require.Contains(t, result, "NOTICE: .foo() called via implicit interface IN;\nHINT: consider using .ACC().foo() instead")
+			require.Contains(t, result, "NOTICE: .foo() called via implicit interface IN")
+			require.Contains(t, result, "HINT: consider using .ACC().foo() instead")
 			if showTip {
 				require.Contains(t, result, "TIP:")
 			} else {
@@ -71,7 +72,8 @@ func TestSeriousNotifyFn(t *testing.T) {
 		fn("foo")
 		fn("foo")
 		result := buf.String()
-		require.Contains(t, result, "WARNING: risky use of implicit IN via .foo()\nHINT: clarify intent using .ACC1().foo() or .ACC2().foo() instead")
+		require.Contains(t, result, "WARNING: risky use of implicit IN via .foo()")
+		require.Contains(t, result, "HINT: clarify intent using .ACC1().foo() or .ACC2().foo() instead")
 		require.Contains(t, result, "TIP:")
 
 		if reportAllCalls {

@@ -21,21 +21,12 @@ import (
 )
 
 const tipText = `consider replacing the test server initialization from:
-
-    ts, db, kvDB := serverutils.StartServer(t, ...)
-    // or:
-    tc := serverutils.StartCluster(t, ...)
-    ts := tc.Server(0)
-
-To:
-
-    srv, db, kvDB := serverutils.StartServer(t, ...)
-    defer srv.Stop(...)
+    ts, ... := serverutils.StartServer(t, ...)
+    defer ts.Stopper().Stop(...)
+to:
+    srv, ... := serverutils.StartServer(t, ...)
+    defer srv.Stopper().Stop(...)
     ts := srv.ApplicationLayer()
-    // or:
-    tc := serverutils.StartCluster(t, ...)
-    ts := tc.Server(0).ApplicationLayer()
-
 `
 
 // When this env var is set, all the suspicious API calls are reported in test logs.
@@ -224,7 +215,9 @@ func makeSeriousNotifyFn(
 	}
 	return func(methodName string) {
 		reportFn(func() {
-			(*logFn)("\n%s\n\tWARNING: risky use of implicit %s via .%s()\nHINT: clarify intent using .%s().%s() or .%s().%s() instead.\n",
+			(*logFn)("\n%s\n\tWARNING: risky use of implicit %s via .%s()\n"+
+				"See: https://go.crdb.dev/p/testserver-api-problem\n"+
+				"HINT: clarify intent using .%s().%s() or .%s().%s() instead.\n",
 				GetExternalCaller(),
 				ifname, methodName, accessor1, methodName, accessor2, methodName)
 			(*logFn)("TIP: %s", tipText)
