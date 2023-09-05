@@ -2020,6 +2020,32 @@ message ListExecutionInsightsResponse {
   ];
 }
 
+// StatementExecutionInsightsRequest requests a list of statement execution insights that match
+// specified statement ID or fingerprint ID in case they're specified.
+message StatementExecutionInsightsRequest {
+  bytes statement_id = 1 [(gogoproto.customname) = "StatementID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID"];
+  uint64 stmt_fingerprint_id = 2 [(gogoproto.customname) = "StmtFingerprintID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.StmtFingerprintID"];
+  google.protobuf.Timestamp start_time = 3 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp end_time = 4 [(gogoproto.stdtime) = true];
+}
+
+// StatementExecutionInsightsResponse returns list of requested statement execution insights.
+message StatementExecutionInsightsResponse {
+  // StatementInsight message is a wrapper on top of cockroach.sql.insights.Statement message to
+  // extend it with transaction and session level information.
+  message StatementInsight {
+    bytes transaction_id = 1 [(gogoproto.customname) = "TransactionID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+      (gogoproto.nullable) = false];
+    bytes session_id = 2 [(gogoproto.customname) = "ID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
+      (gogoproto.nullable) = false];
+    cockroach.sql.insights.Statement statement = 3;
+  }
+  repeated StatementInsight statement_insights = 1;
+}
 
 message CriticalNodesRequest {}
 message CriticalNodesResponse {
@@ -2586,6 +2612,13 @@ service Status {
     (ListJobProfilerExecutionDetailsResponse) {
     option (google.api.http) = {
       get: "/_status/list_job_profiler_execution_details/{job_id}"
+    };
+  }
+
+  rpc StatementExecutionInsights(StatementExecutionInsightsRequest) returns (StatementExecutionInsightsResponse) {
+    option (google.api.http) = {
+      post: "/_status/insights/statements"
+      body: "*"
     };
   }
 }

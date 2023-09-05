@@ -15,6 +15,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
+import "sql/contentionpb/contention.proto";
 
 enum Problem {
   // This statement execution was not itself problematic, but it happened in
@@ -92,6 +93,7 @@ message Transaction {
   // The error code of the last failed statement in the transaction.
   string last_error_code = 18; 
   Status status = 19;
+  repeated ContentionEvent contention_events = 20 [(gogoproto.nullable) = true];
 }
 
 message Statement {
@@ -111,8 +113,8 @@ message Statement {
   google.protobuf.Timestamp start_time = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   google.protobuf.Timestamp end_time = 7 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   bool full_scan = 8;
-  reserved 9; // previously user
-  reserved 10; // previously application_name
+  string user = 9;
+  string application_name = 10;
   string database = 11;
   string plan_gist = 12;
   int64 rows_read = 13;
@@ -128,6 +130,10 @@ message Statement {
   repeated Cause causes = 22;
   int64 cpu_sql_nanos = 23 [(gogoproto.customname) = "CPUSQLNanos"];
   string error_code = 24;
+  repeated ContentionEvent contention_events = 25 [(gogoproto.nullable) = true];
+  double retry_lat_seconds = 26;
+  double commit_lat_seconds = 27;
+  double idle_lat_seconds = 28;
 }
 
 
@@ -145,4 +151,12 @@ message Insight {
 
   reserved  4; // Previously problem.
   reserved 5; // Previously causes.
+}
+
+message ContentionEvent {
+  contentionpb.ExtendedContentionEvent event = 1;
+  string database_name = 2;
+  string schema_name = 3;
+  string index_name = 4;
+  string table_name = 5;
 }
