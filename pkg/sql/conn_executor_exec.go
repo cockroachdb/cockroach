@@ -2177,6 +2177,8 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	err error,
 ) {
 	now := ex.server.cfg.Clock.PhysicalTime()
+	p := &ex.planner
+	ex.resetPlanner(ctx, p, nil, now)
 	var modes tree.TransactionModes
 	if s != nil {
 		modes = s.Modes
@@ -2187,9 +2189,6 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		return rwMode, now, nil, nil
 	}
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
-	p := &ex.planner
-
-	ex.resetPlanner(ctx, p, nil, now)
 	asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
 	if err != nil {
 		return 0, time.Time{}, nil, err
