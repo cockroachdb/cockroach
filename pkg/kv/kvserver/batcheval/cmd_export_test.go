@@ -436,6 +436,7 @@ func TestExportRequestWithCPULimitResumeSpans(t *testing.T) {
 
 	ctx := context.Background()
 	rng, _ := randutil.NewTestRand()
+
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			UseDatabase: "test",
@@ -457,21 +458,20 @@ func TestExportRequestWithCPULimitResumeSpans(t *testing.T) {
 					}
 					return nil
 				},
-			}},
-		},
-	})
-
+			}}}})
 	defer tc.Stopper().Stop(context.Background())
 
-	s := tc.ApplicationLayer(0)
+	srv := tc.Server(0)
+
+	s := srv.ApplicationLayer()
+	sqlDB := tc.Conns[0]
+	kvDB := s.DB()
 
 	sql.SecondaryTenantSplitAtEnabled.Override(context.Background(), &s.ClusterSettings().SV, true)
 	sql.SecondaryTenantScatterEnabled.Override(context.Background(), &s.ClusterSettings().SV, true)
 
-	sqlDB := tc.Conns[0]
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	kvDB := s.DB()
 
 	const (
 		initRows = 1000
@@ -502,12 +502,15 @@ func TestExportGCThreshold(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-	kvDB := tc.Server(0).DB()
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+
+	startKey := append(ts.Codec().TenantPrefix(), bootstrap.TestingUserTableDataMin()...)
+	endKey := append(ts.Codec().TenantPrefix(), keys.MaxKey...)
 
 	req := &kvpb.ExportRequest{
-		RequestHeader: kvpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
+		RequestHeader: kvpb.RequestHeader{Key: startKey, EndKey: endKey},
 		StartTime:     hlc.Timestamp{WallTime: -1},
 	}
 	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
