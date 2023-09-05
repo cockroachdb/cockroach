@@ -36,10 +36,14 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	codec := s.ApplicationLayer().Codec()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+
+	codec := s.Codec()
 
 	// Create a table (for which we know the encoding of valid keys) with a
 	// single row.
@@ -81,15 +85,15 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 
 	getStreamer := func(singleRowLookup bool) *Streamer {
 		require.Zero(t, acc.Used())
-		rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
+		rootTxn := kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID())
 		leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
 		if err != nil {
 			panic(err)
 		}
 		s := NewStreamer(
 			s.DistSenderI().(*kvcoord.DistSender),
-			s.Stopper(),
-			kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState),
+			s.AppStopper(),
+			kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState),
 			cluster.MakeTestingClusterSettings(),
 			lock.WaitPolicy(0),
 			math.MaxInt64,
