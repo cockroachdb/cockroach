@@ -399,6 +399,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.TxnIsoLevel = isolation.Serializable
 	notStale()
 
+	// Stale optimizer_push_select_into_unique_key.
+	evalCtx.SessionData().OptimizerPushSelectIntoUniqueKey = true
+	stale()
+	evalCtx.SessionData().OptimizerPushSelectIntoUniqueKey = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)

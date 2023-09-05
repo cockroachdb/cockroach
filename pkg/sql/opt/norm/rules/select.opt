@@ -113,7 +113,8 @@ $input
 # which match on Select expressions, to fire.
 [PushSelectIntoUniqueKey, Normalize]
 (Select
-    (UniqueKey $input:* $private:*)
+    (UniqueKey $input:* $private:*) &
+        (PushSelectIntoUniqueKeyEnabled)
     $filters:[
         ...
         $item:* &

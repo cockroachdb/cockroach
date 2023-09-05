@@ -2434,3 +2434,97 @@ project
       │         └── row-number [as=row_num:25]
       └── filters
            └── row_num:25 <= 100 [outer=(25), constraints=(/25: (/NULL - /100]; tight)]
+
+# The filter on tr.str16 cannot be pushed into the val3 inner lateral join when
+# optimizer_push_select_into_unique_key is false.
+norm set=optimizer_push_select_into_unique_key=false expect-not=PushSelectIntoUniqueKey
+WITH
+  with2
+    AS (
+      SELECT
+        tq.trid, tq.dec1
+      FROM
+        trrec AS r INNER JOIN trtab4 AS tq ON r.id = tq.trid AND r.str16 = '12345'
+    )
+SELECT tr.id, tr.trid
+FROM
+  trrec AS tr
+  INNER JOIN LATERAL (
+      SELECT  q.dec1 FROM with2 AS q WHERE tr.id = q.trid
+    ) AS q ON true
+  INNER JOIN LATERAL (
+      SELECT
+        m.ts12
+      FROM trm AS m WHERE tr.id = m.trid
+      ORDER BY m.ts12 DESC
+      LIMIT 100
+    ) AS val3 ON true
+WHERE
+  tr.str16 = '12345'
+;
+----
+project
+ ├── columns: id:12!null trid:13!null
+ ├── fd: (12)-->(13)
+ └── select
+      ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null m.trid:21!null m.ts12:22!null row_num:25!null rownum:26!null
+      ├── fd: ()-->(15), (12)-->(13), (26)-->(12,13), (12)==(21), (21)==(12)
+      ├── window partition=(26) ordering=-22 opt(12-17,19,21,26)
+      │    ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null m.trid:21!null m.ts12:22!null row_num:25 rownum:26!null
+      │    ├── fd: ()-->(15), (12)-->(13), (26)-->(12,13), (12)==(21), (21)==(12)
+      │    ├── inner-join (hash)
+      │    │    ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null m.trid:21!null m.ts12:22!null rownum:26!null
+      │    │    ├── fd: ()-->(15), (12)-->(13), (26)-->(12,13), (12)==(21), (21)==(12)
+      │    │    ├── select
+      │    │    │    ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null rownum:26!null
+      │    │    │    ├── key: (26)
+      │    │    │    ├── fd: ()-->(15), (12)-->(13), (26)-->(12,13)
+      │    │    │    ├── unique-key
+      │    │    │    │    ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15 rownum:26!null
+      │    │    │    │    ├── key: (26)
+      │    │    │    │    ├── fd: (12)-->(13,15), (26)-->(12,13,15)
+      │    │    │    │    └── project
+      │    │    │    │         ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15
+      │    │    │    │         ├── fd: (12)-->(13,15)
+      │    │    │    │         └── inner-join (hash)
+      │    │    │    │              ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15 trid:18!null
+      │    │    │    │              ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │    │    │    │              ├── fd: (12)-->(13,15), (12)==(18), (18)==(12)
+      │    │    │    │              ├── scan trrec [as=tr]
+      │    │    │    │              │    ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15
+      │    │    │    │              │    ├── key: (12)
+      │    │    │    │              │    └── fd: (12)-->(13,15)
+      │    │    │    │              ├── project
+      │    │    │    │              │    ├── columns: trid:18!null
+      │    │    │    │              │    ├── inner-join (hash)
+      │    │    │    │              │    │    ├── columns: r.id:1!null r.str16:4!null tq.trid:8!null
+      │    │    │    │              │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │    │    │    │              │    │    ├── fd: ()-->(4), (1)==(8), (8)==(1)
+      │    │    │    │              │    │    ├── select
+      │    │    │    │              │    │    │    ├── columns: r.id:1!null r.str16:4!null
+      │    │    │    │              │    │    │    ├── key: (1)
+      │    │    │    │              │    │    │    ├── fd: ()-->(4)
+      │    │    │    │              │    │    │    ├── scan trrec [as=r]
+      │    │    │    │              │    │    │    │    ├── columns: r.id:1!null r.str16:4
+      │    │    │    │              │    │    │    │    ├── key: (1)
+      │    │    │    │              │    │    │    │    └── fd: (1)-->(4)
+      │    │    │    │              │    │    │    └── filters
+      │    │    │    │              │    │    │         └── r.str16:4 = '12345' [outer=(4), constraints=(/4: [/'12345' - /'12345']; tight), fd=()-->(4)]
+      │    │    │    │              │    │    ├── scan trtab4 [as=tq]
+      │    │    │    │              │    │    │    └── columns: tq.trid:8!null
+      │    │    │    │              │    │    └── filters
+      │    │    │    │              │    │         └── r.id:1 = tq.trid:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      │    │    │    │              │    └── projections
+      │    │    │    │              │         └── tq.trid:8 [as=trid:18, outer=(8)]
+      │    │    │    │              └── filters
+      │    │    │    │                   └── tr.id:12 = trid:18 [outer=(12,18), constraints=(/12: (/NULL - ]; /18: (/NULL - ]), fd=(12)==(18), (18)==(12)]
+      │    │    │    └── filters
+      │    │    │         └── tr.str16:15 = '12345' [outer=(15), constraints=(/15: [/'12345' - /'12345']; tight), fd=()-->(15)]
+      │    │    ├── scan trm [as=m]
+      │    │    │    └── columns: m.trid:21!null m.ts12:22!null
+      │    │    └── filters
+      │    │         └── tr.id:12 = m.trid:21 [outer=(12,21), constraints=(/12: (/NULL - ]; /21: (/NULL - ]), fd=(12)==(21), (21)==(12)]
+      │    └── windows
+      │         └── row-number [as=row_num:25]
+      └── filters
+           └── row_num:25 <= 100 [outer=(25), constraints=(/25: (/NULL - /100]; tight)]

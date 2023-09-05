@@ -441,6 +441,11 @@ message LocalOnlySessionData {
   // forms of DDL inside explicit txns).
   bool strict_ddl_atomicity = 111 [(gogoproto.customname) = "StrictDDLAtomicity"];
 
+  // OptimizerPushSelectIntoUniqueKey, when true, allows the optimizer to push a
+  // Select expression into a UniqueKey expression. This rewrite can sometimes
+  // enable constrained index scan.
+  bool optimizer_push_select_into_unique_key = 112;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

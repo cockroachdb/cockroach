@@ -417,3 +417,11 @@ func (c *CustomFuncs) addConjuncts(
 	}
 	return filters, true
 }
+
+// PushSelectIntoUniqueKeyEnabled returns true if the
+// `optimizer_push_select_into_unique_key` session flag is true, meaning a
+// Select operation is allowed to be pushed into a UniqueKey expression which
+// was constructed for the purposes of duplicate row removal.
+func (c *CustomFuncs) PushSelectIntoUniqueKeyEnabled() (ok bool) {
+	return c.mem.EvalContext().SessionData().OptimizerPushSelectIntoUniqueKey
+}

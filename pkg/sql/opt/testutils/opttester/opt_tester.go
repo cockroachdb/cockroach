@@ -302,6 +302,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries = true
 	ot.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation = true
 	ot.evalCtx.SessionData().OptimizerUseImprovedJoinElimination = true
+	ot.evalCtx.SessionData().OptimizerPushSelectIntoUniqueKey = true
 
 	return ot
 }

@@ -5379,6 +5379,7 @@ opt_split_scan_limit                                       2048
 optimizer                                                  on
 optimizer_always_use_histograms                            on
 optimizer_hoist_uncorrelated_equality_subqueries           on
+optimizer_push_select_into_unique_key                      on
 optimizer_use_forecasts                                    on
 optimizer_use_histograms                                   on
 optimizer_use_improved_computed_column_filters_derivation  on
