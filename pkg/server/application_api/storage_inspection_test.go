@@ -39,9 +39,13 @@ import (
 func TestAdminAPINonTableStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110012),
+		},
+	})
 	defer testCluster.Stopper().Stop(context.Background())
-	s := testCluster.Server(0)
+	s := testCluster.Server(0).ApplicationLayer()
 
 	// Skip TableStatsResponse.Stats comparison, since it includes data which
 	// aren't consistent (time, bytes).
