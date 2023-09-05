@@ -29,7 +29,7 @@ var _ tree.FunctionReferenceResolver = (*Catalog)(nil)
 func (tc *Catalog) ResolveFunction(
 	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	fn, err := name.ToFunctionName()
+	fn, err := name.ToRoutineName()
 	if err != nil {
 		return nil, err
 	}
