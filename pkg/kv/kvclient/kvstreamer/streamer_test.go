@@ -39,17 +39,20 @@ import (
 )
 
 func getStreamer(
-	ctx context.Context, s serverutils.TestServerInterface, limitBytes int64, acc *mon.BoundAccount,
+	ctx context.Context,
+	s serverutils.ApplicationLayerInterface,
+	limitBytes int64,
+	acc *mon.BoundAccount,
 ) *kvstreamer.Streamer {
-	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
+	rootTxn := kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID())
 	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
 	if err != nil {
 		panic(err)
 	}
 	return kvstreamer.NewStreamer(
 		s.DistSenderI().(*kvcoord.DistSender),
-		s.Stopper(),
-		kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState),
+		s.AppStopper(),
+		kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState),
 		cluster.MakeTestingClusterSettings(),
 		lock.WaitPolicy(0),
 		limitBytes,
@@ -67,8 +70,10 @@ func TestStreamerLimitations(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
 
 	getStreamer := func() *kvstreamer.Streamer {
 		return getStreamer(ctx, s, math.MaxInt64, nil /* acc */)
@@ -85,7 +90,8 @@ func TestStreamerLimitations(t *testing.T) {
 		streamer := getStreamer()
 		defer streamer.Close(ctx)
 		streamer.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
-		get := kvpb.NewGet(roachpb.Key("key"), false /* forUpdate */)
+		k := append(s.Codec().TenantPrefix(), roachpb.Key("key")...)
+		get := kvpb.NewGet(k, false /* forUpdate */)
 		reqs := []kvpb.RequestUnion{{
 			Value: &kvpb.RequestUnion_Get{
 				Get: get.(*kvpb.GetRequest),
@@ -101,8 +107,8 @@ func TestStreamerLimitations(t *testing.T) {
 		require.Panics(t, func() {
 			kvstreamer.NewStreamer(
 				s.DistSenderI().(*kvcoord.DistSender),
-				s.Stopper(),
-				kv.NewTxn(ctx, s.DB(), s.NodeID()),
+				s.AppStopper(),
+				kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID()),
 				cluster.MakeTestingClusterSettings(),
 				lock.WaitPolicy(0),
 				math.MaxInt64, /* limitBytes */
@@ -133,9 +139,12 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	codec := s.ApplicationLayer().Codec()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+
+	codec := s.Codec()
 
 	// Create a dummy table for which we know the encoding of valid keys.
 	_, err := db.Exec("CREATE TABLE foo (pk_blob STRING PRIMARY KEY, attribute INT, blob TEXT, INDEX(attribute))")
@@ -400,13 +409,13 @@ func TestStreamerEmptyScans(t *testing.T) {
 	// Start a cluster with large --max-sql-memory parameter so that the
 	// Streamer isn't hitting the root budget exceeded error.
 	const rootPoolSize = 1 << 30 /* 1GiB */
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		SQLMemoryPoolSize: rootPoolSize,
 	})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
 
-	ts := s.ApplicationLayer()
+	ts := srv.ApplicationLayer()
 	codec := ts.Codec()
 	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
 
@@ -429,7 +438,7 @@ func TestStreamerEmptyScans(t *testing.T) {
 	require.NoError(t, err)
 
 	getStreamer := func() *kvstreamer.Streamer {
-		s := getStreamer(ctx, s, math.MaxInt64, nil /* acc */)
+		s := getStreamer(ctx, ts, math.MaxInt64, nil /* acc */)
 		// There are two column families in the table.
 		s.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 2 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s
