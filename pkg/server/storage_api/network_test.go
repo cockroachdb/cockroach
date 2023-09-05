@@ -31,11 +31,21 @@ func TestNetworkConnectivity(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	numNodes := 3
 	testCluster := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110024),
+		},
+
 		ReplicationMode: base.ReplicationManual,
 	})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
-	ts := testCluster.Server(0)
+
+	// TODO(#110024): grant the appropriate capability to the test
+	// tenant before the connectivity endpoint can be accessed. See
+	// example in `TestNodeStatusResponse`.
+
+	s0 := testCluster.Server(0)
+	ts := s0.ApplicationLayer()
 
 	var resp serverpb.NetworkConnectivityResponse
 	// Should wait because endpoint relies on Gossip.
@@ -60,11 +70,11 @@ func TestNetworkConnectivity(t *testing.T) {
 			return err
 		}
 		require.Equal(t, len(resp.Connections), numNodes-1)
-		fmt.Printf("got status: %s", resp.Connections[ts.NodeID()].Peers[stoppedNodeID].Status.String())
-		if resp.Connections[ts.NodeID()].Peers[stoppedNodeID].Status != serverpb.NetworkConnectivityResponse_ERROR {
+		fmt.Printf("got status: %s", resp.Connections[s0.StorageLayer().NodeID()].Peers[stoppedNodeID].Status.String())
+		if resp.Connections[s0.StorageLayer().NodeID()].Peers[stoppedNodeID].Status != serverpb.NetworkConnectivityResponse_ERROR {
 			return errors.New("waiting for connection state to be changed.")
 		}
-		if latency := resp.Connections[ts.NodeID()].Peers[stoppedNodeID].Latency; latency > 0 {
+		if latency := resp.Connections[s0.StorageLayer().NodeID()].Peers[stoppedNodeID].Latency; latency > 0 {
 			return errors.Errorf("expected latency to be 0 but got %s", latency.String())
 		}
 		return nil

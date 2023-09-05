@@ -50,8 +50,11 @@ func TestStatusLocalLogs(t *testing.T) {
 	// there's just one.
 	defer s.SetupSingleFileLogging()()
 
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer ts.Stopper().Stop(context.Background())
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	ts := srv.ApplicationLayer()
+
+	logCtx := ts.AnnotateCtx(context.Background())
 
 	// Log an error of each main type which we expect to be able to retrieve.
 	// The resolution of our log timestamps is such that it's possible to get
@@ -65,15 +68,15 @@ func TestStatusLocalLogs(t *testing.T) {
 	const sleepBuffer = time.Microsecond * 20
 	timestamp := timeutil.Now().UnixNano()
 	time.Sleep(sleepBuffer)
-	log.Errorf(context.Background(), "TestStatusLocalLogFile test message-Error")
+	log.Errorf(logCtx, "TestStatusLocalLogFile test message-Error")
 	time.Sleep(sleepBuffer)
 	timestampE := timeutil.Now().UnixNano()
 	time.Sleep(sleepBuffer)
-	log.Warningf(context.Background(), "TestStatusLocalLogFile test message-Warning")
+	log.Warningf(logCtx, "TestStatusLocalLogFile test message-Warning")
 	time.Sleep(sleepBuffer)
 	timestampEW := timeutil.Now().UnixNano()
 	time.Sleep(sleepBuffer)
-	log.Infof(context.Background(), "TestStatusLocalLogFile test message-Info")
+	log.Infof(logCtx, "TestStatusLocalLogFile test message-Info")
 	time.Sleep(sleepBuffer)
 	timestampEWI := timeutil.Now().UnixNano()
 
@@ -205,8 +208,11 @@ func TestStatusLocalLogsTenantFilter(t *testing.T) {
 	// there's just one.
 	defer sc.SetupSingleFileLogging()()
 
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer ts.Stopper().Stop(context.Background())
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer srv.Stopper().Stop(context.Background())
+	ts := srv.ApplicationLayer()
 
 	appTenantID := roachpb.MustMakeTenantID(uint64(2))
 	ctxSysTenant, ctxAppTenant := server.TestingMakeLoggingContexts(appTenantID)
@@ -336,11 +342,13 @@ func TestStatusLogRedaction(t *testing.T) {
 			// Apply the redactable log boolean for this test.
 			defer log.TestingSetRedactable(redactableLogs)()
 
-			ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
-			defer ts.Stopper().Stop(context.Background())
+			srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+			defer srv.Stopper().Stop(context.Background())
+			ts := srv.ApplicationLayer()
 
 			// Log something.
-			log.Infof(context.Background(), "THISISSAFE %s", "THISISUNSAFE")
+			logCtx := ts.AnnotateCtx(context.Background())
+			log.Infof(logCtx, "THISISSAFE %s", "THISISUNSAFE")
 
 			// Determine the log file name.
 			var wrapper serverpb.LogFilesListResponse

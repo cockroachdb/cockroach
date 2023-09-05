@@ -28,8 +28,14 @@ func TestStatusGossipJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110022),
+	})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
+	// TODO(#110022): grant a special capability to the secondary tenant
+	// before the endpoint can be accessed.
 
 	var data gossip.InfoStatus
 	if err := srvtestutils.GetStatusJSONProto(s, "gossip/local", &data); err != nil {
