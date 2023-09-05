@@ -774,6 +774,7 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+	kvflowcontrol.Mode.Override(ctx, &st.SV, int64(kvflowcontrol.ApplyToAll))
 
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{

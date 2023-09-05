@@ -189,6 +189,7 @@ func TestInspectController(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	elasticTokensPerStream.Override(ctx, &st.SV, 8<<20 /* 8 MiB */)
 	regularTokensPerStream.Override(ctx, &st.SV, 16<<20 /* 16 MiB */)
+	kvflowcontrol.Mode.Override(ctx, &st.SV, int64(kvflowcontrol.ApplyToAll))
 	controller := New(metric.NewRegistry(), st, hlc.NewClockForTesting(nil))
 
 	// No streams connected -- inspect state should be empty.
