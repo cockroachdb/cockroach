@@ -1,0 +1,81 @@
+exec-ddl
+CREATE TABLE abc (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT
+)
+----
+
+# --------------------------------------------------
+# Procedure without arguments.
+# --------------------------------------------------
+
+build
+CALL p()
+----
+error (42883): procedure p does not exist
+
+exec-ddl
+CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS 'INSERT INTO abc VALUES (1, 2, 3)'
+----
+
+build format=show-scalars
+CALL p()
+----
+call
+ └── udf: p
+      └── body
+           └── insert abc
+                ├── columns: <none>
+                ├── insert-mapping:
+                │    ├── column1:6 => a:1
+                │    ├── column2:7 => b:2
+                │    └── column3:8 => c:3
+                └── values
+                     ├── columns: column1:6!null column2:7!null column3:8!null
+                     └── tuple
+                          ├── const: 1
+                          ├── const: 2
+                          └── const: 3
+
+exec-ddl
+CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS $$
+  INSERT INTO abc VALUES (1, 2, 3);
+  UPSERT INTO abc VALUES (4, 5, 6), (7, 8, 9);
+$$
+----
+
+build format=show-scalars
+CALL p()
+----
+call
+ └── udf: p
+      └── body
+           ├── insert abc
+           │    ├── columns: <none>
+           │    ├── insert-mapping:
+           │    │    ├── column1:6 => a:1
+           │    │    ├── column2:7 => b:2
+           │    │    └── column3:8 => c:3
+           │    └── values
+           │         ├── columns: column1:6!null column2:7!null column3:8!null
+           │         └── tuple
+           │              ├── const: 1
+           │              ├── const: 2
+           │              └── const: 3
+           └── upsert abc
+                ├── columns: <none>
+                ├── upsert-mapping:
+                │    ├── column1:14 => a:9
+                │    ├── column2:15 => b:10
+                │    └── column3:16 => c:11
+                └── values
+                     ├── columns: column1:14!null column2:15!null column3:16!null
+                     ├── tuple
+                     │    ├── const: 4
+                     │    ├── const: 5
+                     │    └── const: 6
+                     └── tuple
+                          ├── const: 7
+                          ├── const: 8
+                          └── const: 9

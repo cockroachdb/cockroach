@@ -505,7 +505,7 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 		return "", nil
 
 	case *tree.CreateRoutine:
-		tc.CreateFunction(stmt)
+		tc.CreateRoutine(stmt)
 		return "", nil
 
 	case *tree.SetZoneConfig:
