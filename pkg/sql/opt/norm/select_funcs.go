@@ -424,3 +424,11 @@ func (c *CustomFuncs) addConjuncts(
 func (c *CustomFuncs) ForDuplicateRemoval(private *memo.OrdinalityPrivate) (ok bool) {
 	return private.ForDuplicateRemoval
 }
+
+// PushSelectIntoOrdinalityEnabled returns true if the
+// `optimizer_push_select_into_ordinality` session flag is true, meaning a
+// Select operation is allowed to be pushed into an an Ordinality expression
+// which was constructed for the purposes of duplicate row removal.
+func (c *CustomFuncs) PushSelectIntoOrdinalityEnabled() (ok bool) {
+	return c.mem.EvalContext().SessionData().OptimizerPushSelectIntoOrdinality
+}

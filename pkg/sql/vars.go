@@ -2903,6 +2903,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`optimizer_push_select_into_ordinality`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_push_select_into_ordinality`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_push_select_into_ordinality", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerPushSelectIntoOrdinality(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerPushSelectIntoOrdinality), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
