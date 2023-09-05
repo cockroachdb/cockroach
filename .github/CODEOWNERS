@@ -329,7 +329,7 @@
 /pkg/kv/kvserver/txnwait/               @cockroachdb/kv-prs
 /pkg/kv/kvserver/uncertainty/           @cockroachdb/kv-prs
 
-/pkg/ccl/spanconfigccl/      @cockroachdb/kv-prs
+/pkg/ccl/spanconfigccl/      @cockroachdb/sql-foundations
 
 /pkg/ccl/storageccl/engineccl   @cockroachdb/storage
 /pkg/storage/                   @cockroachdb/storage
