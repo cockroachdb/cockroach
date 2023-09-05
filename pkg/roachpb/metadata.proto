@@ -486,18 +486,71 @@ message GCHint {
   // which doesn't carry this hint, because we know that the entire span is
   // probably not covered by range tombstones.
   //
-  // TODO(pavelkalinnikov): this hint is also used for two other purposes,
-  // factor them out.
+  // TODO(pavelkalinnikov): this is used for one other purpose, factor it out.
   //
-  //  - Upper layers can set this hint if they want to expedite GC process for
-  //  this range. For example, on deleting a SQL table/index, the schema change
-  //  job is blocked until GC removes the data entirely, so it sets the hint.
-  //  This case is buggy, see #107931.
-  //
-  //  - When this hint is set, it is likely that adjacent ranges have it too,
-  //  especially in bulk deletion situations. Once the GC queue sees this hint,
-  //  it scans meta to find all the ranges that have it set too, and GC them
-  //  with higher priority / lower delay. Ultimately, this reduces the cost of
-  //  Pebble compactions that can be triggered by writing range tombstones.
+  // When this hint is set, it is likely that adjacent ranges have it too,
+  // especially in bulk deletion situations. Once the GC queue sees this hint,
+  // it scans all the local leaseholder replicas to find the one with this hint
+  // too, and GC them with higher priority / lower delay. Ultimately, this
+  // reduces the cost of Pebble compactions that can be triggered by writing
+  // range tombstones.
   optional util.hlc.Timestamp latest_range_delete_timestamp = 1 [(gogoproto.nullable) = false];
+
+  // GCTimestamp is the lowest "pending" timestamp for which some data in the
+  // range must be garbage collected.
+  //
+  // Typically, this is left up to the MVCC GC job to decide when to delete
+  // data. Because of the way the GC scoring works, it may take a long time
+  // until such a decision is made. Some upper layer jobs require a more timely
+  // deletion. For example, when a SQL table/index is dropped, there is a schema
+  // change job waiting on the GC.
+  //
+  // We carry this hint to help expedite GC in such cases. Garbage collection is
+  // triggered shortly after the time is past GCTimestamp + TTL.
+  //
+  // It is possible that there are multiple timestamps for which some data must
+  // be deleted, e.g. if multiple SQL tables touching the same Range are
+  // dropped. We could carry all such timestamps in this GCHint for accuracy,
+  // but we would need extra measures to prevent uncontrollable growth of this
+  // list, and excessive number of GC runs it could cause.
+  //
+  // Instead, we compress this list of timestamps to a pair of GCTimestamp and
+  // GCTimestampNext, storing the min and max (if different from min) timestamp
+  // correspondingly.
+  //
+  // Since a GC run covers all timestamps <= threshold, preserving the max
+  // timestamp as a threshold guarantees that all pending timestamps <= max are
+  // covered. However, the max pending timestamp can always be bumped up by
+  // newer and newer writes, and never get below now() - TTL. To work around
+  // this race, we also preserve the min pending timestamp, and update it only
+  // when it has been garbage collected.
+  //
+  // With such a structure of the hint, we have a couple of guarantees:
+  //
+  //  1. The number of expedited GC runs on this range does not exceed 2 per TTL.
+  //
+  // Worst case: min < max < min+TTL = now. GC runs at time now = min+TTL, and
+  // maybe at max+TTL or later time. Since any new write is at timestamp >= now,
+  // the next GC run after these two is at least TTL away from now.
+  //
+  //  2. The max delay of expedited GC is close to one TTL, i.e. in the worst
+  //     case the GC will run at timestamp + 2*TTL.
+  //
+  // Worst case: now = max = min+TTL. GC runs at time now and clears the min
+  // timestamp. The only remaining timestamp (max) is min+TTL. The next possible
+  // expedited GC run is thus at min+2*TTL. We may have omitted some timestamps
+  // between min and max, and they are now <= 2*TTL away from the next GC run.
+  optional util.hlc.Timestamp gc_timestamp = 2 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "GCTimestamp"];
+  // GCTimestampNext is the largest "pending" timestamp for which some data in
+  // the range must be garbage collected. See GCTimestamp comment for more
+  // details.
+  //
+  // INVARIANT: if GCTimestamp is empty, then GCTimestampNext is empty.
+  // INVARIANT: if GCTimestampNext is set, it exceeds GCTimestamp.
+  //
+  // NB: if GCTimestamp is set and GCTimestampNext is empty, it means there is
+  // only one pending timestamp for garbage collection.
+  optional util.hlc.Timestamp next_gc_timestamp = 3 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "GCTimestampNext"];
 }

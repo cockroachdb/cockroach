@@ -5266,14 +5266,14 @@ func TestStoreMergeGCHint(t *testing.T) {
 			dataLeft:   true,
 			dataRight:  true,
 			delLeft:    true,
-			expectHint: false,
+			expectHint: true,
 		},
 		{
 			name:       "merge with data on left",
 			dataLeft:   true,
 			dataRight:  true,
 			delRight:   true,
-			expectHint: false,
+			expectHint: true,
 		},
 		{
 			name:       "merge with empty on left",
