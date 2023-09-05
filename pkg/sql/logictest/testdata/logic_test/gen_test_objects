@@ -215,7 +215,8 @@ lease                  rowid               bigint
 lease                  version             bigint
 protecte😠d_ts_records  _ts                 numeric
 protecte😠d_ts_records  "i'd"               uuid
-protecte😠d_ts_records  "meta_type"        text
+protecte😠d_ts_records  "meta_typ
+e"        text
 protecte😠d_ts_records  met😹a               bytea
 protecte😠d_ts_records  num_spans           bigint
 

@@ -175,6 +175,8 @@ mutations discard tenant=11
 state offset=81
 ----
 ...
+/Tenant/10/Table/2{5-6}                    database system (tenant)
+/Tenant/10/Table/2{6-7}                    database system (tenant)
 /Tenant/10/Table/2{7-8}                    database system (tenant)
 /Tenant/10/Table/2{8-9}                    database system (tenant)
 /Tenant/10/NamespaceTable/{30-Max}         database system (tenant)

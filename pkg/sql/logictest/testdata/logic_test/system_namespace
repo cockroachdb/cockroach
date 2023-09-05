@@ -47,6 +47,7 @@ SELECT * FROM system.namespace
 1    29  statement_diagnostics            36
 1    29  statement_diagnostics_requests   35
 1    29  statement_statistics             42
+1    29  stmt_exec_insights               64
 1    29  table_statistics                 20
 1    29  task_payloads                    58
 1    29  tenant_id_seq                    62
@@ -56,6 +57,7 @@ SELECT * FROM system.namespace
 1    29  tenants                          8
 1    29  transaction_activity             61
 1    29  transaction_statistics           43
+1    29  txn_exec_insights                63
 1    29  ui                               14
 1    29  users                            4
 1    29  web_sessions                     19

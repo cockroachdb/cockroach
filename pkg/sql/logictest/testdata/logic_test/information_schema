@@ -2681,7 +2681,7 @@ system         public        statement_statistics             transaction_finger
 system         public        stmt_exec_insights               app_name                                                                                                  14
 system         public        stmt_exec_insights               causes                                                                                                    7
 system         public        stmt_exec_insights               commit_lat                                                                                                29
-system         public        stmt_exec_insights               contention                                                                                                22
+system         public        stmt_exec_insights               contention_time                                                                                           22
 system         public        stmt_exec_insights               cpu_sql_nanos                                                                                             25
 system         public        stmt_exec_insights               created                                                                                                   33
 system         public        stmt_exec_insights               database_name                                                                                             15
@@ -2793,7 +2793,7 @@ system         public        transaction_statistics           statistics        
 system         public        transaction_statistics           total_estimated_execution_time                                                                            13
 system         public        txn_exec_insights                app_name                                                                                                  8
 system         public        txn_exec_insights                causes                                                                                                    16
-system         public        txn_exec_insights                contention                                                                                                14
+system         public        txn_exec_insights                contention_time                                                                                           14
 system         public        txn_exec_insights                cpu_sql_nanos                                                                                             18
 system         public        txn_exec_insights                created                                                                                                   23
 system         public        txn_exec_insights                details                                                                                                   22
