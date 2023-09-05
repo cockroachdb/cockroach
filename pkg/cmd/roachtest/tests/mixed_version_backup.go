@@ -88,6 +88,12 @@ var (
 
 	v231 = version.MustParse("v23.1.0")
 	v222 = version.MustParse("v22.2.0")
+	v221 = version.MustParse("v22.1.0")
+
+	// minSupportedNewDBName is the first version we supported
+	// RESTORE's new_db_name option in. We can only validate DB
+	// restores above this version.
+	minSupportedNewDBName = v221
 
 	// systemTablesInFullClusterBackup includes all system tables that
 	// are included as part of a full cluster backup. It should include
@@ -1047,8 +1053,14 @@ func newMixedVersionBackup(
 func (mvb *mixedVersionBackup) newBackupType(rng *rand.Rand, h *mixedversion.Helper) backupType {
 	possibleTypes := []backupType{
 		newTableBackup(rng, mvb.dbs, mvb.tables),
-		newDatabaseBackup(rng, mvb.dbs, mvb.tables),
+
 		newClusterBackup(rng, mvb.dbs, mvb.tables, h.LowestBinaryVersion()),
+	}
+
+	// Only allow database backups if we support new_db_name for
+	// verification.
+	if h.LowestBinaryVersion().AtLeast(minSupportedNewDBName) {
+		possibleTypes = append(possibleTypes, newDatabaseBackup(rng, mvb.dbs, mvb.tables))
 	}
 
 	return possibleTypes[rng.Intn(len(possibleTypes))]
