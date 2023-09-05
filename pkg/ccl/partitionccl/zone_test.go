@@ -1026,12 +1026,12 @@ func TestPrimaryKeyChangeZoneConfigs(t *testing.T) {
 
 	// Our subzones should be spans prefixed with dropped copy of i1,
 	// dropped copy of i2, new copy of i1, and new copy of i2.
-	// These have ID's 2, 3, 8 and 10 respectively.
+	// These have ID's 2, 3, 6 and 8 respectively.
 	expectedSpans := []roachpb.Key{
 		table.IndexSpan(codec, 2 /* indexID */).Key,
 		table.IndexSpan(codec, 3 /* indexID */).Key,
+		table.IndexSpan(codec, 6 /* indexID */).Key,
 		table.IndexSpan(codec, 8 /* indexID */).Key,
-		table.IndexSpan(codec, 10 /* indexID */).Key,
 	}
 	if len(zone.SubzoneSpans) != len(expectedSpans) {
 		t.Fatalf("expected subzones to have length %d", len(expectedSpans))
