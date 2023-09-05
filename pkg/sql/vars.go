@@ -2903,6 +2903,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`optimizer_push_select_into_unique_key`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_push_select_into_unique_key`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_push_select_into_unique_key", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerPushSelectIntoUniqueKey(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerPushSelectIntoUniqueKey), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
