@@ -957,7 +957,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	)
 
 	// Enable stepping for volatile functions so that statements within the UDF
-	// see mutations made by the invoking statement and by previous executed
+	// see mutations made by the invoking statement and by previously executed
 	// statements.
 	enableStepping := udf.Def.Volatility == volatility.Volatile
 

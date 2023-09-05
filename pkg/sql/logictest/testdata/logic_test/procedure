@@ -18,5 +18,24 @@ CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS $$
   SELECT nextval('s');
 $$
 
-statement error pgcode 0A000 unimplemented: procedures not supported
+statement ok
 CALL p()
+
+query I
+SELECT currval('s')
+----
+1
+
+statement ok
+CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS $$
+  SELECT 1;
+$$
+
+statement ok
+CALL p()
+
+# Ensure that the memo for the first execution of p was not re-used.
+query I
+SELECT currval('s')
+----
+1
