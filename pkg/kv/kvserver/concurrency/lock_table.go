@@ -2152,7 +2152,7 @@ func (kl *keyLocks) lockHeldDuration(now time.Time) time.Duration {
 	return now.Sub(minStartTS)
 }
 
-// Returns the total amount of time all waiters in the queues of
+// Returns the total amount of time all active waiters in the queues of
 // readers and locking requests have been waiting on the key referenced in the
 // receiver.
 //
@@ -2172,14 +2172,16 @@ func (kl *keyLocks) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.
 	}
 	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 		qg := e.Value
-		g := qg.guard
-		g.mu.Lock()
-		waitDuration := now.Sub(g.mu.curLockWaitStart)
-		totalWaitDuration += waitDuration
-		if waitDuration > maxWaitDuration {
-			maxWaitDuration = waitDuration
+		if qg.active {
+			g := qg.guard
+			g.mu.Lock()
+			waitDuration := now.Sub(g.mu.curLockWaitStart)
+			totalWaitDuration += waitDuration
+			if waitDuration > maxWaitDuration {
+				maxWaitDuration = waitDuration
+			}
+			g.mu.Unlock()
 		}
-		g.mu.Unlock()
 	}
 	return totalWaitDuration, maxWaitDuration
 }
