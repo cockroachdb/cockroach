@@ -120,7 +120,6 @@ func TestMultiRegionDataDriven(t *testing.T) {
 	// (legitimate) timing issues on a deadlock build.
 	skip.UnderRace(t, "flaky test")
 	skip.UnderDeadlock(t, "flaky test")
-	skip.WithIssue(t, 98020)
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		ds := datadrivenTestState{}
