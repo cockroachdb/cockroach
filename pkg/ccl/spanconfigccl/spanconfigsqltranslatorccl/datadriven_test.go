@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
@@ -40,6 +41,12 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	time.Sleep(301 * time.Second)
+}
 
 // TestDataDriven is a data-driven test for the spanconfig.SQLTranslator. It
 // allows users to set up zone config hierarchies and validate their translation

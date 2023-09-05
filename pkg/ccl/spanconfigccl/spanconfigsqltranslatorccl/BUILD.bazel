@@ -2,11 +2,12 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "spanconfigsqltranslatorccl_test",
+    size = "large",
     srcs = [
         "datadriven_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
     tags = ["ccl_test"],
     deps = [
