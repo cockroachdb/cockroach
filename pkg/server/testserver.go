@@ -425,10 +425,7 @@ func (ts *testServer) NodeLiveness() interface{} {
 
 // NodeDialer returns the NodeDialer used by the testServer.
 func (ts *testServer) NodeDialer() interface{} {
-	if ts != nil {
-		return ts.nodeDialer
-	}
-	return nil
+	return ts.nodeDialer
 }
 
 // HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
@@ -940,6 +937,11 @@ func (t *testTenant) RPCContext() *rpc.Context {
 // JobRegistry is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) JobRegistry() interface{} {
 	return t.sql.jobRegistry
+}
+
+// NodeDialer returns the NodeDialer used by the testServer.
+func (t *testTenant) NodeDialer() interface{} {
+	return t.sql.nodeDialer
 }
 
 // ExecutorConfig is part of the serverutils.ApplicationLayerInterface.
