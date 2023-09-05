@@ -2453,6 +2453,7 @@ var builtinOidsArray = []string{
 	2482: `bitmask_xor(a: varbit, b: string) -> varbit`,
 	2483: `bitmask_xor(a: string, b: varbit) -> varbit`,
 	2484: `oidvectortypes(vector: oidvector) -> string`,
+	2485: `crdb_internal.row_to_proto(row: tuple) -> bytes`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

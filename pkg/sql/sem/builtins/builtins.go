@@ -3039,6 +3039,27 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Stable,
 		},
 	),
+	"crdb_internal.row_to_proto": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategoryString,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "row", Typ: types.AnyTuple}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				v, err := protoreflect.MarshallToProtoStruct(args[0].(*tree.DTuple))
+				if err != nil {
+					return nil, err
+				}
+				data, err := protoutil.Marshal(v)
+				if err != nil {
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid proto")
+				}
+				return tree.NewDBytes(tree.DBytes(data)), nil
+			},
+			Info:       "Convert record to google.protobuf.Value",
+			Volatility: volatility.Immutable,
+		}),
 
 	// https://www.postgresql.org/docs/9.6/functions-datetime.html
 	"timezone": makeBuiltin(defProps(),

@@ -12,13 +12,16 @@ package protoreflect
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	jsonb "github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 var shorthands map[string]protoutil.Message = map[string]protoutil.Message{}
@@ -132,4 +135,70 @@ func JSONBMarshalToMessage(input jsonb.JSON, target protoutil.Message) ([]byte, 
 		return nil, errors.Wrapf(err, "marshaling to proto %s", proto.MessageName(target))
 	}
 	return data, nil
+}
+
+func asProtoValue(d tree.Datum) (*pbtypes.Value, error) {
+	if d == tree.DNull {
+		return &pbtypes.Value{Kind: &pbtypes.Value_NullValue{}}, nil
+	}
+
+	d = tree.UnwrapDOidWrapper(d)
+	switch t := d.(type) {
+	case *tree.DBool:
+		return &pbtypes.Value{Kind: &pbtypes.Value_BoolValue{BoolValue: bool(*t)}}, nil
+	case *tree.DInt:
+		return &pbtypes.Value{Kind: &pbtypes.Value_NumberValue{NumberValue: float64(*t)}}, nil
+	case *tree.DFloat:
+		return &pbtypes.Value{Kind: &pbtypes.Value_NumberValue{NumberValue: float64(*t)}}, nil
+	case *tree.DDecimal:
+		f, err := t.Float64()
+		if err != nil {
+			return nil, err
+		}
+		return &pbtypes.Value{Kind: &pbtypes.Value_NumberValue{NumberValue: f}}, nil
+	case *tree.DArray:
+		arr := &pbtypes.Value_ListValue{}
+		for _, e := range t.Array {
+			v, err := asProtoValue(e) // Not a problem since we don't support nested arrays.
+			if err != nil {
+				return nil, err
+			}
+			arr.ListValue.Values = append(arr.ListValue.Values, v)
+		}
+		return &pbtypes.Value{Kind: arr}, nil
+	case *tree.DTuple:
+		rec, err := MarshallToProtoStruct(t)
+		if err != nil {
+			return nil, err
+		}
+		return &pbtypes.Value{Kind: &pbtypes.Value_StructValue{StructValue: rec}}, nil
+	default:
+		return &pbtypes.Value{Kind: &pbtypes.Value_StringValue{
+			StringValue: tree.AsStringWithFlags(d, tree.FmtExport),
+		}}, nil
+	}
+}
+
+// MarshallToProtoStruct marshals tuple to google.protobuf.Struct.
+func MarshallToProtoStruct(tuple *tree.DTuple) (*pbtypes.Struct, error) {
+	typ := tuple.ResolvedType()
+	labels := typ.TupleLabels()
+	getLabel := func(i int) string {
+		if labels != nil {
+			return labels[i]
+		}
+		return "f" + strconv.Itoa(i)
+	}
+
+	rec := &pbtypes.Struct{Fields: make(map[string]*pbtypes.Value)}
+
+	for i, d := range tuple.D {
+		v, err := asProtoValue(d)
+		if err != nil {
+			return nil, err
+		}
+		rec.Fields[getLabel(i)] = v
+	}
+
+	return rec, nil
 }

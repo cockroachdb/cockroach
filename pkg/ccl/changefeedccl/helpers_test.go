@@ -187,7 +187,7 @@ func checkPerKeyOrdering(payloads []cdctest.TestFeedMessage) (bool, error) {
 }
 
 func assertPayloadsBase(
-	t testing.TB, f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
+	t testing.TB, f cdctest.TestFeed, expected []string, opts ...assertPayloadOption,
 ) {
 	t.Helper()
 	timeout := assertPayloadsTimeout()
@@ -199,14 +199,19 @@ func assertPayloadsBase(
 	require.NoError(t,
 		withTimeout(f, timeout,
 			func(ctx context.Context) (err error) {
-				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered)
+				return assertPayloadsBaseErr(ctx, f, expected, opts...)
 			},
 		))
 }
 
 func assertPayloadsBaseErr(
-	ctx context.Context, f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
+	ctx context.Context, f cdctest.TestFeed, expected []string, opts ...assertPayloadOption,
 ) error {
+	var cfg assertPayloadsConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	actual, err := readNextMessages(ctx, f, len(expected))
 	if err != nil {
 		return err
@@ -214,10 +219,17 @@ func assertPayloadsBaseErr(
 
 	var actualFormatted []string
 	for _, m := range actual {
-		actualFormatted = append(actualFormatted, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value))
+		v := m.Value
+		if cfg.valueTransform != nil {
+			v, err = cfg.valueTransform(v)
+			if err != nil {
+				return err
+			}
+		}
+		actualFormatted = append(actualFormatted, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, v))
 	}
 
-	if perKeyOrdered {
+	if cfg.perKeyOrder {
 		ordered, err := checkPerKeyOrdering(actual)
 		if err != nil {
 			return err
@@ -229,7 +241,7 @@ func assertPayloadsBaseErr(
 	}
 
 	// strip timestamps after checking per-key ordering since check uses timestamps
-	if stripTs {
+	if cfg.stripTS {
 		// format again with timestamps stripped
 		actualFormatted, err = stripTsFromPayloads(actual)
 		if err != nil {
@@ -269,21 +281,44 @@ func withTimeout(
 	)
 }
 
-func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
+type assertPayloadsConfig struct {
+	stripTS        bool
+	perKeyOrder    bool
+	valueTransform func(in []byte) (out []byte, _ error)
+}
+
+type assertPayloadOption func(cfg *assertPayloadsConfig)
+
+func withStripTS(cfg *assertPayloadsConfig) {
+	cfg.stripTS = true
+}
+func withPerKeyOrder(cfg *assertPayloadsConfig) {
+	cfg.perKeyOrder = true
+}
+
+func withValueTransform(fn func(in []byte) (out []byte, _ error)) assertPayloadOption {
+	return func(cfg *assertPayloadsConfig) {
+		cfg.valueTransform = fn
+	}
+}
+
+func assertPayloads(
+	t testing.TB, f cdctest.TestFeed, expected []string, opts ...assertPayloadOption,
+) {
 	t.Helper()
-	assertPayloadsBase(t, f, expected, false, false)
+	assertPayloadsBase(t, f, expected, opts...)
 }
 
 func assertPayloadsStripTs(t testing.TB, f cdctest.TestFeed, expected []string) {
 	t.Helper()
-	assertPayloadsBase(t, f, expected, true, false)
+	assertPayloads(t, f, expected, withStripTS)
 }
 
 // assert that the messages received by the sink maintain per-key ordering guarantees. then,
 // strip the timestamp from the messages and compare them to the expected payloads.
 func assertPayloadsPerKeyOrderedStripTs(t testing.TB, f cdctest.TestFeed, expected []string) {
 	t.Helper()
-	assertPayloadsBase(t, f, expected, true, true)
+	assertPayloads(t, f, expected, withStripTS, withPerKeyOrder)
 }
 
 func avroToJSON(t testing.TB, reg *cdctest.SchemaRegistry, avroBytes []byte) []byte {
