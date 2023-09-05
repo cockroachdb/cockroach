@@ -116,6 +116,14 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 			},
 		},
 		{
+			"requireViewActivityRedactedPermission",
+			underTest.RequireViewActivityRedactedPermission,
+			map[username.SQLUsername]bool{
+				withAdmin: false, withVa: true, withVaRedacted: false, withVaAndRedacted: false, withoutPrivs: true,
+				withVaGlobalPrivilege: true, withVaRedactedGlobalPrivilege: false, withVaAndRedactedGlobalPrivilege: false,
+			},
+		},
+		{
 			"requireViewActivityOrViewActivityRedactedPermission",
 			underTest.RequireViewActivityOrViewActivityRedactedPermission,
 			map[username.SQLUsername]bool{
