@@ -459,10 +459,8 @@ func (r *clusterRegistry) registerCluster(c *clusterImpl) error {
 		return fmt.Errorf("cluster named %q already exists in registry", c.name)
 	}
 	r.mu.clusters[c.name] = c
-	if err := c.addLabels(map[string]string{
-		VmLabelTestRunID: runID,
-	}); err != nil && c.l != nil {
-		c.l.Printf("failed to add %s label to cluster: %s", VmLabelTestRunID, err)
+	if err := c.addLabels(map[string]string{VmLabelTestRunID: runID}); err != nil && c.l != nil {
+		c.l.Printf("failed to add label to cluster [%s] - %s", c.name, err)
 	}
 	return nil
 }
@@ -476,7 +474,7 @@ func (r *clusterRegistry) unregisterCluster(c *clusterImpl) bool {
 		return false
 	}
 	if err := c.removeLabels([]string{VmLabelTestRunID}); err != nil && c.l != nil {
-		c.l.Printf("failed to remove %s label from cluster: %s", VmLabelTestRunID, err)
+		c.l.Printf("failed to remove label from cluster [%s] - %s", c.name, err)
 	}
 	delete(r.mu.clusters, c.name)
 	if c.tag != "" {

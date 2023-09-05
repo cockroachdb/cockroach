@@ -363,7 +363,7 @@ the cluster nodes on start.
 		cmd.Flags().StringVar(
 			&cloud, "cloud", cloud, "cloud provider to use (aws, azure, or gce)")
 		cmd.Flags().StringVar(
-			&clusterID, "cluster-id", "", "an identifier to use in the test cluster's name")
+			&clusterID, "cluster-id", "", "an identifier to use in the name of the test cluster(s)")
 		cmd.Flags().IntVar(
 			&count, "count", 1, "the number of times to run each test")
 		cmd.Flags().BoolVarP(
