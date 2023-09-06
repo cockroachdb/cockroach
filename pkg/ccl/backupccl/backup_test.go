@@ -10837,7 +10837,7 @@ $$;
 	err = sql.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 		require.NoError(t, err)
-		require.Equal(t, 107, int(dbDesc.GetID()))
+		require.Equal(t, 123, int(dbDesc.GetID()))
 
 		scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
 		require.NoError(t, err)
@@ -10861,7 +10861,7 @@ $$;
 		fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 130, int(fnDesc.GetID()))
-		require.Equal(t, 107, int(fnDesc.GetParentID()))
+		require.Equal(t, 123, int(fnDesc.GetParentID()))
 		require.Equal(t, 125, int(fnDesc.GetParentSchemaID()))
 		// Make sure db name and IDs are rewritten in function body.
 		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(129:::REGCLASS);", fnDesc.GetFunctionBody())
