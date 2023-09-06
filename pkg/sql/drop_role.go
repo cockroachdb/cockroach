@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -53,7 +52,7 @@ func (p *planner) DropRole(ctx context.Context, n *tree.DropRole) (planNode, err
 func (p *planner) DropRoleNode(
 	ctx context.Context, roleSpecs tree.RoleSpecList, ifExists bool, isRole bool, opName string,
 ) (*DropRoleNode, error) {
-	if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
+	if err := p.CheckGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE); err != nil {
 		return nil, err
 	}
 
