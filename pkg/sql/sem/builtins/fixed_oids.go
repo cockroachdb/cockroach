@@ -2457,6 +2457,7 @@ var builtinOidsArray = []string{
 	2486: `encrypt_iv(data: bytes, key: bytes, iv: bytes, type: string) -> bytes`,
 	2487: `decrypt(data: bytes, key: bytes, type: string) -> bytes`,
 	2488: `decrypt_iv(data: bytes, key: bytes, iv: bytes, type: string) -> bytes`,
+	2489: `gen_random_bytes(count: int) -> bytes`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

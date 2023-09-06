@@ -225,6 +225,27 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 
 	"gen_random_uuid": generateRandomUUID4Impl(),
 
+	"gen_random_bytes": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "count", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				count := int(tree.MustBeDInt(args[0]))
+				if count < 1 || count > 1024 {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "length %d is outside the range [1, 1024]", count)
+				}
+				bytes, err := getRandomBytes(count)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(bytes)), nil
+			},
+			Info:       "Returns `count` cryptographically strong random bytes. At most 1024 bytes can be extracted at a time.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"gen_salt": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryCrypto},
 		tree.Overload{
