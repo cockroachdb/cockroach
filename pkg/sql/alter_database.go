@@ -1548,6 +1548,16 @@ func (p *planner) AlterDatabaseAddSuperRegion(
 		return nil, err
 	}
 
+	// Validate no duplicate regions exist.
+	existingRegionNames := make(map[tree.Name]struct{})
+	for _, region := range n.Regions {
+		if _, found := existingRegionNames[region]; found {
+			return nil, pgerror.Newf(pgcode.DuplicateObject,
+				"duplicate region %s found in super region %s", region, n.SuperRegionName)
+		}
+		existingRegionNames[region] = struct{}{}
+	}
+
 	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.DatabaseName))
 	if err != nil {
 		return nil, err
