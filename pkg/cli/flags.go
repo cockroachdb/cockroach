@@ -13,11 +13,14 @@ package cli
 import (
 	"flag"
 	"fmt"
+	"io"
 	"net"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clientflags"
@@ -33,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
+	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -60,6 +64,7 @@ var localityAdvertiseHosts localityList
 var startBackground bool
 var storeSpecs base.StoreSpecList
 var goMemLimit int64
+var tenantIDFile string
 
 // initPreFlagsDefaults initializes the values of the global variables
 // defined above.
@@ -543,6 +548,7 @@ func init() {
 	{
 		f := mtStartSQLCmd.Flags()
 		cliflagcfg.VarFlag(f, &tenantIDWrapper{&serverCfg.SQLConfig.TenantID}, cliflags.TenantID)
+		cliflagcfg.StringFlag(f, &tenantIDFile, cliflags.TenantIDFromFile)
 		cliflagcfg.StringSliceFlag(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs)
 	}
 
@@ -946,6 +952,18 @@ func init() {
 	}
 }
 
+func setTenantID(s string, cfgTenantID *roachpb.TenantID) error {
+	tenID, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return errors.Wrap(err, "invalid tenant ID")
+	}
+	if tenID == 0 {
+		return errors.New("invalid tenant ID")
+	}
+	*cfgTenantID = roachpb.MustMakeTenantID(tenID)
+	return nil
+}
+
 type tenantIDWrapper struct {
 	tenID *roachpb.TenantID
 }
@@ -954,19 +972,83 @@ func (w *tenantIDWrapper) String() string {
 	return w.tenID.String()
 }
 func (w *tenantIDWrapper) Set(s string) error {
-	tenID, err := strconv.ParseUint(s, 10, 64)
-	if err != nil {
-		return errors.Wrap(err, "invalid tenant ID")
-	}
-	if tenID == 0 {
-		return errors.New("invalid tenant ID")
-	}
-	*w.tenID = roachpb.MustMakeTenantID(tenID)
-	return nil
+	return setTenantID(s, w.tenID)
 }
 
 func (w *tenantIDWrapper) Type() string {
 	return "number"
+}
+
+//	fileFlag := mtStartSQLCmd.Flags().Lookup(cliflags.TenantIDFromFile.Name)
+//	if fileFlag == nil {
+//		return nil, errors.New("tenant id from file callback executed without tenant id file")
+//	}
+//	fileName := fileFlag.Value.String()
+
+// tenantIDFromFile will look for the given file and read the full first
+// line of the file that should contain the `<TenantID>`.
+func tenantIDFromFile(
+	fileName string, watcherWaitCount *atomic.Uint32, watcherEventCount *atomic.Uint32,
+) (*roachpb.TenantID, error) {
+
+	// Start watching the file for changes as the typical case is that the file
+	// will not have yet the tenant id at startup.
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = watcher.Close() }()
+	if err = watcher.Add(fileName); err != nil {
+		return nil, err
+	}
+
+	headBuf := make([]byte, 100)
+	for {
+		readCount, err := func() (int, error) {
+			file, err := os.Open(fileName)
+			if err != nil {
+				return 0, err
+			}
+			defer file.Close()
+			return io.ReadFull(file, headBuf)
+		}()
+		if err != nil && !errors.IsAny(err, io.EOF, io.ErrUnexpectedEOF) {
+			return nil, err
+		}
+		if line, _, foundNewLine := strings.Cut(string(headBuf[:readCount]), "\n"); foundNewLine {
+			cfgTenantID := roachpb.TenantID{}
+			if err := setTenantID(line, &cfgTenantID); err != nil {
+				return nil, err
+			}
+			return &cfgTenantID, nil
+		}
+		if readCount == len(headBuf) {
+			// no new line and the file is larger than the initial portion that is
+			// expected to contain tenant ID - return an error
+			return nil,
+				errors.Newf("no tenant id in first %d chars of %q file", len(headBuf), fileName)
+		}
+		// Wait for file notification
+		if watcherWaitCount != nil {
+			watcherWaitCount.Add(1)
+		}
+		select {
+		case _, ok := <-watcher.Events:
+			if watcherEventCount != nil {
+				watcherEventCount.Add(1)
+			}
+			if !ok {
+				return nil,
+					errors.Newf("fsnotify.Watcher got Events channel closed while waiting on %q", fileName)
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return nil,
+					errors.Newf("fsnotify.Watcher got Errors channel closed while waiting on %q", fileName)
+			}
+			return nil, err
+		}
+	}
 }
 
 // extraServerFlagInit configures the server.Config based on the command-line flags.
@@ -1219,8 +1301,7 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 	if !fs.Changed(cliflags.Store.Name) {
 		// We assume that we only need to change top level store as temp dir configs are
 		// initialized when start is executed and temp dirs inherit path from first store.
-		tenantID := fs.Lookup(cliflags.TenantID.Name).Value.String()
-		serverCfg.Stores.Specs[0].Path += "-tenant-" + tenantID
+		serverCfg.Stores.Specs[0].Path += fmt.Sprintf("-tenant-%d", os.Getpid())
 	}
 
 	// In standalone SQL servers, we do not generate a ballast file,

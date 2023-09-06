@@ -23,11 +23,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1394,7 +1396,8 @@ func TestSQLPodStorageDefaults(t *testing.T) {
 
 	defer initCLIDefaults()
 
-	expectedDefaultDir, err := base.GetAbsoluteStorePath("", "cockroach-data-tenant-9")
+	expectedDefaultDir, err := base.GetAbsoluteStorePath("",
+		fmt.Sprintf("cockroach-data-tenant-%d", os.Getpid()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1417,4 +1420,116 @@ func TestSQLPodStorageDefaults(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_setTenantID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type args struct {
+		s           string
+		cfgTenantID *roachpb.TenantID
+	}
+
+	var cfgTenantID roachpb.TenantID
+	tests := []struct {
+		name        string
+		args        args
+		errContains string
+	}{
+		{"empty tenant id text", args{"", &cfgTenantID}, "invalid tenant ID: strconv.ParseUint"},
+		{"tenant id text not integer", args{"abc", &cfgTenantID}, "invalid tenant ID: strconv.ParseUint"},
+		{"tenant id is 0", args{"0", &cfgTenantID}, "invalid tenant ID"},
+		{"tenant id is valid", args{"2", &cfgTenantID}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.errContains == "" {
+				assert.NoError(t, setTenantID(tt.args.s, tt.args.cfgTenantID),
+					fmt.Sprintf("setTenantID(%v, %v)", tt.args.s, tt.args.cfgTenantID))
+				assert.Equal(t, tt.args.s, tt.args.cfgTenantID.String())
+			} else {
+				assert.ErrorContains(t, setTenantID(tt.args.s, tt.args.cfgTenantID),
+					tt.errContains, fmt.Sprintf("setTenantID(%v, %v)", tt.args.s, tt.args.cfgTenantID))
+				assert.Equal(t, &roachpb.TenantID{}, tt.args.cfgTenantID)
+			}
+		})
+	}
+}
+
+func Test_tenantIDFromFileWrapper_setTenantIDFromFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	createTempFileWithData := func(data string) *os.File {
+		file, err := os.CreateTemp("", "")
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(file.Name(), []byte(data), 0777))
+		return file
+	}
+	t.Run("non-existent file", func(t *testing.T) {
+		cfgTenantID, err := tenantIDFromFile("non-existent-file", nil, nil)
+		require.ErrorContains(t, err, "no such file or directory")
+		require.Nil(t, cfgTenantID)
+	})
+
+	t.Run("file exists, has complete first row, but the value is an invalid tenant id",
+		func(t *testing.T) {
+			file := createTempFileWithData("abc\n")
+			defer file.Close()
+			cfgTenantID, err := tenantIDFromFile(file.Name(), nil, nil)
+			require.ErrorContains(t, err, "invalid tenant ID: strconv.ParseUint")
+			require.Nil(t, cfgTenantID)
+		})
+
+	t.Run("file exists, has incomplete first row, waits for it to complete and after completion with invalid tenant id fails",
+		func(t *testing.T) {
+			file := createTempFileWithData("abc")
+			defer file.Close()
+			watcherWaitCount := atomic.Uint32{}
+			watcherEventCount := atomic.Uint32{}
+			generatedError := atomic.Bool{}
+			go func() {
+				cfgTenantID, err := tenantIDFromFile(file.Name(), &watcherWaitCount, &watcherEventCount)
+				require.ErrorContains(t, err, "invalid tenant ID: strconv.ParseUint")
+				require.Nil(t, cfgTenantID)
+				generatedError.Store(true)
+			}()
+			require.Eventually(t, func() bool { return watcherWaitCount.Load() == 1 }, time.Second, time.Millisecond)
+			require.EqualValues(t, 0, watcherEventCount.Load())
+			require.Equal(t, false, generatedError.Load())
+			require.NoError(t, os.WriteFile(file.Name(), []byte("abc\n"), 0777))
+			require.Eventually(t, func() bool { return watcherEventCount.Load() == 1 }, time.Second, time.Millisecond)
+			require.Eventually(t, func() bool { return generatedError.Load() }, time.Second, time.Millisecond)
+		})
+
+	t.Run("file exists, has complete first row, it has tenant id and it is set to valid value",
+		func(t *testing.T) {
+			file := createTempFileWithData("123\n")
+			defer file.Close()
+			cfgTenantID, err := tenantIDFromFile(file.Name(), nil, nil)
+			require.NoError(t, err)
+			require.EqualValues(t, 123, cfgTenantID.ToUint64())
+		})
+
+	t.Run("file exists, has incomplete first row, waits for it to complete and after completion reads valid tenant id",
+		func(t *testing.T) {
+			file := createTempFileWithData("abc")
+			defer file.Close()
+			watcherWaitCount := atomic.Uint32{}
+			watcherEventCount := atomic.Uint32{}
+			runSuccessfuly := atomic.Bool{}
+			go func() {
+				cfgTenantID, err := tenantIDFromFile(file.Name(), &watcherWaitCount, &watcherEventCount)
+				require.NoError(t, err)
+				require.EqualValues(t, 123, cfgTenantID.ToUint64())
+				runSuccessfuly.Store(true)
+			}()
+			require.Eventually(t, func() bool { return watcherWaitCount.Load() == 1 }, time.Second, time.Millisecond)
+			require.EqualValues(t, 0, watcherEventCount.Load())
+			require.Equal(t, false, runSuccessfuly.Load())
+			require.NoError(t, os.WriteFile(file.Name(), []byte("123\n"), 0777))
+			require.Eventually(t, func() bool { return watcherEventCount.Load() == 1 }, time.Second, time.Millisecond)
+			require.Eventually(t, func() bool { return runSuccessfuly.Load() }, time.Second, time.Millisecond)
+		})
 }
