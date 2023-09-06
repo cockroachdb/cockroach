@@ -469,6 +469,9 @@ ALTER DATABASE mr3 ADD SUPER REGION "test1" VALUES "us-east-1", "us-west-1"
 statement ok
 ALTER DATABASE mr3 ADD SUPER REGION "test2" VALUES "us-central-1", "ca-central-1"
 
+statement error pgcode 42710 pq: duplicate region us-central-1 found in super region test3
+ALTER DATABASE mr3 ADD SUPER REGION "test3" VALUES "us-central-1", "ca-central-1", "us-central-1"
+
 statement error pq: the secondary region must be in the same super region as the current primary region
 ALTER DATABASE mr3 SET SECONDARY REGION "us-east-1"
 
