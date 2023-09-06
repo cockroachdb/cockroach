@@ -176,40 +176,8 @@ func (k Kind) IsSetIn(bits uint64) bool {
 	return bits&k.Mask() != 0
 }
 
-// ByName is a map of string -> kind value.
-var ByName = map[string]Kind{
-	"ALL":                      ALL,
-	"CHANGEFEED":               CHANGEFEED,
-	"CONNECT":                  CONNECT,
-	"CREATE":                   CREATE,
-	"DROP":                     DROP,
-	"SELECT":                   SELECT,
-	"INSERT":                   INSERT,
-	"DELETE":                   DELETE,
-	"UPDATE":                   UPDATE,
-	"ZONECONFIG":               ZONECONFIG,
-	"USAGE":                    USAGE,
-	"RULE":                     RULE,
-	"MODIFYCLUSTERSETTING":     MODIFYCLUSTERSETTING,
-	"EXTERNALCONNECTION":       EXTERNALCONNECTION,
-	"VIEWACTIVITY":             VIEWACTIVITY,
-	"VIEWACTIVITYREDACTED":     VIEWACTIVITYREDACTED,
-	"VIEWCLUSTERSETTING":       VIEWCLUSTERSETTING,
-	"CANCELQUERY":              CANCELQUERY,
-	"NOSQLLOGIN":               NOSQLLOGIN,
-	"EXECUTE":                  EXECUTE,
-	"VIEWCLUSTERMETADATA":      VIEWCLUSTERMETADATA,
-	"VIEWDEBUG":                VIEWDEBUG,
-	"BACKUP":                   BACKUP,
-	"RESTORE":                  RESTORE,
-	"EXTERNALIOIMPLICITACCESS": EXTERNALIOIMPLICITACCESS,
-	"VIEWJOB":                  VIEWJOB,
-	"MODIFYSQLCLUSTERSETTING":  MODIFYSQLCLUSTERSETTING,
-	"REPLICATION":              REPLICATION,
-	"MANAGETENANT":             MANAGETENANT,
-	"VIEWSYSTEMTABLE":          VIEWSYSTEMTABLE,
-	"CREATEROLE":               CREATEROLE,
-}
+// ByName is a map of string -> kind value. It is populated by init.
+var ByName map[string]Kind
 
 // List is a list of privileges.
 type List []Kind
@@ -499,10 +467,14 @@ type Object interface {
 }
 
 func init() {
+	AllPrivileges = make([]Kind, 0, largestKind)
+	ByName = make(map[string]Kind)
+
 	for kind := ALL; kind <= largestKind; kind++ {
 		if isDeprecatedKind[kind] {
 			continue
 		}
 		AllPrivileges = append(AllPrivileges, kind)
+		ByName[kind.String()] = kind
 	}
 }
