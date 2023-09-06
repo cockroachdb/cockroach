@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -339,6 +340,47 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		row, meta := out.Next()
 		require.Nil(t, row)
 		testutils.IsError(meta.Err, "this client always returns an error")
+	})
+}
+
+func TestFrontierForSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var (
+		spanAB = roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}
+		spanCD = roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}
+		spanEF = roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}
+		spanXZ = roachpb.Span{Key: roachpb.Key("x"), EndKey: roachpb.Key("z")}
+	)
+
+	t.Run("returns the lowest timestamp for the matched spans", func(t *testing.T) {
+		f, err := span.MakeFrontier(spanAB, spanCD, spanEF)
+		require.NoError(t, err)
+		_, err = f.Forward(spanAB, hlc.Timestamp{WallTime: 1})
+		require.NoError(t, err)
+		_, err = f.Forward(spanCD, hlc.Timestamp{WallTime: 2})
+		require.NoError(t, err)
+		_, err = f.Forward(spanEF, hlc.Timestamp{WallTime: 3})
+		require.NoError(t, err)
+		require.Equal(t, hlc.Timestamp{WallTime: 1}, frontierForSpans(f, spanAB, spanCD, spanEF))
+		require.Equal(t, hlc.Timestamp{WallTime: 2}, frontierForSpans(f, spanCD, spanEF))
+		require.Equal(t, hlc.Timestamp{WallTime: 3}, frontierForSpans(f, spanEF))
+		require.Equal(t, hlc.Timestamp{WallTime: 1}, frontierForSpans(f, spanAB, spanEF))
+	})
+	t.Run("returns zero if none of the spans overlap", func(t *testing.T) {
+		f, err := span.MakeFrontierAt(hlc.Timestamp{WallTime: 1}, spanAB, spanCD, spanEF)
+		require.NoError(t, err)
+		require.Equal(t, hlc.Timestamp{}, frontierForSpans(f, spanXZ))
+	})
+	t.Run("returns zero if one of the spans is zero", func(t *testing.T) {
+		f, err := span.MakeFrontier(spanAB, spanCD, spanEF)
+		require.NoError(t, err)
+		_, err = f.Forward(spanAB, hlc.Timestamp{WallTime: 1})
+		require.NoError(t, err)
+		// spanCD should still be at zero
+		_, err = f.Forward(spanEF, hlc.Timestamp{WallTime: 3})
+		require.NoError(t, err)
+		require.Equal(t, hlc.Timestamp{}, frontierForSpans(f, spanAB, spanCD, spanEF))
 	})
 }
 
