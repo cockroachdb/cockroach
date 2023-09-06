@@ -270,8 +270,8 @@ func (hi *hypotheticalIndex) hasPrefixOfExplicitCols(
 		existingIndexCol := existingIndex.Column(j)
 		indexCol := indexCols[j]
 
-		if isInverted && existingIndex.IsInverted() && j == m-1 {
-			// If the column is inverted, compare the source columns.
+		if indexCol.Kind() == cat.Inverted && existingIndexCol.Kind() == cat.Inverted {
+			// If the columns are inverted, compare their source columns.
 			if existingIndexCol.InvertedSourceColumnOrdinal() != indexCol.InvertedSourceColumnOrdinal() {
 				return false
 			}
