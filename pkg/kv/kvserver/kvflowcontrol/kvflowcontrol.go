@@ -307,7 +307,8 @@ type raftAdmissionMetaKey struct{}
 // ContextWithMeta returns a Context wrapping the supplied raft admission meta,
 // if any.
 //
-// TODO(irfansharif): This causes a heap allocation. Revisit as part of #95563.
+// TODO(irfansharif,aaditya): This causes a heap allocation. Revisit as part of
+// #104154.
 func ContextWithMeta(ctx context.Context, meta *kvflowcontrolpb.RaftAdmissionMeta) context.Context {
 	if meta != nil {
 		ctx = context.WithValue(ctx, raftAdmissionMetaKey{}, meta)

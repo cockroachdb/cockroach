@@ -816,10 +816,10 @@ func (t *RaftTransport) processQueue(
 				continue // nothing to do
 			}
 
-			// TODO(irfansharif): There's no limit on how many pending
+			// TODO(irfansharif,aaditya): There's no limit on how many pending
 			// dispatches are going to be attached to the outgoing raft
 			// messages, both here and above. It can be excessive -- limit this
-			// by some count/byte policy as part of #95563.
+			// by some count/byte policy as part of #104154.
 			req := newRaftMessageRequest()
 			maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
 			batch.Requests = append(batch.Requests, *req)
