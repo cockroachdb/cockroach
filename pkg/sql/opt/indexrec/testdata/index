@@ -2374,3 +2374,74 @@ project
       ├── columns: v:2!null j:4
       ├── constraint: /2/1: [/2 - ]
       └── cost: 371.353333
+
+# Regression test for #109974. Do not panic by trying to find the inverted
+# source column for a non-inverted index column.
+exec-ddl
+CREATE TABLE t109974a (
+  g1 GEOGRAPHY
+)
+----
+
+exec-ddl
+CREATE TABLE t109974b (
+  k2 INT PRIMARY KEY,
+  g2 GEOGRAPHY,
+  INVERTED INDEX (k2, g2) NOT VISIBLE
+)
+----
+
+index-recommendations
+DELETE FROM t109974b USING t109974a WHERE st_intersects(g2, g1);
+----
+creation: CREATE INVERTED INDEX ON t.public.t109974b (g2);
+--
+optimal plan:
+delete t109974b
+ ├── columns: <none>
+ ├── fetch columns: k2:6 g2:7
+ ├── passthrough columns g1:11 rowid:12 t109974a.crdb_internal_mvcc_timestamp:13 t109974a.tableoid:14
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── cost: 112692.926
+ └── distinct-on
+      ├── columns: k2:6!null g2:7!null g1:11!null rowid:12!null t109974a.crdb_internal_mvcc_timestamp:13 t109974a.tableoid:14
+      ├── grouping columns: k2:6!null
+      ├── immutable
+      ├── cost: 112692.916
+      ├── key: (6)
+      ├── fd: (6)-->(7,11-14), (12)-->(11,13,14)
+      ├── inner-join (lookup t109974b)
+      │    ├── columns: k2:6!null g2:7!null g1:11!null rowid:12!null t109974a.crdb_internal_mvcc_timestamp:13 t109974a.tableoid:14
+      │    ├── key columns: [23] = [6]
+      │    ├── lookup columns are key
+      │    ├── immutable
+      │    ├── cost: 111996.67
+      │    ├── key: (6,12)
+      │    ├── fd: (6)-->(7), (12)-->(11,13,14)
+      │    ├── inner-join (inverted t109974b@_hyp_2)
+      │    │    ├── columns: g1:11 rowid:12!null t109974a.crdb_internal_mvcc_timestamp:13 t109974a.tableoid:14 k2:23!null
+      │    │    ├── inverted-expr
+      │    │    │    └── st_intersects(g1:11, g2:24)
+      │    │    ├── cost: 41492.64
+      │    │    ├── key: (12,23)
+      │    │    ├── fd: (12)-->(11,13,14)
+      │    │    ├── scan t109974a
+      │    │    │    ├── columns: g1:11 rowid:12!null t109974a.crdb_internal_mvcc_timestamp:13 t109974a.tableoid:14
+      │    │    │    ├── cost: 1088.62
+      │    │    │    ├── key: (12)
+      │    │    │    └── fd: (12)-->(11,13,14)
+      │    │    └── filters (true)
+      │    └── filters
+      │         └── st_intersects(g2:7, g1:11) [outer=(7,11), immutable, constraints=(/7: (/NULL - ]; /11: (/NULL - ])]
+      └── aggregations
+           ├── first-agg [as=g2:7, outer=(7)]
+           │    └── g2:7
+           ├── first-agg [as=g1:11, outer=(11)]
+           │    └── g1:11
+           ├── first-agg [as=rowid:12, outer=(12)]
+           │    └── rowid:12
+           ├── first-agg [as=t109974a.crdb_internal_mvcc_timestamp:13, outer=(13)]
+           │    └── t109974a.crdb_internal_mvcc_timestamp:13
+           └── first-agg [as=t109974a.tableoid:14, outer=(14)]
+                └── t109974a.tableoid:14
