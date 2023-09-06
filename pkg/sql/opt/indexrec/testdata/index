@@ -1953,3 +1953,48 @@ project
       ├── columns: v:2!null j:4
       ├── constraint: /2/1: [/2 - ]
       └── cost: 367.353333
+
+# Regression test for #109974. Do not panic by trying to find the inverted
+# source column for a non-inverted index column.
+exec-ddl
+CREATE TABLE t109974a (
+  g1 GEOGRAPHY
+)
+----
+
+exec-ddl
+CREATE TABLE t109974b (
+  k2 INT PRIMARY KEY,
+  g2 GEOGRAPHY,
+  INVERTED INDEX (k2, g2) NOT VISIBLE
+)
+----
+
+index-recommendations
+SELECT * FROM t109974b JOIN t109974a ON st_intersects(g2, g1);
+----
+creation: CREATE INVERTED INDEX ON t109974a (g1);
+--
+optimal plan:
+inner-join (lookup t109974a)
+ ├── columns: k2:1!null g2:2!null g1:6!null
+ ├── key columns: [13] = [7]
+ ├── lookup columns are key
+ ├── immutable
+ ├── cost: 111864.47
+ ├── fd: (1)-->(2)
+ ├── inner-join (inverted t109974a@_hyp_1)
+ │    ├── columns: k2:1!null g2:2 rowid:13!null
+ │    ├── inverted-expr
+ │    │    └── st_intersects(g2:2, g1:12)
+ │    ├── cost: 41464.44
+ │    ├── key: (1,13)
+ │    ├── fd: (1)-->(2)
+ │    ├── scan t109974b
+ │    │    ├── columns: k2:1!null g2:2
+ │    │    ├── cost: 1064.42
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    └── filters (true)
+ └── filters
+      └── st_intersects(g2:2, g1:6) [outer=(2,6), immutable, constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
