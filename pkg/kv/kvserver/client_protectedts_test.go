@@ -72,6 +72,9 @@ func TestProtectedTimestamps(t *testing.T) {
 	_, err = conn.Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
 	require.NoError(t, err)
 
+	_, err = conn.Exec("SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'") // speeds up the test
+	require.NoError(t, err)
+
 	_, err = conn.Exec("SET CLUSTER SETTING kv.enqueue_in_replicate_queue_on_span_config_update.enabled = true") // speeds up the test
 	require.NoError(t, err)
 
