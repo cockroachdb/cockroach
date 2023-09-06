@@ -289,14 +289,14 @@ func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool
 	for j := 0; j < len(colTypes); j++ {
 		valBuilder.WriteString(comma)
 		var d tree.Datum
-		if rand.Intn(10) < 4 {
+		if rng.Intn(10) < 4 {
 			// 40% of the time, use a corner case value
 			d = randInterestingDatum(rng, colTypes[j])
 		}
 		if colTypes[j] == types.RegType {
 			// RandDatum is naive to the constraint that a RegType < len(types.OidToType),
 			// at least before linking and user defined types are added.
-			d = tree.NewDOid(oid.Oid(rand.Intn(len(types.OidToType))))
+			d = tree.NewDOid(oid.Oid(rng.Intn(len(types.OidToType))))
 		}
 		if d == nil {
 			d = RandDatum(rng, colTypes[j], nullable[j])
@@ -462,26 +462,26 @@ func GenerateRandInterestingTable(db *gosql.DB, dbName, tableName string) error 
 
 // randColumnTableDef produces a random ColumnTableDef for a non-computed
 // column, with a random type and nullability.
-func randColumnTableDef(rand *rand.Rand, tableIdx int, colIdx int) *tree.ColumnTableDef {
-	g := randident.NewNameGenerator(&nameGenCfg, rand, fmt.Sprintf("col%d_", tableIdx))
+func randColumnTableDef(rng *rand.Rand, tableIdx int, colIdx int) *tree.ColumnTableDef {
+	g := randident.NewNameGenerator(&nameGenCfg, rng, fmt.Sprintf("col%d_", tableIdx))
 	colName := g.GenerateOne(colIdx)
 	columnDef := &tree.ColumnTableDef{
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
 		Name: tree.Name(colName),
-		Type: RandColumnType(rand),
+		Type: RandColumnType(rng),
 	}
 	// Slightly prefer non-nullable columns
 	if columnDef.Type.(*types.T).Family() == types.OidFamily {
 		// Make all OIDs nullable so they're not part of a PK or unique index.
 		// Some OID types have a very narrow range of values they accept, which
 		// may cause many duplicate row errors.
-		columnDef.Nullable.Nullability = tree.RandomNullability(rand, true /* nullableOnly */)
-	} else if rand.Intn(2) == 0 {
+		columnDef.Nullable.Nullability = tree.RandomNullability(rng, true /* nullableOnly */)
+	} else if rng.Intn(2) == 0 {
 		// Slightly prefer non-nullable columns
 		columnDef.Nullable.Nullability = tree.NotNull
 	} else {
-		columnDef.Nullable.Nullability = tree.RandomNullability(rand, false /* nullableOnly */)
+		columnDef.Nullable.Nullability = tree.RandomNullability(rng, false /* nullableOnly */)
 	}
 	return columnDef
 }
