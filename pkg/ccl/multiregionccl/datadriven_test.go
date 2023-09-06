@@ -120,7 +120,6 @@ func TestMultiRegionDataDriven(t *testing.T) {
 	// (legitimate) timing issues on a deadlock build.
 	skip.UnderRace(t, "flaky test")
 	skip.UnderDeadlock(t, "flaky test")
-	skip.WithIssue(t, 98020)
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		ds := datadrivenTestState{}
@@ -202,7 +201,7 @@ SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s';
 SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s';
 SET CLUSTER SETTING kv.allocator.load_based_rebalancing = 'off';
 SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false;
-SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = 5m
+SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 `,
 					";") {
 					_, err = sqlConn.Exec(stmt)
