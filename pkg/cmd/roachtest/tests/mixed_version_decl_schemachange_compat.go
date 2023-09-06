@@ -32,7 +32,7 @@ func registerDeclSchemaChangeCompatMixedVersions(r registry.Registry) {
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().Cloud != spec.GCE {
+			if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
 				t.Skip("uses gs://cockroach-corpus; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
 			runDeclSchemaChangeCompatMixedVersions(ctx, t, c, t.BuildVersion())

@@ -185,7 +185,7 @@ func registerCopy(r registry.Registry) {
 			Cluster: r.MakeClusterSpec(tc.nodes),
 			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud != spec.GCE {
+				if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
 					t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
 				}
 				runCopy(ctx, t, c, tc.rows, tc.txn)

@@ -317,7 +317,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			// NB: sqlsmith failures should never block a release.
 			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud != spec.GCE {
+				if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
 					t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
 				}
 				runSQLSmith(ctx, t, c, setup, setting)
