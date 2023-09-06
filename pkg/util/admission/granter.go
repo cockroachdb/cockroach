@@ -739,15 +739,21 @@ var (
 		Measurement: "Microseconds",
 		Unit:        metric.Unit_COUNT,
 	}
-	kvIOTotalTokensTaken = metric.Metadata{
+	kvIOTokensTaken = metric.Metadata{
 		Name:        "admission.granter.io_tokens_taken.kv",
 		Help:        "Total number of tokens taken",
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
 	}
-	kvIOTotalTokensReturned = metric.Metadata{
+	kvIOTokensReturned = metric.Metadata{
 		Name:        "admission.granter.io_tokens_returned.kv",
 		Help:        "Total number of tokens returned",
+		Measurement: "Tokens",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvIOTokensBypassed = metric.Metadata{
+		Name:        "admission.granter.io_tokens_bypassed.kv",
+		Help:        "Total number of tokens taken by work bypassing admission control (for example, follower writes without flow control)",
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
 	}
