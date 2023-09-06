@@ -104,7 +104,8 @@ func NewNetwork(
 
 // CreateNode creates a simulation node and starts an RPC server for it.
 func (n *Network) CreateNode(defaultZoneConfig *zonepb.ZoneConfig) (*Node, error) {
-	server, err := rpc.NewServer(n.RPCContext)
+	ctx := context.TODO()
+	server, err := rpc.NewServer(ctx, n.RPCContext)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +117,7 @@ func (n *Network) CreateNode(defaultZoneConfig *zonepb.ZoneConfig) (*Node, error
 	node.Gossip = gossip.NewTest(0, n.Stopper, node.Registry, defaultZoneConfig)
 	gossip.RegisterGossipServer(server, node.Gossip)
 	n.Stopper.AddCloser(stop.CloserFn(server.Stop))
-	_ = n.Stopper.RunAsyncTask(context.TODO(), "node-wait-quiesce", func(context.Context) {
+	_ = n.Stopper.RunAsyncTask(ctx, "node-wait-quiesce", func(context.Context) {
 		<-n.Stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
 		node.Gossip.EnableSimulationCycler(false)

@@ -174,7 +174,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	disconnectListener kvserver.RaftTransportDisconnectListener,
 	knobs *kvserver.RaftTransportTestingKnobs,
 ) (*kvserver.RaftTransport, net.Addr) {
-	grpcServer, err := rpc.NewServer(rttc.nodeRPCContext)
+	grpcServer, err := rpc.NewServer(context.Background(), rttc.nodeRPCContext)
 	require.NoError(rttc.t, err)
 	ctwWithTracer := log.MakeTestingAmbientCtxWithNewTracer()
 	transport := kvserver.NewRaftTransport(

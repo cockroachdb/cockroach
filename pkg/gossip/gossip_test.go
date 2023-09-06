@@ -707,7 +707,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 		clock := hlc.NewClockForTesting(nil)
 		rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
-		server, err := rpc.NewServer(rpcContext)
+		server, err := rpc.NewServer(ctx, rpcContext)
 		require.NoError(t, err)
 
 		// node ID must be non-zero

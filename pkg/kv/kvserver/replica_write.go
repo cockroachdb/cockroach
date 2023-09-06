@@ -207,8 +207,12 @@ func (r *Replica) executeWriteBatch(
 			// Semi-synchronously process any intents that need resolving here in
 			// order to apply back pressure on the client which generated them. The
 			// resolution is semi-synchronous in that there is a limited number of
-			// outstanding asynchronous resolution tasks allowed after which
-			// further calls will block.
+			// outstanding asynchronous resolution tasks allowed after which further
+			// calls will block. The limited number of asynchronous resolution tasks
+			// ensures that the number of goroutines doing intent resolution does
+			// not diverge from the number of workload goroutines (see
+			// https://github.com/cockroachdb/cockroach/issues/4925#issuecomment-193015586
+			// for an old problem predating such a limit).
 			if len(propResult.EndTxns) > 0 {
 				if err := r.store.intentResolver.CleanupTxnIntentsAsync(
 					ctx, r.RangeID, propResult.EndTxns, true, /* allowSync */

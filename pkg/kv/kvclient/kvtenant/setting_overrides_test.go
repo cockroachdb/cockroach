@@ -39,7 +39,7 @@ func newTestConnector(
 	cleanup := func() { stopper.Stop(ctx) }
 	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-	s, err := rpc.NewServer(rpcContext)
+	s, err := rpc.NewServer(ctx, rpcContext)
 	require.NoError(t, err)
 
 	tenantID := roachpb.MustMakeTenantID(5)
@@ -327,7 +327,7 @@ func TestCrossVersionMetadataSupport(t *testing.T) {
 
 			clock := hlc.NewClockForTesting(nil)
 			rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-			s, err := rpc.NewServer(rpcContext)
+			s, err := rpc.NewServer(ctx, rpcContext)
 			require.NoError(t, err)
 
 			gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {

@@ -2000,6 +2000,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		Clock:                s.cfg.Clock,
 		DB:                   s.db,
 		Stopper:              stopper,
+		Settings:             s.cfg.Settings,
 		TaskLimit:            s.cfg.IntentResolverTaskLimit,
 		AmbientCtx:           s.cfg.AmbientCtx,
 		TestingKnobs:         s.cfg.TestingKnobs.IntentResolverKnobs,

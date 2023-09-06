@@ -178,7 +178,7 @@ type Config struct {
 	// batches which are queued to send but not yet in flight will still send.
 	// Note that values	less than or equal to zero will result in the use of
 	// DefaultInFlightBackpressureLimit.
-	InFlightBackpressureLimit int
+	InFlightBackpressureLimit func() int
 
 	// NowFunc is used to determine the current time. It defaults to timeutil.Now.
 	NowFunc func() time.Time
@@ -252,12 +252,22 @@ func validateConfig(cfg *Config) {
 	} else if cfg.Sender == nil {
 		panic("cannot construct a Batcher with a nil Sender")
 	}
-	if cfg.InFlightBackpressureLimit <= 0 {
-		cfg.InFlightBackpressureLimit = DefaultInFlightBackpressureLimit
+	if cfg.InFlightBackpressureLimit == nil {
+		cfg.InFlightBackpressureLimit = func() int {
+			return DefaultInFlightBackpressureLimit
+		}
 	}
 	if cfg.NowFunc == nil {
 		cfg.NowFunc = timeutil.Now
 	}
+}
+
+func normalizedInFlightBackPressureLimit(cfg *Config) int {
+	limit := cfg.InFlightBackpressureLimit()
+	if limit <= 0 {
+		limit = DefaultInFlightBackpressureLimit
+	}
+	return limit
 }
 
 // SendWithChan sends a request with a client provided response channel. The
@@ -457,9 +467,12 @@ func (b *RequestBatcher) run(ctx context.Context) {
 		// inBackPressure indicates whether the reqChan is enabled.
 		// It becomes true when inFlight exceeds b.cfg.InFlightBackpressureLimit.
 		inBackPressure = false
+		// curInFlightBackpressureLimit is the current limit on in flight
+		// requests.
+		curInFlightBackpressureLimit = normalizedInFlightBackPressureLimit(&b.cfg)
 		// recoveryThreshold is the number of in flight requests below which the
-		// the inBackPressure state should exit.
-		recoveryThreshold = backpressureRecoveryThreshold(b.cfg.InFlightBackpressureLimit)
+		// inBackPressure state should exit.
+		recoveryThreshold = backpressureRecoveryThreshold(curInFlightBackpressureLimit)
 		// reqChan consults inBackPressure to determine whether the goroutine is
 		// accepting new requests.
 		reqChan = func() <-chan *request {
@@ -470,7 +483,11 @@ func (b *RequestBatcher) run(ctx context.Context) {
 		}
 		sendBatch = func(ba *batch) {
 			inFlight++
-			if inFlight >= b.cfg.InFlightBackpressureLimit {
+			// Sample the backpressure limit.
+			curInFlightBackpressureLimit = normalizedInFlightBackPressureLimit(&b.cfg)
+			recoveryThreshold = backpressureRecoveryThreshold(curInFlightBackpressureLimit)
+
+			if inFlight >= curInFlightBackpressureLimit {
 				inBackPressure = true
 			}
 			b.sendBatch(sendCtx, ba)
