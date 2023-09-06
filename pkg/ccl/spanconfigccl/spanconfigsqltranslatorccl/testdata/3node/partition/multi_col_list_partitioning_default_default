@@ -1,0 +1,30 @@
+exec-sql
+CREATE DATABASE IF NOT EXISTS db;
+CREATE TABLE IF NOT EXISTS db.tbl (a INT, b INT, PRIMARY KEY (a, b));
+ALTER TABLE db.tbl PARTITION BY LIST (a, b) (
+  PARTITION p34 VALUES IN ((3, 4)),
+  PARTITION p57 VALUES IN ((5, 7)),
+  PARTITION p58 VALUES IN ((5, 8)),
+  PARTITION p5d VALUES IN ((5, DEFAULT)),
+  PARTITION pd VALUES IN ((DEFAULT, DEFAULT))
+);
+ALTER TABLE db.tbl CONFIGURE ZONE DISCARD;
+ALTER PARTITION p34 OF INDEX db.tbl@tbl_pkey CONFIGURE ZONE USING constraints = '[+n1]';
+ALTER PARTITION p57 OF INDEX db.tbl@tbl_pkey CONFIGURE ZONE USING constraints = '[+n2]';
+ALTER PARTITION p58 OF INDEX db.tbl@tbl_pkey CONFIGURE ZONE USING constraints = '[+n3]';
+ALTER PARTITION p5d OF INDEX db.tbl@tbl_pkey CONFIGURE ZONE USING constraints = '[+n1]';
+ALTER PARTITION pd OF INDEX db.tbl@tbl_pkey CONFIGURE ZONE USING constraints = '[+n2]';
+----
+
+translate database=db table=tbl
+----
+/Table/106{-/1}                            range default
+/Table/106/1{-/3/4}                        constraints=[+n2]
+/Table/106/1/3/{4-5}                       constraints=[+n1]
+/Table/106/1/{3/5-5}                       constraints=[+n2]
+/Table/106/1/5{-/7}                        constraints=[+n1]
+/Table/106/1/5/{7-8}                       constraints=[+n2]
+/Table/106/1/5/{8-9}                       constraints=[+n3]
+/Table/106/1/{5/9-6}                       constraints=[+n1]
+/Table/106/{1/6-2}                         constraints=[+n2]
+/Table/10{6/2-7}                           range default
