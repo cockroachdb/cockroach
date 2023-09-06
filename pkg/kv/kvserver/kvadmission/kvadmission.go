@@ -334,7 +334,6 @@ func (n *controllerImpl) AdmitKVWork(
 					AdmissionOriginNode: n.nodeID.Get(),
 				}
 			}
-
 		}
 		// If flow control is disabled or if work bypasses flow control, we still
 		// subject it above-raft, leaseholder-only IO admission control.
