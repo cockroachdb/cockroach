@@ -12,7 +12,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -64,22 +63,11 @@ var (
 const (
 	docsOrganization = "cockroachdb"
 	docsRepo         = "docs"
+	//jiraDocsUserId   = "712020:f8672db2-443f-4232-b01a-f97746f89805"
 )
 
 // the heart of the script to fetch and manipulate all data and create the individual docs issues
 func docsIssueGeneration(params queryParameters) {
-	var x map[int]map[string]string
-	_, _, err := searchJiraDocsIssuesSingle(params.StartTime, 100, 0, x)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Printf("%v\n", x)
-	os.Exit(0)
-
-	repoID, labelMap, err := searchDocsRepoLabels()
-	if err != nil {
-		fmt.Println(err)
-	}
 	prs, err := searchCockroachPRs(params.StartTime, params.EndTime)
 	if err != nil {
 		fmt.Println(err)
@@ -88,7 +76,7 @@ func docsIssueGeneration(params queryParameters) {
 	if params.DryRun {
 		fmt.Printf("Start time: %#v\n", params.StartTime.Format(time.RFC3339))
 		fmt.Printf("End time: %#v\n", params.EndTime.Format(time.RFC3339))
-		fmt.Printf("Repo ID: %s\n", repoID)
+		//fmt.Printf("Repo ID: %s\n", repoID)
 		fmt.Printf("Number of PRs found: %d\n", len(prs))
 		if len(docsIssues) > 0 {
 			fmt.Printf("Dry run is enabled. The following %d docs issue(s) would be created:\n", len(docsIssues))
@@ -97,8 +85,16 @@ func docsIssueGeneration(params queryParameters) {
 			fmt.Println("No docs issues need to be created.")
 		}
 	} else {
-		for _, di := range docsIssues {
-			err := di.createDocsIssues(repoID, labelMap)
+		batchSize := 50
+		for i := 0; i < len(docsIssues); i += batchSize {
+			end := i + batchSize
+			if end > len(docsIssues) {
+				end = len(docsIssues)
+			}
+			batch := docsIssueBatch{
+				IssueUpdates: docsIssues[i:end],
+			}
+			err := batch.createDocsIssuesInBulk()
 			if err != nil {
 				fmt.Println(err)
 			}
@@ -158,32 +154,4 @@ func getJiraIssueFromRef(ref string) string {
 }
 
 // TODO: Redo this function
-
-func (di docsIssue) createDocsIssues(repoID string, labelMap map[string]string) error {
-	var output gqlCreateIssueMutation
-	mutation := `mutation ($repoId: ID!, $title: String!, $body: String!, $labelIds: [ID!]) {
-		createIssue(
-			input: {repositoryId: $repoId, title: $title, body: $body, labelIds: $labelIds}
-		) {
-			clientMutationId
-		}
-	}`
-	var labelIds []string
-	for _, x := range di.labels {
-		labelIds = append(labelIds, labelMap[x])
-	}
-	mutationVariables := map[string]interface{}{
-		"repoId": repoID,
-		"title":  di.title,
-		"body":   di.body,
-	}
-	if len(labelIds) > 0 {
-		mutationVariables["labelIds"] = labelIds
-	}
-	err := queryGraphQL(mutation, mutationVariables, &output)
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-	return nil
-}
+// figure out if you can do this against an array once and bundle it by groups of 50

@@ -7,6 +7,7 @@ go_library(
         "extract.go",
         "format.go",
         "github_graphql_queries.go",
+        "jira.go",
         "main.go",
         "requests.go",
         "structs.go",

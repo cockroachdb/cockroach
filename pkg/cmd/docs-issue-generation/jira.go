@@ -11,6 +11,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -59,9 +61,12 @@ func searchJiraDocsIssuesSingle(
 			"description",
 		},
 		"fieldsByKeys": false,
-		"jql":          fmt.Sprintf(`project = DOC and "Doc Type[Dropdown]" = "Product Change" and createdDate >= "%s"`, startTime.Format(time.DateTime)),
-		"maxResults":   pageSize,
-		"startAt":      startAt,
+		"jql": fmt.Sprintf(
+			`project = DOC and "Doc Type[Dropdown]" = "Product Change" and summary ~ "PR #" and createdDate >= "%s"`,
+			startTime.Format("2006-01-02 15:04"),
+		),
+		"maxResults": pageSize,
+		"startAt":    startAt,
 	}
 	var search jiraIssueSearch
 	err := queryJiraRESTAPI(apiEndpoint, method, headers, body, &search)
@@ -78,10 +83,62 @@ func searchJiraDocsIssuesSingle(
 		if prNumber != 0 && commitSha != "" {
 			_, ok := m[prNumber]
 			if !ok {
-				m[prNumber] = make(map[string]string)
+				m[prNumber] = map[string]string{}
 			}
 			m[prNumber][commitSha] = issue.Key
 		}
 	}
 	return search.MaxResults, search.Total, nil
+}
+
+var getJiraIssueCreateMeta = func() (jiraIssueCreateMeta, error) {
+	apiEndpoint := "issue/createmeta?projectKeys=DOC&issuetypeNames=Docs&expand=projects.issuetypes.fields.parent"
+	method := "GET"
+	headers := map[string]string{
+		"Accept": "application/json",
+	}
+	var search jiraIssueCreateMeta
+	err := queryJiraRESTAPI(apiEndpoint, method, headers, nil, &search)
+	if err != nil {
+		fmt.Println(err)
+		return jiraIssueCreateMeta{}, err
+	}
+	return search, nil
+}
+
+func (dib docsIssueBatch) createDocsIssuesInBulk() error {
+	apiEndpoint := "issue/bulk"
+	method := "POST"
+	headers := map[string]string{
+		"Accept":       "application/json",
+		"Content-Type": "application/json",
+	}
+	var res jiraBulkIssueCreateResponse
+
+	var b bytes.Buffer
+	encoder := json.NewEncoder(&b)
+	encoder.SetEscapeHTML(false)
+	err := encoder.Encode(dib)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	var body map[string]interface{}
+	err = json.Unmarshal(b.Bytes(), &body)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	err = queryJiraRESTAPI(apiEndpoint, method, headers, body, &res)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	if len(res.Errors) > 0 {
+		err := fmt.Errorf("error: Could not create issues: %v", res.Errors)
+		fmt.Println(err)
+		return err
+	}
+	return nil
 }

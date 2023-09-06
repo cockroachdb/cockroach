@@ -74,17 +74,17 @@ func queryJiraRESTAPI(
 }
 
 func httpRequest(
-	url, method, source string,
-	headers map[string]string,
-	body map[string]interface{},
-	out interface{},
+	url, method, source string, headers map[string]string, body interface{}, out interface{},
 ) error {
-	requestBody, err := json.Marshal(body)
-	fmt.Printf("%#v\n", string(requestBody))
+	var requestBody bytes.Buffer
+	encoder := json.NewEncoder(&requestBody)
+	encoder.SetEscapeHTML(false)
+	err := encoder.Encode(body)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest(method, url, bytes.NewBuffer(requestBody))
+
+	req, err := http.NewRequest(method, url, &requestBody)
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func httpRequest(
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		err = fmt.Errorf("Request failed with status: %s\n", res.Status)
+		err = fmt.Errorf("error: Request failed with status: %s", res.Status)
 		fmt.Println(err)
 		return err
 	}

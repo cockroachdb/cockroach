@@ -12,12 +12,47 @@ package main
 
 import "time"
 
+type jiraFieldId struct {
+	Id string `json:"id"`
+}
+
 // docsIssue contains details about each formatted commit to be committed to the docs repo.
 type docsIssue struct {
-	sourceCommitSha string
-	title           string
-	body            string
-	labels          []string
+	Fields docsIssueFields `json:"fields"`
+}
+
+type docsIssueFields struct {
+	IssueType              jiraFieldId   `json:"issuetype"`
+	Project                jiraFieldId   `json:"project"`
+	Summary                string        `json:"summary"`
+	Reporter               jiraFieldId   `json:"reporter"`
+	Description            string        `json:"description"`
+	DocType                jiraFieldId   `json:"customfield_10175"`
+	FixVersions            []jiraFieldId `json:"fixVersions"`
+	EpicLink               string        `json:"customfield_10014"`
+	ProductChangePrNumber  string        `json:"customfield_10435"`
+	ProductChangeCommitSHA string        `json:"customfield_10436"`
+}
+
+type docsIssueBatch struct {
+	IssueUpdates []docsIssue `json:"issueUpdates"`
+}
+
+type jiraBulkIssueCreateResponse struct {
+	Issues []struct {
+		Id         string `json:"id"`
+		Key        string `json:"key"`
+		Self       string `json:"self"`
+		Transition struct {
+			Status          int `json:"status"`
+			ErrorCollection struct {
+				ErrorMessages []interface{} `json:"errorMessages"`
+				Errors        struct {
+				} `json:"errors"`
+			} `json:"errorCollection"`
+		} `json:"transition,omitempty"`
+	} `json:"issues"`
+	Errors []interface{} `json:"errors"`
 }
 
 // queryParameters stores the GitHub API token, a dry run flag to output the issues it would create, and the
@@ -148,6 +183,182 @@ type jiraIssueSearch struct {
 			Description string `json:"description"`
 		} `json:"renderedFields"`
 	} `json:"issues"`
+}
+
+type jiraIssueCreateMeta struct {
+	Projects []struct {
+		Issuetypes []struct {
+			Fields struct {
+				Issuetype struct {
+					Required bool `json:"required"`
+					Schema   struct {
+						Type   string `json:"type"`
+						System string `json:"system"`
+					} `json:"schema"`
+					Name            string        `json:"name"`
+					Key             string        `json:"key"`
+					HasDefaultValue bool          `json:"hasDefaultValue"`
+					Operations      []interface{} `json:"operations"`
+					AllowedValues   []struct {
+						Self           string `json:"self"`
+						Id             string `json:"id"`
+						Description    string `json:"description"`
+						IconUrl        string `json:"iconUrl"`
+						Name           string `json:"name"`
+						Subtask        bool   `json:"subtask"`
+						AvatarId       int    `json:"avatarId"`
+						HierarchyLevel int    `json:"hierarchyLevel"`
+					} `json:"allowedValues"`
+				} `json:"issuetype"`
+				Description struct {
+					Required bool `json:"required"`
+					Schema   struct {
+						Type   string `json:"type"`
+						System string `json:"system"`
+					} `json:"schema"`
+					Name            string   `json:"name"`
+					Key             string   `json:"key"`
+					HasDefaultValue bool     `json:"hasDefaultValue"`
+					Operations      []string `json:"operations"`
+				} `json:"description"`
+				Project struct {
+					Required bool `json:"required"`
+					Schema   struct {
+						Type   string `json:"type"`
+						System string `json:"system"`
+					} `json:"schema"`
+					Name            string   `json:"name"`
+					Key             string   `json:"key"`
+					HasDefaultValue bool     `json:"hasDefaultValue"`
+					Operations      []string `json:"operations"`
+					AllowedValues   []struct {
+						Self           string `json:"self"`
+						Id             string `json:"id"`
+						Key            string `json:"key"`
+						Name           string `json:"name"`
+						ProjectTypeKey string `json:"projectTypeKey"`
+						Simplified     bool   `json:"simplified"`
+						AvatarUrls     struct {
+							X48 string `json:"48x48"`
+							X24 string `json:"24x24"`
+							X16 string `json:"16x16"`
+							X32 string `json:"32x32"`
+						} `json:"avatarUrls"`
+						ProjectCategory struct {
+							Self        string `json:"self"`
+							Id          string `json:"id"`
+							Description string `json:"description"`
+							Name        string `json:"name"`
+						} `json:"projectCategory"`
+					} `json:"allowedValues"`
+				} `json:"project"`
+				DocType struct {
+					Required bool `json:"required"`
+					Schema   struct {
+						Type     string `json:"type"`
+						Custom   string `json:"custom"`
+						CustomId int    `json:"customId"`
+					} `json:"schema"`
+					Name            string   `json:"name"`
+					Key             string   `json:"key"`
+					HasDefaultValue bool     `json:"hasDefaultValue"`
+					Operations      []string `json:"operations"`
+					AllowedValues   []struct {
+						Self  string `json:"self"`
+						Value string `json:"value"`
+						Id    string `json:"id"`
+					} `json:"allowedValues"`
+				} `json:"customfield_10175"`
+				FixVersions struct {
+					Required bool `json:"required"`
+					Schema   struct {
+						Type   string `json:"type"`
+						Items  string `json:"items"`
+						System string `json:"system"`
+					} `json:"schema"`
+					Name            string                                       `json:"name"`
+					Key             string                                       `json:"key"`
+					HasDefaultValue bool                                         `json:"hasDefaultValue"`
+					Operations      []string                                     `json:"operations"`
+					AllowedValues   []jiraCreateIssueMetaFixVersionsAllowedValue `json:"allowedValues"`
+				} `json:"fixVersions"`
+				EpicLink struct {
+					Required bool `json:"required"`
+					Schema   struct {
+						Type     string `json:"type"`
+						Custom   string `json:"custom"`
+						CustomId int    `json:"customId"`
+					} `json:"schema"`
+					Name            string   `json:"name"`
+					Key             string   `json:"key"`
+					HasDefaultValue bool     `json:"hasDefaultValue"`
+					Operations      []string `json:"operations"`
+				} `json:"customfield_10014"`
+				Summary struct {
+					Required bool `json:"required"`
+					Schema   struct {
+						Type   string `json:"type"`
+						System string `json:"system"`
+					} `json:"schema"`
+					Name            string   `json:"name"`
+					Key             string   `json:"key"`
+					HasDefaultValue bool     `json:"hasDefaultValue"`
+					Operations      []string `json:"operations"`
+				} `json:"summary"`
+				Reporter struct {
+					Required bool `json:"required"`
+					Schema   struct {
+						Type   string `json:"type"`
+						System string `json:"system"`
+					} `json:"schema"`
+					Name            string   `json:"name"`
+					Key             string   `json:"key"`
+					AutoCompleteUrl string   `json:"autoCompleteUrl"`
+					HasDefaultValue bool     `json:"hasDefaultValue"`
+					Operations      []string `json:"operations"`
+				} `json:"reporter"`
+				ProductChangePRNumber struct {
+					Required bool `json:"required"`
+					Schema   struct {
+						Type     string `json:"type"`
+						Custom   string `json:"custom"`
+						CustomId int    `json:"customId"`
+					} `json:"schema"`
+					Name            string   `json:"name"`
+					Key             string   `json:"key"`
+					HasDefaultValue bool     `json:"hasDefaultValue"`
+					Operations      []string `json:"operations"`
+				} `json:"customfield_10435"`
+				ProductChangeCommitSHA struct {
+					Required bool `json:"required"`
+					Schema   struct {
+						Type     string `json:"type"`
+						Custom   string `json:"custom"`
+						CustomId int    `json:"customId"`
+					} `json:"schema"`
+					Name            string   `json:"name"`
+					Key             string   `json:"key"`
+					HasDefaultValue bool     `json:"hasDefaultValue"`
+					Operations      []string `json:"operations"`
+				} `json:"customfield_10436"`
+			} `json:"fields"`
+		} `json:"issuetypes"`
+	} `json:"projects"`
+}
+
+type jiraCreateIssueMetaFixVersionsAllowedValue struct {
+	Self            string `json:"self"`
+	Id              string `json:"id"`
+	Description     string `json:"description,omitempty"`
+	Name            string `json:"name"`
+	Archived        bool   `json:"archived"`
+	Released        bool   `json:"released"`
+	ProjectId       int    `json:"projectId"`
+	StartDate       string `json:"startDate,omitempty"`
+	ReleaseDate     string `json:"releaseDate,omitempty"`
+	Overdue         bool   `json:"overdue,omitempty"`
+	UserStartDate   string `json:"userStartDate,omitempty"`
+	UserReleaseDate string `json:"userReleaseDate,omitempty"`
 }
 
 type cockroachPR struct {

@@ -117,10 +117,18 @@ func TestConstructDocsIssues(t *testing.T) {
 				}},
 			}},
 			docsIssues: []docsIssue{{
-				sourceCommitSha: "8dc44d23bb7e0688cd435b6f7908fab615f1aa39",
-				title:           "PR #91345 - clusterversion: allow forcing release binary to dev version",
-				body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/91345\nCommit: https://github.com/cockroachdb/cockroach/commit/8dc44d23bb7e0688cd435b6f7908fab615f1aa39\nEpic: none\n\n---\n\nRelease note (ops change): Release version binaries can now be instructed via the enviroment\nvariable COCKROACH_FORCE_DEV_VERSION to override their cluster version support to match that\nof develeopment builds, which can allow a release binary to be started in a cluster that is\nrun or has previously run a development build.",
-				labels:          []string{"C-product-change", "release-22.2"},
+				Fields: docsIssueFields{
+					IssueType:              jiraFieldId{Id: "10084"},
+					Project:                jiraFieldId{Id: "10047"},
+					Summary:                "PR #91345 - clusterversion: allow forcing release binary to dev version",
+					Reporter:               jiraFieldId{Id: "712020:f8672db2-443f-4232-b01a-f97746f89805"},
+					Description:            "Related PR: https://github.com/cockroachdb/cockroach/pull/91345\nCommit: https://github.com/cockroachdb/cockroach/commit/8dc44d23bb7e0688cd435b6f7908fab615f1aa39\nEpic: none\n\n---\n\nRelease note (ops change): Release version binaries can now be instructed via the enviroment\nvariable COCKROACH_FORCE_DEV_VERSION to override their cluster version support to match that\nof develeopment builds, which can allow a release binary to be started in a cluster that is\nrun or has previously run a development build.",
+					DocType:                jiraFieldId{Id: "10781"},
+					FixVersions:            nil,
+					EpicLink:               "",
+					ProductChangePrNumber:  "91345",
+					ProductChangeCommitSHA: "8dc44d23bb7e0688cd435b6f7908fab615f1aa39",
+				},
 			}},
 		},
 		{
@@ -162,22 +170,46 @@ func TestConstructDocsIssues(t *testing.T) {
 			},
 			docsIssues: []docsIssue{
 				{
-					sourceCommitSha: "8d15073f329cf8d72e09977b34a3b339d1436000",
-					title:           "PR #91294 - ui: update filter labels",
-					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/91294\nCommit: https://github.com/cockroachdb/cockroach/commit/8d15073f329cf8d72e09977b34a3b339d1436000\nFixes: CRDB-19614\n\n---\n\nRelease note (ui change): Update filter labels from\n\"App\" to \"Application Name\" and from \"Username\" to\n\"User Name\" on SQL Activity pages.",
-					labels:          []string{"C-product-change", "release-22.1"},
+					Fields: docsIssueFields{
+						IssueType:              jiraFieldId{Id: "10084"},
+						Project:                jiraFieldId{Id: "10047"},
+						Summary:                "PR #91294 - ui: update filter labels",
+						Reporter:               jiraFieldId{Id: "712020:f8672db2-443f-4232-b01a-f97746f89805"},
+						Description:            "Related PR: https://github.com/cockroachdb/cockroach/pull/91294\nCommit: https://github.com/cockroachdb/cockroach/commit/8d15073f329cf8d72e09977b34a3b339d1436000\nFixes: CRDB-19614\n\n---\n\nRelease note (ui change): Update filter labels from\n\"App\" to \"Application Name\" and from \"Username\" to\n\"User Name\" on SQL Activity pages.",
+						DocType:                jiraFieldId{Id: "10781"},
+						FixVersions:            nil,
+						EpicLink:               "",
+						ProductChangePrNumber:  "91294",
+						ProductChangeCommitSHA: "8d15073f329cf8d72e09977b34a3b339d1436000",
+					},
 				},
 				{
-					sourceCommitSha: "1829a72664f28ddfa50324c9ff5352380029560b",
-					title:           "PR #90381 - sql/ttl: rename num_active_ranges metrics",
-					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/90381\nCommit: https://github.com/cockroachdb/cockroach/commit/1829a72664f28ddfa50324c9ff5352380029560b\nFixes: CRDB-20636\n\n---\n\nRelease note (ops change): These TTL metrics have been renamed:\njobs.row_level_ttl.range_total_duration -> jobs.row_level_ttl.span_total_duration\njobs.row_level_ttl.num_active_ranges -> jobs.row_level_ttl.num_active_spans",
-					labels:          []string{"C-product-change", "release-22.2.0"},
+					Fields: docsIssueFields{
+						IssueType:              jiraFieldId{Id: "10084"},
+						Project:                jiraFieldId{Id: "10047"},
+						Summary:                "PR #90381 - sql/ttl: rename num_active_ranges metrics",
+						Reporter:               jiraFieldId{Id: "712020:f8672db2-443f-4232-b01a-f97746f89805"},
+						Description:            "Related PR: https://github.com/cockroachdb/cockroach/pull/90381\nCommit: https://github.com/cockroachdb/cockroach/commit/1829a72664f28ddfa50324c9ff5352380029560b\nFixes: CRDB-20636\n\n---\n\nRelease note (ops change): These TTL metrics have been renamed:\njobs.row_level_ttl.range_total_duration -> jobs.row_level_ttl.span_total_duration\njobs.row_level_ttl.num_active_ranges -> jobs.row_level_ttl.num_active_spans",
+						DocType:                jiraFieldId{Id: "10781"},
+						FixVersions:            nil,
+						EpicLink:               "",
+						ProductChangePrNumber:  "90381",
+						ProductChangeCommitSHA: "1829a72664f28ddfa50324c9ff5352380029560b",
+					},
 				},
 				{
-					sourceCommitSha: "43de8ff30e3e6e1d9b2272ed4f62c543dc0a037c",
-					title:           "PR #89957 - opt/props: shallow-copy props.Histogram when applying selectivity",
-					body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/89957\nCommit: https://github.com/cockroachdb/cockroach/commit/43de8ff30e3e6e1d9b2272ed4f62c543dc0a037c\nFixes: CRDB-20505\n\n---\n\nRelease note (performance improvement): The optimizer now does less\ncopying of histograms while planning queries, which will reduce memory\npressure a little.",
-					labels:          []string{"C-product-change", "release-22.2"},
+					Fields: docsIssueFields{
+						IssueType:              jiraFieldId{Id: "10084"},
+						Project:                jiraFieldId{Id: "10047"},
+						Summary:                "PR #89957 - opt/props: shallow-copy props.Histogram when applying selectivity",
+						Reporter:               jiraFieldId{Id: "712020:f8672db2-443f-4232-b01a-f97746f89805"},
+						Description:            "Related PR: https://github.com/cockroachdb/cockroach/pull/89957\nCommit: https://github.com/cockroachdb/cockroach/commit/43de8ff30e3e6e1d9b2272ed4f62c543dc0a037c\nFixes: CRDB-20505\n\n---\n\nRelease note (performance improvement): The optimizer now does less\ncopying of histograms while planning queries, which will reduce memory\npressure a little.",
+						DocType:                jiraFieldId{Id: "10781"},
+						FixVersions:            nil,
+						EpicLink:               "",
+						ProductChangePrNumber:  "89957",
+						ProductChangeCommitSHA: "43de8ff30e3e6e1d9b2272ed4f62c543dc0a037c",
+					},
 				},
 			},
 		},
@@ -194,12 +226,22 @@ func TestConstructDocsIssues(t *testing.T) {
 					MessageBody:     "Epic: none\nRelease note (enterprise change): enterprise changes",
 				}},
 			}},
-			docsIssues: []docsIssue{{
-				sourceCommitSha: "690da3e2ac3b1b7268accfb1dcbe5464e948e9d1",
-				title:           "PR #123456 - Epic none PR",
-				body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/123456\nCommit: https://github.com/cockroachdb/cockroach/commit/690da3e2ac3b1b7268accfb1dcbe5464e948e9d1\nEpic: none\n\n---\n\nRelease note (enterprise change): enterprise changes",
-				labels:          []string{"C-product-change", "master"},
-			}},
+			docsIssues: []docsIssue{
+				{
+					Fields: docsIssueFields{
+						IssueType:              jiraFieldId{Id: "10084"},
+						Project:                jiraFieldId{Id: "10047"},
+						Summary:                "PR #123456 - Epic none PR",
+						Reporter:               jiraFieldId{Id: "712020:f8672db2-443f-4232-b01a-f97746f89805"},
+						Description:            "Related PR: https://github.com/cockroachdb/cockroach/pull/123456\nCommit: https://github.com/cockroachdb/cockroach/commit/690da3e2ac3b1b7268accfb1dcbe5464e948e9d1\nEpic: none\n\n---\n\nRelease note (enterprise change): enterprise changes",
+						DocType:                jiraFieldId{Id: "10781"},
+						FixVersions:            nil,
+						EpicLink:               "",
+						ProductChangePrNumber:  "123456",
+						ProductChangeCommitSHA: "690da3e2ac3b1b7268accfb1dcbe5464e948e9d1",
+					},
+				},
+			},
 		},
 		{
 			testName: "Epic extraction",
@@ -215,10 +257,18 @@ func TestConstructDocsIssues(t *testing.T) {
 				}},
 			}},
 			docsIssues: []docsIssue{{
-				sourceCommitSha: "aaada3e2ac3b1b7268accfb1dcbe5464e948e9d1",
-				title:           "PR #123456 - Epic extraction PR",
-				body:            "Related PR: https://github.com/cockroachdb/cockroach/pull/123456\nCommit: https://github.com/cockroachdb/cockroach/commit/aaada3e2ac3b1b7268accfb1dcbe5464e948e9d1\nEpic: CRDB-24680\n\n---\n\nRelease note (cli change): cli changes",
-				labels:          []string{"C-product-change", "master"},
+				Fields: docsIssueFields{
+					IssueType:              jiraFieldId{Id: "10084"},
+					Project:                jiraFieldId{Id: "10047"},
+					Summary:                "PR #123456 - Epic extraction PR",
+					Reporter:               jiraFieldId{Id: "712020:f8672db2-443f-4232-b01a-f97746f89805"},
+					Description:            "Related PR: https://github.com/cockroachdb/cockroach/pull/123456\nCommit: https://github.com/cockroachdb/cockroach/commit/aaada3e2ac3b1b7268accfb1dcbe5464e948e9d1\nEpic: CRDB-24680\n\n---\n\nRelease note (cli change): cli changes",
+					DocType:                jiraFieldId{Id: "10781"},
+					FixVersions:            nil,
+					EpicLink:               "CRDB-24680",
+					ProductChangePrNumber:  "123456",
+					ProductChangeCommitSHA: "aaada3e2ac3b1b7268accfb1dcbe5464e948e9d1",
+				},
 			}},
 		},
 	}
@@ -235,6 +285,695 @@ func TestConstructDocsIssues(t *testing.T) {
 				ghJiraIssueMap["cockroachdb"]["cockroach"][90094] = "CRDB-20636"
 				ghJiraIssueMap["cockroachdb"]["cockroach"][89941] = "CRDB-20505"
 				return ghJiraIssueMap[org][repo][issue], nil
+			})()
+			defer testutils.TestingHook(&getJiraIssueCreateMeta, func() (jiraIssueCreateMeta, error) {
+				result := jiraIssueCreateMeta{
+					Projects: []struct {
+						Issuetypes []struct {
+							Fields struct {
+								Issuetype struct {
+									Required bool "json:\"required\""
+									Schema   struct {
+										Type   string "json:\"type\""
+										System string "json:\"system\""
+									} "json:\"schema\""
+									Name            string        "json:\"name\""
+									Key             string        "json:\"key\""
+									HasDefaultValue bool          "json:\"hasDefaultValue\""
+									Operations      []interface{} "json:\"operations\""
+									AllowedValues   []struct {
+										Self           string "json:\"self\""
+										Id             string "json:\"id\""
+										Description    string "json:\"description\""
+										IconUrl        string "json:\"iconUrl\""
+										Name           string "json:\"name\""
+										Subtask        bool   "json:\"subtask\""
+										AvatarId       int    "json:\"avatarId\""
+										HierarchyLevel int    "json:\"hierarchyLevel\""
+									} "json:\"allowedValues\""
+								} "json:\"issuetype\""
+								Description struct {
+									Required bool "json:\"required\""
+									Schema   struct {
+										Type   string "json:\"type\""
+										System string "json:\"system\""
+									} "json:\"schema\""
+									Name            string   "json:\"name\""
+									Key             string   "json:\"key\""
+									HasDefaultValue bool     "json:\"hasDefaultValue\""
+									Operations      []string "json:\"operations\""
+								} "json:\"description\""
+								Project struct {
+									Required bool "json:\"required\""
+									Schema   struct {
+										Type   string "json:\"type\""
+										System string "json:\"system\""
+									} "json:\"schema\""
+									Name            string   "json:\"name\""
+									Key             string   "json:\"key\""
+									HasDefaultValue bool     "json:\"hasDefaultValue\""
+									Operations      []string "json:\"operations\""
+									AllowedValues   []struct {
+										Self           string "json:\"self\""
+										Id             string "json:\"id\""
+										Key            string "json:\"key\""
+										Name           string "json:\"name\""
+										ProjectTypeKey string "json:\"projectTypeKey\""
+										Simplified     bool   "json:\"simplified\""
+										AvatarUrls     struct {
+											X48 string "json:\"48x48\""
+											X24 string "json:\"24x24\""
+											X16 string "json:\"16x16\""
+											X32 string "json:\"32x32\""
+										} "json:\"avatarUrls\""
+										ProjectCategory struct {
+											Self        string "json:\"self\""
+											Id          string "json:\"id\""
+											Description string "json:\"description\""
+											Name        string "json:\"name\""
+										} "json:\"projectCategory\""
+									} "json:\"allowedValues\""
+								} "json:\"project\""
+								DocType struct {
+									Required bool "json:\"required\""
+									Schema   struct {
+										Type     string "json:\"type\""
+										Custom   string "json:\"custom\""
+										CustomId int    "json:\"customId\""
+									} "json:\"schema\""
+									Name            string   "json:\"name\""
+									Key             string   "json:\"key\""
+									HasDefaultValue bool     "json:\"hasDefaultValue\""
+									Operations      []string "json:\"operations\""
+									AllowedValues   []struct {
+										Self  string "json:\"self\""
+										Value string "json:\"value\""
+										Id    string "json:\"id\""
+									} "json:\"allowedValues\""
+								} "json:\"customfield_10175\""
+								FixVersions struct {
+									Required bool "json:\"required\""
+									Schema   struct {
+										Type   string "json:\"type\""
+										Items  string "json:\"items\""
+										System string "json:\"system\""
+									} "json:\"schema\""
+									Name            string                                       "json:\"name\""
+									Key             string                                       "json:\"key\""
+									HasDefaultValue bool                                         "json:\"hasDefaultValue\""
+									Operations      []string                                     "json:\"operations\""
+									AllowedValues   []jiraCreateIssueMetaFixVersionsAllowedValue "json:\"allowedValues\""
+								} "json:\"fixVersions\""
+								EpicLink struct {
+									Required bool "json:\"required\""
+									Schema   struct {
+										Type     string "json:\"type\""
+										Custom   string "json:\"custom\""
+										CustomId int    "json:\"customId\""
+									} "json:\"schema\""
+									Name            string   "json:\"name\""
+									Key             string   "json:\"key\""
+									HasDefaultValue bool     "json:\"hasDefaultValue\""
+									Operations      []string "json:\"operations\""
+								} "json:\"customfield_10014\""
+								Summary struct {
+									Required bool "json:\"required\""
+									Schema   struct {
+										Type   string "json:\"type\""
+										System string "json:\"system\""
+									} "json:\"schema\""
+									Name            string   "json:\"name\""
+									Key             string   "json:\"key\""
+									HasDefaultValue bool     "json:\"hasDefaultValue\""
+									Operations      []string "json:\"operations\""
+								} "json:\"summary\""
+								Reporter struct {
+									Required bool "json:\"required\""
+									Schema   struct {
+										Type   string "json:\"type\""
+										System string "json:\"system\""
+									} "json:\"schema\""
+									Name            string   "json:\"name\""
+									Key             string   "json:\"key\""
+									AutoCompleteUrl string   "json:\"autoCompleteUrl\""
+									HasDefaultValue bool     "json:\"hasDefaultValue\""
+									Operations      []string "json:\"operations\""
+								} "json:\"reporter\""
+								ProductChangePRNumber struct {
+									Required bool "json:\"required\""
+									Schema   struct {
+										Type     string "json:\"type\""
+										Custom   string "json:\"custom\""
+										CustomId int    "json:\"customId\""
+									} "json:\"schema\""
+									Name            string   "json:\"name\""
+									Key             string   "json:\"key\""
+									HasDefaultValue bool     "json:\"hasDefaultValue\""
+									Operations      []string "json:\"operations\""
+								} "json:\"customfield_10435\""
+								ProductChangeCommitSHA struct {
+									Required bool "json:\"required\""
+									Schema   struct {
+										Type     string "json:\"type\""
+										Custom   string "json:\"custom\""
+										CustomId int    "json:\"customId\""
+									} "json:\"schema\""
+									Name            string   "json:\"name\""
+									Key             string   "json:\"key\""
+									HasDefaultValue bool     "json:\"hasDefaultValue\""
+									Operations      []string "json:\"operations\""
+								} "json:\"customfield_10436\""
+							} "json:\"fields\""
+						} "json:\"issuetypes\""
+					}{{Issuetypes: []struct {
+						Fields struct {
+							Issuetype struct {
+								Required bool "json:\"required\""
+								Schema   struct {
+									Type   string "json:\"type\""
+									System string "json:\"system\""
+								} "json:\"schema\""
+								Name            string        "json:\"name\""
+								Key             string        "json:\"key\""
+								HasDefaultValue bool          "json:\"hasDefaultValue\""
+								Operations      []interface{} "json:\"operations\""
+								AllowedValues   []struct {
+									Self           string "json:\"self\""
+									Id             string "json:\"id\""
+									Description    string "json:\"description\""
+									IconUrl        string "json:\"iconUrl\""
+									Name           string "json:\"name\""
+									Subtask        bool   "json:\"subtask\""
+									AvatarId       int    "json:\"avatarId\""
+									HierarchyLevel int    "json:\"hierarchyLevel\""
+								} "json:\"allowedValues\""
+							} "json:\"issuetype\""
+							Description struct {
+								Required bool "json:\"required\""
+								Schema   struct {
+									Type   string "json:\"type\""
+									System string "json:\"system\""
+								} "json:\"schema\""
+								Name            string   "json:\"name\""
+								Key             string   "json:\"key\""
+								HasDefaultValue bool     "json:\"hasDefaultValue\""
+								Operations      []string "json:\"operations\""
+							} "json:\"description\""
+							Project struct {
+								Required bool "json:\"required\""
+								Schema   struct {
+									Type   string "json:\"type\""
+									System string "json:\"system\""
+								} "json:\"schema\""
+								Name            string   "json:\"name\""
+								Key             string   "json:\"key\""
+								HasDefaultValue bool     "json:\"hasDefaultValue\""
+								Operations      []string "json:\"operations\""
+								AllowedValues   []struct {
+									Self           string "json:\"self\""
+									Id             string "json:\"id\""
+									Key            string "json:\"key\""
+									Name           string "json:\"name\""
+									ProjectTypeKey string "json:\"projectTypeKey\""
+									Simplified     bool   "json:\"simplified\""
+									AvatarUrls     struct {
+										X48 string "json:\"48x48\""
+										X24 string "json:\"24x24\""
+										X16 string "json:\"16x16\""
+										X32 string "json:\"32x32\""
+									} "json:\"avatarUrls\""
+									ProjectCategory struct {
+										Self        string "json:\"self\""
+										Id          string "json:\"id\""
+										Description string "json:\"description\""
+										Name        string "json:\"name\""
+									} "json:\"projectCategory\""
+								} "json:\"allowedValues\""
+							} "json:\"project\""
+							DocType struct {
+								Required bool "json:\"required\""
+								Schema   struct {
+									Type     string "json:\"type\""
+									Custom   string "json:\"custom\""
+									CustomId int    "json:\"customId\""
+								} "json:\"schema\""
+								Name            string   "json:\"name\""
+								Key             string   "json:\"key\""
+								HasDefaultValue bool     "json:\"hasDefaultValue\""
+								Operations      []string "json:\"operations\""
+								AllowedValues   []struct {
+									Self  string "json:\"self\""
+									Value string "json:\"value\""
+									Id    string "json:\"id\""
+								} "json:\"allowedValues\""
+							} "json:\"customfield_10175\""
+							FixVersions struct {
+								Required bool "json:\"required\""
+								Schema   struct {
+									Type   string "json:\"type\""
+									Items  string "json:\"items\""
+									System string "json:\"system\""
+								} "json:\"schema\""
+								Name            string                                       "json:\"name\""
+								Key             string                                       "json:\"key\""
+								HasDefaultValue bool                                         "json:\"hasDefaultValue\""
+								Operations      []string                                     "json:\"operations\""
+								AllowedValues   []jiraCreateIssueMetaFixVersionsAllowedValue "json:\"allowedValues\""
+							} "json:\"fixVersions\""
+							EpicLink struct {
+								Required bool "json:\"required\""
+								Schema   struct {
+									Type     string "json:\"type\""
+									Custom   string "json:\"custom\""
+									CustomId int    "json:\"customId\""
+								} "json:\"schema\""
+								Name            string   "json:\"name\""
+								Key             string   "json:\"key\""
+								HasDefaultValue bool     "json:\"hasDefaultValue\""
+								Operations      []string "json:\"operations\""
+							} "json:\"customfield_10014\""
+							Summary struct {
+								Required bool "json:\"required\""
+								Schema   struct {
+									Type   string "json:\"type\""
+									System string "json:\"system\""
+								} "json:\"schema\""
+								Name            string   "json:\"name\""
+								Key             string   "json:\"key\""
+								HasDefaultValue bool     "json:\"hasDefaultValue\""
+								Operations      []string "json:\"operations\""
+							} "json:\"summary\""
+							Reporter struct {
+								Required bool "json:\"required\""
+								Schema   struct {
+									Type   string "json:\"type\""
+									System string "json:\"system\""
+								} "json:\"schema\""
+								Name            string   "json:\"name\""
+								Key             string   "json:\"key\""
+								AutoCompleteUrl string   "json:\"autoCompleteUrl\""
+								HasDefaultValue bool     "json:\"hasDefaultValue\""
+								Operations      []string "json:\"operations\""
+							} "json:\"reporter\""
+							ProductChangePRNumber struct {
+								Required bool "json:\"required\""
+								Schema   struct {
+									Type     string "json:\"type\""
+									Custom   string "json:\"custom\""
+									CustomId int    "json:\"customId\""
+								} "json:\"schema\""
+								Name            string   "json:\"name\""
+								Key             string   "json:\"key\""
+								HasDefaultValue bool     "json:\"hasDefaultValue\""
+								Operations      []string "json:\"operations\""
+							} "json:\"customfield_10435\""
+							ProductChangeCommitSHA struct {
+								Required bool "json:\"required\""
+								Schema   struct {
+									Type     string "json:\"type\""
+									Custom   string "json:\"custom\""
+									CustomId int    "json:\"customId\""
+								} "json:\"schema\""
+								Name            string   "json:\"name\""
+								Key             string   "json:\"key\""
+								HasDefaultValue bool     "json:\"hasDefaultValue\""
+								Operations      []string "json:\"operations\""
+							} "json:\"customfield_10436\""
+						} "json:\"fields\""
+					}{{Fields: struct {
+						Issuetype struct {
+							Required bool "json:\"required\""
+							Schema   struct {
+								Type   string "json:\"type\""
+								System string "json:\"system\""
+							} "json:\"schema\""
+							Name            string        "json:\"name\""
+							Key             string        "json:\"key\""
+							HasDefaultValue bool          "json:\"hasDefaultValue\""
+							Operations      []interface{} "json:\"operations\""
+							AllowedValues   []struct {
+								Self           string "json:\"self\""
+								Id             string "json:\"id\""
+								Description    string "json:\"description\""
+								IconUrl        string "json:\"iconUrl\""
+								Name           string "json:\"name\""
+								Subtask        bool   "json:\"subtask\""
+								AvatarId       int    "json:\"avatarId\""
+								HierarchyLevel int    "json:\"hierarchyLevel\""
+							} "json:\"allowedValues\""
+						} "json:\"issuetype\""
+						Description struct {
+							Required bool "json:\"required\""
+							Schema   struct {
+								Type   string "json:\"type\""
+								System string "json:\"system\""
+							} "json:\"schema\""
+							Name            string   "json:\"name\""
+							Key             string   "json:\"key\""
+							HasDefaultValue bool     "json:\"hasDefaultValue\""
+							Operations      []string "json:\"operations\""
+						} "json:\"description\""
+						Project struct {
+							Required bool "json:\"required\""
+							Schema   struct {
+								Type   string "json:\"type\""
+								System string "json:\"system\""
+							} "json:\"schema\""
+							Name            string   "json:\"name\""
+							Key             string   "json:\"key\""
+							HasDefaultValue bool     "json:\"hasDefaultValue\""
+							Operations      []string "json:\"operations\""
+							AllowedValues   []struct {
+								Self           string "json:\"self\""
+								Id             string "json:\"id\""
+								Key            string "json:\"key\""
+								Name           string "json:\"name\""
+								ProjectTypeKey string "json:\"projectTypeKey\""
+								Simplified     bool   "json:\"simplified\""
+								AvatarUrls     struct {
+									X48 string "json:\"48x48\""
+									X24 string "json:\"24x24\""
+									X16 string "json:\"16x16\""
+									X32 string "json:\"32x32\""
+								} "json:\"avatarUrls\""
+								ProjectCategory struct {
+									Self        string "json:\"self\""
+									Id          string "json:\"id\""
+									Description string "json:\"description\""
+									Name        string "json:\"name\""
+								} "json:\"projectCategory\""
+							} "json:\"allowedValues\""
+						} "json:\"project\""
+						DocType struct {
+							Required bool "json:\"required\""
+							Schema   struct {
+								Type     string "json:\"type\""
+								Custom   string "json:\"custom\""
+								CustomId int    "json:\"customId\""
+							} "json:\"schema\""
+							Name            string   "json:\"name\""
+							Key             string   "json:\"key\""
+							HasDefaultValue bool     "json:\"hasDefaultValue\""
+							Operations      []string "json:\"operations\""
+							AllowedValues   []struct {
+								Self  string "json:\"self\""
+								Value string "json:\"value\""
+								Id    string "json:\"id\""
+							} "json:\"allowedValues\""
+						} "json:\"customfield_10175\""
+						FixVersions struct {
+							Required bool "json:\"required\""
+							Schema   struct {
+								Type   string "json:\"type\""
+								Items  string "json:\"items\""
+								System string "json:\"system\""
+							} "json:\"schema\""
+							Name            string                                       "json:\"name\""
+							Key             string                                       "json:\"key\""
+							HasDefaultValue bool                                         "json:\"hasDefaultValue\""
+							Operations      []string                                     "json:\"operations\""
+							AllowedValues   []jiraCreateIssueMetaFixVersionsAllowedValue "json:\"allowedValues\""
+						} "json:\"fixVersions\""
+						EpicLink struct {
+							Required bool "json:\"required\""
+							Schema   struct {
+								Type     string "json:\"type\""
+								Custom   string "json:\"custom\""
+								CustomId int    "json:\"customId\""
+							} "json:\"schema\""
+							Name            string   "json:\"name\""
+							Key             string   "json:\"key\""
+							HasDefaultValue bool     "json:\"hasDefaultValue\""
+							Operations      []string "json:\"operations\""
+						} "json:\"customfield_10014\""
+						Summary struct {
+							Required bool "json:\"required\""
+							Schema   struct {
+								Type   string "json:\"type\""
+								System string "json:\"system\""
+							} "json:\"schema\""
+							Name            string   "json:\"name\""
+							Key             string   "json:\"key\""
+							HasDefaultValue bool     "json:\"hasDefaultValue\""
+							Operations      []string "json:\"operations\""
+						} "json:\"summary\""
+						Reporter struct {
+							Required bool "json:\"required\""
+							Schema   struct {
+								Type   string "json:\"type\""
+								System string "json:\"system\""
+							} "json:\"schema\""
+							Name            string   "json:\"name\""
+							Key             string   "json:\"key\""
+							AutoCompleteUrl string   "json:\"autoCompleteUrl\""
+							HasDefaultValue bool     "json:\"hasDefaultValue\""
+							Operations      []string "json:\"operations\""
+						} "json:\"reporter\""
+						ProductChangePRNumber struct {
+							Required bool "json:\"required\""
+							Schema   struct {
+								Type     string "json:\"type\""
+								Custom   string "json:\"custom\""
+								CustomId int    "json:\"customId\""
+							} "json:\"schema\""
+							Name            string   "json:\"name\""
+							Key             string   "json:\"key\""
+							HasDefaultValue bool     "json:\"hasDefaultValue\""
+							Operations      []string "json:\"operations\""
+						} "json:\"customfield_10435\""
+						ProductChangeCommitSHA struct {
+							Required bool "json:\"required\""
+							Schema   struct {
+								Type     string "json:\"type\""
+								Custom   string "json:\"custom\""
+								CustomId int    "json:\"customId\""
+							} "json:\"schema\""
+							Name            string   "json:\"name\""
+							Key             string   "json:\"key\""
+							HasDefaultValue bool     "json:\"hasDefaultValue\""
+							Operations      []string "json:\"operations\""
+						} "json:\"customfield_10436\""
+					}{Issuetype: struct {
+						Required bool "json:\"required\""
+						Schema   struct {
+							Type   string "json:\"type\""
+							System string "json:\"system\""
+						} "json:\"schema\""
+						Name            string        "json:\"name\""
+						Key             string        "json:\"key\""
+						HasDefaultValue bool          "json:\"hasDefaultValue\""
+						Operations      []interface{} "json:\"operations\""
+						AllowedValues   []struct {
+							Self           string "json:\"self\""
+							Id             string "json:\"id\""
+							Description    string "json:\"description\""
+							IconUrl        string "json:\"iconUrl\""
+							Name           string "json:\"name\""
+							Subtask        bool   "json:\"subtask\""
+							AvatarId       int    "json:\"avatarId\""
+							HierarchyLevel int    "json:\"hierarchyLevel\""
+						} "json:\"allowedValues\""
+					}{Required: true, Schema: struct {
+						Type   string "json:\"type\""
+						System string "json:\"system\""
+					}{Type: "issuetype", System: "issuetype"}, Name: "Issue Type", Key: "issuetype", HasDefaultValue: false, Operations: []interface{}{}, AllowedValues: []struct {
+						Self           string "json:\"self\""
+						Id             string "json:\"id\""
+						Description    string "json:\"description\""
+						IconUrl        string "json:\"iconUrl\""
+						Name           string "json:\"name\""
+						Subtask        bool   "json:\"subtask\""
+						AvatarId       int    "json:\"avatarId\""
+						HierarchyLevel int    "json:\"hierarchyLevel\""
+					}{{Self: "https://cockroachlabs.atlassian.net/rest/api/3/issuetype/10084", Id: "10084", Description: "", IconUrl: "https://cockroachlabs.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10568?size=medium", Name: "Docs", Subtask: false, AvatarId: 10568, HierarchyLevel: 0}}}, Description: struct {
+						Required bool "json:\"required\""
+						Schema   struct {
+							Type   string "json:\"type\""
+							System string "json:\"system\""
+						} "json:\"schema\""
+						Name            string   "json:\"name\""
+						Key             string   "json:\"key\""
+						HasDefaultValue bool     "json:\"hasDefaultValue\""
+						Operations      []string "json:\"operations\""
+					}{Required: false, Schema: struct {
+						Type   string "json:\"type\""
+						System string "json:\"system\""
+					}{Type: "string", System: "description"}, Name: "Description", Key: "description", HasDefaultValue: false, Operations: []string{"set"}}, Project: struct {
+						Required bool "json:\"required\""
+						Schema   struct {
+							Type   string "json:\"type\""
+							System string "json:\"system\""
+						} "json:\"schema\""
+						Name            string   "json:\"name\""
+						Key             string   "json:\"key\""
+						HasDefaultValue bool     "json:\"hasDefaultValue\""
+						Operations      []string "json:\"operations\""
+						AllowedValues   []struct {
+							Self           string "json:\"self\""
+							Id             string "json:\"id\""
+							Key            string "json:\"key\""
+							Name           string "json:\"name\""
+							ProjectTypeKey string "json:\"projectTypeKey\""
+							Simplified     bool   "json:\"simplified\""
+							AvatarUrls     struct {
+								X48 string "json:\"48x48\""
+								X24 string "json:\"24x24\""
+								X16 string "json:\"16x16\""
+								X32 string "json:\"32x32\""
+							} "json:\"avatarUrls\""
+							ProjectCategory struct {
+								Self        string "json:\"self\""
+								Id          string "json:\"id\""
+								Description string "json:\"description\""
+								Name        string "json:\"name\""
+							} "json:\"projectCategory\""
+						} "json:\"allowedValues\""
+					}{Required: true, Schema: struct {
+						Type   string "json:\"type\""
+						System string "json:\"system\""
+					}{Type: "project", System: "project"}, Name: "Project", Key: "project", HasDefaultValue: false, Operations: []string{"set"}, AllowedValues: []struct {
+						Self           string "json:\"self\""
+						Id             string "json:\"id\""
+						Key            string "json:\"key\""
+						Name           string "json:\"name\""
+						ProjectTypeKey string "json:\"projectTypeKey\""
+						Simplified     bool   "json:\"simplified\""
+						AvatarUrls     struct {
+							X48 string "json:\"48x48\""
+							X24 string "json:\"24x24\""
+							X16 string "json:\"16x16\""
+							X32 string "json:\"32x32\""
+						} "json:\"avatarUrls\""
+						ProjectCategory struct {
+							Self        string "json:\"self\""
+							Id          string "json:\"id\""
+							Description string "json:\"description\""
+							Name        string "json:\"name\""
+						} "json:\"projectCategory\""
+					}{{Self: "https://cockroachlabs.atlassian.net/rest/api/3/project/10047", Id: "10047", Key: "DOC", Name: "Documentation", ProjectTypeKey: "software", Simplified: false, AvatarUrls: struct {
+						X48 string "json:\"48x48\""
+						X24 string "json:\"24x24\""
+						X16 string "json:\"16x16\""
+						X32 string "json:\"32x32\""
+					}{X48: "https://cockroachlabs.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10412", X24: "https://cockroachlabs.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10412?size=small", X16: "https://cockroachlabs.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10412?size=xsmall", X32: "https://cockroachlabs.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10412?size=medium"}, ProjectCategory: struct {
+						Self        string "json:\"self\""
+						Id          string "json:\"id\""
+						Description string "json:\"description\""
+						Name        string "json:\"name\""
+					}{Self: "https://cockroachlabs.atlassian.net/rest/api/3/projectCategory/10001", Id: "10001", Description: "", Name: "Agile Delivery"}}}}, DocType: struct {
+						Required bool "json:\"required\""
+						Schema   struct {
+							Type     string "json:\"type\""
+							Custom   string "json:\"custom\""
+							CustomId int    "json:\"customId\""
+						} "json:\"schema\""
+						Name            string   "json:\"name\""
+						Key             string   "json:\"key\""
+						HasDefaultValue bool     "json:\"hasDefaultValue\""
+						Operations      []string "json:\"operations\""
+						AllowedValues   []struct {
+							Self  string "json:\"self\""
+							Value string "json:\"value\""
+							Id    string "json:\"id\""
+						} "json:\"allowedValues\""
+					}{Required: false, Schema: struct {
+						Type     string "json:\"type\""
+						Custom   string "json:\"custom\""
+						CustomId int    "json:\"customId\""
+					}{Type: "option", Custom: "com.atlassian.jira.plugin.system.customfieldtypes:select", CustomId: 10175}, Name: "Doc Type", Key: "customfield_10175", HasDefaultValue: false, Operations: []string{"set"}, AllowedValues: []struct {
+						Self  string "json:\"self\""
+						Value string "json:\"value\""
+						Id    string "json:\"id\""
+					}{{Self: "https://cockroachlabs.atlassian.net/rest/api/3/customFieldOption/10781", Value: "Doc Bug", Id: "10781"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/customFieldOption/10780", Value: "Doc Improvement", Id: "10780"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/customFieldOption/11164", Value: "General admin", Id: "11164"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/customFieldOption/10782", Value: "Microcopy", Id: "10782"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/customFieldOption/10779", Value: "Product Change", Id: "10779"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/customFieldOption/11432", Value: "Release Notes", Id: "11432"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/customFieldOption/11493", Value: "Roadmap Feature", Id: "11493"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/customFieldOption/11569", Value: "Style", Id: "11569"}}}, FixVersions: struct {
+						Required bool "json:\"required\""
+						Schema   struct {
+							Type   string "json:\"type\""
+							Items  string "json:\"items\""
+							System string "json:\"system\""
+						} "json:\"schema\""
+						Name            string                                       "json:\"name\""
+						Key             string                                       "json:\"key\""
+						HasDefaultValue bool                                         "json:\"hasDefaultValue\""
+						Operations      []string                                     "json:\"operations\""
+						AllowedValues   []jiraCreateIssueMetaFixVersionsAllowedValue "json:\"allowedValues\""
+					}{Required: false, Schema: struct {
+						Type   string "json:\"type\""
+						Items  string "json:\"items\""
+						System string "json:\"system\""
+					}{Type: "array", Items: "version", System: "fixVersions"}, Name: "Fix versions", Key: "fixVersions", HasDefaultValue: false, Operations: []string{"set", "add", "remove"}, AllowedValues: []jiraCreateIssueMetaFixVersionsAllowedValue{{Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10181", Id: "10181", Description: "20.1 (Spring '20)", Name: "20.1 (Spring '20)", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10182", Id: "10182", Description: "20.2 (Fall '20)", Name: "20.2 (Fall '20)", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10183", Id: "10183", Description: "21.1 (Spring '21)", Name: "21.1 (Spring '21)", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10184", Id: "10184", Description: "21.2 (Fall '21)", Name: "21.2 (Fall '21)", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10185", Id: "10185", Description: "22.1 (Spring '22)", Name: "22.1 (Spring '22)", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10186", Id: "10186", Description: "22.2 (Fall '22)", Name: "22.2 (Fall '22)", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10187", Id: "10187", Description: "Later", Name: "Later", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10213", Id: "10213", Description: "22.FEB", Name: "22.FEB", Archived: false, Released: false, ProjectId: 10047, StartDate: "2022-02-01", ReleaseDate: "2022-02-28", Overdue: true, UserStartDate: "31/Jan/22", UserReleaseDate: "27/Feb/22"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10214", Id: "10214", Description: "22.MAR", Name: "22.MAR", Archived: false, Released: false, ProjectId: 10047, StartDate: "2022-03-01", ReleaseDate: "2022-03-31", Overdue: true, UserStartDate: "28/Feb/22", UserReleaseDate: "30/Mar/22"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10215", Id: "10215", Description: "22.APR", Name: "22.APR", Archived: false, Released: false, ProjectId: 10047, StartDate: "2022-04-01", ReleaseDate: "2022-04-30", Overdue: true, UserStartDate: "31/Mar/22", UserReleaseDate: "29/Apr/22"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10216", Id: "10216", Description: "22.MAY", Name: "22.MAY", Archived: false, Released: false, ProjectId: 10047, StartDate: "2022-05-01", ReleaseDate: "2022-05-31", Overdue: true, UserStartDate: "30/Apr/22", UserReleaseDate: "30/May/22"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10217", Id: "10217", Description: "22.JUN", Name: "22.JUN", Archived: false, Released: false, ProjectId: 10047, StartDate: "2022-06-01", ReleaseDate: "2022-06-30", Overdue: true, UserStartDate: "31/May/22", UserReleaseDate: "29/Jun/22"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10218", Id: "10218", Description: "22.JUL", Name: "22.JUL", Archived: false, Released: false, ProjectId: 10047, StartDate: "2022-07-01", ReleaseDate: "2022-07-31", Overdue: true, UserStartDate: "30/Jun/22", UserReleaseDate: "30/Jul/22"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10219", Id: "10219", Description: "22.AUG", Name: "22.AUG", Archived: false, Released: false, ProjectId: 10047, StartDate: "2022-08-01", ReleaseDate: "2022-08-31", Overdue: true, UserStartDate: "31/Jul/22", UserReleaseDate: "30/Aug/22"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10220", Id: "10220", Description: "22.SEP", Name: "22.SEP", Archived: false, Released: false, ProjectId: 10047, StartDate: "2022-09-01", ReleaseDate: "2022-09-30", Overdue: true, UserStartDate: "31/Aug/22", UserReleaseDate: "29/Sep/22"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10221", Id: "10221", Description: "22.OCT", Name: "22.OCT", Archived: false, Released: false, ProjectId: 10047, StartDate: "2022-10-01", ReleaseDate: "2022-10-31", Overdue: true, UserStartDate: "30/Sep/22", UserReleaseDate: "30/Oct/22"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10222", Id: "10222", Description: "22.NOV", Name: "22.NOV", Archived: false, Released: false, ProjectId: 10047, StartDate: "2022-11-01", ReleaseDate: "2022-11-30", Overdue: true, UserStartDate: "31/Oct/22", UserReleaseDate: "29/Nov/22"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10223", Id: "10223", Description: "22.DEC", Name: "22.DEC", Archived: false, Released: false, ProjectId: 10047, StartDate: "2022-12-01", ReleaseDate: "2022-12-31", Overdue: true, UserStartDate: "30/Nov/22", UserReleaseDate: "30/Dec/22"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10237", Id: "10237", Description: "23.1 (Spring 23)", Name: "23.1 (Spring 23)", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10310", Id: "10310", Description: "22.DEC PCI SAQ-D", Name: "22.DEC PCI SAQ-D", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "2022-12-30", Overdue: true, UserStartDate: "", UserReleaseDate: "29/Dec/22"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10311", Id: "10311", Description: "22.SEP PCI Customer Enablement", Name: "22.SEP PCI Customer Enablement", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "2022-09-30", Overdue: true, UserStartDate: "", UserReleaseDate: "29/Sep/22"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10312", Id: "10312", Description: "22.JUL PCI SAQ-A", Name: "22.JUL PCI SAQ-A", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "2022-07-29", Overdue: true, UserStartDate: "", UserReleaseDate: "28/Jul/22"}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10328", Id: "10328", Description: "", Name: "23.JAN", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10329", Id: "10329", Description: "", Name: "23.FEB", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10330", Id: "10330", Description: "", Name: "23.MAR", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10331", Id: "10331", Description: "", Name: "23.APR", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10332", Id: "10332", Description: "", Name: "23.MAY", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10333", Id: "10333", Description: "", Name: "23.JUN", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}, {Self: "https://cockroachlabs.atlassian.net/rest/api/3/version/10365", Id: "10365", Description: "", Name: "23.2 (Fall 23)", Archived: false, Released: false, ProjectId: 10047, StartDate: "", ReleaseDate: "", Overdue: false, UserStartDate: "", UserReleaseDate: ""}}}, EpicLink: struct {
+						Required bool "json:\"required\""
+						Schema   struct {
+							Type     string "json:\"type\""
+							Custom   string "json:\"custom\""
+							CustomId int    "json:\"customId\""
+						} "json:\"schema\""
+						Name            string   "json:\"name\""
+						Key             string   "json:\"key\""
+						HasDefaultValue bool     "json:\"hasDefaultValue\""
+						Operations      []string "json:\"operations\""
+					}{Required: false, Schema: struct {
+						Type     string "json:\"type\""
+						Custom   string "json:\"custom\""
+						CustomId int    "json:\"customId\""
+					}{Type: "any", Custom: "com.pyxis.greenhopper.jira:gh-epic-link", CustomId: 10014}, Name: "Epic Link", Key: "customfield_10014", HasDefaultValue: false, Operations: []string{"set"}}, Summary: struct {
+						Required bool "json:\"required\""
+						Schema   struct {
+							Type   string "json:\"type\""
+							System string "json:\"system\""
+						} "json:\"schema\""
+						Name            string   "json:\"name\""
+						Key             string   "json:\"key\""
+						HasDefaultValue bool     "json:\"hasDefaultValue\""
+						Operations      []string "json:\"operations\""
+					}{Required: true, Schema: struct {
+						Type   string "json:\"type\""
+						System string "json:\"system\""
+					}{Type: "string", System: "summary"}, Name: "Summary", Key: "summary", HasDefaultValue: false, Operations: []string{"set"}}, Reporter: struct {
+						Required bool "json:\"required\""
+						Schema   struct {
+							Type   string "json:\"type\""
+							System string "json:\"system\""
+						} "json:\"schema\""
+						Name            string   "json:\"name\""
+						Key             string   "json:\"key\""
+						AutoCompleteUrl string   "json:\"autoCompleteUrl\""
+						HasDefaultValue bool     "json:\"hasDefaultValue\""
+						Operations      []string "json:\"operations\""
+					}{Required: true, Schema: struct {
+						Type   string "json:\"type\""
+						System string "json:\"system\""
+					}{Type: "user", System: "reporter"}, Name: "Reporter", Key: "reporter", AutoCompleteUrl: "https://cockroachlabs.atlassian.net/rest/api/3/user/search?query=", HasDefaultValue: true, Operations: []string{"set"}}, ProductChangePRNumber: struct {
+						Required bool "json:\"required\""
+						Schema   struct {
+							Type     string "json:\"type\""
+							Custom   string "json:\"custom\""
+							CustomId int    "json:\"customId\""
+						} "json:\"schema\""
+						Name            string   "json:\"name\""
+						Key             string   "json:\"key\""
+						HasDefaultValue bool     "json:\"hasDefaultValue\""
+						Operations      []string "json:\"operations\""
+					}{Required: false, Schema: struct {
+						Type     string "json:\"type\""
+						Custom   string "json:\"custom\""
+						CustomId int    "json:\"customId\""
+					}{Type: "string", Custom: "com.atlassian.jira.plugin.system.customfieldtypes:textfield", CustomId: 10435}, Name: "Product Change PR Number", Key: "customfield_10435", HasDefaultValue: false, Operations: []string{"set"}}, ProductChangeCommitSHA: struct {
+						Required bool "json:\"required\""
+						Schema   struct {
+							Type     string "json:\"type\""
+							Custom   string "json:\"custom\""
+							CustomId int    "json:\"customId\""
+						} "json:\"schema\""
+						Name            string   "json:\"name\""
+						Key             string   "json:\"key\""
+						HasDefaultValue bool     "json:\"hasDefaultValue\""
+						Operations      []string "json:\"operations\""
+					}{Required: false, Schema: struct {
+						Type     string "json:\"type\""
+						Custom   string "json:\"custom\""
+						CustomId int    "json:\"customId\""
+					}{Type: "string", Custom: "com.atlassian.jira.plugin.system.customfieldtypes:textfield", CustomId: 10436}, Name: "Product Change Commit SHA", Key: "customfield_10436", HasDefaultValue: false, Operations: []string{"set"}}}}}}}}
+				return result, nil
 			})()
 			result := constructDocsIssues(tc.cockroachPRs)
 			assert.Equal(t, tc.docsIssues, result)

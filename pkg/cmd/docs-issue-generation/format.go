@@ -19,19 +19,43 @@ import (
 // constructDocsIssues takes a list of commits from GitHub as well as the PR number associated with those commits and
 // outputs a formatted list of docs issues with valid release notes
 func constructDocsIssues(prs []cockroachPR) []docsIssue {
+	jiraIssueMeta, err := getJiraIssueCreateMeta()
+	if err != nil {
+		fmt.Println(err)
+	}
+	const jiraDocsUserId = "712020:f8672db2-443f-4232-b01a-f97746f89805"
 	var result []docsIssue
 	for _, pr := range prs {
 		for _, commit := range pr.Commits {
 			rns := formatReleaseNotes(commit.MessageBody, pr.Number, pr.Body, commit.Sha)
+			var epicRef string
+			for k := range extractEpicIDs(commit.MessageBody + "\n" + pr.Body) {
+				epicRef = k
+				break
+			}
 			for i, rn := range rns {
 				x := docsIssue{
-					sourceCommitSha: commit.Sha,
-					title:           formatTitle(commit.MessageHeadline, pr.Number, i+1, len(rns)),
-					body:            rn,
-					labels: []string{
-						"C-product-change",
-						pr.BaseRefName,
+					Fields: docsIssueFields{
+						IssueType: jiraFieldId{
+							Id: jiraIssueMeta.Projects[0].Issuetypes[0].Fields.Issuetype.AllowedValues[0].Id,
+						},
+						Project: jiraFieldId{
+							Id: jiraIssueMeta.Projects[0].Issuetypes[0].Fields.Project.AllowedValues[0].Id,
+						},
+						Summary: formatTitle(commit.MessageHeadline, pr.Number, i+1, len(rns)),
+						Reporter: jiraFieldId{
+							Id: jiraDocsUserId,
+						},
+						Description: rn,
+						DocType: jiraFieldId{
+							Id: jiraIssueMeta.Projects[0].Issuetypes[0].Fields.DocType.AllowedValues[0].Id,
+						},
+						ProductChangeCommitSHA: commit.Sha,
+						ProductChangePrNumber:  strconv.Itoa(pr.Number),
 					},
+				}
+				if epicRef != "" {
+					x.Fields.EpicLink = epicRef
 				}
 				result = append(result, x)
 
