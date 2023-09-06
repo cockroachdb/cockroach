@@ -54,8 +54,9 @@ type StoreGrantCoordinators struct {
 	kvIOTokensExhaustedDuration *metric.Counter
 	kvIOTokensAvailable         *metric.Gauge
 	kvElasticIOTokensAvailable  *metric.Gauge
-	kvIOTotalTokensTaken        *metric.Counter
-	kvIOTotalTokensReturned     *metric.Counter
+	kvIOTokensTaken             *metric.Counter
+	kvIOTokensReturned          *metric.Counter
+	kvIOTokensBypassed          *metric.Counter
 	l0CompactedBytes            *metric.Counter
 	l0TokensProduced            *metric.Counter
 
@@ -172,8 +173,8 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		ioTokensExhaustedDurationMetric: sgc.kvIOTokensExhaustedDuration,
 		availableTokensMetric:           sgc.kvIOTokensAvailable,
 		availableElasticTokensMetric:    sgc.kvElasticIOTokensAvailable,
-		tokensTakenMetric:               sgc.kvIOTotalTokensTaken,
-		tokensReturnedMetric:            sgc.kvIOTotalTokensReturned,
+		tokensTakenMetric:               sgc.kvIOTokensTaken,
+		tokensReturnedMetric:            sgc.kvIOTokensReturned,
 	}
 	kvg.coordMu.availableIOTokens = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
 	kvg.coordMu.availableElasticIOTokens = kvg.coordMu.availableIOTokens
@@ -203,6 +204,7 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		opts,
 		sgc.knobs,
 		sgc.onLogEntryAdmitted,
+		sgc.kvIOTokensBypassed,
 		&coord.mu.Mutex,
 	)
 	coord.queues[KVWork] = storeReq
@@ -380,7 +382,7 @@ type makeRequesterFunc func(
 type makeStoreRequesterFunc func(
 	_ log.AmbientContext, storeID roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
 	settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, knobs *TestingKnobs,
-	onLogEntryAdmitted OnLogEntryAdmitted, coordMu *syncutil.Mutex,
+	onLogEntryAdmitted OnLogEntryAdmitted, ioTokensBypassedMetric *metric.Counter, coordMu *syncutil.Mutex,
 ) storeRequester
 
 // NewGrantCoordinators constructs GrantCoordinators and WorkQueues for a
@@ -470,8 +472,9 @@ func makeStoresGrantCoordinators(
 		settings:                    st,
 		makeStoreRequesterFunc:      makeStoreRequester,
 		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
-		kvIOTotalTokensTaken:        metrics.KVIOTotalTokensTaken,
-		kvIOTotalTokensReturned:     metrics.KVIOTotalTokensReturned,
+		kvIOTokensTaken:             metrics.KVIOTokensTaken,
+		kvIOTokensReturned:          metrics.KVIOTokensReturned,
+		kvIOTokensBypassed:          metrics.KVIOTokensBypassed,
 		kvIOTokensAvailable:         metrics.KVIOTokensAvailable,
 		kvElasticIOTokensAvailable:  metrics.KVElasticIOTokensAvailable,
 		l0CompactedBytes:            metrics.L0CompactedBytes,
@@ -1019,8 +1022,9 @@ type GrantCoordinatorMetrics struct {
 	KVSlotAdjusterDecrements     *metric.Counter
 	// TODO(banabrick): Make these metrics per store.
 	KVIOTokensExhaustedDuration *metric.Counter
-	KVIOTotalTokensTaken        *metric.Counter
-	KVIOTotalTokensReturned     *metric.Counter
+	KVIOTokensTaken             *metric.Counter
+	KVIOTokensReturned          *metric.Counter
+	KVIOTokensBypassed          *metric.Counter
 	KVIOTokensAvailable         *metric.Gauge
 	KVElasticIOTokensAvailable  *metric.Gauge
 	L0CompactedBytes            *metric.Counter
@@ -1044,8 +1048,9 @@ func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 		KVIOTokensExhaustedDuration:  metric.NewCounter(kvIOTokensExhaustedDuration),
 		SQLLeafStartUsedSlots:        metric.NewGauge(addName(workKindString(SQLStatementLeafStartWork), usedSlots)),
 		SQLRootStartUsedSlots:        metric.NewGauge(addName(workKindString(SQLStatementRootStartWork), usedSlots)),
-		KVIOTotalTokensTaken:         metric.NewCounter(kvIOTotalTokensTaken),
-		KVIOTotalTokensReturned:      metric.NewCounter(kvIOTotalTokensReturned),
+		KVIOTokensTaken:              metric.NewCounter(kvIOTokensTaken),
+		KVIOTokensReturned:           metric.NewCounter(kvIOTokensReturned),
+		KVIOTokensBypassed:           metric.NewCounter(kvIOTokensBypassed),
 		KVIOTokensAvailable:          metric.NewGauge(kvIOTokensAvailable),
 		KVElasticIOTokensAvailable:   metric.NewGauge(kvElasticIOTokensAvailable),
 		L0CompactedBytes:             metric.NewCounter(l0CompactedBytes),

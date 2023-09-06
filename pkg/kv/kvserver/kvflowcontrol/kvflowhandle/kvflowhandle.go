@@ -170,6 +170,11 @@ func (h *Handle) deductTokensForInner(
 			// Only deduct tokens if we're able to track them for subsequent
 			// returns. We risk leaking flow tokens otherwise.
 			h.controller.DeductTokens(ctx, pri, tokens, c.Stream())
+
+			// TODO(irfansharif,aaditya): This accounts for 0.4% of
+			// alloc_objects when running kv0/enc=false/nodes=3/cpu=9. Except
+			// this return type is not used in production code. Clean it up as
+			// part of #104154.
 			streams = append(streams, c.Stream())
 		}
 	}
@@ -211,14 +216,19 @@ func (h *Handle) ReturnTokensUpto(
 		// instantiated.
 		stream.TenantID = h.tenantID
 	}
+
+	// TODO(irfansharif,aaditya): This mutex still shows up in profiles, ~0.3%
+	// for kv0/enc=false/nodes=3/cpu=9. Maybe clean it up as part of #104154.
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if h.mu.closed {
+		h.mu.Unlock()
 		log.Errorf(ctx, "operating on a closed handle")
 		return
 	}
 
 	tokens := h.mu.perStreamTokenTracker[stream].Untrack(ctx, pri, upto)
+	h.mu.Unlock()
+
 	h.controller.ReturnTokens(ctx, pri, tokens, stream)
 }
 

@@ -31,6 +31,7 @@ go_test(
         ":privilege",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

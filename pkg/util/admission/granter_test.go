@@ -112,7 +112,7 @@ func TestGranterBasic(t *testing.T) {
 				makeStoreRequesterFunc: func(
 					ambientCtx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
 					settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, knobs *TestingKnobs,
-					_ OnLogEntryAdmitted, _ *syncutil.Mutex,
+					_ OnLogEntryAdmitted, _ *metric.Counter, _ *syncutil.Mutex,
 				) storeRequester {
 					makeTestRequester := func(wc admissionpb.WorkClass) *testRequester {
 						req := &testRequester{
@@ -140,8 +140,9 @@ func TestGranterBasic(t *testing.T) {
 				kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
 				kvIOTokensAvailable:         metrics.KVIOTokensAvailable,
 				kvElasticIOTokensAvailable:  metrics.KVElasticIOTokensAvailable,
-				kvIOTotalTokensTaken:        metrics.KVIOTotalTokensTaken,
-				kvIOTotalTokensReturned:     metrics.KVIOTotalTokensReturned,
+				kvIOTokensTaken:             metrics.KVIOTokensTaken,
+				kvIOTokensReturned:          metrics.KVIOTokensReturned,
+				kvIOTokensBypassed:          metrics.KVIOTokensBypassed,
 				l0CompactedBytes:            metrics.L0CompactedBytes,
 				l0TokensProduced:            metrics.L0TokensProduced,
 				workQueueMetrics:            workQueueMetrics,
@@ -324,7 +325,8 @@ func TestStoreCoordinators(t *testing.T) {
 		makeRequesterFunc: makeRequesterFunc,
 		makeStoreRequesterFunc: func(
 			ctx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
-			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, _ *TestingKnobs, _ OnLogEntryAdmitted, _ *syncutil.Mutex) storeRequester {
+			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions, _ *TestingKnobs, _ OnLogEntryAdmitted,
+			_ *metric.Counter, _ *syncutil.Mutex) storeRequester {
 			reqReg := makeRequesterFunc(ctx, KVWork, granters[admissionpb.RegularWorkClass], settings, metrics, opts)
 			reqElastic := makeRequesterFunc(ctx, KVWork, granters[admissionpb.ElasticWorkClass], settings, metrics, opts)
 			str := &storeTestRequester{}
