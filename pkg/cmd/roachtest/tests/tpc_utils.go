@@ -44,7 +44,7 @@ func loadTPCHDataset(
 	disableMergeQueue bool,
 	secure bool,
 ) (retErr error) {
-	if c.Spec().Cloud != spec.GCE {
+	if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
 		t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
 	}
 

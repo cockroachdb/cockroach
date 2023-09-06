@@ -2257,8 +2257,8 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 	y INT8 NOT NULL,
 	z INT8 NULL,
 	CONSTRAINT test_pkey PRIMARY KEY (y ASC),
-	UNIQUE INDEX test_x_key (x ASC),
-	INDEX i (z ASC)
+	INDEX i (z ASC),
+	UNIQUE INDEX test_x_key (x ASC)
 )`
 	if create != expected {
 		t.Fatalf("expected %s, found %s", expected, create)
