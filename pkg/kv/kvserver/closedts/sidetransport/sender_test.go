@@ -396,7 +396,7 @@ func newMockSideTransportGRPCServerWithOpts(
 	}
 
 	clock := hlc.NewClockForTesting(nil)
-	grpcServer, err := rpc.NewServer(rpc.NewInsecureTestingContext(ctx, clock, stopper))
+	grpcServer, err := rpc.NewServer(ctx, rpc.NewInsecureTestingContext(ctx, clock, stopper))
 	if err != nil {
 		return nil, err
 	}

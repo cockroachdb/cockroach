@@ -44,7 +44,7 @@ var connectJoinCmd = &cobra.Command{
 func requestPeerCA(
 	ctx context.Context, stopper *stop.Stopper, peer string, jt security.JoinToken,
 ) (*x509.CertPool, error) {
-	dialOpts := rpc.GetAddJoinDialOptions(nil)
+	dialOpts := rpc.GetAddJoinDialOptions(ctx, nil)
 
 	conn, err := grpc.DialContext(ctx, peer, dialOpts...)
 	if err != nil {
@@ -89,7 +89,7 @@ func requestCertBundle(
 	certPool *x509.CertPool,
 	jt security.JoinToken,
 ) (*server.CertificateBundle, error) {
-	dialOpts := rpc.GetAddJoinDialOptions(certPool)
+	dialOpts := rpc.GetAddJoinDialOptions(ctx, certPool)
 
 	conn, err := grpc.DialContext(ctx, peerAddr, dialOpts...)
 	if err != nil {
