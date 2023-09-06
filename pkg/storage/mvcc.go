@@ -4680,7 +4680,7 @@ func (h singleDelOptimizationHelper) onAbortIntent() bool {
 // Returns whether an intent was found and resolved, false otherwise.
 func mvccResolveWriteIntent(
 	ctx context.Context,
-	rw ReadWriter,
+	writer Writer,
 	iter iterForKeyVersions,
 	ms *enginepb.MVCCStats,
 	intent roachpb.LockUpdate,
@@ -4773,7 +4773,7 @@ func mvccResolveWriteIntent(
 		// be mutating meta and we shouldn't be restoring the previous value
 		// here. Instead, this should all be handled down below.
 		var removeIntent bool
-		removeIntent, rolledBackVal, err = mvccMaybeRewriteIntentHistory(ctx, rw, intent.IgnoredSeqNums, meta, latestKey)
+		removeIntent, rolledBackVal, err = mvccMaybeRewriteIntentHistory(ctx, writer, intent.IgnoredSeqNums, meta, latestKey)
 		if err != nil {
 			return false, err
 		}
@@ -4881,7 +4881,7 @@ func mvccResolveWriteIntent(
 			newValue := oldValue
 			newValue.LocalTimestamp = oldValue.GetLocalTimestamp(oldKey.Timestamp)
 			newValue.LocalTimestamp.Forward(intent.ClockWhilePending.Timestamp)
-			if !newValue.LocalTimestampNeeded(newKey.Timestamp) || !rw.ShouldWriteLocalTimestamps(ctx) {
+			if !newValue.LocalTimestampNeeded(newKey.Timestamp) || !writer.ShouldWriteLocalTimestamps(ctx) {
 				newValue.LocalTimestamp = hlc.ClockTimestamp{}
 			}
 
@@ -4893,10 +4893,10 @@ func mvccResolveWriteIntent(
 			newMeta.ValBytes = int64(encodedMVCCValueSize(newValue))
 			newMeta.Deleted = newValue.IsTombstone()
 
-			if err = rw.PutMVCC(newKey, newValue); err != nil {
+			if err = writer.PutMVCC(newKey, newValue); err != nil {
 				return false, err
 			}
-			if err = rw.ClearMVCC(oldKey, ClearOptions{
+			if err = writer.ClearMVCC(oldKey, ClearOptions{
 				ValueSizeKnown: true,
 				ValueSize:      uint32(len(v)),
 			}); err != nil {
@@ -4939,10 +4939,10 @@ func mvccResolveWriteIntent(
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
 			metaKeySize, metaValSize, err = buf.putIntentMeta(
-				rw, metaKey, newMeta, true /* alreadyExists */)
+				writer, metaKey, newMeta, true /* alreadyExists */)
 		} else {
 			metaKeySize, metaValSize, err = buf.clearIntentMeta(
-				rw, metaKey, canSingleDelHelper.onCommitIntent(), meta.Txn.ID, ClearOptions{
+				writer, metaKey, canSingleDelHelper.onCommitIntent(), meta.Txn.ID, ClearOptions{
 					ValueSizeKnown: true,
 					ValueSize:      uint32(origMetaValSize),
 				})
@@ -4962,7 +4962,7 @@ func mvccResolveWriteIntent(
 		if pushed {
 			logicalOp = MVCCUpdateIntentOpType
 		}
-		rw.LogLogicalOp(logicalOp, MVCCLogicalOpDetails{
+		writer.LogLogicalOp(logicalOp, MVCCLogicalOpDetails{
 			Txn:       intent.Txn,
 			Key:       intent.Key,
 			Timestamp: intent.Txn.WriteTimestamp,
@@ -4984,7 +4984,7 @@ func mvccResolveWriteIntent(
 	// - ResolveIntent with epoch 0 aborts intent from epoch 1.
 
 	// First clear the provisional value.
-	if err := rw.ClearMVCC(latestKey, ClearOptions{
+	if err := writer.ClearMVCC(latestKey, ClearOptions{
 		ValueSizeKnown: true,
 		ValueSize:      uint32(meta.ValBytes),
 	}); err != nil {
@@ -4992,7 +4992,7 @@ func mvccResolveWriteIntent(
 	}
 
 	// Log the logical MVCC operation.
-	rw.LogLogicalOp(MVCCAbortIntentOpType, MVCCLogicalOpDetails{
+	writer.LogLogicalOp(MVCCAbortIntentOpType, MVCCLogicalOpDetails{
 		Txn: intent.Txn,
 		Key: intent.Key,
 	})
@@ -5054,7 +5054,7 @@ func mvccResolveWriteIntent(
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
 		_, _, err := buf.clearIntentMeta(
-			rw, metaKey, canSingleDelHelper.onAbortIntent(), meta.Txn.ID, ClearOptions{
+			writer, metaKey, canSingleDelHelper.onAbortIntent(), meta.Txn.ID, ClearOptions{
 				ValueSizeKnown: true,
 				ValueSize:      uint32(origMetaValSize),
 			})
@@ -5076,7 +5076,7 @@ func mvccResolveWriteIntent(
 		ValBytes: int64(nextValueLen),
 	}
 	metaKeySize, metaValSize, err := buf.clearIntentMeta(
-		rw, metaKey, canSingleDelHelper.onAbortIntent(), meta.Txn.ID, ClearOptions{
+		writer, metaKey, canSingleDelHelper.onAbortIntent(), meta.Txn.ID, ClearOptions{
 			ValueSizeKnown: true,
 			ValueSize:      uint32(origMetaValSize),
 		})
@@ -5103,7 +5103,7 @@ func mvccResolveWriteIntent(
 // and should be overwritten in engine.
 func mvccMaybeRewriteIntentHistory(
 	ctx context.Context,
-	engine ReadWriter,
+	writer Writer,
 	ignoredSeqNums []enginepb.IgnoredSeqNumRange,
 	meta *enginepb.MVCCMetadata,
 	latestKey MVCCKey,
@@ -5141,7 +5141,7 @@ func mvccMaybeRewriteIntentHistory(
 	meta.Deleted = restoredVal.IsTombstone()
 	meta.ValBytes = int64(len(restoredValRaw))
 	// And also overwrite whatever was there in storage.
-	err = engine.PutMVCC(latestKey, restoredVal)
+	err = writer.PutMVCC(latestKey, restoredVal)
 
 	return false, &restoredVal, err
 }
