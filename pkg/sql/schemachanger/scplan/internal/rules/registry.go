@@ -36,6 +36,12 @@ func (r *Registry) ApplyDepRules(ctx context.Context, g *scgraph.Graph) error {
 		start := timeutil.Now()
 		var added int
 		if err := dr.q.Iterate(g.Database(), func(r rel.Result) error {
+			// Applying the dep rules can be slow in some cases. Check for
+			// cancellation when applying the rules to ensure we don't spin for
+			// too long while the user is waiting for the task to exit cleanly.
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			from := r.Var(dr.from).(*screl.Node)
 			to := r.Var(dr.to).(*screl.Node)
 			added++
@@ -44,12 +50,6 @@ func (r *Registry) ApplyDepRules(ctx context.Context, g *scgraph.Graph) error {
 			)
 		}); err != nil {
 			return errors.Wrapf(err, "applying dep rule %s", dr.name)
-		}
-		// Applying the dep rules can be slow in some cases. Check for
-		// cancellation when applying the rules to ensure we don't spin for
-		// too long while the user is waiting for the task to exit cleanly.
-		if ctx.Err() != nil {
-			return ctx.Err()
 		}
 		if log.ExpensiveLogEnabled(ctx, 2) {
 			log.Infof(
