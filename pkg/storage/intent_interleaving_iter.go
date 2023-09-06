@@ -170,9 +170,11 @@ type intentInterleavingIter struct {
 	// exhausted. Note that the intentIter may still be positioned
 	// at a valid position in the case of prefix iteration, but the
 	// state of the intentKey overrides that state.
+	// TODO(nvanbenschoten): rename to s/intentKey*/lockKey*/.
 	intentKey                            roachpb.Key
 	intentKeyAsNoTimestampMVCCKey        []byte
 	intentKeyAsNoTimestampMVCCKeyBacking []byte
+	intentKeyStr                         lock.Strength
 
 	// - cmp output of (intentKey, current iter key) when both are valid.
 	//   This does not take timestamps into consideration. So if intentIter
@@ -214,6 +216,16 @@ type intentInterleavingIter struct {
 	dir   int
 	valid bool
 	err   error
+
+	// maxIntentItersBeforeSeek is the maximum number of iterations we will try
+	// across the locks on single user key while searching for intents in the
+	// lock table before we do a SeekGE/SeekLT to skip to the locks on the
+	// next/previous user key.
+	// The iteration count stays within [0, maxIntentItersBeforeSeek] and
+	// defaults to maxIntentItersBeforeSeek/2. This is roughly the same dynamic
+	// adjustment algorithm that is used by pebbleMVCCScanner when scanning over
+	// mvcc versions for a key.
+	maxIntentItersBeforeSeek int
 
 	// Buffers to reuse memory when constructing lock table keys for bounds and
 	// seeks.
@@ -351,6 +363,7 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) (MVCCIterato
 		intentKeyAsNoTimestampMVCCKeyBacking: iiIter.intentKeyAsNoTimestampMVCCKeyBacking,
 		intentKeyBuf:                         intentKeyBuf,
 		intentLimitKeyBuf:                    intentLimitKeyBuf,
+		maxIntentItersBeforeSeek:             maxItersBeforeSeek,
 	}
 	return iiIter, nil
 }
@@ -583,7 +596,7 @@ func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 		if i.iterValid && !i.prefix {
 			limitKey = i.makeUpperLimitKey()
 		}
-		if _, err := i.seekIntentIterAndDecodeLockKey(EngineKey{Key: intentSeekKey}, limitKey); err != nil {
+		if err := i.seekIntentIterAndDecodeLockKey(EngineKey{Key: intentSeekKey}, limitKey); err != nil {
 			return
 		}
 		if err := i.maybeSkipIntentRangeKey(); err != nil {
@@ -621,7 +634,7 @@ func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID
 	if i.iterValid && !i.prefix {
 		limitKey = i.makeUpperLimitKey()
 	}
-	if _, err := i.seekIntentIterAndDecodeLockKey(engineKey, limitKey); err != nil {
+	if err := i.seekIntentIterAndDecodeLockKey(engineKey, limitKey); err != nil {
 		return
 	}
 	if err := i.maybeSkipIntentRangeKey(); err != nil {
@@ -715,50 +728,115 @@ func (i *intentInterleavingIter) computePos() {
 // to (if i.dir > 0) or after seekKey and decodes it into i.intentKey.
 func (i *intentInterleavingIter) seekIntentIterAndDecodeLockKey(
 	seekKey EngineKey, limitKey roachpb.Key,
-) (iterState pebble.IterValidityState, err error) {
+) error {
+	var iterState pebble.IterValidityState
+	var err error
 	if i.dir < 0 {
 		iterState, err = i.intentIter.SeekEngineKeyLTWithLimit(seekKey, limitKey)
 	} else {
 		iterState, err = i.intentIter.SeekEngineKeyGEWithLimit(seekKey, limitKey)
 	}
-	if skip, err := i.tryDecodeLockKey(iterState, err); !skip {
-		return iterState, err
+	if err := i.tryDecodeLockKey(iterState, err); err != nil {
+		return err
+	}
+	if i.intentIterState != pebble.IterValid || i.intentKeyStr == lock.Intent {
+		return nil
 	}
 	return i.stepIntentIterAndDecodeLockKey(limitKey)
 }
 
 // stepIntentIterAndDecodeLockKey steps intentIter to the next intent key and
 // decodes it into i.intentKey.
-func (i *intentInterleavingIter) stepIntentIterAndDecodeLockKey(
-	limitKey roachpb.Key,
-) (iterState pebble.IterValidityState, err error) {
-	// TODO(nvanbenschoten): implement a form of maxItersBeforeSeek to avoid
-	// num_locks iterations in the case of a large number of shared locks on a
-	// single key.
+func (i *intentInterleavingIter) stepIntentIterAndDecodeLockKey(limitKey roachpb.Key) error {
+	// If this is a prefix iterator, we have already seeked to or past the
+	// intent key, which is ordered first, so we can stop iterating.
+	// TODO DURING REVIEW: do we want something like this to short-circuit the
+	// lock table iteration immediately for a prefix iterator?
+	if i.prefix {
+		return i.tryDecodeLockKey(pebble.IterExhausted, nil)
+	}
+	// Otherwise, iterate over the locks on each key until we find an intent.
+	itersBeforeSeek := i.maxIntentItersBeforeSeek / 2
+	if itersBeforeSeek == 0 && i.intentIterState != pebble.IterValid {
+		// If the iterator is not valid and i.intentKey is not set, step the
+		// iterator at least once before seeking.
+		itersBeforeSeek = 1
+	}
+	i.intentKeyBuf = i.intentKeyBuf[:0]
+	// Step the iterator repeatedly until we find an intent key. If we step
+	// itersBeforeSeek times and see (shared) locks on the same user key each
+	// time, we seek to locks on the next user key. This bounds the number of
+	// (shared) locks that we will see for a single user key.
 	for {
-		if i.dir < 0 {
-			iterState, err = i.intentIter.PrevEngineKeyWithLimit(limitKey)
+		var iterState pebble.IterValidityState
+		var err error
+		if itersBeforeSeek > 0 {
+			if i.dir < 0 {
+				iterState, err = i.intentIter.PrevEngineKeyWithLimit(limitKey)
+			} else {
+				iterState, err = i.intentIter.NextEngineKeyWithLimit(limitKey)
+			}
 		} else {
-			iterState, err = i.intentIter.NextEngineKeyWithLimit(limitKey)
+			if i.dir < 0 {
+				var seekEngineKey EngineKey
+				if i.intentKeyStr != lock.Intent {
+					// If the current key is not an intent key, then we seek
+					// backwards to the lock table key for the current user key
+					// with an intent strength. Recall that the lock table key
+					// strength is stored in the key's version and that versions
+					// are stored in reverse order, so intent-strength lock
+					// table keys are ordered first for a given user key.
+					seekEngineKey, i.intentKeyBuf = LockTableKey{
+						Key:      i.intentKey,
+						Strength: lock.Intent,
+					}.ToEngineKey(i.intentKeyBuf)
+				} else {
+					// Else, seek backwards to locks on the previous key.
+					var seekKey roachpb.Key
+					seekKey, i.intentKeyBuf = keys.LockTableSingleKey(i.intentKey, i.intentKeyBuf)
+					seekEngineKey = EngineKey{Key: seekKey}
+				}
+				iterState, err = i.intentIter.SeekEngineKeyLTWithLimit(seekEngineKey, limitKey)
+			} else {
+				// Seek forwards to locks on the next key.
+				var seekKey roachpb.Key
+				seekKey, i.intentKeyBuf = keys.LockTableSingleNextKey(i.intentKey, i.intentKeyBuf)
+				seekEngineKey := EngineKey{Key: seekKey}
+				iterState, err = i.intentIter.SeekEngineKeyGEWithLimit(seekEngineKey, limitKey)
+			}
+			i.intentKeyBuf = i.intentKeyBuf[:0]
 		}
-		if skip, err := i.tryDecodeLockKey(iterState, err); !skip {
-			return iterState, err
+		if err := i.tryDecodeLockKey(iterState, err); err != nil {
+			return err
 		}
-		// Not an intent key. Continue...
+		if i.intentIterState != pebble.IterValid || i.intentKeyStr == lock.Intent {
+			return nil
+		}
+		// The iterator is not at an intent key. Continue iterating after
+		// adjusting itersBeforeSeek.
+		if bytes.Equal(i.intentKey, i.intentKeyBuf) {
+			itersBeforeSeek--
+			if itersBeforeSeek < 0 {
+				return errors.AssertionFailedf("seeked without moving to new key")
+			}
+		} else {
+			i.intentKeyBuf = append(i.intentKeyBuf[:0], i.intentKey...)
+			if itersBeforeSeek < i.maxIntentItersBeforeSeek {
+				itersBeforeSeek++
+			}
+		}
 	}
 }
 
 // tryDecodeLockTable attempts to decode the key-value pair at the current
-// position of intentIter into i.intentKey. If the key is not an intent key and
-// is instead some other form of lock, it returns true to inform the caller to
-// skip this key and continue iterating.
+// position of intentIter into i.intentKey.
 func (i *intentInterleavingIter) tryDecodeLockKey(
 	iterState pebble.IterValidityState, err error,
-) (skip bool, _ error) {
+) error {
 	if err != nil {
 		i.err = err
 		i.valid = false
-		return false, err
+		return err
 	}
 	i.intentIterState = iterState
 	if iterState != pebble.IterValid {
@@ -767,13 +845,13 @@ func (i *intentInterleavingIter) tryDecodeLockKey(
 		// responsibility to additionally use the state of i.iter to appropriately
 		// set i.valid.
 		i.intentKey = nil
-		return false, nil
+		return nil
 	}
 	engineKey, err := i.intentIter.UnsafeEngineKey()
 	if err != nil {
 		i.err = err
 		i.valid = false
-		return false, err
+		return err
 	}
 	// TODO(nvanbenschoten): this call to ToLockTableKey could be optimized if
 	// we often expect to find non-intent locks. For example, we could check the
@@ -782,14 +860,7 @@ func (i *intentInterleavingIter) tryDecodeLockKey(
 	if err != nil {
 		i.err = err
 		i.valid = false
-		return false, err
-	}
-	if lockTableKey.Strength != lock.Intent {
-		// If the lock table key is not an intent key, ignore it and tell the
-		// caller to continue stepping. The key is for a lock with shared or
-		// exclusive strength and the intentInterleavingIter does not concern
-		// itself with these forms of locks.
-		return true /* skip */, nil
+		return err
 	}
 	i.intentKey = lockTableKey.Key
 	// If we were to encode MVCCKey{Key: i.intentKey}, i.e., encode it as an
@@ -816,7 +887,8 @@ func (i *intentInterleavingIter) tryDecodeLockKey(
 			i.intentKeyAsNoTimestampMVCCKey = prospectiveKey
 		}
 	}
-	return false, nil
+	i.intentKeyStr = lockTableKey.Strength
+	return nil
 }
 
 func (i *intentInterleavingIter) Valid() (bool, error) {
@@ -854,7 +926,7 @@ func (i *intentInterleavingIter) Next() {
 			if i.iterValid {
 				limitKey = i.makeUpperLimitKey()
 			}
-			if _, err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
+			if err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
 				return
 			}
 			if err := i.maybeSkipIntentRangeKey(); err != nil {
@@ -901,7 +973,7 @@ func (i *intentInterleavingIter) Next() {
 			// this key has an intent, or an earlier key. Either way, stepping
 			// forward will take it to an intent for a later key.
 			limitKey := i.makeUpperLimitKey()
-			if _, err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
+			if err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
 				return
 			}
 			// NB: doesn't need maybeSkipIntentRangeKey() as intentCmp > 0.
@@ -932,7 +1004,7 @@ func (i *intentInterleavingIter) Next() {
 		if !i.prefix {
 			limitKey = i.makeUpperLimitKey()
 		}
-		if _, err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
+		if err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
 			return
 		}
 		i.rangeKeyChanged = false // already surfaced at the intent
@@ -950,7 +1022,7 @@ func (i *intentInterleavingIter) Next() {
 			// TODO(sumeer): could avoid doing this if i.iter has stepped to
 			// different version of same key.
 			limitKey := i.makeUpperLimitKey()
-			if _, err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
+			if err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
 				return
 			}
 		}
@@ -995,7 +1067,7 @@ func (i *intentInterleavingIter) NextKey() {
 		if i.iterValid && !i.prefix {
 			limitKey = i.makeUpperLimitKey()
 		}
-		if _, err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
+		if err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
 			return
 		}
 		if err := i.maybeSkipIntentRangeKey(); err != nil {
@@ -1014,7 +1086,7 @@ func (i *intentInterleavingIter) NextKey() {
 	i.rangeKeyChanged = i.iter.RangeKeyChanged()
 	if i.intentIterState == pebble.IterAtLimit && i.iterValid && !i.prefix {
 		limitKey := i.makeUpperLimitKey()
-		if _, err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
+		if err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
 			return
 		}
 	}
@@ -1219,7 +1291,7 @@ func (i *intentInterleavingIter) SeekLT(key MVCCKey) {
 	if i.iterValid {
 		limitKey = i.makeLowerLimitKey()
 	}
-	if _, err := i.seekIntentIterAndDecodeLockKey(EngineKey{Key: intentSeekKey}, limitKey); err != nil {
+	if err := i.seekIntentIterAndDecodeLockKey(EngineKey{Key: intentSeekKey}, limitKey); err != nil {
 		return
 	}
 	i.computePos()
@@ -1234,7 +1306,11 @@ func (i *intentInterleavingIter) Prev() {
 	if i.err != nil {
 		return
 	}
-	// INVARIANT: !i.prefix
+	if i.prefix {
+		i.err = errors.Errorf("pebble: unsupported reverse prefix iteration")
+		i.valid = false
+		return
+	}
 	if i.dir > 0 {
 		// Switching from forward to reverse iteration.
 		isCurAtIntent := i.isCurAtIntentIterForward()
@@ -1250,7 +1326,7 @@ func (i *intentInterleavingIter) Prev() {
 			if i.iterValid {
 				limitKey = i.makeLowerLimitKey()
 			}
-			if _, err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
+			if err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
 				return
 			}
 			i.computePos()
@@ -1291,7 +1367,7 @@ func (i *intentInterleavingIter) Prev() {
 			// has an intent. Note that the iter could itself be positioned at an
 			// intent.
 			limitKey := i.makeLowerLimitKey()
-			if _, err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
+			if err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
 				return
 			}
 			i.computePos()
@@ -1335,14 +1411,13 @@ func (i *intentInterleavingIter) Prev() {
 		if i.iterValid {
 			limitKey = i.makeLowerLimitKey()
 		}
-		intentIterState, err := i.stepIntentIterAndDecodeLockKey(limitKey)
-		if err != nil {
+		if err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
 			return
 		}
 		if !i.iterValid {
 			// It !i.iterValid, the intentIter can no longer be valid either.
 			// Note that limitKey is nil in this case.
-			if intentIterState != pebble.IterExhausted {
+			if i.intentIterState != pebble.IterExhausted {
 				i.err = errors.Errorf("reverse iteration discovered intent without provisional value")
 			}
 			i.valid = false
@@ -1372,7 +1447,7 @@ func (i *intentInterleavingIter) Prev() {
 			// TODO(sumeer): could avoid doing this if i.iter has stepped to
 			// different version of same key.
 			limitKey := i.makeLowerLimitKey()
-			if _, err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
+			if err := i.stepIntentIterAndDecodeLockKey(limitKey); err != nil {
 				return
 			}
 		}

@@ -358,6 +358,10 @@ func TestIntentInterleavingIter(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				// maxIntentItersBeforeSeek defaults to a metamorphic value in
+				// tests. We set it to a fixed value here to make iteration
+				// behavior deterministic.
+				iiter.(*intentInterleavingIter).maxIntentItersBeforeSeek = 6
 				iter := maybeWrapInUnsafeIter(iiter)
 				var b strings.Builder
 				defer iter.Close()

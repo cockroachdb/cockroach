@@ -87,8 +87,8 @@ iter_prev
 ----
 iter_seek_ge: "a"/3.000000000,0=/BYTES/a3
 iter_next: "a"/2.000000000,0=/BYTES/a2
-iter_prev: err=intentIter should not be after iter
-error: (*withstack.withStack:) intentIter should not be after iter
+iter_prev: err=pebble: unsupported reverse prefix iteration
+error: (*withstack.withStack:) pebble: unsupported reverse prefix iteration
 
 # Complete iterator with intents and range keys.
 run ok
