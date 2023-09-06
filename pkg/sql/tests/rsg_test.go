@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"math/rand"
 	"os"
 	"regexp"
@@ -823,7 +824,8 @@ func testRandomSyntax(
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := rsg.NewRSG(timeutil.Now().UnixNano(), string(yBytes), allowDuplicates)
+	_, seed := randutil.NewTestRand()
+	r, err := rsg.NewRSG(seed, string(yBytes), allowDuplicates)
 	if err != nil {
 		t.Fatal(err)
 	}
