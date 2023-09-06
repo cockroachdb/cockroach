@@ -485,6 +485,9 @@ type SQLConfig struct {
 	// The tenant that the SQL server runs on the behalf of.
 	TenantID roachpb.TenantID
 
+	// If set, will to be called at server startup to obtain the tenant id.
+	DelayedSetTenantID func() (roachpb.TenantID, error)
+
 	// TempStorageConfig is used to configure temp storage, which stores
 	// ephemeral data when processing large queries.
 	TempStorageConfig base.TempStorageConfig
