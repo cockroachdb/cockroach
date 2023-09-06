@@ -192,12 +192,12 @@ type UserDefinedTypeMetadata struct {
 	// Name is the resolved name of this type.
 	Name *UserDefinedTypeName
 
+	// EnumData is non-nil iff the metadata is for an ENUM type.
+	EnumData *EnumMetadata
+
 	// Version is the descriptor version of the descriptor used to construct
 	// this version of the type metadata.
 	Version uint32
-
-	// EnumData is non-nil iff the metadata is for an ENUM type.
-	EnumData *EnumMetadata
 
 	// ImplicitRecordType is true if the metadata is for an implicit record type
 	// for a table. Note: this can be deleted if we migrate implicit record types
