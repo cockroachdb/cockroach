@@ -1142,6 +1142,9 @@ type replicatedLockHolderInfo struct {
 	strengths [len(replicatedHolderStrengths)]bool
 
 	// The timestamp at which the replicated lock is held. Must not regress.
+
+	// TODO(arul): This should correspond to an intent's timestamp. It should only
+	// be updated when an intent is discovered or acquired.
 	ts hlc.Timestamp
 }
 
@@ -1169,7 +1172,11 @@ func (rlh *replicatedLockHolderInfo) resetStrengths() {
 
 // acquire updates the tracking on the receiver to indicate a lock is held with
 // the supplied lock strength.
-func (rlh *replicatedLockHolderInfo) acquire(str lock.Strength) {
+func (rlh *replicatedLockHolderInfo) acquire(str lock.Strength, ts hlc.Timestamp) {
+	rlh.ts.Forward(ts)
+	if rlh.held(str) {
+		return
+	}
 	rlh.strengths[replicatedLockHolderStrengthToIndexMap[str]] = true
 }
 
@@ -1471,8 +1478,7 @@ func (tl *txnLock) reacquireLock(acq *roachpb.LockAcquisition) error {
 			return err
 		}
 	case lock.Replicated:
-		tl.replicatedInfo.ts.Forward(acq.Txn.WriteTimestamp)
-		tl.replicatedInfo.acquire(acq.Strength)
+		tl.replicatedInfo.acquire(acq.Strength, acq.Txn.WriteTimestamp)
 	default:
 		panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
 	}
@@ -2864,8 +2870,7 @@ func (kl *keyLocks) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 			return err
 		}
 	case lock.Replicated:
-		tl.replicatedInfo.ts = acq.Txn.WriteTimestamp
-		tl.replicatedInfo.acquire(acq.Strength)
+		tl.replicatedInfo.acquire(acq.Strength, acq.Txn.WriteTimestamp)
 	default:
 		panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
 	}
@@ -2911,8 +2916,7 @@ func (kl *keyLocks) discoveredLock(
 	}
 
 	if tl.replicatedInfo.isEmpty() {
-		tl.replicatedInfo.acquire(foundLock.Strength)
-		tl.replicatedInfo.ts = foundLock.Txn.WriteTimestamp
+		tl.replicatedInfo.acquire(foundLock.Strength, foundLock.Txn.WriteTimestamp)
 	}
 
 	if accessStrength == lock.None {
