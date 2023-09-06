@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -2668,30 +2669,33 @@ func (ds *DistSender) maybeIncrementErrCounters(br *kvpb.BatchResponse, err erro
 	}
 }
 
-// AllRangeSpans returns the list of all ranges that cover input spans along with the
-// nodeCountHint indicating the number of nodes that host those ranges.
+// AllRangeSpans invokes provided function with the list of all ranges
+// that cover input spans. Function may return iterutil.StopIteration() sentinel
+// error to terminate early.
+// Returns the nodeCountHint indicating the number of nodes that host those ranges.
 func (ds *DistSender) AllRangeSpans(
-	ctx context.Context, spans []roachpb.Span,
-) (_ []roachpb.Span, nodeCountHint int, _ error) {
-	ranges := make([]roachpb.Span, 0, len(spans))
-
+	ctx context.Context, spans []roachpb.Span, fn func(s roachpb.Span) error,
+) (nodeCountHint int, _ error) {
 	it := MakeRangeIterator(ds)
 	var replicas util.FastIntMap
 
 	for i := range spans {
 		rSpan, err := keys.SpanAddr(spans[i])
 		if err != nil {
-			return nil, 0, err
+			return 0, err
 		}
 		for it.Seek(ctx, rSpan.Key, Ascending); ; it.Next(ctx) {
 			if !it.Valid() {
-				return nil, 0, it.Error()
+				return 0, it.Error()
 			}
-			ranges = append(ranges, roachpb.Span{
-				Key: it.Desc().StartKey.AsRawKey(), EndKey: it.Desc().EndKey.AsRawKey(),
-			})
+
 			for _, r := range it.Desc().InternalReplicas {
 				replicas.Set(int(r.NodeID), 0)
+			}
+			if err := fn(roachpb.Span{
+				Key: it.Desc().StartKey.AsRawKey(), EndKey: it.Desc().EndKey.AsRawKey(),
+			}); err != nil {
+				return replicas.Len(), iterutil.Map(err)
 			}
 			if !it.NeedAnother(rSpan) {
 				break
@@ -2699,7 +2703,7 @@ func (ds *DistSender) AllRangeSpans(
 		}
 	}
 
-	return ranges, replicas.Len(), nil
+	return replicas.Len(), nil
 }
 
 // skipStaleReplicas advances the transport until it's positioned on a replica

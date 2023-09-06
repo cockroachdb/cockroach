@@ -253,7 +253,11 @@ func (p *scanRequestScanner) exportSpan(
 func getRangesToProcess(
 	ctx context.Context, ds *kvcoord.DistSender, targetSpans []roachpb.Span,
 ) ([]roachpb.Span, int, error) {
-	ranges, numNodes, err := ds.AllRangeSpans(ctx, targetSpans)
+	ranges := make([]roachpb.Span, 0, len(targetSpans))
+	numNodes, err := ds.AllRangeSpans(ctx, targetSpans, func(s roachpb.Span) error {
+		ranges = append(ranges, s)
+		return nil
+	})
 	if err != nil {
 		return nil, 0, err
 	}
