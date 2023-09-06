@@ -12,6 +12,7 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci \
     --test_arg -rsg=5m --test_arg -rsg-routines=8 --test_arg -rsg-exec-timeout=1m \
     --test_timeout 3600 --test_filter 'TestRandomSyntax' \
     --test_sharding_strategy=disabled \
+    --test_env=COCKROACH_RANDOM_SEED=1146349849176758046 \
     || exit_status=$?
 
 exit $exit_status
