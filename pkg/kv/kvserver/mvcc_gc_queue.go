@@ -288,9 +288,10 @@ func makeMVCCGCQueueScore(
 	gcTTL time.Duration,
 	canAdvanceGCThreshold bool,
 ) mvccGCQueueScore {
-	repl.mu.Lock()
+	repl.mu.RLock()
 	ms := *repl.mu.state.Stats
-	repl.mu.Unlock()
+	hint := *repl.mu.state.GCHint
+	repl.mu.RUnlock()
 
 	if repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
 		lastGC = hlc.Timestamp{}
@@ -301,7 +302,7 @@ func makeMVCCGCQueueScore(
 	// trigger GC at the same time.
 	r := makeMVCCGCQueueScoreImpl(
 		ctx, int64(repl.RangeID), now, ms, gcTTL, lastGC, canAdvanceGCThreshold,
-		repl.GetGCHint(), gc.TxnCleanupThreshold.Get(&repl.ClusterSettings().SV),
+		hint, gc.TxnCleanupThreshold.Get(&repl.ClusterSettings().SV),
 	)
 	return r
 }
