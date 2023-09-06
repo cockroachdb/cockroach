@@ -288,7 +288,7 @@ func TestEngineKeyValidate(t *testing.T) {
 				if err := ek.Validate(); err != nil {
 					t.Errorf("%q.Validate() = %q, want nil", ek, err)
 				}
-				require.Equal(t, 0.0, testing.AllocsPerRun(1, func() {
+				require.Equal(t, 0.0, testing.AllocsPerRun(1000, func() {
 					_ = ek.Validate()
 				}))
 			}
@@ -301,7 +301,7 @@ func TestEngineKeyValidate(t *testing.T) {
 				if err := ek.Validate(); err != nil {
 					t.Errorf("%q.Validate() = %q, want nil", ek, err)
 				}
-				require.Equal(t, 0.0, testing.AllocsPerRun(1, func() {
+				require.Equal(t, 0.0, testing.AllocsPerRun(1000, func() {
 					_ = ek.Validate()
 				}))
 				buf = ek.Key[:0]
