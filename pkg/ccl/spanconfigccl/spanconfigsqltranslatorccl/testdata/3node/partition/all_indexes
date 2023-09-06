@@ -8,7 +8,7 @@ ALTER INDEX db.tbl@idx2 CONFIGURE ZONE USING constraints = '[+n3]';
 
 translate database=db table=tbl
 ----
-/Table/106{-/2}                            range default
-/Table/106/{2-3}                           constraints=[+n2]
-/Table/106/{3-4}                           constraints=[+n3]
-/Table/10{6/4-7}                           range default
+[..., .../2)                               range default
+[.../2, .../3)                             constraints=[+n2]
+[.../3, .../4)                             constraints=[+n3]
+[.../4, ...)                               range default

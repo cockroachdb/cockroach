@@ -12,12 +12,12 @@ ALTER PARTITION p3 OF INDEX db.tbl@b_idx CONFIGURE ZONE USING constraints = '[+n
 
 translate database=db table=tbl
 ----
-/Table/106{-/2}                            range default
-/Table/106/2{-/NULL}                       constraints=[+n1]
-/Table/106/2/{NULL-!NULL}                  constraints=[+n2]
-/Table/106/2/{!NULL-1}                     constraints=[+n1]
-/Table/106/2/{1-2}                         constraints=[+n2]
-/Table/106/2/{2-3}                         constraints=[+n1]
-/Table/106/2/{3-4}                         constraints=[+n3]
-/Table/106/{2/4-3}                         constraints=[+n1]
-/Table/10{6/3-7}                           range default
+[..., .../2)                               range default
+[.../2, .../2/NULL)                        constraints=[+n1]
+[.../2/NULL, .../2/!NULL)                  constraints=[+n2]
+[.../2/!NULL, .../2/1)                     constraints=[+n1]
+[.../2/1, .../2/2)                         constraints=[+n2]
+[.../2/2, .../2/3)                         constraints=[+n1]
+[.../2/3, .../2/4)                         constraints=[+n3]
+[.../2/4, .../3)                           constraints=[+n1]
+[.../3, ...)                               range default

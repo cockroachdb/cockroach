@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -41,6 +42,8 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
+
+var tableIDPrefixRegexp = regexp.MustCompile("/Table/[0-9]+(.*)")
 
 // TestDataDriven is a data-driven test for the spanconfig.SQLTranslator. It
 // allows users to set up zone config hierarchies and validate their translation
@@ -122,9 +125,10 @@ func TestDataDriven(t *testing.T) {
 				},
 			}
 		}
+		isMultiNode := strings.Contains(path, "3node")
 		// Use 1 node by default to make tests run faster.
 		nodes := 1
-		if strings.Contains(path, "3node") {
+		if isMultiNode {
 			nodes = 3
 		}
 		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{
@@ -218,7 +222,18 @@ func TestDataDriven(t *testing.T) {
 				for _, record := range records {
 					switch {
 					case record.GetTarget().IsSpanTarget():
-						output.WriteString(fmt.Sprintf("%-42s %s\n", record.GetTarget().GetSpan(),
+						var spanStr string
+						if isMultiNode {
+							span := record.GetTarget().GetSpan()
+							// The span's table ID may change in multi-node tests.
+							const repl = "...$1"
+							startKeyStr := tableIDPrefixRegexp.ReplaceAllString(span.Key.String(), repl)
+							endKeyStr := tableIDPrefixRegexp.ReplaceAllString(span.EndKey.String(), repl)
+							spanStr = fmt.Sprintf("[%s, %s)", startKeyStr, endKeyStr)
+						} else {
+							spanStr = record.GetTarget().GetSpan().String()
+						}
+						output.WriteString(fmt.Sprintf("%-42s %s\n", spanStr,
 							spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.GetConfig())))
 					case record.GetTarget().IsSystemTarget():
 						output.WriteString(fmt.Sprintf("%-42s %s\n", record.GetTarget().GetSystemTarget(),

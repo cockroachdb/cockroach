@@ -14,8 +14,8 @@ ALTER PARTITION pxxx OF INDEX db.tbl@tbl_pkey CONFIGURE ZONE USING constraints =
 
 translate database=db table=tbl
 ----
-/Table/106{-/1}                            range default
-/Table/106/1{-/7}                          constraints=[+n1]
-/Table/106/1/7{-/-6}                       constraints=[+n2]
-/Table/106/{1/7/-6-2}                      constraints=[+n3]
-/Table/10{6/2-7}                           range default
+[..., .../1)                               range default
+[.../1, .../1/7)                           constraints=[+n1]
+[.../1/7, .../1/7/-6)                      constraints=[+n2]
+[.../1/7/-6, .../2)                        constraints=[+n3]
+[.../2, ...)                               range default
