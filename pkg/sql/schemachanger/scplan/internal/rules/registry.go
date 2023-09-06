@@ -36,6 +36,9 @@ func (r *Registry) ApplyDepRules(ctx context.Context, g *scgraph.Graph) error {
 		start := timeutil.Now()
 		var added int
 		if err := dr.q.Iterate(g.Database(), func(r rel.Result) error {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			from := r.Var(dr.from).(*screl.Node)
 			to := r.Var(dr.to).(*screl.Node)
 			added++
