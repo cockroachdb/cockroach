@@ -31,6 +31,16 @@ func MakeSST(
 	t *testing.T, st *cluster.Settings, kvs []interface{},
 ) ([]byte, roachpb.Key, roachpb.Key) {
 	t.Helper()
+	return MakeSSTWithPrefix(t, st, nil, kvs)
+}
+
+// MakeSST builds a binary in-memory SST from the given KVs, which can be both
+// MVCCKeyValue or MVCCRangeKeyValue. It returns the binary SST data as well as
+// the start and end (exclusive) keys of the SST.
+func MakeSSTWithPrefix(
+	t *testing.T, st *cluster.Settings, prefix roachpb.Key, kvs []interface{},
+) ([]byte, roachpb.Key, roachpb.Key) {
+	t.Helper()
 
 	sstFile := &storage.MemObject{}
 	writer := storage.MakeIngestionSSTWriter(context.Background(), st, sstFile)
@@ -41,6 +51,11 @@ func MakeSST(
 		var s, e roachpb.Key
 		switch kv := kvI.(type) {
 		case storage.MVCCKeyValue:
+			if len(prefix) > 0 {
+				k, err := keys.RewriteKeyToTenantPrefix(kv.Key.Key, prefix)
+				require.NoError(t, err)
+				kv.Key.Key = k
+			}
 			if kv.Key.Timestamp.IsEmpty() {
 				v, err := protoutil.Marshal(&enginepb.MVCCMetadata{RawBytes: kv.Value})
 				require.NoError(t, err)
