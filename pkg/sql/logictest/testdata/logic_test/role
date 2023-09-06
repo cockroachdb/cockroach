@@ -1792,3 +1792,64 @@ statement ok
 ALTER ROLE testuser NOCREATEROLE
 
 subtest end
+
+subtest create_db_priv
+
+user root
+
+statement ok
+ALTER ROLE testuser NOCREATEDB
+
+user testuser
+
+statement error permission denied to create database
+CREATE DATABASE db_create_db_priv
+
+user root
+
+statement ok
+GRANT SYSTEM CREATEDB TO testuser
+
+user testuser
+
+statement ok
+CREATE DATABASE db_create_db_priv
+
+user root
+
+statement ok
+REVOKE SYSTEM CREATEDB FROM testuser
+
+user testuser
+
+statement error permission denied to rename database
+ALTER DATABASE db_create_db_priv RENAME TO renamed_db_create_db_priv
+
+user root
+
+statement ok
+CREATE ROLE creator_of_databases
+
+statement ok
+GRANT creator_of_databases TO testuser
+
+statement ok
+GRANT SYSTEM CREATEDB TO creator_of_databases
+
+user testuser
+
+statement ok
+ALTER DATABASE db_create_db_priv RENAME TO renamed_db_create_db_priv
+
+user root
+
+statement ok
+DROP DATABASE renamed_db_create_db_priv
+
+statement ok
+REVOKE SYSTEM CREATEDB FROM creator_of_databases
+
+statement ok
+DROP ROLE creator_of_databases
+
+subtest end
