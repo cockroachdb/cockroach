@@ -710,7 +710,7 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 			tl := e.Value
 			lockHolderTxn, _ := tl.getLockHolder()
 			if !g.isSameTxn(lockHolderTxn) &&
-				lock.Conflicts(tl.getLockMode(), makeLockMode(str, g.txn, g.ts), &g.lt.settings.SV) {
+				lock.Conflicts(tl.getLockMode(), makeLockMode(str, g.txnMeta(), g.ts), &g.lt.settings.SV) {
 				return true, tl.txn, nil // the key is locked by some other transaction; return it
 			}
 		}
@@ -744,7 +744,7 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 				"SKIP LOCKED request should not find another waiting request from the same transaction",
 			)
 		}
-		if lock.Conflicts(qqg.mode, makeLockMode(str, g.txn, g.ts), &g.lt.settings.SV) {
+		if lock.Conflicts(qqg.mode, makeLockMode(str, g.txnMeta(), g.ts), &g.lt.settings.SV) {
 			return true, nil, nil // the conflict isn't with a lock holder, nil is returned
 		}
 	}
@@ -796,11 +796,11 @@ func (g *lockTableGuardImpl) curStrength() lock.Strength {
 // request. The value returned by this method are mutable as the request's scan
 // of the lock table progresses from lock to lock.
 func (g *lockTableGuardImpl) curLockMode() lock.Mode {
-	return makeLockMode(g.curStrength(), g.txn, g.ts)
+	return makeLockMode(g.curStrength(), g.txnMeta(), g.ts)
 }
 
 // makeLockMode constructs and returns a lock mode.
-func makeLockMode(str lock.Strength, txn *roachpb.Transaction, ts hlc.Timestamp) lock.Mode {
+func makeLockMode(str lock.Strength, txn *enginepb.TxnMeta, ts hlc.Timestamp) lock.Mode {
 	iso := isolation.Serializable
 	if txn != nil {
 		iso = txn.IsoLevel
@@ -1304,6 +1304,13 @@ func newTxnLock(txn *enginepb.TxnMeta, clock *hlc.Clock) *txnLock {
 // getLockHolder returns information about the lock's holder.
 //
 // REQUIRES: kl.mu is locked.
+//
+// TODO(arul): No place uses both the transaction and the timestamp returned by
+// this function together. Once we stop storing timestamps associated with
+// replicated locks for lock strengths other than lock.Intent, returning a
+// blanket timestamp from this function is a pretty sharp edge. We should split
+// this function out into two -- one that returns the holder's transaction, and
+// another that fits the timestamp needs at the callers.
 func (tl *txnLock) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
 	assert(
 		tl.isHeldReplicated() || tl.isHeldUnreplicated(),
@@ -1329,7 +1336,7 @@ func (tl *txnLock) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
 //
 // REQUIRES: kl.mu is locked.
 func (tl *txnLock) isHeldReplicated() bool {
-	return !tl.replicatedInfo.ts.IsEmpty()
+	return !tl.replicatedInfo.isEmpty()
 }
 
 // isHeldUnreplicated returns true if the receiver is held as a unreplicated
@@ -1346,18 +1353,27 @@ func (tl *txnLock) isHeldUnreplicated() bool {
 //
 // REQUIRES: kl.mu is locked.
 func (tl *txnLock) getLockMode() lock.Mode {
-	lockHolderTxn, lockHolderTS := tl.getLockHolder()
+	lockHolderTxn, _ := tl.getLockHolder()
 
-	if tl.isHeldReplicated() {
-		return lock.MakeModeIntent(lockHolderTS)
+	// Only replicated locks can be held with strength lock.Intent. It's also the
+	// strongest locking strength, so if held, it's the one we prefer.
+	if tl.replicatedInfo.held(lock.Intent) {
+		return lock.MakeModeIntent(tl.replicatedInfo.ts)
 	}
+	// Other than lock.Intent, which we've already handled above,
+	// replicatedHolderStrengths == unreplicatedHolderStrengths.
 	for _, str := range unreplicatedHolderStrengths {
-		if !tl.unreplicatedInfo.held(str) {
+		if !tl.unreplicatedInfo.held(str) && !tl.replicatedInfo.held(str) {
 			continue
 		}
 		switch str {
 		case lock.Exclusive:
-			return lock.MakeModeExclusive(lockHolderTS, lockHolderTxn.IsoLevel)
+			if tl.unreplicatedInfo.held(str) {
+				return lock.MakeModeExclusive(tl.unreplicatedInfo.ts, lockHolderTxn.IsoLevel)
+			}
+			// Using hlc.MaxTimestamp as the timestamp for the exclusive lock ensures
+			// that non-locking reads do not conflict with replicated exclusive locks.
+			return lock.MakeModeExclusive(hlc.MaxTimestamp, lockHolderTxn.IsoLevel)
 		case lock.Shared:
 			return lock.MakeModeShared()
 		default:
@@ -1389,11 +1405,17 @@ func (tl *txnLock) isIdempotentLockAcquisition(acq *roachpb.LockAcquisition) boo
 			// lock's timestamp at a given durability never regresses.
 			tl.unreplicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
 	case lock.Replicated:
-		// NB: Lock re-acquisitions at different timestamps are not considered
-		// idempotent. Strictly speaking, we could tighten this condition to
-		// consider lock re-acquisition at lower timestamps idempotent, as a
-		// lock's timestamp at a given durability never regresses.
-		return tl.isHeldReplicated() && tl.replicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
+		// Lock is being re-acquired with the same strength.
+		return tl.replicatedInfo.held(acq.Strength) &&
+			// NB: Lock re-acquisitions at different timestamps are not considered
+			// idempotent. Strictly speaking, we could tighten this condition in a
+			// few ways:
+			// 1. We could consider lock re-acquisition at a lower timestamp idempotent,
+			// as a lock's timestamp at a given durability can never regress.
+			// 2. We could only check the timestamp if the lock is being acquired with
+			// strength lock.Intent, as we disregard the timestamp for all other lock
+			// strengths when dealing with replicated locks.
+			tl.replicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
 	default:
 		panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
 	}
@@ -2805,7 +2827,9 @@ func (kl *keyLocks) isNonConflictingLock(g *lockTableGuardImpl) bool {
 // from the transaction acquiring the lock are also released.
 //
 // Acquires l.mu.
-func (kl *keyLocks) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) error {
+func (kl *keyLocks) acquireLock(
+	acq *roachpb.LockAcquisition, clock *hlc.Clock, st *cluster.Settings,
+) error {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
 	if kl.isLockedBy(acq.Txn.ID) {
@@ -2862,6 +2886,17 @@ func (kl *keyLocks) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 		panic("lockTable bug")
 	}
 
+	// TODO(arul): add a test for unreplicated locks as well where this assertion
+	// is triggered.
+	if buildutil.CrdbTestBuild && kl.isLocked() {
+		// If lock(s) are already held on this key by other transactions, sanity
+		// check that the lock acquisition is compatible.
+		m := makeLockMode(acq.Strength, &acq.Txn, acq.Txn.WriteTimestamp)
+		if err := kl.testingAssertCompatibleLockMode(m, &acq.Txn, st); err != nil {
+			return err
+		}
+	}
+
 	tl := newTxnLock(&acq.Txn, clock)
 	switch acq.Durability {
 	case lock.Unreplicated:
@@ -2900,17 +2935,23 @@ func (kl *keyLocks) discoveredLock(
 	}
 
 	var tl *txnLock
-	if kl.isLocked() {
-		e, found := kl.heldBy[foundLock.Txn.ID]
+	if kl.isLockedBy(foundLock.Txn.ID) {
+		e := kl.heldBy[foundLock.Txn.ID]
 		tl = e.Value
-		if !found {
-			return errors.AssertionFailedf(
-				"discovered lock by different transaction (%s) than existing lock (see issue #63592): %s",
-				foundLock.Txn, kl)
-		}
+		tl.replicatedInfo.acquire(foundLock.Strength, foundLock.Txn.WriteTimestamp)
 		// TODO(arul): If the discovered lock indicates a newer epoch than what's
 		// being tracked, should we clear out unreplicatedLockInfo here?
 	} else {
+		if buildutil.CrdbTestBuild {
+			// If lock(s) are already held on this key by other transactions, sanity
+			// check that the discovered lock is compatible with them.
+			m := makeLockMode(foundLock.Strength, &foundLock.Txn, foundLock.Txn.WriteTimestamp)
+			if err := kl.testingAssertCompatibleLockMode(m, &foundLock.Txn, g.lt.settings); err != nil {
+				return err
+			}
+		}
+		// The lock is compatible with any locks that may already be held on this
+		// key. We can start tracking it.
 		tl = newTxnLock(&foundLock.Txn, clock)
 		kl.lockAcquiredOrDiscovered(tl)
 	}
@@ -2945,7 +2986,7 @@ func (kl *keyLocks) discoveredLock(
 			// Put self in queue as inactive waiter.
 			qg := &queuedGuard{
 				guard:  g,
-				mode:   makeLockMode(accessStrength, g.txn, g.ts),
+				mode:   makeLockMode(accessStrength, g.txnMeta(), g.ts),
 				active: false,
 			}
 			// g is not necessarily first in the queue in the (rare) case (a) above.
@@ -3467,6 +3508,43 @@ func (kl *keyLocks) maybeReleaseCompatibleLockingRequests() {
 	kl.informActiveWaiters()
 }
 
+// testingAssertCompatibleLockMode ensures the supplied lock mode is compatible
+// with all locks held on the receiver. Any locks held by the transaction itself
+// are considered compatible; the supplied transaction meta is used for this
+// determination.
+//
+// An error is returned if the supplied lock mode is incompatible. This check is
+// expensive when there are multiple shared locks on a single key; we only
+// expect it to be triggered by test builds.
+//
+// REQUIRES: kl.mu to be locked.
+//
+// TODO(arul): Once https://github.com/cockroachdb/cockroach/issues/108843 is
+// addressed, we should pull this verification into the more general purpose
+// verification.
+func (kl *keyLocks) testingAssertCompatibleLockMode(
+	m lock.Mode, txn *enginepb.TxnMeta, st *cluster.Settings,
+) error {
+	if buildutil.CrdbTestBuild {
+		for e := kl.holders.Front(); e != nil; e = e.Next() {
+			holder := e.Value
+			holderTxn, _ := holder.getLockHolder()
+			holderMode := holder.getLockMode()
+			// Holder belongs to a different transaction ...
+			if holderTxn.ID != txn.ID &&
+				// ... which conflicts with the supplied lock mode.
+				lock.Conflicts(holderMode, m, &st.SV) {
+				return errors.AssertionFailedf(
+					"incompatibility detected; lock by transaction %s with strength %s incompatible with an "+
+						"already held lock by %s with strength %s",
+					txn.ID, m.Strength, holder.txn.ID, holderMode.Strength,
+				)
+			}
+		}
+	}
+	return nil
+}
+
 // Delete removes the specified lock from the tree.
 // REQUIRES: t.mu is locked.
 func (t *treeMu) Delete(l *keyLocks) {
@@ -3642,8 +3720,6 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		// higher lease sequence than the current value of enabledSeq.
 		return false, errors.AssertionFailedf("unexpected lease sequence: %d > %d", seq, t.enabledSeq)
 	}
-	// TODO(arul): lift this limitation.
-	assert(foundLock.Strength == lock.Intent, "unsupported lock strength")
 	g := guard.(*lockTableGuardImpl)
 	key := foundLock.Key
 	str, err := findHighestLockStrengthInSpans(key, g.spans)
@@ -3719,10 +3795,9 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	switch acq.Strength {
 	case lock.Intent:
 		assert(acq.Durability == lock.Replicated, "incorrect durability")
-	case lock.Exclusive:
-		assert(acq.Durability == lock.Unreplicated, "incorrect durability")
-	case lock.Shared:
-		assert(acq.Durability == lock.Unreplicated, "incorrect durability")
+	case lock.Exclusive, lock.Shared:
+		// Both shared and exclusive locks can have either replicated or
+		// unreplicated durability.
 	default:
 		return errors.AssertionFailedf("unsupported lock strength %s", acq.Strength)
 	}
@@ -3771,7 +3846,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 			return nil
 		}
 	}
-	err := l.acquireLock(acq, t.clock)
+	err := l.acquireLock(acq, t.clock, t.settings)
 	t.locks.mu.Unlock()
 
 	if checkMaxLocks {
