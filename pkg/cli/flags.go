@@ -14,10 +14,12 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clientflags"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/errors"
+	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -60,6 +63,7 @@ var localityAdvertiseHosts localityList
 var startBackground bool
 var storeSpecs base.StoreSpecList
 var goMemLimit int64
+var tenantIDFile string
 
 // initPreFlagsDefaults initializes the values of the global variables
 // defined above.
@@ -90,6 +94,8 @@ func initPreFlagsDefaults() {
 	storeSpecs = base.StoreSpecList{}
 
 	goMemLimit = 0
+
+	tenantIDFile = ""
 }
 
 // AddPersistentPreRunE add 'fn' as a persistent pre-run function to 'cmd'.
@@ -543,6 +549,7 @@ func init() {
 	{
 		f := mtStartSQLCmd.Flags()
 		cliflagcfg.VarFlag(f, &tenantIDWrapper{&serverCfg.SQLConfig.TenantID}, cliflags.TenantID)
+		cliflagcfg.StringFlag(f, &tenantIDFile, cliflags.TenantIDFile)
 		cliflagcfg.StringSliceFlag(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs)
 	}
 
@@ -946,6 +953,14 @@ func init() {
 	}
 }
 
+func tenantID(s string) (roachpb.TenantID, error) {
+	tenID, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return roachpb.TenantID{}, errors.Wrap(err, "invalid tenant ID")
+	}
+	return roachpb.MakeTenantID(tenID)
+}
+
 type tenantIDWrapper struct {
 	tenID *roachpb.TenantID
 }
@@ -954,19 +969,68 @@ func (w *tenantIDWrapper) String() string {
 	return w.tenID.String()
 }
 func (w *tenantIDWrapper) Set(s string) error {
-	tenID, err := strconv.ParseUint(s, 10, 64)
+	cfgTenantID, err := tenantID(s)
 	if err != nil {
-		return errors.Wrap(err, "invalid tenant ID")
+		return err
 	}
-	if tenID == 0 {
-		return errors.New("invalid tenant ID")
-	}
-	*w.tenID = roachpb.MustMakeTenantID(tenID)
+	*w.tenID = cfgTenantID
 	return nil
 }
 
 func (w *tenantIDWrapper) Type() string {
 	return "number"
+}
+
+// tenantIDFromFile will look for the given file and read the full first
+// line of the file that should contain the `<TenantID>`.
+func tenantIDFromFile(
+	fileName string, watcherWaitCount *atomic.Uint32, watcherEventCount *atomic.Uint32,
+) (roachpb.TenantID, error) {
+	// Start watching the file for changes as the typical case is that the file
+	// will not have yet the tenant id at startup.
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return roachpb.TenantID{}, errors.Wrapf(err, "creating new watcher")
+	}
+	defer func() { _ = watcher.Close() }()
+	if err = watcher.Add(fileName); err != nil {
+		return roachpb.TenantID{}, errors.Wrapf(err, "adding %q to watcher", fileName)
+	}
+
+	for {
+		headBuf, err := os.ReadFile(fileName)
+		if err != nil {
+			return roachpb.TenantID{}, errors.Wrapf(err, "reading %q file", fileName)
+		}
+		if line, _, foundNewLine := strings.Cut(string(headBuf), "\n"); foundNewLine {
+			cfgTenantID, err := tenantID(line)
+			if err != nil {
+				return roachpb.TenantID{}, errors.Wrapf(err, "setting tenant id from line %q", line)
+			}
+			return cfgTenantID, nil
+		}
+
+		// Wait for file notification.
+		if watcherWaitCount != nil {
+			watcherWaitCount.Add(1)
+		}
+		select {
+		case _, ok := <-watcher.Events:
+			if watcherEventCount != nil {
+				watcherEventCount.Add(1)
+			}
+			if !ok {
+				return roachpb.TenantID{},
+					errors.Newf("fsnotify.Watcher got Events channel closed while waiting on %q", fileName)
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return roachpb.TenantID{},
+					errors.Newf("fsnotify.Watcher got Errors channel closed while waiting on %q", fileName)
+			}
+			return roachpb.TenantID{}, errors.Wrapf(err, "watcher error while waiting on %q", fileName)
+		}
+	}
 }
 
 // extraServerFlagInit configures the server.Config based on the command-line flags.
@@ -1219,8 +1283,7 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 	if !fs.Changed(cliflags.Store.Name) {
 		// We assume that we only need to change top level store as temp dir configs are
 		// initialized when start is executed and temp dirs inherit path from first store.
-		tenantID := fs.Lookup(cliflags.TenantID.Name).Value.String()
-		serverCfg.Stores.Specs[0].Path += "-tenant-" + tenantID
+		serverCfg.Stores.Specs[0].Path += fmt.Sprintf("-tenant-%d", os.Getpid())
 	}
 
 	// In standalone SQL servers, we do not generate a ballast file,
