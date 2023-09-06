@@ -40,7 +40,8 @@ func _() {
 	_ = x[MANAGETENANT-30]
 	_ = x[VIEWSYSTEMTABLE-31]
 	_ = x[CREATEROLE-32]
-	_ = x[largestKind-32]
+	_ = x[CREATELOGIN-33]
+	_ = x[largestKind-33]
 }
 
 func (i Kind) String() string {
@@ -109,6 +110,8 @@ func (i Kind) String() string {
 		return "VIEWSYSTEMTABLE"
 	case CREATEROLE:
 		return "CREATEROLE"
+	case CREATELOGIN:
+		return "CREATELOGIN"
 	default:
 		return "Kind(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
