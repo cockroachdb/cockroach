@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -1392,13 +1393,10 @@ func TestDBAddSSTable(t *testing.T) {
 	t.Run("store=in-memory", func(t *testing.T) {
 		defer log.Scope(t).Close(t)
 		ctx := context.Background()
-		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
-		})
+		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 		defer srv.Stopper().Stop(ctx)
 		s := srv.ApplicationLayer()
-		tr := s.TracerI().(*tracing.Tracer)
-		runTestDBAddSSTable(ctx, t, db, tr, nil)
+		runTestDBAddSSTable(ctx, t, db, s, nil)
 	})
 
 	t.Run("store=on-disk", func(t *testing.T) {
@@ -1408,22 +1406,27 @@ func TestDBAddSSTable(t *testing.T) {
 		storeSpec.InMemory = false
 		storeSpec.Path = t.TempDir()
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
-			StoreSpecs:        []base.StoreSpec{storeSpec},
+			StoreSpecs: []base.StoreSpec{storeSpec},
 		})
 		defer srv.Stopper().Stop(ctx)
 		s := srv.ApplicationLayer()
-		tr := s.TracerI().(*tracing.Tracer)
+
 		store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 		require.NoError(t, err)
-		runTestDBAddSSTable(ctx, t, db, tr, store)
+
+		runTestDBAddSSTable(ctx, t, db, s, store)
 	})
 }
 
 // if store != nil, assume it is on-disk and check ingestion semantics.
 func runTestDBAddSSTable(
-	ctx context.Context, t *testing.T, db *kv.DB, tr *tracing.Tracer, store *kvserver.Store,
+	ctx context.Context,
+	t *testing.T,
+	db *kv.DB,
+	srv serverutils.ApplicationLayerInterface,
+	store *kvserver.Store,
 ) {
+	tr := srv.TracerI().(*tracing.Tracer)
 	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
 	const ingestAsWrites, ingestAsSST = true, false
 	const allowConflicts = false
@@ -1433,18 +1436,24 @@ func runTestDBAddSSTable(
 	var noTS hlc.Timestamp
 	cs := cluster.MakeTestingClusterSettings()
 
+	k := func(s string) roachpb.Key {
+		k, err := keys.RewriteKeyToTenantPrefix(roachpb.Key(s), srv.Codec().TenantPrefix())
+		require.NoError(t, err)
+		return k
+	}
+
 	{
-		sst, start, end := storageutils.MakeSST(t, cs, kvs{pointKV("bb", 2, "1")})
+		sst, start, end := storageutils.MakeSSTWithPrefix(t, cs, srv.Codec().TenantPrefix(), kvs{pointKV("bb", 2, "1")})
 
 		// Key is before the range in the request span.
 		_, _, err := db.AddSSTable(
-			ctx, "d", "e", sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			ctx, k("d"), k("e"), sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not in request range")
 
 		// Key is after the range in the request span.
 		_, _, err = db.AddSSTable(
-			ctx, "a", "b", sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			ctx, k("a"), k("b"), sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not in request range")
 
@@ -1459,7 +1468,9 @@ func runTestDBAddSSTable(
 		require.Contains(t, trace, "sideloadable proposal detected")
 		require.Contains(t, trace, "ingested SSTable at index")
 
-		if store != nil {
+		if store != nil && srv.Codec().ForSystemTenant() {
+			// If this request was made by the system tenant to an on-disk store, we
+			// should have the un-redacted on-disk path to the file that was ingested;
 			// Look for the ingested path and verify it still exists.
 			re := regexp.MustCompile(`ingested SSTable at index \d+, term \d+: (\S+)`)
 			match := re.FindStringSubmatch(trace)
@@ -1469,7 +1480,7 @@ func runTestDBAddSSTable(
 			_, err = os.Stat(strings.TrimSuffix(match[1], ".ingested"))
 			require.NoError(t, err, "%q file missing after ingest: %+v", match[1], err)
 		}
-		r, err := db.Get(ctx, "bb")
+		r, err := db.Get(ctx, k("bb"))
 		require.NoError(t, err)
 		require.Equal(t, []byte("1"), r.ValueBytes())
 	}
@@ -1477,11 +1488,11 @@ func runTestDBAddSSTable(
 	// Check that ingesting a key with an earlier mvcc timestamp doesn't affect
 	// the value returned by Get.
 	{
-		sst, start, end := storageutils.MakeSST(t, cs, kvs{pointKV("bb", 1, "2")})
+		sst, start, end := storageutils.MakeSSTWithPrefix(t, cs, srv.Codec().TenantPrefix(), kvs{pointKV("bb", 1, "2")})
 		_, _, err := db.AddSSTable(
 			ctx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.NoError(t, err)
-		r, err := db.Get(ctx, "bb")
+		r, err := db.Get(ctx, k("bb"))
 		require.NoError(t, err)
 		require.Equal(t, []byte("1"), r.ValueBytes())
 		if store != nil {
@@ -1492,7 +1503,7 @@ func runTestDBAddSSTable(
 	// Key range in request span is not empty. First time through a different
 	// key is present. Second time through checks the idempotency.
 	{
-		sst, start, end := storageutils.MakeSST(t, cs, kvs{pointKV("bc", 1, "3")})
+		sst, start, end := storageutils.MakeSSTWithPrefix(t, cs, srv.Codec().TenantPrefix(), kvs{pointKV("bc", 1, "3")})
 
 		var before int64
 		if store != nil {
@@ -1510,11 +1521,11 @@ func runTestDBAddSSTable(
 			require.Contains(t, trace, "sideloadable proposal detected")
 			require.Contains(t, trace, "ingested SSTable at index")
 
-			r, err := db.Get(ctx, "bb")
+			r, err := db.Get(ctx, k("bb"))
 			require.NoError(t, err)
 			require.Equal(t, []byte("1"), r.ValueBytes())
 
-			r, err = db.Get(ctx, "bc")
+			r, err = db.Get(ctx, k("bc"))
 			require.NoError(t, err)
 			require.Equal(t, []byte("3"), r.ValueBytes())
 		}
@@ -1529,7 +1540,7 @@ func runTestDBAddSSTable(
 
 	// ... and doing the same thing but via write-batch works the same.
 	{
-		sst, start, end := storageutils.MakeSST(t, cs, kvs{pointKV("bd", 1, "3")})
+		sst, start, end := storageutils.MakeSSTWithPrefix(t, cs, srv.Codec().TenantPrefix(), kvs{pointKV("bd", 1, "3")})
 
 		var before int64
 		if store != nil {
@@ -1546,11 +1557,11 @@ func runTestDBAddSSTable(
 			require.Contains(t, trace, "evaluating AddSSTable")
 			require.Contains(t, trace, "via regular write batch")
 
-			r, err := db.Get(ctx, "bb")
+			r, err := db.Get(ctx, k("bb"))
 			require.NoError(t, err)
 			require.Equal(t, []byte("1"), r.ValueBytes())
 
-			r, err = db.Get(ctx, "bd")
+			r, err = db.Get(ctx, k("bd"))
 			require.NoError(t, err)
 			require.Equal(t, []byte("3"), r.ValueBytes())
 		}
@@ -1561,7 +1572,7 @@ func runTestDBAddSSTable(
 
 	// Invalid key/value entry checksum.
 	{
-		key := storage.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := storage.MVCCKey{Key: k("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		value := roachpb.MakeValueFromString("1")
 		value.InitChecksum([]byte("foo"))
 
@@ -1572,7 +1583,7 @@ func runTestDBAddSSTable(
 		require.NoError(t, w.Finish())
 
 		_, _, err := db.AddSSTable(
-			ctx, "b", "c", sstFile.Bytes(), allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			ctx, k("b"), k("c"), sstFile.Bytes(), allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid checksum")
 	}
