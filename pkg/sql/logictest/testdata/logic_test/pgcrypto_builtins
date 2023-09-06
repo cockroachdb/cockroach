@@ -308,3 +308,18 @@ query error pgcode XXC01 decrypt_iv can only be used with a CCL distribution
 SELECT decrypt_iv('\x91b4ef63852013c8da53829da662b871', 'key', '123', 'aes')
 
 subtest end
+
+subtest gen_random_bytes
+
+statement error pgcode 22023 length 0 is outside the range [1, 1024]
+SELECT gen_random_bytes(0)
+
+statement error pgcode 22023 length 1025 is outside the range [1, 1024]
+SELECT gen_random_bytes(1025)
+
+query I
+SELECT length(gen_random_bytes(10))
+----
+10
+
+subtest end
