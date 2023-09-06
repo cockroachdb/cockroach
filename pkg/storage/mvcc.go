@@ -4384,15 +4384,16 @@ func MVCCResolveWriteIntent(
 	if err != nil {
 		return false, 0, nil, err
 	}
-	iterAndBuf := GetBufUsingIter(iter)
-	defer iterAndBuf.Cleanup()
-	iterAndBuf.iter.SeekIntentGE(intent.Key, intent.Txn.ID)
+	defer iter.Close()
+	iter.SeekIntentGE(intent.Key, intent.Txn.ID)
+	buf := newPutBuffer()
+	defer buf.release()
 	// Production code will use a buffered writer, which makes the numBytes
 	// calculation accurate. Note that an inaccurate numBytes (e.g. 0 in the
 	// case of an unbuffered writer) does not affect any safety properties of
 	// the database.
 	beforeBytes := rw.BufferedSize()
-	ok, err = mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
+	ok, err = mvccResolveWriteIntent(ctx, rw, iter, ms, intent, buf)
 	numBytes = int64(rw.BufferedSize() - beforeBytes)
 	return ok, numBytes, nil, err
 }
@@ -5146,29 +5147,6 @@ func mvccMaybeRewriteIntentHistory(
 	return false, &restoredVal, err
 }
 
-// IterAndBuf used to pass iterators and buffers between MVCC* calls, allowing
-// reuse without the callers needing to know the particulars.
-type IterAndBuf struct {
-	buf  *putBuffer
-	iter MVCCIterator
-}
-
-// GetBufUsingIter returns an IterAndBuf using the supplied iterator.
-func GetBufUsingIter(iter MVCCIterator) IterAndBuf {
-	return IterAndBuf{
-		buf:  newPutBuffer(),
-		iter: iter,
-	}
-}
-
-// Cleanup must be called to release the resources when done.
-func (b IterAndBuf) Cleanup() {
-	b.buf.release()
-	if b.iter != nil {
-		b.iter.Close()
-	}
-}
-
 // MVCCResolveWriteIntentRange commits or aborts (rolls back) the range of write
 // intents specified by start and end keys for a given txn.
 // ResolveWriteIntentRange will skip write intents of other txns.
@@ -5225,12 +5203,12 @@ func MVCCResolveWriteIntentRange(
 		// For correctness, we need mvccIter to be consistent with engineIter.
 		mvccIter = newPebbleIteratorByCloning(engineIter.CloneContext(), iterOpts, StandardDurability)
 	}
-	iterAndBuf := GetBufUsingIter(mvccIter)
-	defer iterAndBuf.Cleanup()
-	putBuf := iterAndBuf.buf
+	defer mvccIter.Close()
+	buf := newPutBuffer()
+	defer buf.release()
 	sepIter := &separatedIntentAndVersionIter{
 		engineIter: engineIter,
-		mvccIter:   iterAndBuf.iter,
+		mvccIter:   mvccIter,
 	}
 	// Seek sepIter to position it for the loop below. The loop itself will
 	// only step the iterator and not seek.
@@ -5259,7 +5237,7 @@ func MVCCResolveWriteIntentRange(
 			return numKeys, numBytes, &roachpb.Span{Key: lastResolvedKey.Next(), EndKey: intentEndKey}, resumeReason, nil
 		}
 		// Parse the MVCCMetadata to see if it is a relevant intent.
-		meta := &putBuf.meta
+		meta := &buf.meta
 		if err := sepIter.ValueProto(meta); err != nil {
 			return 0, 0, nil, 0, err
 		}
@@ -5281,7 +5259,7 @@ func MVCCResolveWriteIntentRange(
 		lastResolvedKey = append(lastResolvedKey[:0], sepIter.UnsafeKey().Key...)
 		intent.Key = lastResolvedKey
 		beforeBytes := rw.BufferedSize()
-		ok, err := mvccResolveWriteIntent(ctx, rw, sepIter, ms, intent, putBuf)
+		ok, err := mvccResolveWriteIntent(ctx, rw, sepIter, ms, intent, buf)
 		if err != nil {
 			log.Warningf(ctx, "failed to resolve intent for key %q: %+v", lastResolvedKey, err)
 		} else if ok {
