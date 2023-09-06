@@ -67,7 +67,11 @@ func startListenRPCAndSQL(
 
 	var pgL net.Listener
 	if cfg.SplitListenSQL && enableSQLListener {
-		pgL, err = ListenAndUpdateAddrs(ctx, &cfg.SQLAddr, &cfg.SQLAdvertiseAddr, "sql")
+		if cfg.SQLAddrListener == nil {
+			pgL, err = ListenAndUpdateAddrs(ctx, &cfg.SQLAddr, &cfg.SQLAdvertiseAddr, "sql")
+		} else {
+			pgL = cfg.SQLAddrListener
+		}
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
