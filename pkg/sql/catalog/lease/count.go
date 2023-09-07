@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -43,7 +44,11 @@ func CountLeases(
 		leaseDescs = append(leaseDescs, systemschema.LeaseTable())
 	}
 	if usesExpiry {
-		leaseDescs = append(leaseDescs, systemschema.V23_1_LeaseTable())
+		if activeVersion.IsActive(ctx, clusterversion.V23_1_SystemRbrReadNew) {
+			leaseDescs = append(leaseDescs, systemschema.V23_1_LeaseTable())
+		} else {
+			leaseDescs = append(leaseDescs, systemschema.V22_2_LeaseTable())
+		}
 	}
 	var whereClauses [2][]string
 	for _, t := range versions {
@@ -94,6 +99,7 @@ func CountLeases(
 		if count > 0 {
 			return count, nil
 		}
+		log.Warningf(ctx, "Counted: %s %d", stmt, count)
 	}
 	return 0, nil
 }

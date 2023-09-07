@@ -93,7 +93,11 @@ func (m *Manager) WaitForNoVersion(
 			stmts = append(stmts, `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND (crdb_internal.sql_liveness_is_alive("sessionID")))`)
 		}
 		if !m.settings.Version.IsActive(ctx, clusterversion.V23_2_LeaseWillOnlyHaveSessions) {
-			leaseDescs = append(leaseDescs, systemschema.V23_1_LeaseTable())
+			if !m.settings.Version.IsActive(ctx, clusterversion.V23_1_SystemRbrReadNew) {
+				leaseDescs = append(leaseDescs, systemschema.V23_1_LeaseTable())
+			} else {
+				leaseDescs = append(leaseDescs, systemschema.V22_2_LeaseTable())
+			}
 			stmts = append(stmts, `SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d  AND expiration > $1)`)
 		}
 		now := m.storage.clock.Now()
