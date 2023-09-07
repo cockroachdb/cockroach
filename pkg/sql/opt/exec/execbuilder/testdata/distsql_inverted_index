@@ -1,8 +1,7 @@
 # LogicTest: 5node
 
-# TODO(rytaft): When zigzag joins are supported with multicolumn inverted
-# indexes, change this test to use a multicolumn inverted index and split
-# the index.
+statement ok
+SET enable_zigzag_join = true
 
 subtest json
 

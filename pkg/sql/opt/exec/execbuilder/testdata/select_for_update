@@ -1786,6 +1786,9 @@ vectorized: true
 # ------------------------------------------------------------------------------
 
 statement ok
+SET enable_zigzag_join = true
+
+statement ok
 CREATE TABLE inverted (
   a INT PRIMARY KEY,
   b INT[],
@@ -1956,6 +1959,9 @@ vectorized: true
           right columns: (a, d_inverted_key)
           right fixed values: 1 column
           right locking strength: for update
+
+statement ok
+RESET enable_zigzag_join
 
 # ------------------------------------------------------------------------------
 # Tests with the NOWAIT lock wait policy.
