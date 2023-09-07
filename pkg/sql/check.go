@@ -805,6 +805,7 @@ func (p *planner) RepairTTLScheduledJobForTable(ctx context.Context, tableID int
 		jobs.ScheduledJobTxn(p.InternalSQLTxn()),
 		p.User(),
 		tableDesc,
+		tableDesc.RowLevelTTL,
 	)
 	if err != nil {
 		return err

@@ -1867,12 +1867,9 @@ func (desc *Mutable) AddNotNullMutation(
 }
 
 // AddModifyRowLevelTTLMutation adds a row-level TTL mutation to descs.Mutations.
-func (desc *Mutable) AddModifyRowLevelTTLMutation(
-	ttl *descpb.ModifyRowLevelTTL, direction descpb.DescriptorMutation_Direction,
-) {
+func (desc *Mutable) AddModifyRowLevelTTLMutation(ttl *descpb.ModifyRowLevelTTL) {
 	m := descpb.DescriptorMutation{
 		Descriptor_: &descpb.DescriptorMutation_ModifyRowLevelTTL{ModifyRowLevelTTL: ttl},
-		Direction:   direction,
 	}
 	desc.addIndexMutationMaybeWithTempIndex(m)
 }

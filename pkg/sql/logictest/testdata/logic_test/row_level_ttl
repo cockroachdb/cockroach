@@ -1241,7 +1241,7 @@ CREATE TABLE public.tbl_set_both_reset_ttl_expire_after (
   expire_at TIMESTAMPTZ NULL,
   CONSTRAINT tbl_set_both_reset_ttl_expire_after_pkey PRIMARY KEY (id ASC),
   FAMILY fam_0_id_expire_at_crdb_internal_expiration (id, expire_at)
-)
+) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at', ttl_job_cron = '@hourly')
 
 let $label_suffix
 SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl_set_both_reset_ttl_expire_after'
@@ -1250,6 +1250,7 @@ query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
 WHERE label = 'row-level-ttl: $label_suffix'
 ----
+ACTIVE  @hourly  root
 
 subtest end
 

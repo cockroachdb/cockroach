@@ -2421,6 +2421,7 @@ func newTableDesc(
 			jobs.ScheduledJobTxn(params.p.InternalSQLTxn()),
 			params.p.User(),
 			ret,
+			ret.RowLevelTTL,
 		)
 		if err != nil {
 			return nil, err
@@ -2434,7 +2435,10 @@ func newTableDesc(
 // for a given table. newRowLevelTTLScheduledJob assumes that
 // tblDesc.RowLevelTTL is not nil.
 func newRowLevelTTLScheduledJob(
-	env scheduledjobs.JobSchedulerEnv, owner username.SQLUsername, tblDesc *tabledesc.Mutable,
+	env scheduledjobs.JobSchedulerEnv,
+	owner username.SQLUsername,
+	tblDesc *tabledesc.Mutable,
+	rowLevelTTL *catpb.RowLevelTTL,
 ) (*jobs.ScheduledJob, error) {
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleLabel(ttlbase.BuildScheduleLabel(tblDesc))
@@ -2445,7 +2449,7 @@ func newRowLevelTTLScheduledJob(
 		OnError: jobspb.ScheduleDetails_RETRY_SCHED,
 	})
 
-	if err := sj.SetSchedule(tblDesc.RowLevelTTL.DeletionCronOrDefault()); err != nil {
+	if err := sj.SetSchedule(rowLevelTTL.DeletionCronOrDefault()); err != nil {
 		return nil, err
 	}
 	args := &catpb.ScheduledRowLevelTTLArgs{
@@ -2469,14 +2473,15 @@ func CreateRowLevelTTLScheduledJob(
 	s jobs.ScheduledJobStorage,
 	owner username.SQLUsername,
 	tblDesc *tabledesc.Mutable,
+	rowLevelTTL *catpb.RowLevelTTL,
 ) (*jobs.ScheduledJob, error) {
-	if !tblDesc.HasRowLevelTTL() {
+	if rowLevelTTL == nil {
 		return nil, errors.AssertionFailedf("CreateRowLevelTTLScheduledJob called with no .RowLevelTTL: %#v", tblDesc)
 	}
 
 	telemetry.Inc(sqltelemetry.RowLevelTTLCreated)
 	env := JobSchedulerEnv(knobs)
-	j, err := newRowLevelTTLScheduledJob(env, owner, tblDesc)
+	j, err := newRowLevelTTLScheduledJob(env, owner, tblDesc, rowLevelTTL)
 	if err != nil {
 		return nil, err
 	}

@@ -2261,6 +2261,7 @@ func (r *restoreResumer) publishDescriptors(
 				jobs.ScheduledJobTxn(txn),
 				user,
 				mutTable,
+				mutTable.RowLevelTTL,
 			)
 			if err != nil {
 				return err
@@ -3439,4 +3440,4 @@ type sz int64
 func (b sz) String() string { return string(humanizeutil.IBytes(int64(b))) }
 
 // TODO(dt): move this to humanizeutil and allow-list it there.
-//func (b sz) SafeValue()     {}
+// func (b sz) SafeValue()     {}

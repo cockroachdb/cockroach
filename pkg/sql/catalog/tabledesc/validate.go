@@ -562,7 +562,7 @@ func validateMutation(m *descpb.DescriptorMutation) error {
 				"materialized view refresh mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
 		}
 	case *descpb.DescriptorMutation_ModifyRowLevelTTL:
-		if m.Direction == descpb.DescriptorMutation_NONE {
+		if m.Direction != descpb.DescriptorMutation_NONE {
 			return errors.AssertionFailedf(
 				"modify row level TTL mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
 		}

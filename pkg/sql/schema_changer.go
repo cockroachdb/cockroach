@@ -1595,22 +1595,25 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 			// If we are modifying TTL, then make sure the schedules are created
 			// or dropped as appropriate.
-			scheduledJobs := jobs.ScheduledJobTxn(txn)
 			if modify := m.AsModifyRowLevelTTL(); modify != nil && !modify.IsRollback() {
 				if fn := sc.testingKnobs.RunBeforeModifyRowLevelTTL; fn != nil {
 					if err := fn(); err != nil {
 						return err
 					}
 				}
-				if m.Adding() {
-					scTable.RowLevelTTL = modify.RowLevelTTL()
-					shouldCreateScheduledJob := scTable.RowLevelTTL.ScheduleID == 0
+				scheduledJobs := jobs.ScheduledJobTxn(txn)
+				jobsKnobs := sc.execCfg.JobsKnobs()
+				before := scTable.RowLevelTTL
+				after := modify.RowLevelTTL()
+				if before == nil && after != nil {
+					scheduleID := after.ScheduleID
+					shouldCreateScheduledJob := scheduleID == 0
 					// Double check the job exists - if it does not, we need to recreate it.
-					if scTable.RowLevelTTL.ScheduleID != 0 {
+					if after.ScheduleID != 0 {
 						_, err := scheduledJobs.Load(
 							ctx,
-							JobSchedulerEnv(sc.execCfg.JobsKnobs()),
-							scTable.RowLevelTTL.ScheduleID,
+							JobSchedulerEnv(jobsKnobs),
+							after.ScheduleID,
 						)
 						if err != nil {
 							if !jobs.HasScheduledJobNotFoundError(err) {
@@ -1623,26 +1626,29 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					if shouldCreateScheduledJob {
 						j, err := CreateRowLevelTTLScheduledJob(
 							ctx,
-							sc.execCfg.JobsKnobs(),
+							jobsKnobs,
 							scheduledJobs,
 							scTable.GetPrivileges().Owner(),
 							scTable,
+							after,
 						)
 						if err != nil {
 							return err
 						}
-						scTable.RowLevelTTL.ScheduleID = j.ScheduleID()
+						after.ScheduleID = j.ScheduleID()
 					}
-				} else if m.Dropped() {
-					if scTable.HasRowLevelTTL() {
+					scTable.RowLevelTTL = after
+				} else if before != nil && after == nil {
+					scheduleID := before.ScheduleID
+					if scheduleID != 0 {
 						if err := scheduledJobs.DeleteByID(
-							ctx, JobSchedulerEnv(sc.execCfg.JobsKnobs()),
-							scTable.GetRowLevelTTL().ScheduleID,
+							ctx, JobSchedulerEnv(jobsKnobs),
+							scheduleID,
 						); err != nil {
 							return err
 						}
 					}
-					scTable.RowLevelTTL = nil
+					scTable.RowLevelTTL = after
 				}
 			}
 
