@@ -767,7 +767,7 @@ func reserveRestoreWorkerMemory(
 // implement a mock SSTBatcher used purely for job progress tracking.
 type SSTBatcherExecutor interface {
 	AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error
-	Reset(ctx context.Context) error
+	Reset(ctx context.Context)
 	Flush(ctx context.Context) error
 	Close(ctx context.Context)
 	GetSummary() kvpb.BulkOpSummary
@@ -786,9 +786,7 @@ func (b *sstBatcherNoop) AddMVCCKey(ctx context.Context, key storage.MVCCKey, va
 }
 
 // Reset resets the counter
-func (b *sstBatcherNoop) Reset(ctx context.Context) error {
-	return nil
-}
+func (b *sstBatcherNoop) Reset(ctx context.Context) {}
 
 // Flush noops.
 func (b *sstBatcherNoop) Flush(ctx context.Context) error {

@@ -232,8 +232,8 @@ func MakeSSTBatcher(
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
-	err := b.Reset(ctx)
-	return b, err
+	b.Reset(ctx)
+	return b, nil
 }
 
 // MakeStreamSSTBatcher creates a batcher configured to ingest duplicate keys
@@ -258,8 +258,8 @@ func MakeStreamSSTBatcher(
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
 	b.SetOnFlush(onFlush)
-	err := b.Reset(ctx)
-	return b, err
+	b.Reset(ctx)
+	return b, nil
 }
 
 // MakeTestingSSTBatcher creates a batcher for testing, allowing setting options
@@ -281,8 +281,8 @@ func MakeTestingSSTBatcher(
 		mem:            mem,
 		limiter:        sendLimiter,
 	}
-	err := b.Reset(ctx)
-	return b, err
+	b.Reset(ctx)
+	return b, nil
 }
 
 func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
@@ -373,7 +373,7 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 }
 
 // Reset clears all state in the batcher and prepares it for reuse.
-func (b *SSTBatcher) Reset(ctx context.Context) error {
+func (b *SSTBatcher) Reset(ctx context.Context) {
 	b.sstWriter.Close()
 	b.sstFile = &storage.MemObject{}
 	// Create sstables intended for ingestion using the newest format that all
@@ -402,8 +402,6 @@ func (b *SSTBatcher) Reset(ctx context.Context) error {
 	if b.mu.totalStats.SendWaitByStore == nil {
 		b.mu.totalStats.SendWaitByStore = make(map[roachpb.StoreID]time.Duration)
 	}
-
-	return nil
 }
 
 const (
@@ -438,7 +436,8 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		if err := b.doFlush(ctx, rangeFlush); err != nil {
 			return err
 		}
-		return b.Reset(ctx)
+		b.Reset(ctx)
+		return nil
 	}
 
 	if b.sstWriter.DataSize >= ingestFileSize(b.settings) {
@@ -462,7 +461,8 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		if err := b.doFlush(ctx, sizeFlush); err != nil {
 			return err
 		}
-		return b.Reset(ctx)
+		b.Reset(ctx)
+		return nil
 	}
 	return nil
 }

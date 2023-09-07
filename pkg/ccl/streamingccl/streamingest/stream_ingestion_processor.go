@@ -1188,9 +1188,7 @@ func (sip *streamIngestionProcessor) flushBuffer(b flushableBuffer) (*jobspb.Res
 	sip.metrics.IngestedEvents.Inc(int64(len(b.buffer.curKVBatch)))
 	sip.metrics.IngestedEvents.Inc(int64(len(b.buffer.curRangeKVBatch)))
 
-	if err := sip.batcher.Reset(ctx); err != nil {
-		return b.checkpoint, err
-	}
+	sip.batcher.Reset(ctx)
 
 	releaseBuffer(b.buffer)
 
