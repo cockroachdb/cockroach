@@ -1887,14 +1887,8 @@ func handleTTLStorageParamChange(
 		}
 	}
 
-	// Add TTL mutation if TTL is newly SET.
-	addTTLMutation := before == nil && after != nil
-
 	// Create new column.
 	if (before == nil || !before.HasDurationExpr()) && (after != nil && after.HasDurationExpr()) {
-		// Adding a TTL requires adding the automatic column and deferring the TTL
-		// addition to after the column is successfully added.
-		addTTLMutation = true
 		if catalog.FindColumnByName(tableDesc, catpb.TTLDefaultExpirationColumnName) != nil {
 			return false, pgerror.Newf(
 				pgcode.InvalidTableDefinition,
@@ -1929,21 +1923,9 @@ func handleTTLStorageParamChange(
 		}
 	}
 
-	// Add TTL mutation so that job is scheduled in SchemaChanger.
-	if addTTLMutation {
-		tableDesc.AddModifyRowLevelTTLMutation(
-			&descpb.ModifyRowLevelTTL{RowLevelTTL: after},
-			descpb.DescriptorMutation_ADD,
-		)
-	}
-
-	dropTTLMutation := before != nil && after == nil
-
 	// Remove existing column.
 	if (before != nil && before.HasDurationExpr()) && (after == nil || !after.HasDurationExpr()) {
 		telemetry.Inc(sqltelemetry.RowLevelTTLDropped)
-		// Create the DROP COLUMN job and the associated mutation.
-		dropTTLMutation = true
 		droppedViews, err := dropColumnImpl(params, tn, tableDesc, after, &tree.AlterTableDropColumn{
 			Column: catpb.TTLDefaultExpirationColumnName,
 		})
@@ -1956,10 +1938,22 @@ func handleTTLStorageParamChange(
 		}
 	}
 
-	if dropTTLMutation {
+	// Adding TTL requires adding the TTL job before adding the TTL fields.
+	// Removing TTL requires removing the TTL job before removing the TTL fields.
+	var direction descpb.DescriptorMutation_Direction
+	switch {
+	case before == nil && after != nil:
+		direction = descpb.DescriptorMutation_ADD
+	case before != nil && after == nil:
+		direction = descpb.DescriptorMutation_DROP
+	default:
+		descriptorChanged = true
+	}
+	if !descriptorChanged {
+		// Add TTL mutation so that job is scheduled in SchemaChanger.
 		tableDesc.AddModifyRowLevelTTLMutation(
 			&descpb.ModifyRowLevelTTL{RowLevelTTL: after},
-			descpb.DescriptorMutation_DROP,
+			direction,
 		)
 	}
 
@@ -1973,7 +1967,7 @@ func handleTTLStorageParamChange(
 		}
 	}
 
-	descriptorChanged = !addTTLMutation && !dropTTLMutation
+	// Modify the TTL fields here because it will not be done in a mutation.
 	if descriptorChanged {
 		tableDesc.RowLevelTTL = after
 	}
