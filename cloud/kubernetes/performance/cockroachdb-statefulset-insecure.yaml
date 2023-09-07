@@ -1,4 +1,4 @@
-# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/performance/cockroachdb-statefulset-insecure.yaml
+# Generated file, DO NOT EDIT. Source: cockroachdb_cockroach_master/cloud/kubernetes/templates/performance/cockroachdb-statefulset-insecure.yaml
 # This configuration file sets up an insecure StatefulSet running CockroachDB with
 # tweaks to make it more performant than our default configuration files. All
 # changes from the default insecure configuration have been marked with a comment
@@ -141,7 +141,7 @@ spec:
       - name: cockroachdb
         # NOTE: Always use the most recent version of CockroachDB for the best
         # performance and reliability.
-        image: cockroachdb/cockroach:v23.1.8
+        image: cockroachdb/cockroach:v23.1.9
         imagePullPolicy: IfNotPresent
         # TODO: Change these to appropriate values for the hardware that you're running. You can see
         # the resources that can be allocated on each of your Kubernetes nodes by running:

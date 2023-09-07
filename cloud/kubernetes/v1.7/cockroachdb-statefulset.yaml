@@ -1,4 +1,4 @@
-# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/v1.7/cockroachdb-statefulset.yaml
+# Generated file, DO NOT EDIT. Source: cockroachdb_cockroach_master/cloud/kubernetes/templates/v1.7/cockroachdb-statefulset.yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -93,7 +93,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v23.1.8
+        image: cockroachdb/cockroach:v23.1.9
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 26257
