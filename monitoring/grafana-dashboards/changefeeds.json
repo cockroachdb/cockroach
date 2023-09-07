@@ -9,6 +9,84 @@
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
         "type": "dashboard"
+      },
+      {
+        "datasource": "CockroachDB",
+        "enable": true,
+        "iconColor": "green",
+        "name": "Schema Changes",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT timestamp AS time, \"eventType\" AS title, info :: JSONB ->> 'Statement' AS text, encode(\"uniqueID\", 'hex') AS id, 'schema change' AS tags FROM system.eventlog WHERE \"eventType\" LIKE ANY(${ddl_event_types:csv}) ORDER BY timestamp LIMIT 500;",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": "CockroachDB",
+        "enable": true,
+        "iconColor": "yellow",
+        "name": "Cluster Settings",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT timestamp AS time, \"eventType\" AS title, info :: JSONB ->> 'Statement' AS text, encode(\"uniqueID\", 'hex') AS id, 'cluster setting' AS tags FROM system.eventlog WHERE \"eventType\" LIKE ANY(${cluster_setting_event_types:csv}) ORDER BY timestamp LIMIT 500;",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": "CockroachDB",
+        "enable": false,
+        "iconColor": "purple",
+        "name": "Cluster-wide Events",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT timestamp AS time, \"eventType\" AS title, concat('Reporting node ID: ', \"reportingID\"::STRING) AS text, encode(\"uniqueID\", 'hex') AS id, 'cluster-wide event' AS tags FROM system.eventlog WHERE \"eventType\" LIKE ANY(${cluster_wide_event_types:csv}) ORDER BY timestamp LIMIT 500;",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": "CockroachDB",
+        "enable": false,
+        "iconColor": "blue",
+        "name": "Jobs",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT timestamp AS time, \"eventType\" AS title, info :: JSONB ->> 'Description' AS text, encode(\"uniqueID\", 'hex') AS id, 'job' AS tags FROM system.eventlog WHERE \"eventType\" LIKE ANY(${job_event_types:csv}) ORDER BY timestamp LIMIT 500;",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": "CockroachDB",
+        "enable": false,
+        "iconColor": "orange",
+        "name": "SQL Session Events",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT timestamp AS time, \"eventType\" AS title, concat('SQL client remote address: ', info :: JSONB ->> 'RemoteAddress') AS text, encode(\"uniqueID\", 'hex') AS id, 'SQL session event' AS tags FROM system.eventlog WHERE \"eventType\" LIKE ANY(${sql_session_event_types:csv}) ORDER BY timestamp LIMIT 500;",
+          "refId": "Anno"
+        }
+      },
+      {
+        "datasource": "CockroachDB",
+        "enable": false,
+        "iconColor": "red",
+        "name": "Zone Configurations",
+        "target": {
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT timestamp AS time, \"eventType\" AS title, info :: JSONB ->> 'Statement' AS text, encode(\"uniqueID\", 'hex') AS id, 'zone configurations' AS tags FROM system.eventlog WHERE \"eventType\" LIKE ANY(${zone_config_event_types:csv}) ORDER BY timestamp LIMIT 500;",
+          "refId": "Anno"
+        }
       }
     ]
   },
@@ -666,6 +744,126 @@
         "refresh": 2,
         "skipUrlSync": false,
         "type": "interval"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "'alter_database_add_region', 'alter_database_drop_region', 'alter_database_placement', 'alter_database_primary_region', 'alter_database_set_zone_config_extension', 'alter_database_survival_goal', 'alter_function_options', 'alter_index', 'alter_index_visible', 'alter_sequence', 'alter_table', 'alter_type', 'comment_on_column', 'comment_on_constraint', 'comment_on_database', 'comment_on_index', 'comment_on_schema', 'comment_on_table', 'convert_to_schema', 'create_database', 'create_function', 'create_index', 'create_schema', 'create_sequence', 'create_statistics', 'create_table', 'create_type', 'create_view', 'drop_database', 'drop_function', 'drop_index', 'drop_schema', 'drop_sequence', 'drop_table', 'drop_type', 'drop_view', 'finish_schema_change', 'finish_schema_change_rollback', 'force_delete_table_data_entry', 'rename_database', 'rename_function', 'rename_schema', 'rename_table', 'rename_type', 'reverse_schema_change', 'set_schema', 'truncate_table', 'unsafe_delete_descriptor', 'unsafe_delete_namespace_entry', 'unsafe_upsert_descriptor', 'unsafe_upsert_namespace_entry'",
+          "value": "'alter_database_add_region', 'alter_database_drop_region', 'alter_database_placement', 'alter_database_primary_region', 'alter_database_set_zone_config_extension', 'alter_database_survival_goal', 'alter_function_options', 'alter_index', 'alter_index_visible', 'alter_sequence', 'alter_table', 'alter_type', 'comment_on_column', 'comment_on_constraint', 'comment_on_database', 'comment_on_index', 'comment_on_schema', 'comment_on_table', 'convert_to_schema', 'create_database', 'create_function', 'create_index', 'create_schema', 'create_sequence', 'create_statistics', 'create_table', 'create_type', 'create_view', 'drop_database', 'drop_function', 'drop_index', 'drop_schema', 'drop_sequence', 'drop_table', 'drop_type', 'drop_view', 'finish_schema_change', 'finish_schema_change_rollback', 'force_delete_table_data_entry', 'rename_database', 'rename_function', 'rename_schema', 'rename_table', 'rename_type', 'reverse_schema_change', 'set_schema', 'truncate_table', 'unsafe_delete_descriptor', 'unsafe_delete_namespace_entry', 'unsafe_upsert_descriptor', 'unsafe_upsert_namespace_entry'"
+        },
+        "description": "The list of event types for DDL statements.",
+        "hide": 2,
+        "name": "ddl_event_types",
+        "options": [
+          {
+            "selected": true,
+            "text": "'alter_database_add_region', 'alter_database_drop_region', 'alter_database_placement', 'alter_database_primary_region', 'alter_database_set_zone_config_extension', 'alter_database_survival_goal', 'alter_function_options', 'alter_index', 'alter_index_visible', 'alter_sequence', 'alter_table', 'alter_type', 'comment_on_column', 'comment_on_constraint', 'comment_on_database', 'comment_on_index', 'comment_on_schema', 'comment_on_table', 'convert_to_schema', 'create_database', 'create_function', 'create_index', 'create_schema', 'create_sequence', 'create_statistics', 'create_table', 'create_type', 'create_view', 'drop_database', 'drop_function', 'drop_index', 'drop_schema', 'drop_sequence', 'drop_table', 'drop_type', 'drop_view', 'finish_schema_change', 'finish_schema_change_rollback', 'force_delete_table_data_entry', 'rename_database', 'rename_function', 'rename_schema', 'rename_table', 'rename_type', 'reverse_schema_change', 'set_schema', 'truncate_table', 'unsafe_delete_descriptor', 'unsafe_delete_namespace_entry', 'unsafe_upsert_descriptor', 'unsafe_upsert_namespace_entry'",
+            "value": "'alter_database_add_region', 'alter_database_drop_region', 'alter_database_placement', 'alter_database_primary_region', 'alter_database_set_zone_config_extension', 'alter_database_survival_goal', 'alter_function_options', 'alter_index', 'alter_index_visible', 'alter_sequence', 'alter_table', 'alter_type', 'comment_on_column', 'comment_on_constraint', 'comment_on_database', 'comment_on_index', 'comment_on_schema', 'comment_on_table', 'convert_to_schema', 'create_database', 'create_function', 'create_index', 'create_schema', 'create_sequence', 'create_statistics', 'create_table', 'create_type', 'create_view', 'drop_database', 'drop_function', 'drop_index', 'drop_schema', 'drop_sequence', 'drop_table', 'drop_type', 'drop_view', 'finish_schema_change', 'finish_schema_change_rollback', 'force_delete_table_data_entry', 'rename_database', 'rename_function', 'rename_schema', 'rename_table', 'rename_type', 'reverse_schema_change', 'set_schema', 'truncate_table', 'unsafe_delete_descriptor', 'unsafe_delete_namespace_entry', 'unsafe_upsert_descriptor', 'unsafe_upsert_namespace_entry'"
+          }
+        ],
+        "query": "'alter_database_add_region', 'alter_database_drop_region', 'alter_database_placement', 'alter_database_primary_region', 'alter_database_set_zone_config_extension', 'alter_database_survival_goal', 'alter_function_options', 'alter_index', 'alter_index_visible', 'alter_sequence', 'alter_table', 'alter_type', 'comment_on_column', 'comment_on_constraint', 'comment_on_database', 'comment_on_index', 'comment_on_schema', 'comment_on_table', 'convert_to_schema', 'create_database', 'create_function', 'create_index', 'create_schema', 'create_sequence', 'create_statistics', 'create_table', 'create_type', 'create_view', 'drop_database', 'drop_function', 'drop_index', 'drop_schema', 'drop_sequence', 'drop_table', 'drop_type', 'drop_view', 'finish_schema_change', 'finish_schema_change_rollback', 'force_delete_table_data_entry', 'rename_database', 'rename_function', 'rename_schema', 'rename_table', 'rename_type', 'reverse_schema_change', 'set_schema', 'truncate_table', 'unsafe_delete_descriptor', 'unsafe_delete_namespace_entry', 'unsafe_upsert_descriptor', 'unsafe_upsert_namespace_entry'",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "'set_cluster_setting', 'set_tenant_cluster_setting'",
+          "value": "'set_cluster_setting', 'set_tenant_cluster_setting'"
+        },
+        "description": "The list of event types for cluster settings.",
+        "hide": 2,
+        "name": "cluster_setting_event_types",
+        "options": [
+          {
+            "selected": true,
+            "text": "'set_cluster_setting', 'set_tenant_cluster_setting'",
+            "value": "'set_cluster_setting', 'set_tenant_cluster_setting'"
+          }
+        ],
+        "query": "'set_cluster_setting', 'set_tenant_cluster_setting'",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "'certs_reload',   'node_decommissioned',   'node_decommissioning',   'node_join',   'node_recommissioned',   'node_restart'",
+          "value": "'certs_reload',   'node_decommissioned',   'node_decommissioning',   'node_join',   'node_recommissioned',   'node_restart'"
+        },
+        "description": "The list of event types for cluster-wide events.",
+        "hide": 2,
+        "name": "cluster_wide_event_types",
+        "options": [
+          {
+            "selected": true,
+            "text": "'certs_reload',   'node_decommissioned',   'node_decommissioning',   'node_join',   'node_recommissioned',   'node_restart'",
+            "value": "'certs_reload',   'node_decommissioned',   'node_decommissioning',   'node_join',   'node_recommissioned',   'node_restart'"
+          }
+        ],
+        "query": "'certs_reload',   'node_decommissioned',   'node_decommissioning',   'node_join',   'node_recommissioned',   'node_restart'",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "'import', 'restore'",
+          "value": "'import', 'restore'"
+        },
+        "description": "The list of event types for jobs.",
+        "hide": 2,
+        "name": "job_event_types",
+        "options": [
+          {
+            "selected": true,
+            "text": "'import', 'restore'",
+            "value": "'import', 'restore'"
+          }
+        ],
+        "query": "'import', 'restore'",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "'client_authentication_failed',   'client_authentication_info',   'client_authentication_ok',   'client_connection_end',   'client_connection_start',   'client_session_end'",
+          "value": "'client_authentication_failed',   'client_authentication_info',   'client_authentication_ok',   'client_connection_end',   'client_connection_start',   'client_session_end'"
+        },
+        "description": "The list of event types for SQL session events.",
+        "hide": 2,
+        "name": "sql_session_event_types",
+        "options": [
+          {
+            "selected": true,
+            "text": "'client_authentication_failed',   'client_authentication_info',   'client_authentication_ok',   'client_connection_end',   'client_connection_start',   'client_session_end'",
+            "value": "'client_authentication_failed',   'client_authentication_info',   'client_authentication_ok',   'client_connection_end',   'client_connection_start',   'client_session_end'"
+          }
+        ],
+        "query": "'client_authentication_failed',   'client_authentication_info',   'client_authentication_ok',   'client_connection_end',   'client_connection_start',   'client_session_end'",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "'set_zone_config', 'remove_zone_config'",
+          "value": "'set_zone_config', 'remove_zone_config'"
+        },
+        "description": "The list of event types for zone configurations.",
+        "hide": 2,
+        "name": "zone_config_event_types",
+        "options": [
+          {
+            "selected": true,
+            "text": "'set_zone_config', 'remove_zone_config'",
+            "value": "'set_zone_config', 'remove_zone_config'"
+          }
+        ],
+        "query": "'set_zone_config', 'remove_zone_config'",
+        "skipUrlSync": false,
+        "type": "textbox"
       }
     ]
   },

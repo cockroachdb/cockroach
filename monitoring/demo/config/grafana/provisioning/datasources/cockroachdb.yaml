@@ -1,0 +1,19 @@
+# This file defines the connection information that Grafana uses to connect to
+# your cluster and query the system.eventlog table. In its current
+# configuration, the Grafana demo dashboards will use this data source to show
+# annotations for several categories of structured events.
+apiVersion: 1
+
+datasources:
+  - name: CockroachDB
+    type: postgres
+    url: roach1:26257
+    user: root
+    jsonData:
+      database: system
+      sslmode: 'disable' # disable/require/verify-ca/verify-full
+      maxOpenConns: 0 # Grafana v5.4+
+      maxIdleConns: 2 # Grafana v5.4+
+      connMaxLifetime: 14400 # Grafana v5.4+
+      postgresVersion: 903 # 903=9.3, 904=9.4, 905=9.5, 906=9.6, 1000=10
+      timescaledb: false
