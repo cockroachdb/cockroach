@@ -372,3 +372,45 @@ SELECT * FROM d.t@b_idx   = %s
 		})
 	}
 }
+
+// TODO(mgartner): This probably belongs in another test file, like
+// insert_test.go.
+func TestConcurrentInsertCreateIndexDuplicateKeyViolation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	// Setup a database and table.
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (a INT, b INT, PRIMARY KEY(a, b))`)
+
+	// Define the index to create and the inserts to perform concurrently.
+	createIndexStmt := `CREATE INDEX ON d.t (b) WHERE a = 1`
+	insertStmt := `INSERT INTO d.t VALUES ($1, 2)`
+	const numInserts = 1000
+
+	g, _ := errgroup.WithContext(context.Background())
+	g.Go(func() error {
+		// Perform the inserts.
+		for i := 0; i < numInserts; i++ {
+			_ = sqlDB.QueryStr(t, insertStmt, i)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		// Let the INSERTs start before the CREATE INDEX is executed.
+		time.Sleep(500 * time.Microsecond)
+		if _, err := sqlDB.DB.ExecContext(ctx, createIndexStmt); err != nil {
+			// The CREATE INDEX statement should not fail with a duplicate key
+			// violation.
+			return err
+		}
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		t.Fatalf("%+v", err)
+	}
+}
