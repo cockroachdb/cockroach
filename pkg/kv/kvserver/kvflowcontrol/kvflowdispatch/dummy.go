@@ -35,6 +35,8 @@ func (d *dummy) PendingDispatch() []roachpb.NodeID {
 	return nil
 }
 
-func (d *dummy) PendingDispatchFor(id roachpb.NodeID) []kvflowcontrolpb.AdmittedRaftLogEntries {
-	return nil
+func (d *dummy) PendingDispatchFor(
+	nodeID roachpb.NodeID, maxBytes int64,
+) ([]kvflowcontrolpb.AdmittedRaftLogEntries, int) {
+	return nil, 0
 }

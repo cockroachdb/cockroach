@@ -129,6 +129,16 @@ var FlowTokenDispatchInterval = settings.RegisterDurationSetting(
 	settings.PositiveDuration, settings.NonNegativeDurationWithMaximum(time.Minute),
 )
 
+// FlowTokenDispatchMaxBytes determines the maximum number of bytes of dispatch
+// messages that are annotated onto a single RaftTransport message.
+var FlowTokenDispatchMaxBytes = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_control.dispatch.max_bytes",
+	"limits the size of flow control dispatch messages being attached to a single raft message",
+	64<<20,                         // 64 MB
+	settings.IntWithMinimum(1<<20), // 1 MB
+)
+
 // ConnectedStoreExpiration controls how long the RaftTransport layers considers
 // a stream connected without it having observed any messages from it.
 var ConnectedStoreExpiration = settings.RegisterDurationSetting(
