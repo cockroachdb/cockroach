@@ -44,7 +44,11 @@ func CountLeases(
 		leaseDescs = append(leaseDescs, systemschema.LeaseTable())
 	}
 	if usesExpiry {
-		leaseDescs = append(leaseDescs, systemschema.V23_1_LeaseTable())
+		if activeVersion.IsActive(ctx, clusterversion.V23_1_SystemRbrReadNew) {
+			leaseDescs = append(leaseDescs, systemschema.V23_1_LeaseTable())
+		} else {
+			leaseDescs = append(leaseDescs, systemschema.V22_2_LeaseTable())
+		}
 	}
 	var whereClauses [2][]string
 	for _, t := range versions {
