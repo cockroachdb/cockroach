@@ -55,13 +55,25 @@ func TestExportCmd(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109429),
-		ExternalIODir:     dir,
+		ExternalIODir: dir,
 	})
 	defer srv.Stopper().Stop(ctx)
 	ts := srv.ApplicationLayer()
 
+	sysDB := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t, ""))
+
 	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
+
+	// sKey takes a string key and makes a key, adding a tenant prefix if needed.
+	sKey := func(s string) roachpb.Key {
+		if ts.Codec().ForSystemTenant() {
+			return []byte(s)
+		}
+		if s == keys.MaxKey.String() {
+			return ts.Codec().TenantSpan().EndKey
+		}
+		return []byte(ts.Codec().TenantSpan().Key.String() + s)
+	}
 
 	export := func(
 		t *testing.T, start hlc.Timestamp, mvccFilter kvpb.MVCCFilter, maxResponseSSTBytes int64,
@@ -194,7 +206,7 @@ func TestExportCmd(t *testing.T) {
 	)
 	var (
 		setSetting = func(t *testing.T, variable, val string) {
-			sqlDB.Exec(t, "SET CLUSTER SETTING "+variable+" = "+val)
+			sysDB.Exec(t, "SET CLUSTER SETTING "+variable+" = "+val)
 		}
 		resetSetting = func(t *testing.T, variable string) {
 			setSetting(t, variable, "DEFAULT")
@@ -299,7 +311,7 @@ INTO
 		// the max overage being exceeded.
 		defer resetMaxOverage(t)
 		setMaxOverage(t, "'1b'")
-		const expectedError = `export size \(11 bytes\) exceeds max size \(2 bytes\)`
+		const expectedError = `export size \(\d\d bytes\) exceeds max size \(2 bytes\)`
 		_, pErr := export(t, res5.end, kvpb.MVCCFilter_Latest, noTargetBytes)
 		require.Regexp(t, expectedError, pErr)
 		hints := errors.GetAllHints(pErr.GoError())
@@ -320,6 +332,8 @@ INTO
 	t.Run("ts7", func(t *testing.T) {
 		var maxResponseSSTBytes int64
 		kvByteSize := int64(11)
+		kvByteSize += int64(len(ts.Codec().TenantPrefix()))
+
 		// Because of the above split, there are going to be two ExportRequests by
 		// the DistSender. One for the first KV and the next one for the remaining
 		// KVs.
@@ -350,20 +364,21 @@ INTO
 		expect(t, res7, 1, 1, 1, 1)
 		latestRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/2", tableID)),
-				EndKey: []byte("/Max"),
+				Key:    sKey(fmt.Sprintf("/Table/%d/1/2", tableID)),
+				EndKey: sKey("/Max"),
 			},
 			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		allRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/2", tableID)),
-				EndKey: []byte("/Max"),
+				Key:    sKey(fmt.Sprintf("/Table/%d/1/2", tableID)),
+				EndKey: sKey("/Max"),
 			},
 			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
+
 		expectResponseHeader(t, res7, latestRespHeader, allRespHeader)
 
 		// TargetSize to one KV and TargetBytes to two KVs. We should see one KV in
@@ -374,16 +389,16 @@ INTO
 		expect(t, res7, 2, 2, 2, 2)
 		latestRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/3/0", tableID)),
-				EndKey: []byte("/Max"),
+				Key:    sKey(fmt.Sprintf("/Table/%d/1/3/0", tableID)),
+				EndKey: sKey("/Max"),
 			},
 			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		allRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/3/0", tableID)),
-				EndKey: []byte("/Max"),
+				Key:    sKey(fmt.Sprintf("/Table/%d/1/3/0", tableID)),
+				EndKey: sKey("/Max"),
 			},
 			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
@@ -397,16 +412,16 @@ INTO
 		expect(t, res7, 99, 99, 99, 99)
 		latestRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/100/0", tableID)),
-				EndKey: []byte("/Max"),
+				Key:    sKey(fmt.Sprintf("/Table/%d/1/100/0", tableID)),
+				EndKey: sKey("/Max"),
 			},
 			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
 		}
 		allRespHeader = kvpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/100/0", tableID)),
-				EndKey: []byte("/Max"),
+				Key:    sKey(fmt.Sprintf("/Table/%d/1/100/0", tableID)),
+				EndKey: sKey("/Max"),
 			},
 			ResumeReason: kvpb.RESUME_BYTE_LIMIT,
 			NumBytes:     maxResponseSSTBytes,
