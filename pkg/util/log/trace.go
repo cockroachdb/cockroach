@@ -34,11 +34,11 @@ type ctxEventLog struct {
 
 func (el *ctxEventLog) finish() {
 	el.Lock()
+	defer el.Unlock()
 	if el.eventLog != nil {
 		el.eventLog.Finish()
 		el.eventLog = nil
 	}
-	el.Unlock()
 }
 
 func embedCtxEventLog(ctx context.Context, el *ctxEventLog) context.Context {

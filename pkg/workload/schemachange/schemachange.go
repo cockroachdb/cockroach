@@ -675,7 +675,7 @@ func (l *logger) flushLogWithError(tx pgx.Tx, err error) {
 	}()
 
 	l.flushLogAndLock(tx, err.Error(), true)
-	l.currentLogEntry.mu.Unlock()
+	defer l.currentLogEntry.mu.Unlock()
 }
 
 // flushLog outputs the currentLogEntry of the schemaChangeWorker.
@@ -685,7 +685,7 @@ func (l *logger) flushLog(tx pgx.Tx, message string) {
 		return
 	}
 	l.flushLogAndLock(tx, message, true)
-	l.currentLogEntry.mu.Unlock()
+	defer l.currentLogEntry.mu.Unlock()
 }
 
 // flushLogAndLock prints the currentLogEntry of the schemaChangeWorker and does not release

@@ -480,9 +480,9 @@ func (l *sinkInfo) describeAppliedConfig() (c logconfig.CommonSinkConfig) {
 		c.Buffering.FlushTriggerSize = &triggerSize
 		c.Buffering.Format = &bufferedSink.format.fmtType
 		bufferedSink.mu.Lock()
+		defer bufferedSink.mu.Unlock()
 		maxBufferSize := logconfig.ByteSize(bufferedSink.mu.buf.maxSizeBytes)
 		c.Buffering.MaxBufferSize = &maxBufferSize
-		bufferedSink.mu.Unlock()
 	}
 	return c
 }
@@ -505,9 +505,11 @@ func DescribeAppliedConfig() string {
 	if logging.testingFd2CaptureLogger != nil {
 		config.CaptureFd2.Enable = true
 		fs := logging.testingFd2CaptureLogger.sinkInfos[0].sink.(*fileSink)
-		fs.mu.Lock()
-		dir := fs.mu.logDir
-		fs.mu.Unlock()
+		dir := func() string {
+			fs.mu.Lock()
+			defer fs.mu.Unlock()
+			return fs.mu.logDir
+		}()
 		config.CaptureFd2.Dir = &dir
 		m := logconfig.ByteSize(fs.logFilesCombinedMaxSize)
 		config.CaptureFd2.MaxGroupSize = &m
@@ -529,10 +531,12 @@ func DescribeAppliedConfig() string {
 	}
 
 	// Describe the connections to the stderr sink.
-	logging.rmu.RLock()
-	chans := logging.rmu.channels
-	stderrSinkInfo := logging.rmu.currentStderrSinkInfo
-	logging.rmu.RUnlock()
+
+	chans, stderrSinkInfo := func() (map[logpb.Channel]*loggerT, *sinkInfo) {
+		logging.rmu.RLock()
+		defer logging.rmu.RUnlock()
+		return logging.rmu.channels, logging.rmu.currentStderrSinkInfo
+	}()
 	for ch, logger := range chans {
 		describeConnections(logger, ch,
 			stderrSinkInfo, &config.Sinks.Stderr.Channels)
@@ -556,9 +560,11 @@ func DescribeAppliedConfig() string {
 		fc.MaxFileSize = &mf
 		mg := logconfig.ByteSize(fileSink.logFilesCombinedMaxSize)
 		fc.MaxGroupSize = &mg
-		fileSink.mu.Lock()
-		dir := fileSink.mu.logDir
-		fileSink.mu.Unlock()
+		dir := func() string {
+			fileSink.mu.Lock()
+			defer fileSink.mu.Unlock()
+			return fileSink.mu.logDir
+		}()
 		fc.Dir = &dir
 		fc.BufferedWrites = &fileSink.bufferedWrites
 

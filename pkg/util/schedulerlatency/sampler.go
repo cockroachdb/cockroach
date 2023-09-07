@@ -147,9 +147,11 @@ func StartSampler(
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-ticker.C:
-				settingsValuesMu.Lock()
-				period := settingsValuesMu.period
-				settingsValuesMu.Unlock()
+				period := func() time.Duration {
+					settingsValuesMu.Lock()
+					defer settingsValuesMu.Unlock()
+					return settingsValuesMu.period
+				}()
 				s.sampleOnTickAndInvokeCallbacks(period)
 			}
 		}
@@ -175,6 +177,7 @@ func newSampler(period, duration time.Duration, listener LatencyObserver) *sampl
 
 func (s *sampler) setPeriodAndDuration(period, duration time.Duration) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.mu.ringBuffer.Discard()
 	numSamples := int(duration / period)
 	if numSamples < 1 {
@@ -182,7 +185,6 @@ func (s *sampler) setPeriodAndDuration(period, duration time.Duration) {
 	}
 	s.mu.ringBuffer.Resize(numSamples)
 	s.mu.lastIntervalHistogram = nil
-	s.mu.Unlock()
 }
 
 // sampleOnTickAndInvokeCallbacks samples scheduler latency stats as the ticker

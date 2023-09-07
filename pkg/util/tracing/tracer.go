@@ -453,14 +453,9 @@ func (r *SpanRegistry) getSpanByID(id tracingpb.SpanID) RegistrySpan {
 // The callback should not hold on to the span after it returns.
 func (r *SpanRegistry) VisitRoots(visitor func(span RegistrySpan) error) error {
 	// Take a snapshot of the registry and release the lock.
-	r.mu.Lock()
-	spans := make([]spanRef, 0, len(r.mu.m))
-	for _, sp := range r.mu.m {
-		// We'll keep the spans alive while we're visiting them below.
-		spans = append(spans, makeSpanRef(sp.sp))
-	}
-	r.mu.Unlock()
+	spans := r.getSpanRefs()
 
+	// Keep the spans alive while visting them below.
 	defer func() {
 		for i := range spans {
 			spans[i].release()
@@ -489,14 +484,9 @@ func visitTrace(sp *crdbSpan, visitor func(sp RegistrySpan)) {
 // The callback should not hold on to the span after it returns.
 func (r *SpanRegistry) VisitSpans(visitor func(span RegistrySpan)) {
 	// Take a snapshot of the registry and release the lock.
-	r.mu.Lock()
-	spans := make([]spanRef, 0, len(r.mu.m))
-	for _, sp := range r.mu.m {
-		// We'll keep the spans alive while we're visiting them below.
-		spans = append(spans, makeSpanRef(sp.sp))
-	}
-	r.mu.Unlock()
+	spans := r.getSpanRefs()
 
+	// Keep the spans alive while visting them below.
 	defer func() {
 		for i := range spans {
 			spans[i].release()
@@ -506,6 +496,18 @@ func (r *SpanRegistry) VisitSpans(visitor func(span RegistrySpan)) {
 	for _, sp := range spans {
 		visitTrace(sp.Span.i.crdb, visitor)
 	}
+}
+
+// getSpanRefs collects references to all spans in the SpanRegistry map and
+// returns a slice of them.
+func (r *SpanRegistry) getSpanRefs() []spanRef {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	spans := make([]spanRef, 0, len(r.mu.m))
+	for _, sp := range r.mu.m {
+		spans = append(spans, makeSpanRef(sp.sp))
+	}
+	return spans
 }
 
 // testingAll returns (pointers to) all the spans in the registry, in an
@@ -1038,14 +1040,16 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 	// Nobody is supposed to have a reference to the span at this point, but let's
 	// take the lock anyway to protect against buggy clients accessing the span
 	// after Finish().
-	c.mu.Lock()
-	c.mu.openChildren = nil
-	c.mu.recording.finishedChildren = Trace{}
-	c.mu.tags = nil
-	c.mu.lazyTags = nil
-	c.mu.recording.logs.Discard()
-	c.mu.recording.structured.Discard()
-	c.mu.Unlock()
+	func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.mu.openChildren = nil
+		c.mu.recording.finishedChildren = Trace{}
+		c.mu.tags = nil
+		c.mu.lazyTags = nil
+		c.mu.recording.logs.Discard()
+		c.mu.recording.structured.Discard()
+	}()
 
 	// Zero out the spanAllocHelper buffers to make the elements inside the
 	// arrays, if any, available for GC.
