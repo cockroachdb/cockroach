@@ -70,6 +70,9 @@ type AuthorizationAccessor interface {
 	// HasAdminRole mirrors sql.AuthorizationAccessor.
 	HasAdminRole(ctx context.Context) (bool, error)
 
+	// HasGlobalPrivilegeOrRoleOption mirrors sql.AuthorizationAccessor.
+	HasGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind) (bool, error)
+
 	// User mirrors sql.PlanHookState.
 	User() username.SQLUsername
 }
@@ -101,7 +104,7 @@ func Authorize(
 		return nil
 	}
 
-	hasControlJob, err := a.HasRoleOption(ctx, roleoption.CONTROLJOB)
+	hasControlJob, err := a.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CONTROLJOB)
 	if err != nil {
 		return err
 	}

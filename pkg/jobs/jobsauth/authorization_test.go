@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -36,6 +37,8 @@ type userPrivilege struct {
 }
 
 var viewJobGlobalPrivilege = userPrivilege{privilege.VIEWJOB, privilege.Global}
+
+var controlJobGlobalPrivilege = userPrivilege{privilege.CONTROLJOB, privilege.Global}
 
 type testAuthAccessor struct {
 	user username.SQLUsername
@@ -112,6 +115,22 @@ func (a *testAuthAccessor) HasAdminRole(ctx context.Context) (bool, error) {
 	return ok, nil
 }
 
+func (a *testAuthAccessor) HasGlobalPrivilegeOrRoleOption(
+	ctx context.Context, privilege privilege.Kind,
+) (bool, error) {
+	ok, err := a.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege, a.User())
+	if err != nil {
+		return false, err
+	}
+	if ok {
+		return true, nil
+	}
+	if roleOption, ok := roleoption.ByName[privilege.String()]; ok {
+		return a.HasRoleOption(ctx, roleOption)
+	}
+	return false, nil
+}
+
 func (a *testAuthAccessor) User() username.SQLUsername {
 	return a.user
 }
@@ -157,7 +176,7 @@ func TestAuthorization(t *testing.T) {
 		userErr     error
 	}{
 		{
-			name: "controljob-sufficient-for-non-admin-jobs",
+			name: "controljob-role-option-sufficient-for-non-admin-jobs",
 
 			user: username.MakeSQLUsernameFromPreNormalizedString("user1"),
 			roleOptions: map[roleoption.Option]struct{}{
@@ -168,7 +187,7 @@ func TestAuthorization(t *testing.T) {
 			accessLevel: jobsauth.ControlAccess,
 		},
 		{
-			name: "controljob-sufficient-to-view-admin-jobs",
+			name: "controljob-role-option-sufficient-to-view-admin-jobs",
 			user: username.MakeSQLUsernameFromPreNormalizedString("user1"),
 			roleOptions: map[roleoption.Option]struct{}{
 				roleoption.CONTROLJOB: {},
@@ -261,6 +280,27 @@ func TestAuthorization(t *testing.T) {
 			payload:     makeBackupPayload("user2"),
 			accessLevel: jobsauth.ControlAccess,
 			userErr:     pgerror.New(pgcode.InsufficientPrivilege, "foo"),
+		},
+		{
+			name: "controljob-system-privilege-sufficient-for-non-admin-jobs",
+
+			user: username.MakeSQLUsernameFromPreNormalizedString("user1"),
+			userPrivileges: map[userPrivilege]struct{}{
+				controlJobGlobalPrivilege: {},
+			},
+			admins:      map[string]struct{}{},
+			payload:     makeBackupPayload("user2"),
+			accessLevel: jobsauth.ControlAccess,
+		},
+		{
+			name: "controljob-system-privilege-sufficient-to-view-admin-jobs",
+			user: username.MakeSQLUsernameFromPreNormalizedString("user1"),
+			userPrivileges: map[userPrivilege]struct{}{
+				controlJobGlobalPrivilege: {},
+			},
+			admins:      map[string]struct{}{"user2": {}},
+			payload:     makeBackupPayload("user2"),
+			accessLevel: jobsauth.ViewAccess,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
