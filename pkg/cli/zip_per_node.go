@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -219,43 +220,47 @@ func (zc *debugZipContext) collectPerNodeData(
 		}
 	}
 
-	var stacksData []byte
-	s := nodePrinter.start("requesting stacks")
-	requestErr := zc.runZipFn(ctx, s,
-		func(ctx context.Context) error {
-			stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
-				NodeId: id,
-				Type:   serverpb.StacksType_GOROUTINE_STACKS,
+	if zipCtx.includeStacks {
+		var stacksData []byte
+		s := nodePrinter.start("requesting stacks")
+		requestErr := zc.runZipFn(ctx, s,
+			func(ctx context.Context) error {
+				stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
+					NodeId: id,
+					Type:   serverpb.StacksType_GOROUTINE_STACKS,
+				})
+				if err == nil {
+					stacksData = stacks.Data
+				}
+				return err
 			})
-			if err == nil {
-				stacksData = stacks.Data
-			}
+		if err := zc.z.createRawOrError(s, prefix+"/stacks.txt", stacksData, requestErr); err != nil {
 			return err
-		})
-	if err := zc.z.createRawOrError(s, prefix+"/stacks.txt", stacksData, requestErr); err != nil {
-		return err
-	}
+		}
 
-	var stacksDataWithLabels []byte
-	s = nodePrinter.start("requesting stacks with labels")
-	requestErr = zc.runZipFn(ctx, s,
-		func(ctx context.Context) error {
-			stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
-				NodeId: id,
-				Type:   serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1,
+		var stacksDataWithLabels []byte
+		s = nodePrinter.start("requesting stacks with labels")
+		requestErr = zc.runZipFn(ctx, s,
+			func(ctx context.Context) error {
+				stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
+					NodeId: id,
+					Type:   serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1,
+				})
+				if err == nil {
+					stacksDataWithLabels = stacks.Data
+				}
+				return err
 			})
-			if err == nil {
-				stacksDataWithLabels = stacks.Data
-			}
+		if err := zc.z.createRawOrError(s, prefix+"/stacks_with_labels.txt", stacksDataWithLabels, requestErr); err != nil {
 			return err
-		})
-	if err := zc.z.createRawOrError(s, prefix+"/stacks_with_labels.txt", stacksDataWithLabels, requestErr); err != nil {
-		return err
+		}
+	} else {
+		nodePrinter.info("Skipping fetching goroutine stacks. Enable via the --" + cliflags.ZipIncludeGoroutineStacks.Name + " flag.")
 	}
 
 	var heapData []byte
-	s = nodePrinter.start("requesting heap profile")
-	requestErr = zc.runZipFn(ctx, s,
+	s := nodePrinter.start("requesting heap profile")
+	requestErr := zc.runZipFn(ctx, s,
 		func(ctx context.Context) error {
 			heap, err := zc.status.Profile(ctx, &serverpb.ProfileRequest{
 				NodeId: id,

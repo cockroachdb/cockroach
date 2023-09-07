@@ -1340,8 +1340,8 @@ exit 1
 			return res, nil
 		}
 		mu.Lock()
+		defer mu.Unlock()
 		providerKnownHostData[nodeProvider] = []byte(res.Stdout)
-		mu.Unlock()
 		return res, nil
 	}, WithDisplay("scanning hosts")); err != nil {
 		return err
@@ -1931,28 +1931,32 @@ func (c *SyncedCluster) Put(
 		case r, ok := <-results:
 			done = !ok
 			if ok {
-				linesMu.Lock()
-				if r.err != nil {
-					setErr(r.err)
-					lines[r.index] = r.err.Error()
-				} else {
-					lines[r.index] = "done"
-				}
-				linesMu.Unlock()
+				func() {
+					linesMu.Lock()
+					defer linesMu.Unlock()
+					if r.err != nil {
+						setErr(r.err)
+						lines[r.index] = r.err.Error()
+					} else {
+						lines[r.index] = "done"
+					}
+				}()
 			}
 		}
 		if !config.Quiet {
-			linesMu.Lock()
-			for i := range lines {
-				fmt.Fprintf(&writer, "  %2d: ", nodes[i])
-				if lines[i] != "" {
-					fmt.Fprintf(&writer, "%s", lines[i])
-				} else {
-					fmt.Fprintf(&writer, "%s", spinner[spinnerIdx%len(spinner)])
+			func() {
+				linesMu.Lock()
+				defer linesMu.Unlock()
+				for i := range lines {
+					fmt.Fprintf(&writer, "  %2d: ", nodes[i])
+					if lines[i] != "" {
+						fmt.Fprintf(&writer, "%s", lines[i])
+					} else {
+						fmt.Fprintf(&writer, "%s", spinner[spinnerIdx%len(spinner)])
+					}
+					fmt.Fprintf(&writer, "\n")
 				}
-				fmt.Fprintf(&writer, "\n")
-			}
-			linesMu.Unlock()
+			}()
 			_ = writer.Flush(l.Stdout)
 			spinnerIdx++
 		}
@@ -1960,11 +1964,13 @@ func (c *SyncedCluster) Put(
 
 	if config.Quiet && l.File != nil {
 		l.Printf("\n")
-		linesMu.Lock()
-		for i := range lines {
-			l.Printf("  %2d: %s", nodes[i], lines[i])
-		}
-		linesMu.Unlock()
+		func() {
+			linesMu.Lock()
+			defer linesMu.Unlock()
+			for i := range lines {
+				l.Printf("  %2d: %s", nodes[i], lines[i])
+			}
+		}()
 	}
 
 	if finalErr != nil {
@@ -2303,39 +2309,45 @@ func (c *SyncedCluster) Get(
 		case r, ok := <-results:
 			done = !ok
 			if ok {
-				linesMu.Lock()
-				if r.err != nil {
-					haveErr = true
-					lines[r.index] = r.err.Error()
-				} else {
-					lines[r.index] = "done"
-				}
-				linesMu.Unlock()
+				func() {
+					linesMu.Lock()
+					defer linesMu.Unlock()
+					if r.err != nil {
+						haveErr = true
+						lines[r.index] = r.err.Error()
+					} else {
+						lines[r.index] = "done"
+					}
+				}()
 			}
 		}
 		if !config.Quiet && l.File == nil {
-			linesMu.Lock()
-			for i := range lines {
-				fmt.Fprintf(&writer, "  %2d: ", nodes[i])
-				if lines[i] != "" {
-					fmt.Fprintf(&writer, "%s", lines[i])
-				} else {
-					fmt.Fprintf(&writer, "%s", spinner[spinnerIdx%len(spinner)])
+			func() {
+				linesMu.Lock()
+				defer linesMu.Unlock()
+				for i := range lines {
+					fmt.Fprintf(&writer, "  %2d: ", nodes[i])
+					if lines[i] != "" {
+						fmt.Fprintf(&writer, "%s", lines[i])
+					} else {
+						fmt.Fprintf(&writer, "%s", spinner[spinnerIdx%len(spinner)])
+					}
+					fmt.Fprintf(&writer, "\n")
 				}
-				fmt.Fprintf(&writer, "\n")
-			}
-			linesMu.Unlock()
+			}()
 			_ = writer.Flush(l.Stdout)
 			spinnerIdx++
 		}
 	}
 
 	if config.Quiet && l.File != nil {
-		linesMu.Lock()
-		for i := range lines {
-			l.Printf("  %2d: %s", nodes[i], lines[i])
-		}
-		linesMu.Unlock()
+		func() {
+			linesMu.Lock()
+			defer linesMu.Unlock()
+			for i := range lines {
+				l.Printf("  %2d: %s", nodes[i], lines[i])
+			}
+		}()
 	}
 
 	if haveErr {

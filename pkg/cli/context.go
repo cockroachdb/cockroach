@@ -356,6 +356,13 @@ type zipContext struct {
 	// dramatically increase debug zip size/file count.
 	includeRangeInfo bool
 
+	// includeStacks fetches all goroutines running on each targeted node in
+	// nodes/*/stacks.txt and nodes/*/stacks_with_labels.txt files. Note that
+	// fetching stack traces for all goroutines is a temporary "stop the world"
+	// operation, which can momentarily have negative impacts on SQL service
+	// latency.
+	includeStacks bool
+
 	// The log/heap/etc files to include.
 	files fileSelection
 }
@@ -371,6 +378,9 @@ func setZipContextDefaults() {
 	// Even though it makes debug.zip heavyweight, range infos are often the best source
 	// of information for range-level issues and so they are opt-out, not opt-in.
 	zipCtx.includeRangeInfo = true
+	// Goroutine stack dumps require a "stop the world" operation on the server side,
+	// which impacts performance and SQL service latency.
+	zipCtx.includeStacks = true
 	zipCtx.cpuProfDuration = 5 * time.Second
 	zipCtx.concurrency = 15
 
