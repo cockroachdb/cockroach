@@ -1645,8 +1645,8 @@ FROM pg_catalog.pg_depend
 ORDER BY objid, refobjid, refobjsubid
 ----
 classid     objid       objsubid  refclassid  refobjid    refobjsubid  deptype
-4294967095  111         0         4294967098  110         14           a
-4294967095  112         0         4294967098  110         15           a
+4294967098  111         0         4294967098  110         14           a
+4294967098  112         0         4294967098  110         15           a
 4294967052  842401391   0         4294967098  110         1            n
 4294967052  842401391   0         4294967098  110         2            n
 4294967052  842401391   0         4294967098  110         3            n
@@ -1655,6 +1655,31 @@ classid     objid       objsubid  refclassid  refobjid    refobjsubid  deptype
 4294967095  3935750373  0         4294967098  3687884465  0            n
 4294967095  4072017905  0         4294967098  0           0            n
 4294967095  4170826110  0         4294967098  0           0            n
+
+statement ok
+CREATE TABLE t_with_pk_seq (a INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, b INT);
+
+# This query is used by activerecord to find primary keys backed by a sequence.
+query TTT colnames
+SELECT attr.attname, nsp.nspname, seq.relname
+FROM pg_class      seq,
+     pg_attribute  attr,
+     pg_depend     dep,
+     pg_constraint cons,
+     pg_namespace  nsp
+WHERE seq.oid           = dep.objid
+  AND seq.relkind       = 'S'
+  AND attr.attrelid     = dep.refobjid
+  AND attr.attnum       = dep.refobjsubid
+  AND attr.attrelid     = cons.conrelid
+  AND attr.attnum       = cons.conkey[1]
+  AND seq.relnamespace  = nsp.oid
+  AND cons.contype      = 'p'
+  AND dep.classid       = 'pg_class'::regclass
+  AND dep.refobjid      = 't_with_pk_seq'::regclass
+----
+attname  nspname  relname
+a        public   t_with_pk_seq_a_seq
 
 # Some entries in pg_depend are dependency links from the pg_constraint system
 # table to the pg_class system table. Other entries are links to pg_class when it is
@@ -1668,6 +1693,7 @@ JOIN pg_class refcla ON refclassid=refcla.oid
 ----
 classid     refclassid  tablename      reftablename
 4294967052  4294967098  pg_rewrite     pg_class
+4294967098  4294967098  pg_class       pg_class
 4294967095  4294967098  pg_constraint  pg_class
 
 # Some entries in pg_depend are foreign key constraints that reference an index
@@ -1679,15 +1705,16 @@ FROM pg_depend
 JOIN pg_class ON refobjid=pg_class.oid
 ORDER BY relname
 ----
-relname    relkind
-index_key  i
-t1         r
-t1         r
-t1         r
-t1         r
-t1         r
-t1         r
-t1_a_key   i
+relname        relkind
+index_key      i
+t1             r
+t1             r
+t1             r
+t1             r
+t1             r
+t1             r
+t1_a_key       i
+t_with_pk_seq  r
 
 
 # Some entries in pg_depend are linked to a foreign key constraint whose
@@ -1738,8 +1765,8 @@ SELECT * FROM pg_rewrite WHERE ev_class IN (
 ) ORDER BY oid
 ----
 oid         rulename  ev_class  ev_type  ev_enabled  is_instead  ev_qual  ev_action
-554906963   _RETURN   129       1        NULL        true        NULL     NULL
-1899983969  _RETURN   130       1        NULL        true        NULL     NULL
+2159720243  _RETURN   131       1        NULL        true        NULL     NULL
+3504797253  _RETURN   132       1        NULL        true        NULL     NULL
 
 ## pg_catalog.pg_enum
 statement ok
@@ -1753,10 +1780,10 @@ oid         enumtypid  enumsortorder  enumlabel
 3341603527  100118     0              foo
 3341603335  100118     1              bar
 3341603399  100118     2              baz
-2452389720  100131     0              v1
-2452389784  100131     1              v2
-2553055434  100133     0              v3
-2553055242  100133     1              v4
+2553055434  100133     0              v1
+2553055242  100133     1              v2
+2519500068  100135     0              v3
+2519500260  100135     1              v4
 
 ## pg_catalog.pg_type
 
@@ -1863,13 +1890,15 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 100119  _mytype                109           1546506610  -1      false     b
 100120  t6                     109           1546506610  -1      false     c
 100121  mv1                    109           1546506610  -1      false     c
-100128  source_table           109           1546506610  -1      false     c
-100129  depend_view            109           1546506610  -1      false     c
-100130  view_dependingon_view  109           1546506610  -1      false     c
-100131  newtype1               109           1546506610  -1      false     e
-100132  _newtype1              109           1546506610  -1      false     b
-100133  newtype2               109           1546506610  -1      false     e
-100134  _newtype2              109           1546506610  -1      false     b
+100128  t_with_pk_seq          109           1546506610  -1      false     c
+100129  t_with_pk_seq_a_seq    109           1546506610  -1      false     c
+100130  source_table           109           1546506610  -1      false     c
+100131  depend_view            109           1546506610  -1      false     c
+100132  view_dependingon_view  109           1546506610  -1      false     c
+100133  newtype1               109           1546506610  -1      false     e
+100134  _newtype1              109           1546506610  -1      false     b
+100135  newtype2               109           1546506610  -1      false     e
+100136  _newtype2              109           1546506610  -1      false     b
 
 query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
@@ -1974,13 +2003,15 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 100119  _mytype                A            false           true          ,         0         100118   0
 100120  t6                     C            false           true          ,         120       0        0
 100121  mv1                    C            false           true          ,         121       0        0
-100128  source_table           C            false           true          ,         128       0        0
-100129  depend_view            C            false           true          ,         129       0        0
-100130  view_dependingon_view  C            false           true          ,         130       0        0
-100131  newtype1               E            false           true          ,         0         0        100132
-100132  _newtype1              A            false           true          ,         0         100131   0
-100133  newtype2               E            false           true          ,         0         0        100134
-100134  _newtype2              A            false           true          ,         0         100133   0
+100128  t_with_pk_seq          C            false           true          ,         128       0        0
+100129  t_with_pk_seq_a_seq    C            false           true          ,         129       0        0
+100130  source_table           C            false           true          ,         130       0        0
+100131  depend_view            C            false           true          ,         131       0        0
+100132  view_dependingon_view  C            false           true          ,         132       0        0
+100133  newtype1               E            false           true          ,         0         0        100134
+100134  _newtype1              A            false           true          ,         0         100133   0
+100135  newtype2               E            false           true          ,         0         0        100136
+100136  _newtype2              A            false           true          ,         0         100135   0
 
 query OTOOOOOOO colnames
 SELECT oid, typname, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze
@@ -2085,13 +2116,15 @@ oid     typname                typinput        typoutput        typreceive      
 100119  _mytype                array_in        array_out        array_recv        array_send        0         0          0
 100120  t6                     record_in       record_out       record_recv       record_send       0         0          0
 100121  mv1                    record_in       record_out       record_recv       record_send       0         0          0
-100128  source_table           record_in       record_out       record_recv       record_send       0         0          0
-100129  depend_view            record_in       record_out       record_recv       record_send       0         0          0
-100130  view_dependingon_view  record_in       record_out       record_recv       record_send       0         0          0
-100131  newtype1               enum_in         enum_out         enum_recv         enum_send         0         0          0
-100132  _newtype1              array_in        array_out        array_recv        array_send        0         0          0
-100133  newtype2               enum_in         enum_out         enum_recv         enum_send         0         0          0
-100134  _newtype2              array_in        array_out        array_recv        array_send        0         0          0
+100128  t_with_pk_seq          record_in       record_out       record_recv       record_send       0         0          0
+100129  t_with_pk_seq_a_seq    record_in       record_out       record_recv       record_send       0         0          0
+100130  source_table           record_in       record_out       record_recv       record_send       0         0          0
+100131  depend_view            record_in       record_out       record_recv       record_send       0         0          0
+100132  view_dependingon_view  record_in       record_out       record_recv       record_send       0         0          0
+100133  newtype1               enum_in         enum_out         enum_recv         enum_send         0         0          0
+100134  _newtype1              array_in        array_out        array_recv        array_send        0         0          0
+100135  newtype2               enum_in         enum_out         enum_recv         enum_send         0         0          0
+100136  _newtype2              array_in        array_out        array_recv        array_send        0         0          0
 
 query OTTTBOI colnames
 SELECT oid, typname, typalign, typstorage, typnotnull, typbasetype, typtypmod
@@ -2196,13 +2229,15 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 100119  _mytype                NULL      NULL        false       0            -1
 100120  t6                     NULL      NULL        false       0            -1
 100121  mv1                    NULL      NULL        false       0            -1
-100128  source_table           NULL      NULL        false       0            -1
-100129  depend_view            NULL      NULL        false       0            -1
-100130  view_dependingon_view  NULL      NULL        false       0            -1
-100131  newtype1               NULL      NULL        false       0            -1
-100132  _newtype1              NULL      NULL        false       0            -1
-100133  newtype2               NULL      NULL        false       0            -1
-100134  _newtype2              NULL      NULL        false       0            -1
+100128  t_with_pk_seq          NULL      NULL        false       0            -1
+100129  t_with_pk_seq_a_seq    NULL      NULL        false       0            -1
+100130  source_table           NULL      NULL        false       0            -1
+100131  depend_view            NULL      NULL        false       0            -1
+100132  view_dependingon_view  NULL      NULL        false       0            -1
+100133  newtype1               NULL      NULL        false       0            -1
+100134  _newtype1              NULL      NULL        false       0            -1
+100135  newtype2               NULL      NULL        false       0            -1
+100136  _newtype2              NULL      NULL        false       0            -1
 
 query OTIOTTT colnames
 SELECT oid, typname, typndims, typcollation, typdefaultbin, typdefault, typacl
@@ -2307,13 +2342,15 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 100119  _mytype                0         0             NULL           NULL        NULL
 100120  t6                     0         0             NULL           NULL        NULL
 100121  mv1                    0         0             NULL           NULL        NULL
-100128  source_table           0         0             NULL           NULL        NULL
-100129  depend_view            0         0             NULL           NULL        NULL
-100130  view_dependingon_view  0         0             NULL           NULL        NULL
-100131  newtype1               0         0             NULL           NULL        NULL
-100132  _newtype1              0         0             NULL           NULL        NULL
-100133  newtype2               0         0             NULL           NULL        NULL
-100134  _newtype2              0         0             NULL           NULL        NULL
+100128  t_with_pk_seq          0         0             NULL           NULL        NULL
+100129  t_with_pk_seq_a_seq    0         0             NULL           NULL        NULL
+100130  source_table           0         0             NULL           NULL        NULL
+100131  depend_view            0         0             NULL           NULL        NULL
+100132  view_dependingon_view  0         0             NULL           NULL        NULL
+100133  newtype1               0         0             NULL           NULL        NULL
+100134  _newtype1              0         0             NULL           NULL        NULL
+100135  newtype2               0         0             NULL           NULL        NULL
+100136  _newtype2              0         0             NULL           NULL        NULL
 
 user testuser
 
@@ -2342,7 +2379,7 @@ FROM pg_catalog.pg_type
 WHERE typname = 'newtype1'
 ----
 oid     typname   typnamespace  typowner    typlen  typbyval  typtype
-100131  newtype1  109           1546506610  -1      false     e
+100133  newtype1  109           1546506610  -1      false     e
 
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
@@ -2364,7 +2401,7 @@ FROM pg_catalog.pg_type
 WHERE typname = 'source_table'
 ----
 oid     typname       typnamespace  typowner    typlen  typbyval  typtype
-100128  source_table  109           1546506610  -1      false     c
+100130  source_table  109           1546506610  -1      false     c
 
 let $sourceid
 SELECT oid
@@ -2378,7 +2415,7 @@ FROM pg_catalog.pg_type
 WHERE oid = $sourceid
 ----
 oid     typname       typnamespace  typowner    typlen  typbyval  typtype
-100128  source_table  109           1546506610  -1      false     c
+100130  source_table  109           1546506610  -1      false     c
 
 let $vtableSourceId
 SELECT oid
@@ -2614,13 +2651,13 @@ OR (c.relname = 'pg_namespace' AND d.objoid IN (SELECT oid FROM pg_catalog.pg_na
 ORDER BY d.objoid, description
 ----
 relname       objoid      classoid    objsubid  description
-pg_class      135         4294967098  0         mycomment1
-pg_class      135         4294967098  1         mycomment2
-pg_namespace  136         4294967069  0         mycomment4
+pg_class      137         4294967098  0         mycomment1
+pg_class      137         4294967098  1         mycomment2
+pg_namespace  138         4294967069  0         mycomment4
 pg_proc       738         4294967060  0         Calculates the absolute value of `val`.
 pg_proc       739         4294967060  0         Calculates the absolute value of `val`.
 pg_proc       740         4294967060  0         Calculates the absolute value of `val`.
-pg_class      125730312   4294967098  0         mycomment3
+pg_class      645202854   4294967098  0         mycomment3
 pg_class      4294966982  4294967098  0         database users
 
 ## pg_catalog.pg_shdescription
@@ -3190,8 +3227,8 @@ query OOIIIIIB colnames,rowsort
 SELECT * FROM pg_catalog.pg_sequence
 ----
 seqrelid  seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-139       20        1         1             9223372036854775807  1       1         false
-140       20        6         2             10                   5       1         false
+141       20        1         1             9223372036854775807  1       1         false
+142       20        6         2             10                   5       1         false
 
 statement ok
 DROP DATABASE seq
@@ -3205,6 +3242,7 @@ SELECT * FROM pg_catalog.pg_sequence
 ----
 111  20  1  1  9223372036854775807  1  1  false
 112  20  1  1  9223372036854775807  1  1  false
+129  20  1  1  9223372036854775807  1  1  false
 
 ## pg_catalog.pg_operator
 
@@ -3236,22 +3274,23 @@ JOIN pg_catalog.pg_class c ON def.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public' ORDER BY def.oid DESC
 ----
-4171354239  t2         unique_rowid()
-3086013501  t5         unique_rowid()
-2306804703  t1         a * b
-2306804701  t1         nextval('public.t1_n_seq'::REGCLASS)
-2306804700  t1         nextval('public.t1_m_seq'::REGCLASS)
-2306804698  t1         a * b
-2306804694  t1         12
-2000672759  mv1        unique_rowid()
-1740936492  t4         unique_rowid()
-1249221897  testtable  unique_rowid()
-1221463949  t3         'FOO'::STRING
-1221463946  t3         unique_rowid()
-655595756   t6         m = 'foo'::constraint_db.public.mytype
-655595747   t6         lower(c)
-655595746   t6         unique_rowid()
-655595745   t6         a + b
+4171354239  t2             unique_rowid()
+3086013501  t5             unique_rowid()
+2594298909  t_with_pk_seq  nextval('public.t_with_pk_seq_a_seq'::REGCLASS)
+2306804703  t1             a * b
+2306804701  t1             nextval('public.t1_n_seq'::REGCLASS)
+2306804700  t1             nextval('public.t1_m_seq'::REGCLASS)
+2306804698  t1             a * b
+2306804694  t1             12
+2000672759  mv1            unique_rowid()
+1768694439  testtable      unique_rowid()
+1740936492  t4             unique_rowid()
+1221463949  t3             'FOO'::STRING
+1221463946  t3             unique_rowid()
+655595756   t6             m = 'foo'::constraint_db.public.mytype
+655595747   t6             lower(c)
+655595746   t6             unique_rowid()
+655595745   t6             a + b
 
 # Verify that a set database shows tables from that database for a non-root
 # user, when that user has permissions.
@@ -3267,7 +3306,7 @@ SET DATABASE = 'constraint_db'
 query I
 SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public'
 ----
-8
+9
 
 user root
 
@@ -3795,13 +3834,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-170  170  jt
+172  172  jt
 
 query ITT rowsort
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1    NULL  NULL
-170  170   jt
+172  172   jt
 
 subtest regression_49207
 statement ok
@@ -4417,7 +4456,7 @@ JOIN pg_class ON pg_statistic_ext.stxrelid = pg_class.oid
 ----
 relname  stxname  stxnamespace  stxowner  stxstattarget  stxkeys  stxkind
 stxtbl   stxobj   105           NULL      -1             {2,3}    {d}
-stxtbl2  stxobj2  191           NULL      -1             {1,3}    {d}
+stxtbl2  stxobj2  193           NULL      -1             {1,3}    {d}
 stx      NULL     105           NULL      -1             {2}      {d}
 stx      NULL     105           NULL      -1             {1}      {d}
 

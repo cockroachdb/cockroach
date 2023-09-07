@@ -1557,13 +1557,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 				refObjSubID := tree.NewDInt(tree.DInt(table.GetSequenceOpts().SequenceOwner.OwnerColumnID))
 				objID := tableOid(table.GetID())
 				return addRow(
-					pgConstraintTableOid, // classid
-					objID,                // objid
-					zeroVal,              // objsubid
-					pgClassTableOid,      // refclassid
-					refObjID,             // refobjid
-					refObjSubID,          // refobjsubid
-					depTypeAuto,          // deptype
+					pgClassTableOid, // classid
+					objID,           // objid
+					zeroVal,         // objsubid
+					pgClassTableOid, // refclassid
+					refObjID,        // refobjid
+					refObjSubID,     // refobjsubid
+					depTypeAuto,     // deptype
 				)
 			}
 
