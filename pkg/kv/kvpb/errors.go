@@ -348,6 +348,7 @@ func init() {
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.RefreshFailedError", &RefreshFailedError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.MVCCHistoryMutationError", &MVCCHistoryMutationError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.InsufficientSpaceError", &InsufficientSpaceError{})
+
 }
 
 // GoError returns a Go error converted from Error. If the error is a transaction
