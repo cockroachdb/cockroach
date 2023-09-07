@@ -158,8 +158,9 @@ func largeAbortSpan(ms enginepb.MVCCStats) bool {
 type mvccGCQueue struct {
 	*baseQueue
 
-	// Set to true when GC finds range that has a hint indicating that range is
-	// completely cleared.
+	// lastRangeWasHighPriority is true when GC found a range with a GCHint
+	// indicating that the range is completely cleared. Reset to false after all
+	// such ranges have been processed.
 	lastRangeWasHighPriority bool
 	// leaseholderCheckInterceptor is a leasholder check used by high priority replica scanner
 	// its only purpose is to allow test function injection.
