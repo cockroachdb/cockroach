@@ -121,7 +121,6 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 	var testDMLInjectionCase func(
 		t *testing.T, ts CumulativeTestSpec, key stageKey, injectPreCommit bool,
 	)
-	var injectionFunc execInjectionCallback
 	testFunc := func(t *testing.T, ts CumulativeTestSpec) {
 		// Count number of stages in PostCommit and PostCommitNonRevertible phase
 		// for running `stmts` after properly running `setup`.
@@ -136,7 +135,6 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 				}
 			}
 		})
-		injectionFunc = ts.stageExecMap.GetInjectionCallback(t, ts.Rewrite)
 		injectionRanges := ts.stageExecMap.GetInjectionRuns(postCommit, nonRevertible)
 		defer ts.stageExecMap.AssertMapIsUsed(t)
 		injectPreCommits := []bool{false}
@@ -167,6 +165,8 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 		var clusterCreated atomic.Bool
 		var tdb *sqlutils.SQLRunner
 		ctx := context.Background()
+		injectionFunc := ts.stageExecMap.GetInjectionCallback(t, ts.Rewrite)
+
 		knobs := &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
 				if !clusterCreated.Load() {
@@ -175,6 +175,19 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 					// defaultdb`) and we don't want those to hijack this knob.
 					return nil
 				}
+
+				// if t.Fail/Fatal has been called, try to end the job as quickly as
+				// possible and avoid running any more test code.
+				if t.Failed() && p.InRollback {
+					t.Log("short-circuiting BeforeStage hook due to test failure")
+					return nil
+				}
+
+				if t.Failed() {
+					t.Log("forcing job failure from BeforeStage due to test failure")
+					return errors.New("t.Failed() is true")
+				}
+
 				s := p.Stages[stageIdx]
 				if (injection.phase == p.Stages[stageIdx].Phase &&
 					p.Stages[stageIdx].Ordinal >= injection.minOrdinal &&
@@ -207,11 +220,11 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 					} else {
 						t.Logf("Retrying stage: %v", key)
 					}
-
 				}
 				return nil
 			},
 		}
+
 		runfn := func(s serverutils.TestServerInterface, db *gosql.DB) {
 			clusterCreated.Store(true)
 			tdb = sqlutils.MakeSQLRunner(db)
