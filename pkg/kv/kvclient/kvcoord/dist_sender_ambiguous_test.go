@@ -238,18 +238,33 @@ func (tMu *interceptorHelperMutex) configureSubTest(t *testing.T) (restore func(
 	return restore
 }
 
+// validateTxnCommitAmbiguousError checks that an error on txn commit is
+// ambiguous, rather than an assertion failure or a retryable error.
+func validateTxnCommitAmbiguousError(t *testing.T, err error, reason string) {
+	aErr := (*kvpb.AmbiguousResultError)(nil)
+	rErr := (*kvpb.TransactionRetryWithProtoRefreshError)(nil)
+	tErr := (*kvpb.TransactionStatusError)(nil)
+	require.Errorf(t, err, "expected an AmbiguousResultError")
+	require.ErrorAsf(t, err, &aErr,
+		"expected AmbiguousResultError due to %s", reason)
+	require.Falsef(t, errors.As(err, &tErr),
+		"did not expect TransactionStatusError due to being already committed")
+	require.Falsef(t, errors.As(err, &rErr),
+		"did not expect incorrect TransactionRetryWithProtoRefreshError due to failed refresh")
+	require.Falsef(t, errors.HasAssertionFailure(err),
+		"expected no AssertionFailedError due to sanity check on transaction already committed")
+	require.ErrorContainsf(t, aErr, reason,
+		"expected AmbiguousResultError to include message \"%s\"", reason)
+}
+
 // TestTransactionUnexpectedlyCommitted validates the handling of the case where
 // a parallel commit transaction with an ambiguous error on a write races with
 // a contending transaction's recovery attempt. In the case that the recovery
 // succeeds prior to the original transaction's retries, an ambiguous error
 // should be raised.
 //
-// NB: This case encounters a known issue described in #103817 and seen in
-// #67765, where it currently is surfaced as an assertion failure that will
-// result in a node crash.
-//
-// TODO(sarkesian): Validate the ambiguous result error once the initial fix as
-// outlined in #103817 has been resolved.
+// NB: These tests deal with a known issue described in #103817 and seen in
+// #67765.
 func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -591,12 +606,13 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 				return grpcstatus.Errorf(codes.Unavailable, "response jammed on n%d<-n%d", req.fromNodeID, req.toNodeID)
 			}
 
-			// -- NB: If ambiguous errors were propagated, txn1 would end here.
-			// -- NB: When ambiguous errors are not propagated, txn1 continues with:
-			//
 			// 9. txn1->n1: Put(b) -- Retry on new leaseholder sees new lease start
 			// timestamp, and attempts to evaluate it as an idempotent replay, but at
 			// a higher timestamp, which breaks idempotency due to being on commit.
+
+			// -- NB: With ambiguous replay protection, txn1 should end here.
+			// -- NB: Without ambiguous replay protection, txn1 would continue with:
+
 			// 10. txn1->n1: Refresh(a)
 			// 11. txn1->n1: Refresh(b)
 			// 12. txn1->n1: EndTxn(commit) -- Before sending, pause the request so
@@ -643,21 +659,13 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		// Start test, await concurrent operations and validate results.
 		close(txn1Ready)
 		err := <-txn1ResultCh
-		t.Logf("txn1 completed with err: %+v", err)
+		t.Logf("txn1 completed with err: %v", err)
 		wg.Wait()
 
-		// TODO(sarkesian): While we expect an AmbiguousResultError once the
-		// immediate changes outlined in #103817 are implemented, right now this is
-		// essentially validating the existence of the bug. This needs to be fixed,
-		// and we should not see an assertion failure from the transaction
-		// coordinator once fixed.
-		tErr := (*kvpb.TransactionStatusError)(nil)
-		require.ErrorAsf(t, err, &tErr,
-			"expected TransactionStatusError due to being already committed")
-		require.Equalf(t, kvpb.TransactionStatusError_REASON_TXN_COMMITTED, tErr.Reason,
-			"expected TransactionStatusError due to being already committed")
-		require.Truef(t, errors.HasAssertionFailure(err),
-			"expected AssertionFailedError due to sanity check on transaction already committed")
+		// NB: While ideally we would hope to see a successful commit without
+		// error, without querying txn record/intents from the txn coordinator we
+		// expect an AmbiguousResultError in this case (as outlined in #103817).
+		validateTxnCommitAmbiguousError(t, err, "replay protection" /* reason */)
 	}
 
 	// The set of test cases that use the same request scheduling.
@@ -803,15 +811,16 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 				return grpcstatus.Errorf(codes.Unavailable, "response jammed on n%d<-n%d", req.fromNodeID, req.toNodeID)
 			}
 
-			// -- NB: If ambiguous errors were propagated, txn1 would end here.
-			// -- NB: When ambiguous errors are not propagated, txn1 continues with:
-			//
 			// 9. txn1->n1: Put(b) -- Retry on new leaseholder sees new lease start
 			// timestamp, and attempts to evaluate it as an idempotent replay, but at
 			// a higher timestamp, which breaks idempotency due to being on commit.
+
+			// -- NB: With ambiguous replay protection, txn1 should end here.
+			// -- NB: Without ambiguous replay protection, txn1 would continue with:
+
 			// 10. txn1->n1: Refresh(a)
 			// 11. txn1->n1: Refresh(b,c) -- This fails due to txn2's intent on c.
-			// Causes the transaction coordinator to return a retriable error,
+			// Causes the transaction coordinator to return a retryable error,
 			// although the transaction has been actually committed during recovery;
 			// a highly problematic bug.
 
@@ -829,20 +838,13 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		// Start test, await concurrent operations and validate results.
 		close(txn1Ready)
 		err := <-txn1ResultCh
-		t.Logf("txn1 completed with err: %+v", err)
+		t.Logf("txn1 completed with err: %v", err)
 		wg.Wait()
 
-		// TODO(sarkesian): While we expect an AmbiguousResultError once the
-		// immediate changes outlined in #103817 are implemented, right now this is
-		// essentially validating the existence of the bug. This needs to be fixed,
-		// and we should not see an transaction retry error from the transaction
-		// coordinator once fixed.
-		tErr := (*kvpb.TransactionRetryWithProtoRefreshError)(nil)
-		require.ErrorAsf(t, err, &tErr,
-			"expected incorrect TransactionRetryWithProtoRefreshError due to failed refresh")
-		require.False(t, tErr.PrevTxnAborted())
-		require.Falsef(t, errors.HasAssertionFailure(err),
-			"expected no AssertionFailedError due to sanity check")
+		// NB: While ideally we would hope to see a successful commit without
+		// error, without querying txn record/intents from the txn coordinator we
+		// expect an AmbiguousResultError in this case (as outlined in #103817).
+		validateTxnCommitAmbiguousError(t, err, "replay protection" /* reason */)
 	})
 
 	// The txn coordinator shouldn't respond with an incorrect retryable failure
@@ -946,15 +948,16 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 				return grpcstatus.Errorf(codes.Unavailable, "response jammed on n%d<-n%d", req.fromNodeID, req.toNodeID)
 			}
 
-			// -- NB: If ambiguous errors were propagated, txn1 would end here.
-			// -- NB: When ambiguous errors are not propagated, txn1 continues with:
-			//
 			// 10. txn1->n1: Put(b) -- Retry on new leaseholder sees new lease start
 			// timestamp, and attempts to evaluate it as an idempotent replay, but at
 			// a higher timestamp, which breaks idempotency due to being on commit.
+
+			// -- NB: With ambiguous replay protection, txn1 should end here.
+			// -- NB: Without ambiguous replay protection, txn1 would continue with:
+
 			// 11. txn1->n1: Refresh(a)
 			// 12. txn1->n1: Refresh(b,c) -- This fails due to txn3's write on c.
-			// Causes the transaction coordinator to return a retriable error,
+			// Causes the transaction coordinator to return a retryable error,
 			// although the transaction could be actually committed during recovery;
 			// a highly problematic bug.
 			// <allow (9) RecoverTxn(txn1) to proceed and finish> -- because txn1
@@ -962,7 +965,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// so the recovery will succeed in marking it explicitly committed.
 			if req.ba.IsSingleRecoverTxnRequest() && cp == BeforeSending {
 				// The RecoverTxn operation should be evaluated after txn1 completes,
-				// in this case with a problematic retriable error.
+				// in this case with a problematic retryable error.
 				req.pauseUntil(t, txn1Done, cp)
 			}
 			if req.ba.IsSingleRecoverTxnRequest() && cp == AfterSending {
@@ -987,20 +990,13 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		// Start test, await concurrent operations and validate results.
 		close(txn1Ready)
 		err := <-txn1ResultCh
-		t.Logf("txn1 completed with err: %+v", err)
+		t.Logf("txn1 completed with err: %v", err)
 		wg.Wait()
 
-		// TODO(sarkesian): While we expect an AmbiguousResultError once the
-		// immediate changes outlined in #103817 are implemented, right now this is
-		// essentially validating the existence of the bug. This needs to be fixed,
-		// and we should not see an transaction retry error from the transaction
-		// coordinator once fixed.
-		tErr := (*kvpb.TransactionRetryWithProtoRefreshError)(nil)
-		require.ErrorAsf(t, err, &tErr,
-			"expected incorrect TransactionRetryWithProtoRefreshError due to failed refresh")
-		require.False(t, tErr.PrevTxnAborted())
-		require.Falsef(t, errors.HasAssertionFailure(err),
-			"expected no AssertionFailedError due to sanity check")
+		// NB: While ideally we would hope to see a successful commit without
+		// error, without querying txn record/intents from the txn coordinator we
+		// expect an AmbiguousResultError in this case (as outlined in #103817).
+		validateTxnCommitAmbiguousError(t, err, "replay protection" /* reason */)
 	})
 
 	// This test is primarily included for completeness, in order to ensure the
@@ -1067,12 +1063,13 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 				return grpcstatus.Errorf(codes.Unavailable, "response jammed on n%d<-n%d", req.fromNodeID, req.toNodeID)
 			}
 
-			// -- NB: If ambiguous errors were propagated, txn1 would end here.
-			// -- NB: When ambiguous errors are not propagated, txn1 continues with:
-			//
 			// 9. txn1->n1: Put(b) -- Retry on new leaseholder sees new lease start
 			// timestamp, and attempts to evaluate it as an idempotent replay, but at
 			// a higher timestamp, which breaks idempotency due to being on commit.
+
+			// -- NB: With ambiguous replay protection, txn1 should end here.
+			// -- NB: Without ambiguous replay protection, txn1 would continue with:
+
 			// 10. txn1->n1: Refresh(a)
 			// 11. txn1->n1: Refresh(b)
 			// 12. txn1->n1: EndTxn(commit) -- Recovery has already completed, so this
@@ -1091,21 +1088,13 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		// Start test, await concurrent operations and validate results.
 		close(txn1Ready)
 		err := <-txn1ResultCh
-		t.Logf("txn1 completed with err: %+v", err)
+		t.Logf("txn1 completed with err: %v", err)
 		wg.Wait()
 
-		// TODO(sarkesian): While we expect an AmbiguousResultError once the
-		// immediate changes outlined in #103817 are implemented, right now this is
-		// essentially validating the existence of the bug. This needs to be fixed,
-		// and we should not see an assertion failure from the transaction
-		// coordinator once fixed.
-		tErr := (*kvpb.TransactionStatusError)(nil)
-		require.ErrorAsf(t, err, &tErr,
-			"expected TransactionStatusError due to being already committed")
-		require.Equalf(t, kvpb.TransactionStatusError_REASON_TXN_COMMITTED, tErr.Reason,
-			"expected TransactionStatusError due to being already committed")
-		require.Truef(t, errors.HasAssertionFailure(err),
-			"expected AssertionFailedError due to sanity check on transaction already committed")
+		// NB: While ideally we would hope to see a successful commit without
+		// error, without querying txn record/intents from the txn coordinator we
+		// expect an AmbiguousResultError in this case (as outlined in #103817).
+		validateTxnCommitAmbiguousError(t, err, "replay protection" /* reason */)
 	})
 
 	// When a retried write happens after another txn's intent already exists on
@@ -1178,6 +1167,9 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// error. Since the transaction had an earlier ambiguous failure on a
 			// batch with a commit, it should propagate the ambiguous error.
 
+			// -- NB: Ambiguous replay protection is not required, and should not
+			// come into play here.
+
 			// <allow txn2 to complete>
 			if req.txnName == "txn2" && req.ba.IsSingleEndTxnRequest() && cp == BeforeSending {
 				req.pauseUntil(t, txn1Done, cp)
@@ -1190,17 +1182,12 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		// Start test, await concurrent operations and validate results.
 		close(txn1Ready)
 		err := <-txn1ResultCh
-		t.Logf("txn1 completed with err: %+v", err)
+		t.Logf("txn1 completed with err: %v", err)
 		wg.Wait()
 
-		aErr := (*kvpb.AmbiguousResultError)(nil)
-		tErr := (*kvpb.TransactionStatusError)(nil)
-		require.ErrorAsf(t, err, &aErr,
-			"expected AmbiguousResultError due to encountering an intent on retry")
-		require.Falsef(t, errors.As(err, &tErr),
-			"did not expect TransactionStatusError due to being already committed")
-		require.Falsef(t, errors.HasAssertionFailure(err),
-			"expected no AssertionFailedError due to sanity check on transaction already committed")
+		// NB: It is likely not possible to eliminate ambiguity in this case, as
+		// the original intents were already cleaned up.
+		validateTxnCommitAmbiguousError(t, err, "WriteTooOld" /* reason */)
 	})
 
 	// When a retried write happens after our txn's intent has already been
@@ -1293,6 +1280,9 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// serverside refresh as reads were already returned. Fails, and should
 			// propagate the ambiguous error.
 
+			// -- NB: Ambiguous replay protection is not required, and should not
+			// come into play here.
+
 			// <allow txn2's Puts to execute>
 			if req.txnName == "txn2" && hasPut && cp == BeforeSending {
 				<-txn1Done
@@ -1305,19 +1295,12 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		// Start test, await concurrent operations and validate results.
 		close(txn1Ready)
 		err := <-txn1ResultCh
-		t.Logf("txn1 completed with err: %+v", err)
+		t.Logf("txn1 completed with err: %v", err)
 		wg.Wait()
 
-		// TODO(sarkesian): Once we incorporate secondary errors into the
-		// AmbiguousResultError, check that we see the WriteTooOldError.
-		aErr := (*kvpb.AmbiguousResultError)(nil)
-		tErr := (*kvpb.TransactionStatusError)(nil)
-		require.ErrorAsf(t, err, &aErr,
-			"expected AmbiguousResultError due to encountering an intent on retry")
-		require.Falsef(t, errors.As(err, &tErr),
-			"did not expect TransactionStatusError due to being already committed")
-		require.Falsef(t, errors.HasAssertionFailure(err),
-			"expected no AssertionFailedError due to sanity check on transaction already committed")
+		// NB: It is likely not possible to eliminate ambiguity in this case, as
+		// the original intents were already cleaned up.
+		validateTxnCommitAmbiguousError(t, err, "WriteTooOld" /* reason */)
 	})
 
 	// This test is included for completeness, but tests expected behavior;
@@ -1407,7 +1390,9 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			}
 
 			// 8. txn1->n1: Put(b) -- Retry gets evaluated as idempotent replay and
-			// correctly succeeds.
+			// correctly succeeds. Ambiguous replay protection, though enabled,
+			// should not cause the retried write to error.
+
 			// -- NB: In this case, txn1 returns without error here, as there is no
 			// need to refresh and the final EndTxn can be split off and run
 			// asynchronously.
@@ -1448,7 +1433,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		// Start test, await concurrent operations and validate results.
 		close(txn1Ready)
 		err := <-txn1ResultCh
-		t.Logf("txn1 completed with err: %+v", err)
+		t.Logf("txn1 completed with err: %v", err)
 		wg.Wait()
 
 		require.NoErrorf(t, err, "expected txn1 to succeed")
@@ -1554,9 +1539,13 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 				return grpcstatus.Errorf(codes.Unavailable, "response jammed on n%d<-n%d", req.fromNodeID, req.toNodeID)
 			}
 
-			// 7. txn1->n1: Put(b) -- Retry gets WriteTooOld, performs a
-			// serverside refresh, and succeeds.
-			// 8. txn1->n1: EndTxn(commit) -- Results in "transaction unexpectedly
+			// 7. txn1->n1: Put(b) -- Retry gets WriteTooOld; with ambiguous replay
+			// protection enabled, it should not be able to perform a serverside
+			// refresh. Fails, and should propagate the ambiguous error.
+
+			// -- NB: Without ambiguous replay protection, txn1 would continue with:
+
+			// 8. txn1->n1: EndTxn(commit) -- Would get "transaction unexpectedly
 			// committed" due to the recovery completing first.
 
 			// <allow txn2's Puts to execute>
@@ -1571,20 +1560,11 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		// Start test, await concurrent operations and validate results.
 		close(txn1Ready)
 		err := <-txn1ResultCh
-		t.Logf("txn1 completed with err: %+v", err)
+		t.Logf("txn1 completed with err: %v", err)
 		wg.Wait()
 
-		// TODO(sarkesian): While we expect an AmbiguousResultError once the
-		// immediate changes outlined in #103817 are implemented, right now this is
-		// essentially validating the existence of the bug. This needs to be fixed,
-		// and we should not see an assertion failure from the transaction
-		// coordinator once fixed.
-		tErr := (*kvpb.TransactionStatusError)(nil)
-		require.ErrorAsf(t, err, &tErr,
-			"expected TransactionStatusError due to being already committed")
-		require.Equalf(t, kvpb.TransactionStatusError_REASON_TXN_COMMITTED, tErr.Reason,
-			"expected TransactionStatusError due to being already committed")
-		require.Truef(t, errors.HasAssertionFailure(err),
-			"expected AssertionFailedError due to sanity check on transaction already committed")
+		// NB: It is likely not possible to eliminate ambiguity in this case, as
+		// the original intents were already cleaned up.
+		validateTxnCommitAmbiguousError(t, err, "WriteTooOld" /* reason */)
 	})
 }
