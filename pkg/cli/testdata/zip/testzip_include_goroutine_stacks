@@ -1,6 +1,6 @@
 zip
 ----
-debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info /dev/null
+debug zip --concurrency=1 --cpu-profile-duration=1s --include-goroutine-stacks /dev/null
 [cluster] discovering virtual clusters... done
 [cluster] creating output file /dev/null... done
 [cluster] establishing RPC connection to ...
@@ -111,7 +111,8 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info /dev/nu
 [node 1] requesting data for debug/nodes/1/details... received response... writing JSON output: debug/nodes/1/details.json... done
 [node 1] requesting data for debug/nodes/1/gossip... received response... writing JSON output: debug/nodes/1/gossip.json... done
 [node 1] requesting data for debug/nodes/1/enginestats... received response... writing JSON output: debug/nodes/1/enginestats.json... done
-[node 1] Skipping fetching goroutine stacks. Enable via the --include-goroutine-stacks flag.
+[node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done
+[node 1] requesting stacks with labels... received response... writing binary output: debug/nodes/1/stacks_with_labels.txt... done
 [node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done
 [node 1] requesting heap file list... received response... done
 [node ?] ? heap profiles found
@@ -124,4 +125,3 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info /dev/nu
 [cluster] pprof summary script... writing binary output: debug/pprof-summary.sh... done
 [cluster] hot range summary script... writing binary output: debug/hot-ranges.sh... done
 [cluster] tenant hot range summary script... writing binary output: debug/hot-ranges-tenant.sh... done
-[cluster] NOTE: Omitted node-level goroutine stack dumps from this debug zip bundle. Use the --include-goroutine-stacks flag to enable the fetching of this data.

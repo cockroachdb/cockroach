@@ -111,8 +111,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] requesting data for debug/nodes/1/details... received response... writing JSON output: debug/nodes/1/details.json... done
 [node 1] requesting data for debug/nodes/1/gossip... received response... writing JSON output: debug/nodes/1/gossip.json... done
 [node 1] requesting data for debug/nodes/1/enginestats... received response... writing JSON output: debug/nodes/1/enginestats.json... done
-[node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done
-[node 1] requesting stacks with labels... received response... writing binary output: debug/nodes/1/stacks_with_labels.txt... done
+[node 1] Skipping fetching goroutine stacks. Enable via the --include-goroutine-stacks flag.
 [node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done
 [node 1] requesting heap file list... received response... done
 [node ?] ? heap profiles found
@@ -267,8 +266,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] requesting data for debug/cluster/test-tenant/nodes/1/enginestats... received response...
 [node 1] requesting data for debug/cluster/test-tenant/nodes/1/enginestats: last request failed: rpc error: ...
 [node 1] requesting data for debug/cluster/test-tenant/nodes/1/enginestats: creating error output: debug/cluster/test-tenant/nodes/1/enginestats.json.err.txt... done
-[node 1] requesting stacks... received response... writing binary output: debug/cluster/test-tenant/nodes/1/stacks.txt... done
-[node 1] requesting stacks with labels... received response... writing binary output: debug/cluster/test-tenant/nodes/1/stacks_with_labels.txt... done
+[node 1] Skipping fetching goroutine stacks. Enable via the --include-goroutine-stacks flag.
 [node 1] requesting heap profile... received response... writing binary output: debug/cluster/test-tenant/nodes/1/heap.pprof... done
 [node 1] requesting heap file list... received response...
 [node 1] requesting heap file list: last request failed: rpc error: ...
@@ -284,3 +282,4 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] pprof summary script... writing binary output: debug/cluster/test-tenant/pprof-summary.sh... done
 [cluster] hot range summary script... writing binary output: debug/cluster/test-tenant/hot-ranges.sh... done
 [cluster] tenant hot range summary script... writing binary output: debug/cluster/test-tenant/hot-ranges-tenant.sh... done
+[cluster] NOTE: Omitted node-level goroutine stack dumps from this debug zip bundle. Use the --include-goroutine-stacks flag to enable the fetching of this data.
