@@ -120,7 +120,8 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				}
 			case *kvpb.RangeFeedCheckpoint:
 				if p.knobs.ModifyTimestamps != nil {
-					p.knobs.ModifyTimestamps(&t.ResolvedTS)
+					e = kvcoord.RangeFeedMessage{RangeFeedEvent: e.ShallowCopy(), RegisteredSpan: e.RegisteredSpan}
+					p.knobs.ModifyTimestamps(&e.Checkpoint.ResolvedTS)
 				}
 				if !t.ResolvedTS.IsEmpty() && t.ResolvedTS.Less(p.cfg.Frontier) {
 					// RangeFeed happily forwards any closed timestamps it receives as
