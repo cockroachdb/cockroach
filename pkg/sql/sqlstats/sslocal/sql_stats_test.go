@@ -1478,6 +1478,8 @@ func TestSQLStatsIndexesUsed(t *testing.T) {
 		name          string
 		tableCreation string
 		statement     string
+		setup         string
+		cleanup      string
 		fingerprint   string
 		indexes       []indexInfo
 	}{
@@ -1511,6 +1513,8 @@ func TestSQLStatsIndexesUsed(t *testing.T) {
 			name:          "buildZigZag",
 			tableCreation: "CREATE TABLE t5 (a INT, b INT, INDEX a_idx(a), INDEX b_idx(b))",
 			statement:     "SELECT * FROM t5@{FORCE_ZIGZAG} WHERE a = 1 AND b = 1",
+      setup:         "SET enable_zigzag_join = true",
+      cleanup:       "RESET enable_zigzag_join",
 			fingerprint:   "SELECT * FROM t5@{FORCE_ZIGZAG} WHERE (a = _) AND (b = _)",
 			indexes: []indexInfo{
 				{name: "a_idx", table: "t5"},
@@ -1531,8 +1535,14 @@ func TestSQLStatsIndexesUsed(t *testing.T) {
 	var indexes []string
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+      if tc.setup != "" {
+        testConn.Exec(t, tc.setup)
+      }
 			testConn.Exec(t, tc.tableCreation)
 			testConn.Exec(t, tc.statement)
+      if tc.cleanup != "" {
+        testConn.Exec(t, tc.cleanup)
+      }
 
 			rows := testConn.QueryRow(t, "SELECT statistics -> 'statistics' ->> 'indexes' "+
 				"FROM CRDB_INTERNAL.STATEMENT_STATISTICS WHERE app_name = $1 "+

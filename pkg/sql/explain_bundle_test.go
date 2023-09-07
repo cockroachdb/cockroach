@@ -198,7 +198,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			{"enable_implicit_transaction_for_batch_statements", "off"},
 			{"enable_insert_fast_path", "off"},
 			{"enable_multiple_modifications_of_table", "on"},
-			{"enable_zigzag_join", "off"},
+			{"enable_zigzag_join", "on"},
 			{"expect_and_ignore_not_visible_columns_in_copy", "on"},
 			{"intervalstyle", "iso_8601"},
 			{"large_full_scan_rows", "2000"},

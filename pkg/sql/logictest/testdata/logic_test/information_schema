@@ -5347,7 +5347,7 @@ enable_multiple_modifications_of_table                     off
 enable_multiregion_placement_policy                        off
 enable_seqscan                                             on
 enable_super_regions                                       off
-enable_zigzag_join                                         on
+enable_zigzag_join                                         off
 enforce_home_region                                        off
 enforce_home_region_follower_reads_enabled                 off
 escape_string_warning                                      on
