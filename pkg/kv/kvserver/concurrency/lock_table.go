@@ -1737,17 +1737,7 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 			// We use the lowest timestamp at which a lock is held at in its
 			// formatting. The lowest timestamp contends with more transactions
 			// (assuming the strength dictates as such).
-			var ts hlc.Timestamp
-			if tl.isHeldUnreplicated() && tl.isHeldReplicated() &&
-				// timestamps for replicated locks are only tracked/relevant for intents
-				tl.replicatedInfo.held(lock.Intent) {
-				ts = tl.unreplicatedInfo.ts
-				ts.Backward(tl.replicatedInfo.ts)
-			} else if tl.isHeldUnreplicated() {
-				ts = tl.unreplicatedInfo.ts
-			} else {
-				ts = tl.replicatedInfo.ts
-			}
+			var ts = tl.writeTS()
 
 			var prefix string
 			if first {
@@ -1760,9 +1750,13 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 			} else {
 				prefix = "\n           "
 			}
-			sb.Printf("%stxn: %v epoch: %d, iso: %s, ts: %v, info: ",
+			var optTS string
+			if !ts.Equal(hlc.MaxTimestamp) {
+				optTS = fmt.Sprintf(" ts: %v,", ts)
+			}
+			sb.Printf("%stxn: %v epoch: %d, iso: %s,%s info: ",
 				redact.Safe(prefix), redact.Safe(txn.ID), redact.Safe(txn.Epoch),
-				redact.Safe(txn.IsoLevel), redact.Safe(ts),
+				redact.Safe(txn.IsoLevel), redact.Safe(optTS),
 			)
 			if !tl.replicatedInfo.isEmpty() {
 				tl.replicatedInfo.safeFormat(sb)
