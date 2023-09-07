@@ -963,7 +963,7 @@ func registerClusterToCluster(r registry.Registry) {
 			dstNodes:           3,
 			cpus:               8,
 			pdSize:             100,
-			workload:           replicateKV{readPercent: 0, initRows: 5000000, maxBlockBytes: 1024},
+			workload:           replicateKV{readPercent: 0, initRows: 50000000, maxBlockBytes: 1024},
 			timeout:            1 * time.Hour,
 			additionalDuration: 10 * time.Minute,
 			cutover:            5 * time.Minute,
