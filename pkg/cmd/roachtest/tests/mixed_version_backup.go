@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -1357,19 +1358,30 @@ func (mvb *mixedVersionBackup) backupName(
 // error if the job doesn't succeed within the attempted retries.
 func (mvb *mixedVersionBackup) waitForJobSuccess(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper, jobID int,
-) error {
+) (resErr error) {
 	var lastErr error
-	node, db := h.RandomDB(rng, mvb.roachNodes)
+	node := h.RandomNode(rng, mvb.roachNodes)
 	l.Printf("querying job status through node %d", node)
+
+	db, err := mvb.cluster.ConnE(ctx, l, node, option.DBName("system"))
+	if err != nil {
+		l.Printf("error connecting to node %d: %v", node, err)
+		return err
+	}
+	defer func() {
+		err := db.Close()
+		resErr = errors.CombineErrors(resErr, err)
+	}()
 
 	jobsQuery := "system.jobs WHERE id = $1"
 	if hasInternalSystemJobs(h) {
 		jobsQuery = fmt.Sprintf("(%s)", jobutils.InternalSystemJobsBaseQuery)
 	}
-	for r := retry.StartWithCtx(ctx, backupCompletionRetryOptions); r.Next(); {
+	r := retry.StartWithCtx(ctx, backupCompletionRetryOptions)
+	for r.Next() {
 		var status string
 		var payloadBytes []byte
-		err := db.QueryRow(
+		err := db.QueryRowContext(ctx,
 			fmt.Sprintf(`SELECT status, payload FROM %s`, jobsQuery), jobID,
 		).Scan(&status, &payloadBytes)
 		if err != nil {
@@ -1400,7 +1412,11 @@ func (mvb *mixedVersionBackup) waitForJobSuccess(
 		return nil
 	}
 
-	return fmt.Errorf("waiting for job to finish: %w", lastErr)
+	if r.CurrentAttempt() >= backupCompletionRetryOptions.MaxRetries {
+		return fmt.Errorf("exhausted all %d retries waiting for job %d to finish, last err: %w", backupCompletionRetryOptions.MaxRetries, jobID, lastErr)
+	}
+
+	return fmt.Errorf("error waiting for job to finish: %w", lastErr)
 }
 
 // computeTableContents will generate a list of `tableContents`
