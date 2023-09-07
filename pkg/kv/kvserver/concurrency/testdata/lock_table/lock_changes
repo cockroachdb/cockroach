@@ -141,11 +141,11 @@ new-txn txn=txn1 ts=14 epoch=2 seq=1
 new-request r=req6 txn=txn1 ts=14 spans=intent@a+exclusive@a
 ----
 
-acquire r=req6 k=a durability=r strength=intent
+acquire r=req6 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 10.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, ts: 8.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 2, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 2
@@ -154,7 +154,7 @@ guard-state r=req5
 ----
 old: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
 
-acquire r=req6 k=a durability=u strength=exclusive
+acquire r=req6 k=a durability=r strength=intent
 ----
 num=1
  lock: "a"
