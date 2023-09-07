@@ -107,7 +107,7 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 			continue
 		}
 		switch vfield.Kind() {
-		case reflect.Array:
+		case reflect.Array, reflect.Slice:
 			for i := 0; i < vfield.Len(); i++ {
 				velem := vfield.Index(i)
 				telemName := fmt.Sprintf("%s[%d]", tname, i)
