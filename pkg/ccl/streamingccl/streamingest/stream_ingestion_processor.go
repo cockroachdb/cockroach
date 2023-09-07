@@ -1155,6 +1155,8 @@ type flushableBuffer struct {
 func (sip *streamIngestionProcessor) flushBuffer(b flushableBuffer) (*jobspb.ResolvedSpans, error) {
 	ctx, sp := tracing.ChildSpan(sip.Ctx(), "stream-ingestion-flush")
 	defer sp.Finish()
+	// Ensure the batcher is always reset, even on early error returns.
+	defer sip.batcher.Reset(ctx)
 
 	// First process the point KVs.
 	//
@@ -1187,8 +1189,6 @@ func (sip *streamIngestionProcessor) flushBuffer(b flushableBuffer) (*jobspb.Res
 	sip.metrics.Flushes.Inc(1)
 	sip.metrics.IngestedEvents.Inc(int64(len(b.buffer.curKVBatch)))
 	sip.metrics.IngestedEvents.Inc(int64(len(b.buffer.curRangeKVBatch)))
-
-	sip.batcher.Reset(ctx)
 
 	releaseBuffer(b.buffer)
 
