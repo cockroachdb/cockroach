@@ -1,4 +1,4 @@
-# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/v1.6/client-secure.yaml
+# Generated file, DO NOT EDIT. Source: cockroachdb_cockroach_master/cloud/kubernetes/templates/v1.6/client-secure.yaml
 apiVersion: v1
 kind: Pod
 metadata:
@@ -32,7 +32,7 @@ spec:
       mountPath: /cockroach-certs
   containers:
   - name: cockroachdb-client
-    image: cockroachdb/cockroach:v23.1.8
+    image: cockroachdb/cockroach:v23.1.9
     imagePullPolicy: IfNotPresent
     volumeMounts:
     - name: client-certs
