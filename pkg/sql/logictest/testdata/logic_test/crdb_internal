@@ -1354,7 +1354,7 @@ skipif config local-mixed-22.2-23.1
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('sql.defaults.zigzag_join.enabled')
 ----
-true
+false
 
 skipif config local-mixed-22.2-23.1
 query T

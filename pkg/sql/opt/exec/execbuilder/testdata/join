@@ -2117,6 +2117,10 @@ vectorized: true
           table: zigzag2@a_b_idx
           spans: [/1/2 - /1/2]
 
+# Reset zigzag joins to its default setting.
+statement ok
+RESET enable_zigzag_join
+
 # Test that we can force a merge join.
 query T
 EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn USING(x)
