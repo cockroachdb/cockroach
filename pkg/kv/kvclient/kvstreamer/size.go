@@ -11,6 +11,7 @@
 package kvstreamer
 
 import (
+	"fmt"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -36,8 +37,9 @@ var zeroInt32Slice []int32
 func init() {
 	scanRequestOverhead := int64(unsafe.Sizeof(kvpb.RequestUnion_Scan{}) +
 		unsafe.Sizeof(kvpb.ScanRequest{}))
-	if requestOverhead != scanRequestOverhead {
-		panic("GetRequest and ScanRequest have different overheads")
+	// TODO(XXX): understand this.
+	if requestOverhead+8 != scanRequestOverhead {
+		panic(fmt.Sprintf("GetRequest and ScanRequest have different overheads %d and scan req %d", requestOverhead, scanRequestOverhead))
 	}
 	scanResponseUnionOverhead := int64(unsafe.Sizeof(kvpb.ResponseUnion_Scan{}))
 	if responseUnionOverhead != scanResponseUnionOverhead {

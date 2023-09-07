@@ -95,6 +95,33 @@ enum ResumeReason {
   RESUME_ELASTIC_CPU_LIMIT = 5;
 }
 
+enum DurabilityType {
+  option (gogoproto.goproto_enum_prefix) = false;
+  // LockDurabilityBestEffort represents the default: make a best-effort attempt
+  // to hold any locks acquired until commit time. Typically, the lock is not
+  // replicated; instead, it's kept in-memory on the leaseholder of the locked
+  // key. As such, bes-effort locks are susceptible to things like lease
+  // transfers and node crashes. However, they're faster to acquire than
+  // guaranteed-durable locks, which makes them appealing for transactions that
+  // do not require locks for correctness (read: serializable isolation
+  // transactions).
+  LockDurabilityBestEffort = 0;
+
+  // LockDurabilityGuaranteed represents locks that must be held until a
+  // transaction commits. Unlike best-effort locks, they aren't susceptible to
+  // things like lease transfers, range {splits, merges}, memory limits, node
+  // crashes etc. Typically, these locks are replicated[1], which adds a
+  // performance penalty to asking for these. As such, they should only be asked
+  // for by transactions that use locks for correctness (read: read-committed or
+  // snapshot isolation transactions).
+  //
+  // [1] In the future, we may decide to (selectively) not replicate locks
+  // even if they need durability guarantees. Such a scheme would need buy-in
+  // from the KV client, KV server, and some mechanism to verify whether a lock
+  // is held or not before a transaction can commit.
+  LockDurabilityGuaranteed  = 1;
+}
+
 // RequestHeaderPure is not to be used directly. It's generated only for use of
 // its marshaling methods by RequestHeader. See the comment there.
 message RequestHeaderPure {
@@ -236,9 +263,18 @@ message GetRequest {
   // The desired key-level locking mode used during this get. When set to None
   // (the default), no key-level locking mode is used - meaning that the get
   // does not acquire a lock. When set to any other strength, a lock of that
-  // strength is acquired with the Unreplicated durability (i.e. best-effort)
-  // the key, if it exists.
+  // strength is acquired with the associated durability guarantees on the key,
+  // if it exists.
   kv.kvserver.concurrency.lock.Strength key_locking = 2;
+
+  // DurabilityType is only ever meaningful when KeyLocking is set to something
+  // other than None. It dictates the effort we want to go through in keeping
+  // our lock once its been acquired -- do we want a best-effort unreplicated
+  // lock, or do we want a guaranteed to exist until commit time (replicated)
+  // lock? The latter is more expensive, so transaction's that can do with
+  // best-effort locks (read: serializable isolation transactions) should use
+  // the former.
+  DurabilityType durability_type = 6;
 }
 
 // A GetResponse is the return value from the Get() method.
@@ -609,14 +645,23 @@ message ScanRequest {
   // The desired key-level locking mode used during this scan. When set to None
   // (the default), no key-level locking mode is used - meaning that the scan
   // does not acquire any locks. When set to any other strength, a lock of that
-  // strength is acquired with the Unreplicated durability (i.e. best-effort) on
-  // each of the keys scanned by the request, subject to any key limit applied
-  // to the batch which limits the number of keys returned.
+  // strength is acquired with the associated durability guarantees on each of
+  // the keys scanned by the request, subject to any key limit applied to the
+  // batch which limits the number of keys returned.
   //
   // NOTE: the locks acquire with this strength are point locks on each of the
   // keys returned by the request, not a single range lock over the entire span
   // scanned by the request.
   kv.kvserver.concurrency.lock.Strength key_locking = 5;
+
+  // DurabilityType is only ever meaningful when KeyLocking is set to something
+  // other than None. It dictates the effort we want to go through in keeping
+  // our lock once its been acquired -- do we want a best-effort unreplicated
+  // lock, or do we want a guaranteed to exist until commit time (replicated)
+  // lock? The latter is more expensive, so transaction's that can do with
+  // best-effort locks (read: serializable isolation transactions) should use
+  // the former.
+  DurabilityType durability_type = 6;
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -674,14 +719,23 @@ message ReverseScanRequest {
   // The desired key-level locking mode used during this scan. When set to None
   // (the default), no key-level locking mode is used - meaning that the scan
   // does not acquire any locks. When set to any other strength, a lock of that
-  // strength is acquired with the Unreplicated durability (i.e. best-effort) on
-  // each of the keys scanned by the request, subject to any key limit applied
-  // to the batch which limits the number of keys returned.
+  // strength is acquired with the associated durability guarantees on each of
+  // the keys scanned by the request, subject to any key limit applied to the
+  // batch which limits the number of keys returned.
   //
   // NOTE: the locks acquire with this strength are point locks on each of the
   // keys returned by the request, not a single range lock over the entire span
   // scanned by the request.
   kv.kvserver.concurrency.lock.Strength key_locking = 5;
+
+  // DurabilityType is only ever meaningful when KeyLocking is set to something
+  // other than None. It dictates the effort we want to go through in keeping
+  // our lock once its been acquired -- do we want a best-effort unreplicated
+  // lock, or do we want a guaranteed to exist until commit time (replicated)
+  // lock? The latter is more expensive, so transaction's that can do with
+  // best-effort locks (read: serializable isolation transactions) should use
+  // the former.
+  DurabilityType durability_type = 6;
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
