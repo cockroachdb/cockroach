@@ -158,7 +158,7 @@ func (zc *debugZipContext) collectClusterData(
 		}
 	}
 
-	{
+	if zipCtx.includeRangeInfo {
 		var tenantRanges *serverpb.TenantRangesResponse
 		s := zc.clusterPrinter.start("requesting tenant ranges")
 		if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
@@ -178,13 +178,10 @@ func (zc *debugZipContext) collectClusterData(
 					return rangeList.Ranges[i].RangeID > rangeList.Ranges[j].RangeID
 				})
 				sLocality := zc.clusterPrinter.start("writing tenant ranges for locality: %s", locality)
-				prefix := fmt.Sprintf("%s/%s", tenantRangesName, locality)
-				for _, r := range rangeList.Ranges {
-					sRange := zc.clusterPrinter.start("writing tenant range %d", r.RangeID)
-					name := fmt.Sprintf("%s/%d", prefix, r.RangeID)
-					if err := zc.z.createJSON(sRange, name+".json", r); err != nil {
-						return nodesInfo{}, nil, errors.Wrapf(err, "writing tenant range %d for locality %s", r.RangeID, locality)
-					}
+				name := fmt.Sprintf("%s/%s", tenantRangesName, locality)
+				s := zc.clusterPrinter.start("writing tenant ranges for locality %s", locality)
+				if err := zc.z.createJSON(s, name+".json", rangeList.Ranges); err != nil {
+					return nodesInfo{}, nil, s.fail(err)
 				}
 				sLocality.done()
 			}
