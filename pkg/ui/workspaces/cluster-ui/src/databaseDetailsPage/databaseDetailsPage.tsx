@@ -321,6 +321,7 @@ export class DatabaseDetailsPage extends React.Component<
 
   private refresh(): void {
     let lastDetailsError: Error;
+    let lastStatsError: Error;
     // Load everything by default
     let filteredTables = this.props.tables;
 
@@ -363,6 +364,23 @@ export class DatabaseDetailsPage extends React.Component<
           table.details.lastError?.name === "GetDatabaseInfoError")
       ) {
         this.props.refreshTableDetails(this.props.name, table.name);
+      }
+
+      if (table.stats.lastError !== undefined) {
+        lastStatsError = table.stats.lastError;
+      }
+      if (
+        lastStatsError &&
+        this.state.lastStatsError?.name != lastStatsError?.name
+      ) {
+        this.setState({ lastStatsError: lastStatsError });
+      }
+      if (
+        !table.stats.loaded &&
+        !table.stats.loading &&
+        table.stats.lastError === undefined
+      ) {
+        return this.props.refreshTableStats(this.props.name, table.name);
       }
     });
   }
