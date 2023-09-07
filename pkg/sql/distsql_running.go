@@ -1953,11 +1953,11 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	defer physPlanCleanup()
 	if err != nil {
 		recv.SetError(err)
-		return
+	} else {
+		finalizePlanWithRowCount(ctx, planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
+		recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
+		dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, finishedSetupFn)
 	}
-	finalizePlanWithRowCount(ctx, planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
-	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
-	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, finishedSetupFn)
 	if distributedErr := recv.getError(); distributedErr != nil && !planCtx.isLocal &&
 		distributedQueryRerunAsLocalEnabled.Get(&dsp.st.SV) {
 		// If we had a distributed plan which resulted in an error, we want to
