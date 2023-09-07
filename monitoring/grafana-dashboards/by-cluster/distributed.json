@@ -3,31 +3,41 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": "-- Grafana --",
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
         "type": "dashboard"
       }
     ]
   },
   "editable": true,
-  "gnetId": null,
+  "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "iteration": 1623960497845,
+  "id": 13,
   "links": [],
+  "liveNow": false,
   "panels": [
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -48,13 +58,13 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
+      "linewidth": 1,
       "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -64,63 +74,31 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
-          "expr": "sum(sum(ranges{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"})) by (instance)",
-          "hide": false,
+          "expr": "sum(rate(distsender_batches{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval])) by (cluster)",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Ranges",
+          "legendFormat": "Batch",
           "refId": "A"
         },
         {
-          "expr": "sum(sum(replicas_leaders{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(distsender_batches_partial{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval])) by (cluster)",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Leaders",
+          "legendFormat": "Partial Batches",
           "refId": "B"
-        },
-        {
-          "expr": "sum(sum(replicas_leaseholders{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))",
-          "interval": "",
-          "legendFormat": "Lease Holders",
-          "refId": "G"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(sum(replicas_leaders_not_leaseholders{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Leaders w/o Lease",
-          "refId": "C"
-        },
-        {
-          "expr": "sum(sum(ranges_unavailable{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Unavailable",
-          "refId": "D"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(sum(ranges_underreplicated{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Under-replicated",
-          "refId": "E"
-        },
-        {
-          "expr": "sum(sum(ranges_overreplicated{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Over-replicated",
-          "refId": "F"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
-      "title": "Ranges",
+      "title": "Batches",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -128,35 +106,28 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
       "yaxes": [
         {
-          "$$hashKey": "object:133",
+          "$$hashKey": "object:159",
           "format": "short",
-          "label": "ranges",
+          "label": "batches",
           "logBase": 1,
-          "max": null,
-          "min": null,
+          "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:134",
+          "$$hashKey": "object:160",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -164,11 +135,9 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "The number of replicas on each store.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "fill": 1,
       "fillGradient": 0,
@@ -190,13 +159,13 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null as zero",
+      "linewidth": 1,
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -206,18 +175,32 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(replicas{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(distsender_rpc_sent{job=\"cockroachdb\", cluster=~\"$cluster\"}[$__rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{instance}}",
+          "legendFormat": "RPCs Sent",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(distsender_rpc_sent_local{job=\"cockroachdb\",cluster=~\"$cluster\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Local Fast-path",
+          "refId": "B"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
-      "title": "Replicas per Store",
+      "title": "RPCs",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -225,35 +208,27 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
       "yaxes": [
         {
-          "$$hashKey": "object:431",
+          "$$hashKey": "object:309",
           "format": "short",
-          "label": "replicas",
+          "label": "rpcs",
           "logBase": 1,
-          "max": null,
-          "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:432",
+          "$$hashKey": "object:310",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -261,16 +236,14 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "The number of leaseholder replicas on each store. A leaseholder replica is the one that receives and coordinates all read and write requests for its range.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 8,
+        "h": 7,
         "w": 24,
         "x": 0,
         "y": 16
@@ -288,12 +261,12 @@
       },
       "lines": true,
       "linewidth": 2,
-      "nullPointMode": "null as zero",
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "",
+      "pluginVersion": "9.4.7",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -303,18 +276,34 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(replicas_leaseholders{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(distsender_rpc_sent_nextreplicaerror{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "{{instance}}",
+          "intervalFactor": 1,
+          "legendFormat": "Replica Errors",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(distsender_errors_notleaseholder{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "Not Lease Holder Errors",
+          "refId": "B"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
-      "title": "Leaseholders per Store",
+      "title": "RPC Errors",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -322,35 +311,28 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
       "yaxes": [
         {
-          "$$hashKey": "object:581",
+          "$$hashKey": "object:83",
           "format": "short",
-          "label": "leaseholders",
+          "label": "errors",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:582",
+          "$$hashKey": "object:84",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -358,11 +340,124 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "Exponentially weighted moving average of the number of KV batch requests processed by leaseholder replicas on each store per second. Tracks roughly the last 30 minutes of requests. Used for load-based rebalancing decisions.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "hiddenSeries": false,
+      "id": 8,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "9.0.2",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(txn_commits{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "Commited",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(txn_commits1PC{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "Fast-path Commited",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(txn_aborts{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Aborted",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "KV Transactions",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:668",
+          "format": "short",
+          "label": "transactions",
+          "logBase": 1,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:669",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "fill": 1,
       "fillGradient": 0,
@@ -370,10 +465,10 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 30
       },
       "hiddenSeries": false,
-      "id": 14,
+      "id": 20,
       "legend": {
         "avg": false,
         "current": false,
@@ -400,18 +495,104 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
-          "expr": "rebalancing_queriespersecond{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}",
+          "expr": "sum(rate(txn_restarts_writetooold{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval]))",
           "interval": "",
-          "legendFormat": "{{instance}}",
+          "legendFormat": "Write Too Old",
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(txn_restarts_writetoooldmulti{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Write Too Old (multiple)",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(txn_restarts_serializable{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Forwarded Timestamp (iso=serializable)",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(txn_restarts_asyncwritefailure{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Async Consensus Failure",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(txn_restarts_readwithinuncertainty{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Read Within Uncertainty Interval",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(txn_restarts_txnaborted{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Aborted",
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(txn_restarts_txnpush{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Push Failure",
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(txn_restarts_unknown{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Unknown",
+          "refId": "H"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
-      "title": "Average Queries per Store",
+      "title": "KV Transaction Restarts",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -419,35 +600,28 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
       "yaxes": [
         {
-          "$$hashKey": "object:731",
+          "$$hashKey": "object:437",
           "format": "short",
-          "label": "queries",
+          "label": "restarts",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:732",
+          "$$hashKey": "object:438",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     },
     {
@@ -455,19 +629,292 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
-      "description": "Number of logical bytes stored in [key-value pairs](https://www.cockroachlabs.com/docs/v21.1/architecture/distribution-layer.html#table-data) on each node.\n\nThis includes historical and deleted data.",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
+      "description": "The 99th percentile of transaction durations over a 1 minute period.",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
-        "h": 8,
+        "h": 7,
         "w": 24,
         "x": 0,
-        "y": 32
+        "y": 38
+      },
+      "hiddenSeries": false,
+      "id": 12,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "histogram_quantile(0.99, rate(txn_durations_bucket{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[1m]))",
+          "interval": "",
+          "legendFormat": "{{instance}}",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "KV Transactional Durations: 99th percentile",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:316",
+          "format": "ns",
+          "label": "transaction duration",
+          "logBase": 1,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:317",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "The 90th percentile of transaction durations over a 1 minute period.",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      },
+      "hiddenSeries": false,
+      "id": 18,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "histogram_quantile(0.90, rate(txn_durations_bucket{job=\"cockroachdb\",cluster=~\"$cluster\",instance=~\"$node\"}[1m]))",
+          "interval": "",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "KV Transaction Durations: 90th percentile",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:263",
+          "format": "ns",
+          "label": "transaction duration",
+          "logBase": 1,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:264",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "The 99th percentile of latency to heartbeat a node's internal liveness record over a 1 minute period.",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 52
+      },
+      "hiddenSeries": false,
+      "id": 14,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 2,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "exemplar": true,
+          "expr": "histogram_quantile(0.99,rate(liveness_heartbeatlatency_bucket{job=\"cockroachdb\", cluster=\"$cluster\",instance=~\"$node\"}[1m]))",
+          "interval": "",
+          "intervalFactor": 2,
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Node Heartbeat Latency: 99th percentile ",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:210",
+          "format": "ns",
+          "label": "heartbeat latency",
+          "logBase": 1,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:211",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "The 90th percentile of latency to heartbeat a node's internal liveness record over a 1 minute period.",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 59
       },
       "hiddenSeries": false,
       "id": 16,
@@ -497,18 +944,21 @@
       "steppedLine": false,
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "exemplar": true,
-          "expr": "totalbytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}",
+          "expr": "histogram_quantile(0.90,rate(liveness_heartbeatlatency_bucket{job=\"cockroachdb\", cluster=\"$cluster\",instance=~\"$node\"}[1m]))",
           "interval": "",
+          "intervalFactor": 2,
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
-      "timeFrom": null,
       "timeRegions": [],
-      "timeShift": null,
-      "title": "Logical Bytes per Store",
+      "title": "Node Heartbeat Latency: 90th percentile",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -516,413 +966,34 @@
       },
       "type": "graph",
       "xaxis": {
-        "buckets": null,
         "mode": "time",
-        "name": null,
         "show": true,
         "values": []
       },
       "yaxes": [
         {
-          "$$hashKey": "object:807",
-          "format": "bytes",
-          "label": "logical store size",
+          "$$hashKey": "object:157",
+          "format": "ns",
+          "label": "heartbeat latency",
           "logBase": 1,
-          "max": null,
           "min": "0",
           "show": true
         },
         {
-          "$$hashKey": "object:808",
+          "$$hashKey": "object:158",
           "format": "short",
-          "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
           "show": true
         }
       ],
       "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "description": "",
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 40
-      },
-      "hiddenSeries": false,
-      "id": 8,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum(sum(replicas{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))  ",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Replicas",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(sum(replicas_quiescent{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Quiescent",
-          "refId": "B"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Replica Quiescence",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:883",
-          "format": "short",
-          "label": "replicas",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:884",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 48
-      },
-      "hiddenSeries": false,
-      "id": 10,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum(sum(rate(range_splits{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Splits",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(sum(rate(range_merges{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Merges",
-          "refId": "C"
-        },
-        {
-          "expr": "sum(sum(rate(range_adds{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Adds",
-          "refId": "B"
-        },
-        {
-          "expr": "sum(sum(rate(range_removes{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Removes",
-          "refId": "D"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(sum(rate(leases_transfers_success{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Lease Transfers",
-          "refId": "E"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(sum(rate(rebalancing_lease_transfers{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Load-based Lease Transfers",
-          "refId": "F"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(sum(rate(rebalancing_range_rebalances{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval])) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Load-based Range Rebalances",
-          "refId": "G"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Range Operations",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:959",
-          "format": "short",
-          "label": "ranges",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:960",
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 56
-      },
-      "hiddenSeries": false,
-      "id": 12,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum(rate(range_snapshots_generated{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval]))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Generated",
-          "refId": "A"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(rate(range_snapshots_applied_voter{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval]))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Applied (Voters)",
-          "refId": "B"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(rate(range_snapshots_applied_initial{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval]))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Applied (Initial Upreplication)",
-          "refId": "C"
-        },
-        {
-          "exemplar": true,
-          "expr": "sum(rate(range_snapshots_applied_initial{cluster=\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$rate_interval]))",
-          "hide": false,
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Applied (Non-Voters)",
-          "refId": "D"
-        },
-        {
-          "expr": "sum(rate(replicas_reserved{cluster=~\"$cluster\",job=\"cockroachdb\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Reserved Replicas",
-          "refId": "E"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Snapshots",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:1109",
-          "format": "short",
-          "label": "snapshots",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:1110",
-          "format": "short",
-          "label": "",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": false
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
+        "align": false
       }
     }
   ],
-  "refresh": false,
-  "schemaVersion": 27,
+  "refresh": "30s",
+  "revision": 1,
+  "schemaVersion": 38,
   "style": "dark",
   "tags": [],
   "templating": {
@@ -933,8 +1004,6 @@
           "text": "Prometheus",
           "value": "Prometheus"
         },
-        "description": null,
-        "error": null,
         "hide": 0,
         "includeAll": false,
         "label": "datasource",
@@ -942,23 +1011,22 @@
         "name": "DS_PROMETHEUS",
         "options": [],
         "query": "prometheus",
-        "queryValue": "",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
       },
       {
-        "allValue": null,
         "current": {
           "selected": false,
-          "text": "my-cockroachdb-cluster",
-          "value": "my-cockroachdb-cluster"
+          "text": "drew-demo",
+          "value": "drew-demo"
         },
-        "datasource": "${DS_PROMETHEUS}",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
         "definition": "sys_uptime{job=\"cockroachdb\"}",
-        "description": null,
-        "error": null,
         "hide": 0,
         "includeAll": false,
         "label": "Cluster",
@@ -974,7 +1042,6 @@
         "skipUrlSync": false,
         "sort": 1,
         "tagValuesQuery": "",
-        "tags": [],
         "tagsQuery": "",
         "type": "query",
         "useTags": false
@@ -986,10 +1053,11 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": "${DS_PROMETHEUS}",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
         "definition": "label_values(sys_uptime{job=\"cockroachdb\",cluster=\"$cluster\"},instance)",
-        "description": null,
-        "error": null,
         "hide": 0,
         "includeAll": true,
         "label": "Node",
@@ -1005,7 +1073,6 @@
         "skipUrlSync": false,
         "sort": 1,
         "tagValuesQuery": "",
-        "tags": [],
         "tagsQuery": "",
         "type": "query",
         "useTags": false
@@ -1016,22 +1083,20 @@
         "auto_min": "10s",
         "current": {
           "selected": false,
-          "text": "30s",
-          "value": "30s"
+          "text": "1m",
+          "value": "1m"
         },
-        "description": null,
-        "error": null,
         "hide": 0,
         "label": "Rate Interval",
         "name": "rate_interval",
         "options": [
           {
-            "selected": true,
+            "selected": false,
             "text": "30s",
             "value": "30s"
           },
           {
-            "selected": false,
+            "selected": true,
             "text": "1m",
             "value": "1m"
           },
@@ -1042,8 +1107,8 @@
           },
           {
             "selected": false,
-            "text": "15m",
-            "value": "15m"
+            "text": "10m",
+            "value": "10m"
           },
           {
             "selected": false,
@@ -1057,8 +1122,13 @@
           },
           {
             "selected": false,
-            "text": "2h",
-            "value": "2h"
+            "text": "6h",
+            "value": "6h"
+          },
+          {
+            "selected": false,
+            "text": "12h",
+            "value": "12h"
           },
           {
             "selected": false,
@@ -1066,7 +1136,8 @@
             "value": "1d"
           }
         ],
-        "query": "30s,1m,5m,15m,30m,1h,2h,1d",
+        "query": "30s,1m,5m,10m,30m,1h,6h,12h,1d",
+        "queryValue": "",
         "refresh": 2,
         "skipUrlSync": false,
         "type": "interval"
@@ -1078,8 +1149,9 @@
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "utc",
-  "title": "CRDB Console: Replication",
-  "uid": "crdb-console-replications",
-  "version": 3
+  "timezone": "browser",
+  "title": "CRDB Console: Distributed",
+  "uid": "crdb-console-distributed",
+  "version": 3,
+  "weekStart": ""
 }
