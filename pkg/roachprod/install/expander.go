@@ -27,7 +27,7 @@ var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+)?}`)
 var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)}`)
 var storeDirRe = regexp.MustCompile(`{store-dir}`)
-var logDirRe = regexp.MustCompile(`{log-dir}`)
+var logDirRe = regexp.MustCompile(`{log-dir(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var certsDirRe = regexp.MustCompile(`{certs-dir}`)
 
 // expander expands a string which contains templated parameters for cluster
@@ -251,10 +251,15 @@ func (e *expander) maybeExpandStoreDir(
 func (e *expander) maybeExpandLogDir(
 	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
 ) (string, bool, error) {
-	if !logDirRe.MatchString(s) {
+	m := logDirRe.FindStringSubmatch(s)
+	if m == nil {
 		return s, false, nil
 	}
-	return c.LogDir(e.node), true, nil
+	tenantName, tenantInstance, err := extractTenantInfo(m[1:])
+	if err != nil {
+		return "", false, err
+	}
+	return c.LogDir(e.node, tenantName, tenantInstance), true, nil
 }
 
 // maybeExpandCertsDir is an expanderFunc for "{certs-dir}"

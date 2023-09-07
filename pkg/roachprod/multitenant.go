@@ -45,17 +45,6 @@ func StartTenant(
 		return err
 	}
 
-	if tc.Name == hc.Name {
-		// We allow using the same cluster, but the node sets must be disjoint.
-		for _, n1 := range tc.Nodes {
-			for _, n2 := range hc.Nodes {
-				if n1 == n2 {
-					return errors.Errorf("host and tenant nodes must be disjoint")
-				}
-			}
-		}
-	}
-
 	startOpts.Target = install.StartTenantSQL
 	if startOpts.TenantID < 2 {
 		return errors.Errorf("invalid tenant ID %d (must be 2 or higher)", startOpts.TenantID)
