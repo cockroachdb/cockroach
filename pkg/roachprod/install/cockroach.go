@@ -361,11 +361,31 @@ func (c *SyncedCluster) NodeDir(node Node, storeIndex int) string {
 }
 
 // LogDir returns the logs directory for the given node.
-func (c *SyncedCluster) LogDir(node Node) string {
+func (c *SyncedCluster) LogDir(node Node, tenantName string, instance int) string {
+	dirName := "logs" + tenantDirSuffix(tenantName, instance)
 	if c.IsLocal() {
-		return filepath.Join(c.localVMDir(node), "logs")
+		return filepath.Join(c.localVMDir(node), dirName)
 	}
-	return "logs"
+	return dirName
+}
+
+// TenantStoreDir returns the data directory for a given tenant.
+func (c *SyncedCluster) TenantStoreDir(node Node, tenantName string, instance int) string {
+	dataDir := fmt.Sprintf("data%s", tenantDirSuffix(tenantName, instance))
+	if c.IsLocal() {
+		return filepath.Join(c.localVMDir(node), dataDir)
+	}
+
+	return dataDir
+}
+
+// tenantDirSuffix returns the suffix to use for tenant-specific directories.
+// This suffix consists of the tenant name and instance number (if applicable).
+func tenantDirSuffix(tenantName string, instance int) string {
+	if tenantName != "" && tenantName != SystemTenantName {
+		return fmt.Sprintf("-%s-%d", tenantName, instance)
+	}
+	return ""
 }
 
 // CertsDir returns the certificate directory for the given node.
@@ -532,7 +552,7 @@ func (c *SyncedCluster) generateStartCmd(
 	}
 
 	return execStartTemplate(startTemplateData{
-		LogDir: c.LogDir(node),
+		LogDir: c.LogDir(node, startOpts.TenantName, startOpts.TenantInstance),
 		KeyCmd: keyCmd,
 		EnvVars: append(append([]string{
 			fmt.Sprintf("ROACHPROD=%s", c.roachprodEnvValue(node)),
@@ -609,7 +629,7 @@ func (c *SyncedCluster) generateStartArgs(
 		args = append(args, "--insecure")
 	}
 
-	logDir := c.LogDir(node)
+	logDir := c.LogDir(node, startOpts.TenantName, startOpts.TenantInstance)
 	idx1 := argExists(startOpts.ExtraArgs, "--log")
 	idx2 := argExists(startOpts.ExtraArgs, "--log-config-file")
 
@@ -687,7 +707,7 @@ func (c *SyncedCluster) generateStartArgs(
 	}
 
 	if startOpts.Target == StartDefault || startOpts.Target == StartTenantSQL {
-		args = append(args, c.generateStartFlagsSQL()...)
+		args = append(args, c.generateStartFlagsSQL(node, startOpts)...)
 	}
 
 	args = append(args, startOpts.ExtraArgs...)
@@ -757,10 +777,13 @@ func (c *SyncedCluster) generateStartFlagsKV(node Node, startOpts StartOpts) []s
 
 // generateStartFlagsSQL generates `cockroach start` and `cockroach mt
 // start-sql` arguments that are relevant for the SQL layers, used by both KV
-// and storage layers (and in particular, are never used by `
-func (c *SyncedCluster) generateStartFlagsSQL() []string {
+// and storage layers.
+func (c *SyncedCluster) generateStartFlagsSQL(node Node, startOpts StartOpts) []string {
 	var args []string
 	args = append(args, fmt.Sprintf("--max-sql-memory=%d%%", c.maybeScaleMem(25)))
+	if startOpts.Target == StartTenantSQL {
+		args = append(args, "--store", c.TenantStoreDir(node, startOpts.TenantName, startOpts.TenantInstance))
+	}
 	return args
 }
 
