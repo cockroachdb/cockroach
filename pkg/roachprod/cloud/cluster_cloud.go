@@ -185,12 +185,15 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 		g.Go(func() error {
 			var err error
 			providerVMs[index], err = provider.List(l, options)
-			return err
+			return errors.Wrapf(err, "provider %s", provider.Name())
 		})
 	}
 
 	if err := g.Wait(); err != nil {
-		return nil, err
+		// We continue despite the error as we don't want to fail for all providers if only one
+		// has an issue. The function that calls ListCloud may not even use the erring provider.
+		// If it does, it will fail later when it doesn't find the specified cluster.
+		l.Printf("WARNING: Error listing VMs, continuing but list may be incomplete. %s \n", err.Error())
 	}
 
 	for _, vms := range providerVMs {
