@@ -198,27 +198,27 @@ type Request interface {
 // strength of a read-only request.
 type LockingReadRequest interface {
 	Request
-	KeyLockingStrength() lock.Strength
+	KeyLockingStr() lock.Strength
 }
 
 var _ LockingReadRequest = (*GetRequest)(nil)
 
-// KeyLockingStrength implements the LockingReadRequest interface.
-func (gr *GetRequest) KeyLockingStrength() lock.Strength {
-	return gr.KeyLocking
+// KeyLockingStr implements the LockingReadRequest interface.
+func (gr *GetRequest) KeyLockingStr() lock.Strength {
+	return gr.KeyLockingStrength
 }
 
 var _ LockingReadRequest = (*ScanRequest)(nil)
 
-// KeyLockingStrength implements the LockingReadRequest interface.
-func (sr *ScanRequest) KeyLockingStrength() lock.Strength {
+// KeyLockingStr implements the LockingReadRequest interface.
+func (sr *ScanRequest) KeyLockingStr() lock.Strength {
 	return sr.KeyLocking
 }
 
 var _ LockingReadRequest = (*ReverseScanRequest)(nil)
 
-// KeyLockingStrength implements the LockingReadRequest interface.
-func (rsr *ReverseScanRequest) KeyLockingStrength() lock.Strength {
+// KeyLockingStr implements the LockingReadRequest interface.
+func (rsr *ReverseScanRequest) KeyLockingStr() lock.Strength {
 	return rsr.KeyLocking
 }
 
@@ -1197,7 +1197,7 @@ func NewGet(key roachpb.Key, forUpdate bool) Request {
 		RequestHeader: RequestHeader{
 			Key: key,
 		},
-		KeyLocking: scanLockStrength(forUpdate),
+		KeyLockingStrength: scanLockStrength(forUpdate),
 	}
 }
 
@@ -1355,7 +1355,7 @@ func flagForLockStrength(l lock.Strength) flag {
 }
 
 func (gr *GetRequest) flags() flag {
-	maybeLocking := flagForLockStrength(gr.KeyLocking)
+	maybeLocking := flagForLockStrength(gr.KeyLockingStrength)
 	return isRead | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 

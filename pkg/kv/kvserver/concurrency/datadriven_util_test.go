@@ -183,7 +183,7 @@ func scanSingleRequest(
 		var r kvpb.GetRequest
 		r.Sequence = maybeGetSeq()
 		r.Key = roachpb.Key(mustGetField("key"))
-		r.KeyLocking = maybeGetStr()
+		r.KeyLockingStrength = maybeGetStr()
 		return &r
 
 	case "scan":

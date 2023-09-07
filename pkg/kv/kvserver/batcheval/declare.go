@@ -87,7 +87,7 @@ func DefaultDeclareIsolatedKeys(
 			in := uncertainty.ComputeInterval(header, kvserverpb.LeaseStatus{}, maxOffset)
 			timestamp.Forward(in.GlobalLimit)
 		} else {
-			str = req.(kvpb.LockingReadRequest).KeyLockingStrength()
+			str = req.(kvpb.LockingReadRequest).KeyLockingStr()
 			switch str {
 			// The lock.None case has already been handled above.
 			case lock.Shared:

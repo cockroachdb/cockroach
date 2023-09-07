@@ -1744,7 +1744,7 @@ func buildResumeSingleRangeBatch(
 			newGet := gets[0]
 			gets = gets[1:]
 			newGet.req.SetSpan(*get.ResumeSpan)
-			newGet.req.KeyLocking = s.keyLocking
+			newGet.req.KeyLockingStrength = s.keyLocking
 			newGet.union.Get = &newGet.req
 			resumeReq.reqs[resumeReqIdx].Value = &newGet.union
 			resumeReq.positions = append(resumeReq.positions, position)

@@ -2916,10 +2916,10 @@ func TestReplicaLatchingOptimisticEvaluationSkipLocked(t *testing.T) {
 				gArgs1, gArgs2 := getArgsString("a"), getArgsString("b")
 				gArgs3, gArgs4 := getArgsString("c"), getArgsString("d")
 				if lockingReads {
-					gArgs1.KeyLocking = lock.Exclusive
-					gArgs2.KeyLocking = lock.Exclusive
-					gArgs3.KeyLocking = lock.Exclusive
-					gArgs4.KeyLocking = lock.Exclusive
+					gArgs1.KeyLockingStrength = lock.Exclusive
+					gArgs2.KeyLockingStrength = lock.Exclusive
+					gArgs3.KeyLockingStrength = lock.Exclusive
+					gArgs4.KeyLockingStrength = lock.Exclusive
 				}
 				baRead.Add(gArgs1, gArgs2, gArgs3, gArgs4)
 			} else {

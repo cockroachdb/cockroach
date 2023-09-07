@@ -293,7 +293,7 @@ func TestEvaluateBatch(t *testing.T) {
 			},
 		},
 		//
-		// Test suite for KeyLocking.
+		// Test suite for KeyLockingStrength.
 		//
 		{
 			// Two gets, one of which finds a key, one of which does not. An
@@ -302,10 +302,10 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanA := getArgsString("a")
-				scanA.KeyLocking = lock.Exclusive
+				scanA.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanA)
 				scanG := getArgsString("g")
-				scanG.KeyLocking = lock.Exclusive
+				scanG.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanG)
 				d.ba.Txn = &txn
 			},
@@ -322,10 +322,10 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanA := getArgsString("a")
-				scanA.KeyLocking = lock.Exclusive
+				scanA.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanA)
 				scanG := getArgsString("g")
-				scanG.KeyLocking = lock.Exclusive
+				scanG.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanG)
 			},
 			check: func(t *testing.T, r resp) {
