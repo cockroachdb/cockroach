@@ -1953,12 +1953,17 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	defer physPlanCleanup()
 	if err != nil {
 		recv.SetError(err)
+	} else {
+		finalizePlanWithRowCount(ctx, planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
+		recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
+		dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, finishedSetupFn)
+	}
+	if planCtx.isLocal {
+		// If the plan was local, then we're done regardless of whether an error
+		// was encountered or not.
 		return
 	}
-	finalizePlanWithRowCount(ctx, planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
-	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
-	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, finishedSetupFn)
-	if distributedErr := recv.getError(); distributedErr != nil && !planCtx.isLocal &&
+	if distributedErr := recv.getError(); distributedErr != nil &&
 		distributedQueryRerunAsLocalEnabled.Get(&dsp.st.SV) {
 		// If we had a distributed plan which resulted in an error, we want to
 		// retry this query as local in some cases. In particular, this retry
