@@ -1385,6 +1385,10 @@ func instanceIDForKVNodeHostedInstance(nodeID roachpb.NodeID) base.SQLInstanceID
 	return base.SQLInstanceID(nodeID)
 }
 
+func (dsp *DistSQLPlanner) alwaysUseGateway(roachpb.NodeID) base.SQLInstanceID {
+	return dsp.gatewaySQLInstanceID
+}
+
 // makeInstanceResolver returns a function that can choose the SQL instance ID
 // for a provided KV node ID.
 func (dsp *DistSQLPlanner) makeInstanceResolver(
@@ -1397,13 +1401,16 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 	}
 
 	// GetAllInstances only returns healthy instances.
-	// TODO(yuzefovich): confirm that all instances are of compatible version.
 	instances, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if len(instances) == 0 {
-		return nil, errors.New("no healthy sql instances available for planning")
+		// For whatever reason, we think that we don't have any healthy
+		// instances (one example is someone explicitly removing the rows from
+		// the sql_instances table), but we always have the gateway pod to
+		// execute on, so we'll use it.
+		return dsp.alwaysUseGateway, nil
 	}
 
 	rng, _ := randutil.NewPseudoRand()
