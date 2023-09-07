@@ -1652,6 +1652,18 @@ For large clusters, this can dramatically increase debug zip size/file count.
 `,
 	}
 
+	ZipIncludeGoroutineStacks = FlagInfo{
+		Name: "include-goroutine-stacks",
+		Description: `
+Fetch stack traces for all goroutines running on each targeted node in nodes/*/stacks.txt
+and nodes/*/stacks_with_labels.txt files. Note that fetching stack traces for all goroutines is
+a "stop-the-world" operation, which can momentarily have negative impacts on SQL service 
+latency. Note that any periodic goroutine dumps previously taken on the node will still be 
+included in nodes/*/goroutines/*.txt.gz, as these would have already been generated and don't 
+require any additional stop-the-world operations to be collected.
+`,
+	}
+
 	ZipCPUProfileDuration = FlagInfo{
 		Name: "cpu-profile-duration",
 		Description: `

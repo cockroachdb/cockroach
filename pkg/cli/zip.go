@@ -344,6 +344,12 @@ done
 		}
 	}
 
+	if !zipCtx.includeStacks {
+		zr.info("NOTE: Omitted node-level goroutine stack dumps from this debug zip bundle." +
+			" Use the --" + cliflags.ZipIncludeGoroutineStacks.Name + " flag to enable the fetching of this" +
+			" data.")
+	}
+
 	// TODO(obs-infra): remove deprecation warning once process completed in v23.2.
 	if zipCtx.redactLogs {
 		zr.info("WARNING: The --" + cliflags.ZipRedactLogs.Name +
