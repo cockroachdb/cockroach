@@ -816,13 +816,20 @@ func (h *GCHint) IsEmpty() bool {
 // of receiver hint (leftEmpty) and argument hint (rightEmpty).
 // Returns true if receiver state was changed.
 func (h *GCHint) Merge(rhs *GCHint, leftEmpty, rightEmpty bool) bool {
-	// If either side has data but no hint, merged range can't have a hint.
+	// If LHS or RHS has data but no LatestRangeDeleteTimestamp hint, then this
+	// side is not known to be covered by range tombstones. Correspondingly, the
+	// union of the two is not too. If so, clear the hint.
 	if (rhs.LatestRangeDeleteTimestamp.IsEmpty() && !rightEmpty) ||
 		(h.LatestRangeDeleteTimestamp.IsEmpty() && !leftEmpty) {
 		updated := h.LatestRangeDeleteTimestamp.IsSet()
 		h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
 		return updated
 	}
+	// TODO(pavelkalinnikov): handle the case when some side has a hint (i.e. is
+	// covered by range tombstones), but is not empty. It means that there is data
+	// on top of the range tombstones, so the ClearRange optimization may not be
+	// effective. For now, live with the false positive because this is unlikely.
+
 	// Otherwise, use the newest hint.
 	return h.ForwardLatestRangeDeleteTimestamp(rhs.LatestRangeDeleteTimestamp)
 }
