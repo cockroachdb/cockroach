@@ -29,7 +29,7 @@ add-discovered r=req1 k=a txn=txn2 strength=shared
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
@@ -37,11 +37,11 @@ add-discovered r=req1 k=b txn=txn3 strength=exclusive
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
@@ -63,15 +63,15 @@ acquire r=req2 k=c durability=u strength=shared
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
 
 new-request r=req3 txn=txn1 ts=10 spans=exclusive@a+exclusive@c
 ----
@@ -84,36 +84,36 @@ add-discovered r=req3 k=a txn=txn3 strength=shared
 ----
 num=3
  lock: "a"
-  holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
-           txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: repl [Shared]
+           txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 3
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
 
 add-discovered r=req3 k=c txn=txn3 strength=shared
 ----
 num=3
  lock: "a"
-  holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
-           txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: repl [Shared]
+           txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 3
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
-           txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
@@ -149,8 +149,8 @@ add-discovered r=req4 k=b txn=txn3 strength=intent
 ----
 num=3
  lock: "a"
-  holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
-           txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: repl [Shared]
+           txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
@@ -162,8 +162,8 @@ num=3
     active: false req: 1, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
     active: false req: 4, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
-           txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 3, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
 
@@ -195,7 +195,7 @@ num=2
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
 
 # Add a waiter on both these keys so that the replicated lock acquisition
 # doesn't drop the lock.
@@ -230,7 +230,7 @@ num=2
     active: true req: 6, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 6
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 7
@@ -244,7 +244,7 @@ num=2
     active: true req: 6, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 6
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Shared], unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared], unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 7
@@ -268,7 +268,7 @@ add-discovered r=req9 k=a txn=txn1 strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 9, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -283,11 +283,11 @@ add-discovered r=req10 k=b txn=txn1 strength=shared
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 9, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 10, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -306,7 +306,7 @@ num=2
    queued locking requests:
     active: false req: 9, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 10, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -318,7 +318,7 @@ num=2
    queued locking requests:
     active: false req: 9, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Shared], unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared], unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: false req: 10, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -346,7 +346,7 @@ add-discovered r=req12 k=a txn=txn1 strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -355,11 +355,11 @@ add-discovered r=req12 k=b txn=txn1 strength=shared
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -374,11 +374,11 @@ acquire r=req13 k=a durability=r strength=exclusive
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -393,11 +393,11 @@ acquire r=req14 k=b durability=r strength=shared
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -418,11 +418,11 @@ acquire r=req15 k=a durability=r strength=exclusive
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -437,11 +437,11 @@ acquire r=req16 k=b durability=r strength=shared
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -458,11 +458,11 @@ acquire r=req17 k=a durability=r strength=exclusive
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -477,11 +477,11 @@ acquire r=req18 k=b durability=r strength=shared
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 12, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -510,7 +510,7 @@ add-discovered r=req19 k=a txn=txn1 strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 19, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -518,11 +518,11 @@ add-discovered r=req19 k=b txn=txn1 strength=shared
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 19, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
    queued locking requests:
     active: false req: 19, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -580,10 +580,10 @@ acquire r=req23 k=b durability=r strength=shared
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
  lock: "b"
-  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
-           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Shared]
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: repl [Shared]
 
 # ------------------------------------------------------------------------------
 # Ensure non-locking reads do not conflict with replicated exclusive locks. We
@@ -607,7 +607,7 @@ add-discovered r=req24 k=a txn=txn1 strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 24, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -615,11 +615,11 @@ add-discovered r=req24 k=b txn=txn1 strength=exclusive
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 24, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 24, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -635,7 +635,7 @@ acquire r=req25 k=b durability=u strength=exclusive
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 24, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
@@ -692,7 +692,7 @@ print
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 0,0, info: repl [Exclusive]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
    queued locking requests:
     active: false req: 24, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
