@@ -10,7 +10,6 @@ package streamingest
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
@@ -72,11 +71,12 @@ func TestIngestSpanConfigs(t *testing.T) {
 		return ingestor.ingestSpanConfigs(ctx, sourceTenant.Name)
 	})
 
-	for ts, toApply := range []struct {
+	for _, tc := range []struct {
+		name                       string
 		updates                    []spanconfig.Record
 		deletes                    []spanconfig.Target
 		expectedUpdates            []spanconfig.Record
-		expectedDeletes            spanconfig.Targets
+		expectedDeletes            []spanconfig.Target
 		expectedPersistedUserSpans []spanconfig.Record
 	}{
 		{
@@ -87,6 +87,7 @@ func TestIngestSpanConfigs(t *testing.T) {
 			// replacing the deleted span config records. In this test, the only
 			// replicated span config record is the dummy tenant split point created
 			// by replicationtestutils.NewReplicationHelperWithDummySpanConfigTable().
+			name:            "initial scan",
 			expectedUpdates: []spanconfig.Record{makeRecord(destTenantSplitPoint, 14400)},
 			expectedDeletes: []spanconfig.Target{spanconfig.MakeTargetFromSpan(destTenantSplitPoint)},
 
@@ -96,25 +97,25 @@ func TestIngestSpanConfigs(t *testing.T) {
 			expectedPersistedUserSpans: []spanconfig.Record{},
 		},
 		{
-			// Create a Record.
+			name:                       "create a record",
 			updates:                    []spanconfig.Record{makeRecord(i1Source, 2)},
 			expectedUpdates:            []spanconfig.Record{makeRecord(i1Dest, 2)},
 			expectedPersistedUserSpans: []spanconfig.Record{makeRecord(i1Dest, 2)},
 		},
 		{
-			// Update the Span.
+			name:                       "update the span",
 			updates:                    []spanconfig.Record{makeRecord(i1Source, 4)},
 			expectedUpdates:            []spanconfig.Record{makeRecord(i1Dest, 4)},
 			expectedPersistedUserSpans: []spanconfig.Record{makeRecord(i1Dest, 4)},
 		},
 		{
-			// Update two records at the same time
+			name:                       "update two records at the same time",
 			updates:                    []spanconfig.Record{makeRecord(i1Source, 3), makeRecord(i2Source, 2)},
 			expectedUpdates:            []spanconfig.Record{makeRecord(i1Dest, 3), makeRecord(i2Dest, 2)},
 			expectedPersistedUserSpans: []spanconfig.Record{makeRecord(i1Dest, 3), makeRecord(i2Dest, 2)},
 		},
 		{
-			// Merge these Records
+			name:                       "merge the records",
 			deletes:                    []spanconfig.Target{spanconfig.MakeTargetFromSpan(i2Source)},
 			updates:                    []spanconfig.Record{makeRecord(i12Source, 10)},
 			expectedUpdates:            []spanconfig.Record{makeRecord(i12Dest, 10)},
@@ -122,26 +123,30 @@ func TestIngestSpanConfigs(t *testing.T) {
 			expectedPersistedUserSpans: []spanconfig.Record{makeRecord(i12Dest, 10)},
 		},
 		{
-			// Split the records
+			name:                       "split the records",
 			updates:                    []spanconfig.Record{makeRecord(i1Source, 1), makeRecord(i2Source, 2)},
 			expectedUpdates:            []spanconfig.Record{makeRecord(i1Dest, 1), makeRecord(i2Dest, 2)},
 			expectedPersistedUserSpans: []spanconfig.Record{makeRecord(i1Dest, 1), makeRecord(i2Dest, 2)},
 		},
 	} {
-		toApply := toApply
-		require.NoError(t, sourceAccessor.UpdateSpanConfigRecords(ctx, toApply.deletes, toApply.updates,
-			hlc.MinTimestamp,
-			hlc.MaxTimestamp), "failed on update %d (index starts at 0)", ts)
-		toIngest := <-toIngestCh
-		require.Equal(t, replicationtestutils.PrettyRecords(toApply.expectedUpdates), replicationtestutils.PrettyRecords(toIngest.toUpdate), "failed on step %d (0 indexed)", ts)
-		require.Equal(t, fmt.Sprintf("%s", toApply.expectedDeletes), fmt.Sprintf("%s", toIngest.toDelete), "failed on step %d (0 indexed)", ts)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, sourceAccessor.UpdateSpanConfigRecords(ctx, tc.deletes, tc.updates,
+				hlc.MinTimestamp,
+				hlc.MaxTimestamp))
+			toIngest := <-toIngestCh
+			require.Equal(t, replicationtestutils.PrettyRecords(tc.expectedUpdates), replicationtestutils.PrettyRecords(toIngest.toUpdate))
+			if tc.expectedDeletes == nil {
+				tc.expectedDeletes = []spanconfig.Target{}
+			}
+			require.Equal(t, tc.expectedDeletes, toIngest.toDelete)
 
-		actualSpanConfigRecords, err := ingestor.accessor.GetSpanConfigRecords(ctx, i12DestTarget)
-		require.NoError(t, err)
-		require.Equal(t,
-			replicationtestutils.PrettyRecords(toApply.expectedPersistedUserSpans),
-			replicationtestutils.PrettyRecords(actualSpanConfigRecords),
-			"failed on step %d (0 indexed)", ts)
+			actualSpanConfigRecords, err := ingestor.accessor.GetSpanConfigRecords(ctx, i12DestTarget)
+			require.NoError(t, err)
+			require.Equal(t,
+				replicationtestutils.PrettyRecords(tc.expectedPersistedUserSpans),
+				replicationtestutils.PrettyRecords(actualSpanConfigRecords))
+		})
 	}
 }
 
@@ -176,53 +181,17 @@ func TestIngestSpanConfigsInitialScan(t *testing.T) {
 	splitRecord := replicationtestutils.MakeSpanConfigRecord(t, destTenantSplitPoint, 14400)
 
 	type testCase struct {
+		name                       string
 		updatesDuringPause         [][]spanconfig.Record
 		deletesDuringPause         [][]spanconfig.Target
 		expectedInitScanUpdates    []spanconfig.Record
-		expectedInitScanDeletes    spanconfig.Targets
+		expectedInitScanDeletes    []spanconfig.Target
 		expectedPersistedUserSpans []spanconfig.Record
-	}
-	execTestCase := func(tc testCase, step int) {
-		if len(tc.deletesDuringPause) == 0 {
-			tc.deletesDuringPause = make([][]spanconfig.Target, len(tc.expectedInitScanUpdates))
-		}
-		for i := range tc.updatesDuringPause {
-			require.NoError(t, sourceAccessor.UpdateSpanConfigRecords(ctx, tc.deletesDuringPause[i], tc.updatesDuringPause[i],
-				hlc.MinTimestamp,
-				hlc.MaxTimestamp), "failed on update %d (index starts at 0)", step)
-		}
-
-		ingestor, cleanupIngestor := createDummySpanConfigIngestor(
-			ctx,
-			t,
-			h,
-			sourceTenant.ID,
-			destTenantID)
-		group := ctxgroup.WithContext(ctx)
-		defer func() {
-			cleanupIngestor()
-			require.NoError(t, group.Wait())
-		}()
-		group.GoCtx(func(ctx context.Context) error {
-			return ingestor.ingestSpanConfigs(ctx, sourceTenant.Name)
-		})
-
-		toIngest := <-toIngestCh
-		require.Equal(t, replicationtestutils.PrettyRecords(tc.expectedInitScanUpdates), replicationtestutils.PrettyRecords(toIngest.toUpdate), "failed on step %d (0 indexed)", step)
-		require.Equal(t, fmt.Sprintf("%s", tc.expectedInitScanDeletes), fmt.Sprintf("%s", toIngest.toDelete), "failed on step %d (0 indexed)", step)
-
-		i12DestTarget := []spanconfig.Target{spanconfig.MakeTargetFromSpan(i12Dest)}
-		actualSpanConfigRecords, err := ingestor.accessor.GetSpanConfigRecords(ctx, i12DestTarget)
-		require.NoError(t, err)
-		require.Equal(t,
-			replicationtestutils.PrettyRecords(tc.expectedPersistedUserSpans),
-			replicationtestutils.PrettyRecords(actualSpanConfigRecords),
-			"failed on step %d (0 indexed)", step)
 	}
 	makeRecord := func(targetSpan roachpb.Span, ttl int) spanconfig.Record {
 		return replicationtestutils.MakeSpanConfigRecord(t, targetSpan, ttl)
 	}
-	for step, tc := range []testCase{
+	for _, tc := range []testCase{
 		{
 			// Observe the initial scan delete
 			//
@@ -231,18 +200,19 @@ func TestIngestSpanConfigsInitialScan(t *testing.T) {
 			// replacing the deleted span config records. In this test, the only
 			// replicated span config record is the dummy tenant split point created
 			// by replicationtestutils.NewReplicationHelperWithDummySpanConfigTable().
+			name:                    "initial scan",
 			expectedInitScanUpdates: []spanconfig.Record{splitRecord},
 			expectedInitScanDeletes: []spanconfig.Target{splitRecord.GetTarget()},
 		},
 		{
-			// Create a Record.
+			name:                       "create a record",
 			updatesDuringPause:         [][]spanconfig.Record{{makeRecord(i1Source, 2)}},
 			expectedInitScanUpdates:    []spanconfig.Record{splitRecord, makeRecord(i1Dest, 2)},
 			expectedInitScanDeletes:    []spanconfig.Target{splitRecord.GetTarget()},
 			expectedPersistedUserSpans: []spanconfig.Record{makeRecord(i1Dest, 2)},
 		},
 		{
-			// Update the Span.
+			name:                       "update the span",
 			updatesDuringPause:         [][]spanconfig.Record{{makeRecord(i1Source, 1)}},
 			expectedInitScanUpdates:    []spanconfig.Record{splitRecord, makeRecord(i1Dest, 1)},
 			expectedInitScanDeletes:    []spanconfig.Target{splitRecord.GetTarget(), spanconfig.MakeTargetFromSpan(i1Dest)},
@@ -250,27 +220,28 @@ func TestIngestSpanConfigsInitialScan(t *testing.T) {
 		},
 		{
 			// Update the same span config record twice during the pause, and assert that the initial scan replicates only the latest update
+			name:                       "update span twice",
 			updatesDuringPause:         [][]spanconfig.Record{{makeRecord(i1Source, 3)}, {makeRecord(i1Source, 4)}},
 			expectedInitScanUpdates:    []spanconfig.Record{splitRecord, makeRecord(i1Dest, 4)},
 			expectedInitScanDeletes:    []spanconfig.Target{splitRecord.GetTarget(), spanconfig.MakeTargetFromSpan(i1Dest)},
 			expectedPersistedUserSpans: []spanconfig.Record{makeRecord(i1Dest, 4)},
 		},
 		{
-			// Update two records at the same time
+			name:                       "update two records at same time",
 			updatesDuringPause:         [][]spanconfig.Record{{makeRecord(i1Source, 2), makeRecord(i2Source, 1)}},
 			expectedInitScanUpdates:    []spanconfig.Record{splitRecord, makeRecord(i1Dest, 2), makeRecord(i2Dest, 1)},
-			expectedInitScanDeletes:    []spanconfig.Target{splitRecord.GetTarget(), spanconfig.MakeTargetFromSpan(i1Dest)},
+			expectedInitScanDeletes:    spanconfig.Targets{splitRecord.GetTarget(), spanconfig.MakeTargetFromSpan(i1Dest)},
 			expectedPersistedUserSpans: []spanconfig.Record{makeRecord(i1Dest, 2), makeRecord(i2Dest, 1)},
 		},
 		{
-			// Update two records in two different txns
+			name:                       "update two records in two different txns",
 			updatesDuringPause:         [][]spanconfig.Record{{makeRecord(i1Source, 3)}, {makeRecord(i2Source, 2)}},
 			expectedInitScanUpdates:    []spanconfig.Record{splitRecord, makeRecord(i1Dest, 3), makeRecord(i2Dest, 2)},
 			expectedInitScanDeletes:    []spanconfig.Target{splitRecord.GetTarget(), spanconfig.MakeTargetFromSpan(i1Dest), spanconfig.MakeTargetFromSpan(i2Dest)},
 			expectedPersistedUserSpans: []spanconfig.Record{makeRecord(i1Dest, 3), makeRecord(i2Dest, 2)},
 		},
 		{
-			// Merge these Records
+			name:                       "merge the records",
 			deletesDuringPause:         [][]spanconfig.Target{{spanconfig.MakeTargetFromSpan(i2Source)}},
 			updatesDuringPause:         [][]spanconfig.Record{{makeRecord(i12Source, 10)}},
 			expectedInitScanUpdates:    []spanconfig.Record{splitRecord, makeRecord(i12Dest, 10)},
@@ -278,14 +249,50 @@ func TestIngestSpanConfigsInitialScan(t *testing.T) {
 			expectedPersistedUserSpans: []spanconfig.Record{makeRecord(i12Dest, 10)},
 		},
 		{
-			// Split the records
+			name:                       "split the records",
 			updatesDuringPause:         [][]spanconfig.Record{{makeRecord(i1Source, 1), makeRecord(i2Source, 2)}},
 			expectedInitScanUpdates:    []spanconfig.Record{splitRecord, makeRecord(i1Dest, 1), makeRecord(i2Dest, 2)},
 			expectedInitScanDeletes:    []spanconfig.Target{splitRecord.GetTarget(), spanconfig.MakeTargetFromSpan(i12Dest)},
 			expectedPersistedUserSpans: []spanconfig.Record{makeRecord(i1Dest, 1), makeRecord(i2Dest, 2)},
 		},
 	} {
-		execTestCase(tc, step)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			if len(tc.deletesDuringPause) == 0 {
+				tc.deletesDuringPause = make([][]spanconfig.Target, len(tc.expectedInitScanUpdates))
+			}
+			for i := range tc.updatesDuringPause {
+				require.NoError(t, sourceAccessor.UpdateSpanConfigRecords(ctx, tc.deletesDuringPause[i], tc.updatesDuringPause[i],
+					hlc.MinTimestamp,
+					hlc.MaxTimestamp))
+			}
+
+			ingestor, cleanupIngestor := createDummySpanConfigIngestor(
+				ctx,
+				t,
+				h,
+				sourceTenant.ID,
+				destTenantID)
+			group := ctxgroup.WithContext(ctx)
+			defer func() {
+				cleanupIngestor()
+				require.NoError(t, group.Wait())
+			}()
+			group.GoCtx(func(ctx context.Context) error {
+				return ingestor.ingestSpanConfigs(ctx, sourceTenant.Name)
+			})
+
+			toIngest := <-toIngestCh
+			require.Equal(t, replicationtestutils.PrettyRecords(tc.expectedInitScanUpdates), replicationtestutils.PrettyRecords(toIngest.toUpdate))
+			require.Equal(t, tc.expectedInitScanDeletes, toIngest.toDelete)
+
+			i12DestTarget := []spanconfig.Target{spanconfig.MakeTargetFromSpan(i12Dest)}
+			actualSpanConfigRecords, err := ingestor.accessor.GetSpanConfigRecords(ctx, i12DestTarget)
+			require.NoError(t, err)
+			require.Equal(t,
+				replicationtestutils.PrettyRecords(tc.expectedPersistedUserSpans),
+				replicationtestutils.PrettyRecords(actualSpanConfigRecords))
+		})
 	}
 }
 
