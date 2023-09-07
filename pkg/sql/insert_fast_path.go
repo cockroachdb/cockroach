@@ -200,8 +200,8 @@ func (r *insertFastPathRun) addFKChecks(
 		reqIdx := len(r.fkBatch.Requests)
 		r.fkBatch.Requests = append(r.fkBatch.Requests, kvpb.RequestUnion{})
 		r.fkBatch.Requests[reqIdx].MustSetInner(&kvpb.ScanRequest{
-			RequestHeader: kvpb.RequestHeaderFromSpan(span),
-			KeyLocking:    lockStrength,
+			RequestHeader:      kvpb.RequestHeaderFromSpan(span),
+			KeyLockingStrength: lockStrength,
 			// TODO(michae2): Once #100193 is finished, also include c.Locking.Durability.
 		})
 		r.fkSpanInfo = append(r.fkSpanInfo, insertFastPathFKSpanInfo{

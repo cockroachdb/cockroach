@@ -565,7 +565,8 @@ func (r *Replica) collectSpansRead(
 					union kvpb.RequestUnion_Get
 				})
 				getAlloc.get.Key = key
-				getAlloc.get.KeyLocking = req.(kvpb.LockingReadRequest).KeyLockingStrength()
+				getAlloc.get.KeyLockingStrength,
+					getAlloc.get.KeyLockingDurability = req.(kvpb.LockingReadRequest).KeyLocking()
 				getAlloc.union.Get = &getAlloc.get
 				ru := kvpb.RequestUnion{Value: &getAlloc.union}
 				baCopy.Requests = append(baCopy.Requests, ru)

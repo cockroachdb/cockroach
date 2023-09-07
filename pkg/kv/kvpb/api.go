@@ -198,28 +198,28 @@ type Request interface {
 // strength of a read-only request.
 type LockingReadRequest interface {
 	Request
-	KeyLockingStrength() lock.Strength
+	KeyLocking() (lock.Strength, lock.Durability)
 }
 
 var _ LockingReadRequest = (*GetRequest)(nil)
 
-// KeyLockingStrength implements the LockingReadRequest interface.
-func (gr *GetRequest) KeyLockingStrength() lock.Strength {
-	return gr.KeyLocking
+// KeyLocking implements the LockingReadRequest interface.
+func (gr *GetRequest) KeyLocking() (lock.Strength, lock.Durability) {
+	return gr.KeyLockingStrength, gr.KeyLockingDurability
 }
 
 var _ LockingReadRequest = (*ScanRequest)(nil)
 
-// KeyLockingStrength implements the LockingReadRequest interface.
-func (sr *ScanRequest) KeyLockingStrength() lock.Strength {
-	return sr.KeyLocking
+// KeyLocking implements the LockingReadRequest interface.
+func (sr *ScanRequest) KeyLocking() (lock.Strength, lock.Durability) {
+	return sr.KeyLockingStrength, sr.KeyLockingDurability
 }
 
 var _ LockingReadRequest = (*ReverseScanRequest)(nil)
 
-// KeyLockingStrength implements the LockingReadRequest interface.
-func (rsr *ReverseScanRequest) KeyLockingStrength() lock.Strength {
-	return rsr.KeyLocking
+// KeyLocking implements the LockingReadRequest interface.
+func (rsr *ReverseScanRequest) KeyLocking() (lock.Strength, lock.Durability) {
+	return rsr.KeyLockingStrength, rsr.KeyLockingDurability
 }
 
 // SizedWriteRequest is an interface used to expose the number of bytes a
@@ -1197,7 +1197,7 @@ func NewGet(key roachpb.Key, forUpdate bool) Request {
 		RequestHeader: RequestHeader{
 			Key: key,
 		},
-		KeyLocking: scanLockStrength(forUpdate),
+		KeyLockingStrength: scanLockStrength(forUpdate),
 	}
 }
 
@@ -1323,7 +1323,7 @@ func NewScan(key, endKey roachpb.Key, forUpdate bool) Request {
 			Key:    key,
 			EndKey: endKey,
 		},
-		KeyLocking: scanLockStrength(forUpdate),
+		KeyLockingStrength: scanLockStrength(forUpdate),
 	}
 }
 
@@ -1336,7 +1336,7 @@ func NewReverseScan(key, endKey roachpb.Key, forUpdate bool) Request {
 			Key:    key,
 			EndKey: endKey,
 		},
-		KeyLocking: scanLockStrength(forUpdate),
+		KeyLockingStrength: scanLockStrength(forUpdate),
 	}
 }
 
@@ -1355,7 +1355,7 @@ func flagForLockStrength(l lock.Strength) flag {
 }
 
 func (gr *GetRequest) flags() flag {
-	maybeLocking := flagForLockStrength(gr.KeyLocking)
+	maybeLocking := flagForLockStrength(gr.KeyLockingStrength)
 	return isRead | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
@@ -1445,12 +1445,12 @@ func (*RevertRangeRequest) flags() flag {
 }
 
 func (sr *ScanRequest) flags() flag {
-	maybeLocking := flagForLockStrength(sr.KeyLocking)
+	maybeLocking := flagForLockStrength(sr.KeyLockingStrength)
 	return isRead | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 func (rsr *ReverseScanRequest) flags() flag {
-	maybeLocking := flagForLockStrength(rsr.KeyLocking)
+	maybeLocking := flagForLockStrength(rsr.KeyLockingStrength)
 	return isRead | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 

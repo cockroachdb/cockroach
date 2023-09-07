@@ -1744,7 +1744,7 @@ func buildResumeSingleRangeBatch(
 			newGet := gets[0]
 			gets = gets[1:]
 			newGet.req.SetSpan(*get.ResumeSpan)
-			newGet.req.KeyLocking = s.keyLocking
+			newGet.req.KeyLockingStrength = s.keyLocking
 			newGet.union.Get = &newGet.req
 			resumeReq.reqs[resumeReqIdx].Value = &newGet.union
 			resumeReq.positions = append(resumeReq.positions, position)
@@ -1772,7 +1772,7 @@ func buildResumeSingleRangeBatch(
 			scans = scans[1:]
 			newScan.req.SetSpan(*scan.ResumeSpan)
 			newScan.req.ScanFormat = kvpb.BATCH_RESPONSE
-			newScan.req.KeyLocking = s.keyLocking
+			newScan.req.KeyLockingStrength = s.keyLocking
 			newScan.union.Scan = &newScan.req
 			resumeReq.reqs[resumeReqIdx].Value = &newScan.union
 			resumeReq.positions = append(resumeReq.positions, position)

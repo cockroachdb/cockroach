@@ -200,15 +200,6 @@ message Mode {
 enum Durability {
   option (gogoproto.goproto_enum_prefix) = false;
 
-  // Replicated locks are held on at least a quorum of Replicas in a Range.
-  // They are slower to acquire and release than Unreplicated locks because
-  // updating them requires both cross-node coordination and interaction with
-  // durable storage. In exchange, Replicated locks provide a guarantee of
-  // survivability across lease transfers, leaseholder crashes, and other
-  // forms of failure events. They will remain available as long as their
-  // Range remains available and they will never be lost.
-  Replicated = 0;
-
   // Unreplicated locks are held only on a single Replica in a Range, which is
   // typically the leaseholder. Unreplicated locks are very fast to acquire
   // and release because they are held in memory or on fast local storage and
@@ -216,7 +207,16 @@ enum Durability {
   // locks provide no guarantee of survivability across lease transfers or
   // leaseholder crashes. They should therefore be thought of as best-effort
   // and should not be relied upon for correctness.
-  Unreplicated = 1;
+  Unreplicated = 0;
+
+  // Replicated locks are held on at least a quorum of Replicas in a Range.
+  // They are slower to acquire and release than Unreplicated locks because
+  // updating them requires both cross-node coordination and interaction with
+  // durable storage. In exchange, Replicated locks provide a guarantee of
+  // survivability across lease transfers, leaseholder crashes, and other
+  // forms of failure events. They will remain available as long as their
+  // Range remains available and they will never be lost.
+  Replicated = 1;
 }
 
 // WaitPolicy specifies the behavior of a request when it encounters conflicting

@@ -270,7 +270,7 @@ num=5
 
 query
 ----
-num locks: 1, bytes returned: 81, resume reason: RESUME_UNKNOWN, resume span: <nil>
+num locks: 1, bytes returned: 83, resume reason: RESUME_UNKNOWN, resume span: <nil>
  locks:
   range_id=3 key="a" holder=00000000-0000-0000-0000-000000000003 durability=Replicated duration=2s
    waiters:
@@ -712,7 +712,7 @@ topklocksbywaitduration:
 
 query
 ----
-num locks: 3, bytes returned: 288, resume reason: RESUME_UNKNOWN, resume span: <nil>
+num locks: 3, bytes returned: 286, resume reason: RESUME_UNKNOWN, resume span: <nil>
  locks:
   range_id=3 key="a" holder=00000000-0000-0000-0000-000000000003 durability=Replicated duration=2.65s
    waiters:
@@ -883,7 +883,7 @@ topklocksbywaitduration:
 
 query
 ----
-num locks: 3, bytes returned: 268, resume reason: RESUME_UNKNOWN, resume span: <nil>
+num locks: 3, bytes returned: 266, resume reason: RESUME_UNKNOWN, resume span: <nil>
  locks:
   range_id=3 key="b" holder=<nil> durability=Unreplicated duration=0s
    waiters:

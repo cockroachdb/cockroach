@@ -2916,10 +2916,10 @@ func TestReplicaLatchingOptimisticEvaluationSkipLocked(t *testing.T) {
 				gArgs1, gArgs2 := getArgsString("a"), getArgsString("b")
 				gArgs3, gArgs4 := getArgsString("c"), getArgsString("d")
 				if lockingReads {
-					gArgs1.KeyLocking = lock.Exclusive
-					gArgs2.KeyLocking = lock.Exclusive
-					gArgs3.KeyLocking = lock.Exclusive
-					gArgs4.KeyLocking = lock.Exclusive
+					gArgs1.KeyLockingStrength = lock.Exclusive
+					gArgs2.KeyLockingStrength = lock.Exclusive
+					gArgs3.KeyLockingStrength = lock.Exclusive
+					gArgs4.KeyLockingStrength = lock.Exclusive
 				}
 				baRead.Add(gArgs1, gArgs2, gArgs3, gArgs4)
 			} else {
@@ -2927,8 +2927,8 @@ func TestReplicaLatchingOptimisticEvaluationSkipLocked(t *testing.T) {
 				sArgs1 := scanArgsString("a", "c")
 				sArgs2 := scanArgsString("c", "e")
 				if lockingReads {
-					sArgs1.KeyLocking = lock.Exclusive
-					sArgs2.KeyLocking = lock.Exclusive
+					sArgs1.KeyLockingStrength = lock.Exclusive
+					sArgs2.KeyLockingStrength = lock.Exclusive
 				}
 				baRead.Add(sArgs1, sArgs2)
 			}
@@ -10544,7 +10544,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				ba = &kvpb.BatchRequest{}
 				ba.Txn = newTxn("c-scan", ts.Prev())
 				scan := scanArgs(roachpb.Key("c-scan"), roachpb.Key("c-scan\x00"))
-				scan.KeyLocking = lock.Exclusive
+				scan.KeyLockingStrength = lock.Exclusive
 				ba.Add(scan)
 				return
 			},
@@ -10605,7 +10605,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				ba.Txn = newTxn("c-scan", ts.Prev())
 				ba.CanForwardReadTimestamp = true
 				scan := scanArgs(roachpb.Key("c-scan"), roachpb.Key("c-scan\x00"))
-				scan.KeyLocking = lock.Exclusive
+				scan.KeyLockingStrength = lock.Exclusive
 				ba.Add(scan)
 				return
 			},
@@ -10838,7 +10838,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				expTS = ba.Txn.WriteTimestamp
 
 				scan := scanArgs(roachpb.Key("lscan"), roachpb.Key("lscan\x00"))
-				scan.KeyLocking = lock.Exclusive
+				scan.KeyLockingStrength = lock.Exclusive
 				ba.Add(scan)
 				return
 			},
