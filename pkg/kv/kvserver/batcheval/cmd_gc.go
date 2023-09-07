@@ -277,18 +277,15 @@ func GC(
 		if err != nil {
 			return result.Result{}, err
 		}
-		if !hint.IsEmpty() {
-			if hint.LatestRangeDeleteTimestamp.LessEq(gcThreshold) {
-				hint.ResetLatestRangeDeleteTimestamp()
-				// NB: Replicated.State can already contain GCThreshold from above. Make
-				// sure we don't accidentally remove it.
-				if res.Replicated.State == nil {
-					res.Replicated.State = &kvserverpb.ReplicaState{}
-				}
-				res.Replicated.State.GCHint = hint
-				if _, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil {
-					return result.Result{}, err
-				}
+		if hint.UpdateAfterGC(gcThreshold) {
+			// NB: Replicated.State can already contain GCThreshold from above. Make
+			// sure we don't accidentally remove it.
+			if res.Replicated.State == nil {
+				res.Replicated.State = &kvserverpb.ReplicaState{}
+			}
+			res.Replicated.State.GCHint = hint
+			if _, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil {
+				return result.Result{}, err
 			}
 		}
 	}

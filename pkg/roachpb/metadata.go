@@ -953,7 +953,12 @@ func (h *GCHint) ForwardLatestRangeDeleteTimestamp(ts hlc.Timestamp) bool {
 	return false
 }
 
-// ResetLatestRangeDeleteTimestamp resets delete range timestamp.
-func (h *GCHint) ResetLatestRangeDeleteTimestamp() {
-	h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
+// UpdateAfterGC updates the GCHint according to the threshold, up to which the
+// data has been garbage collected. Returns true iff the hint has been updated.
+func (h *GCHint) UpdateAfterGC(gcThreshold hlc.Timestamp) bool {
+	if t := h.LatestRangeDeleteTimestamp; t.IsSet() && t.LessEq(gcThreshold) {
+		h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
+		return true
+	}
+	return false
 }
