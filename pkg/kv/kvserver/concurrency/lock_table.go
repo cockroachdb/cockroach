@@ -708,8 +708,7 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 	if l.isLocked() {
 		for e := l.holders.Front(); e != nil; e = e.Next() {
 			tl := e.Value
-			lockHolderTxn, _ := tl.getLockHolder()
-			if !g.isSameTxn(lockHolderTxn) &&
+			if !g.isSameTxn(tl.getLockHolderTxn()) &&
 				lock.Conflicts(tl.getLockMode(), makeLockMode(str, g.txnMeta(), g.ts), &g.lt.settings.SV) {
 				return true, tl.txn, nil // the key is locked by some other transaction; return it
 			}
@@ -1301,35 +1300,43 @@ func newTxnLock(txn *enginepb.TxnMeta, clock *hlc.Clock) *txnLock {
 	return tl
 }
 
-// getLockHolder returns information about the lock's holder.
+// getLockHolderTxn returns the transaction that holds the lock.
 //
 // REQUIRES: kl.mu is locked.
-//
-// TODO(arul): No place uses both the transaction and the timestamp returned by
-// this function together. Once we stop storing timestamps associated with
-// replicated locks for lock strengths other than lock.Intent, returning a
-// blanket timestamp from this function is a pretty sharp edge. We should split
-// this function out into two -- one that returns the holder's transaction, and
-// another that fits the timestamp needs at the callers.
-func (tl *txnLock) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
-	assert(
-		tl.isHeldReplicated() || tl.isHeldUnreplicated(),
-		"lock held, but no replicated or unreplicated lock holder info",
-	)
+func (tl *txnLock) getLockHolderTxn() *enginepb.TxnMeta {
+	return tl.txn
+}
 
-	var ts hlc.Timestamp
-	if tl.isHeldReplicated() && tl.isHeldUnreplicated() {
-		// If the lock is held as both replicated and unreplicated, we want to
-		// prefer the lower of the two timestamps, since the lower timestamp
-		// contends with more transactions.
-		ts = tl.unreplicatedInfo.ts
-		ts.Backward(tl.replicatedInfo.ts)
-	} else if tl.isHeldUnreplicated() {
-		ts = tl.unreplicatedInfo.ts
-	} else {
+// writeTS returns a timestamp at which a provisional write has been
+// performed[*]. Any non-locking readers at or above this timestamp should block
+// on this lock. Note that this timestamp may be different from the
+// transaction's provisional commit timestamp; however, non-locking readers
+// cannot proceed until the intent has been moved to a higher timestamp.
+//
+// [*] Unreplicated exclusive block non-locking readers even though they aren't
+// writes. If only an unreplicated exclusive lock exists, we return its
+// timestamp. If both an unreplicatd exclusive lock and an intent is present,
+// we defer to the intent.
+//
+// REQUIRES: kl.mu to be locked.
+func (tl *txnLock) writeTS() hlc.Timestamp {
+	ts := hlc.MaxTimestamp
+	// Replicated locks only block non-locking readers if they're held with
+	// lock strength == lock.Intent. Note that replicated exclusive locks do not
+	// block non-locking readers.
+	if tl.isHeldReplicated() && tl.replicatedInfo.held(lock.Intent) {
 		ts = tl.replicatedInfo.ts
 	}
-	return tl.txn, ts
+	// Unreplicated locks only block non-locking readers if they're held with
+	// lock strength == lock.Exclusive. Note that unreplicated locks can't be held
+	// with lock strength lock.Intent.
+	if tl.isHeldUnreplicated() && tl.unreplicatedInfo.held(lock.Exclusive) {
+		// If there's both a write intent and an unreplicated exclusive lock, we want
+		// to prefer the lower of the two timestamps, since the lower timestamp
+		// blocks more non-locking readers.
+		ts.Backward(tl.unreplicatedInfo.ts)
+	}
+	return ts
 }
 
 // isHeldReplicated returns true if the receiver is held as a replicated lock.
@@ -1353,7 +1360,7 @@ func (tl *txnLock) isHeldUnreplicated() bool {
 //
 // REQUIRES: kl.mu is locked.
 func (tl *txnLock) getLockMode() lock.Mode {
-	lockHolderTxn, _ := tl.getLockHolder()
+	lockHolderTxn := tl.getLockHolderTxn()
 
 	// Only replicated locks can be held with strength lock.Intent. It's also the
 	// strongest locking strength, so if held, it's the one we prefer.
@@ -1389,8 +1396,8 @@ func (tl *txnLock) getLockMode() lock.Mode {
 //
 // REQUIRES: kl.mu to be locked.
 func (tl *txnLock) isIdempotentLockAcquisition(acq *roachpb.LockAcquisition) bool {
-	txn, _ := tl.getLockHolder()
-	assert(txn.ID == acq.Txn.ID, "existing lock transaction is different from the acquisition")
+	assert(tl.getLockHolderTxn().ID == acq.Txn.ID,
+		"existing lock transaction is different from the acquisition")
 	switch acq.Durability {
 	case lock.Unreplicated:
 		if !tl.unreplicatedInfo.held(acq.Strength) { // unheld lock
@@ -1473,16 +1480,15 @@ func (tl *txnLock) reacquireLock(acq *roachpb.LockAcquisition) error {
 	// regress, so by forwarding its timestamp during the second acquisition
 	// instead of assigning to it blindly, it remains at 20.
 	//
-	// However, a lock's timestamp as reported by getLockHolder can regress
-	// if it is acquired at a lower timestamp and a different durability
-	// than it was previously held with. This is necessary to support
-	// because the hard constraint which we must uphold here that the
-	// lockHolderInfo for a replicated lock cannot diverge from the
-	// replicated state machine in such a way that its timestamp in the
-	// lockTable exceeds that in the replicated keyspace. If this invariant
-	// were to be violated, we'd risk infinite lock-discovery loops for
-	// requests that conflict with the lock as is written in the replicated
-	// state machine but not as is reflected in the lockTable.
+	// However, a lock's timestamp as reported by writeTS can regress if it is
+	// acquired at a lower timestamp and a different durability than it was
+	// previously held with. This is necessary to support because the hard
+	// constraint which we must uphold here that the lockHolderInfo for a
+	// replicated lock cannot diverge from the replicated state machine in such a
+	// way that its timestamp in the lockTable exceeds that in the replicated
+	// keyspace. If this invariant were to be violated, we'd risk infinite
+	// lock-discovery loops for requests that conflict with the lock as is written
+	// in the replicated state machine but not as is reflected in the lockTable.
 	//
 	// Lock timestamp regressions are safe from the perspective of other
 	// transactions because the request which re-acquired the lock at the
@@ -1720,7 +1726,19 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 		first := true
 		for e := kl.holders.Front(); e != nil; e = e.Next() {
 			tl := e.Value
-			txn, ts := tl.getLockHolder()
+			txn := tl.getLockHolderTxn()
+			// We use the lowest timestamp at which a lock is held at in its
+			// formatting. The lowest timestamp contends with more transactions
+			// (assuming the strength dictates as such).
+			var ts hlc.Timestamp
+			if tl.isHeldReplicated() && tl.isHeldUnreplicated() {
+				ts = tl.unreplicatedInfo.ts
+				ts.Backward(tl.replicatedInfo.ts)
+			} else if tl.isHeldUnreplicated() {
+				ts = tl.unreplicatedInfo.ts
+			} else {
+				ts = tl.replicatedInfo.ts
+			}
 
 			var prefix string
 			if first {
@@ -2434,7 +2452,7 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 	}
 	for e := kl.holders.Front(); e != nil; e = e.Next() {
 		tl := e.Value
-		lockHolderTxn, _ := tl.getLockHolder()
+		lockHolderTxn := tl.getLockHolderTxn()
 		// We should never get here if the lock is already held by another request
 		// from the same transaction with sufficient strength (read: less than or
 		// equal to what this guy wants); this should already be checked in
@@ -2837,12 +2855,12 @@ func (kl *keyLocks) acquireLock(
 		e, found := kl.heldBy[acq.Txn.ID]
 		assert(found, "expected to find lock held by the transaction")
 		tl := e.Value
-		_, beforeTs := tl.getLockHolder()
+		beforeTs := tl.writeTS()
 		err := tl.reacquireLock(acq)
 		if err != nil {
 			return err
 		}
-		_, afterTs := tl.getLockHolder()
+		afterTs := tl.writeTS()
 		if beforeTs.Less(afterTs) {
 			// Check if the lock's timestamp has increased as a result of this
 			// lock acquisition. If it has, some waiting readers may no longer
@@ -3126,7 +3144,7 @@ func (kl *keyLocks) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 	tl := e.Value
 	txn := &up.Txn
 	ts := up.Txn.WriteTimestamp
-	_, beforeTs := tl.getLockHolder()
+	beforeTs := tl.writeTS()
 	advancedTs := beforeTs.Less(ts)
 	isLocked := false
 	// The MVCC keyspace is the source of truth about the disposition of a
@@ -3528,10 +3546,9 @@ func (kl *keyLocks) testingAssertCompatibleLockMode(
 	if buildutil.CrdbTestBuild {
 		for e := kl.holders.Front(); e != nil; e = e.Next() {
 			holder := e.Value
-			holderTxn, _ := holder.getLockHolder()
 			holderMode := holder.getLockMode()
 			// Holder belongs to a different transaction ...
-			if holderTxn.ID != txn.ID &&
+			if holder.getLockHolderTxn().ID != txn.ID &&
 				// ... which conflicts with the supplied lock mode.
 				lock.Conflicts(holderMode, m, &st.SV) {
 				return errors.AssertionFailedf(
