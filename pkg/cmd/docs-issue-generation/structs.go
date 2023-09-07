@@ -123,19 +123,6 @@ type gqlCockroachPR struct {
 	} `json:"data"`
 }
 
-// gqlDocsIssue contains details about existing issues within the docs repo.
-type gqlDocsIssue struct {
-	Data struct {
-		Search struct {
-			Nodes []struct {
-				Number int    `json:"number"`
-				Body   string `json:"body"`
-			} `json:"nodes"`
-			PageInfo pageInfo `json:"pageInfo"`
-		} `json:"search"`
-	} `json:"data"`
-}
-
 type gqlSingleIssue struct {
 	Data struct {
 		Repository struct {
@@ -143,33 +130,6 @@ type gqlSingleIssue struct {
 				Body string `json:"body"`
 			} `json:"issue"`
 		} `json:"repository"`
-	} `json:"data"`
-}
-
-// gqlDocsRepoLabels contains details about the labels within the cockroach repo. In order to create issues using the
-// GraphQL API, we need to use the label IDs and no
-type gqlDocsRepoLabels struct {
-	Data struct {
-		Repository struct {
-			ID     string `json:"id"`
-			Labels struct {
-				Edges []struct {
-					Node struct {
-						Name string `json:"name"`
-						ID   string `json:"id"`
-					} `json:"node"`
-				} `json:"edges"`
-				PageInfo pageInfo `json:"pageInfo"`
-			} `json:"labels"`
-		} `json:"repository"`
-	} `json:"data"`
-}
-
-type gqlCreateIssueMutation struct {
-	Data struct {
-		CreateIssue struct {
-			ClientMutationID interface{} `json:"clientMutationId"`
-		} `json:"createIssue"`
 	} `json:"data"`
 }
 

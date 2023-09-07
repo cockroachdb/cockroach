@@ -6,7 +6,7 @@ go_library(
         "docs_issue_generation.go",
         "extract.go",
         "format.go",
-        "github_graphql_queries.go",
+        "github.go",
         "jira.go",
         "main.go",
         "requests.go",

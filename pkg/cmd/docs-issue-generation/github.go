@@ -15,65 +15,6 @@ import (
 	"time"
 )
 
-// searchDocsRepoLabels passes in a GitHub API token and returns the repo ID of the docs repo as well as a map
-// of all the labels and their respective label IDs in GitHub.
-func searchDocsRepoLabels() (string, map[string]string, error) {
-	var labels = map[string]string{}
-	var repoID string
-	repoID, hasNextPage, nextCursor, err := searchDocsRepoLabelsSingle("", labels)
-	if err != nil {
-		fmt.Println(err)
-		return "", nil, err
-	}
-	for hasNextPage {
-		_, hasNextPage, nextCursor, err = searchDocsRepoLabelsSingle(nextCursor, labels)
-		if err != nil {
-			fmt.Println(err)
-			return "", nil, err
-		}
-	}
-	return repoID, labels, nil
-}
-
-// searchDocsRepoLabelsSingle runs once per page of 100 labels within the docs repo. It returns the repo ID,
-// whether there is another page after the one that just ran, the next cursor value used to query the next
-// page, and any error.
-func searchDocsRepoLabelsSingle(cursor string, m map[string]string) (string, bool, string, error) {
-	docsIssueGQLQuery := fmt.Sprintf(`query ($cursor: String) {
-		repository(owner: "%s", name: "%s") {
-			id
-			labels(first: 100, after: $cursor) {
-				edges {
-					node {
-						name
-						id
-					}
-				}
-				pageInfo {
-					hasNextPage
-					endCursor
-				}
-			}
-		}
-	}`, docsOrganization, docsRepo)
-	var search gqlDocsRepoLabels
-	queryVariables := map[string]interface{}{}
-	if cursor != "" {
-		queryVariables["cursor"] = cursor
-	}
-	err := queryGraphQL(docsIssueGQLQuery, queryVariables, &search)
-	if err != nil {
-		fmt.Println(err)
-		return "", false, "", err
-	}
-	repoID := search.Data.Repository.ID
-	for _, x := range search.Data.Repository.Labels.Edges {
-		m[x.Node.Name] = x.Node.ID
-	}
-	pageInfo := search.Data.Repository.Labels.PageInfo
-	return repoID, pageInfo.HasNextPage, pageInfo.EndCursor, nil
-}
-
 func searchCockroachPRs(startTime time.Time, endTime time.Time) ([]cockroachPR, error) {
 	prCommitsToExclude, err := searchJiraDocsIssues(startTime)
 	if err != nil {

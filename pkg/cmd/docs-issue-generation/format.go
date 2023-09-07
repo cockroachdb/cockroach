@@ -20,6 +20,8 @@ import (
 // outputs a formatted list of docs issues with valid release notes
 func constructDocsIssues(prs []cockroachPR) []docsIssue {
 	jiraIssueMeta, err := getJiraIssueCreateMeta()
+	fixVersions := jiraIssueMeta.Projects[0].Issuetypes[0].Fields.FixVersions.AllowedValues
+	fixVersionMap := make(map[string]string)
 	if err != nil {
 		fmt.Println(err)
 	}

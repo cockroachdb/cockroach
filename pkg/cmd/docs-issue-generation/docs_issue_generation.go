@@ -60,12 +60,6 @@ var (
 	exalateJiraRefRE       = regexp.MustCompile(exalateJiraRefPart)
 )
 
-const (
-	docsOrganization = "cockroachdb"
-	docsRepo         = "docs"
-	//jiraDocsUserId   = "712020:f8672db2-443f-4232-b01a-f97746f89805"
-)
-
 // the heart of the script to fetch and manipulate all data and create the individual docs issues
 func docsIssueGeneration(params queryParameters) {
 	prs, err := searchCockroachPRs(params.StartTime, params.EndTime)

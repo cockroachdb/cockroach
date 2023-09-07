@@ -17,6 +17,10 @@ import (
 	"time"
 )
 
+const (
+	jiraDocsProjectCode = "DOC"
+)
+
 // searchDocsIssues returns a map containing all the product change docs issues that have been created since the given
 // start time. For reference, it's structured as map[crdb_pr_number]map[crdb_commit]docs_pr_number.
 func searchJiraDocsIssues(startTime time.Time) (map[int]map[string]string, error) {
@@ -92,7 +96,7 @@ func searchJiraDocsIssuesSingle(
 }
 
 var getJiraIssueCreateMeta = func() (jiraIssueCreateMeta, error) {
-	apiEndpoint := "issue/createmeta?projectKeys=DOC&issuetypeNames=Docs&expand=projects.issuetypes.fields.parent"
+	apiEndpoint := fmt.Sprintf("issue/createmeta?projectKeys=%s&issuetypeNames=Docs&expand=projects.issuetypes.fields.parent", jiraDocsProjectCode)
 	method := "GET"
 	headers := map[string]string{
 		"Accept": "application/json",
