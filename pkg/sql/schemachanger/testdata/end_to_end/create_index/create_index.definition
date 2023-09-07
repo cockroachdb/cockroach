@@ -3,40 +3,46 @@ CREATE TYPE e AS ENUM('a', 'b', 'c');
 CREATE TABLE t (k INT PRIMARY KEY, v e NOT NULL);
 ----
 
-
+# Intentionally, insert one value for the partial index ('a')
+# (see below). Update one value so it will get added into
+# the partial index. The $stageKeyValue + 1 will not be in the
+# partial index. The delete remove the first insert which will
+# get added back again after. All these changes are propogated in
+# the temporary index.
 stage-exec phase=PostCommitPhase stage=:
 INSERT INTO t VALUES($stageKey, 'a');
 INSERT INTO t VALUES($stageKey + 1, 'b');
 INSERT INTO t VALUES($stageKey + 2, 'c');
 DELETE FROM t WHERE v = 'a' and k=$stageKey;
 INSERT INTO t VALUES($stageKey, 'a');
-UPDATE t SET v='a' WHERE k > 0;
+UPDATE t SET v='a' WHERE k % 2 = 0 
 ----
 
-# Each insert will be injected thrice per stage, so we should always,
-# see a count of 2.
+
+# The value 'a' is added twice per stage, see the rational above.
 stage-query phase=PostCommitPhase stage=:
-SELECT count(*)=$successfulStageCount*3 FROM t where v='a';
+SELECT count(*)=$successfulStageCount*2 FROM t where v='a';
 ----
 true
 
-
+# Similar to the sequence above in the PostCommitPhase.
 stage-exec phase=PostCommitNonRevertiblePhase stage=:
 INSERT INTO t VALUES($stageKey, 'a');
 INSERT INTO t VALUES($stageKey + 1, 'b');
 INSERT INTO t VALUES($stageKey + 2, 'c');
 DELETE FROM t WHERE v = 'a' and k=$stageKey;
 INSERT INTO t VALUES($stageKey, 'a');
-UPDATE t SET v='a' WHERE k > 0;
+UPDATE t SET v='a' WHERE k % 2 = 0;
 ----
 
-# Each insert will be injected twice per stage, so we should always,
-# see a count of 2.
+
+# The value 'a' is added twice per stage, see the rational above.
 stage-query phase=PostCommitNonRevertiblePhase stage=:
-SELECT count(*)=$successfulStageCount*3 FROM t where v='a';
+SELECT count(*)=$successfulStageCount*2 FROM t where v='a';
 ----
 true
 
+# Create a partial index on column V where the value is A
 test
 CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 ----

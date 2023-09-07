@@ -18,13 +18,14 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}
- │         └── 8 Mutation operations
+ │         └── 9 Mutation operations
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │              ├── SetAddedIndexPartialPredicate {"Expr":"i \u003e 0:::INT8","IndexID":2,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
  │              ├── SetIndexName {"IndexID":2,"Name":"idx","TableID":104}
  │              ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
+ │              ├── SetAddedIndexPartialPredicate {"Expr":"i \u003e 0:::INT8","IndexID":3,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"TableID":104}
  │              └── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":104}
  ├── PreCommitPhase
@@ -52,7 +53,7 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}
- │         └── 12 Mutation operations
+ │         └── 13 Mutation operations
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │              ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":104}
  │              ├── SetAddedIndexPartialPredicate {"Expr":"i \u003e 0:::INT8","IndexID":2,"TableID":104}
@@ -60,6 +61,7 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
  │              ├── SetIndexName {"IndexID":2,"Name":"idx","TableID":104}
  │              ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
+ │              ├── SetAddedIndexPartialPredicate {"Expr":"i \u003e 0:::INT8","IndexID":3,"TableID":104}
  │              ├── MaybeAddSplitForIndex {"IndexID":3,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":104}
