@@ -531,7 +531,7 @@ func (s *StreamIngestionDataSpec) summary() (string, []string) {
 	)
 
 	annotations := []string{
-		"Partitions",
+		"Partitions:",
 	}
 
 	// Sort partitions by ID for stable output.
@@ -549,14 +549,15 @@ func (s *StreamIngestionDataSpec) summary() (string, []string) {
 			break
 		}
 		p := s.PartitionSpecs[srcID]
-		var spanDesc string
-		if len(p.Spans) <= spanLimit {
-			spanDesc = fmt.Sprintf("n%s: %v", srcID, p.Spans)
-		} else {
-			spanDesc = fmt.Sprintf("n%s: %v and %d more spans",
-				srcID, p.Spans[:spanLimit], len(p.Spans)-spanLimit)
+
+		annotations = append(annotations, fmt.Sprintf("Source node %s, spans:", srcID))
+		for i, span := range p.Spans {
+			if i == spanLimit {
+				annotations = append(annotations, fmt.Sprintf("and %d more spans", len(p.Spans)-spanLimit))
+				break
+			}
+			annotations = append(annotations, fmt.Sprintf("%v", span))
 		}
-		annotations = append(annotations, spanDesc)
 	}
 
 	return "StreamIngestionData", annotations
