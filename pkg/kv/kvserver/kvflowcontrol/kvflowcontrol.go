@@ -272,7 +272,7 @@ type DispatchWriter interface {
 // the stream breaking by freeing up all held tokens.
 type DispatchReader interface {
 	PendingDispatch() []roachpb.NodeID
-	PendingDispatchFor(roachpb.NodeID) []kvflowcontrolpb.AdmittedRaftLogEntries
+	PendingDispatchFor(nodeID roachpb.NodeID, maxBytes int64) (admittedRaftLogEntries []kvflowcontrolpb.AdmittedRaftLogEntries, remainingDispatches int)
 }
 
 func (t Tokens) String() string {

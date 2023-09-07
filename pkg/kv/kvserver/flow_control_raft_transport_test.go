@@ -346,7 +346,7 @@ func TestFlowControlRaftTransport(t *testing.T) {
 						require.True(t, found, "uninitialized node, did you use 'add node=n%s'?", fromNodeID)
 
 						var buf strings.Builder
-						es := control.dispatch.PendingDispatchFor(toNodeID)
+						es := control.dispatch.PendingDispatchFor(toNodeID, 0)
 						sort.Slice(es, func(i, j int) bool { // for determinism
 							if es[i].RangeID != es[j].RangeID {
 								return es[i].RangeID < es[j].RangeID
