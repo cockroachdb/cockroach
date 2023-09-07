@@ -370,6 +370,7 @@ object TemporaryIndex
 
 TemporaryIndex :  Index
 TemporaryIndex :  IsUsingSecondaryEncoding
+TemporaryIndex :  EmbeddedExpr
 
 object UniqueWithoutIndexConstraint
 
