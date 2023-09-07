@@ -236,9 +236,9 @@ func TestLockSpanIterate(t *testing.T) {
 		{&ReverseScanRequest{}, &ReverseScanResponse{}, sp("e", "g"), sp("f", "g")},
 		{&PutRequest{}, &PutResponse{}, sp("h", ""), sp("", "")},
 		{&DeleteRangeRequest{}, &DeleteRangeResponse{}, sp("i", "k"), sp("j", "k")},
-		{&GetRequest{KeyLocking: lock.Exclusive}, &GetResponse{}, sp("l", ""), sp("", "")},
-		{&ScanRequest{KeyLocking: lock.Exclusive}, &ScanResponse{}, sp("m", "o"), sp("n", "o")},
-		{&ReverseScanRequest{KeyLocking: lock.Exclusive}, &ReverseScanResponse{}, sp("p", "r"), sp("q", "r")},
+		{&GetRequest{KeyLockingStrength: lock.Exclusive}, &GetResponse{}, sp("l", ""), sp("", "")},
+		{&ScanRequest{KeyLockingStrength: lock.Exclusive}, &ScanResponse{}, sp("m", "o"), sp("n", "o")},
+		{&ReverseScanRequest{KeyLockingStrength: lock.Exclusive}, &ReverseScanResponse{}, sp("p", "r"), sp("q", "r")},
 	}
 
 	// NB: can't import testutils for RunTrueAndFalse.
@@ -277,7 +277,7 @@ func TestLockSpanIterate(t *testing.T) {
 			// The intent writes are replicated locking request.
 			require.Equal(t, toExpSpans(testReqs[3], testReqs[4]), spans[lock.Replicated])
 
-			// The scans with KeyLocking are unreplicated locking requests.
+			// The scans with KeyLockingStrength are unreplicated locking requests.
 			require.Equal(t, toExpSpans(testReqs[5], testReqs[6], testReqs[7]), spans[lock.Unreplicated])
 		})
 	}

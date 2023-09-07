@@ -923,7 +923,7 @@ func spansToRequests(
 				// A span without an EndKey indicates that the caller is requesting a
 				// single key fetch, which can be served using a GetRequest.
 				gets[curGet].req.Key = spans[i].Key
-				gets[curGet].req.KeyLocking = keyLocking
+				gets[curGet].req.KeyLockingStrength = keyLocking
 				// TODO(michae2): Once #100193 is finished, also include locking durability.
 				gets[curGet].union.Get = &gets[curGet].req
 				reqs[i].Value = &gets[curGet].union
@@ -933,7 +933,7 @@ func spansToRequests(
 			curScan := i - curGet
 			scans[curScan].req.SetSpan(spans[i])
 			scans[curScan].req.ScanFormat = scanFormat
-			scans[curScan].req.KeyLocking = keyLocking
+			scans[curScan].req.KeyLockingStrength = keyLocking
 			// TODO(michae2): Once #100193 is finished, also include locking durability.
 			scans[curScan].union.ReverseScan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union
@@ -948,7 +948,7 @@ func spansToRequests(
 				// A span without an EndKey indicates that the caller is requesting a
 				// single key fetch, which can be served using a GetRequest.
 				gets[curGet].req.Key = spans[i].Key
-				gets[curGet].req.KeyLocking = keyLocking
+				gets[curGet].req.KeyLockingStrength = keyLocking
 				// TODO(michae2): Once #100193 is finished, also include locking durability.
 				gets[curGet].union.Get = &gets[curGet].req
 				reqs[i].Value = &gets[curGet].union
@@ -958,7 +958,7 @@ func spansToRequests(
 			curScan := i - curGet
 			scans[curScan].req.SetSpan(spans[i])
 			scans[curScan].req.ScanFormat = scanFormat
-			scans[curScan].req.KeyLocking = keyLocking
+			scans[curScan].req.KeyLockingStrength = keyLocking
 			// TODO(michae2): Once #100193 is finished, also include locking durability.
 			scans[curScan].union.Scan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union

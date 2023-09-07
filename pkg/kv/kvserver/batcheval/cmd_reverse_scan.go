@@ -50,7 +50,7 @@ func ReverseScan(
 		TargetBytes:           h.TargetBytes,
 		AllowEmpty:            h.AllowEmpty,
 		WholeRowsOfSize:       h.WholeRowsOfSize,
-		FailOnMoreRecent:      args.KeyLocking != lock.None,
+		FailOnMoreRecent:      args.KeyLockingStrength != lock.None,
 		Reverse:               true,
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
 		LockTable:             cArgs.Concurrency,
@@ -109,8 +109,8 @@ func ReverseScan(
 		}
 	}
 
-	if args.KeyLocking != lock.None && h.Txn != nil {
-		err = acquireUnreplicatedLocksOnKeys(&res, h.Txn, args.KeyLocking, args.ScanFormat, &scanRes)
+	if args.KeyLockingStrength != lock.None && h.Txn != nil {
+		err = acquireUnreplicatedLocksOnKeys(&res, h.Txn, args.KeyLockingStrength, args.ScanFormat, &scanRes)
 		if err != nil {
 			return result.Result{}, err
 		}

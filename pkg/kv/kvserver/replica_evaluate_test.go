@@ -293,7 +293,7 @@ func TestEvaluateBatch(t *testing.T) {
 			},
 		},
 		//
-		// Test suite for KeyLocking.
+		// Test suite for KeyLockingStrength.
 		//
 		{
 			// Two gets, one of which finds a key, one of which does not. An
@@ -302,10 +302,10 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanA := getArgsString("a")
-				scanA.KeyLocking = lock.Exclusive
+				scanA.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanA)
 				scanG := getArgsString("g")
-				scanG.KeyLocking = lock.Exclusive
+				scanG.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanG)
 				d.ba.Txn = &txn
 			},
@@ -322,10 +322,10 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanA := getArgsString("a")
-				scanA.KeyLocking = lock.Exclusive
+				scanA.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanA)
 				scanG := getArgsString("g")
-				scanG.KeyLocking = lock.Exclusive
+				scanG.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanG)
 			},
 			check: func(t *testing.T, r resp) {
@@ -341,13 +341,13 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAD := scanArgsString("a", "d")
-				scanAD.KeyLocking = lock.Exclusive
+				scanAD.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAD)
 				scanEF := scanArgsString("e", "f")
-				scanEF.KeyLocking = lock.Exclusive
+				scanEF.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanEF)
 				scanHJ := scanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanHJ)
 				d.ba.Txn = &txn
 			},
@@ -363,13 +363,13 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAD := revScanArgsString("a", "d")
-				scanAD.KeyLocking = lock.Exclusive
+				scanAD.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAD)
 				scanEF := revScanArgsString("e", "f")
-				scanEF.KeyLocking = lock.Exclusive
+				scanEF.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanEF)
 				scanHJ := revScanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanHJ)
 				d.ba.Txn = &txn
 			},
@@ -386,13 +386,13 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAD := scanArgsString("a", "d")
-				scanAD.KeyLocking = lock.Exclusive
+				scanAD.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAD)
 				scanEF := scanArgsString("e", "f")
-				scanEF.KeyLocking = lock.Exclusive
+				scanEF.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanEF)
 				scanHJ := scanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanHJ)
 			},
 			check: func(t *testing.T, r resp) {
@@ -407,13 +407,13 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAD := revScanArgsString("a", "d")
-				scanAD.KeyLocking = lock.Exclusive
+				scanAD.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAD)
 				scanEF := revScanArgsString("e", "f")
-				scanEF.KeyLocking = lock.Exclusive
+				scanEF.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanEF)
 				scanHJ := revScanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanHJ)
 			},
 			check: func(t *testing.T, r resp) {
@@ -431,7 +431,7 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := scanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				d.ba.Txn = &txn
 				d.ba.MaxSpanRequestKeys = 3
@@ -449,7 +449,7 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := revScanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				d.ba.Txn = &txn
 				d.ba.MaxSpanRequestKeys = 3
@@ -471,10 +471,10 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := scanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				scanHJ := scanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanHJ)
 				d.ba.Txn = &txn
 				d.ba.MaxSpanRequestKeys = 3
@@ -492,10 +492,10 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := revScanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				scanHJ := scanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanHJ)
 				d.ba.Txn = &txn
 				d.ba.MaxSpanRequestKeys = 3
@@ -515,7 +515,7 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := scanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				d.ba.Txn = &txn
 				d.ba.TargetBytes = 1
@@ -533,7 +533,7 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := revScanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				d.ba.Txn = &txn
 				d.ba.TargetBytes = 1
@@ -554,10 +554,10 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := scanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				scanHJ := scanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanHJ)
 				d.ba.Txn = &txn
 				d.ba.TargetBytes = 1
@@ -575,10 +575,10 @@ func TestEvaluateBatch(t *testing.T) {
 			setup: func(t *testing.T, d *data) {
 				writeABCDEFAt(t, d, ts.Prev())
 				scanAE := revScanArgsString("a", "e")
-				scanAE.KeyLocking = lock.Exclusive
+				scanAE.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanAE)
 				scanHJ := scanArgsString("h", "j")
-				scanHJ.KeyLocking = lock.Exclusive
+				scanHJ.KeyLockingStrength = lock.Exclusive
 				d.ba.Add(scanHJ)
 				d.ba.Txn = &txn
 				d.ba.TargetBytes = 1

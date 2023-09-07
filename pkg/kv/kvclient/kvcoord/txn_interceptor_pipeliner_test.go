@@ -122,8 +122,8 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
 	scanArgs := kvpb.ScanRequest{
-		RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB},
-		KeyLocking:    lock.Exclusive,
+		RequestHeader:      kvpb.RequestHeader{Key: keyA, EndKey: keyB},
+		KeyLockingStrength: lock.Exclusive,
 	}
 	ba.Add(&scanArgs)
 	putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
@@ -1353,7 +1353,7 @@ func TestTxnPipelinerRecordsLocksOnFailure(t *testing.T) {
 	ba.Header = kvpb.Header{Txn: &txn}
 	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, EndKey: keyB.Next()}})
-	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, EndKey: keyC.Next()}, KeyLocking: lock.Exclusive})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, EndKey: keyC.Next()}, KeyLockingStrength: lock.Exclusive})
 
 	mockPErr := kvpb.NewErrorf("boom")
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
@@ -1382,7 +1382,7 @@ func TestTxnPipelinerRecordsLocksOnFailure(t *testing.T) {
 	ba.Requests = nil
 	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyD}})
 	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyE, EndKey: keyE.Next()}})
-	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyF, EndKey: keyF.Next()}, KeyLocking: lock.Exclusive})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyF, EndKey: keyF.Next()}, KeyLockingStrength: lock.Exclusive})
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 3)
@@ -1450,7 +1450,7 @@ func TestTxnPipelinerIgnoresLocksOnUnambiguousFailure(t *testing.T) {
 	ba.Header = kvpb.Header{Txn: &txn}
 	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, EndKey: keyB.Next()}})
-	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, EndKey: keyC.Next()}, KeyLocking: lock.Exclusive})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, EndKey: keyC.Next()}, KeyLockingStrength: lock.Exclusive})
 
 	condFailedErr := kvpb.NewError(&kvpb.ConditionFailedError{})
 	condFailedErr.SetErrorIndex(0)
@@ -1480,7 +1480,7 @@ func TestTxnPipelinerIgnoresLocksOnUnambiguousFailure(t *testing.T) {
 	ba.Requests = nil
 	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyD}})
 	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyE, EndKey: keyE.Next()}})
-	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyF, EndKey: keyF.Next()}, KeyLocking: lock.Exclusive})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyF, EndKey: keyF.Next()}, KeyLockingStrength: lock.Exclusive})
 
 	lockConflictErr := kvpb.NewError(&kvpb.LockConflictError{})
 	lockConflictErr.SetErrorIndex(2)
