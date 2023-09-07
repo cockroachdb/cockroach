@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -164,12 +165,12 @@ func (ts *testState) stop() {
 }
 
 type cmdArgs struct {
-	count        int64
-	bytes        int64
-	repeat       int64
-	label        string
-	wait         bool
-	ruMultiplier float64
+	count       int64
+	bytes       int64
+	repeat      int64
+	label       string
+	wait        bool
+	networkCost float64
 }
 
 func parseBytesVal(arg datadriven.CmdArg) (int64, error) {
@@ -233,15 +234,17 @@ func parseArgs(t *testing.T, d *datadriven.TestData) cmdArgs {
 				d.Fatalf(t, "invalid wait value")
 			}
 
-		case "ruMultiplier":
+		case "networkCost":
 			if len(args.Vals) != 1 {
-				d.Fatalf(t, "expected one value for ruMultiplier")
+				d.Fatalf(t, "expected one value for networkCost")
 			}
 			val, err := strconv.ParseFloat(args.Vals[0], 64)
 			if err != nil {
-				d.Fatalf(t, "invalid ruMultiplier value")
+				d.Fatalf(t, "invalid networkCost value")
 			}
-			res.ruMultiplier = val
+			res.networkCost = val
+		default:
+			d.Fatalf(t, "uknown command: '%s'", args.Key)
 		}
 	}
 	return res
@@ -312,24 +315,18 @@ func (ts *testState) request(
 	}
 
 	var writeCount, readCount, writeBytes, readBytes int64
-	var writeRUMultiplier, readRUMultiplier tenantcostmodel.RUMultiplier
+	var writeNetworkCost, readNetworkCost tenantcostmodel.NetworkCost
 	if isWrite {
 		writeCount = args.count
 		writeBytes = args.bytes
-		writeRUMultiplier = tenantcostmodel.RUMultiplier(args.ruMultiplier)
-		if writeRUMultiplier == 0 {
-			writeRUMultiplier = 1
-		}
+		writeNetworkCost = tenantcostmodel.NetworkCost(args.networkCost)
 	} else {
 		readCount = args.count
 		readBytes = args.bytes
-		readRUMultiplier = tenantcostmodel.RUMultiplier(args.ruMultiplier)
-		if readRUMultiplier == 0 {
-			readRUMultiplier = 1
-		}
+		readNetworkCost = tenantcostmodel.NetworkCost(args.networkCost)
 	}
-	reqInfo := tenantcostmodel.TestingRequestInfo(1, writeCount, writeBytes, writeRUMultiplier)
-	respInfo := tenantcostmodel.TestingResponseInfo(!isWrite, readCount, readBytes, readRUMultiplier)
+	reqInfo := tenantcostmodel.TestingRequestInfo(1, writeCount, writeBytes, writeNetworkCost)
+	respInfo := tenantcostmodel.TestingResponseInfo(!isWrite, readCount, readBytes, readNetworkCost)
 
 	for ; repeat > 0; repeat-- {
 		ts.runOperation(t, d, args.label, func() {
@@ -556,6 +553,7 @@ func (ts *testState) usage(*testing.T, *datadriven.TestData, cmdArgs) string {
 	return fmt.Sprintf(""+
 		"RU:  %.2f\n"+
 		"KVRU:  %.2f\n"+
+		"CrossRegionNetworkRU:  %.2f\n"+
 		"Reads:  %d requests in %d batches (%d bytes)\n"+
 		"Writes:  %d requests in %d batches (%d bytes)\n"+
 		"SQL Pods CPU seconds:  %.2f\n"+
@@ -564,6 +562,7 @@ func (ts *testState) usage(*testing.T, *datadriven.TestData, cmdArgs) string {
 		"ExternalIO ingress: %d bytes\n",
 		c.RU,
 		c.KVRU,
+		c.CrossRegionNetworkRU,
 		c.ReadRequests,
 		c.ReadBatches,
 		c.ReadBytes,
@@ -787,7 +786,7 @@ func TestWaitingRU(t *testing.T) {
 
 	// Immediately consume the initial 10K RUs.
 	require.NoError(t, ctrl.OnResponseWait(ctx,
-		tenantcostmodel.TestingRequestInfo(1, 1, 10237952, 1), tenantcostmodel.ResponseInfo{}))
+		tenantcostmodel.TestingRequestInfo(1, 1, 10237952, 0), tenantcostmodel.ResponseInfo{}))
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -805,7 +804,7 @@ func TestWaitingRU(t *testing.T) {
 	// Send 20 KV requests for 1K RU each.
 	const count = 20
 	const fillRate = 100
-	req := tenantcostmodel.TestingRequestInfo(1, 1, 1021952, 1)
+	req := tenantcostmodel.TestingRequestInfo(1, 1, 1021952, 0)
 	resp := tenantcostmodel.TestingResponseInfo(false, 0, 0, 0)
 
 	testutils.SucceedsWithin(t, func() error {
@@ -1415,4 +1414,134 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 			}
 		})
 	}
+}
+
+func TestRUSettingsChanged(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	params := base.TestServerArgs{DisableDefaultTestTenant: true}
+
+	s, mainDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	sysDB := sqlutils.MakeSQLRunner(mainDB)
+
+	tenantID := serverutils.TestTenantID()
+	tenant1, tenantDB1 := serverutils.StartTenant(t, s, base.TestTenantArgs{
+		TenantID: tenantID,
+	})
+	defer tenant1.Stopper().Stop(ctx)
+	defer tenantDB1.Close()
+
+	costClient, err := tenantcostclient.NewTenantSideCostController(tenant1.ClusterSettings(), tenantID, nil)
+	require.NoError(t, err)
+
+	initialModel := costClient.GetCostConfig()
+
+	// Increase the RU cost of everything by 100x
+	settings := []*settings.FloatSetting{
+		tenantcostmodel.ReadBatchCost,
+		tenantcostmodel.ReadRequestCost,
+		tenantcostmodel.ReadPayloadCostPerMiB,
+		tenantcostmodel.WriteBatchCost,
+		tenantcostmodel.WriteRequestCost,
+		tenantcostmodel.WritePayloadCostPerMiB,
+		tenantcostmodel.SQLCPUSecondCost,
+		tenantcostmodel.PgwireEgressCostPerMiB,
+		tenantcostmodel.ExternalIOEgressCostPerMiB,
+		tenantcostmodel.ExternalIOIngressCostPerMiB,
+	}
+	for _, setting := range settings {
+		sysDB.Exec(t, fmt.Sprintf("ALTER TENANT ALL SET CLUSTER SETTING %s = $1", setting.Key()), setting.Default()*100)
+	}
+
+	// Check to make sure the cost of the query increased. Use SucceedsSoon
+	// because the settings propogation is async.
+	testutils.SucceedsSoon(t, func() error {
+		currentModel := costClient.GetCostConfig()
+
+		expect100x := func(name string, getter func(model *tenantcostmodel.Config) tenantcostmodel.RU) error {
+			before := getter(initialModel)
+			after := getter(currentModel)
+			expect := before * 100
+			if after != expect {
+				return errors.Newf("expected %s to be %f found %f", name, expect, after)
+			}
+			return nil
+		}
+
+		err = expect100x("KVReadBatch", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+			return m.KVReadBatch
+		})
+		if err != nil {
+			return err
+		}
+
+		err = expect100x("KVReadRequest", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+			return m.KVReadRequest
+		})
+		if err != nil {
+			return err
+		}
+
+		err = expect100x("KVReadByte", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+			return m.KVReadByte
+		})
+		if err != nil {
+			return err
+		}
+
+		err = expect100x("KVWriteBatch", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+			return m.KVWriteBatch
+		})
+		if err != nil {
+			return err
+		}
+
+		err = expect100x("KVWriteRequest", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+			return m.KVWriteRequest
+		})
+		if err != nil {
+			return err
+		}
+
+		err = expect100x("KVWriteByte", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+			return m.KVWriteByte
+		})
+		if err != nil {
+			return err
+		}
+
+		err = expect100x("PodCPUSecond", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+			return m.PodCPUSecond
+		})
+		if err != nil {
+			return err
+		}
+
+		err = expect100x("PGWireEgressByte", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+			return m.PGWireEgressByte
+		})
+		if err != nil {
+			return err
+		}
+
+		err = expect100x("ExternalIOEgressByte", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+			return m.ExternalIOEgressByte
+		})
+		if err != nil {
+			return err
+		}
+
+		err = expect100x("ExternalIOIngressByte", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+			return m.ExternalIOIngressByte
+		})
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
 }

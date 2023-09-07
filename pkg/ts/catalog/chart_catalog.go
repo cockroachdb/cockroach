@@ -4105,8 +4105,9 @@ var charts = []sectionDescription{
 			{
 				Title: "Total RU consumption",
 				Metrics: []string{
-					"tenant.consumption.request_units",
+					"tenant.consumption.cross_region_network_ru",
 					"tenant.consumption.kv_request_units",
+					"tenant.consumption.request_units",
 				},
 			},
 			{

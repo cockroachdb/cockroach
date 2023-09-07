@@ -19,6 +19,7 @@ usage
 ----
 RU:  0.00
 KVRU:  0.00
+CrossRegionNetworkRU:  0.00
 Reads:  0 requests in 0 batches (0 bytes)
 Writes:  0 requests in 0 batches (0 bytes)
 SQL Pods CPU seconds:  0.00
@@ -40,6 +41,7 @@ usage
 ----
 RU:  0.00
 KVRU:  0.00
+CrossRegionNetworkRU:  0.00
 Reads:  0 requests in 0 batches (0 bytes)
 Writes:  0 requests in 0 batches (0 bytes)
 SQL Pods CPU seconds:  0.00
@@ -60,6 +62,7 @@ usage
 ----
 RU:  16.62
 KVRU:  16.62
+CrossRegionNetworkRU:  0.00
 Reads:  1 requests in 1 batches (1048576 bytes)
 Writes:  0 requests in 0 batches (0 bytes)
 SQL Pods CPU seconds:  0.00
@@ -84,6 +87,7 @@ usage
 ----
 RU:  19.62
 KVRU:  19.62
+CrossRegionNetworkRU:  0.00
 Reads:  1 requests in 1 batches (1048576 bytes)
 Writes:  1 requests in 1 batches (1024 bytes)
 SQL Pods CPU seconds:  0.00
@@ -117,6 +121,7 @@ usage
 ----
 RU:  319.62
 KVRU:  19.62
+CrossRegionNetworkRU:  0.00
 Reads:  1 requests in 1 batches (1048576 bytes)
 Writes:  1 requests in 1 batches (1024 bytes)
 SQL Pods CPU seconds:  0.90
@@ -147,6 +152,7 @@ usage
 ----
 RU:  333.25
 KVRU:  33.25
+CrossRegionNetworkRU:  0.00
 Reads:  2 requests in 2 batches (1114112 bytes)
 Writes:  3 requests in 3 batches (9216 bytes)
 SQL Pods CPU seconds:  0.90
@@ -174,6 +180,7 @@ usage
 ----
 RU:  1299.92
 KVRU:  33.25
+CrossRegionNetworkRU:  0.00
 Reads:  2 requests in 2 batches (1114112 bytes)
 Writes:  3 requests in 3 batches (9216 bytes)
 SQL Pods CPU seconds:  3.80
@@ -199,6 +206,7 @@ usage
 ----
 RU:  1311.97
 KVRU:  33.25
+CrossRegionNetworkRU:  0.00
 Reads:  2 requests in 2 batches (1114112 bytes)
 Writes:  3 requests in 3 batches (9216 bytes)
 SQL Pods CPU seconds:  3.80
@@ -226,6 +234,7 @@ usage
 ----
 RU:  1317.72
 KVRU:  39.00
+CrossRegionNetworkRU:  0.00
 Reads:  4 requests in 3 batches (1179648 bytes)
 Writes:  5 requests in 4 batches (10240 bytes)
 SQL Pods CPU seconds:  3.80
@@ -264,6 +273,7 @@ usage
 ----
 RU:  1317.72
 KVRU:  39.00
+CrossRegionNetworkRU:  0.00
 Reads:  4 requests in 3 batches (1179648 bytes)
 Writes:  5 requests in 4 batches (10240 bytes)
 SQL Pods CPU seconds:  3.80
@@ -295,6 +305,7 @@ usage
 ----
 RU:  1324.39
 KVRU:  39.00
+CrossRegionNetworkRU:  0.00
 Reads:  4 requests in 3 batches (1179648 bytes)
 Writes:  5 requests in 4 batches (10240 bytes)
 SQL Pods CPU seconds:  3.82
@@ -326,6 +337,7 @@ usage
 ----
 RU:  1324.39
 KVRU:  39.00
+CrossRegionNetworkRU:  0.00
 Reads:  4 requests in 3 batches (1179648 bytes)
 Writes:  5 requests in 4 batches (10240 bytes)
 SQL Pods CPU seconds:  3.82
@@ -357,6 +369,7 @@ usage
 ----
 RU:  2324.39
 KVRU:  39.00
+CrossRegionNetworkRU:  0.00
 Reads:  4 requests in 3 batches (1179648 bytes)
 Writes:  5 requests in 4 batches (10240 bytes)
 SQL Pods CPU seconds:  3.82
@@ -364,9 +377,9 @@ PGWire egress:  12345 bytes
 ExternalIO egress: 1026000 bytes
 ExternalIO ingress: 1034000 bytes
 
-# Read the same amount of bytes as the first subtest. Increase in RUs should be
-# multiplied by 2 of the ones in the first subtest.
-read bytes=1048576 ruMultiplier=2.0
+# Read the same amount of bytes as the first subtest. Should have an increase
+# of ~10.5 RUs compared to the first test.
+read bytes=1048576 networkCost=0.00001
 ----
 
 advance
@@ -380,8 +393,9 @@ token-bucket-response
 
 usage
 ----
-RU:  2357.64
-KVRU:  72.25
+RU:  2351.50
+KVRU:  55.62
+CrossRegionNetworkRU:  10.49
 Reads:  5 requests in 4 batches (2228224 bytes)
 Writes:  5 requests in 4 batches (10240 bytes)
 SQL Pods CPU seconds:  3.82
@@ -389,9 +403,8 @@ PGWire egress:  12345 bytes
 ExternalIO egress: 1026000 bytes
 ExternalIO ingress: 1034000 bytes
 
-# Test write operation consumption with RU multiplier of 3.5 on the RUs
-# increased in the second subtest.
-write bytes=1024 ruMultiplier=3.5
+# This write is expected to consume an extra 5.12 RUs from network cost usage.
+write bytes=1024 networkCost=0.005
 ----
 
 advance
@@ -405,8 +418,9 @@ token-bucket-response
 
 usage
 ----
-RU:  2368.14
-KVRU:  82.75
+RU:  2359.62
+KVRU:  58.62
+CrossRegionNetworkRU:  15.61
 Reads:  5 requests in 4 batches (2228224 bytes)
 Writes:  6 requests in 5 batches (11264 bytes)
 SQL Pods CPU seconds:  3.82
@@ -415,10 +429,10 @@ ExternalIO egress: 1026000 bytes
 ExternalIO ingress: 1034000 bytes
 
 # Test multiple requests in the same batch with RU multiplier of 1.
-write count=2 bytes=1024 ruMultiplier=1.0
+write count=2 bytes=1024 networkCost=0
 ----
 
-read count=2 bytes=65536 ruMultiplier=1.0
+read count=2 bytes=65536 networkCost=0
 ----
 
 advance
@@ -432,8 +446,9 @@ token-bucket-response
 
 usage
 ----
-RU:  2373.89
-KVRU:  88.50
+RU:  2365.37
+KVRU:  64.38
+CrossRegionNetworkRU:  15.61
 Reads:  7 requests in 5 batches (2293760 bytes)
 Writes:  8 requests in 6 batches (12288 bytes)
 SQL Pods CPU seconds:  3.82

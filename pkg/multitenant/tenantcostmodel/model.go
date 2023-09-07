@@ -19,10 +19,9 @@ import "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 // a small point read of < 64 bytes costs 1 RU.
 type RU float64
 
-// RUMultiplier is the multiplier for Request Unit(s). For example, a multiplier
-// of 1.5 means that all Request Unit(s) are multiplied by a factor of 1.5 when
-// computing consumed RUs.
-type RUMultiplier float64
+// NetworkCost records how expensive network traffic is between two regions.
+// bytes_transmitted * NetworkCost is the RU cost of the network traffic.
+type NetworkCost float64
 
 // Config contains the cost model parameters. The values are controlled by
 // cluster settings.
@@ -84,9 +83,8 @@ type Config struct {
 	// service into the SQL pod.
 	ExternalIOIngressByte RU
 
-	// KVInterRegionRUMultiplierTable is a table describing the cost multipliers
-	// for transferring between regions.
-	KVInterRegionRUMultiplierTable RegionalCostMultiplierTable
+	// NetworkCostTable is a table describing the network cost between regions.
+	NetworkCostTable NetworkCostTable
 }
 
 // KVReadCost calculates the cost of a KV read operation.
@@ -120,46 +118,57 @@ func (c *Config) ExternalIOIngressCost(bytes int64) RU {
 	return RU(bytes) * c.ExternalIOIngressByte
 }
 
-// KVInterRegionCostMultiplier retrieves the RU multiplier for inter-region
-// transfers between r1 and r2. Ordering does not matter since the model assumes
-// that the multiplier is the same for both directions.
-func (c *Config) KVInterRegionCostMultiplier(r1, r2 string) RUMultiplier {
-	return c.KVInterRegionRUMultiplierTable.CostMultiplier(r1, r2)
+// NetworkCost retrieves the RU per byte cost for inter-region transfers from
+// the source to the destination region. The order of this relationship matters
+// because some clouds have asymetric networking charging.
+func (c *Config) NetworkCost(path NetworkPath) NetworkCost {
+	return c.NetworkCostTable.Matrix[path]
 }
 
-// RequestCost returns the cost, in RUs, of the given request. If it is a write,
-// that includes the per-batch, per-request, and per-byte costs, multiplied by
-// the write multiplier. If it is a read, then the cost is zero, since reads can
-// only be costed by examining the ResponseInfo.
-func (c *Config) RequestCost(bri RequestInfo) RU {
+// RequestCost returns the cost, in RUs, of the given request. If it is a
+// write, that includes the per-batch, per-request, and per-byte costs,
+// multiplied by the number of replicas plus the cost of the cross region
+// networking. If it is a read, then the cost is zero, since reads can only be
+// costed by examining the ResponseInfo.
+func (c *Config) RequestCost(bri RequestInfo) (kv RU, network RU) {
 	if !bri.IsWrite() {
-		return 0
+		return 0, 0
 	}
-	cost := c.KVWriteBatch
-	cost += RU(bri.writeCount) * c.KVWriteRequest
-	cost += RU(bri.writeBytes) * c.KVWriteByte
-	return cost * RU(bri.writeMultiplier)
+	// writeCost measures how expensive each replica is for crdb to write. This
+	// covers things like the cost of serving the RPC, raft consensus, and pebble
+	// write amplification.
+	writeCost := c.KVWriteBatch
+	writeCost += RU(bri.writeCount) * c.KVWriteRequest
+	writeCost += RU(bri.writeBytes) * c.KVWriteByte
+
+	// networkCost is intended to cover the cost of cross region networking. The
+	// network cost per byte is calculated by distsender and already includes the
+	// overhead of each replica.
+	networkCost := RU(bri.networkCost) * RU(bri.writeBytes)
+
+	return writeCost * RU(bri.writeReplicas), networkCost
 }
 
 // ResponseCost returns the cost, in RUs, of the given response. If it is a
-// read, that includes the per-batch, per-request, and per-byte costs,
-// multiplied by the read multiplier. If it is a write, then the cost is zero,
-// since writes can only be costed by examining the RequestInfo.
-func (c *Config) ResponseCost(bri ResponseInfo) RU {
+// read, that includes the per-batch, per-request, and per-byte costs, and the
+// cross region networking cost. If it is a write, then the cost is zero, since
+// writes can only be costed by examining the RequestInfo.
+func (c *Config) ResponseCost(bri ResponseInfo) (kv RU, network RU) {
 	if !bri.IsRead() {
-		return 0
+		return 0, 0
 	}
-	cost := c.KVReadBatch
-	cost += RU(bri.readCount) * c.KVReadRequest
-	cost += RU(bri.readBytes) * c.KVReadByte
-	return cost * RU(bri.readMultiplier)
+	kv = c.KVReadBatch
+	kv += RU(bri.readCount) * c.KVReadRequest
+	kv += RU(bri.readBytes) * c.KVReadByte
+	network = RU(bri.readBytes) * RU(bri.networkCost)
+	return kv, network
 }
 
-// RequestInfo captures the BatchRequest information that is used (together with
-// the cost model) to determine the portion of the cost that can be calculated
-// up-front. Specifically: how many writes were batched together, their total
-// size, the number of target replicas (if the request is a write batch), and
-// the RU multiplier for the request.
+// RequestInfo captures the BatchRequest information that is used (together
+// with the cost model) to determine the portion of the cost that can be
+// calculated up-front. Specifically: how many writes were batched together,
+// their total size, the number of target replicas (if the request is a write
+// batch), and the cross region network cost.
 type RequestInfo struct {
 	// writeReplicas is the number of range replicas to which this write was sent
 	// (i.e. the replication factor). This is 0 if it is a read-only batch.
@@ -170,17 +179,14 @@ type RequestInfo struct {
 	// writeBytes is the total size of all batched writes in the request, in
 	// bytes, or 0 if it is a read-only batch.
 	writeBytes int64
-	// writeMultiplier is the RU multiplier for which this write was sent.
-	// This is usually the same as the number of range replicas (unless a
-	// custom multiplier table was specified for inter-region transfers). This
-	// is 0 if it is a read-only batch.
-	writeMultiplier RUMultiplier
+	// networkCost is the per byte cost of the cross region network cost. This is
+	// calculated ahead of time by distsender and accounts for the network cost
+	// of each replica written.
+	networkCost NetworkCost
 }
 
 // MakeRequestInfo extracts the relevant information from a BatchRequest.
-func MakeRequestInfo(
-	ba *kvpb.BatchRequest, replicas int, writeMultiplier RUMultiplier,
-) RequestInfo {
+func MakeRequestInfo(ba *kvpb.BatchRequest, replicas int, networkCost NetworkCost) RequestInfo {
 	// The cost of read-only batches is captured by MakeResponseInfo.
 	if !ba.IsWrite() {
 		return RequestInfo{}
@@ -203,10 +209,10 @@ func MakeRequestInfo(
 		}
 	}
 	return RequestInfo{
-		writeReplicas:   int64(replicas),
-		writeCount:      writeCount,
-		writeBytes:      writeBytes,
-		writeMultiplier: writeMultiplier,
+		writeReplicas: int64(replicas),
+		writeCount:    writeCount,
+		writeBytes:    writeBytes,
+		networkCost:   networkCost,
 	}
 }
 
@@ -235,40 +241,38 @@ func (bri RequestInfo) WriteBytes() int64 {
 
 // TestingRequestInfo creates a RequestInfo for testing purposes.
 func TestingRequestInfo(
-	writeReplicas, writeCount, writeBytes int64, writeMultiplier RUMultiplier,
+	writeReplicas, writeCount, writeBytes int64, networkCost NetworkCost,
 ) RequestInfo {
 	return RequestInfo{
-		writeReplicas:   writeReplicas,
-		writeCount:      writeCount,
-		writeBytes:      writeBytes,
-		writeMultiplier: writeMultiplier,
+		writeReplicas: writeReplicas,
+		writeCount:    writeCount,
+		writeBytes:    writeBytes,
+		networkCost:   networkCost,
 	}
 }
 
 // ResponseInfo captures the BatchResponse information that is used (together
 // with the cost model) to determine the portion of the cost that can only be
-// calculated after-the-fact. Specifically: how many reads were batched together
-// their total size (if the request is a read-only batch), and the RU multiplier
-// for the request.
+// calculated after-the-fact. Specifically: how many reads were batched
+// together their total size (if the request is a read-only batch), and the
+// network cost for the read.
 type ResponseInfo struct {
 	// isRead is true if this batch contained only read requests, or false if it
 	// was a write batch.
 	isRead bool
-	// readCount is the number of reads that were batched together. This is 0
-	// if it is a write batch.
+	// readCount is the number of reads that were batched together. This is 0 if
+	// it is a write batch.
 	readCount int64
 	// readBytes is the total size of all batched reads in the response, in
-	// bytes, or 0 if it is a write batch.
+	// bytee, or 0 if it is a write batch.
 	readBytes int64
-	// readMultiplier is the RU multiplier for which this read was sent. This
-	// is usually 1 (unless a custom multiplier table was specified for
-	// inter-region transfers). This is 0 if it is a write batch.
-	readMultiplier RUMultiplier
+	// networkCost is RU/byte cost for this read request.
+	networkCost NetworkCost
 }
 
 // MakeResponseInfo extracts the relevant information from a BatchResponse.
 func MakeResponseInfo(
-	br *kvpb.BatchResponse, isReadOnly bool, readMultiplier RUMultiplier,
+	br *kvpb.BatchResponse, isReadOnly bool, networkCost NetworkCost,
 ) ResponseInfo {
 	// The cost of non read-only batches is captured by MakeRequestInfo.
 	if !isReadOnly {
@@ -289,10 +293,10 @@ func MakeResponseInfo(
 		}
 	}
 	return ResponseInfo{
-		isRead:         true,
-		readCount:      readCount,
-		readBytes:      readBytes,
-		readMultiplier: readMultiplier,
+		isRead:      true,
+		readCount:   readCount,
+		readBytes:   readBytes,
+		networkCost: networkCost,
 	}
 }
 
@@ -315,12 +319,12 @@ func (bri ResponseInfo) ReadBytes() int64 {
 
 // TestingResponseInfo creates a ResponseInfo for testing purposes.
 func TestingResponseInfo(
-	isRead bool, readCount, readBytes int64, readMultiplier RUMultiplier,
+	isRead bool, readCount, readBytes int64, networkCost NetworkCost,
 ) ResponseInfo {
 	return ResponseInfo{
-		isRead:         isRead,
-		readCount:      readCount,
-		readBytes:      readBytes,
-		readMultiplier: readMultiplier,
+		isRead:      isRead,
+		readCount:   readCount,
+		readBytes:   readBytes,
+		networkCost: networkCost,
 	}
 }
