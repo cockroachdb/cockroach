@@ -1140,10 +1140,15 @@ type replicatedLockHolderInfo struct {
 	// sync with the in-memory lock table.
 	strengths [len(replicatedHolderStrengths)]bool
 
-	// The timestamp at which the replicated lock is held. Must not regress.
-
-	// TODO(arul): This should correspond to an intent's timestamp. It should only
-	// be updated when an intent is discovered or acquired.
+	// ts is set iff the replicated lock is held with lock strength lock.Intent.
+	// The timestamp here corresponds to the timestamp at which the intent is
+	// written[*]. It must not regress.
+	//
+	// [*] As opposed to the timestamp of the transaction that wrote the intent,
+	// as known to the lock table. This is important because intents aren't
+	// rewritten when their transaction is pushed; they need to be resolved. As
+	// such, for the purposes of sequencing, non-locking readers must use the
+	// timestamp at which the intent is written when sequencing.
 	ts hlc.Timestamp
 }
 
@@ -1172,7 +1177,9 @@ func (rlh *replicatedLockHolderInfo) resetStrengths() {
 // acquire updates the tracking on the receiver to indicate a lock is held with
 // the supplied lock strength.
 func (rlh *replicatedLockHolderInfo) acquire(str lock.Strength, ts hlc.Timestamp) {
-	rlh.ts.Forward(ts)
+	if str == lock.Intent { // only set (or update) ts tracking for intents
+		rlh.ts.Forward(ts)
+	}
 	if rlh.held(str) {
 		return
 	}
@@ -1725,7 +1732,9 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 			// formatting. The lowest timestamp contends with more transactions
 			// (assuming the strength dictates as such).
 			var ts hlc.Timestamp
-			if tl.isHeldReplicated() && tl.isHeldUnreplicated() {
+			if tl.isHeldUnreplicated() && tl.isHeldReplicated() &&
+				// timestamps for replicated locks are only tracked/relevant for intents
+				tl.replicatedInfo.held(lock.Intent) {
 				ts = tl.unreplicatedInfo.ts
 				ts.Backward(tl.replicatedInfo.ts)
 			} else if tl.isHeldUnreplicated() {
