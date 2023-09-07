@@ -374,7 +374,13 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 
 // Reset clears all state in the batcher and prepares it for reuse.
 func (b *SSTBatcher) Reset(ctx context.Context) {
+	if err := b.asyncAddSSTs.Wait(); err != nil {
+		log.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
+	}
+	b.asyncAddSSTs = ctxgroup.Group{}
+
 	b.sstWriter.Close()
+
 	b.sstFile = &storage.MemObject{}
 	// Create sstables intended for ingestion using the newest format that all
 	// nodes can support. MakeIngestionSSTWriter will handle cluster version
