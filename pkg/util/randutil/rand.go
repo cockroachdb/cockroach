@@ -40,22 +40,22 @@ func NewLockedSource(seed int64) rand.Source {
 
 func (rng *lockedSource) Int63() (n int64) {
 	rng.mu.Lock()
+	defer rng.mu.Unlock()
 	n = rng.src.Int63()
-	rng.mu.Unlock()
 	return
 }
 
 func (rng *lockedSource) Uint64() (n uint64) {
 	rng.mu.Lock()
+	defer rng.mu.Unlock()
 	n = rng.src.Uint64()
-	rng.mu.Unlock()
 	return
 }
 
 func (rng *lockedSource) Seed(seed int64) {
 	rng.mu.Lock()
+	defer rng.mu.Unlock()
 	rng.src.Seed(seed)
-	rng.mu.Unlock()
 }
 
 // globalSeed contains a pseudo random seed that should only be used in tests.
