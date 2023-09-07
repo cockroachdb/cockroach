@@ -136,6 +136,13 @@ with their env type and encryption settings (if applicable).
 		&storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 
 	cli.PopulateStorageConfigHook = fillEncryptionOptionsForStore
+	cli.EncryptedStorePathsHook = func() []string {
+		var res []string
+		for _, spec := range storeEncryptionSpecs.Specs {
+			res = append(res, spec.Path)
+		}
+		return res
+	}
 }
 
 // fillEncryptionOptionsForStore fills the StorageConfig fields
