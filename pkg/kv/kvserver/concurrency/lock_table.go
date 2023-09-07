@@ -1327,12 +1327,11 @@ func (tl *txnLock) getLockHolderTxn() *enginepb.TxnMeta {
 //
 // REQUIRES: kl.mu to be locked.
 func (tl *txnLock) writeTS() hlc.Timestamp {
-	ts := hlc.MaxTimestamp
 	// Replicated locks only block non-locking readers if they're held with
 	// lock strength == lock.Intent. Note that replicated exclusive locks do not
 	// block non-locking readers.
 	if tl.isHeldReplicated() && tl.replicatedInfo.held(lock.Intent) {
-		ts = tl.replicatedInfo.ts
+		return tl.replicatedInfo.ts
 	}
 	// Unreplicated locks only block non-locking readers if they're held with
 	// lock strength == lock.Exclusive. Note that unreplicated locks can't be held
@@ -1341,9 +1340,9 @@ func (tl *txnLock) writeTS() hlc.Timestamp {
 		// If there's both a write intent and an unreplicated exclusive lock, we want
 		// to prefer the lower of the two timestamps, since the lower timestamp
 		// blocks more non-locking readers.
-		ts.Backward(tl.unreplicatedInfo.ts)
+		return tl.unreplicatedInfo.ts
 	}
-	return ts
+	return hlc.MaxTimestamp
 }
 
 // isHeldReplicated returns true if the receiver is held as a replicated lock.
@@ -1368,11 +1367,12 @@ func (tl *txnLock) isHeldUnreplicated() bool {
 // REQUIRES: kl.mu is locked.
 func (tl *txnLock) getLockMode() lock.Mode {
 	lockHolderTxn := tl.getLockHolderTxn()
+	ts := tl.writeTS()
 
 	// Only replicated locks can be held with strength lock.Intent. It's also the
 	// strongest locking strength, so if held, it's the one we prefer.
 	if tl.replicatedInfo.held(lock.Intent) {
-		return lock.MakeModeIntent(tl.replicatedInfo.ts)
+		return lock.MakeModeIntent(ts)
 	}
 	// Other than lock.Intent, which we've already handled above,
 	// replicatedHolderStrengths == unreplicatedHolderStrengths.
@@ -1383,7 +1383,7 @@ func (tl *txnLock) getLockMode() lock.Mode {
 		switch str {
 		case lock.Exclusive:
 			if tl.unreplicatedInfo.held(str) {
-				return lock.MakeModeExclusive(tl.unreplicatedInfo.ts, lockHolderTxn.IsoLevel)
+				return lock.MakeModeExclusive(ts, lockHolderTxn.IsoLevel)
 			}
 			// Using hlc.MaxTimestamp as the timestamp for the exclusive lock ensures
 			// that non-locking reads do not conflict with replicated exclusive locks.

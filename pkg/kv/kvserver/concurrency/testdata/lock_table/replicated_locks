@@ -844,3 +844,103 @@ num=1
     active: true req: 37, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 38, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 37
+
+# ------------------------------------------------------------------------------
+# Test the case where both an unreplicated exclusive lock and an intent exists
+# on a key. We test interactions with non-locking readers. Non-locking readers
+# should use the intent's timestamp when deciding whether to wait on the lock or
+# not.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req39 txn=txn2 ts=10 spans=exclusive@a
+----
+
+scan r=req39
+----
+start-waiting: false
+
+acquire k=a r=req39 durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+
+# add a waiter so the replicated lock acquisition doesn't drop the lock.
+new-request r=req40 txn=txn1 ts=10 spans=intent@a
+----
+
+scan  r=req40
+----
+start-waiting: true
+
+new-request r=req41 txn=txn2 ts=20 spans=intent@a
+----
+
+scan r=req41
+----
+start-waiting: false
+
+acquire k=a r=req41 durability=r strength=intent
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 20.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 40, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 40
+
+# Ensure non-locking readers at various timestamps -- below the exclusive lock
+# (10), at the exclusive lock (10), between exclusive and intent (20),
+# at the intent (20), and above the intent (20). Only non-locking reads at or
+# above the intent's timestamp should block.
+
+new-request r=req42 txn=txn1 ts=5 spans=none@a
+----
+
+scan r=req42
+----
+start-waiting: false
+
+new-request r=req43 txn=txn1 ts=10 spans=none@a
+----
+
+scan r=req43
+----
+start-waiting: false
+
+new-request r=req44 txn=txn1 ts=15 spans=none@a
+----
+
+scan r=req44
+----
+start-waiting: false
+
+new-request r=req45 txn=txn1 ts=20 spans=none@a
+----
+
+scan r=req45
+----
+start-waiting: true
+
+new-request r=req46 txn=txn1 ts=25 spans=none@a
+----
+
+scan r=req46
+----
+start-waiting: true
+
+print
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 20.000000000,0, info: repl [Intent], unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 46, txn: 00000000-0000-0000-0000-000000000001
+    req: 45, txn: 00000000-0000-0000-0000-000000000001
+   queued locking requests:
+    active: true req: 40, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 40
