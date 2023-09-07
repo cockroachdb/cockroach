@@ -32,6 +32,7 @@ go_test(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
         "//pkg/sql/roleoption",
+        "//pkg/sql/syntheticprivilege",
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//assert",
     ],
