@@ -89,6 +89,12 @@ var (
 	v231 = version.MustParse("v23.1.0")
 	v222 = version.MustParse("v22.2.0")
 
+	// minActivelySupportedVersion is the minimum cluster version that
+	// should be active for this test to perform any backups or
+	// restores. We are only interested in releases where we are still
+	// actively fixing bugs in patch releases.
+	minActivelySupportedVersion = v222
+
 	// systemTablesInFullClusterBackup includes all system tables that
 	// are included as part of a full cluster backup. It should include
 	// every table that opts-in to cluster backup (see `system_schema.go`).
@@ -102,21 +108,6 @@ var (
 		"users", "settings", "locations", "role_members", "role_options", "ui",
 		"comments", "scheduled_jobs", "database_role_settings", "tenant_settings",
 		"privileges", "external_connections",
-	}
-
-	// systemTableVersionRestrictions maps a subset of
-	// `systemTablesInFullClusterBackups` to the minimum version that
-	// should be active in the cluster for the system tables to exist.
-	systemTableVersionRestrictions = map[string]*version.Version{
-		"external_connections": v222,
-		"privileges":           v222,
-		// Even though the `tenant_settings` table exists in 22.1, there
-		// is a bug when using `SHOW COLUMNS` to access information about
-		// this table after a cluster restore in 22.1 (error: `relation
-		// "system.tenant_settings" does not exist`). For that reason, we
-		// do not make any assertions about this table for cluster versions
-		// older than 22.2.
-		"tenant_settings": v222,
 	}
 
 	// showSystemQueries maps system table names to `SHOW` statements
@@ -542,20 +533,9 @@ func newClusterBackup(
 		dbBackups = append(dbBackups, newDatabaseBackup(rng, []string{db}, [][]string{tables[j]}))
 	}
 
-	// Only include system tables that exist in the current version.
-	var systemTables []string
-	for _, t := range systemTablesInFullClusterBackup {
-		minVersion, ok := systemTableVersionRestrictions[t]
-		if ok && !lowest.AtLeast(minVersion) {
-			continue
-		}
-
-		systemTables = append(systemTables, t)
-	}
-
 	return &clusterBackup{
 		dbBackups:    dbBackups,
-		systemTables: systemTables,
+		systemTables: systemTablesInFullClusterBackup,
 	}
 }
 
@@ -1265,12 +1245,30 @@ func (mvb *mixedVersionBackup) setClusterSettings(
 	return nil
 }
 
-// takePreviousVersionBackup creates a backup collection (full +
+// skipBackups returns `true` when the cluster is running at a version
+// older than the minimum actively supported version. In this case, we
+// don't want to verify the correctness of backups or restores since
+// the releases are already past their non-security support
+// window. Crucially, this also stops this test from hitting bugs
+// already fixed in later releases.
+func (mvb *mixedVersionBackup) skipBackups(l *logger.Logger, h *mixedversion.Helper) bool {
+	if lv := h.LowestBinaryVersion(); !lv.AtLeast(minActivelySupportedVersion) {
+		l.Printf(
+			"skipping step because %s is lower than minimum actively supported version %s",
+			lv, minActivelySupportedVersion,
+		)
+		return true
+	}
+
+	return false
+}
+
+// maybeTakePreviousVersionBackup creates a backup collection (full +
 // incremental), and is supposed to be called before any nodes are
 // upgraded. This ensures that we are able to restore this backup
 // later, when we are in mixed version, and also after the upgrade is
 // finalized.
-func (mvb *mixedVersionBackup) takePreviousVersionBackup(
+func (mvb *mixedVersionBackup) maybeTakePreviousVersionBackup(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
 	// Wait here for a few minutes to allow the workloads (which are
@@ -1288,6 +1286,10 @@ func (mvb *mixedVersionBackup) takePreviousVersionBackup(
 
 	if err := mvb.loadTables(ctx, l, rng, h); err != nil {
 		return err
+	}
+
+	if mvb.skipBackups(l, h) {
+		return nil
 	}
 
 	var collection backupCollection
@@ -1780,6 +1782,22 @@ func (mvb *mixedVersionBackup) enableJobAdoption(
 func (mvb *mixedVersionBackup) planAndRunBackups(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
+	if mvb.skipBackups(l, h) {
+		// If this function is called while an unsupported version is
+		// running, we sleep for a few minutes to let the workloads run in
+		// this older version.
+		possibleWaitMinutes := []int{0, 10, 30}
+		waitDur := time.Duration(possibleWaitMinutes[rng.Intn(len(possibleWaitMinutes))]) * time.Minute
+
+		l.Printf("doing nothing for %s to let workloads run in this version", waitDur)
+		select {
+		case <-time.After(waitDur):
+		case <-ctx.Done():
+		}
+
+		return nil
+	}
+
 	tc := h.Context() // test context
 	l.Printf("current context: %#v", tc)
 
@@ -2178,7 +2196,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 			backupTest := newMixedVersionBackup(t, c, roachNodes, "bank", "tpcc")
 
 			mvt.OnStartup("set short job interval", backupTest.setShortJobIntervals)
-			mvt.OnStartup("take backup in previous version", backupTest.takePreviousVersionBackup)
+			mvt.OnStartup("take backup in previous version", backupTest.maybeTakePreviousVersionBackup)
 			mvt.OnStartup("maybe set custom cluster settings", backupTest.setClusterSettings)
 
 			// We start two workloads in this test:
