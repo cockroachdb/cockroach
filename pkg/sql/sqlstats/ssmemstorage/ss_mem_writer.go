@@ -103,57 +103,20 @@ func (s *Container) RecordStatement(
 		return stmtFingerprintID, nil
 	}
 
-	var errorCode string
-	if value.StatementError != nil {
-		errorCode = pgerror.GetPGCode(value.StatementError).String()
-	}
-
-	s.observeInsightStatement(value, stmtFingerprintID, errorCode)
-
-	var lastErrorCode string
-	if key.Failed {
-		lastErrorCode = pgerror.GetPGCode(value.StatementError).String()
-	}
-
-	// Percentile latencies are only being sampled if the latency was above the
-	// AnomalyDetectionLatencyThreshold.
-	// The Insights detector already does a flush when detecting for anomaly latency,
-	// so there is no need to force a flush when retrieving the data during this step.
-	latencies := s.latencyInformation.GetPercentileValues(stmtFingerprintID, false)
-	latencyInfo := appstatspb.LatencyInfo{
-		Min: value.ServiceLatencySec,
-		Max: value.ServiceLatencySec,
-		P50: latencies.P50,
-		P90: latencies.P90,
-		P99: latencies.P99,
-	}
-
-	// Get the time outside the lock to reduce time in the lock
-	timeNow := s.getTimeNow()
-
-	// setLogicalPlanLastSampled has its own lock so update it before taking
-	// the stats lock.
-	if value.Plan != nil {
-		s.setLogicalPlanLastSampled(statementKey.sampledPlanKey, timeNow)
-	}
-
-	planGist := []string{value.PlanGist}
-
 	// Collect the per-statement statisticstats.
-	// Do as much computation before the lock to reduce the amount of time the
-	// lock is held which reduces lock contention.
 	stats.mu.Lock()
 	defer stats.mu.Unlock()
 
 	stats.mu.data.Count++
 	if key.Failed {
 		stats.mu.data.SensitiveInfo.LastErr = value.StatementError.Error()
-		stats.mu.data.LastErrorCode = lastErrorCode
+		stats.mu.data.LastErrorCode = pgerror.GetPGCode(value.StatementError).String()
 	}
 	// Only update MostRecentPlanDescription if we sampled a new PlanDescription.
 	if value.Plan != nil {
 		stats.mu.data.SensitiveInfo.MostRecentPlanDescription = *value.Plan
-		stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = timeNow
+		stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = s.getTimeNow()
+		s.setLogicalPlanLastSampled(statementKey.sampledPlanKey, stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
 	}
 	if value.AutoRetryCount == 0 {
 		stats.mu.data.FirstAttemptCount++
@@ -172,14 +135,27 @@ func (s *Container) RecordStatement(
 	stats.mu.data.BytesRead.Record(stats.mu.data.Count, float64(value.BytesRead))
 	stats.mu.data.RowsRead.Record(stats.mu.data.Count, float64(value.RowsRead))
 	stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
-	stats.mu.data.LastExecTimestamp = timeNow
+	stats.mu.data.LastExecTimestamp = s.getTimeNow()
 	stats.mu.data.Nodes = util.CombineUnique(stats.mu.data.Nodes, value.Nodes)
 	if value.ExecStats != nil {
 		stats.mu.data.Regions = util.CombineUnique(stats.mu.data.Regions, value.ExecStats.Regions)
 	}
-	stats.mu.data.PlanGists = util.CombineUnique(stats.mu.data.PlanGists, planGist)
-	stats.mu.data.Indexes = util.CombineUnique(stats.mu.data.Indexes, value.Indexes)
+	stats.mu.data.PlanGists = util.CombineUnique(stats.mu.data.PlanGists, []string{value.PlanGist})
 	stats.mu.data.IndexRecommendations = value.IndexRecommendations
+	stats.mu.data.Indexes = util.CombineUnique(stats.mu.data.Indexes, value.Indexes)
+
+	// Percentile latencies are only being sampled if the latency was above the
+	// AnomalyDetectionLatencyThreshold.
+	// The Insights detector already does a flush when detecting for anomaly latency,
+	// so there is no need to force a flush when retrieving the data during this step.
+	latencies := s.latencyInformation.GetPercentileValues(stmtFingerprintID, false)
+	latencyInfo := appstatspb.LatencyInfo{
+		Min: value.ServiceLatencySec,
+		Max: value.ServiceLatencySec,
+		P50: latencies.P50,
+		P90: latencies.P90,
+		P99: latencies.P99,
+	}
 	stats.mu.data.LatencyInfo.Add(latencyInfo)
 
 	// Note that some fields derived from tracing statements (such as
@@ -216,14 +192,6 @@ func (s *Container) RecordStatement(
 		}
 	}
 
-	return stats.ID, nil
-}
-
-func (s *Container) observeInsightStatement(
-	value sqlstats.RecordedStmtStats,
-	stmtFingerprintID appstatspb.StmtFingerprintID,
-	errorCode string,
-) {
 	var autoRetryReason string
 	if value.AutoRetryReason != nil {
 		autoRetryReason = value.AutoRetryReason.Error()
@@ -234,6 +202,11 @@ func (s *Container) observeInsightStatement(
 	if value.ExecStats != nil {
 		contention = &value.ExecStats.ContentionTime
 		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
+	}
+
+	var errorCode string
+	if value.StatementError != nil {
+		errorCode = pgerror.GetPGCode(value.StatementError).String()
 	}
 
 	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
@@ -257,6 +230,8 @@ func (s *Container) observeInsightStatement(
 		CPUSQLNanos:          cpuSQLNanos,
 		ErrorCode:            errorCode,
 	})
+
+	return stats.ID, nil
 }
 
 // RecordStatementExecStats implements sqlstats.Writer interface.
@@ -318,12 +293,7 @@ func (s *Container) RecordTransaction(
 		return ErrFingerprintLimitReached
 	}
 
-	// Insights logic is thread safe and does not require stats lock
-	s.observerInsightTransaction(value, key)
-
 	// Collect the per-transaction statistics.
-	// Do as much computation before the lock to reduce the amount of time the
-	// lock is held which reduces lock contention.
 	stats.mu.Lock()
 	defer stats.mu.Unlock()
 
@@ -390,12 +360,6 @@ func (s *Container) RecordTransaction(
 		stats.mu.data.ExecStats.MVCCIteratorStats.RangeKeySkippedPoints.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeySkippedPoints))
 	}
 
-	return nil
-}
-
-func (s *Container) observerInsightTransaction(
-	value sqlstats.RecordedTxnStats, key appstatspb.TransactionFingerprintID,
-) {
 	var retryReason string
 	if value.AutoRetryReason != nil {
 		retryReason = value.AutoRetryReason.Error()
@@ -422,6 +386,7 @@ func (s *Container) observerInsightTransaction(
 		AutoRetryReason: retryReason,
 		CPUSQLNanos:     cpuSQLNanos,
 	})
+	return nil
 }
 
 func (s *Container) recordTransactionHighLevelStats(
