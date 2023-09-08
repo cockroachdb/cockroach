@@ -522,7 +522,7 @@ func (p *pebbleIterator) UnsafeValue() ([]byte, error) {
 	return p.iter.ValueAndErr()
 }
 
-// UnsafeLazyValue implements the MVCCIterator interface.
+// UnsafeLazyValue implements the MVCCIterator and EngineIterator interfaces.
 func (p *pebbleIterator) UnsafeLazyValue() pebble.LazyValue {
 	if ok := p.iter.Valid(); !ok {
 		panic(errors.AssertionFailedf("UnsafeLazyValue called on !Valid iterator"))
