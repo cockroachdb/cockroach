@@ -1201,11 +1201,10 @@ SELECT (CASE WHEN b THEN NULL ELSE ((ROW(1) AS a)) END).a from t78159
 ----
 1
 
-# TODO(rytaft): Uncomment this case once #109105 is fixed.
-# query B
-# SELECT (CASE WHEN b THEN ((ROW(1) AS a)) ELSE NULL END).a from t78159
-# ----
-# NULL
+query B
+SELECT (CASE WHEN b THEN ((ROW(1) AS a)) ELSE NULL END).a from t78159
+----
+NULL
 
 # Regression test for #78515. Propagate tuple labels when type-checking
 # expressions with multiple matching tuple types.
