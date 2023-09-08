@@ -300,7 +300,6 @@ go_library(
         "//pkg/util/allstacks",
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
-        "//pkg/util/future",
         "//pkg/util/goschedstats",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",

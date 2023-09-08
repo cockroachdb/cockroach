@@ -1898,11 +1898,10 @@ func TestEngineIteratorVisibility(t *testing.T) {
 			canWrite:         false,
 		},
 	}
-	keyKinds := []interface{}{MVCCKeyAndIntentsIterKind, MVCCKeyIterKind}
+	keyKinds := []MVCCIterKind{MVCCKeyAndIntentsIterKind, MVCCKeyIterKind}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			testutils.RunValues(t, "IterKind", keyKinds, func(t *testing.T, iterKindI interface{}) {
-				iterKind := iterKindI.(MVCCIterKind)
+			testutils.RunValues(t, "IterKind", keyKinds, func(t *testing.T, iterKind MVCCIterKind) {
 				eng := NewDefaultInMemForTesting()
 				defer eng.Close()
 

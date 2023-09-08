@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -27,10 +26,10 @@ import (
 )
 
 const (
-	// defaultPushTxnsInterval is the default interval at which a Processor will
+	// DefaultPushTxnsInterval is the default interval at which a Processor will
 	// push all transactions in the unresolvedIntentQueue that are above the age
 	// specified by PushTxnsAge.
-	defaultPushTxnsInterval = 250 * time.Millisecond
+	DefaultPushTxnsInterval = 250 * time.Millisecond
 	// defaultPushTxnsAge is the default age at which a Processor will begin to
 	// consider a transaction old enough to push.
 	defaultPushTxnsAge = 10 * time.Second
@@ -49,6 +48,7 @@ func newErrBufferCapacityExceeded() *kvpb.Error {
 type Config struct {
 	log.AmbientContext
 	Clock   *hlc.Clock
+	Stopper *stop.Stopper
 	RangeID roachpb.RangeID
 	Span    roachpb.RSpan
 
@@ -56,6 +56,9 @@ type Config struct {
 	// PushTxnsInterval specifies the interval at which a Processor will push
 	// all transactions in the unresolvedIntentQueue that are above the age
 	// specified by PushTxnsAge.
+	//
+	// This option only applies to LegacyProcessor since ScheduledProcessor is
+	// relying on store to push events to scheduler to initiate transaction push.
 	PushTxnsInterval time.Duration
 	// PushTxnsAge specifies the age at which a Processor will begin to consider
 	// a transaction old enough to push.
@@ -74,6 +77,10 @@ type Config struct {
 
 	// Optional Processor memory budget.
 	MemBudget *FeedBudget
+
+	// Rangefeed scheduler to use for processor. If set, SchedulerProcessor would
+	// be instantiated.
+	Scheduler *Scheduler
 }
 
 // SetDefaults initializes unset fields in Config to values
@@ -88,7 +95,7 @@ func (sc *Config) SetDefaults() {
 		}
 	} else {
 		if sc.PushTxnsInterval == 0 {
-			sc.PushTxnsInterval = defaultPushTxnsInterval
+			sc.PushTxnsInterval = DefaultPushTxnsInterval
 		}
 		if sc.PushTxnsAge == 0 {
 			sc.PushTxnsAge = defaultPushTxnsAge
@@ -114,14 +121,12 @@ type Processor interface {
 	// initResolvedTSScan. The Processor promises to clean up the iterator by
 	// calling its Close method when it is finished.
 	//
-	// Note that newRtsIter must be called under the same lock as first
-	// registration to ensure that all there would be no missing events.
-	// This is currently achieved by Register function synchronizing with
-	// the work loop before the lock is released.
+	// Note that rtsIter must be closed by processor even if start fails as
+	// caller assumes processor to take ownership.
 	//
 	// If the iterator is nil then no initialization scan will be performed and
 	// the resolved timestamp will immediately be considered initialized.
-	Start(stopper *stop.Stopper, newRtsIter IntentScannerConstructor) error
+	Start(stopper *stop.Stopper, rtsIter IntentScanner) error
 	// Stop processor and close all registrations.
 	//
 	// It is meant to be called by replica when it finds that all streams were
@@ -158,9 +163,9 @@ type Processor interface {
 		startTS hlc.Timestamp, // exclusive
 		catchUpIterConstructor CatchUpIteratorConstructor,
 		withDiff bool,
-		stream Stream,
+		newStream NewStream,
+		newBufferedStream NewBufferedStream,
 		disconnectFn func(),
-		done *future.ErrorFuture,
 	) (bool, *Filter)
 	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 	// the given span with the given error.
@@ -191,6 +196,24 @@ type Processor interface {
 	// EventChanTimeout configuration. If the method returns false, the processor
 	// will have been stopped, so calling Stop is not necessary.
 	ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) bool
+
+	// External notification integration.
+
+	// ID returns scheduler ID of the processor that can be used to notify it
+	// to do some type of work. If ID is 0 then processor doesn't support
+	// external event scheduling.
+	ID() int64
+}
+
+// NewProcessor creates a new rangefeed Processor. The corresponding processing
+// loop should be launched using the Start method.
+func NewProcessor(cfg Config) Processor {
+	cfg.SetDefaults()
+	cfg.AmbientContext.AddLogTag("rangefeed", nil)
+	if cfg.Scheduler != nil {
+		return NewScheduledProcessor(cfg)
+	}
+	return NewLegacyProcessor(cfg)
 }
 
 type LegacyProcessor struct {
@@ -271,11 +294,7 @@ type spanErr struct {
 	pErr *kvpb.Error
 }
 
-// NewProcessor creates a new rangefeed Processor. The corresponding goroutine
-// should be launched using the Start method.
-func NewProcessor(cfg Config) Processor {
-	cfg.SetDefaults()
-	cfg.AmbientContext.AddLogTag("rangefeed", nil)
+func NewLegacyProcessor(cfg Config) *LegacyProcessor {
 	p := &LegacyProcessor{
 		Config: cfg,
 		reg:    makeRegistry(cfg.Metrics),
@@ -298,7 +317,7 @@ func NewProcessor(cfg Config) Processor {
 // IntentScannerConstructor is used to construct an IntentScanner. It
 // should be called from underneath a stopper task to ensure that the
 // engine has not been closed.
-type IntentScannerConstructor func() IntentScanner
+type IntentScannerConstructor func() (IntentScanner, error)
 
 // CatchUpIteratorConstructor is used to construct an iterator that can be used
 // for catchup-scans. Takes the key span and exclusive start time to run the
@@ -313,10 +332,10 @@ type CatchUpIteratorConstructor func(roachpb.Span, hlc.Timestamp) (*CatchUpItera
 //
 // Note that to fulfill newRtsIter contract, LegacyProcessor will create
 // iterator at the start of its work loop prior to firing async task.
-func (p *LegacyProcessor) Start(stopper *stop.Stopper, newRtsIter IntentScannerConstructor) error {
+func (p *LegacyProcessor) Start(stopper *stop.Stopper, rtsIter IntentScanner) error {
 	ctx := p.AnnotateCtx(context.Background())
 	if err := stopper.RunAsyncTask(ctx, "rangefeed.LegacyProcessor", func(ctx context.Context) {
-		p.run(ctx, p.RangeID, newRtsIter, stopper)
+		p.run(ctx, p.RangeID, rtsIter, stopper)
 	}); err != nil {
 		p.reg.DisconnectWithErr(all, kvpb.NewError(err))
 		close(p.stoppedC)
@@ -327,10 +346,7 @@ func (p *LegacyProcessor) Start(stopper *stop.Stopper, newRtsIter IntentScannerC
 
 // run is called from Start and runs the rangefeed.
 func (p *LegacyProcessor) run(
-	ctx context.Context,
-	_forStacks roachpb.RangeID,
-	rtsIterFunc IntentScannerConstructor,
-	stopper *stop.Stopper,
+	ctx context.Context, _forStacks roachpb.RangeID, rtsIter IntentScanner, stopper *stop.Stopper,
 ) {
 	// Close the memory budget last, or there will be a period of time during
 	// which requests are still ongoing but will run into the closed budget,
@@ -344,8 +360,7 @@ func (p *LegacyProcessor) run(
 
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
-	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
+	if rtsIter != nil {
 		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
 		err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
 		if err != nil {
@@ -465,7 +480,9 @@ func (p *LegacyProcessor) run(
 				// Launch an async transaction push attempt that pushes the
 				// timestamp of all transactions beneath the push offset.
 				// Ignore error if quiescing.
-				pushTxns := newTxnPushAttempt(p.Span, p.TxnPusher, p, toPush, now, txnPushAttemptC)
+				pushTxns := newTxnPushAttempt(p.Span, p.TxnPusher, p, toPush, now, func() {
+					close(txnPushAttemptC)
+				})
 				err := stopper.RunAsyncTask(ctx, "rangefeed: pushing old txns", pushTxns.Run)
 				if err != nil {
 					pushTxns.Cancel()
@@ -531,9 +548,9 @@ func (p *LegacyProcessor) Register(
 	startTS hlc.Timestamp,
 	catchUpIterConstructor CatchUpIteratorConstructor,
 	withDiff bool,
-	stream Stream,
+	newStream NewStream,
+	_ NewBufferedStream,
 	disconnectFn func(),
-	done *future.ErrorFuture,
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
@@ -543,7 +560,7 @@ func (p *LegacyProcessor) Register(
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
+		p.Config.EventChanCap, blockWhenFull, p.Metrics, newStream(), disconnectFn,
 	)
 	select {
 	case p.regC <- r:
@@ -709,18 +726,24 @@ func (p *LegacyProcessor) setResolvedTSInitialized(ctx context.Context) {
 // caller to establish causality with actions taken by the Processor goroutine.
 // It does so by flushing the event pipeline.
 func (p *LegacyProcessor) syncEventC() {
-	syncC := make(chan struct{})
-	ev := getPooledEvent(event{sync: &syncEvent{c: syncC}})
+	p.syncEventCWithEvent(&syncEvent{c: make(chan struct{})})
+}
+
+// syncEventCWithEvent allows sync event to be sent and waited on its channel.
+// Exposed to allow special test syncEvents that contain span to be sent.
+func (p *LegacyProcessor) syncEventCWithEvent(se *syncEvent) {
+	ev := getPooledEvent(event{sync: se})
 	select {
 	case p.eventC <- ev:
 		select {
-		case <-syncC:
+		case <-se.c:
 		// Synchronized.
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
 		}
 	case <-p.stoppedC:
-		// Already stopped. Do nothing.
+		// Already stopped. Return event back to the pool.
+		putPooledEvent(ev)
 	}
 }
 
@@ -900,6 +923,11 @@ func (p *LegacyProcessor) newCheckpointEvent() *kvpb.RangeFeedEvent {
 		ResolvedTS: p.rts.Get(),
 	})
 	return &event
+}
+
+// ID implements Processor interface.
+func (p *LegacyProcessor) ID() int64 {
+	return 0
 }
 
 // calculateDateEventSize returns estimated size of the event that contain actual

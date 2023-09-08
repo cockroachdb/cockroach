@@ -1935,9 +1935,19 @@ func (s *ScanStats) String() string {
 }
 
 // RangeFeedEventSink is an interface for sending a single rangefeed event.
+// Decouples underlying grpc implementation from higher level rangefeed
+// components.
 type RangeFeedEventSink interface {
 	Context() context.Context
 	Send(*RangeFeedEvent) error
+}
+
+// MuxRangeFeedEventSink is an interface for sending a single mux rangefeed
+// event. Decouples underlying grpc implementation from higher level rangefeed
+// components.
+type MuxRangeFeedEventSink interface {
+	Context() context.Context
+	Send(*MuxRangeFeedEvent) error
 }
 
 // RangeFeedEventProducer is an adapter for receiving rangefeed events with either

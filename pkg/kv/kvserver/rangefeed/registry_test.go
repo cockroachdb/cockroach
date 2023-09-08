@@ -15,12 +15,12 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	_ "github.com/cockroachdb/cockroach/pkg/keys" // hook up pretty printer
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -43,6 +43,7 @@ var (
 type testStream struct {
 	ctx     context.Context
 	ctxDone func()
+	doneC   chan *kvpb.Error
 	mu      struct {
 		syncutil.Mutex
 		sendErr error
@@ -52,24 +53,99 @@ type testStream struct {
 
 func newTestStream() *testStream {
 	ctx, done := context.WithCancel(context.Background())
-	return &testStream{ctx: ctx, ctxDone: done}
+	return &testStream{ctx: ctx, ctxDone: done, doneC: make(chan *kvpb.Error, 1)}
 }
 
-func (s *testStream) Context() context.Context {
-	return s.ctx
+func (s *testStream) unbuffered() Stream {
+	return &testStreamUnbuffered{s: s}
+}
+
+func (s *testStream) buffered(drained func()) BufferedStream {
+	prevDone := s.ctxDone
+	s.ctxDone = func() {
+		prevDone()
+		// Drained notification only does internal cleanup but won't send any
+		// errors to the stream. We need to manually put an error (as external infra
+		// would in normal case) to resume test execution.
+		drained()
+		s.doneC <- kvpb.NewError(context.Canceled)
+	}
+	return &testStreamBuffered{s: s}
+}
+
+type testStreamUnbuffered struct {
+	s *testStream
+}
+
+func (s *testStreamUnbuffered) Context() context.Context {
+	return s.s.ctx
+}
+
+func (s *testStreamUnbuffered) Send(e *kvpb.RangeFeedEvent) error {
+	s.s.mu.Lock()
+	defer s.s.mu.Unlock()
+	if s.s.mu.sendErr != nil {
+		return s.s.mu.sendErr
+	}
+	s.s.mu.events = append(s.s.mu.events, e)
+	return nil
+}
+
+func (s *testStreamUnbuffered) Error(err *kvpb.Error) {
+	select {
+	case s.s.doneC <- err:
+	default:
+	}
+}
+
+type testStreamBuffered struct {
+	s *testStream
+}
+
+var _ BufferedStream = (*testStreamBuffered)(nil)
+
+func (s *testStreamBuffered) Context() context.Context {
+	return s.s.ctx
+}
+
+func (s *testStreamBuffered) Send(event *kvpb.RangeFeedEvent, _ *SharedBudgetAllocation) {
+	s.s.mu.Lock()
+	defer s.s.mu.Unlock()
+	if s.s.mu.sendErr != nil {
+		return
+	}
+	s.s.mu.events = append(s.s.mu.events, event)
+}
+
+func (s *testStreamBuffered) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
+	s.s.mu.Lock()
+	defer s.s.mu.Unlock()
+	if s.s.mu.sendErr != nil {
+		return s.s.mu.sendErr
+	}
+	s.s.mu.events = append(s.s.mu.events, event)
+	return nil
+}
+
+func (s *testStreamBuffered) SendError(err *kvpb.Error) {
+	select {
+	case s.s.doneC <- err:
+	default:
+	}
 }
 
 func (s *testStream) Cancel() {
 	s.ctxDone()
 }
 
-func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.mu.sendErr != nil {
-		return s.mu.sendErr
+func (s *testStream) Done(t *testing.T, timeout time.Duration) error {
+	t.Helper()
+	select {
+	case err := <-s.doneC:
+		return err.GoError()
+	case <-time.After(timeout):
+		t.Fatal("failed to get stream completion")
 	}
-	s.mu.events = append(s.mu.events, e)
 	return nil
 }
 
@@ -105,11 +181,20 @@ func makeCatchUpIteratorConstructor(iter storage.SimpleMVCCIterator) CatchUpIter
 		return nil
 	}
 	return func(span roachpb.Span, startTime hlc.Timestamp) (*CatchUpIterator, error) {
-		return &CatchUpIterator{
-			simpleCatchupIter: simpleCatchupIterAdapter{iter},
-			span:              span,
-			startTime:         startTime,
-		}, nil
+		return makeCatchUpIterator(iter, span, startTime), nil
+	}
+}
+
+func makeCatchUpIterator(
+	iter storage.SimpleMVCCIterator, span roachpb.Span, startTime hlc.Timestamp,
+) *CatchUpIterator {
+	if iter == nil {
+		return nil
+	}
+	return &CatchUpIterator{
+		simpleCatchupIter: simpleCatchupIterAdapter{iter},
+		span:              span,
+		startTime:         startTime,
 	}
 }
 
@@ -125,9 +210,8 @@ func newTestRegistration(
 		5,
 		false, /* blockWhenFull */
 		NewMetrics(),
-		s,
+		s.unbuffered(),
 		func() {},
-		&future.ErrorFuture{},
 	)
 	if err := r.maybeConstructCatchUpIter(); err != nil {
 		panic(err)
@@ -143,12 +227,17 @@ func (r *testRegistration) Events() []*kvpb.RangeFeedEvent {
 }
 
 func (r *testRegistration) Err() error {
-	err, _ := future.Wait(context.Background(), r.done)
-	return err
+	err := <-r.stream.doneC
+	return err.GoError()
 }
 
 func (r *testRegistration) TryErr() error {
-	return future.MakeAwaitableFuture(r.done).Get()
+	select {
+	case err := <-r.stream.doneC:
+		return err.GoError()
+	default:
+		return nil
+	}
 }
 
 func TestRegistrationBasic(t *testing.T) {
@@ -230,7 +319,7 @@ func TestRegistrationBasic(t *testing.T) {
 	streamCancelReg.stream.Cancel()
 	go streamCancelReg.runOutputLoop(context.Background(), 0)
 	require.NoError(t, streamCancelReg.waitForCaughtUp())
-	require.Equal(t, streamCancelReg.stream.Context().Err(), streamCancelReg.Err())
+	require.Equal(t, streamCancelReg.stream.ctx.Err(), streamCancelReg.Err())
 }
 
 func TestRegistrationCatchUpScan(t *testing.T) {

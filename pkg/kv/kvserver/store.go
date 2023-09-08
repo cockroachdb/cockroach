@@ -73,7 +73,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -178,6 +177,12 @@ var logStoreTelemetryTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_LOG_STORE_TELEMETRY_TICKS_INTERVAL",
 	6*60,
 )
+
+// defaultRangefeedSchedulerConcurency specifies how many workers rangefeed
+// scheduler will use to perform rangefeed work. This number will be divided
+// between stores of the node.
+var defaultRangefeedSchedulerConcurency = envutil.EnvOrDefaultInt(
+	"COCKROACH_RANGEFEED_SCHEDULER_WORKERS", 64)
 
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
@@ -1011,8 +1016,12 @@ type Store struct {
 	// The subset of replicas with active rangefeeds.
 	rangefeedReplicas struct {
 		syncutil.Mutex
-		m map[roachpb.RangeID]struct{}
+		// m contains mapping from rangeID that could be used to retrieve replicas
+		// with associated rangefeed processor scheduler IDs that allow enqueueing
+		// periodic events directly.
+		m map[roachpb.RangeID]int64
 	}
+	rangefeedScheduler *rangefeed.Scheduler
 
 	// raftRecvQueues is a map of per-Replica incoming request queues. These
 	// queues might more naturally belong in Replica, but are kept separate to
@@ -1222,6 +1231,10 @@ type StoreConfig struct {
 
 	// RangeLogWriter is used to write entries to the system.rangelog table.
 	RangeLogWriter RangeLogWriter
+
+	// RangeFeedSchedulerConcurrency specifies number of rangefeed scheduler
+	// workers for the store.
+	RangeFeedSchedulerConcurrency int
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events
@@ -1294,6 +1307,14 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 	}
 	if raftDisableQuiescence {
 		sc.TestingKnobs.DisableQuiescence = true
+	}
+	if sc.RangeFeedSchedulerConcurrency == 0 {
+		sc.RangeFeedSchedulerConcurrency = defaultRangefeedSchedulerConcurency
+		if numStores > 1 && sc.RangeFeedSchedulerConcurrency > 1 {
+			sc.RangeFeedSchedulerConcurrency = min(
+				(sc.RangeFeedSchedulerConcurrency-1)/numStores+1, // ceil division
+				2)
+		}
 	}
 }
 
@@ -1443,7 +1464,7 @@ func NewStore(
 	s.unquiescedReplicas.Unlock()
 
 	s.rangefeedReplicas.Lock()
-	s.rangefeedReplicas.m = map[roachpb.RangeID]struct{}{}
+	s.rangefeedReplicas.m = map[roachpb.RangeID]int64{}
 	s.rangefeedReplicas.Unlock()
 
 	s.tsCache = tscache.New(cfg.Clock)
@@ -1953,6 +1974,14 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return err
 	}
 
+	rfs := rangefeed.NewScheduler(rangefeed.SchedulerConfig{
+		Workers: s.cfg.RangeFeedSchedulerConcurrency,
+	})
+	if err = rfs.Start(ctx, s.stopper); err != nil {
+		return err
+	}
+	s.rangefeedScheduler = rfs
+
 	// Add the store ID to the scanner's AmbientContext before starting it, since
 	// the AmbientContext provided during construction did not include it.
 	// Note that this is just a hacky way of getting around that without
@@ -2177,6 +2206,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Connect rangefeeds to closed timestamp updates.
 	s.startRangefeedUpdater(ctx)
 
+	s.startRangefeedTxnPushNotifier(ctx)
+
 	if s.replicateQueue != nil {
 		s.storeRebalancer = NewStoreRebalancer(
 			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings, s.rebalanceObjManager)
@@ -2354,9 +2385,49 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 	})
 }
 
-func (s *Store) addReplicaWithRangefeed(rangeID roachpb.RangeID) {
+// startRangefeedTxnPushNotifier starts a worker that would periodically
+// enqueue txn push event for rangefeed processors to let them push lagging
+// transactions.
+// Note that this is only affecting scheduler based rangefeeds.
+func (s *Store) startRangefeedTxnPushNotifier(ctx context.Context) {
+	_ /* err */ = s.stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{
+		TaskName: "transaction-rangefeed-push-notifier",
+		SpanOpt:  stop.SterileRootSpan,
+	}, func(ctx context.Context) {
+		ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
+		var schedulerIDs []int64
+		updateSchedulerIDs := func() []int64 {
+			schedulerIDs = schedulerIDs[:0]
+			s.rangefeedReplicas.Lock()
+			for _, id := range s.rangefeedReplicas.m {
+				if id != 0 {
+					// Only process ranges that use scheduler.
+					schedulerIDs = append(schedulerIDs, id)
+				}
+			}
+			s.rangefeedReplicas.Unlock()
+			return schedulerIDs
+		}
+
+		ticker := time.NewTicker(rangefeed.DefaultPushTxnsInterval)
+		for {
+			select {
+			case <-ticker.C:
+				activeIDs := updateSchedulerIDs()
+				s.rangefeedScheduler.EnqueueAll(activeIDs, rangefeed.PushTxnQueued)
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			}
+		}
+	})
+}
+
+func (s *Store) addReplicaWithRangefeed(rangeID roachpb.RangeID, schedulerID int64) {
 	s.rangefeedReplicas.Lock()
-	s.rangefeedReplicas.m[rangeID] = struct{}{}
+	s.rangefeedReplicas.m[rangeID] = schedulerID
 	s.rangefeedReplicas.Unlock()
 }
 
@@ -2909,22 +2980,36 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 // the provided stream and returns a future with an optional error when the rangefeed is
 // complete.
 func (s *Store) RangeFeed(
-	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink,
-) *future.ErrorFuture {
+	ctx context.Context,
+	args *kvpb.RangeFeedRequest,
+	newStream rangefeed.NewStream,
+	newBufferedStream rangefeed.NewBufferedStream,
+) error {
+	// TODO(oleg): need a more comprehensive solution.
+	// Current issue is that we don't know which type of feed underlying processor
+	// will ask for. We cache unbuffered stream, but it only works in limited
+	// cases.
 	if filter := s.TestingKnobs().TestingRangefeedFilter; filter != nil {
+		stream := newStream()
 		if pErr := filter(args, stream); pErr != nil {
-			return future.MakeCompletedErrorFuture(pErr.GoError())
+			return pErr.GoError()
+		}
+		newStream = func() rangefeed.Stream {
+			return stream
+		}
+		newBufferedStream = func(drained func()) rangefeed.BufferedStream {
+			panic("test tried to use TestingRangefeedFilter with scheduled processor")
 		}
 	}
 
 	if err := verifyKeys(args.Span.Key, args.Span.EndKey, true); err != nil {
-		return future.MakeCompletedErrorFuture(err)
+		return err
 	}
 
 	// Get range and add command to the range for execution.
 	repl, err := s.GetReplica(args.RangeID)
 	if err != nil {
-		return future.MakeCompletedErrorFuture(err)
+		return err
 	}
 	if !repl.IsInitialized() {
 		// (*Store).Send has an optimization for uninitialized replicas to send back
@@ -2932,12 +3017,12 @@ func (s *Store) RangeFeed(
 		// be found. RangeFeeds can always be served from followers and so don't
 		// otherwise return NotLeaseHolderError. For simplicity we also don't return
 		// one here.
-		return future.MakeCompletedErrorFuture(kvpb.NewRangeNotFoundError(args.RangeID, s.StoreID()))
+		return kvpb.NewRangeNotFoundError(args.RangeID, s.StoreID())
 	}
 
 	tenID, _ := repl.TenantID()
 	pacer := s.cfg.KVAdmissionController.AdmitRangefeedRequest(tenID, args)
-	return repl.RangeFeed(args, stream, pacer)
+	return repl.RangeFeed(ctx, args, newStream, newBufferedStream, pacer)
 }
 
 // updateReplicationGauges counts a number of simple replication statistics for
@@ -3712,6 +3797,10 @@ func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.R
 // tracking.
 func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 	return s.cfg.KVMemoryMonitor
+}
+
+func (s *Store) getRangefeedScheduler() *rangefeed.Scheduler {
+	return s.rangefeedScheduler
 }
 
 // Implementation of the storeForTruncator interface.
