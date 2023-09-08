@@ -18,6 +18,7 @@ import (
 // Key is a unique identifier for a version of CockroachDB.
 type Key int
 
+// hello, world!
 // Version constants. These drive compatibility between versions as well as
 // migrations. Before you add a version or consider removing one, please
 // familiarize yourself with the rules below.
