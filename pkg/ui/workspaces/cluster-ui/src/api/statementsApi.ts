@@ -21,8 +21,8 @@ import Long from "long";
 import moment from "moment-timezone";
 
 import { AggregateStatistics } from "../statementsTable";
-const STATEMENTS_PATH = "/_status/combinedstmts";
-const STATEMENT_DETAILS_PATH = "/_status/stmtdetails";
+const STATEMENTS_PATH = "_status/combinedstmts";
+const STATEMENT_DETAILS_PATH = "_status/stmtdetails";
 
 export type StatementsRequest =
   cockroach.server.serverpb.CombinedStatementsStatsRequest;

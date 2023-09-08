@@ -314,7 +314,6 @@ export function initializeAnalytics(store: Store<AdminUIState>) {
     analyticsOpts,
   );
   analytics = new AnalyticsSync(analyticsInstance, store, defaultRedactions);
-
   // Attach a listener to the history object which will track a 'page' event
   // whenever the user navigates to a new path.
   let lastPageLocation: Location;

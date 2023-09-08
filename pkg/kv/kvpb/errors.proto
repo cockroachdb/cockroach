@@ -592,6 +592,10 @@ message MergeInProgressError {
 // because of a range lifecycle event, and can be retried.
 message RangeFeedRetryError {
   // Reason specifies what caused the error.
+  // NB: reason names should be stable because they are
+  // exposed as rangefeed error counters.
+  // NB: *never* delete enum values; if retry reason needs to be retired,
+  // reserve reason value.
   enum Reason {
     // The replica was removed from its store.
     REASON_REPLICA_REMOVED = 0;

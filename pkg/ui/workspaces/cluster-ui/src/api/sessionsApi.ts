@@ -11,7 +11,7 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "src/api";
 
-const SESSIONS_PATH = "/_status/sessions";
+const SESSIONS_PATH = "_status/sessions";
 
 export type SessionsRequestMessage =
   cockroach.server.serverpb.ListSessionsRequest;

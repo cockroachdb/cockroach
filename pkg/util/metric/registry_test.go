@@ -256,14 +256,14 @@ func TestRegistryPanicsWhenAddingUnexportedMetrics(t *testing.T) {
 		},
 	)
 
-	// Metric slice is a bug since registry only supports arrays.
+	// Panics when we have a mix of exported and unexported metrics.
 	require.PanicsWithValue(t,
-		"expected array, found slice instead for field <unnamed>.unexportedGaugeSlice ([]*metric.Gauge)",
+		unexportedErr(unnamedStructName, "unexportedSlice"),
 		func() {
 			r.AddMetricStruct(struct {
-				ExportedArray        [1]*Counter
-				unexportedGaugeSlice []*Gauge
-			}{[1]*Counter{c}, []*Gauge{g}})
+				ExportedGauge   *Gauge
+				unexportedSlice []*Counter
+			}{g, []*Counter{c}})
 		},
 	)
 
