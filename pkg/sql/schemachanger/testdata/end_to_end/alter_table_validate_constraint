@@ -85,8 +85,7 @@ upsert descriptor #104
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› VALIDATE CONSTRAINT
-  +          ‹check_i›
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› VALIDATE CONSTRAINT ‹check_i›
   +        statement: ALTER TABLE t VALIDATE CONSTRAINT check_i
   +        statementTag: ALTER TABLE
   +    revertible: true
@@ -157,8 +156,7 @@ upsert descriptor #104
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› VALIDATE CONSTRAINT
-  -          ‹check_i›
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› VALIDATE CONSTRAINT ‹check_i›
   -        statement: ALTER TABLE t VALIDATE CONSTRAINT check_i
   -        statementTag: ALTER TABLE
   -    revertible: true

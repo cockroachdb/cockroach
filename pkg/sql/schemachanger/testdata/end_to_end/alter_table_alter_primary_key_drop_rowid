@@ -43,8 +43,7 @@ write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
     descriptorId: 104
-    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS
-      (‹a›)
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›)
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
@@ -247,8 +246,7 @@ upsert descriptor #104
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY
-  +          USING COLUMNS (‹a›)
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›)
   +        statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a)
   +        statementTag: ALTER TABLE
   +    revertible: true
@@ -970,8 +968,7 @@ upsert descriptor #104
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY
-  -          USING COLUMNS (‹a›)
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›)
   -        statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a)
   -        statementTag: ALTER TABLE
   -    targetRanks: <redacted>

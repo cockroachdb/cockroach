@@ -297,8 +297,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │                 RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
 │                 Statements:
 │                 - statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
-│                   redactedstatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v›
-│                     = ‹'a'›)
+│                   redactedstatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v› = ‹'a'›)
 │                   statementtag: CREATE INDEX
 │
 ├── • PostCommitPhase

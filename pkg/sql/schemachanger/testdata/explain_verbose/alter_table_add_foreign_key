@@ -85,8 +85,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i);
 │                 RunningStatus: PostCommitPhase stage 1 of 2 with 1 ValidationType op pending
 │                 Statements:
 │                 - statement: ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2 (i)
-│                   redactedstatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey›
-│                     FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
+│                   redactedstatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey› FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
 │                   statementtag: ALTER TABLE
 │
 └── • PostCommitPhase

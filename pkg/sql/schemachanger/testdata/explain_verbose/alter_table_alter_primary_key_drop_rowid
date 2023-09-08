@@ -395,8 +395,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │                 RunningStatus: PostCommitPhase stage 1 of 15 with 1 MutationType op pending
 │                 Statements:
 │                 - statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a)
-│                   redactedstatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING
-│                     COLUMNS (‹a›)
+│                   redactedstatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›)
 │                   statementtag: ALTER TABLE
 │
 ├── • PostCommitPhase

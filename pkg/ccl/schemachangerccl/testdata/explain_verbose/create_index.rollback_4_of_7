@@ -191,8 +191,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
             │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION
-            │         BY LIST (id) (PARTITION p1 VALUES IN (1))
+            │       Statement: CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
@@ -203,8 +202,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
             │     IndexID: 3
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION
-            │         BY LIST (id) (PARTITION p1 VALUES IN (1))
+            │       Statement: CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
             │     TableID: 104
             │
             ├── • RemoveJobStateFromDescriptor

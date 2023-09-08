@@ -392,10 +392,8 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │                 JobID: 1
 │                 RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
 │                 Statements:
-│                 - statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT
-│                     1 $$"
-│                   redactedstatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE
-│                     SQL\n\tAS $$SELECT ‹1›;$$"
+│                 - statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT 1 $$"
+│                   redactedstatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
 │                   statementtag: CREATE FUNCTION
 │                 - statement: CREATE UNIQUE INDEX idx ON t (b)
 │                   redactedstatement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹b›)

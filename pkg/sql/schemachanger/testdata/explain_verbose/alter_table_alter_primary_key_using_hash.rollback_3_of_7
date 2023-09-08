@@ -424,8 +424,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
             │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING
-            │         HASH WITH (bucket_count = 3)
+            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
@@ -436,16 +435,14 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
             │     IndexID: 3
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING
-            │         HASH WITH (bucket_count = 3)
+            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
             │     TableID: 104
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 4
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING
-            │         HASH WITH (bucket_count = 3)
+            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
@@ -456,8 +453,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
             │     IndexID: 5
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING
-            │         HASH WITH (bucket_count = 3)
+            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
             │     TableID: 104
             │
             ├── • MakeDeleteOnlyColumnAbsent

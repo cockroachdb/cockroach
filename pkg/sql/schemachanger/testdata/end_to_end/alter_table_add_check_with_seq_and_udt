@@ -21,8 +21,7 @@ write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
     descriptorId: 107
-    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› > nextval(‹'s'›))
-      OR (‹j›::‹typ› = ‹'a'›))
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› > nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›))
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
@@ -181,8 +180,7 @@ upsert descriptor #107
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› >
-  +          nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›))
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› > nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›))
   +        statement: ALTER TABLE t ADD CHECK ((i > nextval('s')) OR (j::typ = 'a'))
   +        statementTag: ALTER TABLE
   +    revertible: true
@@ -301,8 +299,7 @@ upsert descriptor #107
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› >
-  -          nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›))
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› > nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›))
   -        statement: ALTER TABLE t ADD CHECK ((i > nextval('s')) OR (j::typ = 'a'))
   -        statementTag: ALTER TABLE
   -    revertible: true

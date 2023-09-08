@@ -738,8 +738,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
 │                 Statements:
 │                 - statement: DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE
-│                   redactedstatement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table›
-│                     CASCADE
+│                   redactedstatement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE
 │                   statementtag: DROP TABLE
 │
 └── • PostCommitNonRevertiblePhase

@@ -449,8 +449,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │                 RunningStatus: PostCommitPhase stage 1 of 7 with 3 MutationType ops pending
 │                 Statements:
 │                 - statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
-│                   redactedstatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL
-│                     DEFAULT ‹42›
+│                   redactedstatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›
 │                   statementtag: ALTER TABLE
 │
 ├── • PostCommitPhase

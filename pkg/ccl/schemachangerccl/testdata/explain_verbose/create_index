@@ -418,10 +418,8 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │                 JobID: 1
 │                 RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
 │                 Statements:
-│                 - statement: CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION
-│                     BY LIST (id) (PARTITION p1 VALUES IN (1))
-│                   redactedstatement: CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.‹t1› (‹id›, ‹name›)
-│                     STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›))
+│                 - statement: CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
+│                   redactedstatement: CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.‹t1› (‹id›, ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›))
 │                   statementtag: CREATE INDEX
 │
 ├── • PostCommitPhase
@@ -726,8 +724,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
             ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     StatementForDropJob:
-            │       Statement: CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION
-            │         BY LIST (id) (PARTITION p1 VALUES IN (1))
+            │       Statement: CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
             │     TableID: 104
             │
             ├── • RemoveJobStateFromDescriptor

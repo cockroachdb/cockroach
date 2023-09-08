@@ -391,10 +391,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT
 │                 JobID: 1
 │                 RunningStatus: PostCommitPhase stage 1 of 15 with 2 MutationType ops pending
 │                 Statements:
-│                 - statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year',
-│                     now()) AS INT8)
-│                   redactedstatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT
-│                     CAST(date_part(‹'year'›, now()) AS INT8)
+│                 - statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year', now()) AS INT8)
+│                   redactedstatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8)
 │                   statementtag: ALTER TABLE
 │
 ├── • PostCommitPhase
@@ -1150,8 +1148,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT
             ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year',
-            │         now()) AS INT8)
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year', now()) AS INT8)
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
@@ -1161,8 +1158,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT
             ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year',
-            │         now()) AS INT8)
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year', now()) AS INT8)
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
@@ -1172,8 +1168,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT
             ├── • CreateGCJobForIndex
             │     IndexID: 5
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year',
-            │         now()) AS INT8)
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year', now()) AS INT8)
             │     TableID: 106
             │
             ├── • RemoveJobStateFromDescriptor
