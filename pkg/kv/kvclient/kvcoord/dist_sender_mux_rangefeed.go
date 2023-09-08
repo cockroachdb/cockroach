@@ -243,13 +243,9 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error {
 	streamID := atomic.AddInt64(&m.seqID, 1)
 
-	{
-		// Before starting single rangefeed, acquire catchup scan quota.
-		catchupRes, err := acquireCatchupScanQuota(ctx, &m.ds.st.SV, m.catchupSem, m.metrics)
-		if err != nil {
-			return err
-		}
-		s.catchupRes = catchupRes
+	// Before starting single rangefeed, acquire catchup scan quota.
+	if err := s.acquireCatchupScanQuota(ctx, &m.ds.st.SV, m.catchupSem, m.metrics); err != nil {
+		return err
 	}
 
 	// Start a retry loop for sending the batch to the range.
