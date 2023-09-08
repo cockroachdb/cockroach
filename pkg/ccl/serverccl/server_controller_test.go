@@ -388,7 +388,7 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
+	skip.UnderDeadlock(t, "slow under deadlock")
 	t.Logf("starting test cluster")
 	numNodes := 3
 	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
