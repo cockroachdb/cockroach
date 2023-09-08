@@ -778,6 +778,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 	}
 }
 
+// IsPQErrWithCode returns true if `err` is a pq error whose code is in `codes`.
 func isPQErrWithCode(err error, codes ...pgcode.Code) bool {
 	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
 		for _, code := range codes {
