@@ -24,11 +24,39 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
+	"github.com/codahale/hdrhistogram"
 	"github.com/gogo/protobuf/proto"
 	"go.opentelemetry.io/otel/attribute"
 )
 
 var _ bulk.TracingAggregatorEvent = (*IngestionPerformanceStats)(nil)
+
+func (h *HistogramData) String() string {
+	var b strings.Builder
+	hist := hdrhistogram.Import(&hdrhistogram.Snapshot{
+		LowestTrackableValue:  h.LowestTrackableValue,
+		HighestTrackableValue: h.HighestTrackableValue,
+		SignificantFigures:    h.SignificantFigures,
+		Counts:                h.Counts,
+	})
+	b.WriteString(fmt.Sprintf("min: %.6f\n", float64(hist.Min())/float64(time.Second)))
+	b.WriteString(fmt.Sprintf("max: %.6f\n", float64(hist.Max())/float64(time.Second)))
+	b.WriteString(fmt.Sprintf("p5: %.6f\n", float64(hist.ValueAtQuantile(5))/float64(time.Second)))
+	b.WriteString(fmt.Sprintf("p50: %.6f\n", float64(hist.ValueAtQuantile(50))/float64(time.Second)))
+	b.WriteString(fmt.Sprintf("p90: %.6f\n", float64(hist.ValueAtQuantile(90))/float64(time.Second)))
+	b.WriteString(fmt.Sprintf("p99: %.6f\n", float64(hist.ValueAtQuantile(99))/float64(time.Second)))
+	b.WriteString(fmt.Sprintf("p99_9: %.6f\n", float64(hist.ValueAtQuantile(99.9))/float64(time.Second)))
+	b.WriteString(fmt.Sprintf("mean: %.6f\n", float32(hist.Mean())/float32(time.Second)))
+	b.WriteString(fmt.Sprintf("count: %d\n", hist.TotalCount()))
+
+	return b.String()
+}
+
+const (
+	sigFigs    = 1
+	minLatency = time.Microsecond
+	maxLatency = 100 * time.Second
+)
 
 // Identity implements the TracingAggregatorEvent interface.
 func (s *IngestionPerformanceStats) Identity() bulk.TracingAggregatorEvent {
@@ -66,6 +94,30 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 	s.SplitWait += otherStats.SplitWait
 	s.ScatterWait += otherStats.ScatterWait
 	s.CommitWait += otherStats.CommitWait
+
+	// Import the current stats into a new histogram.
+	var batchWaitHist *hdrhistogram.Histogram
+	if s.BatchWaitHist != nil {
+		batchWaitHist = hdrhistogram.Import(&hdrhistogram.Snapshot{
+			LowestTrackableValue:  s.BatchWaitHist.LowestTrackableValue,
+			HighestTrackableValue: s.BatchWaitHist.HighestTrackableValue,
+			SignificantFigures:    s.BatchWaitHist.SignificantFigures,
+			Counts:                s.BatchWaitHist.Counts,
+		})
+	} else {
+		batchWaitHist = hdrhistogram.New(minLatency.Nanoseconds(),
+			maxLatency.Nanoseconds(), sigFigs)
+	}
+	fmt.Printf("other ns %d\n", otherStats.BatchWait.Nanoseconds())
+	_ = batchWaitHist.RecordValue(otherStats.BatchWait.Nanoseconds())
+	// Store the snapshot of this new merged histogram.
+	cumulativeSnapshot := batchWaitHist.Export()
+	s.BatchWaitHist = &HistogramData{
+		LowestTrackableValue:  cumulativeSnapshot.LowestTrackableValue,
+		HighestTrackableValue: cumulativeSnapshot.HighestTrackableValue,
+		SignificantFigures:    cumulativeSnapshot.SignificantFigures,
+		Counts:                cumulativeSnapshot.Counts,
+	}
 
 	// Duration should not be used in throughput calculations as adding durations
 	// of multiple flushes does not account for concurrent execution of these
@@ -138,6 +190,7 @@ func (s *IngestionPerformanceStats) String() string {
 	timeString(&b, "sort_wait", s.SortWait)
 	timeString(&b, "flush_wait", s.FlushWait)
 	timeString(&b, "batch_wait", s.BatchWait)
+	b.WriteString(fmt.Sprintf("batch_wait_hist:\n%s\n", s.BatchWaitHist.String()))
 	timeString(&b, "send_wait", s.SendWait)
 	timeString(&b, "split_wait", s.SplitWait)
 	timeString(&b, "scatter_wait", s.ScatterWait)

@@ -16,6 +16,15 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/kv/bulk/bulkpb";
 import "gogoproto/gogo.proto";
 import "util/hlc/timestamp.proto";
 
+message HistogramData {
+  option (gogoproto.goproto_stringer) = false;
+
+  int64 lowest_trackable_value = 1;
+  int64 highest_trackable_value = 2;
+  int64 significant_figures = 3;
+  repeated int64 counts = 4;
+}
+
 // IngestionPerformanceStats is a message containing information about the
 // creation of SSTables by an SSTBatcher or BufferingAdder.
 message IngestionPerformanceStats {
@@ -67,11 +76,14 @@ message IngestionPerformanceStats {
   // BatchWait is the time spent flushing batches (inc split/scatter/send).
   int64 batch_wait = 14 [(gogoproto.casttype) = "time.Duration"];
 
+  HistogramData batch_wait_hist = 24;
+
   // SendWait is the time spent sending batches (addsstable+retries)
   int64 send_wait = 15  [(gogoproto.casttype) = "time.Duration"];
 
   // SplitWait is the time spent splitting.
   int64 split_wait = 16 [(gogoproto.casttype) = "time.Duration"];
+
   // ScatterWait is the time spent scattering.
   int64 scatter_wait = 17  [(gogoproto.casttype) = "time.Duration"];
 
