@@ -74,6 +74,7 @@ import (
 
 type leaseTest struct {
 	testing.TB
+	cluster                  serverutils.TestClusterInterface
 	server                   serverutils.TestServerInterface
 	db                       *gosql.DB
 	kvDB                     *kv.DB
@@ -98,24 +99,26 @@ func init() {
 
 }
 
-func newLeaseTest(tb testing.TB, params base.TestServerArgs) *leaseTest {
-	s, db, kvDB := serverutils.StartServer(tb, params)
-	leaseTest := &leaseTest{
-		TB:     tb,
-		server: s,
-		db:     db,
-		kvDB:   kvDB,
-		nodes:  map[uint32]*lease.Manager{},
+func newLeaseTest(tb testing.TB, params base.TestClusterArgs) *leaseTest {
+	c := serverutils.StartNewTestCluster(tb, 3, params)
+	lt := &leaseTest{
+		TB:      tb,
+		cluster: c,
+		server:  c.Server(0),
+		db:      c.ServerConn(0),
+		kvDB:    c.Server(0).DB(),
+		nodes:   map[uint32]*lease.Manager{},
 	}
-	if params.Knobs.SQLLeaseManager != nil {
-		leaseTest.leaseManagerTestingKnobs =
-			*params.Knobs.SQLLeaseManager.(*lease.ManagerTestingKnobs)
+
+	if params.ServerArgs.Knobs.SQLLeaseManager != nil {
+		lt.leaseManagerTestingKnobs =
+			*params.ServerArgs.Knobs.SQLLeaseManager.(*lease.ManagerTestingKnobs)
 	}
-	return leaseTest
+	return lt
 }
 
 func (t *leaseTest) cleanup() {
-	t.server.Stopper().Stop(context.Background())
+	t.cluster.Stopper().Stop(context.Background())
 }
 
 func (t *leaseTest) getLeases(descID descpb.ID) string {
@@ -268,8 +271,8 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 func TestLeaseManager(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	removalTracker := lease.NewLeaseRemovalTracker()
-	params := createTestServerParams()
-	params.Knobs = base.TestingKnobs{
+	var params base.TestClusterArgs
+	params.ServerArgs.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
 				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
@@ -382,21 +385,22 @@ func createTestServerParams() base.TestServerArgs {
 
 func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
-	params := createTestServerParams()
 	ctx := context.Background()
-
+	var params base.TestClusterArgs
+	params.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
-	lease.LeaseDuration.Override(ctx, &params.SV, 0)
+	lease.LeaseDuration.Override(ctx, &params.ServerArgs.SV, 0)
 
 	removalTracker := lease.NewLeaseRemovalTracker()
-	params.Knobs = base.TestingKnobs{
+	params.ServerArgs.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
 				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
 			},
 		},
 	}
+
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
 
@@ -430,8 +434,9 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 
 func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
-	params := createTestServerParams()
-	t := newLeaseTest(testingT, params)
+	defer log.Scope(testingT).Close(testingT)
+
+	t := newLeaseTest(testingT, base.TestClusterArgs{})
 	defer t.cleanup()
 
 	descID := t.makeTableForTest()
@@ -493,8 +498,9 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 
 func TestLeaseManagerPublishIllegalVersionChange(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
-	params := createTestServerParams()
-	t := newLeaseTest(testingT, params)
+	defer log.Scope(testingT).Close(testingT)
+
+	t := newLeaseTest(testingT, base.TestClusterArgs{})
 	defer t.cleanup()
 
 	if _, err := t.node(1).Publish(
@@ -517,9 +523,11 @@ func TestLeaseManagerPublishIllegalVersionChange(testingT *testing.T) {
 
 func TestLeaseManagerDrain(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
-	params := createTestServerParams()
+	defer log.Scope(testingT).Close(testingT)
+
+	var params base.TestClusterArgs
 	leaseRemovalTracker := lease.NewLeaseRemovalTracker()
-	params.Knobs = base.TestingKnobs{
+	params.ServerArgs.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
 				LeaseReleasedEvent: leaseRemovalTracker.LeaseRemovedNotification,
@@ -580,8 +588,8 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 	var mu syncutil.Mutex
 	clearSchemaChangers := false
 
-	params := createTestServerParams()
-	params.Knobs = base.TestingKnobs{
+	var params base.TestClusterArgs
+	params.ServerArgs.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			SchemaChangeJobNoOp: func() bool {
 				mu.Lock()
@@ -1165,9 +1173,8 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 // parallelism, which is important to also benchmark locking.
 func BenchmarkLeaseAcquireByNameCached(b *testing.B) {
 	defer leaktest.AfterTest(b)()
-	params := createTestServerParams()
 
-	t := newLeaseTest(b, params)
+	t := newLeaseTest(b, base.TestClusterArgs{})
 	defer t.cleanup()
 
 	if _, err := t.db.Exec(`
@@ -1223,8 +1230,8 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 
 	var testAcquiredCount int32
 	var testAcquisitionBlockCount int32
-	params := createTestServerParams()
-	params.Knobs = base.TestingKnobs{
+	var params base.TestClusterArgs
+	params.ServerArgs.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
 				// We want to track when leases get acquired and when they are renewed.
@@ -1246,13 +1253,14 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 			},
 		},
 	}
+	params.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
 	// The lease jitter is set to ensure newer leases have higher
 	// expiration timestamps.
-	lease.LeaseJitterFraction.Override(ctx, &params.SV, 0)
+	lease.LeaseJitterFraction.Override(ctx, &params.ServerArgs.SV, 0)
 	// The renewal timeout is set to be the duration, so background
 	// renewal should begin immediately after accessing a lease.
-	lease.LeaseRenewalDuration.Override(ctx, &params.SV,
-		lease.LeaseDuration.Get(&params.SV))
+	lease.LeaseRenewalDuration.Override(ctx, &params.ServerArgs.SV,
+		lease.LeaseDuration.Get(&params.ServerArgs.SV))
 
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
@@ -1705,8 +1713,7 @@ func TestModificationTimeTxnOrdering(testingT *testing.T) {
 	// Which table to exercise the test against.
 	const descID = keys.LeaseTableID
 
-	params := createTestServerParams()
-	t := newLeaseTest(testingT, params)
+	t := newLeaseTest(testingT, base.TestClusterArgs{})
 	defer t.cleanup()
 
 	if _, err := t.db.Exec(`
@@ -1797,8 +1804,9 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	var testAcquisitionBlockCount int32
 	var expected catalog.DescriptorIDSet
 
-	params := createTestServerParams()
-	params.Knobs = base.TestingKnobs{
+	params := base.TestClusterArgs{}
+	params.ServerArgs = createTestServerParams()
+	params.ServerArgs.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
 				// We want to track when leases get acquired and when they are renewed.
@@ -1833,12 +1841,12 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 
 	// The lease jitter is set to ensure newer leases have higher
 	// expiration timestamps.
-	lease.LeaseJitterFraction.Override(ctx, &params.SV, 0)
+	lease.LeaseJitterFraction.Override(ctx, &params.ServerArgs.SV, 0)
 	// Lease duration to something small.
-	lease.LeaseDuration.Override(ctx, &params.SV, 50*time.Millisecond)
+	lease.LeaseDuration.Override(ctx, &params.ServerArgs.SV, 50*time.Millisecond)
 	// Renewal timeout to 0 saying that the lease will get renewed only
 	// after the lease expires when a request requests the descriptor.
-	lease.LeaseRenewalDuration.Override(ctx, &params.SV, 0)
+	lease.LeaseRenewalDuration.Override(ctx, &params.ServerArgs.SV, 0)
 
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
@@ -2033,8 +2041,8 @@ INSERT INTO t.kv VALUES ('c', 'd');
 func TestDeleteOrphanedLeases(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 
-	params := createTestServerParams()
-	params.Knobs = base.TestingKnobs{
+	params := base.TestClusterArgs{}
+	params.ServerArgs.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{},
 	}
 
@@ -3085,13 +3093,14 @@ func TestLeaseBulkInsertWithImplicitTxn(t *testing.T) {
 
 	ctx := context.Background()
 
-	params := createTestServerParams()
+	params := base.TestClusterArgs{}
+	params.ServerArgs = createTestServerParams()
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
-	lease.LeaseDuration.Override(ctx, &params.SV, 0)
+	lease.LeaseDuration.Override(ctx, &params.ServerArgs.SV, 0)
 	var leaseManager *lease.Manager
 	leaseTableID := uint64(0)
-	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+	params.ServerArgs.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		// The before execute hook will be to set up to pause
 		// the beforeExecuteStmt, which will then be resumed
 		// when the beforeExecuteResumeStmt statement is observed.
@@ -3135,7 +3144,7 @@ func TestLeaseBulkInsertWithImplicitTxn(t *testing.T) {
 		},
 	}
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: createTestServerParams()})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	// Setup tables for the test.

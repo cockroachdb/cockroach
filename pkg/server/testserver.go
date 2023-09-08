@@ -622,7 +622,7 @@ func (ts *TestServer) Start(ctx context.Context) error {
 	}
 	// In tests we need some, but not all of RunInitialSQL functionality.
 	if err := ts.Server.RunInitialSQL(
-		ctx, false /* startSingleNode */, "" /* adminUser */, "", /* adminPassword */
+		ctx, !ts.params.PartOfCluster, "" /* adminUser */, "", /* adminPassword */
 	); err != nil {
 		return err
 	}
