@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -81,7 +80,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 			return nil, pgerror.Newf(
 				pgcode.InsufficientPrivilege, "must be owner of database %s", n.Name)
 		}
-		hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
+		hasCreateDB, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEDB)
 		if err != nil {
 			return nil, err
 		}

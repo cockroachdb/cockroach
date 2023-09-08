@@ -135,7 +135,7 @@ func (p *planner) checkPasswordOptionConstraints(
 		// NOCREATELOGIN to another role, or set up a password for
 		// authentication, or set up password validity, or enable/disable
 		// LOGIN privilege; even if they have CREATEROLE privilege.
-		if err := p.CheckRoleOption(ctx, roleoption.CREATELOGIN); err != nil {
+		if err := p.CheckGlobalPrivilegeOrRoleOption(ctx, privilege.CREATELOGIN); err != nil {
 			return err
 		}
 	}
