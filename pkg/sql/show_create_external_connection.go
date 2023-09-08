@@ -120,8 +120,8 @@ func (p *planner) ShowCreateExternalConnection(
 			var rows []tree.Datums
 			for _, conn := range connections {
 				row := tree.Datums{
-					scheduleID: tree.NewDString(conn.ConnectionName()),
-					createStmt: tree.NewDString(conn.UnredactedConnectionStatement()),
+					scheduleIDIdx: tree.NewDString(conn.ConnectionName()),
+					createStmtIdx: tree.NewDString(conn.UnredactedConnectionStatement()),
 				}
 				rows = append(rows, row)
 			}
