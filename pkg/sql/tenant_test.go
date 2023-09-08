@@ -72,11 +72,9 @@ func testDestroyTenantSynchronous(ctx context.Context, t *testing.T, sqlDB *gosq
 	const tenantStateQuery = `
 SELECT id, active FROM system.tenants WHERE id = 10
 `
+	tenantSpan := codec.TenantSpan()
 	checkKVsExistForTenant := func(t *testing.T, shouldExist bool) {
-		rows, err := kvDB.Scan(
-			ctx, codec.TenantPrefix(), codec.TenantPrefix().PrefixEnd(),
-			1, /* maxRows */
-		)
+		rows, err := kvDB.Scan(ctx, tenantSpan.Key, tenantSpan.EndKey, 1 /* maxRows */)
 		require.NoError(t, err)
 		require.Equal(t, shouldExist, len(rows) > 0)
 	}
