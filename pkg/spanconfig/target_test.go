@@ -97,11 +97,8 @@ func TestKeyspaceTargeted(t *testing.T) {
 			expSpan: keys.EverythingSpan,
 		},
 		{
-			target: MakeTargetFromSystemTarget(TestingMakeTenantKeyspaceTargetOrFatal(t, ten10, ten10)),
-			expSpan: roachpb.Span{
-				Key:    keys.MakeTenantPrefix(ten10),
-				EndKey: keys.MakeTenantPrefix(ten10).PrefixEnd(),
-			},
+			target:  MakeTargetFromSystemTarget(TestingMakeTenantKeyspaceTargetOrFatal(t, ten10, ten10)),
+			expSpan: keys.MakeTenantSpan(ten10),
 		},
 		{
 			target: MakeTargetFromSystemTarget(
@@ -116,10 +113,7 @@ func TestKeyspaceTargeted(t *testing.T) {
 			target: MakeTargetFromSystemTarget(
 				TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, ten10),
 			),
-			expSpan: roachpb.Span{
-				Key:    keys.MakeTenantPrefix(ten10),
-				EndKey: keys.MakeTenantPrefix(ten10).PrefixEnd(),
-			},
+			expSpan: keys.MakeTenantSpan(ten10),
 		},
 		{
 			target:  MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}),
