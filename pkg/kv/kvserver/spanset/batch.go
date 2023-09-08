@@ -401,14 +401,24 @@ func (i *EngineIterator) UnsafeEngineKey() (storage.EngineKey, error) {
 	return i.i.UnsafeEngineKey()
 }
 
+// EngineKey is part of the storage.EngineIterator interface.
+func (i *EngineIterator) EngineKey() (storage.EngineKey, error) {
+	return i.i.EngineKey()
+}
+
+// UnsafeRawEngineKey is part of the storage.EngineIterator interface.
+func (i *EngineIterator) UnsafeRawEngineKey() []byte {
+	return i.i.UnsafeRawEngineKey()
+}
+
 // UnsafeValue is part of the storage.EngineIterator interface.
 func (i *EngineIterator) UnsafeValue() ([]byte, error) {
 	return i.i.UnsafeValue()
 }
 
-// EngineKey is part of the storage.EngineIterator interface.
-func (i *EngineIterator) EngineKey() (storage.EngineKey, error) {
-	return i.i.EngineKey()
+// UnsafeLazyValue is part of the storage.EngineIterator interface.
+func (i *EngineIterator) UnsafeLazyValue() pebble.LazyValue {
+	return i.i.UnsafeLazyValue()
 }
 
 // Value is part of the storage.EngineIterator interface.
@@ -419,11 +429,6 @@ func (i *EngineIterator) Value() ([]byte, error) {
 // ValueLen is part of the storage.EngineIterator interface.
 func (i *EngineIterator) ValueLen() int {
 	return i.i.ValueLen()
-}
-
-// UnsafeRawEngineKey is part of the storage.EngineIterator interface.
-func (i *EngineIterator) UnsafeRawEngineKey() []byte {
-	return i.i.UnsafeRawEngineKey()
 }
 
 // CloneContext is part of the storage.EngineIterator interface.
