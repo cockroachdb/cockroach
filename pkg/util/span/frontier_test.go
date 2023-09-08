@@ -46,11 +46,12 @@ type frontierForwarder struct {
 }
 
 func (f frontierForwarder) expectedAdvanced(expected bool) frontierForwarder {
-	require.Equal(f.t, expected, f.advanced)
+	require.Equal(f.t, expected, f.advanced, f.f.entriesStr())
 	return f
 }
 func (f frontierForwarder) expectFrontier(wall int64) frontierForwarder {
-	require.Equal(f.t, hlc.Timestamp{WallTime: wall}, f.f.Frontier())
+	require.Equal(f.t, hlc.Timestamp{WallTime: wall}, f.f.Frontier(),
+		"expected %d, found %s", wall, f.f.Frontier())
 	return f
 }
 func (f frontierForwarder) expectEntries(expected string) frontierForwarder {
@@ -285,8 +286,12 @@ func TestSequentialSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var abc = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	startKey, endKey := []byte{abc[0]}, []byte{abc[len(abc)-1]}
+	copyKey := func(k []byte) (c []byte) {
+		return append(c, k...)
+	}
+
 	mkspan := func() roachpb.Span {
-		return roachpb.Span{Key: startKey, EndKey: endKey}
+		return roachpb.Span{Key: copyKey(startKey), EndKey: copyKey(endKey)}
 	}
 
 	f, err := MakeFrontier(mkspan())
@@ -410,9 +415,9 @@ func (m *spanMaker) rndKey() interval.Comparable {
 func (m *spanMaker) rndSpan() roachpb.Span {
 	var startKey interval.Comparable
 
-	if len(m.starts) > 0 && m.rnd.Int()%17 == 0 {
+	if len(m.starts) > 0 && m.rnd.Int()%37 == 0 {
 		// With some probability use previous starting point.
-		startKey = m.starts[m.rnd.Intn(len(m.starts))]
+		startKey = append(startKey, m.starts[m.rnd.Intn(len(m.starts))]...)
 		// Just for fun, nudge start a bit forward or back.
 		if dice := m.rnd.Intn(3) - 1; dice != 0 {
 			startKey[len(startKey)-1] += byte(dice)
@@ -439,15 +444,25 @@ func (m *spanMaker) rndSpan() roachpb.Span {
 }
 
 func BenchmarkFrontier(b *testing.B) {
-	var rndSeed = randutil.NewPseudoSeed()
-
-	rnd := rand.New(rand.NewSource(rndSeed))
+	b.StopTimer()
+	// To produce repeatable runs, run benchmark with COCKROACH_RANDOM_SEED env to override
+	// the seed value and -test.benchtime=Nx to set explicit number of iterations.
+	rnd, rndSeed := randutil.NewPseudoRand()
 	spanMaker, span := newSpanMaker(4, rnd)
+	const corpusSize = 2 << 14
+	corpus := make([]roachpb.Span, corpusSize)
+	for i := 0; i < corpusSize; i++ {
+		corpus[i] = spanMaker.rndSpan()
+	}
+	b.StartTimer()
+	b.ReportAllocs()
 
 	f, err := MakeFrontier(span)
-	require.NoError(b, err)
-	log.Infof(context.Background(), "N=%d TestSpan: %s (seed: %d) Entries: %s", b.N, span, rndSeed, f.entriesStr())
-	b.ReportAllocs()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	log.Infof(context.Background(), "N=%d TestSpan: %s (seed: %d)", b.N, span, rndSeed)
 	var wall int64 = 10
 
 	for i := 0; i < b.N; i++ {
@@ -456,9 +471,10 @@ func BenchmarkFrontier(b *testing.B) {
 		}
 
 		delta := rnd.Int63n(10) - rnd.Int63n(3)
-		rndSpan := spanMaker.rndSpan()
-		_, err := f.Forward(rndSpan, hlc.Timestamp{WallTime: wall + delta})
-		require.NoError(b, err)
+		rndSpan := corpus[rnd.Intn(corpusSize)]
+		if _, err := f.Forward(rndSpan, hlc.Timestamp{WallTime: wall + delta}); err != nil {
+			b.Fatal(err)
+		}
 	}
 	log.Infof(context.Background(), "%d entries: %s", f.tree.Len(), f.entriesStr())
 }
