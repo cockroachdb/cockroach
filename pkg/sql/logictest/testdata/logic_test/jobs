@@ -280,3 +280,77 @@ query I
 SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO CONFIG RUNNER' AND status = 'running'
 ----
 1
+
+subtest control_job_priv
+
+user testuser
+
+statement ok
+CREATE TABLE t_control_job_priv(x INT);
+DROP TABLE t_control_job_priv
+
+let $job_id
+SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP TABLE test.public.t_control_job_priv'
+
+statement error user testuser does not have privileges for job
+PAUSE JOB (SELECT $job_id)
+
+user root
+
+statement ok
+GRANT SYSTEM CONTROLJOB TO testuser
+
+user testuser
+
+statement ok
+PAUSE JOB (SELECT $job_id)
+
+user root
+
+statement ok
+REVOKE SYSTEM CONTROLJOB FROM testuser
+
+subtest end
+
+subtest control_job_priv_inherited
+
+user testuser
+
+statement ok
+CREATE TABLE t_control_job_priv_inherited(x INT);
+DROP TABLE t_control_job_priv_inherited
+
+let $job_id
+SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP TABLE test.public.t_control_job_priv_inherited'
+
+statement error user testuser does not have privileges for job
+PAUSE JOB (SELECT $job_id)
+
+user root
+
+statement ok
+CREATE ROLE jobcontroller
+
+statement ok
+GRANT SYSTEM CONTROLJOB TO jobcontroller
+
+statement ok
+GRANT jobcontroller TO testuser
+
+user testuser
+
+statement ok
+PAUSE JOB (SELECT $job_id)
+
+user root
+
+statement ok
+REVOKE SYSTEM CONTROLJOB FROM jobcontroller
+
+statement ok
+REVOKE jobcontroller FROM testuser
+
+statement ok
+DROP ROLE jobcontroller
+
+subtest end
