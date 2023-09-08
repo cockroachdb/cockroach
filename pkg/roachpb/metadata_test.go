@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -461,4 +462,79 @@ func TestAddTier(t *testing.T) {
 	}
 	require.Equal(t, l2, l1.AddTier(Tier{Key: "foo", Value: "bar"}))
 	require.Equal(t, l3, l2.AddTier(Tier{Key: "bar", Value: "foo"}))
+}
+
+func TestGCHint(t *testing.T) {
+	var empty hlc.Timestamp
+	ts1, ts2, ts3 := makeTS(1234, 2), makeTS(2345, 0), makeTS(3456, 10)
+	hint := func(rangeT, minT, maxT hlc.Timestamp) GCHint {
+		return GCHint{
+			LatestRangeDeleteTimestamp: rangeT,
+			GCTimestamp:                minT,
+			GCTimestampNext:            maxT,
+		}
+	}
+
+	// checkInvariants verifies that the GCHint is well-formed.
+	checkInvariants := func(t *testing.T, hint GCHint) {
+		t.Helper()
+		if hint.GCTimestamp.IsEmpty() {
+			require.True(t, hint.GCTimestampNext.IsEmpty())
+		}
+		if hint.GCTimestampNext.IsSet() {
+			require.True(t, hint.GCTimestamp.Less(hint.GCTimestampNext))
+		}
+	}
+	checkInvariants(t, GCHint{})
+
+	// merge runs GCHint.Merge with the given parameters, and verifies that the
+	// semantics of the returned "updated" bool are satisfied.
+	merge := func(t *testing.T, lhs, rhs GCHint, leftEmtpy, rightEmpty bool) GCHint {
+		t.Helper()
+		before := lhs
+		updated := lhs.Merge(&rhs, leftEmtpy, rightEmpty)
+		require.Equal(t, !lhs.Equal(before), updated, "Merge return value incorrect")
+		return lhs
+	}
+	// checkMerge runs GCHint.Merge, and verifies that:
+	// 	- The result of merging 2 hints does not depend on the order.
+	// 	- Merge returns true iff it modified the hint.
+	// 	- Merge returns GCHint conforming with the invariants.
+	checkMerge := func(t *testing.T, lhs, rhs GCHint, leftEmpty, rightEmpty bool) GCHint {
+		t.Helper()
+		res1 := merge(t, lhs, rhs, leftEmpty, rightEmpty)
+		res2 := merge(t, rhs, lhs, rightEmpty, leftEmpty)
+		require.Equal(t, res1, res2, "Merge is not commutative")
+		checkInvariants(t, res1)
+		return res1
+	}
+
+	// Test the effect of GCHint.Merge with an empty hint. Additionally, test that
+	// the result of such a Merge does not depend on the order, i.e. Merge is
+	// commutative; and that Merge returns a correct "updated" bool.
+	for _, h := range []GCHint{
+		hint(empty, empty, empty),
+		hint(empty, ts1, empty),
+		hint(empty, ts1, ts3),
+		hint(ts1, empty, empty),
+		hint(ts1, ts1, ts3),
+		hint(ts2, ts1, ts3),
+	} {
+		t.Run("Merge-with-empty-hint", func(t *testing.T) {
+			for _, lr := range [][]bool{
+				{false, false},
+				{false, true},
+				{true, false},
+				{true, true},
+			} {
+				t.Run(fmt.Sprintf("leftEmpty=%v/rightEmpty=%v", lr[0], lr[1]), func(t *testing.T) {
+					leftEmpty, rightEmpty := lr[0], lr[1]
+					checkInvariants(t, h)
+					checkMerge(t, h, GCHint{}, leftEmpty, rightEmpty)
+				})
+			}
+		})
+	}
+
+	// TODO(pavelkalinnikov): test Merge with non-empty hints.
 }
