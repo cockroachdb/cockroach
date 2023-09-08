@@ -56,7 +56,7 @@ type streamIngestionFrontier struct {
 
 	// frontier contains the current resolved timestamp high-water for the tracked
 	// span set.
-	frontier *span.Frontier
+	frontier span.Frontier
 
 	// metrics are monitoring all running ingestion jobs.
 	metrics *Metrics
@@ -341,6 +341,8 @@ func (sf *streamIngestionFrontier) Next() (
 }
 
 func (sf *streamIngestionFrontier) close() {
+	defer sf.frontier.Release()
+
 	if err := sf.heartbeatSender.stop(); err != nil {
 		log.Errorf(sf.Ctx(), "heartbeat sender exited with error: %s", err)
 	}

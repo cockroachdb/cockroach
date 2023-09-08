@@ -29,6 +29,7 @@ func checkCoverage(
 	if err != nil {
 		return err
 	}
+	defer frontier.Release()
 
 	// The main loop below requires the entire frontier be caught up to the start
 	// time of each step it proceeds, however a span introduced in a later backup

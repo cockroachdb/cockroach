@@ -229,7 +229,7 @@ type streamIngestionProcessor struct {
 
 	// frontier keeps track of the progress for the spans tracked by this processor
 	// and is used forward resolved spans
-	frontier *span.Frontier
+	frontier span.Frontier
 	// lastFlushTime keeps track of the last time that we flushed due to a
 	// checkpoint timestamp event.
 	lastFlushTime time.Time
@@ -527,6 +527,8 @@ func (sip *streamIngestionProcessor) close() {
 	if sip.Closed {
 		return
 	}
+
+	defer sip.frontier.Release()
 
 	// Stop the partition client, mergedSubscription, and
 	// cutoverPoller. All other goroutines should exit based on
@@ -1276,7 +1278,7 @@ func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, erro
 // frontierForSpan returns the lowest timestamp in the frontier within
 // the given subspans. If the subspans are entirely outside the
 // Frontier's tracked span an empty timestamp is returned.
-func frontierForSpans(f *span.Frontier, spans ...roachpb.Span) hlc.Timestamp {
+func frontierForSpans(f span.Frontier, spans ...roachpb.Span) hlc.Timestamp {
 	var (
 		minTimestamp hlc.Timestamp
 		sawEmptyTS   bool
