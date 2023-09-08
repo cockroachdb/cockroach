@@ -468,7 +468,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 		case *kvpb.RangeFeedError:
 			log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
 			if active.catchupRes != nil {
-				m.metrics.RangefeedErrorCatchup.Inc(1)
+				m.metrics.Errors.RangefeedErrorCatchup.Inc(1)
 			}
 			ms.deleteStream(event.StreamID)
 			// Restart rangefeed on another goroutine. Restart might be a bit
@@ -506,7 +506,7 @@ func (m *rangefeedMuxer) restartActiveRangeFeeds(
 func (m *rangefeedMuxer) restartActiveRangeFeed(
 	ctx context.Context, active *activeMuxRangeFeed, reason error,
 ) error {
-	m.metrics.RangefeedRestartRanges.Inc(1)
+	m.metrics.Errors.RangefeedRestartRanges.Inc(1)
 	active.setLastError(reason)
 
 	// Release catchup scan reservation if any -- we will acquire another

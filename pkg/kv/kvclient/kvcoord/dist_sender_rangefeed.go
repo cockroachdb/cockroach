@@ -541,7 +541,11 @@ type rangefeedErrorInfo struct {
 // handleRangefeedError handles an error that occurred while running rangefeed.
 // Returns rangefeedErrorInfo describing how the error should be handled for the
 // range. Returns an error if the entire rangefeed should terminate.
-func handleRangefeedError(ctx context.Context, err error) (rangefeedErrorInfo, error) {
+func handleRangefeedError(
+	ctx context.Context, metrics *DistSenderRangeFeedMetrics, err error,
+) (rangefeedErrorInfo, error) {
+	metrics.Errors.RangefeedRestartRanges.Inc(1)
+
 	if err == nil {
 		return rangefeedErrorInfo{}, nil
 	}
@@ -550,11 +554,17 @@ func handleRangefeedError(ctx context.Context, err error) (rangefeedErrorInfo, e
 	case errors.Is(err, io.EOF):
 		// If we got an EOF, treat it as a signal to restart single range feed.
 		return rangefeedErrorInfo{}, nil
-	case errors.HasType(err, (*kvpb.StoreNotFoundError)(nil)) ||
-		errors.HasType(err, (*kvpb.NodeUnavailableError)(nil)):
+	case errors.HasType(err, (*kvpb.StoreNotFoundError)(nil)):
 		// These errors are likely to be unique to the replica that
 		// reported them, so no action is required before the next
 		// retry.
+		metrics.Errors.StoreNotFound.Inc(1)
+		return rangefeedErrorInfo{}, nil
+	case errors.HasType(err, (*kvpb.NodeUnavailableError)(nil)):
+		// These errors are likely to be unique to the replica that
+		// reported them, so no action is required before the next
+		// retry.
+		metrics.Errors.NodeNotFound.Inc(1)
 		return rangefeedErrorInfo{}, nil
 	case errors.Is(err, errRestartStuckRange):
 		// Stuck ranges indicate a bug somewhere in the system.  We are being
@@ -564,16 +574,23 @@ func handleRangefeedError(ctx context.Context, err error) (rangefeedErrorInfo, e
 		//
 		// The error contains the replica which we were waiting for.
 		log.Warningf(ctx, "restarting stuck rangefeed: %s", err)
+		metrics.Errors.Stuck.Inc(1)
 		return rangefeedErrorInfo{evict: true}, nil
-	case IsSendError(err), errors.HasType(err, (*kvpb.RangeNotFoundError)(nil)):
+	case IsSendError(err):
+		metrics.Errors.SendErrors.Inc(1)
+		return rangefeedErrorInfo{evict: true}, nil
+	case errors.HasType(err, (*kvpb.RangeNotFoundError)(nil)):
+		metrics.Errors.RangeNotFound.Inc(1)
 		return rangefeedErrorInfo{evict: true}, nil
 	case errors.HasType(err, (*kvpb.RangeKeyMismatchError)(nil)):
+		metrics.Errors.RangeKeyMismatch.Inc(1)
 		return rangefeedErrorInfo{evict: true, resolveSpan: true}, nil
 	case errors.HasType(err, (*kvpb.RangeFeedRetryError)(nil)):
 		var t *kvpb.RangeFeedRetryError
 		if ok := errors.As(err, &t); !ok {
 			return rangefeedErrorInfo{}, errors.AssertionFailedf("wrong error type: %T", err)
 		}
+		metrics.Errors.GetRangeFeedRetryCounter(t.Reason).Inc(1)
 		switch t.Reason {
 		case kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
 			kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
@@ -834,7 +851,7 @@ func (ds *DistSender) singleRangeFeed(
 			case *kvpb.RangeFeedError:
 				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
 				if catchupRes != nil {
-					metrics.RangefeedErrorCatchup.Inc(1)
+					metrics.Errors.RangefeedErrorCatchup.Inc(1)
 				}
 				if stuckWatcher.stuck() {
 					// When the stuck watcher fired, and the rangefeed call is local,
@@ -869,7 +886,6 @@ func handleStuckEvent(
 	threshold time.Duration,
 	m *DistSenderRangeFeedMetrics,
 ) error {
-	m.RangefeedRestartStuck.Inc(1)
 	if afterCatchupScan {
 		telemetry.Count("rangefeed.stuck.after-catchup-scan")
 	} else {
