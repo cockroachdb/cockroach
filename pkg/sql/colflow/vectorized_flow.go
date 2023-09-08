@@ -764,7 +764,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	run := func(ctx context.Context, flowCtxCancel context.CancelFunc) {
 		outbox.Run(
 			ctx,
-			s.f.Cfg.PodNodeDialer,
+			s.f.Cfg.SQLInstanceDialer,
 			stream.TargetNodeID,
 			stream.StreamID,
 			flowCtxCancel,
@@ -911,7 +911,7 @@ func (s *vectorizedFlowCreator) setupInput(
 
 			// Retrieve the latency from the origin node (the one that has the
 			// outbox).
-			latency, err := s.f.Cfg.PodNodeDialer.Latency(roachpb.NodeID(inputStream.OriginNodeID))
+			latency, err := s.f.Cfg.SQLInstanceDialer.Latency(roachpb.NodeID(inputStream.OriginNodeID))
 			if err != nil {
 				// If an error occurred, latency's nil value of 0 is used. If latency is
 				// 0, it is not included in the displayed stats for EXPLAIN ANALYZE

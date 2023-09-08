@@ -942,7 +942,7 @@ func (t *testTenant) JobRegistry() interface{} {
 
 // NodeDialer returns the NodeDialer used by the testServer.
 func (t *testTenant) NodeDialer() interface{} {
-	return t.sql.nodeDialer
+	return t.sql.sqlInstanceDialer
 }
 
 // ExecutorConfig is part of the serverutils.ApplicationLayerInterface.
