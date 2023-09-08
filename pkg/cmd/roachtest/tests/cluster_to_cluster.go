@@ -703,7 +703,7 @@ func (rd *replicationDriver) backupAfterFingerprintMismatch(
 	if rd.c.Spec().Cloud == spec.AWS {
 		prefix = "s3"
 	}
-	collection := fmt.Sprintf("%s://%s/c2c-fingerprint-mismatch/%s/%s/%s?AUTH=implicit", prefix, testutils.BackupTestingBucket(), rd.rs.name, rd.c.Name(), tenantName)
+	collection := fmt.Sprintf("%s://%s/c2c-fingerprint-mismatch/%s/%s/%s?AUTH=implicit", prefix, testutils.BackupTestingBucketLongTTL(), rd.rs.name, rd.c.Name(), tenantName)
 	fullBackupQuery := fmt.Sprintf("BACKUP INTO '%s' AS OF SYSTEM TIME '%s' with revision_history", collection, startTime.AsOfSystemTime())
 	_, err := conn.ExecContext(ctx, fullBackupQuery)
 	if err != nil {
