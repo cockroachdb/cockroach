@@ -325,6 +325,8 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	rangeFeedResumeFrontier = span.MakeConcurrentFrontier(rangeFeedResumeFrontier)
+	defer rangeFeedResumeFrontier.Release()
 
 	for i := 0; ; i++ {
 		initialScan := i == 0
@@ -526,9 +528,7 @@ func (f *kvFeed) scanIfShould(
 	return spansToScan, scanTime, nil
 }
 
-func (f *kvFeed) runUntilTableEvent(
-	ctx context.Context, resumeFrontier *span.Frontier,
-) (err error) {
+func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Frontier) (err error) {
 	startFrom := resumeFrontier.Frontier()
 
 	// Determine whether to request the previous value of each update from
@@ -645,7 +645,7 @@ func copyFromSourceToDestUntilTableEvent(
 	ctx context.Context,
 	dest kvevent.Writer,
 	source kvevent.Reader,
-	frontier *span.Frontier,
+	frontier span.Frontier,
 	tables schemafeed.SchemaFeed,
 	endTime hlc.Timestamp,
 	knobs TestingKnobs,

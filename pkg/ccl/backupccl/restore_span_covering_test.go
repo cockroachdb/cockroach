@@ -270,7 +270,7 @@ func makeImportSpans(
 	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
 	highWaterMark []byte,
 	targetSize int64,
-	introducedSpanFrontier *spanUtils.Frontier,
+	introducedSpanFrontier spanUtils.Frontier,
 	completedSpans []jobspb.RestoreProgress_FrontierEntry,
 	useSimpleImportSpans bool,
 ) ([]execinfrapb.RestoreSpanEntry, error) {
