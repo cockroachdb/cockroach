@@ -60,8 +60,19 @@ func DefaultDeclareIsolatedKeys(
 	access := spanset.SpanReadWrite
 	str := lock.Intent
 	timestamp := header.Timestamp
-	if kvpb.IsReadOnly(req) {
-		if !kvpb.IsLocking(req) {
+
+	readOnlyReq, ok := req.(kvpb.LockingReadRequest)
+	// Locking Get, Scan, and ReverseScan requests that need to acquire replicated
+	// locks aren't considered read-only requests -- atleast not by the flags set
+	// on the request and the evaluation path they take. We handle lock/latch span
+	// declaration for them along with other read-only requests.
+	if ok || kvpb.IsReadOnly(req) {
+		str = lock.None
+		if ok {
+			str, _ = readOnlyReq.KeyLocking()
+		}
+		switch str {
+		case lock.None:
 			access = spanset.SpanReadOnly
 			str = lock.None
 			// For non-locking reads, acquire read latches all the way up to the
@@ -86,36 +97,31 @@ func DefaultDeclareIsolatedKeys(
 			// keys, acquired latches, and consulted the replica's lease.
 			in := uncertainty.ComputeInterval(header, kvserverpb.LeaseStatus{}, maxOffset)
 			timestamp.Forward(in.GlobalLimit)
-		} else {
-			str, _ = req.(kvpb.LockingReadRequest).KeyLocking()
-			switch str {
-			// The lock.None case has already been handled above.
-			case lock.Shared:
-				access = spanset.SpanReadOnly
-				// Unlike non-locking reads, shared-locking reads are isolated from
-				// writes at all timestamps[1] (not just the request's timestamp); so we
-				// acquire a read latch at max timestamp. See the shared locks RFC for
-				// more details.
-				//
-				// [1] This allows the transaction that issued the shared-locking read to
-				// get arbitrarily bumped without needing to worry about its read-refresh
-				// failing. Unlike non-locking reads, where the read set is only protected
-				// from concurrent writers operating at lower timestamps, a shared-locking
-				// read extends this protection to all timestamps.
-				timestamp = hlc.MaxTimestamp
-			case lock.Exclusive:
-				// Reads that acquire exclusive locks acquire write latches at the
-				// request's timestamp. This isolates them from all concurrent writes,
-				// all concurrent shared-locking reads, and non-locking reads at higher
-				// timestamps[1].
-				//
-				// [1] This won't be required once non-locking reads stop blocking on
-				// exclusive locks. Once that happens, exclusive locks should acquire
-				// write latches at hlc.MaxTimestamp.
-				access = spanset.SpanReadWrite
-			default:
-				panic(errors.AssertionFailedf("unexpected lock strength %s", str))
-			}
+		case lock.Shared:
+			access = spanset.SpanReadOnly
+			// Unlike non-locking reads, shared-locking reads are isolated from
+			// writes at all timestamps[1] (not just the request's timestamp); so we
+			// acquire a read latch at max timestamp. See the shared locks RFC for
+			// more details.
+			//
+			// [1] This allows the transaction that issued the shared-locking read to
+			// get arbitrarily bumped without needing to worry about its read-refresh
+			// failing. Unlike non-locking reads, where the read set is only protected
+			// from concurrent writers operating at lower timestamps, a shared-locking
+			// read extends this protection to all timestamps.
+			timestamp = hlc.MaxTimestamp
+		case lock.Exclusive:
+			// Reads that acquire exclusive locks acquire write latches at the
+			// request's timestamp. This isolates them from all concurrent writes,
+			// all concurrent shared-locking reads, and non-locking reads at higher
+			// timestamps[1].
+			//
+			// [1] This won't be required once non-locking reads stop blocking on
+			// exclusive locks. Once that happens, exclusive locks should acquire
+			// write latches at hlc.MaxTimestamp.
+			access = spanset.SpanReadWrite
+		default:
+			panic(errors.AssertionFailedf("unexpected lock strength %s", str))
 		}
 	}
 	latchSpans.AddMVCC(access, req.Header().Span(), timestamp)

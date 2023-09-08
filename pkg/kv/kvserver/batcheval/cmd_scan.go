@@ -110,11 +110,13 @@ func Scan(
 	}
 
 	if args.KeyLockingStrength != lock.None && h.Txn != nil {
-		err = acquireUnreplicatedLocksOnKeys(&res, h.Txn, args.KeyLockingStrength, args.ScanFormat, &scanRes)
+		err = acquireLocksOnKeys(ctx, readWriter, &res, h.Txn, args.KeyLockingStrength,
+			args.KeyLockingDurability, args.ScanFormat, &scanRes)
 		if err != nil {
 			return result.Result{}, err
 		}
 	}
+
 	res.Local.EncounteredIntents = scanRes.Intents
 	return res, nil
 }
