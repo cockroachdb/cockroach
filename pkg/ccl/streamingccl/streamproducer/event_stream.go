@@ -76,7 +76,7 @@ func (s *eventStream) ResolvedType() *types.T {
 }
 
 // Start implements tree.ValueGenerator interface.
-func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
+func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 	// ValueGenerator API indicates that Start maybe called again if Next returned
 	// false.  However, this generator never terminates without an error,
 	// so this method should be called once.  Be defensive and return an error
@@ -128,6 +128,13 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		// If we return with an error, release frontier resources.
+		// It's not strictly needed, but it's nice to be nice.
+		if retErr != nil {
+			frontier.Release()
+		}
+	}()
 
 	initialTimestamp := s.spec.InitialScanTimestamp
 	if s.spec.PreviousReplicatedTimestamp.IsEmpty() {
@@ -185,7 +192,7 @@ func (s *eventStream) maybeSetError(err error) {
 	}
 }
 
-func (s *eventStream) startStreamProcessor(ctx context.Context, frontier *span.Frontier) {
+func (s *eventStream) startStreamProcessor(ctx context.Context, frontier span.Frontier) {
 	type ctxGroupFn = func(ctx context.Context) error
 
 	// withErrCapture wraps fn to capture and report error to the error channel.
@@ -217,6 +224,7 @@ func (s *eventStream) startStreamProcessor(ctx context.Context, frontier *span.F
 	s.sp = sp
 	s.streamGroup = ctxgroup.WithContext(streamCtx)
 	s.streamGroup.GoCtx(withErrCapture(func(ctx context.Context) error {
+		defer frontier.Release()
 		return s.streamLoop(ctx, frontier)
 	}))
 
@@ -313,7 +321,7 @@ func (s *eventStream) onDeleteRange(ctx context.Context, delRange *kvpb.RangeFee
 }
 
 // makeCheckpoint generates checkpoint based on the frontier.
-func makeCheckpoint(f *span.Frontier) (checkpoint streampb.StreamEvent_StreamCheckpoint) {
+func makeCheckpoint(f span.Frontier) (checkpoint streampb.StreamEvent_StreamCheckpoint) {
 	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
 		checkpoint.ResolvedSpans = append(checkpoint.ResolvedSpans, jobspb.ResolvedSpan{
 			Span:      sp,
@@ -428,7 +436,7 @@ func (s *eventStream) addSST(
 
 // streamLoop is the main processing loop responsible for reading rangefeed events,
 // accumulating them in a batch, and sending those events to the ValueGenerator.
-func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) error {
+func (s *eventStream) streamLoop(ctx context.Context, frontier span.Frontier) error {
 	pacer := makeCheckpointPacer(s.spec.Config.MinCheckpointFrequency)
 	seb := makeStreamEventBatcher()
 

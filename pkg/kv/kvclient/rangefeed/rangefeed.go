@@ -207,6 +207,7 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 	if err != nil {
 		return err
 	}
+	defer frontier.Release()
 
 	for _, sp := range spans {
 		if _, err := frontier.Forward(sp, f.initialTimestamp); err != nil {
@@ -271,7 +272,7 @@ var useMuxRangeFeed = util.ConstantWithMetamorphicTestBool("use-mux-rangefeed", 
 
 // run will run the RangeFeed until the context is canceled or if the client
 // indicates that an initial scan error is non-recoverable.
-func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
+func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier) {
 	defer close(f.stopped)
 	r := retry.StartWithCtx(ctx, f.retryOptions)
 	restartLogEvery := log.Every(10 * time.Second)
@@ -354,7 +355,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
 
 // processEvents processes events sent by the rangefeed on the eventCh.
 func (f *RangeFeed) processEvents(
-	ctx context.Context, frontier *span.Frontier, eventCh <-chan kvcoord.RangeFeedMessage,
+	ctx context.Context, frontier span.Frontier, eventCh <-chan kvcoord.RangeFeedMessage,
 ) error {
 	for {
 		select {
