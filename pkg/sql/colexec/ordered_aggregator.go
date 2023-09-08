@@ -83,6 +83,7 @@ const (
 type orderedAggregator struct {
 	colexecop.OneInputNode
 	colexecop.InitHelper
+	colexecop.CloserHelper
 
 	state orderedAggregatorState
 
@@ -415,5 +416,14 @@ func (a *orderedAggregator) Reset(ctx context.Context) {
 }
 
 func (a *orderedAggregator) Close(ctx context.Context) error {
-	return a.toClose.Close(ctx)
+	if !a.CloserHelper.Close() {
+		return nil
+	}
+	retErr := a.toClose.Close(ctx)
+	if c, ok := a.Input.(colexecop.Closer); ok {
+		if err := c.Close(ctx); err != nil {
+			retErr = err
+		}
+	}
+	return retErr
 }

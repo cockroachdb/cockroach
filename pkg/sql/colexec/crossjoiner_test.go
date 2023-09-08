@@ -384,6 +384,20 @@ func TestCrossJoiner(t *testing.T) {
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
 
+	// When we have non-empty ON expression, we will plan additional operators
+	// on top of the cross joiner (selection and projection ops). Those
+	// operators currently don't implement the colexecop.Closer interface, so
+	// the closers aren't automatically closed by the RunTests harness (i.e.
+	// closeIfCloser stops early), so we need to close all closers explicitly.
+	// (The alternative would be to make all these selection and projection
+	// operators implement the interface, but it doesn't seem worth it.)
+	var onExprToClose colexecop.Closers
+	defer func() {
+		for _, c := range onExprToClose {
+			require.NoError(t, c.Close(ctx))
+		}
+	}()
+
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for _, tc := range getCJTestCases() {
@@ -402,6 +416,9 @@ func TestCrossJoiner(t *testing.T) {
 					result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 					if err != nil {
 						return nil, err
+					}
+					if !tc.onExpr.Empty() {
+						onExprToClose = append(onExprToClose, result.ToClose...)
 					}
 					return result.Root, nil
 				})
