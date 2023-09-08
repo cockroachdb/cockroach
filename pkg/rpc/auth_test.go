@@ -870,6 +870,42 @@ func TestTenantAuthRequest(t *testing.T) {
 	}
 }
 
+// TestSpecialTenantID ensures that tenant ID with special encodings
+// are handled properly by authz code.
+func TestSpecialTenantID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// specialTenantID can be set to any integer value such that the KV
+	// encoding of the PrefixEnd of the value, is different from the encoding
+	// of the value + 1.
+	// We know this is true of at least 109 and 511.
+	const specialTenantIDVal = 511
+
+	// First verify the special property.
+	keyStart := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(specialTenantIDVal))
+	keyEnd := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(specialTenantIDVal + 1))
+	require.NotEqual(t, keyEnd, keyStart.PrefixEnd()) // these two would otherwise be equal for non-special tenant IDs.
+
+	// Now check that all the virtual keyspace is properly authorized
+	// by the authz code for various special tenant IDs.
+	for _, tenIDval := range []uint64{1, 10, specialTenantIDVal, roachpb.MaxTenantID.ToUint64()} {
+		t.Run(fmt.Sprint(tenIDval), func(t *testing.T) {
+			tenID := roachpb.MustMakeTenantID(tenIDval)
+			tenantKeyspace := keys.MakeTenantSpan(tenID)
+
+			req := &kvpb.BatchRequest{Requests: makeReqs(
+				&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeaderFromSpan(tenantKeyspace)})}
+			ctx := context.Background()
+			err := rpc.TestingAuthorizeTenantRequest(
+				ctx, &settings.Values{},
+				tenID, "/cockroach.roachpb.Internal/Batch", req,
+				tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer(),
+			)
+			require.NoError(t, err)
+		})
+	}
+}
+
 // TestTenantAuthCapabilityChecks ensures capability checks are performed
 // correctly by the tenant authorizer.
 func TestTenantAuthCapabilityChecks(t *testing.T) {

@@ -278,9 +278,7 @@ func (tf *schemaFeed) Run(ctx context.Context) error {
 }
 
 func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
-	tf.mu.Lock()
-	initialTableDescTs := tf.mu.highWater
-	tf.mu.Unlock()
+	initialTableDescTs := tf.highWater()
 	var initialDescs []catalog.Descriptor
 
 	initialTableDescsFn := func(
@@ -306,13 +304,15 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		return err
 	}
 
-	tf.mu.Lock()
-	// Register all types used by the initial set of tables.
-	for _, desc := range initialDescs {
-		tbl := desc.(catalog.TableDescriptor)
-		tf.mu.typeDeps.ingestTable(tbl)
-	}
-	tf.mu.Unlock()
+	func() {
+		tf.mu.Lock()
+		defer tf.mu.Unlock()
+		// Register all types used by the initial set of tables.
+		for _, desc := range initialDescs {
+			tbl := desc.(catalog.TableDescriptor)
+			tf.mu.typeDeps.ingestTable(tbl)
+		}
+	}()
 
 	return tf.ingestDescriptors(ctx, hlc.Timestamp{}, initialTableDescTs, initialDescs, tf.validateDescriptor)
 }
@@ -509,8 +509,8 @@ func (tf *schemaFeed) pauseOrResumePolling(
 // highWater returns the current high-water timestamp.
 func (tf *schemaFeed) highWater() hlc.Timestamp {
 	tf.mu.Lock()
+	defer tf.mu.Unlock()
 	highWater := tf.mu.highWater
-	tf.mu.Unlock()
 	return highWater
 }
 
@@ -525,19 +525,22 @@ func (tf *schemaFeed) highWater() hlc.Timestamp {
 func (tf *schemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 	var errCh chan error
 
-	tf.mu.Lock()
-	highWater := tf.mu.highWater
+	highWater := tf.highWater()
 	var err error
-	if !tf.mu.errTS.IsEmpty() && tf.mu.errTS.LessEq(ts) {
-		err = tf.mu.err
-	}
-	fastPath := err != nil || ts.LessEq(highWater)
-	if !fastPath {
-		// non-fastPath is when we need to prove the invariant holds from [`high_water`, `ts].
-		errCh = make(chan error, 1)
-		tf.mu.waiters = append(tf.mu.waiters, tableHistoryWaiter{ts: ts, errCh: errCh})
-	}
-	tf.mu.Unlock()
+	var fastPath bool
+	func() {
+		tf.mu.Lock()
+		defer tf.mu.Unlock()
+		if !tf.mu.errTS.IsEmpty() && tf.mu.errTS.LessEq(ts) {
+			err = tf.mu.err
+		}
+		fastPath = err != nil || ts.LessEq(highWater)
+		if !fastPath {
+			// non-fastPath is when we need to prove the invariant holds from [`high_water`, `ts].
+			errCh = make(chan error, 1)
+			tf.mu.waiters = append(tf.mu.waiters, tableHistoryWaiter{ts: ts, errCh: errCh})
+		}
+	}()
 	if fastPath {
 		if log.V(1) {
 			log.Infof(ctx, "fastpath for %s: %v", ts, err)

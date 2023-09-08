@@ -71,7 +71,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	fakeTenant := roachpb.MustMakeTenantID(2)
 	systemTable := keys.SystemSQLCodec.TablePrefix(keys.SettingsTableID)
 	fakeCodec := keys.MakeSQLCodec(fakeTenant)
-	fakeTenantPrefix := keys.MakeTenantPrefix(fakeTenant)
+	fakeTenantSpan := keys.MakeTenantSpan(fakeTenant)
 
 	getSourceClusterRows := func() []kv.KeyValue {
 		rows, err := db.Scan(ctx, systemTable, systemTable.PrefixEnd(), 0 /* maxRows */)
@@ -103,8 +103,8 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	copySettingsFromSystemToFakeTenant := func() int {
 		_, err := db.DelRange(
 			ctx,
-			fakeTenantPrefix,
-			fakeTenantPrefix.PrefixEnd(),
+			fakeTenantSpan.Key,
+			fakeTenantSpan.EndKey,
 			false,
 		)
 		require.NoError(t, err)
@@ -112,7 +112,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		for _, row := range rows {
 			rem, _, err := keys.DecodeTenantPrefix(row.Key)
 			require.NoError(t, err)
-			tenantKey := append(fakeTenantPrefix, rem...)
+			tenantKey := append(fakeTenantSpan.Key, rem...)
 			row.Value.ClearChecksum()
 			row.Value.Timestamp = hlc.Timestamp{}
 			require.NoError(t, db.Put(ctx, tenantKey, row.Value))
@@ -130,7 +130,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		for i, kv := range got {
 			rem, _, err := keys.DecodeTenantPrefix(kv.Key)
 			require.NoError(t, err)
-			tenantKey := append(fakeTenantPrefix, rem...)
+			tenantKey := append(fakeTenantSpan.Key, rem...)
 			if !tenantKey.Equal(expected[i].Key) {
 				return errors.Errorf("mismatched key %d: %v expected, got %d", i, expected[i].Key, tenantKey)
 			}
