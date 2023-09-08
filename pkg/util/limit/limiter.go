@@ -64,3 +64,7 @@ func (l *ConcurrentRequestLimiter) Begin(ctx context.Context) (Reservation, erro
 func (l *ConcurrentRequestLimiter) SetLimit(newLimit int) {
 	l.sem.UpdateCapacity(uint64(newLimit))
 }
+
+func (l *ConcurrentRequestLimiter) Available() int {
+	return l.sem.Len()
+}
