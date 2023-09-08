@@ -346,6 +346,12 @@ func (z *ZoneConfig) ValidateTandemFields() error {
 var minRangeMaxBytes = envutil.EnvOrDefaultInt64("COCKROACH_MIN_RANGE_MAX_BYTES",
 	64<<20 /* 64 MiB */)
 
+func TestingSetMinRangeMaxBytes(v int64) func() {
+	old := minRangeMaxBytes
+	minRangeMaxBytes = v
+	return func() { minRangeMaxBytes = old }
+}
+
 // Validate returns an error if the ZoneConfig specifies a known-dangerous or
 // disallowed configuration.
 func (z *ZoneConfig) Validate() error {
