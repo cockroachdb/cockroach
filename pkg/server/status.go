@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -4005,8 +4006,11 @@ func (s *statusServer) GetJobProfilerExecutionDetails(
 
 	jobID := jobspb.JobID(req.JobId)
 	execCfg := s.sqlServer.execCfg
-	data, err := jobs.ReadExecutionDetailFile(ctx, req.Filename, execCfg.InternalDB, jobID)
-	if err != nil {
+	var data []byte
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		data, err = jobs.ReadExecutionDetailFile(ctx, req.Filename, txn, jobID)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 	return &serverpb.GetJobProfilerExecutionDetailResponse{Data: data}, nil

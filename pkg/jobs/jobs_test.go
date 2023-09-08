@@ -1195,18 +1195,23 @@ func checkTraceFiles(
 	require.NoError(t, err)
 	require.Len(t, edFiles, expectedNumFiles)
 
-	for _, f := range edFiles {
-		data, err := jobs.ReadExecutionDetailFile(ctx, f, execCfg.InternalDB, jobID)
-		require.NoError(t, err)
-		// Trace files are dumped in `binpb` and `binpb.txt` format. The former
-		// should be unmarshal-able.
-		if strings.HasSuffix(f, "binpb") {
-			td := jobspb.TraceData{}
-			require.NoError(t, protoutil.Unmarshal(data, &td))
-			require.NotEmpty(t, td.CollectedSpans)
+	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		for _, f := range edFiles {
+			data, err := jobs.ReadExecutionDetailFile(ctx, f, txn, jobID)
+			if err != nil {
+				return err
+			}
+			// Trace files are dumped in `binpb` and `binpb.txt` format. The former
+			// should be unmarshal-able.
+			if strings.HasSuffix(f, "binpb") {
+				td := jobspb.TraceData{}
+				require.NoError(t, protoutil.Unmarshal(data, &td))
+				require.NotEmpty(t, td.CollectedSpans)
+			}
+			recordings = append(recordings, data)
 		}
-		recordings = append(recordings, data)
-	}
+		return nil
+	}))
 	if len(recordings) != expectedNumFiles {
 		t.Fatalf("expected %d entries but found %d", expectedNumFiles, len(recordings))
 	}

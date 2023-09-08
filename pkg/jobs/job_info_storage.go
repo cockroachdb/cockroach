@@ -26,7 +26,7 @@ import (
 )
 
 // InfoStorage can be used to read and write rows to system.job_info table. All
-// operations are scoped under the txn and are are executed on behalf of Job j.
+// operations are scoped under the txn and are executed on behalf of Job j.
 type InfoStorage struct {
 	j   *Job
 	txn isql.Txn

@@ -227,23 +227,25 @@ func TestTraceRecordingOnResumerCompletion(t *testing.T) {
 			}
 		}
 
-		for _, f := range traceFiles {
-			data, err := jobs.ReadExecutionDetailFile(ctx, f, execCfg.InternalDB, jobspb.JobID(jobID))
-			if err != nil {
-				return err
-			}
-			recordings = append(recordings, data)
-			if strings.HasSuffix(f, "binpb") {
-				td := jobspb.TraceData{}
-				if err := protoutil.Unmarshal(data, &td); err != nil {
+		return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			for _, f := range traceFiles {
+				data, err := jobs.ReadExecutionDetailFile(ctx, f, txn, jobspb.JobID(jobID))
+				if err != nil {
 					return err
 				}
-				require.NotEmpty(t, td.CollectedSpans)
+				recordings = append(recordings, data)
+				if strings.HasSuffix(f, "binpb") {
+					td := jobspb.TraceData{}
+					if err := protoutil.Unmarshal(data, &td); err != nil {
+						return err
+					}
+					require.NotEmpty(t, td.CollectedSpans)
+				}
 			}
-		}
-		if len(recordings) != 4 {
-			return errors.Newf("expected 2 entries but found %d", len(recordings))
-		}
-		return nil
+			if len(recordings) != 4 {
+				return errors.Newf("expected 2 entries but found %d", len(recordings))
+			}
+			return nil
+		})
 	})
 }
