@@ -638,7 +638,7 @@ func (s *SystemConfig) tenantBoundarySplitKey(
 			log.Errorf(ctx, "unable to decode tenant ID from start key: %s", err)
 			return nil
 		}
-		if lowTenIDExcl == roachpb.MaxTenantID {
+		if lowTenIDExcl.ToUint64() >= roachpb.MaxTenantID.ToUint64() {
 			// MaxTenantID already split or outside range.
 			return nil
 		}
