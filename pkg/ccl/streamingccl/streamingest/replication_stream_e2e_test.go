@@ -366,10 +366,10 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 		require.Nil(t, stats.ProducerStatus.ProtectedTimestamp)
 
 		// Check if dest tenant key ranges are not cleaned up.
-		destTenantPrefix := keys.MakeTenantPrefix(args.DestTenantID)
+		destTenantSpan := keys.MakeTenantSpan(args.DestTenantID)
 
 		rows, err := c.DestCluster.Server(0).DB().
-			Scan(ctx, destTenantPrefix, destTenantPrefix.PrefixEnd(), 10)
+			Scan(ctx, destTenantSpan.Key, destTenantSpan.EndKey, 10)
 		require.NoError(t, err)
 		require.NotEmpty(t, rows)
 
@@ -382,7 +382,7 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 		c.DestSysSQL.Exec(t, "DROP TENANT [$1] IMMEDIATE",
 			args.DestTenantID.ToUint64())
 		rows, err = c.DestCluster.Server(0).DB().
-			Scan(ctx, destTenantPrefix, destTenantPrefix.PrefixEnd(), 10)
+			Scan(ctx, destTenantSpan.Key, destTenantSpan.EndKey, 10)
 		require.NoError(t, err)
 		require.Empty(t, rows)
 
@@ -439,9 +439,9 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 		c.DestSysSQL.Exec(t, "SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'")
 
 		// Check if dest tenant key range is cleaned up.
-		destTenantPrefix := keys.MakeTenantPrefix(args.DestTenantID)
+		destTenantSpan := keys.MakeTenantSpan(args.DestTenantID)
 		rows, err := c.DestCluster.Server(0).DB().
-			Scan(ctx, destTenantPrefix, destTenantPrefix.PrefixEnd(), 10)
+			Scan(ctx, destTenantSpan.Key, destTenantSpan.EndKey, 10)
 		require.NoError(t, err)
 		require.Empty(t, rows)
 
@@ -913,9 +913,9 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			c.DestSysSQL.Exec(t, "SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'")
 
 			// Check if dest tenant key range is cleaned up.
-			destTenantPrefix := keys.MakeTenantPrefix(args.DestTenantID)
+			destTenantSpan := keys.MakeTenantSpan(args.DestTenantID)
 			rows, err := c.DestCluster.Server(0).DB().
-				Scan(ctx, destTenantPrefix, destTenantPrefix.PrefixEnd(), 10)
+				Scan(ctx, destTenantSpan.Key, destTenantSpan.EndKey, 10)
 			require.NoError(t, err)
 			require.Empty(t, rows)
 

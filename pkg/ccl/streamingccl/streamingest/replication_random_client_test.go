@@ -279,9 +279,9 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tenantPrefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(uint64(newTenantID)))
-	t.Logf("counting kvs in span %v", tenantPrefix)
-	maxIngestedTS := assertExactlyEqualKVs(t, tc, streamValidator, revertRangeTargetTime, tenantPrefix)
+	tenantSpan := keys.MakeTenantSpan(roachpb.MustMakeTenantID(uint64(newTenantID)))
+	t.Logf("counting kvs in span %v", tenantSpan)
+	maxIngestedTS := assertExactlyEqualKVs(t, tc, streamValidator, revertRangeTargetTime, tenantSpan)
 	// Sanity check that the max ts in the store is less than the revert range
 	// target timestamp.
 	require.True(t, maxIngestedTS.LessEq(revertRangeTargetTime))
@@ -296,13 +296,13 @@ func assertExactlyEqualKVs(
 	tc *testcluster.TestCluster,
 	streamValidator *streamClientValidator,
 	frontierTimestamp hlc.Timestamp,
-	tenantPrefix roachpb.Key,
+	tenantSpan roachpb.Span,
 ) hlc.Timestamp {
 	// Iterate over the store.
 	store := tc.GetFirstStoreFromServer(t, 0)
 	it, err := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-		LowerBound: tenantPrefix,
-		UpperBound: tenantPrefix.PrefixEnd(),
+		LowerBound: tenantSpan.Key,
+		UpperBound: tenantSpan.EndKey,
 	})
 	if err != nil {
 		t.Fatal(err)
