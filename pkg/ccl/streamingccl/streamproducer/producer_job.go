@@ -30,9 +30,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func makeTenantSpan(tenantID uint64) *roachpb.Span {
-	prefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenantID))
-	return &roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+func makeTenantSpan(tenantID uint64) roachpb.Span {
+	tenID := roachpb.MustMakeTenantID(tenantID)
+	return keys.MakeTenantSpan(tenID)
 }
 
 func makeProducerJobRecord(
@@ -42,13 +42,14 @@ func makeProducerJobRecord(
 	user username.SQLUsername,
 	ptsID uuid.UUID,
 ) jobs.Record {
+	sp := makeTenantSpan(tenantID)
 	return jobs.Record{
 		JobID:       registry.MakeJobID(),
 		Description: fmt.Sprintf("stream replication for tenant %d", tenantID),
 		Username:    user,
 		Details: jobspb.StreamReplicationDetails{
 			ProtectedTimestampRecordID: ptsID,
-			Spans:                      []*roachpb.Span{makeTenantSpan(tenantID)},
+			Spans:                      []*roachpb.Span{&sp},
 			TenantID:                   roachpb.MustMakeTenantID(tenantID),
 		},
 		Progress: jobspb.StreamReplicationProgress{

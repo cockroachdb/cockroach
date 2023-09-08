@@ -64,7 +64,7 @@ func startReplicationProducerJob(
 	statementTime := hlc.Timestamp{
 		WallTime: evalCtx.GetStmtTimestamp().UnixNano(),
 	}
-	deprecatedSpansToProtect := roachpb.Spans{*makeTenantSpan(tenantID)}
+	deprecatedSpansToProtect := roachpb.Spans{makeTenantSpan(tenantID)}
 	targetToProtect := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(tenantID)})
 	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), statementTime,
 		deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
