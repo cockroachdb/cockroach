@@ -144,7 +144,7 @@ num=5
    queued locking requests:
     active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "g"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
 
 new-request r=req5 txn=txn2 ts=9,1 spans=shared@h
 ----
@@ -170,9 +170,9 @@ num=6
    queued locking requests:
     active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "g"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
  lock: "h"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
 
 new-request r=req6 txn=txn2 ts=9,1 spans=shared@i
 ----
@@ -198,11 +198,11 @@ num=7
    queued locking requests:
     active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "g"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
  lock: "h"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
  lock: "i"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
 
 new-request r=req7 txn=txn1 ts=10,1 spans=exclusive@i
 ----
@@ -228,11 +228,11 @@ num=7
    queued locking requests:
     active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "g"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
  lock: "h"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
  lock: "i"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 7
@@ -375,11 +375,11 @@ num=7
    queued locking requests:
     active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "g"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
  lock: "h"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
  lock: "i"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 7
@@ -449,11 +449,11 @@ num=7
    queued locking requests:
     active: false req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "g"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
  lock: "h"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
  lock: "i"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 9.000000000,1, info: unrepl [(str: Shared seq: 0)]
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
     active: true req: 7, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 7
