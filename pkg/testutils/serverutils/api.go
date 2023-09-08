@@ -501,6 +501,16 @@ type TenantControlInterface interface {
 	// if the tenant record exists in KV.
 	WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error
 
+	// WaitForTenantCapabilities waits until the in-RAM cache of
+	// tenant capabilities has been populated for the given tenant ID
+	// with the expected target capability values.
+	WaitForTenantCapabilities(
+		ctx context.Context,
+		tenID roachpb.TenantID,
+		targetCaps map[tenantcapabilities.ID]string,
+		errPrefix string,
+	) error
+
 	// TestTenant returns the test tenant associated with the server.
 	//
 	// TODO(knz): rename to TestApplicationService.
