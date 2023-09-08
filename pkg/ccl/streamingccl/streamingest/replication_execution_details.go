@@ -66,7 +66,7 @@ func constructSpanFrontierExecutionDetails(
 }
 
 func constructSpanFrontierExecutionDetailsWithFrontier(
-	partitionSpecs execinfrapb.StreamIngestionPartitionSpecs, f *span.Frontier,
+	partitionSpecs execinfrapb.StreamIngestionPartitionSpecs, f span.Frontier,
 ) []frontierExecutionDetails {
 	now := timeutil.Now()
 	res := make([]frontierExecutionDetails, 0)

@@ -270,7 +270,7 @@ func makeImportSpans(
 	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
 	highWaterMark []byte,
 	targetSize int64,
-	introducedSpanFrontier *spanUtils.Frontier,
+	introducedSpanFrontier spanUtils.Frontier,
 	completedSpans []jobspb.RestoreProgress_FrontierEntry,
 ) ([]execinfrapb.RestoreSpanEntry, error) {
 	cover := make([]execinfrapb.RestoreSpanEntry, 0)
@@ -387,7 +387,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		{c.sp("a", "h"), c.sp("j", "k")},
 		{c.sp("h", "i"), c.sp("l", "m")}})
 
-	emptySpanFrontier, err := spanUtils.MakeFrontier(roachpb.Span{})
+	emptySpanFrontier, err := spanUtils.MakeFrontier()
 	require.NoError(t, err)
 
 	layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage,

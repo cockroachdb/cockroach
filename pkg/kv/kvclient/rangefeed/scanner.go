@@ -55,7 +55,8 @@ func (f *RangeFeed) runInitialScan(
 		f.onValue(ctx, &v)
 	}
 
-	getSpansToScan := f.getSpansToScan(ctx)
+	getSpansToScan, cleanup := f.getSpansToScan(ctx)
+	defer cleanup()
 
 	r.Reset()
 	for r.Next() {
@@ -80,13 +81,14 @@ func (f *RangeFeed) runInitialScan(
 	return false
 }
 
-func (f *RangeFeed) getSpansToScan(ctx context.Context) func() []roachpb.Span {
+func (f *RangeFeed) getSpansToScan(ctx context.Context) (func() []roachpb.Span, func()) {
 	retryAll := func() []roachpb.Span {
 		return f.spans
 	}
 
+	noCleanup := func() {}
 	if f.retryBehavior == ScanRetryAll {
-		return retryAll
+		return retryAll, noCleanup
 	}
 
 	// We want to retry remaining spans.
@@ -99,8 +101,9 @@ func (f *RangeFeed) getSpansToScan(ctx context.Context) func() []roachpb.Span {
 		// so, log it and fall back to retrying all spans.
 		log.Errorf(ctx, "failed to build frontier for the initial scan; "+
 			"falling back to retry all behavior: err=%v", err)
-		return retryAll
+		return retryAll, noCleanup
 	}
+	frontier = span.MakeConcurrentFrontier(frontier)
 
 	userSpanDoneCallback := f.onSpanDone
 	f.onSpanDone = func(ctx context.Context, sp roachpb.Span) error {
@@ -129,5 +132,5 @@ func (f *RangeFeed) getSpansToScan(ctx context.Context) func() []roachpb.Span {
 			return span.ContinueMatch
 		})
 		return retrySpans
-	}
+	}, frontier.Release
 }
