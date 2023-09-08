@@ -187,6 +187,11 @@ func (e sqlEncoder) TenantPrefix() roachpb.Key {
 	return *e.buf
 }
 
+// TenantEndKey returns the end key of the tenant's keyspace.
+func (e sqlEncoder) TenantEndKey() roachpb.Key {
+	return *e.endKey
+}
+
 // TenantSpan returns a span representing the tenant's keyspace.
 func (e sqlEncoder) TenantSpan() roachpb.Span {
 	key := *e.buf
