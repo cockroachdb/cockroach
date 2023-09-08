@@ -93,8 +93,8 @@ var flagExclusions = map[flag][]flag{
 
 // IsReadOnly returns true iff the request is read-only. A request is
 // read-only if it does not go through raft, meaning that it cannot
-// change any replicated state. However, read-only requests may still
-// acquire locks with an unreplicated durability level; see IsLocking.
+// change any replicated state. However, read-only requests may still acquire
+// locks, but only with unreplicated durability.
 func IsReadOnly(args Request) bool {
 	flags := args.flags()
 	return (flags&isRead) != 0 && (flags&isWrite) == 0
@@ -1382,9 +1382,17 @@ func flagForLockStrength(l lock.Strength) flag {
 	return 0
 }
 
+func flagForIsWrite(l lock.Strength, d lock.Durability) flag {
+	if l == lock.None || d == lock.Unreplicated {
+		return 0
+	}
+	return isWrite
+}
+
 func (gr *GetRequest) flags() flag {
 	maybeLocking := flagForLockStrength(gr.KeyLockingStrength)
-	return isRead | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
+	maybeWrite := flagForIsWrite(gr.KeyLockingStrength, gr.KeyLockingDurability)
+	return isRead | maybeWrite | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 func (*PutRequest) flags() flag {
@@ -1474,12 +1482,14 @@ func (*RevertRangeRequest) flags() flag {
 
 func (sr *ScanRequest) flags() flag {
 	maybeLocking := flagForLockStrength(sr.KeyLockingStrength)
-	return isRead | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
+	maybeWrite := flagForIsWrite(sr.KeyLockingStrength, sr.KeyLockingDurability)
+	return isRead | maybeWrite | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 func (rsr *ReverseScanRequest) flags() flag {
 	maybeLocking := flagForLockStrength(rsr.KeyLockingStrength)
-	return isRead | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
+	maybeWrite := flagForIsWrite(rsr.KeyLockingStrength, rsr.KeyLockingDurability)
+	return isRead | maybeWrite | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 // EndTxn updates the timestamp cache to prevent replays.
