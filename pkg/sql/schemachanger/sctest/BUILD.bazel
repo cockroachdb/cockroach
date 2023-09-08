@@ -53,6 +53,7 @@ go_library(
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_go_cmp//cmp",
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//require",
     ],

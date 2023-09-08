@@ -12,14 +12,19 @@ package sctest
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/errors"
+	"github.com/google/go-cmp/cmp"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 // This file contains common logic for performing comparator testing
@@ -53,6 +58,9 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 	declarativeTDB := sqlutils.MakeSQLRunner(declarativeSQLDB)
 	declarativeTDB.Exec(t, "SET use_declarative_schema_changer = on;")
 
+	// Track executed statements so far for debugging/repro purposes.
+	var linesExecutedSoFar []string
+
 	for ss.HasNextLine() {
 		line := ss.NextLine()
 		_, errLegacy := legacySQLDB.Exec(line)
@@ -61,6 +69,12 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 		}
 		_, errDeclarative := declarativeSQLDB.Exec(line)
 		requireNoErrOrSameErrCode(t, line, errLegacy, errDeclarative)
+		linesExecutedSoFar = append(linesExecutedSoFar, line)
+
+		// Perform a descriptor identity check after a DDL.
+		if containsStmtOfType(t, line, tree.TypeDDL) {
+			metaDataIdentityCheck(t, legacyTDB, declarativeTDB, linesExecutedSoFar)
+		}
 	}
 }
 
@@ -95,4 +109,46 @@ func getPQErrCode(err error) pq.ErrorCode {
 		return pqErr.Code
 	}
 	return ""
+}
+
+// containsStmtOfType returns true if `line` contains any statement of type `typ`.
+func containsStmtOfType(t *testing.T, line string, typ tree.StatementType) bool {
+	parsedLine, err := parser.Parse(line)
+	require.NoError(t, err)
+	for _, parsedStmt := range parsedLine {
+		if parsedStmt.AST.StatementType() == typ {
+			return true
+		}
+	}
+	return false
+}
+
+// metaDataIdentityCheck looks up all descriptors' create_statements in
+// `legacy` and `declarative` clusters and assert that they are identical.
+func metaDataIdentityCheck(
+	t *testing.T, legacy, declarative *sqlutils.SQLRunner, linesExecutedSoFar []string,
+) {
+	legacyDescriptors := parserRoundTrip(t, legacy.QueryStr(t, fetchDescriptorStateQuery))
+	declarativeDescriptors := parserRoundTrip(t, declarative.QueryStr(t, fetchDescriptorStateQuery))
+	if len(legacyDescriptors) != len(declarativeDescriptors) {
+		t.Fatal(errors.Newf("number of descriptors mismatches: "+
+			"legacy cluster = %v, declarative cluster = %v", len(legacyDescriptors), len(declarativeDescriptors)))
+	}
+	// Transform the query result [][]string into one string, so we can compare them.
+	var createsInLegacy, createsInDeclarative []string
+	for i := range legacyDescriptors {
+		// Each row should only have one column "create_statement".
+		require.Equal(t, 1, len(legacyDescriptors[i]))
+		require.Equal(t, 1, len(declarativeDescriptors[i]))
+		createsInLegacy = append(createsInLegacy, legacyDescriptors[i][0])
+		createsInDeclarative = append(createsInDeclarative, declarativeDescriptors[i][0])
+	}
+	diff := cmp.Diff(createsInLegacy, createsInDeclarative)
+	if len(diff) > 0 {
+		t.Logf("Meta-data mismatch!\nHistory of executed statements:\n%v", strings.Join(linesExecutedSoFar, "\n"))
+		err := errors.Newf("descriptors mismatch with diff (- is legacy, + is declarative):\n%v", diff)
+		err = errors.Wrapf(err, "\ndescriptors diverge after executing %q; "+
+			"see logs for the history of executed statements", linesExecutedSoFar[len(linesExecutedSoFar)-1])
+		t.Fatalf(err.Error())
+	}
 }
