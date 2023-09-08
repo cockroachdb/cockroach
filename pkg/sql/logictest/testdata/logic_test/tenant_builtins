@@ -31,6 +31,10 @@ SELECT crdb_internal.create_tenant(10, 'invalid_name')
 query error invalid tenant name
 SELECT crdb_internal.create_tenant(10, 'invalid.name')
 
+# The max tenant ID is less or equal to 18446744073709551614.
+query error out of range
+SELECT crdb_internal.create_tenant('{"id":18446744073709551615}'::jsonb)
+
 query I
 SELECT crdb_internal.create_tenant(10, 'tenant-number-ten')
 ----

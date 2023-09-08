@@ -293,6 +293,9 @@ func CreateTenantRecord(
 		tenID = tenantID.ToUint64()
 		info.ID = tenID
 	}
+	if info.ID > roachpb.MaxTenantID.ToUint64() {
+		return roachpb.TenantID{}, pgerror.Newf(pgcode.ProgramLimitExceeded, "tenant ID %d out of range", info.ID)
+	}
 
 	// Update the ID sequence if available.
 	// We only keep the latest ID.
