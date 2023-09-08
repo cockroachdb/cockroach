@@ -1,13 +1,11 @@
 diff --git a/src/runtime/proc.go b/src/runtime/proc.go
-index 3991a48b10..4a50ae650d 100644
+index 554a60d747..8d64ee31c8 100644
 --- a/src/runtime/proc.go
 +++ b/src/runtime/proc.go
-@@ -994,8 +994,19 @@ func casgstatus(gp *g, oldval, newval uint32) {
+@@ -1027,7 +1027,18 @@ func casgstatus(gp *g, oldval, newval uint32) {
  		}
  	}
  
--	// Handle tracking for scheduling latencies.
-+	// Handle tracking for scheduling and running latencies.
 +	now := nanotime()
 +	if newval == _Grunning {
 +		// We're transitioning into the running state, record the timestamp for
@@ -20,26 +18,40 @@ index 3991a48b10..4a50ae650d 100644
 +		// state.
 +		gp.runningnanos += now - gp.lastsched
 +
- 		// Track every 8th time a goroutine transitions out of running.
- 		if gp.trackingSeq%gTrackingPeriod == 0 {
+ 		// Track every gTrackingPeriod time a goroutine transitions out of running.
+ 		if casgstatusAlwaysTrack || gp.trackingSeq%gTrackingPeriod == 0 {
  			gp.tracking = true
-@@ -1007,14 +1018,12 @@ func casgstatus(gp *g, oldval, newval uint32) {
- 			// We transitioned out of runnable, so measure how much
- 			// time we spent in this state and add it to
- 			// runnableTime.
--			now := nanotime()
- 			gp.runnableTime += now - gp.runnableStamp
- 			gp.runnableStamp = 0
+@@ -1048,7 +1059,6 @@ func casgstatus(gp *g, oldval, newval uint32) {
+ 		// We transitioned out of runnable, so measure how much
+ 		// time we spent in this state and add it to
+ 		// runnableTime.
+-		now := nanotime()
+ 		gp.runnableTime += now - gp.trackingStamp
+ 		gp.trackingStamp = 0
+ 	case _Gwaiting:
+@@ -1061,7 +1071,6 @@ func casgstatus(gp *g, oldval, newval uint32) {
+ 		// a more representative estimate of the absolute value.
+ 		// gTrackingPeriod also represents an accurate sampling period
+ 		// because we can only enter this state from _Grunning.
+-		now := nanotime()
+ 		sched.totalMutexWaitTime.Add((now - gp.trackingStamp) * gTrackingPeriod)
+ 		gp.trackingStamp = 0
+ 	}
+@@ -1072,12 +1081,10 @@ func casgstatus(gp *g, oldval, newval uint32) {
+ 			break
  		}
- 		if newval == _Grunnable {
- 			// We just transitioned into runnable, so record what
- 			// time that happened.
--			now := nanotime()
- 			gp.runnableStamp = now
- 		} else if newval == _Grunning {
- 			// We're transitioning into running, so turn off
-@@ -3258,6 +3267,14 @@ func dropg() {
- 	setGNoWB(&_g_.m.curg, nil)
+ 		// Blocking on a lock. Write down the timestamp.
+-		now := nanotime()
+ 		gp.trackingStamp = now
+ 	case _Grunnable:
+ 		// We just transitioned into runnable, so record what
+ 		// time that happened.
+-		now := nanotime()
+ 		gp.trackingStamp = now
+ 	case _Grunning:
+ 		// We're transitioning into running, so turn off
+@@ -3412,6 +3419,14 @@ func dropg() {
+ 	setGNoWB(&gp.m.curg, nil)
  }
  
 +// grunningnanos returns the wall time spent by current g in the running state.
@@ -53,7 +65,7 @@ index 3991a48b10..4a50ae650d 100644
  // checkTimers runs any timers for the P that are ready.
  // If now is not 0 it is the current time.
  // It returns the passed time or the current time if now was passed as 0.
-@@ -3491,6 +3508,8 @@ func goexit0(gp *g) {
+@@ -3646,6 +3661,8 @@ func goexit0(gp *g) {
  	gp.param = nil
  	gp.labels = nil
  	gp.timer = nil
@@ -63,7 +75,7 @@ index 3991a48b10..4a50ae650d 100644
  	if gcBlackenEnabled != 0 && gp.gcAssistBytes > 0 {
  		// Flush assist credit to the global pool. This gives
 diff --git a/src/runtime/runtime2.go b/src/runtime/runtime2.go
-index e1788223e7..5ed1fb40ba 100644
+index 9381d1e3f7..8182f8e9bc 100644
 --- a/src/runtime/runtime2.go
 +++ b/src/runtime/runtime2.go
 @@ -474,7 +474,6 @@ type g struct {
@@ -77,7 +89,7 @@ index e1788223e7..5ed1fb40ba 100644
 @@ -488,6 +487,9 @@ type g struct {
  	labels         unsafe.Pointer // profiler labels
  	timer          *timer         // cached timer for time.Sleep
- 	selectDone     uint32         // are we participating in a select and did someone win the race?
+ 	selectDone     atomic.Uint32  // are we participating in a select and did someone win the race?
 +	sig            uint32
 +	lastsched      int64 // timestamp when the G last started running
 +	runningnanos   int64 // wall time spent in the running state

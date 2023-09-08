@@ -27,10 +27,10 @@ import (
 )
 
 const (
-	// defaultPushTxnsInterval is the default interval at which a Processor will
+	// DefaultPushTxnsInterval is the default interval at which a Processor will
 	// push all transactions in the unresolvedIntentQueue that are above the age
 	// specified by PushTxnsAge.
-	defaultPushTxnsInterval = 250 * time.Millisecond
+	DefaultPushTxnsInterval = 250 * time.Millisecond
 	// defaultPushTxnsAge is the default age at which a Processor will begin to
 	// consider a transaction old enough to push.
 	defaultPushTxnsAge = 10 * time.Second
@@ -49,6 +49,7 @@ func newErrBufferCapacityExceeded() *kvpb.Error {
 type Config struct {
 	log.AmbientContext
 	Clock   *hlc.Clock
+	Stopper *stop.Stopper
 	RangeID roachpb.RangeID
 	Span    roachpb.RSpan
 
@@ -56,6 +57,9 @@ type Config struct {
 	// PushTxnsInterval specifies the interval at which a Processor will push
 	// all transactions in the unresolvedIntentQueue that are above the age
 	// specified by PushTxnsAge.
+	//
+	// This option only applies to LegacyProcessor since ScheduledProcessor is
+	// relying on store to push events to scheduler to initiate transaction push.
 	PushTxnsInterval time.Duration
 	// PushTxnsAge specifies the age at which a Processor will begin to consider
 	// a transaction old enough to push.
@@ -74,6 +78,10 @@ type Config struct {
 
 	// Optional Processor memory budget.
 	MemBudget *FeedBudget
+
+	// Rangefeed scheduler to use for processor. If set, SchedulerProcessor would
+	// be instantiated.
+	Scheduler *Scheduler
 }
 
 // SetDefaults initializes unset fields in Config to values
@@ -88,7 +96,7 @@ func (sc *Config) SetDefaults() {
 		}
 	} else {
 		if sc.PushTxnsInterval == 0 {
-			sc.PushTxnsInterval = defaultPushTxnsInterval
+			sc.PushTxnsInterval = DefaultPushTxnsInterval
 		}
 		if sc.PushTxnsAge == 0 {
 			sc.PushTxnsAge = defaultPushTxnsAge
@@ -191,6 +199,24 @@ type Processor interface {
 	// EventChanTimeout configuration. If the method returns false, the processor
 	// will have been stopped, so calling Stop is not necessary.
 	ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) bool
+
+	// External notification integration.
+
+	// ID returns scheduler ID of the processor that can be used to notify it
+	// to do some type of work. If ID is 0 then processor doesn't support
+	// external event scheduling.
+	ID() int64
+}
+
+// NewProcessor creates a new rangefeed Processor. The corresponding processing
+// loop should be launched using the Start method.
+func NewProcessor(cfg Config) Processor {
+	cfg.SetDefaults()
+	cfg.AmbientContext.AddLogTag("rangefeed", nil)
+	if cfg.Scheduler != nil {
+		return NewScheduledProcessor(cfg)
+	}
+	return NewLegacyProcessor(cfg)
 }
 
 type LegacyProcessor struct {
@@ -271,11 +297,7 @@ type spanErr struct {
 	pErr *kvpb.Error
 }
 
-// NewProcessor creates a new rangefeed Processor. The corresponding goroutine
-// should be launched using the Start method.
-func NewProcessor(cfg Config) Processor {
-	cfg.SetDefaults()
-	cfg.AmbientContext.AddLogTag("rangefeed", nil)
+func NewLegacyProcessor(cfg Config) *LegacyProcessor {
 	p := &LegacyProcessor{
 		Config: cfg,
 		reg:    makeRegistry(cfg.Metrics),
@@ -465,7 +487,9 @@ func (p *LegacyProcessor) run(
 				// Launch an async transaction push attempt that pushes the
 				// timestamp of all transactions beneath the push offset.
 				// Ignore error if quiescing.
-				pushTxns := newTxnPushAttempt(p.Span, p.TxnPusher, p, toPush, now, txnPushAttemptC)
+				pushTxns := newTxnPushAttempt(p.Span, p.TxnPusher, p, toPush, now, func() {
+					close(txnPushAttemptC)
+				})
 				err := stopper.RunAsyncTask(ctx, "rangefeed: pushing old txns", pushTxns.Run)
 				if err != nil {
 					pushTxns.Cancel()
@@ -709,18 +733,24 @@ func (p *LegacyProcessor) setResolvedTSInitialized(ctx context.Context) {
 // caller to establish causality with actions taken by the Processor goroutine.
 // It does so by flushing the event pipeline.
 func (p *LegacyProcessor) syncEventC() {
-	syncC := make(chan struct{})
-	ev := getPooledEvent(event{sync: &syncEvent{c: syncC}})
+	p.syncEventCWithEvent(&syncEvent{c: make(chan struct{})})
+}
+
+// syncEventCWithEvent allows sync event to be sent and waited on its channel.
+// Exposed to allow special test syncEvents that contain span to be sent.
+func (p *LegacyProcessor) syncEventCWithEvent(se *syncEvent) {
+	ev := getPooledEvent(event{sync: se})
 	select {
 	case p.eventC <- ev:
 		select {
-		case <-syncC:
+		case <-se.c:
 		// Synchronized.
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
 		}
 	case <-p.stoppedC:
-		// Already stopped. Do nothing.
+		// Already stopped. Return event back to the pool.
+		putPooledEvent(ev)
 	}
 }
 
@@ -900,6 +930,11 @@ func (p *LegacyProcessor) newCheckpointEvent() *kvpb.RangeFeedEvent {
 		ResolvedTS: p.rts.Get(),
 	})
 	return &event
+}
+
+// ID implements Processor interface.
+func (p *LegacyProcessor) ID() int64 {
+	return 0
 }
 
 // calculateDateEventSize returns estimated size of the event that contain actual

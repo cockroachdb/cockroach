@@ -41,23 +41,35 @@ import (
 type processorEventType int
 
 const (
-	// queued is an internal event type that indicate that there's already a
+	// Queued is an internal event type that indicate that there's already a
 	// pending work for processor and it is already scheduled for execution.
 	// When more events types come in, they should just be added to existing
 	// pending value.
-	queued processorEventType = 1 << iota
-	// stopped is an event that indicates that there would be no more events
+	Queued processorEventType = 1 << iota
+	// Stopped is an event that indicates that there would be no more events
 	// scheduled for the processor. once it is enqueued, all subsequent events
 	// are rejected. processor should perform any cleanup when receiving this
 	// event that it needs to perform within callback context.
-	stopped
+	Stopped
+	// EventQueued is scheduled when event is put into rangefeed queue for
+	// processing.
+	EventQueued
+	// RequestQueued is scheduled when request closure is put into rangefeed
+	// request queue.
+	RequestQueued
+	// PushTxnQueued is scheduled externally on ranges to push transaction with intents
+	// that block resolved timestamp advancing.
+	PushTxnQueued
 	// numProcessorEventTypes is total number of event types.
 	numProcessorEventTypes int = iota
 )
 
 var eventNames = map[processorEventType]string{
-	queued:  "Queued",
-	stopped: "Stopped",
+	Queued:        "Queued",
+	Stopped:       "Stopped",
+	EventQueued:   "Data",
+	RequestQueued: "Request",
+	PushTxnQueued: "PushTxn",
 }
 
 func (e processorEventType) String() string {
@@ -203,14 +215,14 @@ func (s *Scheduler) Enqueue(id int64, evt processorEventType) {
 
 func (s *Scheduler) enqueueInternalLocked(id int64, evt processorEventType) bool {
 	pending := s.mu.status[id]
-	if pending&stopped != 0 {
+	if pending&Stopped != 0 {
 		return false
 	}
 	if pending == 0 {
 		// Enqueue if processor was idle.
 		s.mu.queue.pushBack(id)
 	}
-	update := pending | evt | queued
+	update := pending | evt | Queued
 	if update != pending {
 		// Only update if event actually changed.
 		s.mu.status[id] = update
@@ -258,11 +270,11 @@ func (s *Scheduler) EnqueueAll(ids []int64, evt processorEventType) {
 	}
 }
 
-// StopProcessor instructs processor to stop gracefully by sending it stopped event.
+// StopProcessor instructs processor to stop gracefully by sending it Stopped event.
 // Once stop is called all subsequent Schedule calls for this id will return
 // error.
 func (s *Scheduler) StopProcessor(id int64) {
-	s.Enqueue(id, stopped)
+	s.Enqueue(id, Stopped)
 }
 
 // processEvents is a main worker method of a scheduler pool. each one should
@@ -285,11 +297,11 @@ func (s *Scheduler) processEvents(ctx context.Context) {
 
 		cb := s.mu.procs[id]
 		e := s.mu.status[id]
-		// Keep queued status and preserve stopped to block any more events.
-		s.mu.status[id] = queued | (e & stopped)
+		// Keep Queued status and preserve Stopped to block any more events.
+		s.mu.status[id] = Queued | (e & Stopped)
 		s.mu.Unlock()
 
-		procEventType := queued ^ e
+		procEventType := Queued ^ e
 		remaining := cb(procEventType)
 
 		if remaining != 0 && buildutil.CrdbTestBuild {
@@ -300,15 +312,15 @@ func (s *Scheduler) processEvents(ctx context.Context) {
 			}
 		}
 
-		if e&stopped != 0 {
+		if e&Stopped != 0 {
 			if remaining != 0 {
 				log.VWarningf(ctx, 5,
 					"rangefeed processor %d didn't process all events on close", id)
 			}
-			// We'll keep stopped state to avoid calling stopped processor again
+			// We'll keep Stopped state to avoid calling stopped processor again
 			// on scheduler shutdown.
 			s.mu.Lock()
-			s.mu.status[id] = stopped
+			s.mu.status[id] = Stopped
 			s.mu.Unlock()
 			continue
 		}
@@ -320,7 +332,7 @@ func (s *Scheduler) processEvents(ctx context.Context) {
 			continue
 		}
 		newStatus := pendingStatus | remaining
-		if newStatus == queued {
+		if newStatus == Queued {
 			// If no events arrived, get rid of id.
 			delete(s.mu.status, id)
 		} else {
@@ -339,8 +351,8 @@ func (s *Scheduler) processEvents(ctx context.Context) {
 // Unregister a processor. This function is removing processor callback and
 // status from scheduler. If processor is currently processing event it will
 // finish processing.
-// Processor won't receive stopped event if it wasn't explicitly sent.
-// To make sure processor performs cleanup, it is easier to send it stopped
+// Processor won't receive Stopped event if it wasn't explicitly sent.
+// To make sure processor performs cleanup, it is easier to send it Stopped
 // event first and let it remove itself from registration during event handling.
 // Any attempts to enqueue events for processor after this call will return an
 // error.
@@ -370,11 +382,11 @@ func (s *Scheduler) Stop() {
 	for id, p := range s.mu.procs {
 		pending := s.mu.status[id]
 		// Ignore processors that already processed their stopped event.
-		if pending == stopped {
+		if pending == Stopped {
 			continue
 		}
 		// Add stopped event on top of what was pending and remove queued.
-		pending = (^queued & pending) | stopped
+		pending = (^Queued & pending) | Stopped
 		s.mu.Unlock()
 		p(pending)
 		s.mu.Lock()
@@ -416,15 +428,14 @@ func (cs *ClientScheduler) Register(cb Callback) error {
 	return err
 }
 
-// Schedule schedules callback for event. Error is returned if client callback
-// wasn't registered prior to this call.
-func (cs *ClientScheduler) Schedule(event processorEventType) {
+// Enqueue schedules callback execution for event.
+func (cs *ClientScheduler) Enqueue(event processorEventType) {
 	cs.s.Enqueue(cs.id, event)
 }
 
-// Stop instructs processor to stop gracefully by sending it stopped event.
+// StopProcessor instructs processor to stop gracefully by sending it Stopped event.
 // Once stop is called all subsequent Schedule calls will return error.
-func (cs *ClientScheduler) Stop() {
+func (cs *ClientScheduler) StopProcessor() {
 	cs.s.StopProcessor(cs.id)
 }
 
