@@ -115,6 +115,16 @@ var MaxMemReportedSQLStatsTxnFingerprints = settings.RegisterIntSetting(
 	100000,
 	settings.WithPublic)
 
+// DiscardedStatsLogInterval specifies the interval between log emissions for discarded
+// statement and transaction statistics due to reaching the SQL statistics memory limit.
+var DiscardedStatsLogInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"sql.metrics.discarded_stats.log_interval",
+	"interval between log emissions for discarded statistics due to SQL statistics memory limit",
+	1*time.Minute,
+	settings.NonNegativeDuration,
+	settings.WithVisibility(settings.Reserved))
+
 // MaxSQLStatsStmtFingerprintsPerExplicitTxn specifies the maximum of unique statement
 // fingerprints we store for each explicit transaction.
 //

@@ -12,12 +12,14 @@ package sslocal
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // StatsCollector is used to collect statement and transaction statistics
@@ -31,6 +33,21 @@ type StatsCollector struct {
 	// previousPhaseTimes tracks the session-level phase times for the previous
 	// query. This enables the `SHOW LAST QUERY STATISTICS` observer statement.
 	previousPhaseTimes *sessionphase.Times
+
+	// discardedStmtCount represents the count of statement statistics
+	// that were discarded due to reaching the SQL statistics memory limit
+	// since the last log emission.
+	discardedStmtCount uint64
+
+	// discardedTxnCount represents the count of transaction statistics
+	// that were discarded due to reaching the SQL statistics memory limit
+	// since the last log emission.
+	discardedTxnCount uint64
+
+	// lastLoggedTimestamp records the time when the system last logged
+	// a warning about discarding statistics due to the SQL statistics memory limit.
+	// It is used to throttle the frequency of these log emissions.
+	lastLoggedTimestamp time.Time
 
 	flushTarget sqlstats.ApplicationStats
 	st          *cluster.Settings
@@ -49,8 +66,10 @@ func NewStatsCollector(
 	return &StatsCollector{
 		ApplicationStats: appStats,
 		phaseTimes:       phaseTime.Clone(),
-		st:               st,
-		knobs:            knobs,
+		// Initialize to the current time to prevent immediate log emission after startup
+		lastLoggedTimestamp: timeutil.Now(),
+		st:                  st,
+		knobs:               knobs,
 	}
 }
 
@@ -92,8 +111,7 @@ func (s *StatsCollector) EndTransaction(
 		transactionFingerprintID = appstatspb.InvalidTransactionFingerprintID
 	}
 
-	var discardedStats uint64
-	discardedStats += s.flushTarget.MergeApplicationStatementStats(
+	discardedStmts := s.flushTarget.MergeApplicationStatementStats(
 		ctx,
 		s.ApplicationStats,
 		func(statistics *appstatspb.CollectedStatementStatistics) {
@@ -101,13 +119,30 @@ func (s *StatsCollector) EndTransaction(
 		},
 	)
 
-	discardedStats += s.flushTarget.MergeApplicationTransactionStats(
+	discardedTxns := s.flushTarget.MergeApplicationTransactionStats(
 		ctx,
 		s.ApplicationStats,
 	)
 
-	if discardedStats > 0 {
-		log.Warningf(ctx, "%d statement statistics discarded due to memory limit", discardedStats)
+	// Update the counts of discarded statements and transactions.
+	s.discardedStmtCount += discardedStmts
+	s.discardedTxnCount += discardedTxns
+	logInterval := sqlstats.DiscardedStatsLogInterval.Get(&s.st.SV)
+
+	// Check if it's time to log.
+	now := timeutil.Now()
+	if s.discardedStmtCount > 0 || s.discardedTxnCount > 0 {
+		if now.Sub(s.lastLoggedTimestamp) > logInterval {
+			if s.discardedStmtCount > 0 {
+				log.Warningf(ctx, "%d statement statistics discarded due to memory limit", s.discardedStmtCount)
+			}
+			if s.discardedTxnCount > 0 {
+				log.Warningf(ctx, "%d transaction statistics discarded due to memory limit", s.discardedTxnCount)
+			}
+			s.discardedStmtCount = 0
+			s.discardedTxnCount = 0
+			s.lastLoggedTimestamp = now
+		}
 	}
 
 	s.ApplicationStats.Free(ctx)
