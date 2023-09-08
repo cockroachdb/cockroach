@@ -938,9 +938,6 @@ func (r *testRunner) runTest(
 	if runCount > 1 {
 		testRunID += fmt.Sprintf("#%d", runNum)
 	}
-	if !teamCity {
-		shout(ctx, l, stdout, "=== RUN   %s", testRunID)
-	}
 
 	r.status.Lock()
 	r.status.running[t] = struct{}{}
@@ -966,8 +963,8 @@ func (r *testRunner) runTest(
 		if grafanaAvailable {
 			// Links to the dashboard overview for this test where a user can then navigate
 			// to a preferred dashboard. Add 2 minutes to show complete metrics in grafana.
-			l.Printf("grafana metrics available at: https://go.crdb.dev/roachtest-grafana/%s/%s/%d/%d",
-				vm.SanitizeLabel(runID), vm.SanitizeLabel(testRunID), t.start.UnixMilli(), t.end.Add(2*time.Minute).UnixMilli())
+			l.Printf("metrics: https://go.crdb.dev/roachtest-grafana/%s/%s/%d/%d", vm.SanitizeLabel(runID),
+				vm.SanitizeLabel(testRunID), t.start.UnixMilli(), t.end.Add(2*time.Minute).UnixMilli())
 		}
 		// We only have to record panics if the panic'd value is not the sentinel
 		// produced by t.Fatal*(). We may see calls to t.Fatal from this goroutine
@@ -1120,8 +1117,12 @@ func (r *testRunner) runTest(
 	if grafanaAvailable {
 		// Shout this to the log and stdout to make it available to anyone watching the test via CI or locally.
 		// At this point, we don't have an end time, so default to a 30 minute window from the start time.
-		shout(ctx, l, stdout, "grafana metrics available at: https://go.crdb.dev/roachtest-grafana/%s/%s/%d/%d",
-			vm.SanitizeLabel(runID), vm.SanitizeLabel(testRunID), t.start.UnixMilli(), t.start.Add(30*time.Minute).UnixMilli())
+		shout(ctx, l, stdout, "=== RUN   %s  [metrics: https://go.crdb.dev/roachtest-grafana/%s/%s/%d/%d]",
+			testRunID, vm.SanitizeLabel(runID), vm.SanitizeLabel(testRunID), t.start.UnixMilli(), t.start.Add(30*time.Minute).UnixMilli())
+	} else {
+		if !teamCity {
+			shout(ctx, l, stdout, "=== RUN   %s", testRunID)
+		}
 	}
 	select {
 	case <-testReturnedCh:

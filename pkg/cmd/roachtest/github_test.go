@@ -111,12 +111,12 @@ func TestGenerateHelpCommand(t *testing.T) {
 	end := time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC)
 
 	r := &issues.Renderer{}
-	generateHelpCommand("foo-cluster", spec.GCE, start, end)(r)
+	generateHelpCommand("acceptance/gossip/locality-address", "foo-cluster", spec.GCE, start, end)(r)
 
 	echotest.Require(t, r.String(), filepath.Join("testdata", "help_command.txt"))
 
 	r = &issues.Renderer{}
-	generateHelpCommand("foo-cluster", spec.AWS, start, end)(r)
+	generateHelpCommand("acceptance/gossip/locality-address", "foo-cluster", spec.AWS, start, end)(r)
 
 	echotest.Require(t, r.String(), filepath.Join("testdata", "help_command_non_gce.txt"))
 }
