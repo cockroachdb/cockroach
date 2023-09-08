@@ -1043,6 +1043,15 @@ func (x *FilePermissions) UnmarshalYAML(fn func(interface{}) error) (err error) 
 	return nil
 }
 
+func init() {
+	// Use FutureLineWrap to avoid wrapping long lines. This is required for cases
+	// where one of the logging or zone config fields is longer than 80
+	// characters. In that case, without FutureLineWrap, the output will have `\n`
+	// characters interspersed every 80 characters. FutureLineWrap ensures that
+	// the whole field shows up as a single line.
+	yaml.FutureLineWrap()
+}
+
 // String implements the fmt.Stringer interface.
 func (c *Config) String() string {
 	b, err := yaml.Marshal(c)
