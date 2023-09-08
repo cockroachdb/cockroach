@@ -13,6 +13,7 @@ go_library(
         "scheduled_processor.go",
         "scheduler.go",
         "task.go",
+        "testutil.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed",
     visibility = ["//visibility:public"],
