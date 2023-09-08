@@ -327,6 +327,19 @@ config_setting(
 )
 
 bool_flag(
+    name = "bazel_code_coverage_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "bazel_code_coverage",
+    flag_values = {
+        ":bazel_code_coverage_flag": "true",
+    },
+)
+
+bool_flag(
     name = "cross_flag",
     build_setting_default = False,
     visibility = ["//visibility:public"],

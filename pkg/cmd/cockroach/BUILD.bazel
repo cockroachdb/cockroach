@@ -10,6 +10,7 @@ go_library(
         "//pkg/ccl",
         "//pkg/ccl/cliccl",
         "//pkg/cli",
+        "//pkg/testutils/bazelcodecover",
         "//pkg/ui/distccl",
     ],
 )
