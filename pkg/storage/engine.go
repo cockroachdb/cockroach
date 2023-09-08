@@ -421,9 +421,6 @@ type IterOptions struct {
 	// the iterator. UpperBound must be provided unless Prefix is true, in which
 	// case the end of the prefix will be used as the upper bound.
 	UpperBound roachpb.Key
-	// If WithStats is true, the iterator accumulates performance
-	// counters over its lifetime which can be queried via `Stats()`.
-	WithStats bool
 	// MinTimestampHint and MaxTimestampHint, if set, indicate that keys outside
 	// of the time range formed by [MinTimestampHint, MaxTimestampHint] do not
 	// need to be presented by the iterator. The underlying iterator may be able
