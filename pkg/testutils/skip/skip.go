@@ -37,6 +37,17 @@ func WithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
 		args...))
 }
 
+// Unimplemented skips this test case, loggint the given issue ID. It
+// is included in addition to WithIssue to allow the caller to signal
+// that this test is not being skipped because of a bug, but rather
+// because of an unimplemented feature.
+func Unimplemented(t SkippableTest, githubIssueID int, args ...interface{}) {
+	t.Helper()
+	maybeSkip(t, append([]interface{}{
+		fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", githubIssueID)},
+		args...))
+}
+
 // IgnoreLint skips this test, explicitly marking it as not a test that
 // should be tracked as a "skipped test" by external tools. You should use this
 // if, for example, your test should only be run in Race mode.
