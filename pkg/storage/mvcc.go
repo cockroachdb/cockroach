@@ -7388,3 +7388,21 @@ func MVCCLookupRangeKeyValue(
 	// Made it!
 	return val, nil
 }
+
+// MVCCAcquireLock acquires acquires a lock, held by the specified transaction
+// with the supplied strength, on the specific key. An error is returned if
+// there is a locking conflict.
+//
+// TODO(arul,nvanbeschoten): this is just a crude stub.
+func MVCCAcquireLock(
+	ctx context.Context,
+	readWriter ReadWriter,
+	txn *roachpb.Transaction,
+	str lock.Strength,
+	key roachpb.Key,
+) error {
+	// TODO(arul, nvanbenschoten): this is currently configured just to make sure
+	// we have access to a legit writer; it's not actually doing anything.
+	readWriter.ShouldWriteLocalTimestamps(ctx)
+	return nil
+}

@@ -93,8 +93,8 @@ var flagExclusions = map[flag][]flag{
 
 // IsReadOnly returns true iff the request is read-only. A request is
 // read-only if it does not go through raft, meaning that it cannot
-// change any replicated state. However, read-only requests may still
-// acquire locks with an unreplicated durability level; see IsLocking.
+// change any replicated state. However, read-only requests may still acquire
+// locks, but only with unreplicated durability.
 func IsReadOnly(args Request) bool {
 	flags := args.flags()
 	return (flags&isRead) != 0 && (flags&isWrite) == 0
@@ -199,6 +199,7 @@ type Request interface {
 type LockingReadRequest interface {
 	Request
 	KeyLockingStrength() lock.Strength
+	KeyLockingDurabilityType() DurabilityType
 }
 
 var _ LockingReadRequest = (*GetRequest)(nil)
@@ -208,6 +209,11 @@ func (gr *GetRequest) KeyLockingStrength() lock.Strength {
 	return gr.KeyLocking
 }
 
+// KeyLockingDurabilityType implements the LockingReadRequest interface.
+func (gr *GetRequest) KeyLockingDurabilityType() DurabilityType {
+	return gr.DurabilityType
+}
+
 var _ LockingReadRequest = (*ScanRequest)(nil)
 
 // KeyLockingStrength implements the LockingReadRequest interface.
@@ -215,11 +221,21 @@ func (sr *ScanRequest) KeyLockingStrength() lock.Strength {
 	return sr.KeyLocking
 }
 
+// KeyLockingDurabilityType implements the LockingReadRequest interface.
+func (sr *ScanRequest) KeyLockingDurabilityType() DurabilityType {
+	return sr.DurabilityType
+}
+
 var _ LockingReadRequest = (*ReverseScanRequest)(nil)
 
 // KeyLockingStrength implements the LockingReadRequest interface.
 func (rsr *ReverseScanRequest) KeyLockingStrength() lock.Strength {
 	return rsr.KeyLocking
+}
+
+// KeyLockingDurabilityType implements the LockingReadRequest interface.
+func (rsr *ReverseScanRequest) KeyLockingDurabilityType() DurabilityType {
+	return rsr.DurabilityType
 }
 
 // SizedWriteRequest is an interface used to expose the number of bytes a
@@ -1354,9 +1370,17 @@ func flagForLockStrength(l lock.Strength) flag {
 	return 0
 }
 
+func flagForIsReadOrIsWrite(l lock.Strength, durabilityType DurabilityType) flag {
+	if l == lock.None {
+		return isRead
+	}
+	return isWrite
+}
+
 func (gr *GetRequest) flags() flag {
 	maybeLocking := flagForLockStrength(gr.KeyLocking)
-	return isRead | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
+	maybeRead := flagForIsReadOrIsWrite(gr.KeyLocking, gr.DurabilityType)
+	return maybeRead | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 func (*PutRequest) flags() flag {
@@ -1446,12 +1470,14 @@ func (*RevertRangeRequest) flags() flag {
 
 func (sr *ScanRequest) flags() flag {
 	maybeLocking := flagForLockStrength(sr.KeyLocking)
-	return isRead | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
+	maybeRead := flagForIsReadOrIsWrite(sr.KeyLocking, sr.DurabilityType)
+	return maybeRead | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 func (rsr *ReverseScanRequest) flags() flag {
 	maybeLocking := flagForLockStrength(rsr.KeyLocking)
-	return isRead | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
+	maybeRead := flagForIsReadOrIsWrite(rsr.KeyLocking, rsr.DurabilityType)
+	return maybeRead | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 // EndTxn updates the timestamp cache to prevent replays.

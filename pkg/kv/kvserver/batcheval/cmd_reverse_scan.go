@@ -110,11 +110,14 @@ func ReverseScan(
 	}
 
 	if args.KeyLocking != lock.None && h.Txn != nil {
-		err = acquireUnreplicatedLocksOnKeys(&res, h.Txn, args.KeyLocking, args.ScanFormat, &scanRes)
+		err = acquireLocksOnKeys(
+			ctx, readWriter, &res, h.Txn, args.KeyLocking, args.DurabilityType, args.ScanFormat, &scanRes,
+		)
 		if err != nil {
 			return result.Result{}, err
 		}
 	}
+
 	res.Local.EncounteredIntents = scanRes.Intents
 	return res, nil
 }

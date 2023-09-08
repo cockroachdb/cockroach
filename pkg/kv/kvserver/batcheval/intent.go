@@ -104,28 +104,55 @@ func readProvisionalVal(
 
 }
 
-// acquireUnreplicatedLocksOnKeys adds an unreplicated lock acquisition by the
-// transaction to the provided result.Result for each key in the scan result.
-func acquireUnreplicatedLocksOnKeys(
+// acquireLocksOnKeys acquires locks on each of the keys in the result of a
+// {,Reverse}ScanRequest. The locks are held by the specified transaction with
+// the supplied locks strength. Best-effort locks are held in unreplicated
+// fashion; locks that need guaranteed durability are replicated.
+//
+// It is possible to run into a lock conflict error when trying to acquire a
+// lock on one of the keys. In such cases, a LockConflictError is returned to
+// the caller. However, if locks have been successfully acquired on each of the
+// keys, the provided result.Result is mutated accordingly.
+func acquireLocksOnKeys(
+	ctx context.Context,
+	readWriter storage.ReadWriter,
 	res *result.Result,
 	txn *roachpb.Transaction,
-	str lock.Strength,
+	keyLocking lock.Strength,
+	durabilityType kvpb.DurabilityType,
 	scanFmt kvpb.ScanFormat,
 	scanRes *storage.MVCCScanResult,
 ) error {
-	res.Local.AcquiredLocks = make([]roachpb.LockAcquisition, scanRes.NumKeys)
+	acquiredLocks := make([]roachpb.LockAcquisition, scanRes.NumKeys)
 	switch scanFmt {
 	case kvpb.BATCH_RESPONSE:
 		var i int
-		return storage.MVCCScanDecodeKeyValues(scanRes.KVData, func(key storage.MVCCKey, _ []byte) error {
-			res.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(txn, copyKey(key.Key), lock.Unreplicated, str)
+		err := storage.MVCCScanDecodeKeyValues(scanRes.KVData, func(key storage.MVCCKey, _ []byte) error {
+			k := copyKey(key.Key)
+			acq, err := acquireLockOnKey(ctx, readWriter, txn, keyLocking, durabilityType, k)
+			if err != nil {
+				return err
+			}
+			acquiredLocks[i] = acq
 			i++
 			return nil
 		})
+		if err != nil {
+			return err
+		}
+		res.Local.AcquiredLocks = acquiredLocks
+		return nil
 	case kvpb.KEY_VALUES:
 		for i, row := range scanRes.KVs {
-			res.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(txn, copyKey(row.Key), lock.Unreplicated, str)
+			k := copyKey(row.Key)
+			acq, err := acquireLockOnKey(ctx, readWriter, txn, keyLocking, durabilityType, k)
+			if err != nil {
+				res.Local.AcquiredLocks = res.Local.AcquiredLocks[:]
+				return err
+			}
+			acquiredLocks[i] = acq
 		}
+		res.Local.AcquiredLocks = acquiredLocks
 		return nil
 	case kvpb.COL_BATCH_RESPONSE:
 		return errors.AssertionFailedf("unexpectedly acquiring unreplicated locks with COL_BATCH_RESPONSE scan format")
@@ -134,14 +161,47 @@ func acquireUnreplicatedLocksOnKeys(
 	}
 }
 
+// acquireLockOnKey acquires a lock on the specified key. The lock is acquired
+// with the supplied lock strength and are held by the specified transaction.
+// Best-effort locks are held in unreplicated fashion; locks that need
+// guaranteed durability are replicated. The resultant lock acquisition struct
+// is returned, which the caller may accumulate in its result set.
+//
+// It is possible for lock acquisition to run into a lock conflict error, in
+// which case a LockConflictError is returned to the caller.
+func acquireLockOnKey(
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	txn *roachpb.Transaction,
+	str lock.Strength,
+	durabilityType kvpb.DurabilityType,
+	key roachpb.Key,
+) (roachpb.LockAcquisition, error) {
+	switch durabilityType {
+	case kvpb.LockDurabilityBestEffort:
+		// TODO(arul): call into storage.MVCCCheckLock() here.
+		acq := roachpb.MakeLockAcquisition(txn, key, lock.Unreplicated, str)
+		return acq, nil
+	case kvpb.LockDurabilityGuaranteed:
+		if err := storage.MVCCAcquireLock(ctx, readWriter, txn, str, key); err != nil {
+			return roachpb.LockAcquisition{}, err
+		}
+		acq := roachpb.MakeLockAcquisition(txn, key, lock.Replicated, str)
+		return acq, nil
+	default:
+		panic("unexpected lock durability")
+	}
+}
+
 // copyKey copies the provided roachpb.Key into a new byte slice, returning the
-// copy. It is used in acquireUnreplicatedLocksOnKeys for two reasons:
+// copy. It is used in acquireLocksOnKeys for two reasons:
 //  1. the keys in an MVCCScanResult, regardless of the scan format used, point
 //     to a small number of large, contiguous byte slices. These "MVCCScan
 //     batches" contain keys and their associated values in the same backing
 //     array. To avoid holding these entire backing arrays in memory and
-//     preventing them from being garbage collected indefinitely, we copy the key
-//     slices before coupling their lifetimes to those of unreplicated locks.
+//     preventing them from being garbage collected indefinitely, we copy the
+//     key slices before coupling their lifetimes to those of the constructed
+//     lock acquisitions.
 //  2. the KV API has a contract that byte slices returned from KV will not be
 //     mutated by higher levels. However, we have seen cases (e.g.#64228) where
 //     this contract is broken due to bugs. To defensively guard against this
