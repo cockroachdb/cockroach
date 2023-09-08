@@ -57,39 +57,45 @@ func DefaultDeclareIsolatedKeys(
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
 ) {
-	access := spanset.SpanReadWrite
-	str := lock.Intent
+	var access spanset.SpanAccess
+	var str lock.Strength
 	timestamp := header.Timestamp
-	if kvpb.IsReadOnly(req) {
-		if !kvpb.IsLocking(req) {
-			access = spanset.SpanReadOnly
-			str = lock.None
-			// For non-locking reads, acquire read latches all the way up to the
-			// request's worst-case (i.e. global) uncertainty limit, because reads may
-			// observe writes all the way up to this timestamp.
-			//
-			// It is critical that reads declare latches up through their uncertainty
-			// interval so that they are properly synchronized with earlier writes that
-			// may have a happened-before relationship with the read. These writes could
-			// not have completed and returned to the client until they were durable in
-			// the Range's Raft log. However, they may not have been applied to the
-			// replica's state machine by the time the write was acknowledged, because
-			// Raft entry application occurs asynchronously with respect to the writer
-			// (see AckCommittedEntriesBeforeApplication). Latching is the only
-			// mechanism that ensures that any observers of the write wait for the write
-			// apply before reading.
-			//
-			// NOTE: we pass an empty lease status here, which means that observed
-			// timestamps collected by transactions will not be used. The actual
-			// uncertainty interval used by the request may be smaller (i.e. contain a
-			// local limit), but we can't determine that until after we have declared
-			// keys, acquired latches, and consulted the replica's lease.
-			in := uncertainty.ComputeInterval(header, kvserverpb.LeaseStatus{}, maxOffset)
-			timestamp.Forward(in.GlobalLimit)
-		} else {
-			str, _ = req.(kvpb.LockingReadRequest).KeyLocking()
+
+	if kvpb.IsReadOnly(req) && !kvpb.IsLocking(req) {
+		str = lock.None
+		access = spanset.SpanReadOnly
+		// For non-locking reads, acquire read latches all the way up to the
+		// request's worst-case (i.e. global) uncertainty limit, because reads may
+		// observe writes all the way up to this timestamp.
+		//
+		// It is critical that reads declare latches up through their uncertainty
+		// interval so that they are properly synchronized with earlier writes that
+		// may have a happened-before relationship with the read. These writes could
+		// not have completed and returned to the client until they were durable in
+		// the Range's Raft log. However, they may not have been applied to the
+		// replica's state machine by the time the write was acknowledged, because
+		// Raft entry application occurs asynchronously with respect to the writer
+		// (see AckCommittedEntriesBeforeApplication). Latching is the only
+		// mechanism that ensures that any observers of the write wait for the write
+		// apply before reading.
+		//
+		// NOTE: we pass an empty lease status here, which means that observed
+		// timestamps collected by transactions will not be used. The actual
+		// uncertainty interval used by the request may be smaller (i.e. contain a
+		// local limit), but we can't determine that until after we have declared
+		// keys, acquired latches, and consulted the replica's lease.
+		in := uncertainty.ComputeInterval(header, kvserverpb.LeaseStatus{}, maxOffset)
+		timestamp.Forward(in.GlobalLimit)
+	} else {
+		str = lock.Intent
+		access = spanset.SpanReadWrite
+		// Get the correct lock strength to use for {lock,latch} spans if we're
+		// dealing with locking read requests.
+		if readOnlyReq, ok := req.(kvpb.LockingReadRequest); ok {
+			str, _ = readOnlyReq.KeyLocking()
 			switch str {
-			// The lock.None case has already been handled above.
+			case lock.None:
+				panic(errors.AssertionFailedf("unexpected non-locking read handling"))
 			case lock.Shared:
 				access = spanset.SpanReadOnly
 				// Unlike non-locking reads, shared-locking reads are isolated from
