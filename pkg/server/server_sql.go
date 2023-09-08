@@ -307,7 +307,7 @@ type sqlServerArgs struct {
 	keyVisServerAccessor *spanstatskvaccessor.SpanStatsKVAccessor
 
 	// Used by DistSQLPlanner to dial KV nodes.
-	nodeDialer *nodedialer.Dialer
+	kvNodeDialer *nodedialer.Dialer
 
 	// Used by DistSQLPlanner to dial other pods in a multi-tenant environment.
 	podNodeDialer *nodedialer.Dialer
@@ -613,7 +613,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// port.
 	canUseNodeDialerAsPodNodeDialer := isMixedSQLAndKVNode && codec.ForSystemTenant()
 	if canUseNodeDialerAsPodNodeDialer {
-		cfg.podNodeDialer = cfg.nodeDialer
+		cfg.podNodeDialer = cfg.kvNodeDialer
 	} else {
 		// In a multi-tenant environment, use the sqlInstanceReader to resolve
 		// SQL pod addresses.
@@ -921,7 +921,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		&contentionMetrics,
 	)
 
-	storageEngineClient := kvserver.NewStorageEngineClient(cfg.nodeDialer)
+	storageEngineClient := kvserver.NewStorageEngineClient(cfg.kvNodeDialer)
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
 		NodeInfo:                nodeInfo,
@@ -990,7 +990,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.gossip,
 			cfg.stopper,
 			isAvailable,
-			cfg.nodeDialer.ConnHealthTryDial,
+			cfg.kvNodeDialer.ConnHealthTryDial, // only used by system tenant
 			cfg.podNodeDialer,
 			codec,
 			cfg.sqlInstanceReader,
@@ -1218,7 +1218,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		if codec.ForSystemTenant() {
 			c = upgradecluster.New(upgradecluster.ClusterConfig{
 				NodeLiveness:     nodeLiveness,
-				Dialer:           cfg.nodeDialer,
+				Dialer:           cfg.kvNodeDialer,
 				RangeDescScanner: rangedesc.NewScanner(cfg.db),
 				DB:               cfg.db,
 			})
