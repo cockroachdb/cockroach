@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -243,10 +242,37 @@ func (ds *DistSender) RangeFeedSpans(
 		for {
 			select {
 			case sri := <-rangeCh:
+				// Bound the partial rangefeed to the partial span.
+				span := sri.rs.AsRawSpanWithNoLocals()
+
+				// Register partial range feed with registry.  We do this prior to acquiring
+				// catchup scan quota so that we have some observability into the ranges
+				// that are blocked, waiting for quota.
+				active := newActiveRangeFeed(span, sri.startAfter, rr, metrics)
+
+				acquireStart := timeutil.Now()
+				if log.V(1) {
+					log.Infof(ctx, "RangeFeed starting for span %s@%s (quota acquisition)", span, sri.startAfter)
+				}
+				// Prior to spawning goroutine to process this feed, acquire catchup scan quota.
+				// This quota acquisition paces the rate of new goroutine creation.
+				catchupRes, err := acquireCatchupScanQuota(ctx, &ds.st.SV, &catchupSem, metrics)
+				if err != nil {
+					active.release()
+					return err
+				}
+				active.catchupRes = catchupRes
+				if log.V(1) {
+					log.Infof(ctx, "RangeFeed starting for span %s@%s (quota acquired in %s)",
+						span, sri.startAfter, timeutil.Since(acquireStart))
+				}
+
 				// Spawn a child goroutine to process this feed.
 				g.GoCtx(func(ctx context.Context) error {
-					return ds.partialRangeFeed(ctx, rr, sri.rs, sri.startAfter,
-						sri.token, &catchupSem, rangeCh, eventCh, cfg, metrics)
+					defer active.release()
+
+					return ds.partialRangeFeed(ctx, active, sri.rs, sri.startAfter,
+						sri.token, rangeCh, eventCh, cfg, metrics)
 				})
 			case <-ctx.Done():
 				return ctx.Err()
@@ -255,7 +281,9 @@ func (ds *DistSender) RangeFeedSpans(
 	})
 
 	// Kick off the initial set of ranges.
-	divideAllSpansOnRangeBoundaries(spans, sendSingleRangeInfo(rangeCh), ds, &g)
+	g.GoCtx(func(ctx context.Context) error {
+		return divideAllSpansOnRangeBoundaries(ctx, spans, sendSingleRangeInfo(rangeCh), ds, &g)
+	})
 
 	return g.Wait()
 }
@@ -264,8 +292,8 @@ func (ds *DistSender) RangeFeedSpans(
 // provided onRange function for each range.  Resolution happens concurrently using provided
 // context group.
 func divideAllSpansOnRangeBoundaries(
-	spans []SpanTimePair, onRange onRangeFn, ds *DistSender, g *ctxgroup.Group,
-) {
+	ctx context.Context, spans []SpanTimePair, onRange onRangeFn, ds *DistSender, g *ctxgroup.Group,
+) error {
 	// Sort input spans based on their start time -- older spans first.
 	// Starting rangefeed over large number of spans is an expensive proposition,
 	// since this involves initiating catch-up scan operation for each span. These
@@ -280,17 +308,16 @@ func divideAllSpansOnRangeBoundaries(
 		return spans[i].StartAfter.Less(spans[j].StartAfter)
 	})
 
-	for _, s := range spans {
-		func(stp SpanTimePair) {
-			g.GoCtx(func(ctx context.Context) error {
-				rs, err := keys.SpanAddr(stp.Span)
-				if err != nil {
-					return err
-				}
-				return divideSpanOnRangeBoundaries(ctx, ds, rs, stp.StartAfter, onRange)
-			})
-		}(s)
+	for _, stp := range spans {
+		rs, err := keys.SpanAddr(stp.Span)
+		if err != nil {
+			return err
+		}
+		if err := divideSpanOnRangeBoundaries(ctx, ds, rs, stp.StartAfter, onRange); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // RangeFeedContext is the structure containing arguments passed to
@@ -305,13 +332,18 @@ type RangeFeedContext struct {
 
 // PartialRangeFeed structure describes the state of currently executing partial range feed.
 type PartialRangeFeed struct {
-	Span              roachpb.Span
-	StartAfter        hlc.Timestamp // exclusive
+	// The following fields are immutable and are initialized
+	// once the rangefeed for a range starts.
+	Span        roachpb.Span
+	StartAfter  hlc.Timestamp // exclusive
+	CreatedTime time.Time
+
+	// Fields below are mutable.
 	NodeID            roachpb.NodeID
 	RangeID           roachpb.RangeID
-	CreatedTime       time.Time
 	LastValueReceived time.Time
 	Resolved          hlc.Timestamp
+	InCatchup         bool
 	NumErrs           int
 	LastErr           error
 }
@@ -343,7 +375,9 @@ func (r *rangeFeedRegistry) ForEachPartialRangefeed(fn ActiveRangeFeedIterFn) (i
 	partialRangeFeed := func(active *activeRangeFeed) PartialRangeFeed {
 		active.Lock()
 		defer active.Unlock()
-		return active.PartialRangeFeed
+		p := active.PartialRangeFeed
+		p.InCatchup = active.catchupRes != nil
+		return p
 	}
 	r.ranges.Range(func(k, v interface{}) bool {
 		active := k.(*activeRangeFeed)
@@ -358,7 +392,23 @@ func (r *rangeFeedRegistry) ForEachPartialRangefeed(fn ActiveRangeFeedIterFn) (i
 
 // activeRangeFeed is a thread safe PartialRangeFeed.
 type activeRangeFeed struct {
+	// release releases resources and updates metrics when
+	// active rangefeed completes.
 	release func()
+
+	// catchupRes is the catchup scan quota acquired upon the
+	// start of rangefeed.
+	// It is released when this stream receives first checkpoint
+	// (meaning: catchup scan completes).
+	// Safe to release multiple times.
+	catchupRes catchupAlloc
+
+	// PartialRangeFeed contains information about this range
+	// mostly for the purpose of exposing it to the external
+	// observability tools (crdb_internal.active_range_feeds).
+	// This state is protected by the mutex to avoid data races.
+	// The mutex overhead in a common case -- a single goroutine
+	// (singleRangeFeed) mutating this data is low.
 	syncutil.Mutex
 	PartialRangeFeed
 }
@@ -459,7 +509,10 @@ func divideSpanOnRangeBoundaries(
 // newActiveRangeFeed registers active rangefeed with rangefeedRegistry.
 // The caller must call active.release() in order to cleanup.
 func newActiveRangeFeed(
-	span roachpb.Span, startAfter hlc.Timestamp, rr *rangeFeedRegistry, c *metric.Gauge,
+	span roachpb.Span,
+	startAfter hlc.Timestamp,
+	rr *rangeFeedRegistry,
+	metrics *DistSenderRangeFeedMetrics,
 ) *activeRangeFeed {
 	// Register partial range feed with registry.
 	active := &activeRangeFeed{
@@ -469,27 +522,38 @@ func newActiveRangeFeed(
 			CreatedTime: timeutil.Now(),
 		},
 	}
+
 	active.release = func() {
+		active.releaseCatchupScan()
 		rr.ranges.Delete(active)
-		c.Dec(1)
+		metrics.RangefeedRanges.Dec(1)
 	}
+
 	rr.ranges.Store(active, nil)
-	c.Inc(1)
+	metrics.RangefeedRanges.Inc(1)
 
 	return active
 }
 
-// partialRangeFeed establishes a RangeFeed to the range specified by desc. It
-// manages lifecycle events of the range in order to maintain the RangeFeed
+// releaseCatchupScan releases catchup scan allocation, if any.
+// safe to call multiple times.
+func (a *activeRangeFeed) releaseCatchupScan() {
+	if a.catchupRes != nil {
+		a.catchupRes.Release()
+		a.catchupRes = nil
+	}
+}
+
+// partialRangeFeed establishes a RangeFeed to the range specified the routing token.
+// This method manages lifecycle events of the range in order to maintain the RangeFeed
 // connection; this may involve instructing higher-level functions to retry
 // this rangefeed, or subdividing the range further in the event of a split.
 func (ds *DistSender) partialRangeFeed(
 	ctx context.Context,
-	rr *rangeFeedRegistry,
+	active *activeRangeFeed,
 	rs roachpb.RSpan,
 	startAfter hlc.Timestamp,
 	token rangecache.EvictionToken,
-	catchupSem *limit.ConcurrentRequestLimiter,
 	rangeCh chan<- singleRangeInfo,
 	eventCh chan<- RangeFeedMessage,
 	cfg rangeFeedConfig,
@@ -497,10 +561,6 @@ func (ds *DistSender) partialRangeFeed(
 ) error {
 	// Bound the partial rangefeed to the partial span.
 	span := rs.AsRawSpanWithNoLocals()
-
-	// Register partial range feed with registry.
-	active := newActiveRangeFeed(span, startAfter, rr, metrics.RangefeedRanges)
-	defer active.release()
 
 	// Start a retry loop for sending the batch to the range.
 	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
@@ -523,29 +583,31 @@ func (ds *DistSender) partialRangeFeed(
 			log.Infof(ctx, "RangeFeed starting for range %d@%s (%s)", token.Desc().RangeID, startAfter, span)
 		}
 
-		maxTS, err := ds.singleRangeFeed(
-			ctx, span, startAfter, token.Desc(),
-			catchupSem, eventCh, active.onRangeEvent, cfg, metrics)
+		maxTS, err := ds.singleRangeFeed(ctx, active, span, startAfter, token.Desc(), eventCh, cfg, metrics)
 
 		// Forward the timestamp in case we end up sending it again.
 		startAfter.Forward(maxTS)
 
 		if log.V(1) {
-			log.Infof(ctx, "RangeFeed %s@%s disconnected with last checkpoint %s ago: %v",
-				active.Span, active.StartAfter, timeutil.Since(active.Resolved.GoTime()), err)
+			log.Infof(ctx, "RangeFeed %d@%s (%s) disconnected with last checkpoint %s ago: %v",
+				token.Desc().RangeID, active.StartAfter, active.Span, timeutil.Since(active.Resolved.GoTime()), err)
 		}
 		active.setLastError(err)
 
-		errInfo, err := handleRangefeedError(ctx, err)
+		errInfo, err := handleRangefeedError(ctx, metrics, err)
 		if err != nil {
 			return err
 		}
-		metrics.RangefeedRestartRanges.Inc(1)
 		if errInfo.evict {
 			token.Evict(ctx)
 			token = rangecache.EvictionToken{}
 		}
+
 		if errInfo.resolveSpan {
+			// We must release catchup scan reservation prior to attempt to
+			// re-resolve since this will attempt to acquire 1 or more catchup
+			// scan reservations.
+			active.releaseCatchupScan()
 			return divideSpanOnRangeBoundaries(ctx, ds, rs, startAfter, sendSingleRangeInfo(rangeCh))
 		}
 	}
@@ -560,7 +622,11 @@ type rangefeedErrorInfo struct {
 // handleRangefeedError handles an error that occurred while running rangefeed.
 // Returns rangefeedErrorInfo describing how the error should be handled for the
 // range. Returns an error if the entire rangefeed should terminate.
-func handleRangefeedError(ctx context.Context, err error) (rangefeedErrorInfo, error) {
+func handleRangefeedError(
+	ctx context.Context, metrics *DistSenderRangeFeedMetrics, err error,
+) (rangefeedErrorInfo, error) {
+	metrics.RangefeedRestartRanges.Inc(1)
+
 	if err == nil {
 		return rangefeedErrorInfo{}, nil
 	}
@@ -659,10 +725,6 @@ func newTransportForRange(
 	return ds.transportFactory(opts, ds.nodeDialer, replicas)
 }
 
-// onRangeEventCb is invoked for each non-error range event.
-// nodeID identifies the node ID which generated the event.
-type onRangeEventCb func(nodeID roachpb.NodeID, rangeID roachpb.RangeID, event *kvpb.RangeFeedEvent)
-
 // makeRangeFeedRequest constructs kvpb.RangeFeedRequest for specified span and
 // rangeID. Request is constructed to watch event after specified timestamp, and
 // with optional diff.  If the request corresponds to a system range, request
@@ -725,12 +787,11 @@ func defaultStuckRangeThreshold(st *cluster.Settings) func() time.Duration {
 // request's timestamp if not checkpoints are seen.
 func (ds *DistSender) singleRangeFeed(
 	ctx context.Context,
+	active *activeRangeFeed,
 	span roachpb.Span,
 	startAfter hlc.Timestamp,
 	desc *roachpb.RangeDescriptor,
-	catchupSem *limit.ConcurrentRequestLimiter,
 	eventCh chan<- RangeFeedMessage,
-	onRangeEvent onRangeEventCb,
 	cfg rangeFeedConfig,
 	metrics *DistSenderRangeFeedMetrics,
 ) (_ hlc.Timestamp, retErr error) {
@@ -749,22 +810,6 @@ func (ds *DistSender) singleRangeFeed(
 		return args.Timestamp, err
 	}
 	defer transport.Release()
-
-	// Indicate catchup scan is starting;  Before potentially blocking on a semaphore, take
-	// opportunity to update semaphore limit.
-	catchupRes, err := acquireCatchupScanQuota(ctx, &ds.st.SV, catchupSem, metrics)
-	if err != nil {
-		return hlc.Timestamp{}, err
-	}
-
-	finishCatchupScan := func() {
-		if catchupRes != nil {
-			catchupRes.Release()
-			catchupRes = nil
-		}
-	}
-	// cleanup catchup reservation in case of early termination.
-	defer finishCatchupScan()
 
 	stuckWatcher := newStuckRangeFeedCanceler(cancelFeed, defaultStuckRangeThreshold(ds.st))
 	defer stuckWatcher.stop()
@@ -820,7 +865,7 @@ func (ds *DistSender) singleRangeFeed(
 			}); err != nil {
 				log.VErrEventf(ctx, 2, "RPC error: %s", err)
 				if stuckWatcher.stuck() {
-					afterCatchUpScan := catchupRes == nil
+					afterCatchUpScan := active.catchupRes == nil
 					return args.Timestamp, handleStuckEvent(&args, afterCatchUpScan, stuckWatcher.threshold(), metrics)
 				}
 				return args.Timestamp, err
@@ -840,9 +885,9 @@ func (ds *DistSender) singleRangeFeed(
 			switch t := event.GetValue().(type) {
 			case *kvpb.RangeFeedCheckpoint:
 				if t.Span.Contains(args.Span) {
-					// If we see the first non-empty checkpoint, we know we're done with the catchup scan.
-					if !t.ResolvedTS.IsEmpty() && catchupRes != nil {
-						finishCatchupScan()
+					// If we see the first checkpoint, we know we're done with the catchup scan.
+					if active.catchupRes != nil {
+						active.releaseCatchupScan()
 					}
 					// Note that this timestamp means that all rows in the span with
 					// writes at or before the timestamp have now been seen. The
@@ -853,19 +898,19 @@ func (ds *DistSender) singleRangeFeed(
 				}
 			case *kvpb.RangeFeedError:
 				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
-				if catchupRes != nil {
+				if active.catchupRes != nil {
 					metrics.RangefeedErrorCatchup.Inc(1)
 				}
 				if stuckWatcher.stuck() {
 					// When the stuck watcher fired, and the rangefeed call is local,
 					// the remote might notice the cancellation first and return from
 					// Recv with an error that we need to special-case here.
-					afterCatchUpScan := catchupRes == nil
+					afterCatchUpScan := active.catchupRes == nil
 					return args.Timestamp, handleStuckEvent(&args, afterCatchUpScan, stuckWatcher.threshold(), metrics)
 				}
 				return args.Timestamp, t.Error.GoError()
 			}
-			onRangeEvent(args.Replica.NodeID, desc.RangeID, event)
+			active.onRangeEvent(args.Replica.NodeID, desc.RangeID, event)
 
 			select {
 			case eventCh <- msg:
