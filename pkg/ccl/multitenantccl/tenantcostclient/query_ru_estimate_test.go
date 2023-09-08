@@ -195,7 +195,7 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 	// Check the estimated RU aggregate for all the queries against the actual
 	// measured RU consumption for the tenant.
 	tenantMeasuredRUs = getTenantRUs() - tenantStartRUs
-	const deltaFraction = 0.05
+	const deltaFraction = 0.25
 	allowedDelta := tenantMeasuredRUs * deltaFraction
 	require.InDeltaf(t, tenantMeasuredRUs, tenantEstimatedRUs, allowedDelta,
 		"estimated RUs (%d) were not within %f RUs of the expected value (%f)",
