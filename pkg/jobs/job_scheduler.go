@@ -362,10 +362,10 @@ func newCancelWhenDisabled(sv *settings.Values) *syncCancelFunc {
 	schedulerEnabledSetting.SetOnChange(sv, func(ctx context.Context) {
 		if !schedulerEnabledSetting.Get(sv) {
 			sf.Lock()
+			defer sf.Unlock()
 			if sf.CancelFunc != nil {
 				sf.CancelFunc()
 			}
-			sf.Unlock()
 		}
 	})
 	return sf

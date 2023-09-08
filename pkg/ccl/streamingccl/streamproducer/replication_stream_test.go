@@ -287,18 +287,16 @@ func TestReplicationStreamInitialization(t *testing.T) {
 			testStreamReplicationStatus(t, h.SysSQL, streamID, streampb.StreamReplicationStatus_STREAM_ACTIVE)
 		}
 
-		// Get a replication stream spec
+		// Get a replication stream spec.
 		spec, rawSpec := &streampb.ReplicationStreamSpec{}, make([]byte, 0)
 		row := h.SysSQL.QueryRow(t, "SELECT crdb_internal.replication_stream_spec($1)", streamID)
 		row.Scan(&rawSpec)
 		require.NoError(t, protoutil.Unmarshal(rawSpec, spec))
 
-		// Ensures the processor spec tracks the tenant span
+		// Ensures the processor spec tracks the tenant span.
 		require.Equal(t, 1, len(spec.Partitions))
 		require.Equal(t, 1, len(spec.Partitions[0].PartitionSpec.Spans))
-		tenantPrefix := keys.MakeTenantPrefix(srcTenant.ID)
-		require.Equal(t, roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.PrefixEnd()},
-			spec.Partitions[0].PartitionSpec.Spans[0])
+		require.Equal(t, keys.MakeTenantSpan(srcTenant.ID), spec.Partitions[0].PartitionSpec.Spans[0])
 	})
 
 	t.Run("nonexistent-replication-stream-has-inactive-status", func(t *testing.T) {

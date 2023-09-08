@@ -226,11 +226,10 @@ func ingestionPlanHook(
 			return err
 		}
 
-		prefix := keys.MakeTenantPrefix(destinationTenantID)
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
 			StreamAddress:         string(streamAddress),
 			StreamID:              uint64(replicationProducerSpec.StreamID),
-			Span:                  roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
+			Span:                  keys.MakeTenantSpan(destinationTenantID),
 			DestinationTenantID:   destinationTenantID,
 			SourceTenantName:      roachpb.TenantName(sourceTenant),
 			DestinationTenantName: roachpb.TenantName(dstTenantName),

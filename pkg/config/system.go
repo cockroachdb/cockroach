@@ -139,9 +139,12 @@ func (s *SystemConfig) getSystemTenantDesc(key roachpb.Key) *roachpb.Value {
 		panic(err)
 	}
 
-	testingLock.Lock()
-	_, ok := testingZoneConfig[ObjectID(id)]
-	testingLock.Unlock()
+	_, ok := func() (zonepb.ZoneConfig, bool) {
+		testingLock.Lock()
+		defer testingLock.Unlock()
+		zc, ok := testingZoneConfig[ObjectID(id)]
+		return zc, ok
+	}()
 
 	if ok {
 		// A test installed a zone config for this ID, but no descriptor.
@@ -638,7 +641,7 @@ func (s *SystemConfig) tenantBoundarySplitKey(
 			log.Errorf(ctx, "unable to decode tenant ID from start key: %s", err)
 			return nil
 		}
-		if lowTenIDExcl == roachpb.MaxTenantID {
+		if lowTenIDExcl.ToUint64() >= roachpb.MaxTenantID.ToUint64() {
 			// MaxTenantID already split or outside range.
 			return nil
 		}
