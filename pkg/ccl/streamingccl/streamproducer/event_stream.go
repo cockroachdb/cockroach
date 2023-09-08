@@ -484,10 +484,11 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 	}
 }
 
+const defaultBatchSize = 1 << 20
+
 func setConfigDefaults(cfg *streampb.StreamPartitionSpec_ExecutionConfig) {
 	const defaultInitialScanParallelism = 16
 	const defaultMinCheckpointFrequency = 10 * time.Second
-	const defaultBatchSize = 1 << 20
 
 	if cfg.InitialScanParallelism <= 0 {
 		cfg.InitialScanParallelism = defaultInitialScanParallelism
@@ -502,16 +503,6 @@ func setConfigDefaults(cfg *streampb.StreamPartitionSpec_ExecutionConfig) {
 	}
 }
 
-func validateSpecs(evalCtx *eval.Context, spec streampb.StreamPartitionSpec) error {
-	if !evalCtx.SessionData().AvoidBuffering {
-		return errors.New("partition streaming requires 'SET avoid_buffering = true' option")
-	}
-	if len(spec.Spans) == 0 {
-		return errors.AssertionFailedf("expected at least one span, got none")
-	}
-	return nil
-}
-
 func streamPartition(
 	evalCtx *eval.Context, streamID streampb.StreamID, opaqueSpec []byte,
 ) (eval.ValueGenerator, error) {
@@ -519,10 +510,12 @@ func streamPartition(
 	if err := protoutil.Unmarshal(opaqueSpec, &spec); err != nil {
 		return nil, errors.Wrapf(err, "invalid partition spec for stream %d", streamID)
 	}
-	if err := validateSpecs(evalCtx, spec); err != nil {
-		return nil, err
+	if !evalCtx.SessionData().AvoidBuffering {
+		return nil, errors.New("partition streaming requires 'SET avoid_buffering = true' option")
 	}
-
+	if len(spec.Spans) == 0 {
+		return nil, errors.AssertionFailedf("expected at least one span, got none")
+	}
 	setConfigDefaults(&spec.Config)
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
