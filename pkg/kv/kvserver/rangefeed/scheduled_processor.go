@@ -119,6 +119,8 @@ func (p *ScheduledProcessor) Start(
 	} else {
 		p.initResolvedTS(ctx)
 	}
+
+	p.Metrics.RangeFeedProcessorsScheduler.Inc(1)
 	return nil
 }
 
@@ -212,6 +214,7 @@ func (p *ScheduledProcessor) processPushTxn(ctx context.Context) {
 
 func (p *ScheduledProcessor) processStop() {
 	p.cleanup()
+	p.Metrics.RangeFeedProcessorsScheduler.Dec(1)
 }
 
 func (p *ScheduledProcessor) cleanup() {
