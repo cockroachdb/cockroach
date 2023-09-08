@@ -144,7 +144,7 @@ type topLevelServer struct {
 	// The gRPC server on which the different RPC handlers will be registered.
 	grpc             *grpcServer
 	gossip           *gossip.Gossip
-	nodeDialer       *nodedialer.Dialer
+	kvNodeDialer     *nodedialer.Dialer
 	nodeLiveness     *liveness.NodeLiveness
 	storePool        *storepool.StorePool
 	tcsFactory       *kvcoord.TxnCoordSenderFactory
@@ -383,7 +383,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		dialerKnobs = dk.(nodedialer.DialerTestingKnobs)
 	}
 
-	nodeDialer := nodedialer.NewWithOpt(rpcContext, gossip.AddressResolver(g),
+	kvNodeDialer := nodedialer.NewWithOpt(rpcContext, gossip.AddressResolver(g),
 		nodedialer.DialerOpt{TestingKnobs: dialerKnobs})
 
 	runtimeSampler := status.NewRuntimeStatSampler(ctx, clock.WallClock())
@@ -430,7 +430,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		NodeDescs:          g,
 		RPCContext:         rpcContext,
 		RPCRetryOptions:    &retryOpts,
-		NodeDialer:         nodeDialer,
+		NodeDialer:         kvNodeDialer,
 		FirstRangeProvider: g,
 		Locality:           cfg.Locality,
 		TestingKnobs:       clientTestingKnobs,
@@ -513,7 +513,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 				log.Ops.Warningf(ctx, "writing last up timestamp: %v", err)
 			}
 		},
-		NodeDialer: nodeDialer,
+		NodeDialer: kvNodeDialer,
 	})
 
 	registry.AddMetricStruct(nodeLiveness.Metrics())
@@ -605,7 +605,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		cfg.AmbientCtx,
 		st,
 		cfg.AmbientCtx.Tracer,
-		nodeDialer,
+		kvNodeDialer,
 		grpcServer.Server,
 		stopper,
 		admissionControl.kvflowTokenDispatch,
@@ -615,7 +615,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 	registry.AddMetricStruct(raftTransport.Metrics())
 
-	ctSender := sidetransport.NewSender(stopper, st, clock, nodeDialer)
+	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
 
 	// The Executor will be further initialized later, as we create more
@@ -828,7 +828,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		Gossip:                       g,
 		NodeLiveness:                 nodeLiveness,
 		Transport:                    raftTransport,
-		NodeDialer:                   nodeDialer,
+		NodeDialer:                   kvNodeDialer,
 		RPCContext:                   rpcContext,
 		ScanInterval:                 cfg.ScanInterval,
 		ScanMinIdleTime:              cfg.ScanMinIdleTime,
@@ -1001,11 +1001,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 
 	keyVisualizerServer := &KeyVisualizerServer{
-		ie:         internalExecutor,
-		settings:   st,
-		nodeDialer: nodeDialer,
-		status:     sStatus,
-		node:       node,
+		ie:           internalExecutor,
+		settings:     st,
+		kvNodeDialer: kvNodeDialer,
+		status:       sStatus,
+		node:         node,
 	}
 	keyVisServerAccessor := spanstatskvaccessor.New(keyVisualizerServer)
 
@@ -1119,7 +1119,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       spanConfig.kvAccessor,
 		keyVisServerAccessor:     keyVisServerAccessor,
-		nodeDialer:               nodeDialer,
+		kvNodeDialer:             kvNodeDialer,
 		distSender:               distSender,
 		db:                       db,
 		registry:                 registry,
@@ -1259,7 +1259,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		engines:                   engines,
 		grpc:                      grpcServer,
 		gossip:                    g,
-		nodeDialer:                nodeDialer,
+		kvNodeDialer:              kvNodeDialer,
 		nodeLiveness:              nodeLiveness,
 		storePool:                 storePool,
 		tcsFactory:                tcsFactory,
@@ -2062,7 +2062,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.cfg.ExternalIODirConfig,
 		s.st,
 		s.sqlServer.sqlIDContainer,
-		s.nodeDialer,
+		s.kvNodeDialer,
 		s.cfg.TestingKnobs,
 		true, /* allowLocalFastPath */
 		s.sqlServer.execCfg.InternalDB.CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
