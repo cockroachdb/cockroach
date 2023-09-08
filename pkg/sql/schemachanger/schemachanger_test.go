@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -788,4 +789,63 @@ func isPQErrWithCode(err error, codes ...pgcode.Code) bool {
 		}
 	}
 	return false
+}
+
+var _ sctest.StmtLineReader = (*fakeSQLStmtLineProvider)(nil)
+
+type fakeSQLStmtLineProvider struct {
+	stmts []string
+	next  int
+}
+
+func (ss *fakeSQLStmtLineProvider) HasNextLine() bool {
+	return ss.next != len(ss.stmts)
+}
+
+func (ss *fakeSQLStmtLineProvider) NextLine() string {
+	ss.next++
+	return ss.stmts[ss.next-1]
+}
+
+// TestCompareLegacyAndDeclarative tests that when processing a sequence of
+// DDL statements, legacy and declarative schema change should transition the
+// descriptors into the same final state.
+func TestCompareLegacyAndDeclarative(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ss := &fakeSQLStmtLineProvider{
+		stmts: []string{
+			// Statements expected to succeed.
+			"SET sql_safe_updates = false;",
+			"CREATE TABLE t2 (i INT PRIMARY KEY, j INT NOT NULL);",
+			"CREATE TABLE t1 (i INT PRIMARY KEY, j INT REFERENCES t2(i));",
+			"INSERT INTO t2 SELECT k, k+1 FROM generate_series(1,1000) AS tmp(k);",
+			"INSERT INTO t1 SELECT k-1, k FROM generate_series(1,1000) AS tmp(k);",
+			"CREATE INDEX t1_idx_1 ON t1(j);",
+			"CREATE INDEX t2_idx_1 ON t2(j);",
+			"ALTER TABLE t1 ADD COLUMN k INT DEFAULT 34;",
+			"ALTER TABLE t2 ADD COLUMN p INT DEFAULT 50;",
+			"ALTER TABLE t2 DROP COLUMN p;",
+			"ALTER TABLE t2 ALTER PRIMARY KEY USING COLUMNS (j);",
+
+			// Statements expected to fail.
+			"CREATE TABLE t1 (); -- expect a DuplicateRelation error",
+			"ALTER TABLE t1 DROP COLUMN xyz; -- expect a rejected (sql_safe_updates = true) warning",
+			"ALTER TABLE t1 DROP COLUMN xyz; -- expect a UndefinedColumn error",
+			"ALTER TABLE txyz ADD COLUMN i INT DEFAULT 30; -- expect a UndefinedTable error",
+
+			// statements with TCL commands or empty content.
+			"",
+			"BEGIN;",
+			"INSERT INTO t2 VALUES (1001, 1002); INSERT INTO t1 VALUES (1000, 1001);",
+			"COMMIT;",
+			"BEGIN;",
+			"SELECT 1/0;",
+			"INSERT INTO t2 VALUES (1002, 1003); INSERT INTO t1 VALUES (1001, 1002); -- expect to be skipped",
+			"ROLLBACK;",
+		},
+	}
+
+	sctest.CompareLegacyAndDeclarative(t, ss)
 }
