@@ -1,28 +1,28 @@
 diff -urN a/google/cloud/kms/v1/BUILD.bazel b/google/cloud/kms/v1/BUILD.bazel
 --- a/google/cloud/kms/v1/BUILD.bazel	1970-01-01 00:00:00.000000000 +0000
 +++ b/google/cloud/kms/v1/BUILD.bazel	2000-01-01 00:00:00.000000000 -0000
-@@ -23,5 +23,11 @@
+@@ -128,8 +128,11 @@
      importpath = "google.golang.org/genproto/googleapis/cloud/kms/v1",
-     proto = ":kms_proto",
-     visibility = ["//visibility:public"],
--    deps = ["//google/api:annotations_go_proto"],
-+    deps = [
+     protos = [":kms_proto"],
+     deps = [
+-        "//google/api:annotations_go_proto",
+-        "//google/iam/v1:iam_go_proto",
 +        "@com_github_golang_protobuf//ptypes/duration:go_default_library",
 +        "@com_github_golang_protobuf//ptypes/timestamp:go_default_library",
 +        "@com_github_golang_protobuf//ptypes/wrappers:go_default_library",
 +        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
 +        "@org_golang_google_genproto//protobuf/field_mask:go_default_library",
-+    ],
+     ],
  )
+ 
 diff -urN a/google/devtools/build/v1/BUILD.bazel a/google/devtools/build/v1/BUILD.bazel
 --- a/google/devtools/build/v1/BUILD.bazel	1970-01-01 00:00:00.000000000 +0000
 +++ b/google/devtools/build/v1/BUILD.bazel	2000-01-01 00:00:00.000000000 -0000
-@@ -25,5 +25,13 @@
+@@ -129,7 +129,13 @@
      importpath = "google.golang.org/genproto/googleapis/devtools/build/v1",
-     proto = ":build_proto",
-     visibility = ["//visibility:public"],
--    deps = ["//google/api:annotations_go_proto"],
-+    deps = [
+     protos = [":build_proto"],
+     deps = [
+-        "//google/api:annotations_go_proto",
 +        "@com_github_golang_protobuf//ptypes/any:go_default_library",
 +        "@com_github_golang_protobuf//ptypes/duration:go_default_library",
 +        "@com_github_golang_protobuf//ptypes/empty:go_default_library",
@@ -30,5 +30,5 @@ diff -urN a/google/devtools/build/v1/BUILD.bazel a/google/devtools/build/v1/BUIL
 +        "@com_github_golang_protobuf//ptypes/wrappers:go_default_library",
 +        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
 +        "@org_golang_google_genproto//protobuf/field_mask:go_default_library",
-+    ],
+     ],
  )

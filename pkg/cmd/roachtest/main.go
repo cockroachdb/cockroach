@@ -85,7 +85,6 @@ func parseCreateOpts(flags *pflag.FlagSet, opts *vm.CreateOpts) {
 }
 
 func main() {
-	rand.Seed(timeutil.Now().UnixNano())
 	username := os.Getenv("ROACHPROD_USER")
 	parallelism := 10
 	var cpuQuota int

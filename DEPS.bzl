@@ -2399,10 +2399,10 @@ def go_deps():
         name = "com_github_docker_docker",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/docker/docker",
-        sha256 = "b96610497d8d7b41eff039cd4b4ba595eedb3944b653b813f087364805e3db76",
-        strip_prefix = "github.com/moby/moby@v20.10.6+incompatible",
+        sha256 = "92fd2184ec4e265dae066c73fc9c7d40254eaeb804f659e7a4cc27ebd3689fcc",
+        strip_prefix = "github.com/moby/moby@v24.0.6+incompatible",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/moby/moby/com_github_moby_moby-v20.10.6+incompatible.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/moby/moby/com_github_moby_moby-v24.0.6+incompatible.zip",
         ],
     )
     go_repository(

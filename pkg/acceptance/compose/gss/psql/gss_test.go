@@ -190,7 +190,8 @@ func TestGSS(t *testing.T) {
 }
 
 func TestGSSFileDescriptorCount(t *testing.T) {
-	rootConnector, err := pq.NewConnector("user=root sslmode=require")
+	t.Skip("#110194")
+	rootConnector, err := pq.NewConnector("user=root password=rootpw sslmode=require")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,6 +11,7 @@
 package fuzzystrmatch
 
 import (
+	crypto_rand "crypto/rand"
 	"math/rand"
 	"testing"
 )
@@ -76,7 +77,7 @@ func TestSoundex(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		l := rand.Int31n(10)
 		b := make([]byte, l)
-		rand.Read(b)
+		_, _ = crypto_rand.Read(b)
 
 		soundex(string(b))
 	}

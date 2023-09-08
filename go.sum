@@ -1741,8 +1741,8 @@ github.com/mmatczuk/go_generics v0.0.0-20181212143635-0aaa050f9bab/go.mod h1:Fs8
 github.com/mmcloughlin/geohash v0.9.0 h1:FihR004p/aE1Sju6gcVq5OLDqGcMnpBY+8moBqIsVOs=
 github.com/mmcloughlin/geohash v0.9.0/go.mod h1:oNZxQo5yWJh0eMQEP/8hwQuVx9Z9tjwFUqcTB1SmG0c=
 github.com/moby/locker v1.0.1/go.mod h1:S7SDdo5zpBK84bzzVlKr2V0hz+7x9hWbYC/kq7oQppc=
-github.com/moby/moby v20.10.6+incompatible h1:3wn5wW3KwjAv8Z36VHdbvaqvY273JiWUDFuudH0z5Vs=
-github.com/moby/moby v20.10.6+incompatible/go.mod h1:fDXVQ6+S340veQPv35CzDahGBmHsiclFwfEygB/TWMc=
+github.com/moby/moby v24.0.6+incompatible h1:O/XZsZtaOVTYszsJQlr9pN1Zo1aRSH0KCWAIa6Kpm3s=
+github.com/moby/moby v24.0.6+incompatible/go.mod h1:fDXVQ6+S340veQPv35CzDahGBmHsiclFwfEygB/TWMc=
 github.com/moby/spdystream v0.2.0/go.mod h1:f7i0iNDQJ059oMTcWxx8MA/zKFIuD/lY+0GqbN2Wy8c=
 github.com/moby/sys/mountinfo v0.4.0/go.mod h1:rEr8tzG/lsIZHBtN/JjGG+LMYx9eXgW2JI+6q0qou+A=
 github.com/moby/sys/mountinfo v0.4.1/go.mod h1:rEr8tzG/lsIZHBtN/JjGG+LMYx9eXgW2JI+6q0qou+A=
