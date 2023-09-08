@@ -71,6 +71,9 @@ type CaptureIndexUsageStatsTestingKnobs struct {
 	// scheduled interval in the case that the logging duration exceeds the
 	// default scheduled interval duration.
 	getOverlapDuration func() time.Duration
+	// onScheduleComplete allows tests to hook into when the current schedule
+	// is completed to check for the expected logs.
+	onScheduleComplete func()
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
@@ -147,6 +150,9 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 				err := captureIndexUsageStats(ctx, ie, stopper, telemetryCaptureIndexUsageStatsLoggingDelay.Get(&s.st.SV))
 				if err != nil {
 					log.Warningf(ctx, "error capturing index usage stats: %+v", err)
+				}
+				if s.knobs != nil && s.knobs.onScheduleComplete != nil {
+					s.knobs.onScheduleComplete()
 				}
 				dur := s.durationUntilNextInterval()
 				if dur < time.Second {

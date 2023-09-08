@@ -21,8 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -83,34 +81,62 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	// timeBuffer is a short time buffer to account for non-determinism in the logging timings.
 	const timeBuffer = 4 * time.Second
 
-	settings := cluster.MakeTestingClusterSettings()
-	// Configure capture index usage statistics to be disabled. This is to test
-	// whether the disabled interval works correctly. We start in a disabled
-	// state, once the disabled interval expires, we check whether we have
-	// transitioned to an enabled state, if we have, we check that the expected
-	// logs have been emitted.
-	telemetryCaptureIndexUsageStatsEnabled.Override(context.Background(), &settings.SV, false)
-	// Configure the schedule interval at which we capture index usage
-	// statistics.
-	telemetryCaptureIndexUsageStatsInterval.Override(context.Background(), &settings.SV, stubScheduleInterval)
-	// Configure the schedule interval at which we check whether capture index
-	// usage statistics has been enabled.
-	telemetryCaptureIndexUsageStatsStatusCheckEnabledInterval.Override(context.Background(), &settings.SV, stubScheduleCheckEnabledInterval)
-	// Configure the delay between each emission of index usage stats logs.
-	telemetryCaptureIndexUsageStatsLoggingDelay.Override(context.Background(), &settings.SV, stubLoggingDelay)
+	schedulesFinishedChan := make(chan struct{})
+	logsVerifiedChan := make(chan struct{})
 
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: settings,
 		Knobs: base.TestingKnobs{
 			CapturedIndexUsageStatsKnobs: &CaptureIndexUsageStatsTestingKnobs{
 				getLoggingDuration: sd.getLoggingDuration,
 				getOverlapDuration: sd.getOverlapDuration,
+				onScheduleComplete: func() {
+					// Notify that the scheudle has completed.
+					schedulesFinishedChan <- struct{}{}
+					// Wait for logs to be verified before proceeding.
+					<-logsVerifiedChan
+				},
 			},
 		},
 	})
-
 	defer srv.Stopper().Stop(context.Background())
-	s := srv.ApplicationLayer()
+	// Close must be called before the server stops, or we will block indefinitely in the callback above.
+	defer close(logsVerifiedChan)
+
+	numTenants := 1
+	if srv.TenantController().StartedDefaultTestTenant() {
+		numTenants = 2
+	}
+
+	waitForCompletedSchedules := func(count int) {
+		for i := 0; i < count; i++ {
+			<-schedulesFinishedChan
+		}
+	}
+
+	tenantSettings := srv.ApplicationLayer().ClusterSettings()
+
+	// Configure capture index usage statistics to be disabled after the first schedule runs.
+	// This is to test whether the disabled interval works correctly. We will disable the the setting for
+	// the system tenant (if multi-tenant). Because the index usage stats scheduler starts immediately
+	// on server startup, we wait for the first schedule of each tenant to execute before setting all
+	// necessary cluster settings.
+	waitForCompletedSchedules(numTenants)
+	telemetryCaptureIndexUsageStatsEnabled.Override(context.Background(), &tenantSettings.SV, false)
+	telemetryCaptureIndexUsageStatsEnabled.Override(context.Background(), &srv.SystemLayer().ClusterSettings().SV, false)
+	// Configure the schedule interval at which we capture index usage statistics.
+	telemetryCaptureIndexUsageStatsInterval.Override(context.Background(), &tenantSettings.SV, stubScheduleInterval)
+	// Configure the schedule interval at which we check whether capture index
+	// usage statistics has been enabled.
+	telemetryCaptureIndexUsageStatsStatusCheckEnabledInterval.Override(context.Background(), &tenantSettings.SV,
+		stubScheduleCheckEnabledInterval)
+	// Configure the delay between each emission of index usage stats logs.
+	telemetryCaptureIndexUsageStatsLoggingDelay.Override(context.Background(), &tenantSettings.SV, stubLoggingDelay)
+
+	// Allow all tenants to continue.
+	logsVerifiedChan <- struct{}{}
+	if srv.TenantController().StartedDefaultTestTenant() {
+		logsVerifiedChan <- struct{}{}
+	}
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -146,22 +172,32 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 		"index_pkey",
 	}
 
-	// Check that telemetry log file contains all the entries we're expecting, at the scheduled intervals.
-
 	// Enable capture of index usage stats.
-	telemetryCaptureIndexUsageStatsEnabled.Override(context.Background(), &s.ClusterSettings().SV, true)
+	telemetryCaptureIndexUsageStatsEnabled.Override(context.Background(), &tenantSettings.SV, true)
+	//t.Fatal(telemetryCaptureIndexUsageStatsEnabled.Get(&s.ClusterSettings().SV))
+
+	// Check that telemetry log file contains all the entries we're expecting, at the scheduled intervals.
 
 	expectedTotalNumEntriesInSingleInterval := 8
 	expectedNumberOfIndividualIndexEntriesInSingleInterval := 1
 
+	// Wait for channel value from end of 1st schedule.
+	waitForCompletedSchedules(1)
+
 	// Check the expected number of entries from the 1st schedule.
-	testutils.SucceedsSoon(t, func() error {
-		return checkNumTotalEntriesAndNumIndexEntries(t,
-			expectedIndexNames,
-			expectedTotalNumEntriesInSingleInterval,
-			expectedNumberOfIndividualIndexEntriesInSingleInterval,
-		)
-	})
+	require.NoError(t, checkNumTotalEntriesAndNumIndexEntries(t,
+		expectedIndexNames,
+		expectedTotalNumEntriesInSingleInterval,
+		expectedNumberOfIndividualIndexEntriesInSingleInterval,
+	), "error encountered checking the number of total entries and number of index entries")
+
+	// Set the logging duration for the next run to be longer than the schedule
+	// interval duration.
+	stubLoggingDuration := stubScheduleInterval * 2
+	sd.setLoggingDuration(stubLoggingDuration)
+
+	// Allow schedules to proceed.
+	logsVerifiedChan <- struct{}{}
 
 	// Expect number of total entries to hold 2 times the number of entries in a
 	// single interval.
@@ -169,19 +205,18 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	// Expect number of individual index entries to hold 2 times the number of
 	// entries in a single interval.
 	expectedNumberOfIndividualIndexEntriesAfterTwoIntervals := expectedNumberOfIndividualIndexEntriesInSingleInterval * 2
-	// Set the logging duration for the next run to be longer than the schedule
-	// interval duration.
-	stubLoggingDuration := stubScheduleInterval * 2
-	sd.setLoggingDuration(stubLoggingDuration)
+
+	// Wait for channel value from end of 2nd schedule.
+	waitForCompletedSchedules(1)
 
 	// Check the expected number of entries from the 2nd schedule.
-	testutils.SucceedsSoon(t, func() error {
-		return checkNumTotalEntriesAndNumIndexEntries(t,
-			expectedIndexNames,
-			expectedTotalNumEntriesAfterTwoIntervals,
-			expectedNumberOfIndividualIndexEntriesAfterTwoIntervals,
-		)
-	})
+	require.NoError(t, checkNumTotalEntriesAndNumIndexEntries(t,
+		expectedIndexNames,
+		expectedTotalNumEntriesAfterTwoIntervals,
+		expectedNumberOfIndividualIndexEntriesAfterTwoIntervals,
+	), "error encountered checking the number of total entries and number of index entries")
+
+	logsVerifiedChan <- struct{}{}
 
 	// Expect number of total entries to hold 3 times the number of entries in a
 	// single interval.
@@ -190,17 +225,18 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	// entries in a single interval.
 	expectedNumberOfIndividualIndexEntriesAfterThreeIntervals := expectedNumberOfIndividualIndexEntriesInSingleInterval * 3
 
+	// Wait for channel value from end of 3rd schedule.
+	waitForCompletedSchedules(1)
+
 	// Check the expected number of entries from the 3rd schedule.
-	testutils.SucceedsSoon(t, func() error {
-		return checkNumTotalEntriesAndNumIndexEntries(t,
-			expectedIndexNames,
-			expectedTotalNumEntriesAfterThreeIntervals,
-			expectedNumberOfIndividualIndexEntriesAfterThreeIntervals,
-		)
-	})
+	require.NoError(t, checkNumTotalEntriesAndNumIndexEntries(t,
+		expectedIndexNames,
+		expectedTotalNumEntriesAfterThreeIntervals,
+		expectedNumberOfIndividualIndexEntriesAfterThreeIntervals,
+	), "error encountered checking the number of total entries and number of index entries")
 
 	// Stop capturing index usage statistics.
-	telemetryCaptureIndexUsageStatsEnabled.Override(context.Background(), &settings.SV, false)
+	telemetryCaptureIndexUsageStatsEnabled.Override(context.Background(), &tenantSettings.SV, false)
 
 	// Iterate through entries, ensure that the timestamp difference between each
 	// schedule is as expected.
@@ -253,6 +289,7 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 		require.Greater(t, actualDuration+timeBuffer, expectedDuration, "%v+%v <= %v", expectedDuration, actualDuration, timeBuffer)
 		previousTimestamp = currentTimestamp
 	}
+
 }
 
 // checkNumTotalEntriesAndNumIndexEntries is a helper function that verifies that
