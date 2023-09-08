@@ -340,8 +340,8 @@ func makeSimpleImportSpans(
 // that manifests are sorted in increasing EndTime.
 func createIntroducedSpanFrontier(
 	manifests []backuppb.BackupManifest, asOf hlc.Timestamp,
-) (*spanUtils.Frontier, error) {
-	introducedSpanFrontier, err := spanUtils.MakeFrontier(roachpb.Span{})
+) (spanUtils.Frontier, error) {
+	introducedSpanFrontier, err := spanUtils.MakeFrontier()
 	if err != nil {
 		return nil, err
 	}
@@ -368,17 +368,17 @@ func makeEntry(start, end roachpb.Key) execinfrapb.RestoreSpanEntry {
 // spanCoveringFilter holds metadata that filters which backups and required spans are used to
 // populate a restoreSpanEntry
 type spanCoveringFilter struct {
-	checkpointFrontier       *spanUtils.Frontier
+	checkpointFrontier       spanUtils.Frontier
 	highWaterMark            roachpb.Key
-	introducedSpanFrontier   *spanUtils.Frontier
+	introducedSpanFrontier   spanUtils.Frontier
 	useFrontierCheckpointing bool
 	targetSize               int64
 }
 
 func makeSpanCoveringFilter(
-	checkpointFrontier *spanUtils.Frontier,
+	checkpointFrontier spanUtils.Frontier,
 	highWater roachpb.Key,
-	introducedSpanFrontier *spanUtils.Frontier,
+	introducedSpanFrontier spanUtils.Frontier,
 	targetSize int64,
 	useFrontierCheckpointing bool,
 ) (spanCoveringFilter, error) {

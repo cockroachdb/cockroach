@@ -225,7 +225,7 @@ func rawStream(
 }
 
 func subscriptionConsumer(
-	sub streamclient.Subscription, frontier *span.Frontier,
+	sub streamclient.Subscription, frontier span.Frontier,
 ) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		var (
@@ -235,6 +235,8 @@ func subscriptionConsumer(
 			totalEventCount    int
 			intervalEventCount int
 		)
+		defer frontier.Release()
+
 		intervalStart := timeutil.Now()
 		for {
 			var sz int
