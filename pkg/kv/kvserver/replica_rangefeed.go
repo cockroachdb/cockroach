@@ -229,6 +229,10 @@ func (r *Replica) RangeFeed(
 		if err != nil {
 			return future.MakeCompletedErrorFuture(err)
 		}
+
+		// Notify rangefeed restart limiter about catch up scan.
+		catchupDone := r.store.feedRestarter.startCatchup()
+
 		// Finish the iterator limit if we exit before the iterator finishes.
 		// The release function will be hooked into the Close method on the
 		// iterator below. The sync.Once prevents any races between exiting early
@@ -239,7 +243,10 @@ func (r *Replica) RangeFeed(
 		// scan.
 		var iterSemReleaseOnce sync.Once
 		iterSemRelease = func() {
-			iterSemReleaseOnce.Do(alloc.Release)
+			iterSemReleaseOnce.Do(func() {
+				alloc.Release()
+				catchupDone()
+			})
 		}
 	}
 
