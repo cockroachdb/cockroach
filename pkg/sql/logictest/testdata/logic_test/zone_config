@@ -363,3 +363,23 @@ bar  03:25:45
 baz  04:00:00
 vm   27:46:40
 zc   27:46:40
+
+statement error pgcode 23514 pq: cannot remove default zone
+ALTER RANGE default CONFIGURE ZONE DISCARD;
+
+# https://github.com/cockroachdb/cockroach/issues/108253
+subtest transactional_schemachanges
+
+statement ok
+CREATE DATABASE foo
+
+statement ok
+ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 3; ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 4;
+
+statement ok
+ALTER DATABASE foo CONFIGURE ZONE USING gc.ttlseconds = 3; ALTER DATABASE foo CONFIGURE ZONE USING gc.ttlseconds = 4;
+
+statement ok
+ALTER DATABASE foo CONFIGURE ZONE DISCARD; ALTER DATABASE foo CONFIGURE ZONE DISCARD;
+
+subtest end

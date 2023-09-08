@@ -2458,6 +2458,11 @@ var builtinOidsArray = []string{
 	2487: `decrypt(data: bytes, key: bytes, type: string) -> bytes`,
 	2488: `decrypt_iv(data: bytes, key: bytes, iv: bytes, type: string) -> bytes`,
 	2489: `gen_random_bytes(count: int) -> bytes`,
+	2490: `make_timestamp(year: int, month: int, day: int, hour: int, min: int, sec: float) -> timestamp`,
+	2491: `make_timestamptz(year: int, month: int, day: int, hour: int, min: int, sec: float) -> timestamptz`,
+	2492: `make_timestamptz(year: int, month: int, day: int, hour: int, min: int, sec: float, timezone: string) -> timestamptz`,
+	2493: `date_trunc(element: string, input: timestamptz, timezone: string) -> timestamptz`,
+	2494: `make_date(year: int, month: int, day: int) -> date`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

@@ -95,7 +95,10 @@ func muxRangeFeed(
 		m.metrics = cfg.knobs.metrics
 	}
 
-	divideAllSpansOnRangeBoundaries(spans, m.startSingleRangeFeed, ds, &m.g)
+	m.g.GoCtx(func(ctx context.Context) error {
+		return divideAllSpansOnRangeBoundaries(ctx, spans, m.startSingleRangeFeed, ds, &m.g)
+	})
+
 	return errors.CombineErrors(m.g.Wait(), ctx.Err())
 }
 
@@ -165,12 +168,6 @@ type activeMuxRangeFeed struct {
 	roachpb.ReplicaDescriptor
 	startAfter hlc.Timestamp
 
-	// catchupRes is the catchup scan quota acquired upon the
-	// start of rangefeed.
-	// It is released when this stream receives first non-empty checkpoint
-	// (meaning: catchup scan completes).
-	catchupRes catchupAlloc
-
 	// State pertaining to execution of rangefeed call.
 	token     rangecache.EvictionToken
 	transport Transport
@@ -218,7 +215,7 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 
 	// Register active mux range feed.
 	stream := &activeMuxRangeFeed{
-		activeRangeFeed: newActiveRangeFeed(span, startAfter, m.registry, m.metrics.RangefeedRanges),
+		activeRangeFeed: newActiveRangeFeed(span, startAfter, m.registry, m.metrics),
 		rSpan:           rs,
 		startAfter:      startAfter,
 		token:           token,
@@ -409,7 +406,7 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 
 		// make sure that the underlying error is not fatal. If it is, there is no
 		// reason to restart each rangefeed, so just bail out.
-		if _, err := handleRangefeedError(ctx, recvErr); err != nil {
+		if _, err := handleRangefeedError(ctx, m.metrics, recvErr); err != nil {
 			// Regardless of an error, release any resources (i.e. metrics) still
 			// being held by active stream.
 			for _, s := range toRestart {
@@ -467,9 +464,8 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 		case *kvpb.RangeFeedCheckpoint:
 			if t.Span.Contains(active.Span) {
 				// If we see the first non-empty checkpoint, we know we're done with the catchup scan.
-				if !t.ResolvedTS.IsEmpty() && active.catchupRes != nil {
-					active.catchupRes.Release()
-					active.catchupRes = nil
+				if active.catchupRes != nil {
+					active.releaseCatchupScan()
 				}
 				// Note that this timestamp means that all rows in the span with
 				// writes at or before the timestamp have now been seen. The
@@ -481,7 +477,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 		case *kvpb.RangeFeedError:
 			log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
 			if active.catchupRes != nil {
-				m.metrics.RangefeedErrorCatchup.Inc(1)
+				m.metrics.Errors.RangefeedErrorCatchup.Inc(1)
 			}
 			ms.deleteStream(event.StreamID)
 			// Restart rangefeed on another goroutine. Restart might be a bit
@@ -519,15 +515,12 @@ func (m *rangefeedMuxer) restartActiveRangeFeeds(
 func (m *rangefeedMuxer) restartActiveRangeFeed(
 	ctx context.Context, active *activeMuxRangeFeed, reason error,
 ) error {
-	m.metrics.RangefeedRestartRanges.Inc(1)
+	m.metrics.Errors.RangefeedRestartRanges.Inc(1)
 	active.setLastError(reason)
 
 	// Release catchup scan reservation if any -- we will acquire another
 	// one when we restart.
-	if active.catchupRes != nil {
-		active.catchupRes.Release()
-		active.catchupRes = nil
-	}
+	active.releaseCatchupScan()
 
 	doRelease := true
 	defer func() {
@@ -536,7 +529,7 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 		}
 	}()
 
-	errInfo, err := handleRangefeedError(ctx, reason)
+	errInfo, err := handleRangefeedError(ctx, m.metrics, reason)
 	if err != nil {
 		// If this is an error we cannot recover from, terminate the rangefeed.
 		return err

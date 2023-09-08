@@ -798,10 +798,15 @@ func (s *sliMetrics) getLaggingRangesCallback() func(int64) {
 	// If 3 ranges catch up, last=10,i=7: X.Dec(10 - 7) = X.Dec(3)
 	// If 4 ranges fall behind, last=7,i=11: X.Dec(7 - 11) = X.Inc(4)
 	// If 1 lagging range is deleted, last=7,i=10: X.Dec(11-10) = X.Dec(1)
-	var last int64
+	last := struct {
+		syncutil.Mutex
+		v int64
+	}{}
 	return func(i int64) {
-		s.LaggingRanges.Dec(last - i)
-		last = i
+		last.Lock()
+		defer last.Unlock()
+		s.LaggingRanges.Dec(last.v - i)
+		last.v = i
 	}
 }
 
