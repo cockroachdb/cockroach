@@ -138,7 +138,13 @@ func (s *spanConfigEventStream) startStreamProcessor(ctx context.Context) {
 		return s.streamLoop(ctx)
 	}))
 
-	// TODO(msbutler): consider using rangefeedcache.Run(), though it seems overly complicated.
+	// TODO(msbutler): consider using rangefeedcache.Start() which calls rfc.Run()
+	// with retry logic. The pro of that refactor is that all c2c machinery would
+	// not need to restart over so some retryable rangefeed error. The con is that
+	// the ingestion side initial scan logic could no longer assume that an
+	// initial scan flush will only ever be the first rangefeed cache flush. In
+	// other words, with this change, an initial scan flush could occur after some
+	// incremental updates.
 	s.streamGroup.GoCtx(withErrCapture(s.rfc.Run))
 }
 
@@ -256,7 +262,7 @@ func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
 			}
 			batcher.addSpanConfigs(bufferedEvents, update.Timestamp)
 			bufferedEvents = bufferedEvents[:0]
-			if pacer.shouldCheckpoint(update.Timestamp, true) {
+			if pacer.shouldCheckpoint(update.Timestamp, true) || update.Type == rangefeedcache.CompleteUpdate {
 				if batcher.getSize() > 0 {
 					if err := s.flushEvent(ctx, &streampb.StreamEvent{Batch: &batcher.batch}); err != nil {
 						return err
