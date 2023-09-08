@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createAction, createReducer } from "@reduxjs/toolkit";
+import { createReducer } from "@reduxjs/toolkit";
 import { combineReducers, createStore } from "redux";
 import {
   ClusterLocksReqState,
@@ -27,12 +27,12 @@ import {
   TxnInsightDetailsCachedState,
 } from "./insightDetails/transactionInsightDetails";
 import {
-  StmtInsightsState,
   reducer as stmtInsights,
+  StmtInsightsState,
 } from "./insights/statementInsights";
 import {
-  TxnInsightsState,
   reducer as txnInsights,
+  TxnInsightsState,
 } from "./insights/transactionInsights";
 import { JobDetailsReducerState, reducer as job } from "./jobDetails";
 import { JobsState, reducer as jobs } from "./jobs";
@@ -58,7 +58,6 @@ import {
   TerminateQueryState,
 } from "./terminateQuery";
 import { reducer as uiConfig, UIConfigState } from "./uiConfig";
-import { DOMAIN_NAME } from "./utils";
 import {
   reducer as statementFingerprintInsights,
   StatementFingerprintInsightsCachedState,
@@ -76,6 +75,7 @@ import {
   KeyedTableDetailsState,
   reducer as tableDetails,
 } from "./databaseTableDetails/tableDetails.reducer";
+import { rootActions } from "./rootActions";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -132,10 +132,6 @@ export const reducers = combineReducers<AdminUiState>({
   statementFingerprintInsights,
   clusterSettings,
 });
-
-export const rootActions = {
-  resetState: createAction(`${DOMAIN_NAME}/RESET_STATE`),
-};
 
 /**
  * rootReducer consolidates reducers slices and cases for handling global actions related to entire state.
