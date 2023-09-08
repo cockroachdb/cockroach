@@ -7093,6 +7093,7 @@ CREATE TABLE crdb_internal.active_range_feeds (
   range_end STRING,
   resolved STRING,
   last_event_utc INT,
+  catchup BOOL,
   num_errs INT,
   last_err STRING
 );`,
@@ -7124,6 +7125,7 @@ CREATE TABLE crdb_internal.active_range_feeds (
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rf.Span.EndKey)),
 					tree.NewDString(rf.Resolved.AsOfSystemTime()),
 					lastEvent,
+					tree.MakeDBool(tree.DBool(rf.InCatchup)),
 					tree.NewDInt(tree.DInt(rf.NumErrs)),
 					lastErr,
 				)

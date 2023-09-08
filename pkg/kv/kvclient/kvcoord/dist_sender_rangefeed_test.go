@@ -741,7 +741,7 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 					case *kvpb.RangeFeedCheckpoint:
 						if checkpoint := t; checkpoint.Span.Contains(s) {
 							if checkpoint.ResolvedTS.IsEmpty() {
-								return false, nil
+								return true, nil
 							}
 
 							// Skip any subsequent checkpoint if we previously arranged for
