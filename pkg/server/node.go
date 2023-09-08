@@ -1318,6 +1318,7 @@ func (n *Node) batchInternal(
 	}()
 	if log.HasSpanOrEvent(ctx) {
 		log.Eventf(ctx, "node received request: %s", args.Summary())
+		defer log.Event(ctx, "node sending response")
 	}
 
 	tStart := timeutil.Now()
