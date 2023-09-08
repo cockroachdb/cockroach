@@ -840,10 +840,24 @@ func TestCompareLegacyAndDeclarative(t *testing.T) {
 			"BEGIN;",
 			"INSERT INTO t2 VALUES (1001, 1002); INSERT INTO t1 VALUES (1000, 1001);",
 			"COMMIT;",
+			"CREATE TABLE t3 (i INT NOT NULL); INSERT INTO t3 SELECT generate_series(1,1000);",
+			"BEGIN; ALTER TABLE t3 ALTER PRIMARY KEY USING COLUMNS (i); INSERT INTO t3 VALUES (1001); COMMIT;",
+			"DROP TABLE IF EXISTS t3; CREATE TABLE t3 (i INT NOT NULL); BEGIN;",
+			"ALTER TABLE t3 ADD PRIMARY KEY (i);",
+			"COMMIT;",
 			"BEGIN;",
 			"SELECT 1/0;",
 			"INSERT INTO t2 VALUES (1002, 1003); INSERT INTO t1 VALUES (1001, 1002); -- expect to be skipped",
 			"ROLLBACK;",
+
+			// statements that will be altered due to known behavioral differences in LSC vs DSC.
+			"ALTER TABLE t1 ADD COLUMN xyz INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i; -- unimplemented in legacy schema changer; expect to skip this line",
+			"CREATE SEQUENCE s;",
+			`CREATE TABLE t4 (i INT CHECK (i > nextval('s')) CHECK (i > 0), CONSTRAINT "ck_i" CHECK (i > nextval('s'::REGCLASS)), CONSTRAINT "ck_i2" CHECK (i > 0)); -- expect to rewrite expressions that reference sequences to just (True)`,
+			"ALTER TABLE t4 ADD CHECK (i > nextval('s')); -- ditto",
+			"ALTER TABLE t4 ADD COLUMN j INT CHECK (j > 0) CHECK (i+j > nextval('s'));  -- ditto",
+			"CREATE TABLE t5 (i INT NOT NULL);",
+			"ALTER TABLE t5 ALTER PRIMARY KEY USING COLUMNS (i);",
 		},
 	}
 
