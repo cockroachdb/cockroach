@@ -375,9 +375,7 @@ func (r *rangeFeedRegistry) ForEachPartialRangefeed(fn ActiveRangeFeedIterFn) (i
 	partialRangeFeed := func(active *activeRangeFeed) PartialRangeFeed {
 		active.Lock()
 		defer active.Unlock()
-		p := active.PartialRangeFeed
-		p.InCatchup = active.catchupRes != nil
-		return p
+		return active.PartialRangeFeed
 	}
 	r.ranges.Range(func(k, v interface{}) bool {
 		active := k.(*activeRangeFeed)
@@ -520,6 +518,7 @@ func newActiveRangeFeed(
 			Span:        span,
 			StartAfter:  startAfter,
 			CreatedTime: timeutil.Now(),
+			InCatchup:   true,
 		},
 	}
 
@@ -541,6 +540,9 @@ func (a *activeRangeFeed) releaseCatchupScan() {
 	if a.catchupRes != nil {
 		a.catchupRes.Release()
 		a.catchupRes = nil
+		a.Lock()
+		a.InCatchup = false
+		a.Unlock()
 	}
 }
 
