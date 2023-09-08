@@ -119,8 +119,7 @@ func streamPartition(ctx context.Context, streamAddr *url.URL) error {
 		return err
 	}
 
-	prefix := keys.MakeTenantPrefix(plan.SourceTenantID)
-	tenantSpan := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+	tenantSpan := keys.MakeTenantSpan(plan.SourceTenantID)
 
 	var sps streampb.StreamPartitionSpec
 	sps.Config.MinCheckpointFrequency = *checkpointInterval
