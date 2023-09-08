@@ -306,7 +306,7 @@ func maybeHasNulls(b coldata.Batch) bool {
 
 // TestRunner is the signature of RunTestsWithTyps that can be used to
 // substitute it with RunTestsWithoutAllNullsInjection when applicable.
-type TestRunner func(*testing.T, *colmem.Allocator, []Tuples, [][]*types.T, Tuples, VerifierType, func([]colexecop.Operator) (colexecop.Operator, colexecop.Closers, error))
+type TestRunner func(*testing.T, *colmem.Allocator, []Tuples, [][]*types.T, Tuples, VerifierType, func([]colexecop.Operator) (colexecop.Operator, error))
 
 // RunTests is a helper that automatically runs your tests with varied batch
 // sizes and with and without a random selection vector.
@@ -320,7 +320,7 @@ func RunTests(
 	tups []Tuples,
 	expected Tuples,
 	verifier VerifierType,
-	constructor func(inputs []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error),
+	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
 ) {
 	RunTestsWithTyps(t, allocator, tups, nil /* typs */, expected, verifier, constructor)
 }
@@ -337,7 +337,7 @@ func RunTestsWithTyps(
 	typs [][]*types.T,
 	expected Tuples,
 	verifier VerifierType,
-	constructor func(inputs []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error),
+	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
 ) {
 	RunTestsWithOrderedCols(t, allocator, tups, typs, expected, verifier, nil /* orderedCols */, constructor)
 }
@@ -353,7 +353,7 @@ func RunTestsWithOrderedCols(
 	expected Tuples,
 	verifier VerifierType,
 	orderedCols []uint32,
-	constructor func(inputs []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error),
+	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
 ) {
 	RunTestsWithoutAllNullsInjectionWithErrorHandler(t, allocator, tups, typs, expected, verifier, constructor, func(err error) { t.Fatal(err) }, orderedCols)
 
@@ -377,7 +377,7 @@ func RunTestsWithOrderedCols(
 				}
 			}
 		}
-		opConstructor := func(injectAllNulls bool) (colexecop.Operator, colexecop.Closers) {
+		opConstructor := func(injectAllNulls bool) colexecop.Operator {
 			inputSources := make([]colexecop.Operator, len(tups))
 			var inputTypes []*types.T
 			for i, tup := range tups {
@@ -388,17 +388,15 @@ func RunTestsWithOrderedCols(
 				input.injectAllNulls = injectAllNulls
 				inputSources[i] = input
 			}
-			op, closers, err := constructor(inputSources)
+			op, err := constructor(inputSources)
 			if err != nil {
 				t.Fatal(err)
 			}
 			op.Init(ctx)
-			return op, closers
+			return op
 		}
-		originalOp, originalClosers := opConstructor(false /* injectAllNulls */)
-		opWithNulls, withNullsClosers := opConstructor(true /* injectAllNulls */)
-		defer closeClosers(t, originalClosers)
-		defer closeClosers(t, withNullsClosers)
+		originalOp := opConstructor(false /* injectAllNulls */)
+		opWithNulls := opConstructor(true /* injectAllNulls */)
 		foundDifference := false
 		for {
 			originalBatch := originalOp.Next()
@@ -431,16 +429,18 @@ func RunTestsWithOrderedCols(
 				"non-nulls in the input tuples, we expect for all nulls injection to "+
 				"change the output")
 		}
+		closeIfCloser(t, originalOp)
+		closeIfCloser(t, opWithNulls)
 	}
 }
 
-// closeClosers is a testing utility function that closes a set of
-// colexecop.Closers created for a test.
+// closeIfCloser is a testing utility function that checks whether op is a
+// colexecop.Closer and closes it if so.
 //
-// RunTests harness needs to do that once it is done with the op(s). In non-test
+// RunTests harness needs to do that once it is done with op. In non-test
 // setting, the closing happens at the end of the query execution.
-func closeClosers(t *testing.T, closers colexecop.Closers) {
-	for _, c := range closers {
+func closeIfCloser(t *testing.T, op colexecop.Operator) {
+	if c, ok := op.(colexecop.Closer); ok {
 		if err := c.Close(context.Background()); err != nil {
 			t.Fatal(err)
 		}
@@ -473,7 +473,7 @@ func RunTestsWithoutAllNullsInjection(
 	typs [][]*types.T,
 	expected Tuples,
 	verifier VerifierType,
-	constructor func(inputs []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error),
+	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
 ) {
 	RunTestsWithoutAllNullsInjectionWithErrorHandler(t, allocator, tups, typs, expected, verifier, constructor, func(err error) { t.Fatal(err) }, nil /* orderedCols */)
 }
@@ -495,7 +495,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 	typs [][]*types.T,
 	expected Tuples,
 	verifier VerifierType,
-	constructor func(inputs []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error),
+	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
 	errorHandler func(error),
 	orderedCols []uint32,
 ) {
@@ -521,11 +521,10 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 		}
 	}
 	RunTestsWithFn(t, allocator, tups, typs, func(t *testing.T, inputs []colexecop.Operator) {
-		op, closers, err := constructor(inputs)
+		op, err := constructor(inputs)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer closeClosers(t, closers)
 		out := NewOpTestOutput(op, expected)
 		if len(typs) > 0 {
 			out.typs = typs[0]
@@ -541,6 +540,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 				errorHandler(err)
 			}
 		}
+		closeIfCloser(t, op)
 	})
 
 	if !skipVerifySelAndNullsResets {
@@ -564,12 +564,12 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 				}
 				inputSources[i] = NewOpTestInput(allocator, 1 /* batchSize */, tup, inputTypes)
 			}
-			op, closers, err := constructor(inputSources)
+			op, err := constructor(inputSources)
 			if err != nil {
 				t.Fatal(err)
 			}
 			// We might short-circuit, so defer the closing of the operator.
-			defer closeClosers(t, closers)
+			defer closeIfCloser(t, op)
 			op.Init(ctx)
 			// NOTE: this test makes sense only if the operator returns two
 			// non-zero length batches (if not, we short-circuit the test since
@@ -640,11 +640,10 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 			input.injectRandomNulls = true
 			inputSources[i] = input
 		}
-		op, closers, err := constructor(inputSources)
+		op, err := constructor(inputSources)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer closeClosers(t, closers)
 		if err = colexecerror.CatchVectorizedRuntimeError(func() {
 			op.Init(ctx)
 			for b := op.Next(); b.Length() > 0; b = op.Next() {
@@ -652,6 +651,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 		}); err != nil {
 			errorHandler(err)
 		}
+		closeIfCloser(t, op)
 	}
 }
 

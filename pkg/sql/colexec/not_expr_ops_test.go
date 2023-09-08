@@ -83,9 +83,8 @@ func TestNotExprProjOp(t *testing.T) {
 
 	for _, c := range testCases {
 		log.Infof(ctx, "%s", c.desc)
-		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
-			op, err := NewNotExprProjOp(types.BoolFamily, testAllocator, input[0], 0, 1)
-			return op, nil, err
+		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
+			return NewNotExprProjOp(types.BoolFamily, testAllocator, input[0], 0, 1)
 		}
 		colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, [][]*types.T{{types.Bool}}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
 	}
@@ -157,9 +156,8 @@ func TestNotExprSelOp(t *testing.T) {
 
 	for _, c := range testCases {
 		log.Infof(ctx, "%s", c.desc)
-		opConstructor := func(sources []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
-			op, err := NewNotExprSelOp(types.BoolFamily, sources[0], 0)
-			return op, nil, err
+		opConstructor := func(sources []colexecop.Operator) (colexecop.Operator, error) {
+			return NewNotExprSelOp(types.BoolFamily, sources[0], 0)
 		}
 		colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, [][]*types.T{{types.Bool}}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
 	}
@@ -189,8 +187,8 @@ func TestNotNullProjOp(t *testing.T) {
 
 	for _, c := range testCases {
 		log.Infof(ctx, "%s", c.desc)
-		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
-			return newNotNullProjOp(testAllocator, input[0], 0, 1), nil, nil
+		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
+			return newNotNullProjOp(testAllocator, input[0], 0, 1), nil
 		}
 		colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, [][]*types.T{{types.Bool}}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
 	}

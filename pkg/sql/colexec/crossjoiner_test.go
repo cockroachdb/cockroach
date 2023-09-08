@@ -389,7 +389,7 @@ func TestCrossJoiner(t *testing.T) {
 		for _, tc := range getCJTestCases() {
 			for _, tc := range tc.mutateTypes() {
 				log.Infof(ctx, "spillForced=%t", spillForced)
-				runHashJoinTestCase(t, tc, nil /* rng */, func(sources []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+				runHashJoinTestCase(t, tc, nil /* rng */, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					spec := createSpecForHashJoiner(tc)
 					args := &colexecargs.NewColOperatorArgs{
 						Spec:                spec,
@@ -401,9 +401,9 @@ func TestCrossJoiner(t *testing.T) {
 					}
 					result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 					if err != nil {
-						return nil, nil, err
+						return nil, err
 					}
-					return result.Root, result.ToClose, nil
+					return result.Root, nil
 				})
 			}
 		}
@@ -476,7 +476,6 @@ func BenchmarkCrossJoiner(b *testing.B) {
 						args.Inputs[1].Root = colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
 						result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 						require.NoError(b, err)
-						require.Nil(b, result.ToClose)
 						cj := result.Root
 						cj.Init(ctx)
 						for b := cj.Next(); b.Length() > 0; b = cj.Next() {

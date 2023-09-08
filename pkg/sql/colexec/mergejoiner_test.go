@@ -1699,7 +1699,7 @@ func TestMergeJoiner(t *testing.T) {
 				runner(t, testAllocator, []colexectestutils.Tuples{tc.leftTuples, tc.rightTuples},
 					[][]*types.T{tc.leftTypes, tc.rightTypes},
 					tc.expected, verifier,
-					func(sources []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+					func(sources []colexecop.Operator) (colexecop.Operator, error) {
 						spec := createSpecForMergeJoiner(tc)
 						args := &colexecargs.NewColOperatorArgs{
 							Spec:                spec,
@@ -1712,9 +1712,9 @@ func TestMergeJoiner(t *testing.T) {
 						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
 						result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 						if err != nil {
-							return nil, nil, err
+							return nil, err
 						}
-						return result.Root, result.ToClose, nil
+						return result.Root, nil
 					})
 			}
 		}

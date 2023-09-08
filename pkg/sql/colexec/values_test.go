@@ -84,12 +84,12 @@ func TestValues(t *testing.T) {
 			}
 
 			colexectestutils.RunTests(t, testAllocator, nil, expected, colexectestutils.OrderedVerifier,
-				func(inputs []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+				func(inputs []colexecop.Operator) (colexecop.Operator, error) {
 					spec, err := execinfra.GenerateValuesSpec(colTypes, rows)
 					if err != nil {
-						return nil, nil, err
+						return nil, err
 					}
-					return NewValuesOp(testAllocator, &spec, math.MaxInt64), nil, nil
+					return NewValuesOp(testAllocator, &spec, math.MaxInt64), nil
 				})
 		}
 	}

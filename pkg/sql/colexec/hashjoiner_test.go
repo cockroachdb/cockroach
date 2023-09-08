@@ -983,7 +983,7 @@ func runHashJoinTestCase(
 	t *testing.T,
 	tc *joinTestCase,
 	rng *rand.Rand,
-	hjOpConstructor func(sources []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error),
+	hjOpConstructor func(sources []colexecop.Operator) (colexecop.Operator, error),
 ) {
 	tc.init()
 	verifier := colexectestutils.OrderedVerifier
@@ -1025,7 +1025,7 @@ func TestHashJoiner(t *testing.T) {
 	for _, tcs := range [][]*joinTestCase{getHJTestCases(), getMJTestCases()} {
 		for _, tc := range tcs {
 			for _, tc := range tc.mutateTypes() {
-				runHashJoinTestCase(t, tc, rng, func(sources []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+				runHashJoinTestCase(t, tc, rng, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					spec := createSpecForHashJoiner(tc)
 					args := &colexecargs.NewColOperatorArgs{
 						Spec:                spec,
@@ -1036,9 +1036,9 @@ func TestHashJoiner(t *testing.T) {
 					args.TestingKnobs.DiskSpillingDisabled = true
 					result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 					if err != nil {
-						return nil, nil, err
+						return nil, err
 					}
-					return result.Root, result.ToClose, nil
+					return result.Root, nil
 				})
 			}
 		}
@@ -1218,7 +1218,6 @@ func TestHashJoinerProjection(t *testing.T) {
 	args.TestingKnobs.DiskSpillingDisabled = true
 	hjOp, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
-	require.Nil(t, hjOp.ToClose)
 	hjOp.Root.Init(ctx)
 	for b := hjOp.Root.Next(); b.Length() > 0; b = hjOp.Root.Next() {
 		// The output types should be {Int64, Int64, Bool, Decimal, Float64, Bytes}

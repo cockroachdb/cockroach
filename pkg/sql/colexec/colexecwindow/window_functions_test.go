@@ -1034,8 +1034,9 @@ func TestWindowFunctions(t *testing.T) {
 			},
 		} {
 			log.Infof(ctx, "spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String())
+			var toClose []colexecop.Closers
 			var semsToCheck []semaphore.Semaphore
-			colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.UnorderedVerifier, func(sources []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+			colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.UnorderedVerifier, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 				tc.init()
 				ct := make([]*types.T, len(tc.tuples[0]))
 				for i := range ct {
@@ -1078,8 +1079,14 @@ func TestWindowFunctions(t *testing.T) {
 				}
 				semsToCheck = append(semsToCheck, sem)
 				result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-				return result.Root, result.ToClose, err
+				toClose = append(toClose, result.ToClose)
+				return result.Root, err
 			})
+			// Close all closers manually (in production this is done on the
+			// flow cleanup).
+			for _, c := range toClose {
+				require.NoError(t, c.Close(ctx))
+			}
 			for i, sem := range semsToCheck {
 				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 			}

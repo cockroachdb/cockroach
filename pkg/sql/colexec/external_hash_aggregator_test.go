@@ -126,7 +126,7 @@ func TestExternalHashAggregator(t *testing.T) {
 				numExpectedClosers = 1
 			}
 			var semsToCheck []semaphore.Semaphore
-			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier, func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 				// ehaNumRequiredFDs is the minimum number of file descriptors
 				// that are needed for the machinery of the external aggregator
 				// (plus 1 is needed for the in-memory hash aggregator in order
@@ -155,7 +155,7 @@ func TestExternalHashAggregator(t *testing.T) {
 					_, isHashAgg := MaybeUnwrapInvariantsChecker(op).(*hashAggregator)
 					require.True(t, isHashAgg)
 				}
-				return op, closers, err
+				return op, err
 			})
 			for i, sem := range semsToCheck {
 				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
@@ -234,7 +234,7 @@ func createExternalHashAggregator(
 	testingSemaphore semaphore.Semaphore,
 	numForcedRepartitions int,
 	monitorRegistry *colexecargs.MonitorRegistry,
-) (colexecop.Operator, colexecop.Closers, error) {
+) (colexecop.Operator, []colexecop.Closer, error) {
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: newAggArgs.InputTypes}},
 		Core: execinfrapb.ProcessorCoreUnion{

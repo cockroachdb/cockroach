@@ -147,7 +147,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 					context.Background(), &evalCtx, &semaCtx, tc.spec.Aggregations, tc.typs,
 				)
 				require.NoError(t, err)
-				colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.UnorderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+				colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, colexectestutils.UnorderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 					return agg.new(context.Background(), &colexecagg.NewAggregatorArgs{
 						Allocator:      testAllocator,
 						MemAccount:     testMemAcc,
@@ -158,7 +158,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 						Constructors:   constructors,
 						ConstArguments: constArguments,
 						OutputTypes:    outputTypes,
-					}), nil, nil
+					}), nil
 				})
 			})
 		}

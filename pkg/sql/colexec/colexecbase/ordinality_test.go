@@ -106,7 +106,7 @@ func BenchmarkOrdinality(b *testing.B) {
 
 func createTestOrdinalityOperator(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, input colexecop.Operator, inputTypes []*types.T,
-) (colexecop.Operator, colexecop.Closers, error) {
+) (colexecop.Operator, error) {
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
 		Core: execinfrapb.ProcessorCoreUnion{
@@ -123,5 +123,5 @@ func createTestOrdinalityOperator(
 	if err != nil {
 		return nil, err
 	}
-	return result.Root, result.ToClose, nil
+	return result.Root, nil
 }

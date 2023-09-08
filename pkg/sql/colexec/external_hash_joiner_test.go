@@ -77,7 +77,7 @@ func TestExternalHashJoiner(t *testing.T) {
 					// allNullsInjection test for now.
 					tc.skipAllNullsInjection = true
 				}
-				runHashJoinTestCase(t, tc, rng, func(sources []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+				runHashJoinTestCase(t, tc, rng, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					sem := colexecop.NewTestingSemaphore(colexecop.ExternalHJMinPartitions)
 					semsToCheck = append(semsToCheck, sem)
 					spec := createSpecForHashJoiner(tc)
@@ -91,7 +91,7 @@ func TestExternalHashJoiner(t *testing.T) {
 					// - 1 for the external hash joiner
 					// - 2 for each of the external sorts (4 total here).
 					require.Equal(t, 6, len(closers))
-					return hjOp, closers, err
+					return hjOp, err
 				})
 				for i, sem := range semsToCheck {
 					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
@@ -297,7 +297,7 @@ func createDiskBackedHashJoiner(
 	delegateFDAcquisitions bool,
 	testingSemaphore semaphore.Semaphore,
 	monitorRegistry *colexecargs.MonitorRegistry,
-) (colexecop.Operator, colexecop.Closers, error) {
+) (colexecop.Operator, []colexecop.Closer, error) {
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              colexectestutils.MakeInputs(sources),

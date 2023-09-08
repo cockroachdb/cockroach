@@ -157,7 +157,7 @@ func TestHashGroupJoiner(t *testing.T) {
 			var spilled bool
 			colexectestutils.RunTests(
 				t, testAllocator, []colexectestutils.Tuples{tc.jtc.leftTuples, tc.jtc.rightTuples}, tc.atc.expected, colexectestutils.UnorderedVerifier,
-				func(inputs []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+				func(inputs []colexecop.Operator) (colexecop.Operator, error) {
 					hgjOp, closers, err := createDiskBackedHashGroupJoiner(
 						ctx, flowCtx, tc, inputs, func() { spilled = true }, queueCfg, &monitorRegistry,
 					)
@@ -170,7 +170,7 @@ func TestHashGroupJoiner(t *testing.T) {
 					// - 1: for the external hash aggregator
 					// - 1: for the disk spiller around the hash group joiner.
 					require.Equal(t, 10, len(closers))
-					return hgjOp, closers, err
+					return hgjOp, err
 
 				},
 			)
@@ -187,7 +187,7 @@ func createDiskBackedHashGroupJoiner(
 	spillingCallbackFn func(),
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	monitorRegistry *colexecargs.MonitorRegistry,
-) (colexecop.Operator, colexecop.Closers, error) {
+) (colexecop.Operator, []colexecop.Closer, error) {
 	tc.jtc.init()
 	hjSpec := createSpecForHashJoiner(&tc.jtc)
 	tc.atc.unorderedInput = true

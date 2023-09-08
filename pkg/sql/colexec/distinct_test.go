@@ -333,7 +333,7 @@ func mustParseJSON(s string) json.JSON {
 func (tc *distinctTestCase) runTests(
 	t *testing.T,
 	verifier colexectestutils.VerifierType,
-	constructor func(inputs []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error),
+	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
 ) {
 	if tc.errorOnDup == "" {
 		colexectestutils.RunTestsWithTyps(
@@ -354,7 +354,7 @@ func (tc *distinctTestCase) runTests(
 		// lower bound because in some cases we will reset the operator chain
 		// for a second run, and the constructor won't get called then.
 		var numConstructorCalls int
-		instrumentedConstructor := func(inputs []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+		instrumentedConstructor := func(inputs []colexecop.Operator) (colexecop.Operator, error) {
 			numConstructorCalls++
 			return constructor(inputs)
 		}
@@ -391,12 +391,12 @@ func TestDistinct(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	for _, tc := range distinctTestCases {
 		log.Infof(context.Background(), "unordered")
-		tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+		tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 			ud := NewUnorderedDistinct(
 				testAllocator, input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup,
 			)
 			ud.(*UnorderedDistinct).hashTableNumBuckets = uint32(1 + rng.Intn(7))
-			return ud, nil, nil
+			return ud, nil
 		})
 		if tc.isOrderedOnDistinctCols {
 			for numOrderedCols := 1; numOrderedCols < len(tc.distinctCols); numOrderedCols++ {
@@ -405,16 +405,15 @@ func TestDistinct(t *testing.T) {
 				for i, j := range rng.Perm(len(tc.distinctCols))[:numOrderedCols] {
 					orderedCols[i] = tc.distinctCols[j]
 				}
-				tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
-					op, err := newPartiallyOrderedDistinct(
+				tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
+					return newPartiallyOrderedDistinct(
 						testAllocator, testAllocator, input[0], tc.distinctCols, orderedCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup,
 					)
-					return op, nil, err
 				})
 			}
 			log.Info(context.Background(), "ordered")
-			tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
-				return colexecbase.NewOrderedDistinct(input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup), nil, nil
+			tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
+				return colexecbase.NewOrderedDistinct(input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup), nil
 			})
 		}
 	}
@@ -444,10 +443,10 @@ func TestUnorderedDistinctRandom(t *testing.T) {
 	}
 	tups, expected := generateRandomDataForUnorderedDistinct(rng, nTuples, nCols, newTupleProbability)
 	colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tups}, [][]*types.T{typs}, expected, colexectestutils.UnorderedVerifier,
-		func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			ud := NewUnorderedDistinct(testAllocator, input[0], distinctCols, typs, false /* nullsAreDistinct */, "" /* errorOnDup */)
 			ud.(*UnorderedDistinct).hashTableNumBuckets = uint32(1 + rng.Intn(7))
-			return ud, nil, nil
+			return ud, nil
 		},
 	)
 }

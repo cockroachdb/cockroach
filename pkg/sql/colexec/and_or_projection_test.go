@@ -200,17 +200,17 @@ func TestAndOrOps(t *testing.T) {
 					[][]*types.T{{types.Bool, types.Bool}},
 					tc.expected,
 					colexectestutils.OrderedVerifier,
-					func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
-						projOp, closers, err := colexectestutils.CreateTestProjectingOperator(
+					func(input []colexecop.Operator) (colexecop.Operator, error) {
+						projOp, err := colexectestutils.CreateTestProjectingOperator(
 							ctx, flowCtx, input[0], []*types.T{types.Bool, types.Bool},
 							fmt.Sprintf("@1 %s @2", test.operation), testMemAcc,
 						)
 						if err != nil {
-							return nil, nil, err
+							return nil, err
 						}
 						// We will project out the first two columns in order
 						// to have test cases be less verbose.
-						return colexecbase.NewSimpleProjectOp(projOp, 3 /* numInputCols */, []uint32{2}), closers, nil
+						return colexecbase.NewSimpleProjectOp(projOp, 3 /* numInputCols */, []uint32{2}), nil
 					})
 			}
 		})

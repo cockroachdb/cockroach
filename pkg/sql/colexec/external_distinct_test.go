@@ -79,7 +79,7 @@ func TestExternalDistinct(t *testing.T) {
 				// disk-backed sort must also be added as Closers.
 				numExpectedClosers += 2
 			}
-			tc.runTests(t, verifier, func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+			tc.runTests(t, verifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 				// A sorter should never exceed ExternalSorterMinPartitions, even
 				// during repartitioning. A panic will happen if a sorter requests
 				// more than this number of file descriptors.
@@ -91,7 +91,7 @@ func TestExternalDistinct(t *testing.T) {
 					&monitorRegistry,
 				)
 				require.Equal(t, numExpectedClosers, len(closers))
-				return distinct, closers, err
+				return distinct, err
 			})
 			for i, sem := range semsToCheck {
 				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
@@ -180,7 +180,7 @@ func TestExternalDistinctSpilling(t *testing.T) {
 		// tups and expected are in an arbitrary order, so we use an unordered
 		// verifier.
 		colexectestutils.UnorderedVerifier,
-		func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+		func(input []colexecop.Operator) (colexecop.Operator, error) {
 			// Since we're giving very low memory limit to the operator, in
 			// order to make the test run faster, we'll use an unlimited number
 			// of file descriptors.
@@ -198,7 +198,7 @@ func TestExternalDistinctSpilling(t *testing.T) {
 			numExpectedClosers := 4
 			require.Equal(t, numExpectedClosers, len(closers))
 			numRuns++
-			return distinct, closers, nil
+			return distinct, nil
 		},
 	)
 	for i, sem := range semsToCheck {
@@ -334,7 +334,7 @@ func createExternalDistinct(
 	spillingCallbackFn func(),
 	numForcedRepartitions int,
 	monitorRegistry *colexecargs.MonitorRegistry,
-) (colexecop.Operator, colexecop.Closers, error) {
+) (colexecop.Operator, []colexecop.Closer, error) {
 	distinctSpec := &execinfrapb.DistinctSpec{
 		DistinctColumns:  distinctCols,
 		NullsAreDistinct: nullsAreDistinct,

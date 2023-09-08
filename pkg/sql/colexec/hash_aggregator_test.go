@@ -431,7 +431,7 @@ func TestHashAggregator(t *testing.T) {
 			verifier = colexectestutils.PartialOrderedVerifier
 		}
 		colexectestutils.RunTestsWithOrderedCols(t, testAllocator, []colexectestutils.Tuples{tc.input}, typs, tc.expected, verifier, tc.orderedCols,
-			func(sources []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+			func(sources []colexecop.Operator) (colexecop.Operator, error) {
 				args := &colexecagg.NewAggregatorArgs{
 					Allocator:      testAllocator,
 					MemAccount:     testMemAcc,
@@ -453,7 +453,7 @@ func TestHashAggregator(t *testing.T) {
 						MaxOutputBatchMemSize:    math.MaxInt64,
 					},
 					nil, /* newSpillingQueueArgs */
-				), nil, nil
+				), nil
 			})
 	}
 }
