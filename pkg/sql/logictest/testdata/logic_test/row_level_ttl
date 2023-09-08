@@ -503,27 +503,31 @@ ALTER TABLE test.public.tbl_ttl_on_noop WITH (ttl = 'on', ...)
 
 subtest end
 
-subtest ttl_job_cron
+subtest ttl_job_cron_invalid
 
 statement error invalid cron expression for "ttl_job_cron"
 CREATE TABLE tbl () WITH (ttl_expire_after = '10 seconds', ttl_job_cron = 'bad expr')
 
+subtest end
+
+subtest create_ttl_job_cron
+
 statement ok
-CREATE TABLE tbl_ttl_job_cron (
+CREATE TABLE tbl_create_ttl_job_cron (
   id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes', ttl_job_cron = '@daily')
 
 query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl_ttl_job_cron]
+SELECT create_statement FROM [SHOW CREATE TABLE tbl_create_ttl_job_cron]
 ----
-CREATE TABLE public.tbl_ttl_job_cron (
+CREATE TABLE public.tbl_create_ttl_job_cron (
   id INT8 NOT NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT tbl_ttl_job_cron_pkey PRIMARY KEY (id ASC)
+  CONSTRAINT tbl_create_ttl_job_cron_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@daily')
 
 let $table_id
-SELECT oid FROM pg_class WHERE relname = 'tbl_ttl_job_cron'
+SELECT oid FROM pg_class WHERE relname = 'tbl_create_ttl_job_cron'
 
 query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
@@ -531,18 +535,29 @@ WHERE label = 'row-level-ttl-$table_id'
 ----
 ACTIVE  @daily  root
 
+subtest end
+
+subtest set_ttl_job_cron
+
 statement ok
-ALTER TABLE tbl_ttl_job_cron SET (ttl_job_cron = '@weekly')
+CREATE TABLE tbl_set_ttl_job_cron (
+  id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes', ttl_job_cron = '@daily')
+
+statement ok
+ALTER TABLE tbl_set_ttl_job_cron SET (ttl_job_cron = '@weekly')
 
 query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl_ttl_job_cron]
+SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_job_cron]
 ----
-CREATE TABLE public.tbl_ttl_job_cron (
+CREATE TABLE public.tbl_set_ttl_job_cron (
   id INT8 NOT NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT tbl_ttl_job_cron_pkey PRIMARY KEY (id ASC)
+  CONSTRAINT tbl_set_ttl_job_cron_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@weekly')
 
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl_set_ttl_job_cron'
 
 query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
@@ -550,17 +565,29 @@ WHERE label = 'row-level-ttl-$table_id'
 ----
 ACTIVE  @weekly  root
 
+subtest end
+
+subtest reset_ttl_job_cron
+
 statement ok
-ALTER TABLE tbl_ttl_job_cron RESET (ttl_job_cron)
+CREATE TABLE tbl_reset_ttl_job_cron (
+  id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes', ttl_job_cron = '@daily')
+
+statement ok
+ALTER TABLE tbl_reset_ttl_job_cron RESET (ttl_job_cron)
 
 query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl_ttl_job_cron]
+SELECT create_statement FROM [SHOW CREATE TABLE tbl_reset_ttl_job_cron]
 ----
-CREATE TABLE public.tbl_ttl_job_cron (
+CREATE TABLE public.tbl_reset_ttl_job_cron (
   id INT8 NOT NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT tbl_ttl_job_cron_pkey PRIMARY KEY (id ASC)
+  CONSTRAINT tbl_reset_ttl_job_cron_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
+
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl_reset_ttl_job_cron'
 
 query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
@@ -810,19 +837,14 @@ CREATE TABLE public.tbl_add_ttl_expiration_expression_to_ttl_expire_after (
   FAMILY fam_0_id_expire_at_crdb_internal_expiration (id, expire_at, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_expiration_expression = 'crdb_internal_expiration', ttl_job_cron = '@hourly')
 
-statement ok
-ALTER TABLE tbl_add_ttl_expiration_expression_to_ttl_expire_after RESET (ttl_expiration_expression)
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl_add_ttl_expiration_expression_to_ttl_expire_after'
 
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl_add_ttl_expiration_expression_to_ttl_expire_after]
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
 ----
-CREATE TABLE public.tbl_add_ttl_expiration_expression_to_ttl_expire_after (
-  id INT8 NOT NULL,
-  expire_at TIMESTAMPTZ NULL,
-  crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT tbl_add_ttl_expiration_expression_to_ttl_expire_after_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_expire_at_crdb_internal_expiration (id, expire_at, crdb_internal_expiration)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
+ACTIVE  @hourly  root
 
 subtest end
 
@@ -849,18 +871,14 @@ CREATE TABLE public.tbl_add_ttl_expire_after_to_ttl_expiration_expression (
   FAMILY fam_0_id_expire_at (id, expire_at, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_expiration_expression = 'expire_at', ttl_job_cron = '@hourly')
 
-statement ok
-ALTER TABLE tbl_add_ttl_expire_after_to_ttl_expiration_expression RESET (ttl_expire_after)
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl_add_ttl_expire_after_to_ttl_expiration_expression'
 
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl_add_ttl_expire_after_to_ttl_expiration_expression]
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
 ----
-CREATE TABLE public.tbl_add_ttl_expire_after_to_ttl_expiration_expression (
-  id INT8 NOT NULL,
-  expire_at TIMESTAMPTZ NULL,
-  CONSTRAINT tbl_add_ttl_expire_after_to_ttl_expiration_expression_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_expire_at (id, expire_at)
-)
+ACTIVE  @hourly  root
 
 subtest end
 
@@ -1087,5 +1105,79 @@ ALTER TABLE test.public."Table-Name" WITH (ttl = 'on', ...)
 
 statement ok
 DROP TABLE "Table-Name"
+
+subtest end
+
+# sets both ttl_exipire_after and ttl_expiration_expression
+subtest set_both_reset_ttl_expire_after
+
+statement ok
+CREATE TABLE tbl_set_both_reset_ttl_expire_after (
+  id INT PRIMARY KEY,
+  expire_at TIMESTAMPTZ,
+  FAMILY (id, expire_at)
+) WITH (
+  ttl_expire_after = '10m',
+  ttl_expiration_expression = 'expire_at'
+)
+
+statement ok
+ALTER TABLE tbl_set_both_reset_ttl_expire_after RESET (ttl_expire_after)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_both_reset_ttl_expire_after]
+----
+CREATE TABLE public.tbl_set_both_reset_ttl_expire_after (
+  id INT8 NOT NULL,
+  expire_at TIMESTAMPTZ NULL,
+  CONSTRAINT tbl_set_both_reset_ttl_expire_after_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_expire_at_crdb_internal_expiration (id, expire_at)
+)
+
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl_set_both_reset_ttl_expire_after'
+
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+----
+
+subtest end
+
+# sets both ttl_exipire_after and ttl_expiration_expression
+subtest set_both_reset_ttl_expiration_expression
+
+statement ok
+CREATE TABLE tbl_set_both_reset_ttl_expiration_expression (
+  id INT PRIMARY KEY,
+  expire_at TIMESTAMPTZ,
+  FAMILY (id, expire_at)
+) WITH (
+  ttl_expire_after = '10m',
+  ttl_expiration_expression = 'expire_at'
+)
+
+statement ok
+ALTER TABLE tbl_set_both_reset_ttl_expiration_expression RESET (ttl_expiration_expression)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_both_reset_ttl_expiration_expression]
+----
+CREATE TABLE public.tbl_set_both_reset_ttl_expiration_expression (
+  id INT8 NOT NULL,
+  expire_at TIMESTAMPTZ NULL,
+  crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+  CONSTRAINT tbl_set_both_reset_ttl_expiration_expression_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_expire_at_crdb_internal_expiration (id, expire_at, crdb_internal_expiration)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
+
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl_set_both_reset_ttl_expiration_expression'
+
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+----
+ACTIVE  @hourly  root
 
 subtest end
