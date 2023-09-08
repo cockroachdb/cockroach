@@ -19,15 +19,17 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func (f *Frontier) entriesStr() string {
+func entriesStr(f Frontier) string {
 	var buf strings.Builder
 	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) OpResult {
 		if buf.Len() != 0 {
@@ -41,25 +43,26 @@ func (f *Frontier) entriesStr() string {
 
 type frontierForwarder struct {
 	t        *testing.T
-	f        *Frontier
+	f        Frontier
 	advanced bool
 }
 
 func (f frontierForwarder) expectedAdvanced(expected bool) frontierForwarder {
-	require.Equal(f.t, expected, f.advanced)
+	require.Equal(f.t, expected, f.advanced, entriesStr(f.f))
 	return f
 }
 func (f frontierForwarder) expectFrontier(wall int64) frontierForwarder {
-	require.Equal(f.t, hlc.Timestamp{WallTime: wall}, f.f.Frontier())
+	require.Equal(f.t, hlc.Timestamp{WallTime: wall}, f.f.Frontier(),
+		"expected %d, found %s", wall, f.f.Frontier())
 	return f
 }
 func (f frontierForwarder) expectEntries(expected string) frontierForwarder {
-	require.Equal(f.t, expected, f.f.entriesStr())
+	require.Equal(f.t, expected, entriesStr(f.f))
 	return f
 }
 
 func makeFrontierForwarded(
-	t *testing.T, f *Frontier,
+	t *testing.T, f Frontier,
 ) func(s roachpb.Span, wall int64) frontierForwarder {
 	t.Helper()
 	return func(s roachpb.Span, wall int64) frontierForwarder {
@@ -75,168 +78,177 @@ func makeFrontierForwarded(
 func TestSpanFrontier(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
-	keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
+	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
+		defer enableBtreeFrontier(useBtreeFrontier)()
 
-	spAB := roachpb.Span{Key: keyA, EndKey: keyB}
-	spAC := roachpb.Span{Key: keyA, EndKey: keyC}
-	spAD := roachpb.Span{Key: keyA, EndKey: keyD}
-	spBC := roachpb.Span{Key: keyB, EndKey: keyC}
-	spBD := roachpb.Span{Key: keyB, EndKey: keyD}
-	spCD := roachpb.Span{Key: keyC, EndKey: keyD}
+		keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+		keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
 
-	f, err := MakeFrontier(spAD)
-	require.NoError(t, err)
-	require.Equal(t, hlc.Timestamp{}, f.Frontier())
-	require.Equal(t, `{a-d}@0`, f.entriesStr())
+		spAB := roachpb.Span{Key: keyA, EndKey: keyB}
+		spAC := roachpb.Span{Key: keyA, EndKey: keyC}
+		spAD := roachpb.Span{Key: keyA, EndKey: keyD}
+		spBC := roachpb.Span{Key: keyB, EndKey: keyC}
+		spBD := roachpb.Span{Key: keyB, EndKey: keyD}
+		spCD := roachpb.Span{Key: keyC, EndKey: keyD}
 
-	forwardFrontier := makeFrontierForwarded(t, f)
+		f, err := MakeFrontier(spAD)
+		require.NoError(t, err)
+		require.Equal(t, hlc.Timestamp{}, f.Frontier())
+		require.Equal(t, `{a-d}@0`, entriesStr(f))
 
-	// Untracked spans are ignored
-	forwardFrontier(roachpb.Span{Key: []byte("d"), EndKey: []byte("e")}, 1).
-		expectedAdvanced(false).
-		expectFrontier(0).
-		expectEntries(`{a-d}@0`)
+		forwardFrontier := makeFrontierForwarded(t, f)
 
-	// Forward the entire tracked spanspace.
-	forwardFrontier(spAD, 1).
-		expectedAdvanced(true).
-		expectFrontier(1).
-		expectEntries(`{a-d}@1`)
+		// Untracked spans are ignored
+		forwardFrontier(roachpb.Span{Key: []byte("d"), EndKey: []byte("e")}, 1).
+			expectedAdvanced(false).
+			expectFrontier(0).
+			expectEntries(`{a-d}@0`)
 
-	// Forward it again.
-	forwardFrontier(spAD, 2).
-		expectedAdvanced(true).
-		expectFrontier(2).
-		expectEntries(`{a-d}@2`)
+		// Forward the entire tracked spanspace.
+		forwardFrontier(spAD, 1).
+			expectedAdvanced(true).
+			expectFrontier(1).
+			expectEntries(`{a-d}@1`)
 
-	// Forward to the previous frontier.
-	forwardFrontier(spAD, 2).
-		expectedAdvanced(false).
-		expectFrontier(2).
-		expectEntries(`{a-d}@2`)
+		// Forward it again.
+		forwardFrontier(spAD, 2).
+			expectedAdvanced(true).
+			expectFrontier(2).
+			expectEntries(`{a-d}@2`)
 
-	// Forward into the past is ignored.
-	forwardFrontier(spAD, 1).
-		expectedAdvanced(false).
-		expectFrontier(2).
-		expectEntries(`{a-d}@2`)
+		// Forward to the previous frontier.
+		forwardFrontier(spAD, 2).
+			expectedAdvanced(false).
+			expectFrontier(2).
+			expectEntries(`{a-d}@2`)
 
-	// Forward a subset.
-	forwardFrontier(spBC, 3).
-		expectedAdvanced(false).
-		expectFrontier(2).
-		expectEntries(`{a-b}@2 {b-c}@3 {c-d}@2`)
+		// Forward into the past is ignored.
+		forwardFrontier(spAD, 1).
+			expectedAdvanced(false).
+			expectFrontier(2).
+			expectEntries(`{a-d}@2`)
 
-	// Forward it more.
-	forwardFrontier(spBC, 4).
-		expectedAdvanced(false).
-		expectFrontier(2).
-		expectEntries(`{a-b}@2 {b-c}@4 {c-d}@2`)
+		// Forward a subset.
+		forwardFrontier(spBC, 3).
+			expectedAdvanced(false).
+			expectFrontier(2).
+			expectEntries(`{a-b}@2 {b-c}@3 {c-d}@2`)
 
-	// Forward all tracked spans to timestamp before BC (currently at 4).
-	// Advances to the min of tracked spans. Note that this requires the
-	// forwarded span to be split into two spans, one on each side of BC.
-	forwardFrontier(spAD, 3).
-		expectedAdvanced(true).
-		expectFrontier(3).
-		expectEntries(`{a-b}@3 {b-c}@4 {c-d}@3`)
+		// Forward it more.
+		forwardFrontier(spBC, 4).
+			expectedAdvanced(false).
+			expectFrontier(2).
+			expectEntries(`{a-b}@2 {b-c}@4 {c-d}@2`)
 
-	// Forward everything but BC, advances to the min of tracked spans.
-	forwardFrontier(spAB, 5).
-		expectedAdvanced(false).
-		expectFrontier(3)
+		// Forward all tracked spans to timestamp before BC (currently at 4).
+		// Advances to the min of tracked spans. Note that this requires the
+		// forwarded span to be split into two spans, one on each side of BC.
+		forwardFrontier(spAD, 3).
+			expectedAdvanced(true).
+			expectFrontier(3).
+			expectEntries(`{a-b}@3 {b-c}@4 {c-d}@3`)
 
-	forwardFrontier(spCD, 5).
-		expectedAdvanced(true).
-		expectFrontier(4).
-		expectEntries(`{a-b}@5 {b-c}@4 {c-d}@5`)
+		// Forward everything but BC, advances to the min of tracked spans.
+		forwardFrontier(spAB, 5).
+			expectedAdvanced(false).
+			expectFrontier(3)
 
-	// Catch BC up: spans collapse.
-	forwardFrontier(spBC, 5).
-		expectedAdvanced(true).
-		expectFrontier(5).
-		expectEntries(`{a-d}@5`)
+		forwardFrontier(spCD, 5).
+			expectedAdvanced(true).
+			expectFrontier(4).
+			expectEntries(`{a-b}@5 {b-c}@4 {c-d}@5`)
 
-	// Forward them all at once.
-	forwardFrontier(spAD, 6).
-		expectedAdvanced(true).
-		expectFrontier(6).
-		expectEntries(`{a-d}@6`)
+		// Catch BC up: spans collapse.
+		forwardFrontier(spBC, 5).
+			expectedAdvanced(true).
+			expectFrontier(5).
+			expectEntries(`{a-d}@5`)
 
-	// Split AC with BD.
-	forwardFrontier(spCD, 7).
-		expectedAdvanced(false).
-		expectFrontier(6).
-		expectEntries(`{a-c}@6 {c-d}@7`)
+		// Forward them all at once.
+		forwardFrontier(spAD, 6).
+			expectedAdvanced(true).
+			expectFrontier(6).
+			expectEntries(`{a-d}@6`)
 
-	forwardFrontier(spBD, 8).
-		expectedAdvanced(false).
-		expectFrontier(6).
-		expectEntries(`{a-b}@6 {b-d}@8`)
+		// Split AC with BD.
+		forwardFrontier(spCD, 7).
+			expectedAdvanced(false).
+			expectFrontier(6).
+			expectEntries(`{a-c}@6 {c-d}@7`)
 
-	forwardFrontier(spAB, 8).
-		expectedAdvanced(true).
-		expectFrontier(8).
-		expectEntries(`{a-d}@8`)
+		forwardFrontier(spBD, 8).
+			expectedAdvanced(false).
+			expectFrontier(6).
+			expectEntries(`{a-b}@6 {b-d}@8`)
 
-	// Split BD with AC.
-	forwardFrontier(spAC, 9).
-		expectedAdvanced(false).
-		expectFrontier(8).
-		expectEntries(`{a-c}@9 {c-d}@8`)
+		forwardFrontier(spAB, 8).
+			expectedAdvanced(true).
+			expectFrontier(8).
+			expectEntries(`{a-d}@8`)
 
-	forwardFrontier(spCD, 9).
-		expectedAdvanced(true).
-		expectFrontier(9).
-		expectEntries(`{a-d}@9`)
+		// Split BD with AC.
+		forwardFrontier(spAC, 9).
+			expectedAdvanced(false).
+			expectFrontier(8).
+			expectEntries(`{a-c}@9 {c-d}@8`)
+
+		forwardFrontier(spCD, 9).
+			expectedAdvanced(true).
+			expectFrontier(9).
+			expectEntries(`{a-d}@9`)
+	})
 }
 
 func TestSpanFrontierDisjointSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
-	keyD, keyE, keyF := roachpb.Key("d"), roachpb.Key("e"), roachpb.Key("f")
-	spAB := roachpb.Span{Key: keyA, EndKey: keyB}
-	spAD := roachpb.Span{Key: keyA, EndKey: keyD}
-	spCE := roachpb.Span{Key: keyC, EndKey: keyE}
-	spDF := roachpb.Span{Key: keyD, EndKey: keyF}
 
-	f, err := MakeFrontier(spAB, spCE)
-	require.NoError(t, err)
-	require.Equal(t, hlc.Timestamp{}, f.Frontier())
-	require.Equal(t, `{a-b}@0 {c-e}@0`, f.entriesStr())
+	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
+		defer enableBtreeFrontier(useBtreeFrontier)()
 
-	forwardFrontier := makeFrontierForwarded(t, f)
+		keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
+		keyD, keyE, keyF := roachpb.Key("d"), roachpb.Key("e"), roachpb.Key("f")
+		spAB := roachpb.Span{Key: keyA, EndKey: keyB}
+		spAD := roachpb.Span{Key: keyA, EndKey: keyD}
+		spCE := roachpb.Span{Key: keyC, EndKey: keyE}
+		spDF := roachpb.Span{Key: keyD, EndKey: keyF}
 
-	// Advance just the tracked spans
-	forwardFrontier(spCE, 1).
-		expectedAdvanced(false).
-		expectFrontier(0).
-		expectEntries(`{a-b}@0 {c-e}@1`)
+		f, err := MakeFrontier(spAB, spCE)
+		require.NoError(t, err)
+		require.Equal(t, hlc.Timestamp{}, f.Frontier())
+		require.Equal(t, `{a-b}@0 {c-e}@0`, entriesStr(f))
 
-	forwardFrontier(spAB, 1).
-		expectedAdvanced(true).
-		expectFrontier(1).
-		expectEntries(`{a-b}@1 {c-e}@1`)
+		forwardFrontier := makeFrontierForwarded(t, f)
 
-	// Advance a span that partially overlaps the tracked spans
-	forwardFrontier(spDF, 2).
-		expectedAdvanced(false).
-		expectFrontier(1).
-		expectEntries(`{a-b}@1 {c-d}@1 {d-e}@2`)
+		// Advance just the tracked spans
+		forwardFrontier(spCE, 1).
+			expectedAdvanced(false).
+			expectFrontier(0).
+			expectEntries(`{a-b}@0 {c-e}@1`)
 
-	// Advance one span that covers two tracked spans and so needs two entries.
-	forwardFrontier(spAD, 3).
-		expectedAdvanced(true).
-		expectFrontier(2).
-		expectEntries(`{a-b}@3 {c-d}@3 {d-e}@2`)
+		forwardFrontier(spAB, 1).
+			expectedAdvanced(true).
+			expectFrontier(1).
+			expectEntries(`{a-b}@1 {c-e}@1`)
 
-	// Advance span that overlaps all the spans tracked by this frontier.
-	// {c-d} and {d-e} should collapse.
-	forwardFrontier(roachpb.Span{Key: roachpb.Key(`0`), EndKey: roachpb.Key(`q`)}, 4).
-		expectedAdvanced(true).
-		expectFrontier(4).
-		expectEntries(`{a-b}@4 {c-e}@4`)
+		// Advance a span that partially overlaps the tracked spans
+		forwardFrontier(spDF, 2).
+			expectedAdvanced(false).
+			expectFrontier(1).
+			expectEntries(`{a-b}@1 {c-d}@1 {d-e}@2`)
+
+		// Advance one span that covers two tracked spans and so needs two entries.
+		forwardFrontier(spAD, 3).
+			expectedAdvanced(true).
+			expectFrontier(2).
+			expectEntries(`{a-b}@3 {c-d}@3 {d-e}@2`)
+
+		// Advance span that overlaps all the spans tracked by this frontier.
+		// {c-d} and {d-e} should collapse.
+		forwardFrontier(roachpb.Span{Key: roachpb.Key(`0`), EndKey: roachpb.Key(`q`)}, 4).
+			expectedAdvanced(true).
+			expectFrontier(4).
+			expectEntries(`{a-b}@4 {c-e}@4`)
+	})
 }
 
 func TestSpanFrontierHeap(t *testing.T) {
@@ -248,9 +260,13 @@ func TestSpanFrontierHeap(t *testing.T) {
 
 	var fh frontierHeap
 
-	eAB1 := &frontierEntry{span: spAB, ts: hlc.Timestamp{WallTime: 1}}
-	eBC1 := &frontierEntry{span: spBC, ts: hlc.Timestamp{WallTime: 1}}
-	eAB2 := &frontierEntry{span: spAB, ts: hlc.Timestamp{WallTime: 2}}
+	mkFrontierEntry := func(s roachpb.Span, wall int64) *btreeFrontierEntry {
+		e := &btreeFrontierEntry{Start: s.Key, End: s.EndKey, ts: hlc.Timestamp{WallTime: wall}}
+		return e
+	}
+	eAB1 := mkFrontierEntry(spAB, 1)
+	eBC1 := mkFrontierEntry(spBC, 1)
+	eAB2 := mkFrontierEntry(spAB, 2)
 
 	// Push one
 	heap.Push(&fh, eAB1)
@@ -283,25 +299,25 @@ func TestSpanFrontierHeap(t *testing.T) {
 
 func TestSequentialSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var abc = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	startKey, endKey := []byte{abc[0]}, []byte{abc[len(abc)-1]}
-	mkspan := func() roachpb.Span {
-		return roachpb.Span{Key: startKey, EndKey: endKey}
-	}
 
-	f, err := MakeFrontier(mkspan())
-	require.NoError(t, err)
+	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
+		defer enableBtreeFrontier(useBtreeFrontier)()
 
-	var expectedRanges []string
-	for i := 0; i < len(abc)-1; i++ {
-		startKey[0] = abc[i]
-		endKey[0] = abc[i+1]
-		span := mkspan()
-		_, err := f.Forward(span, hlc.Timestamp{WallTime: int64(i) + 1})
+		f, err := MakeFrontier(roachpb.Span{Key: roachpb.Key("A"), EndKey: roachpb.Key("Z")})
 		require.NoError(t, err)
-		expectedRanges = append(expectedRanges, fmt.Sprintf("%s@%d", span, i+1))
-	}
-	require.Equal(t, strings.Join(expectedRanges, " "), f.entriesStr())
+
+		var expectedRanges []string
+		for r := 'A'; r <= 'Z'-1; r++ {
+			var sp roachpb.Span
+			sp.Key = append(sp.Key, byte(r))
+			sp.EndKey = append(sp.EndKey, byte(r+1))
+			wall := r - 'A' + 1
+			_, err := f.Forward(sp, hlc.Timestamp{WallTime: int64(wall)})
+			require.NoError(t, err)
+			expectedRanges = append(expectedRanges, fmt.Sprintf("%s@%d", sp, wall))
+		}
+		require.Equal(t, strings.Join(expectedRanges, " "), entriesStr(f))
+	})
 }
 
 func TestSpanEntries(t *testing.T) {
@@ -314,12 +330,12 @@ func TestSpanEntries(t *testing.T) {
 		return roachpb.Span{Key: key(start), EndKey: key(end)}
 	}
 
-	advance := func(f *Frontier, s roachpb.Span, wall int64) {
+	advance := func(f Frontier, s roachpb.Span, wall int64) {
 		_, err := f.Forward(s, hlc.Timestamp{WallTime: wall})
 		require.NoError(t, err)
 	}
 
-	spanEntries := func(f *Frontier, sp roachpb.Span) string {
+	spanEntries := func(f Frontier, sp roachpb.Span) string {
 		var buf strings.Builder
 		f.SpanEntries(sp, func(s roachpb.Span, ts hlc.Timestamp) OpResult {
 			if buf.Len() != 0 {
@@ -330,51 +346,186 @@ func TestSpanEntries(t *testing.T) {
 		})
 		return buf.String()
 	}
-	t.Run("contiguous frontier", func(t *testing.T) {
-		spAZ := mkspan('A', 'Z')
+
+	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
+		defer enableBtreeFrontier(useBtreeFrontier)()
+
+		t.Run("contiguous frontier", func(t *testing.T) {
+			spAZ := mkspan('A', 'Z')
+			f, err := MakeFrontier(spAZ)
+			require.NoError(t, err)
+			// Nothing overlaps span fully to the left of frontier.
+			require.Equal(t, ``, spanEntries(f, mkspan('0', '9')))
+			// Nothing overlaps span fully to the right of the frontier.
+			require.Equal(t, ``, spanEntries(f, mkspan('a', 'z')))
+
+			// Span overlaps entire frontier.
+			require.Equal(t, `{A-Z}@0`, spanEntries(f, spAZ))
+			advance(f, spAZ, 1)
+			require.Equal(t, `{A-Z}@1`, spanEntries(f, spAZ))
+
+			// Span overlaps part of the frontier, with left part outside frontier.
+			require.Equal(t, `{A-C}@1`, spanEntries(f, mkspan('0', 'C')))
+
+			// Span overlaps part of the frontier, with right part outside frontier.
+			require.Equal(t, `{Q-Z}@1`, spanEntries(f, mkspan('Q', 'c')))
+
+			// Span fully inside frontier.
+			require.Equal(t, `{P-W}@1`, spanEntries(f, mkspan('P', 'W')))
+
+			// Advance part of the frontier.
+			advance(f, mkspan('C', 'E'), 2)
+			advance(f, mkspan('H', 'M'), 5)
+			advance(f, mkspan('N', 'Q'), 3)
+
+			// Span overlaps various parts of the frontier.
+			require.Equal(t,
+				`{A-C}@1 {C-E}@2 {E-H}@1 {H-M}@5 {M-N}@1 {N-P}@3`,
+				spanEntries(f, mkspan('3', 'P')))
+		})
+
+		t.Run("disjoint frontier", func(t *testing.T) {
+			spAB := mkspan('A', 'B')
+			spCE := mkspan('C', 'E')
+			f, err := MakeFrontier(spAB, spCE)
+			require.NoError(t, err)
+
+			// Nothing overlaps between the two spans in the frontier.
+			require.Equal(t, ``, spanEntries(f, mkspan('B', 'C')))
+
+			// Overlap with only one entry in the frontier
+			require.Equal(t, `{C-D}@0`, spanEntries(f, mkspan('B', 'D')))
+		})
+	})
+}
+
+func checkContiguousFrontier(f Frontier) (startKey, endKey []byte, retErr error) {
+	// Iterate frontier to make sure it is sane.
+	prev := struct {
+		s  roachpb.Span
+		ts hlc.Timestamp
+	}{}
+
+	f.Entries(func(s roachpb.Span, ts hlc.Timestamp) (done OpResult) {
+		if prev.s.Key == nil && prev.s.EndKey == nil {
+			prev.s = s
+			prev.ts = ts
+			startKey = s.Key
+			endKey = s.EndKey
+			return ContinueMatch
+		}
+
+		if s.Key.Equal(prev.s.EndKey) {
+			// Contiguous spans with the same timestamps are expected to be merged.
+			// However, LLRB based frontier has some gaps in its merge logic, so just
+			// let it be.
+			if useBtreeFrontier && ts.Equal(prev.ts) {
+				retErr = errors.Newf("expected ranges with equal timestamp to be merged, found %s and %s: %s", prev.s, s, f)
+				return StopMatch
+			}
+		} else {
+			// We expect frontier entries to be contiguous.
+			retErr = errors.Newf("expected contiguous entries, found gap between %s and %s: %s", prev.s, s, f)
+			return StopMatch
+		}
+
+		endKey = s.EndKey
+		prev.s = s
+		prev.ts = ts
+		return ContinueMatch
+	})
+	return startKey, endKey, retErr
+}
+
+// forwardWithErrorCheck forwards span timestamp.
+// It verifies if the returned error is consistent with the input span.
+func forwardWithErrorCheck(f Frontier, s roachpb.Span, wall int64) error {
+	if _, err := f.Forward(s, hlc.Timestamp{WallTime: wall}); err != nil {
+		switch s.Key.Compare(s.EndKey) {
+		case 1:
+			if !errors.Is(err, interval.ErrInvertedRange) {
+				return errors.Wrapf(err, "expected inverted span error for span %s", s)
+			}
+		case 0:
+			if len(s.Key) == 0 && len(s.EndKey) == 0 {
+				if !errors.Is(err, interval.ErrNilRange) {
+					return errors.Wrapf(err, "expected nil range error for span %s", s)
+				}
+			} else if !errors.Is(err, interval.ErrEmptyRange) {
+				return errors.Wrapf(err, "expected empty span error for span %s", s)
+			}
+		default:
+			return errors.Wrapf(err, "f=%s", f)
+		}
+	}
+	return nil
+}
+
+// TestForwardInvertedSpan is a replay of a failure uncovered by FuzzLLRBFrontier test.
+// It verifies frontier behaves as expected when attempting to forward inverted span.
+func TestForwardInvertedSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	spAZ := roachpb.Span{
+		Key:    roachpb.Key{'A'},
+		EndKey: roachpb.Key{'z'},
+	}
+
+	mkspan := func(start, end string) roachpb.Span {
+		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
+	}
+	advance := func(f Frontier, s roachpb.Span, wall int64) {
+		require.NoError(t, forwardWithErrorCheck(f, s, wall))
+		_, _, err := checkContiguousFrontier(f)
+		require.NoError(t, err)
+	}
+
+	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
+		defer enableBtreeFrontier(useBtreeFrontier)()
+
 		f, err := MakeFrontier(spAZ)
 		require.NoError(t, err)
-		// Nothing overlaps span fully to the left of frontier.
-		require.Equal(t, ``, spanEntries(f, mkspan('0', '9')))
-		// Nothing overlaps span fully to the right of the frontier.
-		require.Equal(t, ``, spanEntries(f, mkspan('a', 'z')))
 
-		// Span overlaps entire frontier.
-		require.Equal(t, `{A-Z}@0`, spanEntries(f, spAZ))
-		advance(f, spAZ, 1)
-		require.Equal(t, `{A-Z}@1`, spanEntries(f, spAZ))
-
-		// Span overlaps part of the frontier, with left part outside frontier.
-		require.Equal(t, `{A-C}@1`, spanEntries(f, mkspan('0', 'C')))
-
-		// Span overlaps part of the frontier, with right part outside frontier.
-		require.Equal(t, `{Q-Z}@1`, spanEntries(f, mkspan('Q', 'c')))
-
-		// Span fully inside frontier.
-		require.Equal(t, `{P-W}@1`, spanEntries(f, mkspan('P', 'W')))
-
-		// Advance part of the frontier.
-		advance(f, mkspan('C', 'E'), 2)
-		advance(f, mkspan('H', 'M'), 5)
-		advance(f, mkspan('N', 'Q'), 3)
-
-		// Span overlaps various parts of the frontier.
-		require.Equal(t,
-			`{A-C}@1 {C-E}@2 {E-H}@1 {H-M}@5 {M-N}@1 {N-P}@3`,
-			spanEntries(f, mkspan('3', 'P')))
+		advance(f, mkspan("AUgymc", "OOyXp"), 1831)
+		advance(f, mkspan("AUgymc", "OOyXp"), 1923)
+		advance(f, mkspan("AUgymc", "OOyXp"), 2009)
+		advance(f, mkspan("AUggymcymc", "OOyXp"), 2009)
+		advance(f, mkspan("pOyXOmcymc", "pOyXO"), 2009) // NB: inverted span.
+		advance(f, mkspan("a94", "a948"), 1865)
+		advance(f, mkspan("a94", "a948"), 1865)
+		advance(f, mkspan("03hO2Z", "RJRxCy"), 1864)
+		advance(f, mkspan("03hO2Z", "RJRxCy"), 1864)
+		advance(f, mkspan("03", "RJRxCy"), 1864)
+		advance(f, mkspan("0", "RJRxCy"), 1864)
+		advance(f, mkspan("0", "RJRxCy"), 1864)
+		advance(f, mkspan("0", "RJRxCy"), 1864)
+		advance(f, mkspan("0", "RJ"), 1864)
+		advance(f, mkspan("0", "R"), 1864)
+		advance(f, mkspan("0", "0"), 1864)
 	})
+}
 
-	t.Run("disjoint frontier", func(t *testing.T) {
-		spAB := mkspan('A', 'B')
-		spCE := mkspan('C', 'E')
-		f, err := MakeFrontier(spAB, spCE)
+func TestAddOverlappingSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mkspan := func(start, end string) roachpb.Span {
+		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
+	}
+	ts := func(wall int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: wall}
+	}
+
+	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
+		defer enableBtreeFrontier(useBtreeFrontier)()
+
+		f, err := MakeFrontier()
 		require.NoError(t, err)
 
-		// Nothing overlaps between the two spans in the frontier.
-		require.Equal(t, ``, spanEntries(f, mkspan('B', 'C')))
-
-		// Overlap with only one entry in the frontier
-		require.Equal(t, `{C-D}@0`, spanEntries(f, mkspan('B', 'D')))
+		for r := 'A'; r < 'Z'; r++ {
+			require.NoError(t, f.AddSpansAt(ts(int64(r-'A'+1)), mkspan(string(r), string(r+'a'-'A'))))
+		}
+		require.NoError(t, f.AddSpansAt(ts(42), mkspan("a", "z")))
+		require.Equal(t, hlc.Timestamp{WallTime: 42}, f.Frontier(), "f=%s", f)
 	})
 }
 
@@ -407,12 +558,12 @@ func (m *spanMaker) rndKey() interval.Comparable {
 	return key
 }
 
-func (m *spanMaker) rndSpan() roachpb.Span {
+func (m *spanMaker) rndSpan(allowReuse bool) roachpb.Span {
 	var startKey interval.Comparable
 
-	if len(m.starts) > 0 && m.rnd.Int()%17 == 0 {
+	if allowReuse && len(m.starts) > 0 && m.rnd.Int()%37 == 0 {
 		// With some probability use previous starting point.
-		startKey = m.starts[m.rnd.Intn(len(m.starts))]
+		startKey = append(startKey, m.starts[m.rnd.Intn(len(m.starts))]...)
 		// Just for fun, nudge start a bit forward or back.
 		if dice := m.rnd.Intn(3) - 1; dice != 0 {
 			startKey[len(startKey)-1] += byte(dice)
@@ -424,6 +575,10 @@ func (m *spanMaker) rndSpan() roachpb.Span {
 	}
 
 	endKey := m.rndKey()
+	// With some probability, make startKey prefix of endKey.
+	if m.rnd.Int()%97 == 0 {
+		endKey = append(startKey, endKey...)
+	}
 
 	if startKey.Equal(endKey) {
 		endKey = append(endKey, spanSymbols[m.rnd.Intn(len(spanSymbols))])
@@ -438,27 +593,168 @@ func (m *spanMaker) rndSpan() roachpb.Span {
 	return roachpb.Span{Key: roachpb.Key(startKey), EndKey: roachpb.Key(endKey)}
 }
 
-func BenchmarkFrontier(b *testing.B) {
-	var rndSeed = randutil.NewPseudoSeed()
+const maxHistory = 16
 
-	rnd := rand.New(rand.NewSource(rndSeed))
-	spanMaker, span := newSpanMaker(4, rnd)
+// captureHistoryFrontier is a Frontier that captures history
+// of forward calls in order to make it easier to reproduce fuzz test failures.
+// See TestForwardInvertedSpan.
+type SpanFrontier = Frontier
+type captureHistoryFrontier struct {
+	SpanFrontier
+	history []string
+}
 
-	f, err := MakeFrontier(span)
-	require.NoError(b, err)
-	log.Infof(context.Background(), "N=%d TestSpan: %s (seed: %d) Entries: %s", b.N, span, rndSeed, f.entriesStr())
-	b.ReportAllocs()
-	var wall int64 = 10
+func (f *captureHistoryFrontier) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error) {
+	f.history = append(f.history, fmt.Sprintf(`advance(f, mkspan(%q, %q), %d)`, span.Key, span.EndKey, ts.WallTime))
+	if len(f.history) > maxHistory {
+		f.history = append([]string{}, f.history[1:]...)
+	}
+	return f.SpanFrontier.Forward(span, ts)
+}
 
-	for i := 0; i < b.N; i++ {
-		if i%10 == 0 {
-			wall += rnd.Int63n(10)
+func (f *captureHistoryFrontier) History() string {
+	return strings.Join(f.history, "\n")
+}
+
+func fuzzFrontier(f *testing.F) {
+	seed := randutil.NewPseudoSeed()
+	rnd := rand.New(rand.NewSource(seed))
+	f.Logf("seed %d", seed)
+
+	spanMaker, initialSpan := newSpanMaker(6, rnd)
+	const corpusSize = 2 << 10
+	for i := 0; i < corpusSize; i++ {
+		s := spanMaker.rndSpan(false)
+		f.Add([]byte(s.Key), []byte(s.EndKey), i)
+	}
+
+	mkFrontier := func() Frontier {
+		sf, err := MakeFrontier(initialSpan)
+		if err != nil {
+			f.Fatal(err)
+		}
+		return sf
+	}
+
+	sf := &captureHistoryFrontier{SpanFrontier: mkFrontier()}
+
+	f.Fuzz(func(t *testing.T, startKey, endKey []byte, walltime int) {
+		// NB: copy start and end keys: fuzzer mutates inputs.
+		var sp roachpb.Span
+		sp.Key = append(sp.Key, startKey...)
+		sp.EndKey = append(sp.EndKey, endKey...)
+
+		if err := forwardWithErrorCheck(sf, sp, int64(walltime)); err != nil {
+			t.Fatalf("err=%+v f=%s History:\n%s", err, sf, sf.History())
 		}
 
-		delta := rnd.Int63n(10) - rnd.Int63n(3)
-		rndSpan := spanMaker.rndSpan()
-		_, err := f.Forward(rndSpan, hlc.Timestamp{WallTime: wall + delta})
-		require.NoError(b, err)
+		startKey, endKey, err := checkContiguousFrontier(sf)
+		if err != nil {
+			t.Fatalf("err=%s History:\n%s", err, sf.History())
+		}
+		// At the end of iteration, we should have record start/end key equal to the initial span.
+		if !initialSpan.Key.Equal(startKey) || !initialSpan.EndKey.Equal(endKey) {
+			t.Fatalf("expected to see entire %s sf, saw [%s-%s)", initialSpan, startKey, endKey)
+		}
+	})
+}
+
+func FuzzBtreeFrontier(f *testing.F) {
+	defer enableBtreeFrontier(true)()
+	fuzzFrontier(f)
+}
+
+func FuzzLLRBFrontier(f *testing.F) {
+	defer enableBtreeFrontier(false)()
+	fuzzFrontier(f)
+}
+
+func BenchmarkFrontier(b *testing.B) {
+	disableSanityChecksForBenchmark = true
+	defer func() {
+		disableSanityChecksForBenchmark = false
+	}()
+
+	b.StopTimer()
+	// To produce repeatable runs, run benchmark with COCKROACH_RANDOM_SEED env to override
+	// the seed value and -test.benchtime=Nx to set explicit number of iterations.
+	rnd, rndSeed := randutil.NewPseudoRand()
+	spanMaker, initialSpan := newSpanMaker(4, rnd)
+	const corpusSize = 2 << 14
+	corpus := make([]roachpb.Span, corpusSize)
+	for i := 0; i < corpusSize; i++ {
+		corpus[i] = spanMaker.rndSpan(true)
 	}
-	log.Infof(context.Background(), "%d entries: %s", f.tree.Len(), f.entriesStr())
+	b.StartTimer()
+
+	benchForward := func(b *testing.B, f Frontier, rnd *rand.Rand) {
+		if log.V(1) {
+			log.Infof(context.Background(), "N=%d NumEntries=%d (seed: %d)", b.N, f.Len(), rndSeed)
+		}
+		var wall int64 = 10
+
+		for i := 0; i < b.N; i++ {
+			if i%10 == 0 {
+				wall += rnd.Int63n(10)
+			}
+
+			delta := rnd.Int63n(10) - rnd.Int63n(3)
+			rndSpan := corpus[rnd.Intn(corpusSize)]
+			if _, err := f.Forward(rndSpan, hlc.Timestamp{WallTime: wall + delta}); err != nil {
+				b.Fatalf("%+v", err)
+			}
+		}
+		if log.V(1) {
+			log.Infof(context.Background(), "Final frontier has %d entries", f.Len())
+		}
+	}
+
+	for _, enableBtree := range []bool{false, true} {
+		b.Run(fmt.Sprintf("btree=%t/rnd", enableBtree), func(b *testing.B) {
+			defer enableBtreeFrontier(enableBtree)()
+
+			b.StopTimer()
+			// Reset rnd so that we get the same inputs for both benchmarks.
+			rnd := rand.New(rand.NewSource(rndSeed))
+			f, err := MakeFrontier(initialSpan)
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.StartTimer()
+			b.ReportAllocs()
+
+			benchForward(b, f, rnd)
+		})
+
+		// Bench a case where frontier tracks multiple disjoint spans.
+		for _, numRanges := range []int{128, 1024, 4096, 8192, 16384} {
+			b.Run(fmt.Sprintf("btree=%t/r=%d", enableBtree, numRanges), func(b *testing.B) {
+				defer enableBtreeFrontier(enableBtree)()
+
+				b.StopTimer()
+				// Reset rnd so that we get the same inputs for both benchmarks.
+				rnd := rand.New(rand.NewSource(rndSeed))
+				f, err := MakeFrontier()
+				if err != nil {
+					b.Fatal(err)
+				}
+				var sg roachpb.SpanGroup
+				for sg.Len() < numRanges {
+					startKey := roachpb.Key(spanMaker.rndKey())
+					sg.Add(roachpb.Span{Key: startKey, EndKey: startKey.Next()})
+				}
+
+				if err := sg.ForEach(func(span roachpb.Span) error {
+					return f.AddSpansAt(hlc.Timestamp{}, span)
+				}); err != nil {
+					b.Fatal(err)
+				}
+
+				b.StartTimer()
+				b.ReportAllocs()
+
+				benchForward(b, f, rnd)
+			})
+		}
+	}
 }
