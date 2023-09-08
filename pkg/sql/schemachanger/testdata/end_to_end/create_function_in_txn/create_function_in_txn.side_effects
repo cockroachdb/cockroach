@@ -16,8 +16,7 @@ write *eventpb.CreateFunction to event log:
   functionName: defaultdb.public.t
   sql:
     descriptorId: 105
-    statement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE
-      SQL\n\tAS $$SELECT ‹1›;$$"
+    statement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
     tag: CREATE FUNCTION
     user: root
 ## StatementPhase stage 1 of 1 with 11 MutationType ops
@@ -170,10 +169,8 @@ upsert descriptor #105
   +      name: t
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS
-  +          INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
-  +        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT
-  +          1 $$"
+  +        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
+  +        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT 1 $$"
   +        statementTag: CREATE FUNCTION
   +    revertible: true
   +    targetRanks: <redacted>
@@ -249,10 +246,8 @@ upsert descriptor #104
   +      name: t
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS
-  +          INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
-  +        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT
-  +          1 $$"
+  +        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
+  +        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT 1 $$"
   +        statementTag: CREATE FUNCTION
   +    - statement:
   +        redactedStatement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹b›)
@@ -488,10 +483,8 @@ upsert descriptor #104
   -      name: t
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS
-  -          INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
-  -        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT
-  -          1 $$"
+  -        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
+  -        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT 1 $$"
   -        statementTag: CREATE FUNCTION
   -    - statement:
   -        redactedStatement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹b›)
@@ -600,10 +593,8 @@ upsert descriptor #105
   -      name: t
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS
-  -          INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
-  -        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT
-  -          1 $$"
+  -        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
+  -        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT 1 $$"
   -        statementTag: CREATE FUNCTION
   -    revertible: true
   -    targetRanks: <redacted>
