@@ -360,6 +360,11 @@ type EngineIterator interface {
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	// REQUIRES: latest positioning function returned valid=true.
 	UnsafeValue() ([]byte, error)
+	// UnsafeLazyValue is only for use inside the storage package. It exposes
+	// the LazyValue at the current iterator position, and hence delays fetching
+	// the actual value.
+	// REQUIRES: latest positioning function returned valid=true.
+	UnsafeLazyValue() pebble.LazyValue
 	// Value returns the current value as a byte slice.
 	// REQUIRES: latest positioning function returned valid=true.
 	Value() ([]byte, error)
