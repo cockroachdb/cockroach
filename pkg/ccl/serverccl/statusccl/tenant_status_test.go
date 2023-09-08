@@ -1352,10 +1352,10 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 	})
 
 	t.Run("test tenant ranges respects tenant isolation", func(t *testing.T) {
-		keyPrefixForA := keys.MakeTenantPrefix(helper.TestCluster().Tenant(0).GetRPCContext().TenantID)
-		keyPrefixEndForA := keyPrefixForA.PrefixEnd()
-		keyPrefixForB := keys.MakeTenantPrefix(helper.ControlCluster().Tenant(0).GetRPCContext().TenantID)
-		keyPrefixEndForB := keyPrefixForB.PrefixEnd()
+		tenIDA := helper.TestCluster().Tenant(0).GetRPCContext().TenantID
+		tenIDB := helper.ControlCluster().Tenant(0).GetRPCContext().TenantID
+		keySpanForA := keys.MakeTenantSpan(tenIDA)
+		keySpanForB := keys.MakeTenantSpan(tenIDB)
 
 		resp, err := tenantA.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
 		require.NoError(t, err)
@@ -1363,8 +1363,8 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 		for localityKey, rangeList := range resp.RangesByLocality {
 			require.NotEmpty(t, localityKey)
 			for _, r := range rangeList.Ranges {
-				assertStartKeyInRange(t, r.Span.StartKey, keyPrefixForA)
-				assertEndKeyInRange(t, r.Span.EndKey, keyPrefixForA, keyPrefixEndForA)
+				assertStartKeyInRange(t, r.Span.StartKey, keySpanForA.Key)
+				assertEndKeyInRange(t, r.Span.EndKey, keySpanForA.Key, keySpanForA.EndKey)
 			}
 		}
 
@@ -1374,8 +1374,8 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 		for localityKey, rangeList := range resp.RangesByLocality {
 			require.NotEmpty(t, localityKey)
 			for _, r := range rangeList.Ranges {
-				assertStartKeyInRange(t, r.Span.StartKey, keyPrefixForB)
-				assertEndKeyInRange(t, r.Span.EndKey, keyPrefixForB, keyPrefixEndForB)
+				assertStartKeyInRange(t, r.Span.StartKey, keySpanForB.Key)
+				assertEndKeyInRange(t, r.Span.EndKey, keySpanForB.Key, keySpanForB.EndKey)
 			}
 		}
 	})
@@ -1448,20 +1448,20 @@ func assertStartKeyInRange(t *testing.T, startKey string, tenantPrefix roachpb.K
 }
 
 // assertEndKeyInRange compares the pretty printed endKey with the provided
-// tenantPrefix and tenantPrefixEnd keys. Ensures that the key starts with
-// either the tenantPrefix, or the tenantPrefixEnd (valid as end keys are
+// tenantPrefix and tenantEnd keys. Ensures that the key starts with
+// either the tenantPrefix, or the tenantEnd (valid as end keys are
 // exclusive).
 func assertEndKeyInRange(
-	t *testing.T, endKey string, tenantPrefix roachpb.Key, tenantPrefixEnd roachpb.Key,
+	t *testing.T, endKey string, tenantPrefix roachpb.Key, tenantEnd roachpb.Key,
 ) {
 	require.Truef(t,
 		strings.Index(endKey, tenantPrefix.String()) == 0 ||
-			strings.Index(endKey, tenantPrefixEnd.String()) == 0 ||
+			strings.Index(endKey, tenantEnd.String()) == 0 ||
 			// Possible if the tenant's ranges fall at the end of the entire keyspace
 			// range within the cluster.
 			endKey == "/Max",
-		fmt.Sprintf("end key %s is outside of the tenant's keyspace (prefix: %v, prefixEnd: %v)",
-			endKey, tenantPrefix.String(), tenantPrefixEnd.String()))
+		fmt.Sprintf("end key %s is outside of the tenant's keyspace (start: %v, end: %v)",
+			endKey, tenantPrefix.String(), tenantEnd.String()))
 }
 
 func testTenantHotRanges(_ context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
