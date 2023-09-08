@@ -22,10 +22,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_test_hsi_change_locality]
 ----
 CREATE TABLE public.t_test_hsi_change_locality (
-  crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
+  crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 16:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
   b INT8 NULL,
-  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 16:::INT8)) VIRTUAL,
+  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0 (a, b)
@@ -49,10 +49,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_test_hsi_change_locality]
 ----
 CREATE TABLE public.t_test_hsi_change_locality (
-  crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
+  crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 16:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
   b INT8 NULL,
-  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 16:::INT8)) VIRTUAL,
+  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
   crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
@@ -77,11 +77,11 @@ SELECT crdb_region, crdb_internal_a_shard_16, a, b
 FROM t_test_hsi_change_locality
 ORDER BY crdb_region, crdb_internal_a_shard_16, a, b;
 ----
-ca-central-1  0   7  8
-ca-central-1  2   5  6
-ca-central-1  4   3  4
-ca-central-1  6   1  2
-ca-central-1  14  9  10
+ca-central-1  3   9  10
+ca-central-1  11  1  2
+ca-central-1  11  5  6
+ca-central-1  11  7  8
+ca-central-1  13  3  4
 
 # Make sure switching back and forward between different localities is ok.
 statement ok
@@ -91,10 +91,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_test_hsi_change_locality]
 ----
 CREATE TABLE public.t_test_hsi_change_locality (
-  crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
+  crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 16:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
   b INT8 NULL,
-  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 16:::INT8)) VIRTUAL,
+  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
   crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
@@ -119,10 +119,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_test_hsi_change_locality]
 ----
 CREATE TABLE public.t_test_hsi_change_locality (
-  crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
+  crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 16:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
   b INT8 NULL,
-  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 16:::INT8)) VIRTUAL,
+  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
   crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
@@ -168,10 +168,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_parent]
 ----
 CREATE TABLE public.t_parent (
-  crdb_internal_id_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id)), 16:::INT8)) VIRTUAL,
+  crdb_internal_id_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(id))), 16:::INT8)) VIRTUAL,
   id INT8 NOT NULL,
   id2 INT8 NOT NULL,
-  crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id2)), 16:::INT8)) VIRTUAL,
+  crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(id2))), 16:::INT8)) VIRTUAL,
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_id_id2 (id, id2)
@@ -184,10 +184,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_parent]
 ----
 CREATE TABLE public.t_parent (
-  crdb_internal_id_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id)), 16:::INT8)) VIRTUAL,
+  crdb_internal_id_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(id))), 16:::INT8)) VIRTUAL,
   id INT8 NOT NULL,
   id2 INT8 NOT NULL,
-  crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id2)), 16:::INT8)) VIRTUAL,
+  crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(id2))), 16:::INT8)) VIRTUAL,
   crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
@@ -199,11 +199,11 @@ SELECT crdb_region, crdb_internal_id_shard_16, id, id2
 FROM t_parent
 ORDER BY crdb_region, crdb_internal_id_shard_16, id, id2;
 ----
-ca-central-1  0   7  8
-ca-central-1  2   5  6
-ca-central-1  4   3  4
-ca-central-1  6   1  2
-ca-central-1  14  9  10
+ca-central-1  3   9  10
+ca-central-1  11  1  2
+ca-central-1  11  5  6
+ca-central-1  11  7  8
+ca-central-1  13  3  4
 
 query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_parent'
@@ -226,10 +226,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_parent]
 ----
 CREATE TABLE public.t_parent (
-  crdb_internal_id_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id)), 16:::INT8)) VIRTUAL,
+  crdb_internal_id_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(id))), 16:::INT8)) VIRTUAL,
   id INT8 NOT NULL,
   id2 INT8 NOT NULL,
-  crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id2)), 16:::INT8)) VIRTUAL,
+  crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(id2))), 16:::INT8)) VIRTUAL,
   crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
@@ -254,10 +254,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_parent]
 ----
 CREATE TABLE public.t_parent (
-  crdb_internal_id_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id)), 16:::INT8)) VIRTUAL,
+  crdb_internal_id_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(id))), 16:::INT8)) VIRTUAL,
   id INT8 NOT NULL,
   id2 INT8 NOT NULL,
-  crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(id2)), 16:::INT8)) VIRTUAL,
+  crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(id2))), 16:::INT8)) VIRTUAL,
   crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
