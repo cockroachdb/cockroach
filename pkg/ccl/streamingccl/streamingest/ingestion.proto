@@ -7,8 +7,8 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 syntax = "proto3";
-package cockroach.ccl.streamingccl.streamclient;
-option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient";
+package cockroach.ccl.streamingccl.streamingest;
+option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingest";
 
 import "gogoproto/gogo.proto";
 
@@ -26,15 +26,11 @@ message HistogramData {
   int64 count = 9;
 }
 
-message StreamSubscriptionStats {
+message StreamIngestionStats {
   option (gogoproto.goproto_stringer) = false;
 
-  int64 recvd_batches = 1;
-  int64 recvd_checkpoints = 2;
-  int64 cum_time_in_next = 3 [(gogoproto.casttype) = "time.Duration"];
-
-  HistogramData time_in_next = 4;
-  HistogramData time_between_nexts = 5;
+  HistogramData time_in_handle_event = 1;
+  HistogramData time_between_handle_events = 2;
 }
 
 

@@ -309,8 +309,9 @@ func (m *StreamSubscriptionStats) Combine(other bulk.TracingAggregatorEvent) {
 	}
 	m.RecvdBatches += otherStats.RecvdBatches
 	m.RecvdCheckpoints += otherStats.RecvdCheckpoints
-	m.StreamEventReceiveWait += otherStats.StreamEventReceiveWait
-	m.ReceiveWait = otherStats.ReceiveWait
+	m.CumTimeInNext += otherStats.CumTimeInNext
+	m.TimeInNext = otherStats.TimeInNext
+	m.TimeBetweenNexts = otherStats.TimeBetweenNexts
 }
 
 func (m *StreamSubscriptionStats) ProtoName() string {
@@ -326,11 +327,12 @@ func (m *StreamSubscriptionStats) String() string {
 	b.WriteString(fmt.Sprintf("recvd_total: %d\n", totalStreamEventsRecvd))
 
 	if totalStreamEventsRecvd > 0 {
-		waitPerEvent := m.StreamEventReceiveWait.Seconds() / float64(totalStreamEventsRecvd)
-		b.WriteString(fmt.Sprintf("average_wait_per_event: %.6f seconds per event\n", waitPerEvent))
+		inNextPerEvent := m.CumTimeInNext.Seconds() / float64(totalStreamEventsRecvd)
+		b.WriteString(fmt.Sprintf("average_in_next_per_event: %.6f seconds per event\n", inNextPerEvent))
 	}
 
-	b.WriteString(fmt.Sprintf("receive_wait: \n%s\n", m.ReceiveWait.String()))
+	b.WriteString(fmt.Sprintf("time_in_next: \n%s\n", m.TimeInNext.String()))
+	b.WriteString(fmt.Sprintf("time_between_next: \n%s\n", m.TimeBetweenNexts.String()))
 
 	return b.String()
 }

@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/codahale/hdrhistogram"
 )
 
 var minimumFlushInterval = settings.RegisterDurationSettingWithExplicitUnit(
@@ -635,7 +636,47 @@ func (sip *streamIngestionProcessor) onFlushUpdateMetricUpdate(batchSummary kvpb
 // increasing after it has flushed all KV events previously received by that
 // partition.
 func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
+	const (
+		sigFigs    = 1
+		minLatency = time.Microsecond
+		maxLatency = 100 * time.Second
+	)
+	timeInHandleEventHistogram := hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	timeBetweenHandleEventHistogram := hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	var lastHandleEvent time.Time
+	var lastAggregatorStatsEmitted time.Time
+	var ingestionStats StreamIngestionStats
+	sp := tracing.SpanFromContext(ctx)
 	for {
+		if timeutil.Since(lastAggregatorStatsEmitted) > 10*time.Second {
+			if sp != nil {
+				ingestionStats.TimeInHandleEvent = &HistogramData{
+					Min:   timeInHandleEventHistogram.Min(),
+					P5:    timeInHandleEventHistogram.ValueAtQuantile(5),
+					P50:   timeInHandleEventHistogram.ValueAtQuantile(50),
+					P90:   timeInHandleEventHistogram.ValueAtQuantile(90),
+					P99:   timeInHandleEventHistogram.ValueAtQuantile(99),
+					P99_9: timeInHandleEventHistogram.ValueAtQuantile(99.9),
+					Max:   timeInHandleEventHistogram.Max(),
+					Mean:  float32(timeInHandleEventHistogram.Mean()),
+					Count: timeInHandleEventHistogram.TotalCount(),
+				}
+				ingestionStats.TimeBetweenHandleEvents = &HistogramData{
+					Min:   timeBetweenHandleEventHistogram.Min(),
+					P5:    timeBetweenHandleEventHistogram.ValueAtQuantile(5),
+					P50:   timeBetweenHandleEventHistogram.ValueAtQuantile(50),
+					P90:   timeBetweenHandleEventHistogram.ValueAtQuantile(90),
+					P99:   timeBetweenHandleEventHistogram.ValueAtQuantile(99),
+					P99_9: timeBetweenHandleEventHistogram.ValueAtQuantile(99.9),
+					Max:   timeBetweenHandleEventHistogram.Max(),
+					Mean:  float32(timeBetweenHandleEventHistogram.Mean()),
+					Count: timeBetweenHandleEventHistogram.TotalCount(),
+				}
+				sp.RecordStructured(&ingestionStats)
+				ingestionStats = StreamIngestionStats{}
+				lastAggregatorStatsEmitted = timeutil.Now()
+			}
+		}
 		select {
 		case event, ok := <-sip.mergedSubscription.Events():
 			if !ok {
@@ -645,9 +686,19 @@ func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
 				}
 				return nil
 			}
+			if !lastHandleEvent.IsZero() {
+				if err := timeBetweenHandleEventHistogram.RecordValue(timeutil.Since(lastHandleEvent).Nanoseconds()); err != nil {
+					log.Warningf(ctx, "failed to record time between handleEvent: %v", err)
+				}
+			}
+			beforeHandleEvent := timeutil.Now()
 			if err := sip.handleEvent(event); err != nil {
 				return err
 			}
+			if err := timeInHandleEventHistogram.RecordValue(timeutil.Since(beforeHandleEvent).Nanoseconds()); err != nil {
+				log.Warningf(ctx, "failed to record time in handleEvent: %v", err)
+			}
+			lastHandleEvent = timeutil.Now()
 		case <-sip.cutoverCh:
 			// TODO(adityamaru): Currently, the cutover time can only be <= resolved
 			// ts written to the job progress and so there is no point flushing

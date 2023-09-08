@@ -35,11 +35,22 @@ func subscribeInternal(
 		minLatency = time.Microsecond
 		maxLatency = 100 * time.Second
 	)
-	receiveHistogram := hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	timeInNextHistogram := hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	timeBetweenNextHistogram := hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
 	subscriptionStats := &StreamSubscriptionStats{}
 	// Get the next event from the cursor.
 	var bufferedEvent *streampb.StreamEvent
+	var timeOfLastNext time.Time
 	getNextEvent := func() (streamingccl.Event, error) {
+		defer func() {
+			timeOfLastNext = timeutil.Now()
+		}()
+		if !timeOfLastNext.IsZero() {
+			err := timeBetweenNextHistogram.RecordValue(timeutil.Since(timeOfLastNext).Nanoseconds())
+			if err != nil {
+				log.Warningf(ctx, "failed to record value in histogram: %v", err)
+			}
+		}
 		if e := parseEvent(bufferedEvent); e != nil {
 			return e, nil
 		}
@@ -52,8 +63,8 @@ func subscribeInternal(
 			return nil, nil
 		}
 		timeSinceNext := timeutil.Since(beforeNext)
-		subscriptionStats.StreamEventReceiveWait += timeSinceNext
-		if err := receiveHistogram.RecordValue(timeSinceNext.Nanoseconds()); err != nil {
+		subscriptionStats.CumTimeInNext += timeSinceNext
+		if err := timeInNextHistogram.RecordValue(timeSinceNext.Nanoseconds()); err != nil {
 			log.Warningf(ctx, "failed to record value in histogram: %v", err)
 		}
 		var data []byte
@@ -82,16 +93,27 @@ func subscribeInternal(
 		if timeutil.Since(lastAggregatorStatsEmitted) > 10*time.Second {
 			lastAggregatorStatsEmitted = timeutil.Now()
 			if sp != nil {
-				subscriptionStats.ReceiveWait = &HistogramData{
-					Min:   receiveHistogram.Min(),
-					P5:    receiveHistogram.ValueAtQuantile(5),
-					P50:   receiveHistogram.ValueAtQuantile(50),
-					P90:   receiveHistogram.ValueAtQuantile(90),
-					P99:   receiveHistogram.ValueAtQuantile(99),
-					P99_9: receiveHistogram.ValueAtQuantile(99.9),
-					Max:   receiveHistogram.Max(),
-					Mean:  float32(receiveHistogram.Mean()),
-					Count: receiveHistogram.TotalCount(),
+				subscriptionStats.TimeInNext = &HistogramData{
+					Min:   timeInNextHistogram.Min(),
+					P5:    timeInNextHistogram.ValueAtQuantile(5),
+					P50:   timeInNextHistogram.ValueAtQuantile(50),
+					P90:   timeInNextHistogram.ValueAtQuantile(90),
+					P99:   timeInNextHistogram.ValueAtQuantile(99),
+					P99_9: timeInNextHistogram.ValueAtQuantile(99.9),
+					Max:   timeInNextHistogram.Max(),
+					Mean:  float32(timeInNextHistogram.Mean()),
+					Count: timeInNextHistogram.TotalCount(),
+				}
+				subscriptionStats.TimeBetweenNexts = &HistogramData{
+					Min:   timeBetweenNextHistogram.Min(),
+					P5:    timeBetweenNextHistogram.ValueAtQuantile(5),
+					P50:   timeBetweenNextHistogram.ValueAtQuantile(50),
+					P90:   timeBetweenNextHistogram.ValueAtQuantile(90),
+					P99:   timeBetweenNextHistogram.ValueAtQuantile(99),
+					P99_9: timeBetweenNextHistogram.ValueAtQuantile(99.9),
+					Max:   timeBetweenNextHistogram.Max(),
+					Mean:  float32(timeBetweenNextHistogram.Mean()),
+					Count: timeBetweenNextHistogram.TotalCount(),
 				}
 				sp.RecordStructured(subscriptionStats)
 				subscriptionStats = &StreamSubscriptionStats{}
