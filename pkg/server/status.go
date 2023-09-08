@@ -2278,11 +2278,7 @@ func (s *systemStatusServer) TenantRanges(
 		return nil, status.Error(codes.Internal, "no tenant ID found in context")
 	}
 
-	tenantPrefix := keys.MakeTenantPrefix(tID)
-	tenantKeySpan := roachpb.Span{
-		Key:    tenantPrefix,
-		EndKey: tenantPrefix.PrefixEnd(),
-	}
+	tenantKeySpan := keys.MakeTenantSpan(tID)
 
 	// rangeIDs contains all the `roachpb.RangeID`s found to exist within the
 	// tenant's keyspace.
