@@ -1896,10 +1896,10 @@ func TestLockStateSafeFormat(t *testing.T) {
 	holder.replicatedInfo.acquire(lock.Intent, replTS)
 	holder.replicatedInfo.acquire(lock.Shared, replTS)
 	require.EqualValues(t,
-		" lock: ‹\"KEY\"›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: repl [Intent, Shared], unrepl [(str: Exclusive seq: 1), (str: Shared seq: 3)]\n",
+		" lock: ‹\"KEY\"›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000125,1, info: repl [Intent, Shared], unrepl [(str: Exclusive seq: 1), (str: Shared seq: 3)]\n",
 		redact.Sprint(l))
 	require.EqualValues(t,
-		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: repl [Intent, Shared], unrepl [(str: Exclusive seq: 1), (str: Shared seq: 3)]\n",
+		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000125,1, info: repl [Intent, Shared], unrepl [(str: Exclusive seq: 1), (str: Shared seq: 3)]\n",
 		redact.Sprint(l).Redact())
 }
 
@@ -1925,13 +1925,13 @@ func TestLockStateSafeFormatMultipleLockHolders(t *testing.T) {
 	require.NoError(t, holder2.unreplicatedInfo.acquire(lock.Shared, 6))
 	require.EqualValues(t,
 		" lock: ‹\"KEY\"›\n"+
-			"  holders: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: unrepl [(str: Shared seq: 3)]\n"+
-			"           txn: 6ba7b811-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000125,1, info: unrepl [(str: Shared seq: 6)]\n",
+			"  holders: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 3)]\n"+
+			"           txn: 6ba7b811-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 6)]\n",
 		redact.Sprint(kl))
 	require.EqualValues(t,
 		" lock: ‹×›\n"+
-			"  holders: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: unrepl [(str: Shared seq: 3)]\n"+
-			"           txn: 6ba7b811-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000125,1, info: unrepl [(str: Shared seq: 6)]\n",
+			"  holders: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 3)]\n"+
+			"           txn: 6ba7b811-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 6)]\n",
 		redact.Sprint(kl).Redact())
 }
 
