@@ -12,11 +12,14 @@ package sctest
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -63,6 +66,7 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 
 	for ss.HasNextLine() {
 		line := ss.NextLine()
+		line = modifyBlacklistedStmt(t, line, legacyTDB)
 		_, errLegacy := legacySQLDB.Exec(line)
 		if pgcode.MakeCode(string(getPQErrCode(errLegacy))) == pgcode.FeatureNotSupported {
 			continue
@@ -76,6 +80,178 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 			metaDataIdentityCheck(t, legacyTDB, declarativeTDB, linesExecutedSoFar)
 		}
 	}
+}
+
+// sqlLineModifier is the standard signature that takes as input a sql stmt(s) line
+// and perform some kind of modification to it.
+// The SQLRunner is there in case the modification requires being able to access
+// certain info from the cluster with sql.
+type sqlLineModifier func(*testing.T, statements.Statements, *sqlutils.SQLRunner) (statements.Statements, bool)
+
+// modifyBlacklistedStmt attempts to detect whether `line` is a known statement
+// with different behavior under legacy vs under declarative schema changer.
+// Those cases are hard-coded, and if `line` is one of them, we transform it
+// into one with the same behavior under those two schema changers.
+func modifyBlacklistedStmt(t *testing.T, line string, legacyTDB *sqlutils.SQLRunner) string {
+	parsedLine, err := parser.Parse(line)
+	require.NoError(t, err)
+
+	var modify bool
+	for _, lm := range []sqlLineModifier{modifyExprsReferencingSequencesWithTrue, modifyAlterPKWithRowIDCol, modifySetDeclarativeSchemaChangerMode} {
+		var m bool
+		parsedLine, m = lm(t, parsedLine, legacyTDB)
+		modify = modify || m
+	}
+	if modify {
+		t.Logf("Comparator testing framework modifies line %q to %q", line, parsedLine.String())
+	}
+	return parsedLine.String()
+}
+
+// modifySetDeclarativeSchemaChangerMode skips stmts that attempt to alter
+// schema changer mode via session variable "use_declarative_schema_changer" or
+// cluster setting "sql.schema.force_declarative_statements".
+func modifySetDeclarativeSchemaChangerMode(
+	t *testing.T, parsedStmts statements.Statements, _ *sqlutils.SQLRunner,
+) (statements.Statements, bool) {
+	var newParsedStmts statements.Statements
+	for _, parsedStmt := range parsedStmts {
+		switch ast := parsedStmt.AST.(type) {
+		case *tree.SetVar:
+			if ast.Name == "use_declarative_schema_changer" {
+				continue
+			}
+		case *tree.SetClusterSetting:
+			if ast.Name == "sql.schema.force_declarative_statements" {
+				continue
+			}
+		}
+		newParsedStmts = append(newParsedStmts, parsedStmt)
+	}
+	return newParsedStmts, false
+}
+
+// modifyAlterPKWithRowIDCol modifies any ALTER PK stmt in `line` if the
+// current/old primary index column is `rowid` by appending a `DROP COLUMN IF
+// EXISTS rowid` to it, so that legacy schema changer will converge to
+// declarative schema changer (in which ALTER PK will already drop the `rowid`
+// column).
+// The returned boolean indicates if such a modification happened.
+func modifyAlterPKWithRowIDCol(
+	t *testing.T, parsedStmts statements.Statements, tdb *sqlutils.SQLRunner,
+) (statements.Statements, bool) {
+	// A helper to determine whether table `name`'s current primary key column is
+	// the implicit `rowid` column.
+	isCurrentPrimaryKeyColumnRowID := func(name *tree.UnresolvedObjectName) bool {
+		res := tdb.QueryStr(t, fmt.Sprintf(`SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) -> 'table' -> 'primaryIndex' ->> 'keyColumnNames' FROM system.descriptor WHERE id = '%v'::REGCLASS;`, name.String()))
+		return res[0][0] == `["rowid"]`
+	}
+
+	// A helper to determine whether the connection is currently in an open
+	// transaction.
+	isInAnOpenTransaction := func() bool {
+		res := tdb.QueryStr(t, `SHOW transaction_status;`)
+		return res[0][0] == `Open`
+	}
+
+	var newParsedStmts statements.Statements
+	var modified bool
+	for _, parsedStmt := range parsedStmts {
+		newParsedStmts = append(newParsedStmts, parsedStmt)
+		var isAlterPKWithRowID bool
+		var tableName *tree.UnresolvedObjectName
+		switch ast := parsedStmt.AST.(type) {
+		case *tree.AlterTable:
+			for _, cmd := range ast.Cmds {
+				switch cmd := cmd.(type) {
+				case *tree.AlterTableAlterPrimaryKey:
+					if isCurrentPrimaryKeyColumnRowID(ast.Table) {
+						isAlterPKWithRowID = true
+						tableName = ast.Table
+					}
+				case *tree.AlterTableAddConstraint:
+					if alterTableAddPK, ok := cmd.ConstraintDef.(*tree.UniqueConstraintTableDef); ok &&
+						alterTableAddPK.PrimaryKey && isCurrentPrimaryKeyColumnRowID(ast.Table) {
+						isAlterPKWithRowID = true
+						tableName = ast.Table
+					}
+				}
+			}
+		}
+		if isAlterPKWithRowID {
+			parsedCommit, err := parser.ParseOne("commit")
+			require.NoError(t, err)
+			parsedDropRowID, err := parser.ParseOne(fmt.Sprintf("ALTER TABLE %v DROP COLUMN IF EXISTS rowid", tableName))
+			require.NoError(t, err)
+			newParsedStmts = append(newParsedStmts, parsedCommit, parsedDropRowID)
+			if isInAnOpenTransaction() {
+				parsedBegin, err := parser.ParseOne("begin")
+				require.NoError(t, err)
+				newParsedStmts = append(newParsedStmts, parsedBegin)
+			}
+			modified = true
+		}
+	}
+
+	return newParsedStmts, modified
+}
+
+// modifyExprsReferencingSequencesWithTrue modifies any expressions in `line`
+// that references sequences to "True". The returned boolean indicates whether
+// such a modification happened.
+func modifyExprsReferencingSequencesWithTrue(
+	t *testing.T, parsedStmts statements.Statements, _ *sqlutils.SQLRunner,
+) (statements.Statements, bool) {
+	// replaceSeqReferencesWithTrueInExpr detects if `expr` contains any references to
+	// sequences. If so, return a new expression "True"; otherwise, return `expr` as is.
+	replaceSeqReferencesWithTrueInExpr := func(expr tree.Expr) (newExpr tree.Expr) {
+		newExpr = expr
+		useSeqs, err := seqexpr.GetUsedSequences(expr)
+		require.NoError(t, err)
+		if len(useSeqs) > 0 {
+			newExpr, err = parser.ParseExpr("true")
+			require.NoError(t, err)
+		}
+		return newExpr
+	}
+
+	var newParsedStmts statements.Statements
+	var modified bool
+	for _, parsedStmt := range parsedStmts {
+		switch ast := parsedStmt.AST.(type) {
+		case *tree.CreateTable:
+			for _, colDef := range ast.Defs {
+				switch colDef := colDef.(type) {
+				case *tree.ColumnTableDef:
+					for i, colCkExpr := range colDef.CheckExprs {
+						colDef.CheckExprs[i].Expr = replaceSeqReferencesWithTrueInExpr(colCkExpr.Expr)
+						modified = true
+					}
+				case *tree.CheckConstraintTableDef:
+					colDef.Expr = replaceSeqReferencesWithTrueInExpr(colDef.Expr)
+					modified = true
+				}
+			}
+		case *tree.AlterTable:
+			for _, cmd := range ast.Cmds {
+				switch cmd := cmd.(type) {
+				case *tree.AlterTableAddColumn:
+					for i, colCkExpr := range cmd.ColumnDef.CheckExprs {
+						cmd.ColumnDef.CheckExprs[i].Expr = replaceSeqReferencesWithTrueInExpr(colCkExpr.Expr)
+						modified = true
+					}
+				case *tree.AlterTableAddConstraint:
+					if ck, ok := cmd.ConstraintDef.(*tree.CheckConstraintTableDef); ok {
+						ck.Expr = replaceSeqReferencesWithTrueInExpr(ck.Expr)
+						modified = true
+					}
+				}
+			}
+		}
+		newParsedStmts = append(newParsedStmts, parsedStmt)
+	}
+
+	return newParsedStmts, modified
 }
 
 // requireNoErrOrSameErrCode require errors from executing some statement
