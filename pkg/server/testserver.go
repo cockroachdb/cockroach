@@ -426,7 +426,7 @@ func (ts *testServer) NodeLiveness() interface{} {
 
 // NodeDialer returns the NodeDialer used by the testServer.
 func (ts *testServer) NodeDialer() interface{} {
-	return ts.nodeDialer
+	return ts.kvNodeDialer
 }
 
 // HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
