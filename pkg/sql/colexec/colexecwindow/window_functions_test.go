@@ -90,7 +90,7 @@ func TestWindowFunctions(t *testing.T) {
 	avgFn := execinfrapb.AggregatorSpec_AVG
 	maxFn := execinfrapb.AggregatorSpec_MAX
 
-	for _, spillForced := range []bool{true} {
+	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for _, tc := range []windowFnTestCase{
 			// With PARTITION BY, no ORDER BY.
