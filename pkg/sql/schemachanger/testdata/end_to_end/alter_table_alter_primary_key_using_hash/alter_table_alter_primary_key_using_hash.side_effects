@@ -16,8 +16,7 @@ write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
     descriptorId: 104
-    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS
-      (‹j›) USING HASH WITH (‹bucket_count› = ‹3›)
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›) USING HASH WITH (‹bucket_count› = ‹3›)
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
@@ -189,10 +188,8 @@ upsert descriptor #104
   +      name: t
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY
-  +          USING COLUMNS (‹j›) USING HASH WITH (‹bucket_count› = ‹3›)
-  +        statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH
-  +          (bucket_count = 3)
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›) USING HASH WITH (‹bucket_count› = ‹3›)
+  +        statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
   +        statementTag: ALTER TABLE
   +    revertible: true
   +    targetRanks: <redacted>
@@ -788,7 +785,7 @@ upsert descriptor #104
      createAsOfTime:
        wallTime: "1640995200000000000"
   ...
-             (bucket_count = 3)
+           statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
            statementTag: ALTER TABLE
   -    revertible: true
        targetRanks: <redacted>
@@ -969,10 +966,8 @@ upsert descriptor #104
   -      name: t
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY
-  -          USING COLUMNS (‹j›) USING HASH WITH (‹bucket_count› = ‹3›)
-  -        statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH
-  -          (bucket_count = 3)
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›) USING HASH WITH (‹bucket_count› = ‹3›)
+  -        statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
   -        statementTag: ALTER TABLE
   -    targetRanks: <redacted>
   -    targets: <redacted>

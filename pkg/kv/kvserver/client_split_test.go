@@ -1235,9 +1235,13 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 
 			// Set maxBytes to something small so we can exceed the maximum split
 			// size without adding 2x64MB of data.
+			defer zonepb.TestingSetMinRangeMaxBytes(1 << 16)()
+			const minBytes = 1 << 12
 			const maxBytes = 1 << 17
 			zoneConfig := zonepb.DefaultZoneConfig()
+			zoneConfig.RangeMinBytes = proto.Int64(minBytes)
 			zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
+			zoneConfig.NumReplicas = proto.Int32(1)
 
 			testingRequestFilter :=
 				func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
@@ -2577,18 +2581,24 @@ func TestUnsplittableRange(t *testing.T) {
 
 	ctx := context.Background()
 	ttl := 1 * time.Hour
+	defer zonepb.TestingSetMinRangeMaxBytes(1 << 16)()
+	const minBytes = 1 << 12
 	const maxBytes = 1 << 17
 	manualClock := hlc.NewHybridManualClock()
 	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.RangeMinBytes = proto.Int64(minBytes)
 	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
 	zoneConfig.GC = &zonepb.GCPolicy{
 		TTLSeconds: int32(ttl.Seconds()),
 	}
+	zoneConfig.NumReplicas = proto.Int32(1)
 	zoneSystemConfig := zonepb.DefaultSystemZoneConfig()
+	zoneSystemConfig.RangeMinBytes = proto.Int64(minBytes)
 	zoneSystemConfig.RangeMaxBytes = proto.Int64(maxBytes)
 	zoneSystemConfig.GC = &zonepb.GCPolicy{
 		TTLSeconds: int32(ttl.Seconds()),
 	}
+	zoneSystemConfig.NumReplicas = proto.Int32(1)
 	splitQueuePurgatoryChan := make(chan time.Time, 1)
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{

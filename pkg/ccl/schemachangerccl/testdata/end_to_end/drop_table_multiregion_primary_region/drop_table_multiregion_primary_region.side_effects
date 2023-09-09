@@ -21,8 +21,7 @@ increment telemetry for sql.schema.drop_table
 write *eventpb.DropTable to event log:
   sql:
     descriptorId: 108
-    statement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table›
-      CASCADE
+    statement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE
     tag: DROP TABLE
     user: root
   tableName: multi_region_test_db.public.table_regional_by_table
@@ -96,10 +95,8 @@ upsert descriptor #108
   +      name: table_regional_by_table
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table›
-  +          CASCADE
-  +        statement: DROP TABLE multi_region_test_db.public.table_regional_by_table
-  +          CASCADE
+  +        redactedStatement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE
+  +        statement: DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE
   +        statementTag: DROP TABLE
   +    targetRanks: <redacted>
   +    targets: <redacted>
@@ -155,10 +152,8 @@ upsert descriptor #108
   -      name: table_regional_by_table
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table›
-  -          CASCADE
-  -        statement: DROP TABLE multi_region_test_db.public.table_regional_by_table
-  -          CASCADE
+  -        redactedStatement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE
+  -        statement: DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE
   -        statementTag: DROP TABLE
   -    targetRanks: <redacted>
   -    targets: <redacted>

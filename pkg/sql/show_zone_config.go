@@ -163,12 +163,6 @@ func getShowZoneConfigRow(
 
 // zoneConfigToSQL pretty prints a zone configuration as a SQL string.
 func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, error) {
-	// Use FutureLineWrap to avoid wrapping long lines. This is required for
-	// cases where one of the zone config fields is longer than 80 characters.
-	// In that case, without FutureLineWrap, the output will have `\n`
-	// characters interspersed every 80 characters. FutureLineWrap ensures that
-	// the whole field shows up as a single line.
-	yaml.FutureLineWrap()
 	constraints, err := yamlMarshalFlow(zonepb.ConstraintsList{
 		Constraints: zone.Constraints,
 		Inherited:   zone.InheritedConstraints})

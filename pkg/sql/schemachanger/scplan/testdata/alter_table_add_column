@@ -344,8 +344,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
       RunningStatus: PostCommitPhase stage 1 of 7 with 3 MutationType ops pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 NOT NULL DEFAULT 123
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 NOT
-          NULL DEFAULT ‹123›
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹123›
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 7 with 5 MutationType ops
   transitions:
@@ -807,12 +806,10 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
       RunningStatus: PostCommitPhase stage 1 of 7 with 3 MutationType ops pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 DEFAULT 123
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT
-          ‹123›
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
         statementtag: ALTER TABLE
       - statement: ALTER TABLE defaultdb.foo ADD COLUMN k INT8 DEFAULT 456
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹k› INT8 DEFAULT
-          ‹456›
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹k› INT8 DEFAULT ‹456›
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 7 with 5 MutationType ops
   transitions:
@@ -1176,8 +1173,7 @@ PreCommitPhase stage 2 of 2 with 13 MutationType ops
       RunningStatus: PostCommitPhase stage 1 of 7 with 2 MutationType ops pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8 AS (i + 1) STORED
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i›
-          + ‹1›) STORED
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i› + ‹1›) STORED
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 7 with 4 MutationType ops
   transitions:
@@ -1685,8 +1681,7 @@ PreCommitPhase stage 2 of 2 with 10 MutationType ops
       RunningStatus: PostCommitPhase stage 1 of 15 with 1 MutationType op pending
       Statements:
       - statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j)
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS
-          (‹j›)
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›)
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 15 with 3 MutationType ops
   transitions:
@@ -2191,8 +2186,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
       RunningStatus: PostCommitPhase stage 1 of 15 with 2 MutationType ops pending
       Statements:
       - statement: ALTER TABLE defaultdb.baz ADD COLUMN g INT8 UNIQUE DEFAULT 1
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹baz› ADD COLUMN ‹g› INT8 UNIQUE
-          DEFAULT ‹1›
+        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹baz› ADD COLUMN ‹g› INT8 UNIQUE DEFAULT ‹1›
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 15 with 4 MutationType ops
   transitions:

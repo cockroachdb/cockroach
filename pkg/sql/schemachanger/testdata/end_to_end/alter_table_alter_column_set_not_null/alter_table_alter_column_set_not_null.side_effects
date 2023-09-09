@@ -90,8 +90,7 @@ upsert descriptor #104
   +      name: t
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET
-  +          NOT NULL
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET NOT NULL
   +        statement: ALTER TABLE t ALTER COLUMN j SET NOT NULL
   +        statementTag: ALTER TABLE
   +    revertible: true
@@ -181,8 +180,7 @@ upsert descriptor #104
   -      name: t
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET
-  -          NOT NULL
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET NOT NULL
   -        statement: ALTER TABLE t ALTER COLUMN j SET NOT NULL
   -        statementTag: ALTER TABLE
   -    revertible: true
