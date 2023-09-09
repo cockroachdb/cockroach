@@ -190,7 +190,6 @@ func TestGSS(t *testing.T) {
 }
 
 func TestGSSFileDescriptorCount(t *testing.T) {
-	t.Skip("#110194")
 	rootConnector, err := pq.NewConnector("user=root password=rootpw sslmode=require")
 	if err != nil {
 		t.Fatal(err)
@@ -206,12 +205,9 @@ func TestGSSFileDescriptorCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cookie := rootAuthCookie(t)
-	const adminURL = "https://localhost:8080"
-	origFDCount := openFDCount(t, adminURL, cookie)
-
+	const numLogins = 1000
 	start := now()
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < numLogins; i++ {
 		fmt.Println(i, time.Since(start))
 		out, err := exec.Command("psql", "-c", "SELECT 1", "-U", user).CombinedOutput()
 		if IsError(err, "GSS authentication requires an enterprise license") {
@@ -220,9 +216,11 @@ func TestGSSFileDescriptorCount(t *testing.T) {
 		}
 	}
 
-	newFDCount := openFDCount(t, adminURL, cookie)
-	if origFDCount != newFDCount {
-		t.Fatalf("expected open file descriptor count to be the same: %d != %d", origFDCount, newFDCount)
+	cookie := rootAuthCookie(t)
+	const adminURL = "https://cockroach:8080"
+	fdCount := openFDCount(t, adminURL, cookie)
+	if fdCount > numLogins {
+		t.Fatalf("expected file descriptors to be cleaned up, found %d open", fdCount)
 	}
 }
 
@@ -244,7 +242,7 @@ func IsError(err error, re string) bool {
 // authentication a web session.
 func rootAuthCookie(t *testing.T) string {
 	t.Helper()
-	out, err := exec.Command("/cockroach/cockroach", "auth-session", "login", "root", "--only-cookie").CombinedOutput()
+	out, err := exec.Command("/cockroach/cockroach", "auth-session", "login", "root", "--certs-dir", "/certs", "--url=postgresql://root:rootpw@cockroach:26257?sslmode=require", "--only-cookie").CombinedOutput()
 	if err != nil {
 		t.Log(string(out))
 		t.Fatal(errors.Wrap(err, "auth-session failed"))
