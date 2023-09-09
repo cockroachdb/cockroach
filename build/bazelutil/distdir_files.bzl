@@ -662,6 +662,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jcmturner/rpc/v2/com_github_jcmturner_rpc_v2-v2.0.3.zip": "90c595355e5e2c9dc1e1ae71a88491a04c34d8791180098da103217cbf5f5574",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jessevdk/go-flags/com_github_jessevdk_go_flags-v1.5.0.zip": "9886379a8c31f9021ce68490e2a21bdbea7e5fe95533229650e1ac1571dcd78a",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jhump/protoreflect/com_github_jhump_protoreflect-v1.9.1-0.20210817181203-db1a327a393e.zip": "919843c24904e6855775ea7e248654582a1703bd879b608a9bcc5e4a726e0288",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jingyugao/rowserrcheck/com_github_jingyugao_rowserrcheck-v1.1.2-0.20220704084010-fa9179529ab8.zip": "fbe6d0474795770a655e9a11b11202f090a95bb938ff6e2edbe736aab62374e9",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jinzhu/inflection/com_github_jinzhu_inflection-v1.0.0.zip": "cf1087a6f6653ed5f366f85cf0110bbbf581d4e9bc8a4d1a9b56765d94b546c3",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jinzhu/now/com_github_jinzhu_now-v1.1.4.zip": "245473b8e50be3897751ec66dd6be93588de261920e0345b500f692924575872",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jmespath/go-jmespath/com_github_jmespath_go_jmespath-v0.4.0.zip": "d1f77b6790d7c4321a74260f3675683d3ac06b0a614b5f83e870beae0a8b2867",

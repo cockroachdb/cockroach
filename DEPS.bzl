@@ -5060,6 +5060,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_jingyugao_rowserrcheck",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/jingyugao/rowserrcheck",
+        sha256 = "fbe6d0474795770a655e9a11b11202f090a95bb938ff6e2edbe736aab62374e9",
+        strip_prefix = "github.com/jingyugao/rowserrcheck@v1.1.2-0.20220704084010-fa9179529ab8",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jingyugao/rowserrcheck/com_github_jingyugao_rowserrcheck-v1.1.2-0.20220704084010-fa9179529ab8.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_jinzhu_inflection",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jinzhu/inflection",
