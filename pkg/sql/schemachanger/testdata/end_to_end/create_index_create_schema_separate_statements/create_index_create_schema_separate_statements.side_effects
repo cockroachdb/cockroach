@@ -19,8 +19,7 @@ write *eventpb.CreateIndex to event log:
   mutationId: 1
   sql:
     descriptorId: 104
-    statement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹j›) WHERE (‹i›
-      > ‹0›)
+    statement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹j›) WHERE (‹i› > ‹0›)
     tag: CREATE INDEX
     user: root
   tableName: defaultdb.public.t
@@ -220,8 +219,7 @@ upsert descriptor #104
   +      name: t
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹j›)
-  +          WHERE (‹i› > ‹0›)
+  +        redactedStatement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹j›) WHERE (‹i› > ‹0›)
   +        statement: CREATE UNIQUE INDEX idx ON t (j) WHERE (i > 0)
   +        statementTag: CREATE INDEX
   +    revertible: true
@@ -492,8 +490,7 @@ upsert descriptor #104
   -      name: t
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹j›)
-  -          WHERE (‹i› > ‹0›)
+  -        redactedStatement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹j›) WHERE (‹i› > ‹0›)
   -        statement: CREATE UNIQUE INDEX idx ON t (j) WHERE (i > 0)
   -        statementTag: CREATE INDEX
   -    revertible: true
