@@ -1502,17 +1502,19 @@ func (ts *testServer) StartTenant(
 			// the closed timestamp interval required to see new updates.
 			ts.tenantCapabilitiesWatcher.TestingRestart()
 			if err := testutils.SucceedsSoonError(func() error {
-				capabilities, found := ts.TenantCapabilitiesReader().GetCapabilities(params.TenantID)
+				reader := ts.TenantCapabilitiesReader()
+				capabilities, found := reader.GetCapabilities(params.TenantID)
 				if !found {
-					return errors.Newf("capabilities not yet ready")
+					return errors.Newf("no capabilities known yet")
 				}
 				if !tenantcapabilities.MustGetBoolByID(
 					capabilities, tenantcapabilities.CanUseNodelocalStorage,
 				) {
-					return errors.Newf("capabilities not yet ready")
+					return errors.Newf("node local storage capability not granted yet")
 				}
 				return nil
 			}); err != nil {
+				log.DumpStacks(ctx, "something got stuck")
 				return nil, err
 			}
 		}
