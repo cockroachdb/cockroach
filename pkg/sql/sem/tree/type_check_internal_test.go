@@ -136,6 +136,11 @@ func ddecimal(f float64) copyableExpr {
 		return dd
 	}
 }
+func dfloat(f float64) copyableExpr {
+	return func() tree.Expr {
+		return tree.NewDFloat(tree.DFloat(f))
+	}
+}
 func placeholder(id tree.PlaceholderIdx) copyableExpr {
 	return func() tree.Expr {
 		return newPlaceholder(id)
@@ -299,6 +304,11 @@ func TestTypeCheckSameTypedTupleExprs(t *testing.T) {
 		{nil, ttuple(types.Int, types.Decimal), exprs(tuple(intConst("1"), intConst("1")), tuple(intConst("1"), intConst("1"))), ttuple(types.Int, types.Decimal), nil},
 		// Verify desired type when possible with unresolved constants.
 		{ptypesNone, ttuple(types.Int, types.Decimal), exprs(tuple(placeholder(0), intConst("1")), tuple(intConst("1"), placeholder(1))), ttuple(types.Int, types.Decimal), ptypesIntAndDecimal},
+		// Verify CASTs are in the direction of the non-null expression.
+		{nil, nil, exprs(tuple(dnull), dnull, tuple(dint(1)), dnull), ttuple(types.Int), nil},
+		{nil, nil, exprs(tuple(dint(1)), dnull, tuple(dnull), dnull), ttuple(types.Int), nil},
+		{nil, nil, exprs(dnull, tuple(dint(1), dnull), tuple(dnull, dfloat(1)), dnull), ttuple(types.Int, types.Float), nil},
+		{nil, nil, exprs(tuple(dint(1), dnull, dnull), tuple(dnull, ddecimal(1), dnull), dnull, tuple(dnull, dnull, dfloat(1)), dnull), ttuple(types.Int, types.Decimal, types.Float), nil},
 	} {
 		t.Run(fmt.Sprintf("test_%d", i), func(t *testing.T) {
 			attemptTypeCheckSameTypedExprs(t, i, d)

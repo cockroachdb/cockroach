@@ -2595,6 +2595,15 @@ type typeCheckExprsState struct {
 	resolvableIdxs  intsets.Fast // index into exprs/typedExprs
 }
 
+func findFirstTupleIndex(exprs ...Expr) (index int, ok bool) {
+	for i, expr := range exprs {
+		if _, ok := expr.(*Tuple); ok {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 // typeCheckSameTypedExprs type checks a list of expressions, asserting that all
 // resolved TypeExprs have the same type. An optional desired type can be provided,
 // which will hint that type which the expressions should resolve to, if possible.
@@ -2618,9 +2627,26 @@ func typeCheckSameTypedExprs(
 		return []TypedExpr{typedExpr}, typ, nil
 	}
 
-	// Handle tuples, which will in turn call into this function recursively for each element.
-	if _, ok := exprs[0].(*Tuple); ok {
-		return typeCheckSameTypedTupleExprs(ctx, semaCtx, desired, exprs...)
+	// Handle tuples, which will in turn call into this function recursively for
+	// each element.
+	// TODO(msirek): Rewrite typeCheckSameTypedTupleExprs to handle all types of
+	// expressions which could resolve to a type family of `TupleFamily`, like a
+	// VALUES clause. Logic in `typeCheckSameTypedTupleExprs` states that the call
+	// to `TypeCheck` should be deferred until the common type is determined. So,
+	// we would need a way to determine which expressions are in the tuple family
+	// without inspecting the AST node and without calling `TypeCheck`. Does the
+	// call to `TypeCheck` really need to be deferred?
+	if idx, ok := findFirstTupleIndex(exprs...); ok {
+		if _, ok := exprs[idx].(*Tuple); ok {
+			// typeCheckSameTypedTupleExprs expects the first expression in the slice
+			// to be a tuple.
+			exprs[0], exprs[idx] = exprs[idx], exprs[0]
+			typedExprs, commonType, err := typeCheckSameTypedTupleExprs(ctx, semaCtx, desired, exprs...)
+			if err == nil {
+				typedExprs[0], typedExprs[idx] = typedExprs[idx], typedExprs[0]
+			}
+			return typedExprs, commonType, err
+		}
 	}
 
 	// Hold the resolved type expressions of the provided exprs, in order.
