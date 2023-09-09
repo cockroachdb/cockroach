@@ -194,7 +194,6 @@ func runTC(queueBuild func(string, map[string]string)) {
 		opts["env.EXTRA_BAZEL_FLAGS"] = fmt.Sprintf("%s --@io_bazel_rules_go//go/config:race --test_env=GORACE=halt_on_error=1", extraBazelFlags)
 		opts["env.STRESSFLAGS"] = fmt.Sprintf("-maxruns %d -maxtime %s -maxfails %d -p %d",
 			maxRuns, maxTime, maxFails, noParallelism)
-		opts["env.TAGS"] = "race"
 		queueBuildThenWait(buildID, opts)
 		delete(opts, "env.TAGS")
 	}
