@@ -70,9 +70,6 @@ func TestTenantBackupWithCanceledImport(t *testing.T) {
 	)
 	defer hostClusterCleanupFn()
 
-	hostSQLDB.Exec(t, "SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true")
-	hostSQLDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true")
-
 	tenant10, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{
 		TenantID: roachpb.MustMakeTenantID(10),
 		TestingKnobs: base.TestingKnobs{
@@ -142,10 +139,6 @@ func TestTenantBackupNemesis(t *testing.T) {
 		},
 	)
 	defer hostClusterCleanupFn()
-
-	// Range tombstones must be enabled for tenant backups to work correctly.
-	hostSQLDB.Exec(t, "SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true")
-	hostSQLDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true")
 
 	tenant10, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{
 		TenantID: roachpb.MustMakeTenantID(10),
