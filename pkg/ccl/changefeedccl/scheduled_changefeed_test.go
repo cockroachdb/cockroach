@@ -236,8 +236,8 @@ func TestSerializesScheduledChangefeedExecutionArgs(t *testing.T) {
 			queryArgs: []interface{}{th.env.Now()},
 			es: expectedSchedule{
 				nameRe:         "foo-changefeed",
-				changefeedStmt: "CREATE CHANGEFEED INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH format = 'JSON', initial_scan = 'only', schema_change_policy = 'stop' AS SELECT * FROM d.public.foo",
-				shownStmt:      "CREATE CHANGEFEED INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=redacted' WITH format = 'JSON', initial_scan = 'only', schema_change_policy = 'stop' AS SELECT * FROM d.public.foo",
+				changefeedStmt: "CREATE CHANGEFEED INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH OPTIONS (format = 'JSON', initial_scan = 'only', schema_change_policy = 'stop') AS SELECT * FROM d.public.foo",
+				shownStmt:      "CREATE CHANGEFEED INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=redacted' WITH OPTIONS (format = 'JSON', initial_scan = 'only', schema_change_policy = 'stop') AS SELECT * FROM d.public.foo",
 				period:         time.Hour,
 				runsNow:        true,
 			},
