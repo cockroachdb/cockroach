@@ -36,7 +36,6 @@ go_test(
         ":userfile",
         "//pkg/base",
         "//pkg/blobs",
-        "//pkg/ccl",
         "//pkg/cloud",
         "//pkg/cloud/cloudtestutils",
         "//pkg/security/securityassets",

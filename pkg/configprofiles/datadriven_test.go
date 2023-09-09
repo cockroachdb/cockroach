@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/configprofiles"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -31,10 +30,6 @@ import (
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// We need this to avoid a race condition in TestServer.
-	// See: #104500.
-	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 
