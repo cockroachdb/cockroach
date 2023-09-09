@@ -342,6 +342,9 @@ func (s *eventStream) onInitialScanSpanCompleted(ctx context.Context, sp roachpb
 	case s.eventsCh <- kvcoord.RangeFeedMessage{
 		RangeFeedEvent: &kvpb.RangeFeedEvent{Checkpoint: &checkpoint},
 	}:
+		s.mu.Lock()
+		s.mu.eventStreamStats.LastSpanCompleteTime = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		s.mu.Unlock()
 		log.VInfof(ctx, 1, "onSpanCompleted: %s@%s", checkpoint.Span, checkpoint.ResolvedTS)
 		return nil
 	}
@@ -629,6 +632,7 @@ func (s *eventStream) constructTracingAggregatorStats(ctx context.Context) error
 			}
 			if sp != nil {
 				s.mu.Lock()
+				s.mu.eventStreamStats.Name = fmt.Sprintf("%d", sp.SpanID())
 				s.mu.eventStreamStats.RangefeedEventWait = &HistogramData{
 					Min:   s.mu.rangefeedEventReceiveWaitHist.Min(),
 					P5:    s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(5),

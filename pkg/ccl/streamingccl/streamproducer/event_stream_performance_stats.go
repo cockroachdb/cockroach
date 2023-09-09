@@ -70,6 +70,7 @@ func timeString(b *strings.Builder, key string, time time.Duration) {
 // String implements the stringer interface.
 func (m *EventStreamPerformanceStats) String() string {
 	var b strings.Builder
+	b.WriteString(fmt.Sprintf("name: %s\n", m.Name))
 	totalEventsReceived := m.KvEvents + m.SstEvents + m.CheckpointEvents + m.DeleteRangeEvents
 	b.WriteString(fmt.Sprintf("kv_events: %d\n", m.KvEvents))
 	b.WriteString(fmt.Sprintf("sst_events: %d\n", m.SstEvents))
@@ -102,24 +103,13 @@ func (m *EventStreamPerformanceStats) String() string {
 	b.WriteString(fmt.Sprintf("last_recv_time: %s\n", m.LastRecvTime.GoTime()))
 	b.WriteString(fmt.Sprintf("last_stream_event_flush_time: %s\n", m.LastFlushTime.GoTime()))
 	b.WriteString(fmt.Sprintf("last_stream_event_send_time: %s\n\n", m.LastSendTime.GoTime()))
+	b.WriteString(fmt.Sprintf("last_span_complete_time: %s\n", m.LastSpanCompleteTime.GoTime()))
 
 	b.WriteString(fmt.Sprintf("rangefeed_event_wait: \n%s\n", m.RangefeedEventWait.String()))
 	b.WriteString(fmt.Sprintf("flush_event_wait: \n%s\n", m.FlushEventWait.String()))
 	b.WriteString(fmt.Sprintf("send_event_wait: \n%s\n", m.SendEventWait.String()))
 	b.WriteString(fmt.Sprintf("since_next_wait: \n%s\n", m.SinceNextWait.String()))
 
-	b.WriteString("rangefeed_event_bars:\n")
-	for _, bar := range m.RangefeedEventBars {
-		b.WriteString(bar.String())
-	}
-	b.WriteString("\nflush_event_bars:\n")
-	for _, bar := range m.FlushEventBars {
-		b.WriteString(bar.String())
-	}
-	b.WriteString("\nsend_event_bars:\n")
-	for _, bar := range m.SendEventBars {
-		b.WriteString(bar.String())
-	}
 	return b.String()
 }
 
@@ -129,6 +119,7 @@ func (m *EventStreamPerformanceStats) Combine(other bulk.TracingAggregatorEvent)
 		panic(fmt.Sprintf("`other` is not of type EventStreamPerformanceStats: %T", other))
 	}
 
+	m.Name = otherStats.Name
 	m.KvEvents += otherStats.KvEvents
 	m.SstEvents += otherStats.SstEvents
 	m.CheckpointEvents += otherStats.CheckpointEvents
@@ -149,6 +140,9 @@ func (m *EventStreamPerformanceStats) Combine(other bulk.TracingAggregatorEvent)
 	}
 	if m.LastSendTime.Less(otherStats.LastSendTime) {
 		m.LastSendTime = otherStats.LastSendTime
+	}
+	if m.LastSpanCompleteTime.Less(otherStats.LastSpanCompleteTime) {
+		m.LastSpanCompleteTime = otherStats.LastSpanCompleteTime
 	}
 
 	m.RangefeedEventWait = otherStats.RangefeedEventWait

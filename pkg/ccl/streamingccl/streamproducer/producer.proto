@@ -38,6 +38,8 @@ message HistogramData {
 message EventStreamPerformanceStats {
   option (gogoproto.goproto_stringer) = false;
 
+  string name = 21;
+
   int64 kv_events = 1;
   int64 sst_events = 2;
   int64 checkpoint_events = 3;
@@ -58,6 +60,8 @@ message EventStreamPerformanceStats {
   HistogramData flush_event_wait = 15;
   HistogramData send_event_wait = 16;
   HistogramData since_next_wait = 20;
+
+  util.hlc.Timestamp last_span_complete_time = 22 [(gogoproto.nullable) = false];
 
   repeated Bar rangefeed_event_bars = 17;
   repeated Bar flush_event_bars = 18;
