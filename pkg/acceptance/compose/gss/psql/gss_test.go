@@ -12,8 +12,8 @@
 // within docker compose. We also can't use just "gss" here because that
 // tag is reserved for the toplevel Makefile's linux-gnu build.
 
-//go:build gss_compose
-// +build gss_compose
+//go:bu ild gss_compose
+// +bu ild gss_compose
 
 package gss
 
@@ -189,8 +189,10 @@ func TestGSS(t *testing.T) {
 	}
 }
 
+// TestGSSFileDescriptorCount verifies that files are closed after a
+// kerberos connection ends. This is a regression test for the fix made in
+// https://github.com/cockroachdb/cockroach/pull/49572.
 func TestGSSFileDescriptorCount(t *testing.T) {
-	t.Skip("#110194")
 	rootConnector, err := pq.NewConnector("user=root password=rootpw sslmode=require")
 	if err != nil {
 		t.Fatal(err)
@@ -206,9 +208,16 @@ func TestGSSFileDescriptorCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Login once to initialize the kerberos replay cache.
+	out, err := exec.Command("psql", "-c", "SELECT 1", "-U", user).CombinedOutput()
+	if IsError(err, "GSS authentication requires an enterprise license") {
+		t.Log(string(out))
+		t.Fatal(err)
+	}
+
 	cookie := rootAuthCookie(t)
-	const adminURL = "https://localhost:8080"
-	origFDCount := openFDCount(t, adminURL, cookie)
+	const adminURL = "https://cockroach:8080"
+	initFDCount := openFDCount(t, adminURL, cookie)
 
 	start := now()
 	for i := 0; i < 1000; i++ {
@@ -220,10 +229,20 @@ func TestGSSFileDescriptorCount(t *testing.T) {
 		}
 	}
 
-	newFDCount := openFDCount(t, adminURL, cookie)
-	if origFDCount != newFDCount {
-		t.Fatalf("expected open file descriptor count to be the same: %d != %d", origFDCount, newFDCount)
+	deadline := start.Add(30 * time.Second)
+	var endFDCount int
+	for wait := time.Duration(1); now().Before(deadline); wait *= 2 {
+		endFDCount = openFDCount(t, adminURL, cookie)
+		if endFDCount == initFDCount {
+			return
+		}
+		if wait > time.Second {
+			wait = time.Second
+		}
+		time.Sleep(wait)
 	}
+
+	t.Fatalf("expected file descriptors to be cleaned up, found %d open; expected %d", endFDCount, initFDCount)
 }
 
 func IsError(err error, re string) bool {
@@ -244,7 +263,7 @@ func IsError(err error, re string) bool {
 // authentication a web session.
 func rootAuthCookie(t *testing.T) string {
 	t.Helper()
-	out, err := exec.Command("/cockroach/cockroach", "auth-session", "login", "root", "--only-cookie").CombinedOutput()
+	out, err := exec.Command("/cockroach/cockroach", "auth-session", "login", "root", "--certs-dir", "/certs", "--url=postgresql://root:rootpw@cockroach:26257?sslmode=require", "--only-cookie").CombinedOutput()
 	if err != nil {
 		t.Log(string(out))
 		t.Fatal(errors.Wrap(err, "auth-session failed"))
