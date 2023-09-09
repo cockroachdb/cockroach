@@ -36,7 +36,6 @@ go_test(
     deps = [
         ":privchecker",
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

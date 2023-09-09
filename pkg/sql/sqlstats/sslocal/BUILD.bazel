@@ -44,7 +44,6 @@ go_test(
     deps = [
         ":sslocal",
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

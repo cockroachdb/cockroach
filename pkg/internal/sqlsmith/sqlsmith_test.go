@@ -53,7 +53,7 @@ func TestRandTableInserts(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	rnd, _ := randutil.NewTestRand()
-	defer ccl.TestingEnableEnterprise()()
+	defer ccl.TestingEnableEnterprise()() // allow usage of partitions
 
 	setup := randTablesN(rnd, 10, "")
 	for _, stmt := range setup {

@@ -30,7 +30,6 @@ go_test(
     deps = [
         ":structlogging",
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator/plan",
         "//pkg/roachpb",

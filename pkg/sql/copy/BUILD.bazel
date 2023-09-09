@@ -12,7 +12,6 @@ go_test(
     data = glob(["testdata/**"]),
     deps = [
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/cli/clisqlclient",
         "//pkg/kv/kvpb",
         "//pkg/security/securityassets",

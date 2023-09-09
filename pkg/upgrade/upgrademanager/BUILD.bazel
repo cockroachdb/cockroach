@@ -49,7 +49,6 @@ go_test(
     deps = [
         ":upgrademanager",
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/clusterversion",
         "//pkg/jobs",

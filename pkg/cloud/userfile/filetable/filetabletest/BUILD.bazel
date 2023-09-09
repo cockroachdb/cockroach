@@ -10,7 +10,6 @@ go_test(
     args = ["-test.timeout=295s"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/cloud/userfile/filetable",
         "//pkg/kv",
         "//pkg/security/securityassets",
