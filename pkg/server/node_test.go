@@ -741,8 +741,8 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 
 	n := ts.Node().(*Node)
 	bCurr := n.metrics.BatchCount.Count()
-	getCurr := n.metrics.MethodCounts[kvpb.Get].Count()
-	putCurr := n.metrics.MethodCounts[kvpb.Put].Count()
+	getCurr := n.metrics.RemoteMethodCounts[kvpb.Get].Count()
+	putCurr := n.metrics.RemoteMethodCounts[kvpb.Put].Count()
 
 	var ba kvpb.BatchRequest
 	ba.RangeID = 1
@@ -758,8 +758,8 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 	putCurr++
 
 	require.GreaterOrEqual(t, n.metrics.BatchCount.Count(), bCurr)
-	require.GreaterOrEqual(t, n.metrics.MethodCounts[kvpb.Get].Count(), getCurr)
-	require.GreaterOrEqual(t, n.metrics.MethodCounts[kvpb.Put].Count(), putCurr)
+	require.GreaterOrEqual(t, n.metrics.RemoteMethodCounts[kvpb.Get].Count(), getCurr)
+	require.GreaterOrEqual(t, n.metrics.RemoteMethodCounts[kvpb.Put].Count(), putCurr)
 }
 
 // TestNodeCrossLocalityMetrics verifies that

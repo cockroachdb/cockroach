@@ -134,8 +134,15 @@ This metric is thus not an indicator of KV health.`,
 		Unit:        metric.Unit_COUNT,
 	}
 
-	metaInternalBatchRPCMethodCount = metric.Metadata{
-		Name:        "rpc.method.%s.recv",
+	metaInternalRemoteBatchRPCMethodCount = metric.Metadata{
+		Name:        "rpc.method.remote.%s.recv",
+		Help:        "Number of %s requests processed",
+		Measurement: "RPCs",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaInternalLocalBatchRPCMethodCount = metric.Metadata{
+		Name:        "rpc.method.local.%s.recv",
 		Help:        "Number of %s requests processed",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
@@ -263,7 +270,8 @@ type nodeMetrics struct {
 	DiskStalls *metric.Counter
 
 	BatchCount                    *metric.Counter
-	MethodCounts                  [kvpb.NumMethods]*metric.Counter
+	RemoteMethodCounts            [kvpb.NumMethods]*metric.Counter
+	LocalMethodCounts             [kvpb.NumMethods]*metric.Counter
 	BatchRequestsBytes            *metric.Counter
 	BatchResponsesBytes           *metric.Counter
 	CrossRegionBatchRequestBytes  *metric.Counter
@@ -300,12 +308,20 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 		NumMuxRangeFeed:               metric.NewCounter(metaTotalMuxRangeFeed),
 	}
 
-	for i := range nm.MethodCounts {
+	for i := range nm.RemoteMethodCounts {
 		method := kvpb.Method(i).String()
-		meta := metaInternalBatchRPCMethodCount
+		meta := metaInternalRemoteBatchRPCMethodCount
 		meta.Name = fmt.Sprintf(meta.Name, strings.ToLower(method))
 		meta.Help = fmt.Sprintf(meta.Help, method)
-		nm.MethodCounts[i] = metric.NewCounter(meta)
+		nm.RemoteMethodCounts[i] = metric.NewCounter(meta)
+	}
+
+	for i := range nm.LocalMethodCounts {
+		method := kvpb.Method(i).String()
+		meta := metaInternalLocalBatchRPCMethodCount
+		meta.Name = fmt.Sprintf(meta.Name, strings.ToLower(method))
+		meta.Help = fmt.Sprintf(meta.Help, method)
+		nm.LocalMethodCounts[i] = metric.NewCounter(meta)
 	}
 
 	reg.AddMetricStruct(nm)
@@ -1422,7 +1438,11 @@ func (n *Node) incrementBatchCounters(ba *kvpb.BatchRequest) {
 	n.metrics.BatchCount.Inc(1)
 	for _, ru := range ba.Requests {
 		m := ru.GetInner().Method()
-		n.metrics.MethodCounts[m].Inc(1)
+		if ba.AdmissionHeader.SourceLocation == kvpb.AdmissionHeader_REMOTE {
+			n.metrics.RemoteMethodCounts[m].Inc(1)
+		} else {
+			n.metrics.LocalMethodCounts[m].Inc(1)
+		}
 	}
 }
 
