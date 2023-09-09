@@ -28,7 +28,6 @@ go_test(
     deps = [
         ":collector",
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/roachpb",
         "//pkg/rpc/nodedialer",
         "//pkg/security/securityassets",
