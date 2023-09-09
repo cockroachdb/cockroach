@@ -28,7 +28,6 @@ go_test(
     deps = [
         ":idxrecommendations",
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
