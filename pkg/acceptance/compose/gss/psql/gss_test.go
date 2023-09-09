@@ -190,7 +190,6 @@ func TestGSS(t *testing.T) {
 }
 
 func TestGSSFileDescriptorCount(t *testing.T) {
-	t.Skip("#110194")
 	rootConnector, err := pq.NewConnector("user=root password=rootpw sslmode=require")
 	if err != nil {
 		t.Fatal(err)
@@ -244,7 +243,7 @@ func IsError(err error, re string) bool {
 // authentication a web session.
 func rootAuthCookie(t *testing.T) string {
 	t.Helper()
-	out, err := exec.Command("/cockroach/cockroach", "auth-session", "login", "root", "--only-cookie").CombinedOutput()
+	out, err := exec.Command("/cockroach/cockroach", "auth-session", "login", "root", "--url=postgresql://root:rootpw@localhost:26257", "--only-cookie").CombinedOutput()
 	if err != nil {
 		t.Log(string(out))
 		t.Fatal(errors.Wrap(err, "auth-session failed"))
