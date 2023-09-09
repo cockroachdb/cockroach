@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/returnerrcheck"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/timer"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/unconvert"
+	"github.com/jingyugao/rowserrcheck/passes/rowserr"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/asmdecl"
 	"golang.org/x/tools/go/analysis/passes/assign"
@@ -102,6 +103,7 @@ func main() {
 	// Additional analyzers:
 	as = append(as,
 		shadow.Analyzer,
+		rowserr.NewAnalyzer("./pkg/..."),
 	)
 
 	unitchecker.Main(as...)
