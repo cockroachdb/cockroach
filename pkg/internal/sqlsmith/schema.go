@@ -494,6 +494,11 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			// run for a long time or never finish, so we avoid generating them.
 			// See #69213.
 			continue
+		case "st_simplifypreservetopology":
+			// The st_simplifypreservetopology function is non-deterministic in older
+			// versions of libgeos (See #108982). Skip testing this function on older
+			// CRDB release which are running a version of libgeos without the fix.
+			continue
 		}
 
 		if n := tree.Name(def.Name); n.String() != def.Name {
