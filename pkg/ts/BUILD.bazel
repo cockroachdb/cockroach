@@ -69,7 +69,6 @@ go_test(
     embed = [":ts"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",

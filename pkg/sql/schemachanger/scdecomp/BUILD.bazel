@@ -42,7 +42,6 @@ go_test(
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     deps = [
-        "//pkg/ccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

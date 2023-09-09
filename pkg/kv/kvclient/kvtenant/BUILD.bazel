@@ -66,7 +66,6 @@ go_test(
     embed = [":kvtenant"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/config",
         "//pkg/gossip",
         "//pkg/keys",

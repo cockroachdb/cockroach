@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -36,13 +35,11 @@ import (
 )
 
 func TestHotRangesStats(t *testing.T) {
-	ctx := context.Background()
 	defer leaktest.AfterTest(t)()
-	ccl.TestingEnableEnterprise()
-	defer ccl.TestingDisableEnterprise()
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
+	ctx := context.Background()
 	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
 	defer cleanup()
 

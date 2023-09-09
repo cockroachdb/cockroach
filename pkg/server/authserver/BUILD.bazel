@@ -56,7 +56,6 @@ go_test(
     deps = [
         ":authserver",
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/gossip",
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvpb",

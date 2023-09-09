@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -53,8 +52,6 @@ func TestRandTableInserts(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	rnd, _ := randutil.NewTestRand()
-	defer ccl.TestingEnableEnterprise()()
-
 	setup := randTablesN(rnd, 10, "")
 	for _, stmt := range setup {
 		if _, err := sqlDB.Exec(stmt); err != nil {
