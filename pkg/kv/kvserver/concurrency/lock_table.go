@@ -1093,6 +1093,9 @@ func (ulh *unreplicatedLockHolderInfo) rollbackIgnoredSeqNumbers(
 	if len(ignoredSeqNums) == 0 {
 		return
 	}
+	// NOTE: this logic differs slightly from replicated lock acquisition, where
+	// we don't rollback locks at ignored sequence numbers unless they are the
+	// same strength as the lock acquisition. See the comment in MVCCAcquireLock.
 	for strIdx, minSeqNumber := range ulh.strengths {
 		if minSeqNumber == -1 {
 			continue
