@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -42,29 +41,26 @@ type streamIngestionResumer struct {
 	job *jobs.Job
 }
 
-func connectToActiveClient(
-	ctx context.Context, ingestionJob *jobs.Job, db isql.DB, opts ...streamclient.Option,
-) (streamclient.Client, error) {
+func getStreamAddresses(ctx context.Context, ingestionJob *jobs.Job) []string {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	progress := ingestionJob.Progress()
 	streamAddresses := progress.GetStreamIngest().StreamAddresses
 
 	if len(streamAddresses) > 0 {
-		log.Infof(ctx, "attempting to connect to existing stream addresses")
-		client, err := streamclient.GetFirstActiveClient(ctx, streamAddresses, opts...)
-		if err == nil {
-			return client, err
-		}
-
-		// fall through to streamAddress, as even though it is likely part of the
-		// topology it may have been changed to a new valid address via an ALTER
-		// statement
+		return streamAddresses
 	}
-	// Without a list of addresses from existing progress we use the stream
-	// address from the creation statement
-	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
-	client, err := streamclient.NewStreamClient(ctx, streamAddress, db, opts...)
+	// Without a list of addresses from existing progress, we use the stream
+	// address from the creation statement. This could happen if no progress has
+	// been reported.
+	log.Infof(ctx, "no stream addresses in progress. using stream address found during planning")
+	return []string{details.StreamAddress}
+}
 
+func connectToActiveClient(
+	ctx context.Context, ingestionJob *jobs.Job, db isql.DB, opts ...streamclient.Option,
+) (streamclient.Client, error) {
+	streamAddresses := getStreamAddresses(ctx, ingestionJob)
+	client, err := streamclient.GetFirstActiveClient(ctx, streamAddresses, db, opts...)
 	return client, errors.Wrapf(err, "ingestion job %d failed to connect to stream address or existing topology for planning", ingestionJob.ID())
 }
 
@@ -516,8 +512,8 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 	})
 }
 
-func closeAndLog(ctx context.Context, c streamclient.Client) {
-	if err := c.Close(ctx); err != nil {
+func closeAndLog(ctx context.Context, d streamclient.Dialer) {
+	if err := d.Close(ctx); err != nil {
 		log.Warningf(ctx, "error closing stream client: %s", err.Error())
 	}
 }
