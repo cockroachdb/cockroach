@@ -155,7 +155,7 @@ func (sf *streamIngestionFrontier) MustBeStreaming() bool {
 
 type heartbeatSender struct {
 	lastSent        time.Time
-	client          streamclient.Client
+	client          streamclient.StatefulClient
 	streamID        streampb.StreamID
 	frontierUpdates chan hlc.Timestamp
 	frontier        hlc.Timestamp
@@ -173,7 +173,7 @@ func newHeartbeatSender(
 ) (*heartbeatSender, error) {
 
 	streamID := streampb.StreamID(spec.StreamID)
-	streamClient, err := streamclient.GetFirstActiveClient(ctx, spec.StreamAddresses, streamclient.WithStreamID(streamID))
+	streamClient, err := streamclient.GetFirstActiveStatefulClient(ctx, spec.StreamAddresses, flowCtx.Cfg.DB, streamclient.WithStreamID(streamID))
 	if err != nil {
 		return nil, err
 	}

@@ -291,12 +291,12 @@ type RandomStreamClient struct {
 	}
 }
 
-var _ Client = &RandomStreamClient{}
+var _ StatefulClient = &RandomStreamClient{}
 
 // newRandomStreamClient returns a stream client that generates a random set of
 // events on a table with an integer key and integer value for the table with
 // the given ID.
-func newRandomStreamClient(streamURL *url.URL) (Client, error) {
+func newRandomStreamClient(streamURL *url.URL) (StatefulClient, error) {
 	c := randomStreamClientSingleton
 
 	streamConfig, err := parseRandomStreamConfig(streamURL)
@@ -391,13 +391,6 @@ func (m *RandomStreamClient) Create(
 		StreamID:             streampb.StreamID(1),
 		ReplicationStartTime: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
 	}, nil
-}
-
-// SetupSpanConfigsStream implements the Client interface.
-func (m *RandomStreamClient) SetupSpanConfigsStream(
-	ctx context.Context, tenant roachpb.TenantName,
-) (Subscription, error) {
-	panic("SetupSpanConfigsStream not implemented")
 }
 
 // Heartbeat implements the Client interface.

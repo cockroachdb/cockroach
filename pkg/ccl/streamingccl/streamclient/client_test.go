@@ -30,7 +30,7 @@ import (
 
 type testStreamClient struct{}
 
-var _ Client = testStreamClient{}
+var _ StatefulClient = testStreamClient{}
 
 // Dial implements Client interface.
 func (sc testStreamClient) Dial(_ context.Context) error {
@@ -45,13 +45,6 @@ func (sc testStreamClient) Create(
 		StreamID:             streampb.StreamID(1),
 		ReplicationStartTime: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
 	}, nil
-}
-
-// SetupSpanConfigsStream implements the Client interface.
-func (sc testStreamClient) SetupSpanConfigsStream(
-	ctx context.Context, tenant roachpb.TenantName,
-) (Subscription, error) {
-	panic("not implemented")
 }
 
 // Plan implements the Client interface.
@@ -135,8 +128,8 @@ func TestGetFirstActiveClientEmpty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var streamAddresses []string
-	activeClient, err := GetFirstActiveClient(context.Background(), streamAddresses)
-	require.ErrorContains(t, err, "failed to connect, no partition addresses")
+	activeClient, err := GetFirstActiveStatefulClient(context.Background(), streamAddresses, nil)
+	require.ErrorContains(t, err, "failed to connect, no addresses")
 	require.Nil(t, activeClient)
 }
 
@@ -172,7 +165,7 @@ func TestGetFirstActiveClient(t *testing.T) {
 		return nil
 	})
 
-	activeClient, err := GetFirstActiveClient(context.Background(), streamAddresses)
+	activeClient, err := GetFirstActiveStatefulClient(context.Background(), streamAddresses, nil)
 	require.NoError(t, err)
 
 	// Should've dialed the valid schemes up to the 5th one where it should've

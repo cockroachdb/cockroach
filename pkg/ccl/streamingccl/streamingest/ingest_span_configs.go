@@ -63,7 +63,7 @@ type spanConfigIngestor struct {
 	session                  sqlliveness.Session
 	stopperCh                chan struct{}
 	settings                 *cluster.Settings
-	client                   streamclient.Client
+	client                   streamclient.SpanConfigClient
 	rekeyer                  *backupccl.KeyRewriter
 	destinationTenantKeySpan roachpb.Span
 	db                       *kv.DB
@@ -84,7 +84,8 @@ func makeSpanConfigIngestor(
 	stopperCh chan struct{},
 ) (*spanConfigIngestor, error) {
 
-	client, err := connectToActiveClient(ctx, ingestionJob, execCfg.InternalDB, streamclient.ForSpanConfigs())
+	streamAddreses := getStreamAddresses(ctx, ingestionJob)
+	client, err := streamclient.GetFirstActiveSpanConfigClient(ctx, streamAddreses, execCfg.InternalDB)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +122,7 @@ func makeSpanConfigIngestor(
 func (sc *spanConfigIngestor) ingestSpanConfigs(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) error {
-	sub, err := sc.client.SetupSpanConfigsStream(ctx, tenantName)
+	sub, err := sc.client.SetupSpanConfigsStream(tenantName)
 	if err != nil {
 		return err
 	}

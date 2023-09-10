@@ -278,7 +278,7 @@ func GetStreamIngestionStats(
 	if err != nil {
 		return nil, err
 	}
-	client, err := streamclient.GetFirstActiveClient(ctx, stats.IngestionProgress.StreamAddresses)
+	client, err := streamclient.GetFirstActiveStatefulClient(ctx, stats.IngestionProgress.StreamAddresses, nil)
 	if err != nil {
 		return nil, err
 	}

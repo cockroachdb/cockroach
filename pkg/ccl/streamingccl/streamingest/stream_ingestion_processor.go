@@ -214,10 +214,10 @@ type streamIngestionProcessor struct {
 
 	// client is a streaming client which provides a stream of events from a given
 	// address.
-	forceClientForTests streamclient.Client
+	forceClientForTests streamclient.StatefulClient
 	// streamPartitionClients are a collection of streamclient.Client created for
 	// consuming multiple partitions from a stream.
-	streamPartitionClients []streamclient.Client
+	streamPartitionClients []streamclient.StatefulClient
 
 	// cutoverProvider indicates when the cutover time has been reached.
 	cutoverProvider cutoverProvider
@@ -403,17 +403,17 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 
 	// Initialize the event streams.
 	subscriptions := make(map[string]streamclient.Subscription)
-	sip.streamPartitionClients = make([]streamclient.Client, 0)
+	sip.streamPartitionClients = make([]streamclient.StatefulClient, 0)
 	for _, partitionSpec := range sip.spec.PartitionSpecs {
 		id := partitionSpec.PartitionID
 		token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
 		addr := partitionSpec.Address
-		var streamClient streamclient.Client
+		var streamClient streamclient.StatefulClient
 		if sip.forceClientForTests != nil {
 			streamClient = sip.forceClientForTests
 			log.Infof(ctx, "using testing client")
 		} else {
-			streamClient, err = streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(addr), db,
+			streamClient, err = streamclient.NewStatefulStreamClient(ctx, streamingccl.StreamAddress(addr), db,
 				streamclient.WithStreamID(streampb.StreamID(sip.spec.StreamID)))
 			if err != nil {
 				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", token, addr))

@@ -82,7 +82,7 @@ func startDistIngestion(
 	msg := redact.Sprintf("resuming stream (producer job %d) from %s", streamID, heartbeatTimestamp)
 	updateRunningStatus(ctx, ingestionJob, jobspb.InitializingReplication, msg)
 
-	client, err := connectToActiveClient(ctx, ingestionJob, execCtx.ExecCfg().InternalDB,
+	client, err := connectToActiveStatefulClient(ctx, ingestionJob, execCtx.ExecCfg().InternalDB,
 		streamclient.WithStreamID(streamID))
 	if err != nil {
 		return err
@@ -220,7 +220,7 @@ func makeReplicationFlowPlanner(
 	execCtx sql.JobExecContext,
 	ingestionJobID jobspb.JobID,
 	details jobspb.StreamIngestionDetails,
-	client streamclient.Client,
+	client streamclient.StatefulClient,
 	previousReplicatedTime hlc.Timestamp,
 	checkpoint jobspb.StreamIngestionCheckpoint,
 	initialScanTimestamp hlc.Timestamp,
@@ -267,7 +267,7 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 	execCtx sql.JobExecContext,
 	ingestionJobID jobspb.JobID,
 	details jobspb.StreamIngestionDetails,
-	client streamclient.Client,
+	client streamclient.StatefulClient,
 	previousReplicatedTime hlc.Timestamp,
 	checkpoint jobspb.StreamIngestionCheckpoint,
 	initialScanTimestamp hlc.Timestamp,
@@ -593,7 +593,7 @@ func constructStreamIngestionPlanSpecs(
 // is active/running. It returns nil when the job is active.
 func waitUntilProducerActive(
 	ctx context.Context,
-	client streamclient.Client,
+	client streamclient.StatefulClient,
 	streamID streampb.StreamID,
 	heartbeatTimestamp hlc.Timestamp,
 	ingestionJobID jobspb.JobID,

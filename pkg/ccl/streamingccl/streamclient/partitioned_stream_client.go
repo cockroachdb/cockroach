@@ -40,7 +40,7 @@ type partitionedStreamClient struct {
 
 func NewPartitionedStreamClient(
 	ctx context.Context, remote *url.URL, opts ...Option,
-) (Client, error) {
+) (StatefulClient, error) {
 	options := processOptions(opts)
 	config, err := setupPGXConfig(remote, options)
 	if err != nil {
@@ -59,7 +59,7 @@ func NewPartitionedStreamClient(
 	return &client, nil
 }
 
-var _ Client = &partitionedStreamClient{}
+var _ StatefulClient = &partitionedStreamClient{}
 
 // Create implements Client interface.
 func (p *partitionedStreamClient) Create(
@@ -81,12 +81,6 @@ func (p *partitionedStreamClient) Create(
 	}
 
 	return replicationProducerSpec, err
-}
-
-func (p *partitionedStreamClient) SetupSpanConfigsStream(
-	ctx context.Context, tenant roachpb.TenantName,
-) (Subscription, error) {
-	return nil, errors.New("partitioned stream client cannot setup a span config stream")
 }
 
 // Dial implements Client interface.

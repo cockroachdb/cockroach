@@ -324,7 +324,7 @@ func createDummySpanConfigIngestor(
 	sourceTenantID, destTenantID roachpb.TenantID,
 ) (spanConfigIngestor, func()) {
 	maybeInlineURL := h.MaybeGenerateInlineURL(t)
-	client, err := streamclient.NewSpanConfigStreamClient(ctx, maybeInlineURL)
+	client, err := streamclient.NewSpanConfigStreamClient(ctx, maybeInlineURL, nil)
 	require.NoError(t, err)
 
 	rekeyCfg := execinfrapb.TenantRekey{

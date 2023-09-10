@@ -66,19 +66,12 @@ type mockStreamClient struct {
 	onHeartbeat     func() (streampb.StreamReplicationStatus, error)
 }
 
-var _ streamclient.Client = &mockStreamClient{}
+var _ streamclient.StatefulClient = &mockStreamClient{}
 
 // Create implements the Client interface.
 func (m *mockStreamClient) Create(
 	_ context.Context, _ roachpb.TenantName,
 ) (streampb.ReplicationProducerSpec, error) {
-	panic("unimplemented")
-}
-
-// SetupSpanConfigsStream implements the Client interface.
-func (m *mockStreamClient) SetupSpanConfigsStream(
-	ctx context.Context, tenant roachpb.TenantName,
-) (streamclient.Subscription, error) {
 	panic("unimplemented")
 }
 
@@ -169,7 +162,7 @@ func (m *mockStreamClient) Complete(_ context.Context, _ streampb.StreamID, _ bo
 // errorStreamClient always returns an error when consuming a partition.
 type errorStreamClient struct{ mockStreamClient }
 
-var _ streamclient.Client = &errorStreamClient{}
+var _ streamclient.StatefulClient = &errorStreamClient{}
 
 // ConsumePartition implements the streamclient.Client interface.
 func (m *errorStreamClient) Subscribe(
@@ -684,7 +677,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	streamAddr := getTestRandomClientURI(tenantID, tenantName)
 
 	// The random client returns system and table data partitions.
-	streamClient, err := streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(streamAddr), nil)
+	streamClient, err := streamclient.NewStatefulStreamClient(ctx, streamingccl.StreamAddress(streamAddr), nil)
 	require.NoError(t, err)
 
 	randomStreamClient, ok := streamClient.(*streamclient.RandomStreamClient)
@@ -802,7 +795,7 @@ func runStreamIngestionProcessor(
 	initialScanTimestamp hlc.Timestamp,
 	checkpoint []jobspb.ResolvedSpan,
 	tenantRekey execinfrapb.TenantRekey,
-	mockClient streamclient.Client,
+	mockClient streamclient.StatefulClient,
 	cutoverProvider cutoverProvider,
 	streamingTestingKnobs *sql.StreamingTestingKnobs,
 ) (*distsqlutils.RowBuffer, error) {
@@ -832,7 +825,7 @@ func getStreamIngestionProcessor(
 	initialScanTimestamp hlc.Timestamp,
 	checkpoint []jobspb.ResolvedSpan,
 	tenantRekey execinfrapb.TenantRekey,
-	mockClient streamclient.Client,
+	mockClient streamclient.StatefulClient,
 	cutoverProvider cutoverProvider,
 	streamingTestingKnobs *sql.StreamingTestingKnobs,
 ) (*streamIngestionProcessor, *cluster.Settings, error) {
