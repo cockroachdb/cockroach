@@ -16,6 +16,7 @@ go_library(
         "in_mem.go",
         "intent_interleaving_iter.go",
         "lock_table_iterator.go",
+        "lock_table_key_scanner.go",
         "min_version.go",
         "mvcc.go",
         "mvcc_incremental_iterator.go",
