@@ -41,25 +41,26 @@ type SubscriptionToken []byte
 // information to start a stream processor.
 type CheckpointToken []byte
 
-// Client provides a way for the stream ingestion job to consume a
-// specified stream.
-//
-// TODO(57427): The stream client does not yet support the concept of
-// generations in a stream.
+// Dialer is a wrapper for different kinds of clients which stream updates from
+// a tenant.
+type Dialer interface {
+	// Dial checks if the source is able to be connected to for queries
+	Dial(ctx context.Context) error
+
+	// Close releases all the resources used by this client.
+	Close(ctx context.Context) error
+}
+
+// Client provides methods to stream updates from an application tenant.
+// The client persists state on the system tenant, allowing a new client
+// to resume from a checkpoint if a connection is lost.
 type Client interface {
+	Dialer
+
 	// Create initializes a stream with the source, potentially reserving any
 	// required resources, such as protected timestamps, and returns an ID which
 	// can be used to interact with this stream in the future.
 	Create(ctx context.Context, tenant roachpb.TenantName) (streampb.ReplicationProducerSpec, error)
-
-	// SetupSpanConfigsStream creates a stream for the span configs
-	// that apply to the passed in tenant, and returns the subscriptions the
-	// client can subscribe to. No protected timestamp or job is persisted to the
-	// source cluster.
-	SetupSpanConfigsStream(ctx context.Context, tenant roachpb.TenantName) (Subscription, error)
-
-	// Dial checks if the source is able to be connected to for queries
-	Dial(ctx context.Context) error
 
 	// Destroy informs the source of the stream that it may terminate production
 	// and release resources such as protected timestamps.
@@ -85,9 +86,6 @@ type Client interface {
 	// TODO(dt): ts -> checkpointToken.
 	Subscribe(ctx context.Context, streamID streampb.StreamID, spec SubscriptionToken,
 		initialScanTime hlc.Timestamp, previousReplicatedTime hlc.Timestamp) (Subscription, error)
-
-	// Close releases all the resources used by this client.
-	Close(ctx context.Context) error
 
 	// Complete completes a replication stream consumption.
 	Complete(ctx context.Context, streamID streampb.StreamID, successfulIngestion bool) error
@@ -161,9 +159,6 @@ func NewStreamClient(
 	case "postgres", "postgresql":
 		// The canonical PostgreSQL URL scheme is "postgresql", however our
 		// own client commands also accept "postgres".
-		if processOptions(opts).forSpanConfigs {
-			return NewSpanConfigStreamClient(ctx, streamURL, opts...)
-		}
 		return NewPartitionedStreamClient(ctx, streamURL, opts...)
 	case "external":
 		if db == nil {
@@ -202,35 +197,48 @@ func lookupExternalConnection(
 }
 
 // GetFirstActiveClient iterates through each provided stream address
-// and returns the first client it's able to successfully Dial.
+// and returns the first client it's able to successfully dial.
 func GetFirstActiveClient(
-	ctx context.Context, streamAddresses []string, opts ...Option,
+	ctx context.Context, streamAddresses []string, db isql.DB, opts ...Option,
 ) (Client, error) {
+
+	newClient := func(ctx context.Context, address streamingccl.StreamAddress) (Dialer, error) {
+		return NewStreamClient(ctx, address, db, opts...)
+	}
+	dialer, err := getFirstDialer(ctx, streamAddresses, newClient)
+	if err != nil {
+		return nil, err
+	}
+	return dialer.(Client), err
+}
+
+type dialerFactory func(ctx context.Context, address streamingccl.StreamAddress) (Dialer, error)
+
+func getFirstDialer(
+	ctx context.Context, streamAddresses []string, getNewDialer dialerFactory,
+) (Dialer, error) {
 	if len(streamAddresses) == 0 {
-		return nil, errors.Newf("failed to connect, no partition addresses")
+		return nil, errors.Newf("failed to connect, no addresses")
 	}
 	var combinedError error = nil
 	for _, address := range streamAddresses {
 		streamAddress := streamingccl.StreamAddress(address)
-		client, err := NewStreamClient(ctx, streamAddress, nil, opts...)
+		clientCandidate, err := getNewDialer(ctx, streamAddress)
 		if err == nil {
-			err = client.Dial(ctx)
+			err = clientCandidate.Dial(ctx)
 			if err == nil {
-				return client, err
+				return clientCandidate, err
 			}
 		}
-
 		// Note the failure and attempt the next address
 		log.Errorf(ctx, "failed to connect to address %s: %s", streamAddress, err.Error())
 		combinedError = errors.CombineErrors(combinedError, err)
 	}
-
-	return nil, errors.Wrap(combinedError, "failed to connect to any partition address")
+	return nil, errors.Wrap(combinedError, "failed to connect to any address")
 }
 
 type options struct {
-	streamID       streampb.StreamID
-	forSpanConfigs bool
+	streamID streampb.StreamID
 }
 
 func (o *options) appName() string {
@@ -250,13 +258,6 @@ type Option func(*options)
 func WithStreamID(id streampb.StreamID) Option {
 	return func(o *options) {
 		o.streamID = id
-	}
-}
-
-// ForSpanConfigs will create a client for replicating span configs.
-func ForSpanConfigs() Option {
-	return func(o *options) {
-		o.forSpanConfigs = true
 	}
 }
 

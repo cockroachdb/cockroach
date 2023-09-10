@@ -393,13 +393,6 @@ func (m *RandomStreamClient) Create(
 	}, nil
 }
 
-// SetupSpanConfigsStream implements the Client interface.
-func (m *RandomStreamClient) SetupSpanConfigsStream(
-	ctx context.Context, tenant roachpb.TenantName,
-) (Subscription, error) {
-	panic("SetupSpanConfigsStream not implemented")
-}
-
 // Heartbeat implements the Client interface.
 func (m *RandomStreamClient) Heartbeat(
 	ctx context.Context, _ streampb.StreamID, ts hlc.Timestamp,
