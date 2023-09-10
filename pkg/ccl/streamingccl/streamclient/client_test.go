@@ -47,13 +47,6 @@ func (sc testStreamClient) Create(
 	}, nil
 }
 
-// SetupSpanConfigsStream implements the Client interface.
-func (sc testStreamClient) SetupSpanConfigsStream(
-	ctx context.Context, tenant roachpb.TenantName,
-) (Subscription, error) {
-	panic("not implemented")
-}
-
 // Plan implements the Client interface.
 func (sc testStreamClient) Plan(_ context.Context, _ streampb.StreamID) (Topology, error) {
 	return Topology{
@@ -135,9 +128,14 @@ func TestGetFirstActiveClientEmpty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var streamAddresses []string
-	activeClient, err := GetFirstActiveClient(context.Background(), streamAddresses)
-	require.ErrorContains(t, err, "failed to connect, no partition addresses")
+	activeClient, err := GetFirstActiveClient(context.Background(), streamAddresses, nil)
+	require.ErrorContains(t, err, "failed to connect, no addresses")
 	require.Nil(t, activeClient)
+
+	activeSpanConfigClient, err := GetFirstActiveSpanConfigClient(context.Background(), streamAddresses, nil)
+	require.ErrorContains(t, err, "failed to connect, no addresses")
+	require.Nil(t, activeSpanConfigClient)
+
 }
 
 func TestGetFirstActiveClient(t *testing.T) {
@@ -172,7 +170,7 @@ func TestGetFirstActiveClient(t *testing.T) {
 		return nil
 	})
 
-	activeClient, err := GetFirstActiveClient(context.Background(), streamAddresses)
+	activeClient, err := GetFirstActiveClient(context.Background(), streamAddresses, nil)
 	require.NoError(t, err)
 
 	// Should've dialed the valid schemes up to the 5th one where it should've

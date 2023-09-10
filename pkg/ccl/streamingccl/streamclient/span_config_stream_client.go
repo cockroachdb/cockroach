@@ -13,30 +13,53 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
 )
 
-type spanConfigStreamClient struct {
+// SpanConfigClient provides methods to interact with a stream of span
+// config updates of a specific application tenant.
+type SpanConfigClient interface {
+	Dialer
+
+	// SetupSpanConfigsStream creates a stream for the span configs
+	// that apply to the passed in tenant, and returns the subscriptions the
+	// client can subscribe to. No protected timestamp or job is persisted to the
+	// source cluster.
+	SetupSpanConfigsStream(tenant roachpb.TenantName) (Subscription, error)
+}
+type spanConfigClient struct {
 	pgxConfig    *pgx.ConnConfig
 	srcConn      *pgx.Conn // pgx connection to the source cluster
 	subscription spanConfigStreamSubscription
 }
 
-// TODO(msbutler): once the span config stream is hooked up on the ingestion
-// side, consider implementing a different interface for the spanConfig client.
-var _ Client = &spanConfigStreamClient{}
+var _ SpanConfigClient = &spanConfigClient{}
 
 func NewSpanConfigStreamClient(
-	ctx context.Context, remote *url.URL, opts ...Option,
-) (Client, error) {
-	options := processOptions(opts)
+	ctx context.Context, remote *url.URL, db isql.DB, opts ...Option,
+) (SpanConfigClient, error) {
 
+	if remote.Scheme == "external" {
+		if db == nil {
+			return nil, errors.AssertionFailedf("nil db handle can't be used to dereference external URI")
+		}
+		addr, err := lookupExternalConnection(ctx, remote.Host, db)
+		if err != nil {
+			return nil, err
+		}
+		url, err := addr.URL()
+		if err != nil {
+			return nil, err
+		}
+		return NewSpanConfigStreamClient(ctx, url, db, opts...)
+	}
+
+	options := processOptions(opts)
 	config, err := setupPGXConfig(remote, options)
 	if err != nil {
 		return nil, err
@@ -45,55 +68,44 @@ func NewSpanConfigStreamClient(
 	if err != nil {
 		return nil, err
 	}
-	return &spanConfigStreamClient{
+	return &spanConfigClient{
 		pgxConfig: config,
 		srcConn:   conn,
 	}, nil
 }
 
-func (m *spanConfigStreamClient) Create(
-	_ context.Context, _ roachpb.TenantName,
-) (streampb.ReplicationProducerSpec, error) {
-	return streampb.ReplicationProducerSpec{}, errors.New("spanConfigStreamClient cannot create replication producer job")
-}
+// GetFirstActiveSpanConfigClient iterates through each provided stream address
+// and returns the first client it's able to successfully Dial.
+func GetFirstActiveSpanConfigClient(
+	ctx context.Context, streamAddresses []string, db isql.DB, opts ...Option,
+) (SpanConfigClient, error) {
 
-func (m *spanConfigStreamClient) Plan(_ context.Context, _ streampb.StreamID) (Topology, error) {
-	return Topology{}, errors.New("spanConfigStream cannot cannot create a distributed replication stream plan")
-}
-
-func (m *spanConfigStreamClient) Heartbeat(
-	_ context.Context, _ streampb.StreamID, _ hlc.Timestamp,
-) (streampb.StreamReplicationStatus, error) {
-	return streampb.StreamReplicationStatus{}, errors.New("spanConfigStreamClient does not create a producer job, so it does not implement Heartbeat()")
+	newClient := func(ctx context.Context, address streamingccl.StreamAddress) (Dialer, error) {
+		streamURL, err := address.URL()
+		if err != nil {
+			return nil, err
+		}
+		return NewSpanConfigStreamClient(ctx, streamURL, db, opts...)
+	}
+	dialer, err := getFirstDialer(ctx, streamAddresses, newClient)
+	if err != nil {
+		return nil, err
+	}
+	return dialer.(SpanConfigClient), err
 }
 
 // Dial implements Client interface.
-func (p *spanConfigStreamClient) Dial(ctx context.Context) error {
+func (p *spanConfigClient) Dial(ctx context.Context) error {
 	err := p.srcConn.Ping(ctx)
 	return errors.Wrap(err, "failed to dial client")
 }
 
-// Subscribe implements the Subscription interface.
-func (m *spanConfigStreamClient) Subscribe(
-	_ context.Context, _ streampb.StreamID, _ SubscriptionToken, _ hlc.Timestamp, _ hlc.Timestamp,
-) (Subscription, error) {
-	return nil, errors.New("spanConfigStreamClient creates a subscription via SetupSPanConfigStream")
-}
-
-func (p *spanConfigStreamClient) Complete(
-	ctx context.Context, streamID streampb.StreamID, successfulIngestion bool,
-) error {
-	return errors.New("spanConfigStreamClient does not create a producer job, so it does implement Complete()")
-}
-
-func (p *spanConfigStreamClient) Close(ctx context.Context) error {
+func (p *spanConfigClient) Close(ctx context.Context) error {
 	close(p.subscription.closeChan)
 	return p.srcConn.Close(ctx)
 }
 
-func (p *spanConfigStreamClient) SetupSpanConfigsStream(
-	ctx context.Context, tenant roachpb.TenantName,
-) (Subscription, error) {
+func (p *spanConfigClient) SetupSpanConfigsStream(tenant roachpb.TenantName) (Subscription, error) {
 	p.subscription = spanConfigStreamSubscription{
 		eventsChan:    make(chan streamingccl.Event),
 		srcConnConfig: p.pgxConfig,

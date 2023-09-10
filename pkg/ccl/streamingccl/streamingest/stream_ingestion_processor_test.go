@@ -75,13 +75,6 @@ func (m *mockStreamClient) Create(
 	panic("unimplemented")
 }
 
-// SetupSpanConfigsStream implements the Client interface.
-func (m *mockStreamClient) SetupSpanConfigsStream(
-	ctx context.Context, tenant roachpb.TenantName,
-) (streamclient.Subscription, error) {
-	panic("unimplemented")
-}
-
 // Dial implements the Client interface.
 func (m *mockStreamClient) Dial(_ context.Context) error {
 	panic("unimplemented")
