@@ -140,12 +140,12 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 
 	v1, err := iter.UnsafeValue()
 	if err != nil {
-		fmt.Fprintf(b, "output: unable to fetch value: %s\n", err.Error())
+		fmt.Fprintf(b, "output: unable to fetch value: %s\n", err)
 		return
 	}
 	v2, err := iter.Value()
 	if err != nil {
-		fmt.Fprintf(b, "output: unable to fetch value: %s\n", err.Error())
+		fmt.Fprintf(b, "output: unable to fetch value: %s\n", err)
 		return
 	}
 	if !bytes.Equal(v1, v2) {
@@ -154,6 +154,7 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 	}
 	if len(v1) != iter.ValueLen() {
 		fmt.Fprintf(b, "output: value len: %d != %d\n", len(v1), iter.ValueLen())
+		return
 	}
 	if k1.Timestamp.IsEmpty() {
 		var meta enginepb.MVCCMetadata
@@ -235,7 +236,7 @@ func TestIntentInterleavingIter(t *testing.T) {
 				var mvccSection bool
 				// pos is the original <file>:<lineno> prefix computed by
 				// datadriven. It points to the top "define" command itself.
-				// We editing d.Pos in-place below by extending `pos` upon
+				// We are editing d.Pos in-place below by extending `pos` upon
 				// each new line.
 				pos := d.Pos
 				for i, line := range strings.Split(d.Input, "\n") {
@@ -278,9 +279,7 @@ func TestIntentInterleavingIter(t *testing.T) {
 								t.Fatalf("%v", err)
 							}
 							meta.Timestamp = ts.ToLegacyTimestamp()
-							var txn int
-							d.ScanArgs(t, "txn", &txn)
-							txnUUID = uuid.FromUint128(uint128.FromInts(0, uint64(txn)))
+							txnUUID = scanTxnID(t, d, "txn")
 							meta.Txn = &enginepb.TxnMeta{ID: txnUUID}
 						}
 						val, err := protoutil.Marshal(&meta)
@@ -318,6 +317,8 @@ func TestIntentInterleavingIter(t *testing.T) {
 						if err := batch.PutMVCC(mvccKey, mvccValue); err != nil {
 							return err.Error()
 						}
+					default:
+						t.Fatalf("%s: unknown command %q", d.Pos, d.Cmd)
 					}
 				}
 				d.Pos = pos
@@ -346,7 +347,7 @@ func TestIntentInterleavingIter(t *testing.T) {
 				defer iter.Close()
 				// pos is the original <file>:<lineno> prefix computed by
 				// datadriven. It points to the top "define" command itself.
-				// We editing d.Pos in-place below by extending `pos` upon
+				// We are editing d.Pos in-place below by extending `pos` upon
 				// each new line.
 				pos := d.Pos
 				for i, line := range strings.Split(d.Input, "\n") {
@@ -388,13 +389,14 @@ func TestIntentInterleavingIter(t *testing.T) {
 						stats.Stats.InternalStats = pebble.InternalIteratorStats{}
 						fmt.Fprintf(&b, "stats: %s\n", stats.Stats.String())
 					default:
-						fmt.Fprintf(&b, "unknown command: %s\n", d.Cmd)
+						t.Fatalf("%s: unknown command %q", d.Pos, d.Cmd)
 					}
 				}
 				d.Pos = pos
 				return b.String()
 			default:
-				return fmt.Sprintf("unknown command: %s", d.Cmd)
+				t.Fatalf("%s: unknown command %q", d.Pos, d.Cmd)
+				return ""
 			}
 		})
 	})
