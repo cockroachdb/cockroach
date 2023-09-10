@@ -2685,11 +2685,6 @@ func typeCheckSameTypedExprs(
 					candidateType = typ
 				}
 			}
-			// TODO(mgartner): Remove this check now that we check the types
-			// below.
-			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(candidateType) || typ.Family() == types.UnknownFamily) {
-				return nil, nil, unexpectedTypeError(exprs[i], candidateType, typ)
-			}
 			typedExprs[i] = typedExpr
 		}
 		if !constIdxs.Empty() {
@@ -2710,9 +2705,7 @@ func typeCheckSameTypedExprs(
 		// https://www.postgresql.org/docs/15/typeconv-union-case.html
 		for i, e := range typedExprs {
 			typ := e.ResolvedType()
-			// TODO(mgartner): There should probably be a cast if the types are
-			// not identical, not just if the types are not equivalent.
-			if typ.Equivalent(candidateType) || typ.Family() == types.UnknownFamily {
+			if typ.Identical(candidateType) || typ.Family() == types.UnknownFamily {
 				continue
 			}
 			if !cast.ValidCast(typ, candidateType, cast.ContextImplicit) {
