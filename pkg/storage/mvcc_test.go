@@ -3669,13 +3669,11 @@ func TestMVCCResolveTxnRangeResumeWithManyVersions(t *testing.T) {
 		numKeys, _, resumeSpan, _, err := MVCCResolveWriteIntentRange(ctx, engine, nil, lockUpdate,
 			MVCCResolveWriteIntentRangeOptions{MaxKeys: 20})
 		require.NoError(t, err)
-		if resumeSpan == nil {
-			// Last call resolves 0 intents.
-			require.Equal(t, int64(0), numKeys)
-			break
-		}
 		require.Equal(t, int64(20), numKeys)
 		i++
+		if resumeSpan == nil {
+			break
+		}
 		expResumeSpan := roachpb.Span{
 			Key:    makeKey(nil, (i*20-1)*10).Next(),
 			EndKey: lockUpdate.EndKey,
