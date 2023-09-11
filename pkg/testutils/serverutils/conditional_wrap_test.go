@@ -84,7 +84,7 @@ func TestInterfaceNotices(t *testing.T) {
 			opts: (base.DefaultTestTenantOptions{}),
 			scenario: func(t *testing.T, exec func(func(serverutils.TestServerInterface)) string) {
 				result := exec(runCalls)
-				require.Contains(t, result, "WARNING: risky use of implicit ApplicationLayerInterface via .AppStopper()")
+				require.Contains(t, result, "NOTICE: .AppStopper() called via implicit interface ApplicationLayerInterface")
 				require.Contains(t, result, "NOTICE: .NodeID() called via implicit interface StorageLayerInterface")
 				require.Contains(t, result, "NOTICE: .StartedDefaultTestTenant() called via implicit interface TenantControlInterface")
 			},

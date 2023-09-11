@@ -554,7 +554,7 @@ func (tc *TestCluster) AddAndStartServer(
 // cluster's ReplicationMode.
 func (tc *TestCluster) AddAndStartServerE(serverArgs base.TestServerArgs) error {
 	if serverArgs.JoinAddr == "" && len(tc.Servers) > 0 {
-		serverArgs.JoinAddr = tc.Servers[0].AdvRPCAddr()
+		serverArgs.JoinAddr = tc.Servers[0].SystemLayer().AdvRPCAddr()
 	}
 	if _, err := tc.AddServer(serverArgs); err != nil {
 		return err
@@ -699,7 +699,7 @@ func (tc *TestCluster) WaitForNStores(t serverutils.TestFataler, n int, g *gossi
 
 // LookupRange is part of TestClusterInterface.
 func (tc *TestCluster) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
-	return tc.Servers[0].LookupRange(key)
+	return tc.Servers[0].StorageLayer().LookupRange(key)
 }
 
 // LookupRangeOrFatal is part of TestClusterInterface.
@@ -1032,7 +1032,7 @@ func (tc *TestCluster) SwapVoterWithNonVoter(
 	ctx := context.Background()
 	key := keys.MustAddr(startKey)
 	var beforeDesc roachpb.RangeDescriptor
-	if err := tc.Servers[0].DB().GetProto(
+	if err := tc.Servers[0].SystemLayer().DB().GetProto(
 		ctx, keys.RangeDescriptorKey(key), &beforeDesc,
 	); err != nil {
 		return nil, errors.Wrap(err, "range descriptor lookup error")
@@ -1044,7 +1044,7 @@ func (tc *TestCluster) SwapVoterWithNonVoter(
 		{ChangeType: roachpb.REMOVE_VOTER, Target: voterTarget},
 	}
 
-	return tc.Servers[0].DB().AdminChangeReplicas(ctx, key, beforeDesc, changes)
+	return tc.Servers[0].SystemLayer().DB().AdminChangeReplicas(ctx, key, beforeDesc, changes)
 }
 
 // SwapVoterWithNonVoterOrFatal is part of TestClusterInterface.
@@ -1073,7 +1073,7 @@ func (tc *TestCluster) RebalanceVoter(
 ) (*roachpb.RangeDescriptor, error) {
 	key := keys.MustAddr(startKey)
 	var beforeDesc roachpb.RangeDescriptor
-	if err := tc.Servers[0].DB().GetProto(
+	if err := tc.Servers[0].SystemLayer().DB().GetProto(
 		ctx, keys.RangeDescriptorKey(key), &beforeDesc,
 	); err != nil {
 		return nil, errors.Wrap(err, "range descriptor lookup error")
@@ -1082,7 +1082,7 @@ func (tc *TestCluster) RebalanceVoter(
 		{ChangeType: roachpb.REMOVE_VOTER, Target: src},
 		{ChangeType: roachpb.ADD_VOTER, Target: dest},
 	}
-	return tc.Servers[0].DB().AdminChangeReplicas(ctx, key, beforeDesc, changes)
+	return tc.Servers[0].SystemLayer().DB().AdminChangeReplicas(ctx, key, beforeDesc, changes)
 }
 
 // RebalanceVoterOrFatal is part of TestClusterInterface.
@@ -1584,9 +1584,10 @@ func (tc *TestCluster) WaitForNodeStatuses(t serverutils.TestFataler) {
 // node in the cluster.
 func (tc *TestCluster) WaitForNodeLiveness(t serverutils.TestFataler) {
 	testutils.SucceedsSoon(t, func() error {
-		db := tc.Servers[0].DB()
+		db := tc.Servers[0].SystemLayer().DB()
 		for _, s := range tc.Servers {
-			key := keys.NodeLivenessKey(s.NodeID())
+			nodeID := s.StorageLayer().NodeID()
+			key := keys.NodeLivenessKey(nodeID)
 			var liveness livenesspb.Liveness
 			if err := db.GetProto(context.Background(), key, &liveness); err != nil {
 				return err
@@ -1597,7 +1598,7 @@ func (tc *TestCluster) WaitForNodeLiveness(t serverutils.TestFataler) {
 			if liveness.Epoch < 1 {
 				return fmt.Errorf("liveness not incremented")
 			}
-			fmt.Printf("n%d: found liveness\n", s.NodeID())
+			fmt.Printf("n%d: found liveness\n", nodeID)
 		}
 		return nil
 	})
@@ -1727,7 +1728,7 @@ func (tc *TestCluster) RestartServerWithInspect(
 			// Try and point the server to a live server in the cluster to join.
 			for i := range tc.Servers {
 				if !tc.ServerStopped(i) {
-					serverArgs.JoinAddr = tc.Servers[i].AdvRPCAddr()
+					serverArgs.JoinAddr = tc.Servers[i].SystemLayer().AdvRPCAddr()
 				}
 			}
 		}
@@ -1840,7 +1841,7 @@ func (tc *TestCluster) GetRaftLeader(
 	testutils.SucceedsSoon(t, func() error {
 		var latestTerm uint64
 		for i := range tc.Servers {
-			err := tc.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+			err := tc.Servers[i].StorageLayer().GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 				repl := store.LookupReplica(key)
 				if repl == nil {
 					// Replica does not exist on this store or there is no raft
