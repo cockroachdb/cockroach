@@ -139,24 +139,19 @@ const deriveDatabaseTableDetails = (
     name: table,
     loading: !!details?.inFlight,
     loaded: !!details?.valid,
-    lastError: details?.lastError,
+    requestError: details?.lastError,
+    queryError: details?.data?.results?.error,
     details: {
-      columnCount: results?.schemaDetails.columns?.length || 0,
-      indexCount: results?.schemaDetails.indexes.length || 0,
-      userCount: normalizedRoles.length,
-      roles: normalizedRoles,
-      grants: normalizedPrivileges,
-      statsLastUpdated:
-        results?.heuristicsDetails.stats_last_created_at || null,
-      hasIndexRecommendations:
-        results?.stats.indexStats.has_index_recommendations || false,
-      totalBytes: results?.stats?.spanStats.total_bytes || 0,
-      liveBytes: results?.stats?.spanStats.live_bytes || 0,
-      livePercentage: results?.stats?.spanStats.live_percentage || 0,
-      replicationSizeInBytes:
-        results?.stats?.spanStats.approximate_disk_bytes || 0,
+      schemaDetails: results?.schemaDetails,
+      grants: {
+        roles: normalizedRoles,
+        privileges: normalizedPrivileges,
+        error: results?.grantsResp?.error,
+      },
+      statsLastUpdated: results?.heuristicsDetails,
+      indexStatRecs: results?.stats.indexStats,
+      spanStats: results?.stats.spanStats,
       nodes: nodes,
-      rangeCount: results?.stats?.spanStats.range_count || 0,
       nodesByRegionString: getNodesByRegionString(nodes, nodeRegions, isTenant),
     },
   };

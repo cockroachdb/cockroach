@@ -34,7 +34,8 @@ const history = H.createHashHistory();
 const withLoadingIndicator: DatabaseDetailsPageProps = {
   loading: true,
   loaded: false,
-  lastError: undefined,
+  requestError: undefined,
+  queryError: undefined,
   showIndexRecommendations: false,
   csIndexUnusedDuration: indexUnusedDuration,
   name: randomName(),
@@ -68,7 +69,8 @@ const withLoadingIndicator: DatabaseDetailsPageProps = {
 const withoutData: DatabaseDetailsPageProps = {
   loading: false,
   loaded: true,
-  lastError: null,
+  requestError: null,
+  queryError: undefined,
   showIndexRecommendations: false,
   csIndexUnusedDuration: indexUnusedDuration,
   name: randomName(),
@@ -108,7 +110,8 @@ function createTable(): DatabaseDetailsPageDataTable {
   return {
     loading: false,
     loaded: true,
-    lastError: null,
+    requestError: null,
+    queryError: undefined,
     name: randomName(),
     details: {
       columnCount: _.random(5, 42),

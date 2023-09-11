@@ -66,13 +66,23 @@ message StreamPartitionSpec {
     google.protobuf.Duration min_checkpoint_frequency = 2
        [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
 
-    // Controls batch size in bytes.
+    // Controls the batch size, in bytes, sent over pgwire to the consumer.
     int64 batch_byte_size = 3;
-
-    roachpb.TenantID span_config_for_tenant = 4 [(gogoproto.nullable) = false];
   }
 
   ExecutionConfig config = 3 [(gogoproto.nullable) = false];
+}
+
+// SpanConfigEventStreamSpec is the span config event stream specification.
+message SpanConfigEventStreamSpec {
+  roachpb.Span span = 1 [(gogoproto.nullable) = false];
+
+  roachpb.TenantID tenant_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
+
+  // Controls how often checkpoint records are published.
+  google.protobuf.Duration min_checkpoint_frequency = 3
+  [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+
 }
 
 message ReplicationStreamSpec {

@@ -354,7 +354,6 @@ func setupSpanConfigsStream(
 	}); err != nil {
 		return nil, err
 	}
-
 	spanConfigKey := evalCtx.Codec.TablePrefix(uint32(spanConfigID))
 
 	// TODO(msbutler): crop this span to the keyspan within the span config
@@ -362,11 +361,10 @@ func setupSpanConfigsStream(
 	// to stream span configs, which will make testing easier.
 	span := roachpb.Span{Key: spanConfigKey, EndKey: spanConfigKey.PrefixEnd()}
 
-	spec := streampb.StreamPartitionSpec{
-		Spans: roachpb.Spans{span},
-		Config: streampb.StreamPartitionSpec_ExecutionConfig{
-			MinCheckpointFrequency: streamingccl.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV),
-			SpanConfigForTenant:    tenantID,
-		}}
-	return streamSpanConfigPartition(evalCtx, spec)
+	spec := streampb.SpanConfigEventStreamSpec{
+		Span:                   span,
+		TenantID:               tenantID,
+		MinCheckpointFrequency: streamingccl.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV),
+	}
+	return streamSpanConfigs(evalCtx, spec)
 }
