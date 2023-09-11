@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -908,6 +909,7 @@ func checkVal(val, expected, errFraction float64) bool {
 // in MakePriority returning priorities that are P times more likely
 // to be higher than a priority with user priority = 1.
 func TestMakePriority(t *testing.T) {
+	skip.WithIssue(t, 110303, "flaky test")
 	// Verify min & max.
 	if a, e := MakePriority(MinUserPriority), enginepb.MinTxnPriority; a != e {
 		t.Errorf("expected min txn priority %d; got %d", e, a)
