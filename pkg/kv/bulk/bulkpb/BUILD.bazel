@@ -33,10 +33,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
-        "//pkg/util/bulk",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
+        "//pkg/util/tracing",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//proto",
         "@io_opentelemetry_go_otel//attribute",

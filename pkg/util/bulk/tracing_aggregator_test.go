@@ -61,7 +61,7 @@ func TestAggregator(t *testing.T) {
 
 	// We only expect to see the aggregated stats from the local children since we
 	// have not imported the remote children's Recording.
-	agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
+	agg.ForEachAggregatedEvent(func(name string, event tracing.TracingAggregatorEvent) {
 		require.Equal(t, name, proto.MessageName(&backuppb.ExportStats{}))
 		var es *backuppb.ExportStats
 		var ok bool
@@ -81,7 +81,7 @@ func TestAggregator(t *testing.T) {
 
 	// Now, we expect the ExportStats from the remote child to show up in the
 	// aggregator.
-	agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
+	agg.ForEachAggregatedEvent(func(name string, event tracing.TracingAggregatorEvent) {
 		require.Equal(t, name, proto.MessageName(&backuppb.ExportStats{}))
 		var es *backuppb.ExportStats
 		var ok bool
@@ -127,7 +127,7 @@ func TestIngestionPerformanceStatsAggregation(t *testing.T) {
 	}
 
 	assertAggContainsStats := func(t *testing.T, agg *bulk.TracingAggregator, expected *bulkpb.IngestionPerformanceStats) {
-		agg.ForEachAggregatedEvent(func(name string, event bulk.TracingAggregatorEvent) {
+		agg.ForEachAggregatedEvent(func(name string, event tracing.TracingAggregatorEvent) {
 			require.Equal(t, name, proto.MessageName(expected))
 			var actual *bulkpb.IngestionPerformanceStats
 			var ok bool

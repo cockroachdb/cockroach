@@ -38,9 +38,15 @@ go_library(
     name = "streampb",
     srcs = [
         "empty.go",
+        "stream.go",
         "streamid.go",
     ],
     embed = [":streampb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/repstream/streampb",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/tracing",
+        "@com_github_gogo_protobuf//proto",
+        "@io_opentelemetry_go_otel//attribute",
+    ],
 )

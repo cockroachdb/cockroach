@@ -717,6 +717,12 @@ func (sip *streamIngestionProcessor) handleEvent(event partitionEvent) error {
 			return err
 		}
 		return nil
+	case streamingccl.ProducerStatisticsEvent:
+		sp := tracing.SpanFromContext(sip.Ctx())
+		if sp != nil {
+			log.Infof(sip.Ctx(), "recording producer stream event: %s", event.GetProducerStatistics())
+			sp.RecordStructured(event.GetProducerStatistics())
+		}
 	default:
 		return errors.Newf("unknown streaming event type %v", event.Type())
 	}

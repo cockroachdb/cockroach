@@ -74,6 +74,12 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 		return event
 	}
 
+	if streamEvent.Stats != nil {
+		event := streamingccl.MakeProducerStatsEvent(*streamEvent.Stats)
+		streamEvent.Stats = nil
+		return event
+	}
+
 	var event streamingccl.Event
 	if streamEvent.Batch != nil {
 		switch {

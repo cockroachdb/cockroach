@@ -19,19 +19,19 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	"go.opentelemetry.io/otel/attribute"
 )
 
-var _ bulk.TracingAggregatorEvent = (*IngestionPerformanceStats)(nil)
+var _ tracing.TracingAggregatorEvent = (*IngestionPerformanceStats)(nil)
 
 // Identity implements the TracingAggregatorEvent interface.
-func (s *IngestionPerformanceStats) Identity() bulk.TracingAggregatorEvent {
+func (s *IngestionPerformanceStats) Identity() tracing.TracingAggregatorEvent {
 	stats := IngestionPerformanceStats{
 		LastFlushTime:    hlc.Timestamp{WallTime: math.MaxInt64},
 		CurrentFlushTime: hlc.Timestamp{WallTime: math.MinInt64},
@@ -41,7 +41,7 @@ func (s *IngestionPerformanceStats) Identity() bulk.TracingAggregatorEvent {
 }
 
 // Combine implements the TracingAggregatorEvent interface.
-func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
+func (s *IngestionPerformanceStats) Combine(other tracing.TracingAggregatorEvent) {
 	otherStats, ok := other.(*IngestionPerformanceStats)
 	if !ok {
 		panic(fmt.Sprintf("`other` is not of type IngestionPerformanceStats: %T", other))

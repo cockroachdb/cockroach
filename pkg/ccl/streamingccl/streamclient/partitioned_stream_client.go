@@ -213,6 +213,9 @@ func (p *partitionedStreamClient) Subscribe(
 	}
 	sps.InitialScanTimestamp = initialScanTime
 	sps.PreviousReplicatedTimestamp = previousReplicatedTime
+	sps.Config = streampb.StreamPartitionSpec_ExecutionConfig{
+		EmitProducerStats: true,
+	}
 
 	specBytes, err := protoutil.Marshal(&sps)
 	if err != nil {

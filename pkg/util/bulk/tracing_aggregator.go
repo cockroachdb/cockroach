@@ -20,22 +20,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TracingAggregatorEvent describes an event that can be aggregated and stored by the
-// TracingAggregator. A TracingAggregatorEvent also implements the tracing.LazyTag interface
-// to render its information on the associated tracing span.
-type TracingAggregatorEvent interface {
-	// Identity returns a TracingAggregatorEvent that when combined with another
-	// event returns the other TracingAggregatorEvent unchanged.
-	Identity() TracingAggregatorEvent
-	// Combine combines two TracingAggregatorEvents together.
-	Combine(other TracingAggregatorEvent)
-	// ProtoName returns the fully qualified name of the underlying proto that is
-	// a TracingAggregatorEvent.
-	ProtoName() string
-	// String returns the string representation of the TracingAggregatorEvent.
-	String() string
-}
-
 // A TracingAggregator can be used to aggregate and render AggregatorEvents that
 // are emitted as part of its tracing spans' recording.
 type TracingAggregator struct {
@@ -44,14 +28,14 @@ type TracingAggregator struct {
 		// aggregatedEvents is a mapping from the name identifying the
 		// TracingAggregatorEvent to the running aggregate of the
 		// TracingAggregatorEvent.
-		aggregatedEvents map[string]TracingAggregatorEvent
+		aggregatedEvents map[string]tracing.TracingAggregatorEvent
 	}
 }
 
 // ForEachAggregatedEvent executes f on each event in the TracingAggregator's
 // in-memory map.
 func (b *TracingAggregator) ForEachAggregatedEvent(
-	f func(name string, event TracingAggregatorEvent),
+	f func(name string, event tracing.TracingAggregatorEvent),
 ) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -63,7 +47,7 @@ func (b *TracingAggregator) ForEachAggregatedEvent(
 
 // Notify implements the tracing.EventListener interface.
 func (b *TracingAggregator) Notify(event tracing.Structured) tracing.EventConsumptionStatus {
-	bulkEvent, ok := event.(TracingAggregatorEvent)
+	bulkEvent, ok := event.(tracing.TracingAggregatorEvent)
 	if !ok {
 		return tracing.EventNotConsumed
 	}
@@ -83,7 +67,7 @@ func (b *TracingAggregator) Notify(event tracing.Structured) tracing.EventConsum
 
 // TracingAggregatorEventToBytes marshals an event into a byte slice.
 func TracingAggregatorEventToBytes(
-	_ context.Context, event TracingAggregatorEvent,
+	_ context.Context, event tracing.TracingAggregatorEvent,
 ) ([]byte, error) {
 	msg, ok := event.(protoutil.Message)
 	if !ok {
@@ -109,6 +93,6 @@ func TracingAggregatorForContext(ctx context.Context) *TracingAggregator {
 		return nil
 	}
 	agg := &TracingAggregator{}
-	agg.mu.aggregatedEvents = make(map[string]TracingAggregatorEvent)
+	agg.mu.aggregatedEvents = make(map[string]tracing.TracingAggregatorEvent)
 	return agg
 }

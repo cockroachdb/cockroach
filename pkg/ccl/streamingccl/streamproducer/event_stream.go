@@ -463,6 +463,24 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 					if err := s.flushEvent(ctx, &streampb.StreamEvent{Checkpoint: &checkpoint}); err != nil {
 						return err
 					}
+
+					if s.spec.Config.EmitProducerStats {
+						nodeID := int32(s.execCfg.NodeInfo.NodeID.SQLInstanceID())
+						stats := &streampb.ReplicationStreamProducerStats{
+							FlushWait: 42,
+						}
+						ev := &streampb.StreamEvent{
+							Stats: &streampb.StreamEvent_StreamStatistics{
+								Stats: map[int32]*streampb.ReplicationStreamProducerStats{
+									nodeID: stats,
+								},
+							},
+						}
+						if err := s.flushEvent(ctx, ev); err != nil {
+							return err
+						}
+					}
+
 				}
 			case ev.SST != nil:
 				err := s.addSST(ev.SST, ev.RegisteredSpan, seb)

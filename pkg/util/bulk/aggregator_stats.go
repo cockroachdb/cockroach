@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -51,7 +52,7 @@ func ConstructTracingAggregatorProducerMeta(
 		Events:        make(map[string][]byte),
 	}
 
-	agg.ForEachAggregatedEvent(func(name string, event TracingAggregatorEvent) {
+	agg.ForEachAggregatedEvent(func(name string, event tracing.TracingAggregatorEvent) {
 		if data, err := TracingAggregatorEventToBytes(ctx, event); err != nil {
 			// This should never happen but if it does skip the aggregated event.
 			log.Warningf(ctx, "failed to unmarshal aggregated event: %v", err.Error())
@@ -78,7 +79,7 @@ func flushTracingStats(
 	db isql.DB,
 	perNodeStats map[execinfrapb.ComponentID]map[string][]byte,
 ) error {
-	clusterWideAggregatorStats := make(map[string]TracingAggregatorEvent)
+	clusterWideAggregatorStats := make(map[string]tracing.TracingAggregatorEvent)
 	asOf := timeutil.Now().Format("20060102_150405.00")
 
 	var clusterWideSummary bytes.Buffer
@@ -107,7 +108,7 @@ func flushTracingStats(
 			// basis as well as a cluster-wide aggregate.
 			clusterWideSummary.WriteString(fmt.Sprintf("# %s\n", name))
 
-			aggEvent := msg.(TracingAggregatorEvent)
+			aggEvent := msg.(tracing.TracingAggregatorEvent)
 			clusterWideSummary.WriteString(aggEvent.String())
 			clusterWideSummary.WriteString("\n")
 

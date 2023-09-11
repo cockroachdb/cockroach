@@ -34,6 +34,11 @@ const (
 	// SpanConfigEvent indicates that the SpanConfig field of an event holds an updated
 	// SpanConfigRecord.
 	SpanConfigEvent
+
+	// ProducerStatisticsEvent indicates that the
+	// ProducerStatistics field of an event hold an statistics
+	// event from the consumer.
+	ProducerStatisticsEvent
 )
 
 // Event describes an event emitted by a cluster to cluster stream.  Its Type
@@ -59,6 +64,10 @@ type Event interface {
 
 	// GetSpanConfigEvent returns a SpanConfig event if the EventType is SpanConfigEvent
 	GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry
+
+	// GetProducerStatisticsEvent() returns a StreamStatisticsEvent
+	// if teh EventType is ProdudcerStreamEvent.
+	GetProducerStatistics() *streampb.StreamEvent_StreamStatistics
 }
 
 // kvEvent is a key value pair that needs to be ingested.
@@ -98,6 +107,11 @@ func (kve kvEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
 	return nil
 }
 
+// GetSpanConfigEvent implements the Event interface.
+func (kve kvEvent) GetProducerStatistics() *streampb.StreamEvent_StreamStatistics {
+	return nil
+}
+
 // sstableEvent is a sstable that needs to be ingested.
 type sstableEvent struct {
 	sst kvpb.RangeFeedSSTable
@@ -130,6 +144,11 @@ func (sste sstableEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
 
 // GetSpanConfigEvent implements the Event interface.
 func (sste sstableEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
+	return nil
+}
+
+// GetSpanConfigEvent implements the Event interface.
+func (sste sstableEvent) GetProducerStatistics() *streampb.StreamEvent_StreamStatistics {
 	return nil
 }
 
@@ -167,6 +186,11 @@ func (dre delRangeEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
 
 // GetSpanConfigEvent implements the Event interface.
 func (dre delRangeEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
+	return nil
+}
+
+// GetProducerStatistics implements the Event interface.
+func (dre delRangeEvent) GetProducerStatistics() *streampb.StreamEvent_StreamStatistics {
 	return nil
 }
 
@@ -210,6 +234,11 @@ func (ce checkpointEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry
 	return nil
 }
 
+// GetProducerStatistics implements the Event interface.
+func (ce checkpointEvent) GetProducerStatistics() *streampb.StreamEvent_StreamStatistics {
+	return nil
+}
+
 type spanConfigEvent struct {
 	spanConfig streampb.StreamedSpanConfigEntry
 }
@@ -246,6 +275,52 @@ func (spe spanConfigEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntr
 	return &spe.spanConfig
 }
 
+// GetProducerStatistics implements the Event interface.
+func (spe spanConfigEvent) GetProducerStatistics() *streampb.StreamEvent_StreamStatistics {
+	return nil
+}
+
+type producerStatisticsEvent struct {
+	producerStatistics streampb.StreamEvent_StreamStatistics
+}
+
+var _ Event = producerStatisticsEvent{}
+
+// Type implements the Event interface.
+func (pse producerStatisticsEvent) Type() EventType {
+	return ProducerStatisticsEvent
+}
+
+// GetKV implements the Event interface.
+func (pse producerStatisticsEvent) GetKV() *roachpb.KeyValue {
+	return nil
+}
+
+// GetSSTable implements the Event interface.
+func (pse producerStatisticsEvent) GetSSTable() *kvpb.RangeFeedSSTable {
+	return nil
+}
+
+// GetDeleteRange implements the Event interface.
+func (pse producerStatisticsEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
+	return nil
+}
+
+// GetResolvedSpans implements the Event interface.
+func (pse producerStatisticsEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
+	return nil
+}
+
+// GetSpanConfigEvent implements the Event interface.
+func (pse producerStatisticsEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
+	return nil
+}
+
+// GetProducerStatistics implements the Event interface.
+func (pse producerStatisticsEvent) GetProducerStatistics() *streampb.StreamEvent_StreamStatistics {
+	return &pse.producerStatistics
+}
+
 // MakeKVEvent creates an Event from a KV.
 func MakeKVEvent(kv roachpb.KeyValue) Event {
 	return kvEvent{kv: kv}
@@ -266,6 +341,12 @@ func MakeCheckpointEvent(resolvedSpans []jobspb.ResolvedSpan) Event {
 	return checkpointEvent{resolvedSpans: resolvedSpans}
 }
 
+// MakeSpanConfigEvent creates an Event from a StreamSpanConfigEntry
 func MakeSpanConfigEvent(streamedSpanConfig streampb.StreamedSpanConfigEntry) Event {
 	return spanConfigEvent{spanConfig: streamedSpanConfig}
+}
+
+// MakeProducerStatsEvent creates an Event from a ProducerStatsEntry
+func MakeProducerStatsEvent(producerStats streampb.StreamEvent_StreamStatistics) Event {
+	return producerStatisticsEvent{producerStatistics: producerStats}
 }
