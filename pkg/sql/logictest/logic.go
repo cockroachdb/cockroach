@@ -728,7 +728,11 @@ func (ls *logicStatement) readSQL(
 					if i > 0 {
 						fmt.Fprintln(&newSyntax, ";")
 					}
-					fmt.Fprint(&newSyntax, pcfg.Pretty(stmtList[i].AST))
+					p, err := pcfg.Pretty(stmtList[i].AST)
+					if err != nil {
+						return "", errors.Wrapf(err, "error while pretty printing")
+					}
+					fmt.Fprint(&newSyntax, p)
 				}
 				return newSyntax.String(), nil
 			}(ls.sql)

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
+	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -255,7 +256,17 @@ func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) {
 		cfg.Align = tree.PrettyNoAlign
 		cfg.JSONFmt = true
 		cfg.ValueRedaction = b.flags.RedactValues
-		b.stmt = cfg.Pretty(b.plan.stmt.AST)
+		var err error
+		b.stmt, err = cfg.Pretty(b.plan.stmt.AST)
+		if errors.Is(err, pretty.ErrPrettyMaxRecursionDepthExceeded) {
+			// Use the raw statement string if pretty-printing fails.
+			b.stmt = stmtRawSQL
+			// If we're collecting a redacted bundle, redact the raw SQL
+			// completely.
+			if b.flags.RedactValues && b.stmt != "" {
+				b.stmt = string(redact.RedactedMarker())
+			}
+		}
 
 		// If we had ValueRedaction set, Pretty surrounded all constants with
 		// redaction markers. We must call Redact to fully redact them.

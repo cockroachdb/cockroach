@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 )
 
@@ -169,7 +170,12 @@ func formatViewQueryForDisplay(
 				desc.GetName(), desc.GetID(), err)
 			return
 		}
-		query = cfg.Pretty(parsed.AST)
+		query, err = cfg.Pretty(parsed.AST)
+		if errors.Is(err, pretty.ErrPrettyMaxRecursionDepthExceeded) {
+			// Use simple printing if pretty-printing fails.
+			query = tree.AsStringWithFlags(parsed.AST, tree.FmtParsable)
+			return
+		}
 	}()
 
 	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, semaCtx, sessionData, desc)
