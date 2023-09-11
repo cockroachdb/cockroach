@@ -325,7 +325,7 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	}
 
 	for _, cmd := range []*cobra.Command{
-		startCmd, statusCmd, stopCmd, runCmd,
+		startCmd, startInstanceAsSeparateProcessCmd, statusCmd, stopCmd, runCmd,
 	} {
 		cmd.Flags().StringVar(&tag, "tag", "", "the process tag")
 	}
