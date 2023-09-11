@@ -9,6 +9,15 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import React from "react";
+import { Tooltip } from "antd";
+import "antd/lib/tooltip/style";
+import {
+  isMaxSizeError,
+  isPrivilegeError,
+  sqlApiErrorMessage,
+  SqlExecutionErrorMessage,
+} from "../api";
 type IndexUsageStatistic =
   cockroach.server.serverpb.TableIndexStatsResponse.IExtendedCollectedIndexUsageStatistics;
 
@@ -186,3 +195,62 @@ export function buildIndexStatToRecommendationsMap(
   });
   return recommendationsMap;
 }
+
+export function checkInfoAvailable(
+  requestError: Error,
+  queryError: Error,
+  cell: React.ReactNode,
+): React.ReactNode {
+  let tooltipMsg = "";
+  if (requestError) {
+    tooltipMsg = `Encountered a network error fetching data for this cell: ${requestError.name}`;
+  } else if (queryError) {
+    tooltipMsg = getQueryErrorMessage(queryError);
+  } else if (cell == null) {
+    tooltipMsg = "Empty result";
+  }
+  // If we encounter an error gathering data for this cell,
+  // render it "unavailable" with a tooltip message for the error.
+  if (tooltipMsg !== "") {
+    return (
+      <Tooltip
+        overlayStyle={{ whiteSpace: "pre-line" }}
+        placement="bottom"
+        title={tooltipMsg}
+      >
+        (unavailable)
+      </Tooltip>
+    );
+  }
+  return cell;
+}
+
+export const getNetworkErrorMessage = (requestError: Error): string => {
+  return `Encountered a network error: ${requestError.message}`;
+};
+
+export const getQueryErrorMessage = (
+  queryError: SqlExecutionErrorMessage | Error,
+): string => {
+  if (checkPrivilegeError(queryError)) {
+    return (
+      `User has insufficient privileges:\n` +
+      sqlApiErrorMessage(queryError.message)
+    );
+  }
+  if (isMaxSizeError(queryError.message)) {
+    return `Only partial data available, total data size exceeds limit in the console`;
+  }
+  // Unexpected error - return the error message.
+  return sqlApiErrorMessage(queryError.message);
+};
+
+const checkPrivilegeError = (
+  err: SqlExecutionErrorMessage | Error,
+): boolean => {
+  if ("code" in err) {
+    return isPrivilegeError(err.code);
+  }
+  // If the error message includes any mention of privilege, consider it a privilege error.
+  return err.message.includes("privilege");
+};
