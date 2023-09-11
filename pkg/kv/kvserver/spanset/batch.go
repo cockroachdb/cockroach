@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
 )
@@ -83,12 +82,6 @@ func (i *MVCCIterator) Valid() (bool, error) {
 func (i *MVCCIterator) SeekGE(key storage.MVCCKey) {
 	i.i.SeekGE(key)
 	i.checkAllowed(roachpb.Span{Key: key.Key}, true)
-}
-
-// SeekIntentGE is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
-	i.i.SeekIntentGE(key, txnUUID)
-	i.checkAllowed(roachpb.Span{Key: key}, true)
 }
 
 // SeekLT is part of the storage.MVCCIterator interface.
