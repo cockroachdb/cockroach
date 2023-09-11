@@ -2935,14 +2935,12 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// snapshot will still be valid since the leaseholder is also on this
 	// generation by now.
 	if desc.Generation < req.DescriptorGeneration {
-		log.VEventf(ctx, 2,
+		err := errors.Errorf(
 			"%s: generation has changed since snapshot was generated %s < %s",
-			r, req.DescriptorGeneration, desc.Generation,
+			r, desc.Generation, req.DescriptorGeneration,
 		)
-		return errors.Errorf(
-			"%s: generation has changed since snapshot was generated %s < %s",
-			r, req.DescriptorGeneration, desc.Generation,
-		)
+		log.VEventf(ctx, 2, "%v", err)
+		return err
 	}
 
 	// Check that the snapshot we generated has a descriptor that includes the
