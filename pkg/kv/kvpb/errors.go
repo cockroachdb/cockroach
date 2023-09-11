@@ -1630,8 +1630,7 @@ func (e *MissingRecordError) SafeFormatError(p errors.Printer) (next error) {
 
 // DescNotFoundError is reported when a descriptor is missing.
 type DescNotFoundError struct {
-	storeID roachpb.StoreID
-	nodeID  roachpb.NodeID
+	id      int32
 	isStore bool
 }
 
@@ -1639,7 +1638,7 @@ type DescNotFoundError struct {
 // store descriptor.
 func NewStoreDescNotFoundError(storeID roachpb.StoreID) *DescNotFoundError {
 	return &DescNotFoundError{
-		storeID: storeID,
+		id:      int32(storeID),
 		isStore: true,
 	}
 }
@@ -1648,7 +1647,7 @@ func NewStoreDescNotFoundError(storeID roachpb.StoreID) *DescNotFoundError {
 // node descriptor.
 func NewNodeDescNotFoundError(nodeID roachpb.NodeID) *DescNotFoundError {
 	return &DescNotFoundError{
-		nodeID:  nodeID,
+		id:      int32(nodeID),
 		isStore: false,
 	}
 }
@@ -1658,11 +1657,11 @@ func (e *DescNotFoundError) Error() string {
 }
 
 func (e *DescNotFoundError) SafeFormatError(p errors.Printer) (next error) {
+	s := redact.SafeString("node")
 	if e.isStore {
-		p.Printf("store descriptor with store ID %d was not found", e.storeID)
-	} else {
-		p.Printf("node descriptor with node ID %d was not found", e.nodeID)
+		s = "store"
 	}
+	p.Printf("%s descriptor with %s ID %d was not found", s, s, e.id)
 	return nil
 }
 

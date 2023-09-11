@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -112,7 +114,10 @@ func runTestPrettyData(
 				for p := range work {
 					thisCfg := cfg
 					thisCfg.LineWidth = p.numCols
-					res[p.idx] = thisCfg.Pretty(stmt.AST)
+					res[p.idx], err = thisCfg.Pretty(stmt.AST)
+					if err != nil {
+						t.Fatal(err)
+					}
 				}
 				return nil
 			}
@@ -178,12 +183,41 @@ func TestPrettyVerify(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got := tree.Pretty(stmt.AST)
+			got, err := tree.Pretty(stmt.AST)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if pretty != got {
 				t.Fatalf("got: %s\nexpected: %s", got, pretty)
 			}
 		})
 	}
+}
+
+func TestPrettyBigStatement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create a SELECT statement with a 1 million item IN expression. Without
+	// mitigation, this can cause stack overflows - see #91197.
+	var sb strings.Builder
+	sb.WriteString("SELECT * FROM foo WHERE id IN (")
+	for i := 0; i < 1_000_000; i++ {
+		if i != 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(strconv.Itoa(i))
+	}
+	sb.WriteString(");")
+
+	stmt, err := parser.ParseOne(sb.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := tree.DefaultPrettyCfg()
+	_, err = cfg.Pretty(stmt.AST)
+	assert.Errorf(t, err, "max call stack depth of be exceeded")
 }
 
 func BenchmarkPrettyData(b *testing.B) {
@@ -209,7 +243,10 @@ func BenchmarkPrettyData(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, doc := range docs {
 			for _, w := range []int{1, 30, 80} {
-				pretty.Pretty(doc, w, true /*useTabs*/, 4 /*tabWidth*/, nil /* keywordTransform */)
+				_, err := pretty.Pretty(doc, w, true /*useTabs*/, 4 /*tabWidth*/, nil /* keywordTransform */)
+				if err != nil {
+					b.Fatal(err)
+				}
 			}
 		}
 	}
@@ -226,7 +263,10 @@ func TestPrettyExprs(t *testing.T) {
 	}
 
 	for expr, pretty := range tests {
-		got := tree.Pretty(expr)
+		got, err := tree.Pretty(expr)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if pretty != got {
 			t.Fatalf("got: %s\nexpected: %s", got, pretty)
 		}
