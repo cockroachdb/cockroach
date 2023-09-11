@@ -358,16 +358,16 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
 		}
 
-		previousReplicatedTimetamp := frontierForSpans(sip.frontier, partitionSpec.Spans...)
+		previousReplicatedTimestamp := frontierForSpans(sip.frontier, partitionSpec.Spans...)
 
 		if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
-				streamingKnobs.BeforeClientSubscribe(addr, string(token), previousReplicatedTimetamp)
+				streamingKnobs.BeforeClientSubscribe(addr, string(token), previousReplicatedTimestamp)
 			}
 		}
 
 		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID), token,
-			sip.spec.InitialScanTimestamp, previousReplicatedTimetamp)
+			sip.spec.InitialScanTimestamp, previousReplicatedTimestamp)
 
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))
@@ -1169,18 +1169,28 @@ func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, erro
 	return false, nil
 }
 
-// frontierForSpan returns the lowest timestamp in the frontier within the given
-// subspans.  If the subspans are entirely outside the Frontier's tracked span
-// an empty timestamp is returned.
+// frontierForSpan returns the lowest timestamp in the frontier within
+// the given subspans. If the subspans are entirely outside the
+// Frontier's tracked span an empty timestamp is returned.
 func frontierForSpans(f *span.Frontier, spans ...roachpb.Span) hlc.Timestamp {
-	minTimestamp := hlc.Timestamp{}
+	var (
+		minTimestamp hlc.Timestamp
+		sawEmptyTS   bool
+	)
+
 	for _, spanToCheck := range spans {
 		f.SpanEntries(spanToCheck, func(frontierSpan roachpb.Span, ts hlc.Timestamp) span.OpResult {
+			if ts.IsEmpty() {
+				sawEmptyTS = true
+			}
 			if minTimestamp.IsEmpty() || ts.Less(minTimestamp) {
 				minTimestamp = ts
 			}
 			return span.ContinueMatch
 		})
+	}
+	if sawEmptyTS {
+		return hlc.Timestamp{}
 	}
 	return minTimestamp
 }
