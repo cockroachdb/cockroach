@@ -438,7 +438,11 @@ func joinASTs(stmts []tree.NodeFormatter) string {
 			UseTabs:   false,
 			Simplify:  true,
 		}
-		sb.WriteString(cfg.Pretty(stmt))
+		p, err := cfg.Pretty(stmt)
+		if err != nil {
+			panic(err)
+		}
+		sb.WriteString(p)
 		sb.WriteString(";")
 	}
 	return sb.String()

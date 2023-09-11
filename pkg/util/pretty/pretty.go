@@ -13,6 +13,8 @@ package pretty
 import (
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 )
 
 // See the referenced paper in the package documentation for explanations
@@ -45,7 +47,9 @@ const (
 // if not nil. keywordTransform must not change the visible length of its
 // argument. It can, for example, add invisible characters like control codes
 // (colors, etc.).
-func Pretty(d Doc, n int, useTabs bool, tabWidth int, keywordTransform func(string) string) string {
+func Pretty(
+	d Doc, n int, useTabs bool, tabWidth int, keywordTransform func(string) string,
+) (string, error) {
 	var sb strings.Builder
 	b := beExec{
 		w:                int16(n),
@@ -54,13 +58,16 @@ func Pretty(d Doc, n int, useTabs bool, tabWidth int, keywordTransform func(stri
 		memoiDoc:         make(map[iDoc]*iDoc),
 		keywordTransform: keywordTransform,
 	}
-	ldoc := b.best(d)
+	ldoc, err := b.best(d)
+	if err != nil {
+		return "", err
+	}
 	b.layout(&sb, useTabs, ldoc)
-	return sb.String()
+	return sb.String(), nil
 }
 
 // w is the max line width.
-func (b *beExec) best(x Doc) *docBest {
+func (b *beExec) best(x Doc) (*docBest, error) {
 	return b.be(docPos{0, 0}, b.iDoc(docPos{0, 0}, x, nil))
 }
 
@@ -103,18 +110,30 @@ type beExec struct {
 
 	// keywordTransform filters keywords if not nil.
 	keywordTransform func(string) string
+
+	// beDepth is the depth of recursive calls of be. It is used to detect deep
+	// call stacks before a stack overflow occurs.
+	beDepth int
 }
 
-func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
+const maxBeDepth = 10_000
+
+func (b *beExec) be(k docPos, xlist *iDoc) (_ *docBest, err error) {
+	b.beDepth++
+	defer func() { b.beDepth-- }()
+	if b.beDepth > maxBeDepth {
+		return nil, errors.AssertionFailedf("max call stack depth of be exceeded")
+	}
+
 	// Shortcut: be k [] = Nil
 	if xlist == nil {
-		return nil
+		return nil, nil
 	}
 
 	// If we've computed this result before, short cut here too.
 	memoKey := beArgs{k: k, d: xlist}
 	if cached, ok := b.memoBe[memoKey]; ok {
-		return cached
+		return cached, nil
 	}
 
 	// General case.
@@ -127,54 +146,99 @@ func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
 
 	switch t := d.d.(type) {
 	case nilDoc:
-		res = b.be(k, z)
+		res, err = b.be(k, z)
+		if err != nil {
+			return nil, err
+		}
 	case *concat:
-		res = b.be(k, b.iDoc(d.i, t.a, b.iDoc(d.i, t.b, z)))
+		res, err = b.be(k, b.iDoc(d.i, t.a, b.iDoc(d.i, t.b, z)))
+		if err != nil {
+			return nil, err
+		}
 	case nests:
-		res = b.be(k, b.iDoc(docPos{d.i.tabs, d.i.spaces + t.n}, t.d, z))
+		res, err = b.be(k, b.iDoc(docPos{d.i.tabs, d.i.spaces + t.n}, t.d, z))
+		if err != nil {
+			return nil, err
+		}
 	case nestt:
-		res = b.be(k, b.iDoc(docPos{d.i.tabs + 1 + d.i.spaces/b.tabWidth, 0}, t.d, z))
+		res, err = b.be(k, b.iDoc(docPos{d.i.tabs + 1 + d.i.spaces/b.tabWidth, 0}, t.d, z))
+		if err != nil {
+			return nil, err
+		}
 	case text:
+		d, err := b.be(docPos{k.tabs, k.spaces + int16(len(t))}, z)
+		if err != nil {
+			return nil, err
+		}
 		res = b.newDocBest(docBest{
 			tag: textB,
 			s:   string(t),
-			d:   b.be(docPos{k.tabs, k.spaces + int16(len(t))}, z),
+			d:   d,
 		})
 	case keyword:
+		d, err := b.be(docPos{k.tabs, k.spaces + int16(len(t))}, z)
+		if err != nil {
+			return nil, err
+		}
 		res = b.newDocBest(docBest{
 			tag: keywordB,
 			s:   string(t),
-			d:   b.be(docPos{k.tabs, k.spaces + int16(len(t))}, z),
+			d:   d,
 		})
 	case line, softbreak:
+		d, err := b.be(d.i, z)
+		if err != nil {
+			return nil, err
+		}
 		res = b.newDocBest(docBest{
 			tag: lineB,
 			i:   d.i,
-			d:   b.be(d.i, z),
+			d:   d,
 		})
 	case hardline:
+		d, err := b.be(d.i, z)
+		if err != nil {
+			return nil, err
+		}
 		res = b.newDocBest(docBest{
 			tag: hardlineB,
 			i:   d.i,
-			d:   b.be(d.i, z),
+			d:   d,
 		})
 	case *union:
-		res = b.better(k,
-			b.be(k, b.iDoc(d.i, t.x, z)),
+		d, err := b.be(k, b.iDoc(d.i, t.x, z))
+		if err != nil {
+			return nil, err
+		}
+		res, err = b.better(k,
+			d,
 			// We eta-lift the second argument to avoid eager evaluation.
-			func() *docBest {
+			func() (*docBest, error) {
 				return b.be(k, b.iDoc(d.i, t.y, z))
 			},
 		)
+		if err != nil {
+			return nil, err
+		}
 	case *scolumn:
-		res = b.be(k, b.iDoc(d.i, t.f(k.spaces), z))
+		res, err = b.be(k, b.iDoc(d.i, t.f(k.spaces), z))
+		if err != nil {
+			return nil, err
+		}
 	case *snesting:
-		res = b.be(k, b.iDoc(d.i, t.f(d.i.spaces), z))
+		res, err = b.be(k, b.iDoc(d.i, t.f(d.i.spaces), z))
+		if err != nil {
+			return nil, err
+		}
 	case pad:
+		d, err := b.be(docPos{k.tabs, k.spaces + t.n}, z)
+		if err != nil {
+			return nil, err
+		}
 		res = b.newDocBest(docBest{
 			tag: spacesB,
 			i:   docPos{spaces: t.n},
-			d:   b.be(docPos{k.tabs, k.spaces + t.n}, z),
+			d:   d,
 		})
 	default:
 		panic(fmt.Errorf("unknown type: %T", d.d))
@@ -183,7 +247,7 @@ func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
 	// Memoize so we don't compute the same result twice.
 	b.memoBe[memoKey] = res
 
-	return res
+	return res, nil
 }
 
 // newDocBest makes a new docBest on the heap. Allocations
@@ -234,10 +298,10 @@ type beArgs struct {
 	k docPos
 }
 
-func (b *beExec) better(k docPos, x *docBest, y func() *docBest) *docBest {
+func (b *beExec) better(k docPos, x *docBest, y func() (*docBest, error)) (*docBest, error) {
 	remainder := b.w - k.spaces - k.tabs*b.tabWidth
 	if fits(remainder, x) {
-		return x
+		return x, nil
 	}
 	return y()
 }

@@ -11157,7 +11157,11 @@ func prettyStatement(p tree.PrettyCfg, stmt string) (string, error) {
 	}
 	var formattedStmt strings.Builder
 	for idx := range stmts {
-		formattedStmt.WriteString(p.Pretty(stmts[idx].AST))
+		p, err := p.Pretty(stmts[idx].AST)
+		if err != nil {
+			return "", err
+		}
+		formattedStmt.WriteString(p)
 		if len(stmts) > 1 {
 			formattedStmt.WriteString(";")
 		}
