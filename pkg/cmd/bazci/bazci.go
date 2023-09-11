@@ -48,6 +48,7 @@ const (
 	buildSubcmd             = "build"
 	runSubcmd               = "run"
 	testSubcmd              = "test"
+	coverageSubcmd          = "coverage"
 	mergeTestXMLsSubcmd     = "merge-test-xmls"
 	mungeTestXMLSubcmd      = "munge-test-xml"
 	beaverHubServerEndpoint = "https://beaver-hub-server-jjd2v2r2dq-uk.a.run.app/process"
@@ -223,7 +224,7 @@ func (s *monitorBuildServer) handleBuildEvent(
 					continue
 				}
 				for _, output := range testResult.testResult.TestActionOutput {
-					if output.Name == "test.log" || output.Name == "test.xml" {
+					if output.Name == "test.log" || output.Name == "test.xml" || output.Name == "test.lcov" {
 						src := strings.TrimPrefix(output.GetUri(), "file://")
 						dst := filepath.Join(artifactsDir, outputDir, filepath.Base(src))
 						if append_tc_ignore {
@@ -236,7 +237,7 @@ func (s *monitorBuildServer) handleBuildEvent(
 							s.testXmls = append(s.testXmls, src)
 						}
 					} else {
-						panic(output)
+						panic(fmt.Sprintf("Unknown TestActionOutput: %v", output))
 					}
 				}
 			}
@@ -318,8 +319,9 @@ func sendBepDataToBeaverHub(bepFilepath string) error {
 }
 
 func bazciImpl(cmd *cobra.Command, args []string) error {
-	if args[0] != buildSubcmd && args[0] != runSubcmd && args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd && args[0] != mergeTestXMLsSubcmd {
-		return errors.Newf("First argument must be `build`, `run`, `test`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])
+	if args[0] != buildSubcmd && args[0] != runSubcmd && args[0] != coverageSubcmd &&
+		args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd && args[0] != mergeTestXMLsSubcmd {
+		return errors.Newf("First argument must be `build`, `run`, `test`, `coverage`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])
 	}
 
 	// Special case: munge-test-xml/merge-test-xmls don't require running Bazel at all.
