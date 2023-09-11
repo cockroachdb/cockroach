@@ -423,7 +423,7 @@ project
  │    ├── grouping columns: rownum:14(int!null)
  │    ├── left-join (cross)
  │    │    ├── columns: expr:5(int!null) true:11(bool) rownum:14(int!null)
- │    │    ├── ordinality
+ │    │    ├── unique-key
  │    │    │    ├── columns: expr:5(int!null) rownum:14(int!null)
  │    │    │    └── project
  │    │    │         ├── columns: expr:5(int!null)

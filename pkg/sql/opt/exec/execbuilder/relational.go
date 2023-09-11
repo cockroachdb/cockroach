@@ -269,6 +269,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ProjectSetExpr:
 		ep, err = b.buildProjectSet(t)
 
+	case *memo.UniqueKeyExpr:
+		ep, err = b.buildUniqueKey(t)
+
 	case *memo.WindowExpr:
 		ep, err = b.buildWindow(t)
 
@@ -2148,6 +2151,32 @@ func (b *Builder) buildOrdinality(ord *memo.OrdinalityExpr) (execPlan, error) {
 	return execPlan{root: node, outputCols: outputCols}, nil
 }
 
+// buildUniqueKey adds a column to its input which holds a unique number.
+// There is no guarantee on the unique numbers produced, like if they are
+// a sequence of numbers, or if they are deterministic. Currently this uses
+// the ordinality operation, but this may change in the future, for example
+// to use non-sequenced numbers.
+func (b *Builder) buildUniqueKey(uniqueKeyExpr *memo.UniqueKeyExpr) (execPlan, error) {
+	input, err := b.buildRelational(uniqueKeyExpr.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	colName := b.mem.Metadata().ColumnMeta(uniqueKeyExpr.ColID).Alias
+
+	node, err := b.factory.ConstructOrdinality(input.root, colName)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// We have one additional unique key column, which is ordered at the end of
+	// the list.
+	outputCols := input.outputCols.Copy()
+	outputCols.Set(int(uniqueKeyExpr.ColID), outputCols.Len())
+
+	return execPlan{root: node, outputCols: outputCols}, nil
+}
+
 func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 	input, err := b.buildRelational(join.Input)
 	if err != nil {
@@ -3597,6 +3626,7 @@ var boundedStalenessAllowList = map[opt.Operator]struct{}{
 	opt.OffsetOp:           {},
 	opt.SortOp:             {},
 	opt.OrdinalityOp:       {},
+	opt.UniqueKeyOp:        {},
 	opt.Max1RowOp:          {},
 	opt.ProjectSetOp:       {},
 	opt.WindowOp:           {},

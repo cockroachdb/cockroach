@@ -637,6 +637,14 @@ func (c *CustomFuncs) DerivePruneCols(e memo.RelExpr, disabledRules intsets.Fast
 		inputPruneCols := c.DerivePruneCols(ord.Input, disabledRules)
 		relProps.Rule.PruneCols = inputPruneCols.Difference(ord.Ordering.ColSet())
 
+	case opt.UniqueKeyOp:
+		if disabledRules.Contains(int(opt.PruneUniqueKeyCols)) {
+			// Avoid rule cycles.
+			break
+		}
+		uniqueKeyExpr := e.(*memo.UniqueKeyExpr)
+		relProps.Rule.PruneCols = c.DerivePruneCols(uniqueKeyExpr.Input, disabledRules)
+
 	case opt.IndexJoinOp, opt.LookupJoinOp, opt.MergeJoinOp:
 		// There is no need to prune columns projected by Index, Lookup or Merge
 		// joins, since its parent will always be an "alternate" expression in the

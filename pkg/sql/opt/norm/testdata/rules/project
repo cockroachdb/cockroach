@@ -779,7 +779,7 @@ project
  │    │    ├── cardinality: [2 - ]
  │    │    ├── immutable
  │    │    ├── fd: (11)-->(9)
- │    │    ├── ordinality
+ │    │    ├── unique-key
  │    │    │    ├── columns: column1_1:9!null rownum:11!null
  │    │    │    ├── cardinality: [2 - 2]
  │    │    │    ├── key: (11)
@@ -829,7 +829,7 @@ project
  │    │    │    ├── cardinality: [4 - 4]
  │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  │    │    │    ├── fd: (9)-->(7)
- │    │    │    ├── ordinality
+ │    │    │    ├── unique-key
  │    │    │    │    ├── columns: column1_1:7!null rownum:9!null
  │    │    │    │    ├── cardinality: [2 - 2]
  │    │    │    │    ├── key: (9)
@@ -1114,7 +1114,7 @@ project
  │    │    ├── columns: column1:2 "?column?":3!null rownum:5!null
  │    │    ├── cardinality: [2 - 8]
  │    │    ├── fd: (5)-->(3)
- │    │    ├── ordinality
+ │    │    ├── unique-key
  │    │    │    ├── columns: "?column?":3!null rownum:5!null
  │    │    │    ├── cardinality: [2 - 2]
  │    │    │    ├── key: (5)

@@ -311,6 +311,11 @@ func init() {
 		buildChildReqOrdering: exportBuildChildReqOrdering,
 		buildProvidedOrdering: noProvidedOrdering,
 	}
+	funcMap[opt.UniqueKeyOp] = funcs{
+		canProvideOrdering:    uniqueKeyCanProvideOrdering,
+		buildChildReqOrdering: uniqueKeyBuildChildReqOrdering,
+		buildProvidedOrdering: uniqueKeyBuildProvided,
+	}
 	funcMap[opt.WithOp] = funcs{
 		canProvideOrdering:    withCanProvideOrdering,
 		buildChildReqOrdering: withBuildChildReqOrdering,

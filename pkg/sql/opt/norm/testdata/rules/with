@@ -1334,7 +1334,7 @@ scalar-group-by
  │              │         ├── columns: i:6!null n:7!null rownum:11!null
  │              │         ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  │              │         ├── fd: ()-->(6,11)
- │              │         ├── ordinality
+ │              │         ├── unique-key
  │              │         │    ├── columns: i:6 rownum:11!null
  │              │         │    ├── cardinality: [1 - 1]
  │              │         │    ├── key: ()
@@ -1460,7 +1460,7 @@ scalar-group-by
  │              │    └── inner-join (cross)
  │              │         ├── columns: i:6!null n:7!null rownum:11!null
  │              │         ├── fd: (11)-->(6)
- │              │         ├── ordinality
+ │              │         ├── unique-key
  │              │         │    ├── columns: i:6 rownum:11!null
  │              │         │    ├── cardinality: [1 - ]
  │              │         │    ├── key: (11)
@@ -1677,7 +1677,7 @@ scalar-group-by
  │              │         ├── columns: i:6!null n:7!null rownum:11!null
  │              │         ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  │              │         ├── fd: ()-->(6,11)
- │              │         ├── ordinality
+ │              │         ├── unique-key
  │              │         │    ├── columns: i:6 rownum:11!null
  │              │         │    ├── cardinality: [1 - 1]
  │              │         │    ├── key: ()

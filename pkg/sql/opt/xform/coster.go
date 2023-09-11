@@ -593,6 +593,9 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	case opt.ProjectSetOp:
 		cost = c.computeProjectSetCost(candidate.(*memo.ProjectSetExpr))
 
+	case opt.UniqueKeyOp:
+		cost = c.computeUniqueKeyCost(candidate.(*memo.UniqueKeyExpr))
+
 	case opt.ExplainOp:
 		// Technically, the cost of an Explain operation is independent of the cost
 		// of the underlying plan. However, we want to explain the plan we would get
@@ -1434,6 +1437,12 @@ func (c *coster) computeOrdinalityCost(ord *memo.OrdinalityExpr) memo.Cost {
 func (c *coster) computeProjectSetCost(projectSet *memo.ProjectSetExpr) memo.Cost {
 	// Add the CPU cost of emitting the rows.
 	cost := memo.Cost(projectSet.Relational().Statistics().RowCount) * cpuCostFactor
+	return cost
+}
+
+func (c *coster) computeUniqueKeyCost(uniqueKeyExpr *memo.UniqueKeyExpr) memo.Cost {
+	// Add the CPU cost of emitting the rows.
+	cost := memo.Cost(uniqueKeyExpr.Relational().Statistics().RowCount) * cpuCostFactor
 	return cost
 }
 
