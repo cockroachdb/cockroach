@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -26,15 +27,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// DefaultPushTxnsInterval is the default interval at which a Processor will
-	// push all transactions in the unresolvedIntentQueue that are above the age
-	// specified by PushTxnsAge.
-	DefaultPushTxnsInterval = 250 * time.Millisecond
-	// defaultPushTxnsAge is the default age at which a Processor will begin to
-	// consider a transaction old enough to push.
-	defaultPushTxnsAge = 10 * time.Second
-)
+// DefaultPushTxnsInterval is the default interval at which a Processor will
+// push all transactions in the unresolvedIntentQueue that are above the age
+// specified by PushTxnsAge.
+var DefaultPushTxnsInterval = envutil.EnvOrDefaultDuration(
+	"COCKROACH_RANGEFEED_PUSH_TXNS_INTERVAL", time.Second)
+
+// defaultPushTxnsAge is the default age at which a Processor will begin to
+// consider a transaction old enough to push.
+const defaultPushTxnsAge = 10 * time.Second
 
 // newErrBufferCapacityExceeded creates an error that is returned to subscribers
 // if the rangefeed processor is not able to keep up with the flow of incoming
