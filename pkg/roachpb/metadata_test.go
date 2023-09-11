@@ -580,4 +580,38 @@ func TestGCHint(t *testing.T) {
 			assert.Equal(t, tc.want, hint)
 		})
 	}
+
+	for _, tc := range []struct {
+		was  GCHint
+		gced hlc.Timestamp
+		want GCHint
+	}{
+		// Check empty timestamp cases.
+		{was: GCHint{}, gced: empty, want: GCHint{}},
+		{was: GCHint{}, gced: ts1, want: GCHint{}},
+		{was: hint(empty, ts1, empty), gced: empty, want: hint(empty, ts1, empty)},
+		{was: hint(ts2, ts1, ts3), gced: empty, want: hint(ts2, ts1, ts3)},
+		{was: hint(ts2, ts1, empty), gced: empty, want: hint(ts2, ts1, empty)},
+		// Check that the GC hint is updated correctly with all relative positions
+		// of the threshold.
+		{was: hint(empty, ts2, ts3), gced: ts1, want: hint(empty, ts2, ts3)}, // no-op
+		{was: hint(empty, ts2, ts3), gced: ts2, want: hint(empty, ts3, empty)},
+		{was: hint(empty, ts1, ts3), gced: ts2, want: hint(empty, ts3, empty)},
+		{was: hint(empty, ts1, ts3), gced: ts3, want: GCHint{}},
+		{was: hint(empty, ts1, ts2), gced: ts3, want: GCHint{}},
+		// Check that the entire-range hint is updated correctly with all relative
+		// positions of the threshold.
+		{was: hint(ts2, empty, empty), gced: ts1, want: hint(ts2, empty, empty)},
+		{was: hint(ts2, empty, empty), gced: ts2, want: GCHint{}},
+		{was: hint(ts2, empty, empty), gced: ts3, want: GCHint{}},
+	} {
+		t.Run("UpdateAfterGC", func(t *testing.T) {
+			hint := tc.was
+			checkInvariants(t, hint)
+			updated := hint.UpdateAfterGC(tc.gced)
+			checkInvariants(t, hint)
+			assert.Equal(t, !hint.Equal(tc.was), updated, "returned incorrect 'updated' bit")
+			assert.Equal(t, tc.want, hint)
+		})
+	}
 }
