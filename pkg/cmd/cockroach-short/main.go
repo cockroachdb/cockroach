@@ -20,8 +20,10 @@ package main
 import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl" // ccl init hooks
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/testutils/bazelcodecover"
 )
 
 func main() {
+	bazelcodecover.MaybeInitCodeCoverage()
 	cli.Main()
 }
