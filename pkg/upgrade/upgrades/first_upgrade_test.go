@@ -144,7 +144,7 @@ func TestFirstUpgradeRepair(t *testing.T) {
 	execStmts(t,
 		"CREATE DATABASE test",
 		"USE test",
-		"CREATE TABLE foo (i INT PRIMARY KEY, j INT, INDEX idx(j))",
+		"CREATE TABLE foo (i INT PRIMARY KEY, j INT, INDEX idx(j)) WITH (ttl_expire_after = '10m')",
 		"INSERT INTO foo VALUES (1, 2)",
 		"CREATE FUNCTION test.public.f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$",
 	)
