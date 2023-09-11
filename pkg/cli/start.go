@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -491,6 +492,14 @@ func runStartInternal(
 			errors.New("no --join flags provided to 'cockroach start'"),
 			"Consider using 'cockroach init' or 'cockroach start-single-node' instead")
 		return err
+	}
+
+	// Check the --tenant-id-file flag.
+	if fl := cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.TenantIDFile.Name); fl != nil && fl.Changed {
+		fileName := fl.Value.String()
+		serverCfg.DelayedSetTenantID = func() (roachpb.TenantID, error) {
+			return tenantIDFromFile(fileName, nil, nil)
+		}
 	}
 
 	// Now perform additional configuration tweaks specific to the start

@@ -75,7 +75,6 @@ go_test(
     deps = [
         ":persistedsqlstats",
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobstest",

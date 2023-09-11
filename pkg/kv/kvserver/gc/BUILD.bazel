@@ -46,7 +46,6 @@ go_test(
     embed = [":gc"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvpb",
