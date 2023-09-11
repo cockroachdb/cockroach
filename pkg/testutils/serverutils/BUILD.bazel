@@ -36,7 +36,6 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/storage",
-        "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/util",

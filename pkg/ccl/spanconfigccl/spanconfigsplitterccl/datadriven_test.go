@@ -46,7 +46,6 @@ import (
 //     takes to arrive at the number.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -65,6 +64,8 @@ func TestDataDriven(t *testing.T) {
 		},
 	}
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+		defer log.Scope(t).Close(t)
+
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,

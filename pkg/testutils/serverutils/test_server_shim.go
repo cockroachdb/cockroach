@@ -22,7 +22,6 @@ import (
 	gosql "database/sql"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -31,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -307,7 +305,7 @@ func OpenDBConn(
 func StartTenant(
 	t TestFataler, ts TestServerInterface, params base.TestTenantArgs,
 ) (ApplicationLayerInterface, *gosql.DB) {
-	tenant, err := ts.StartTenant(context.Background(), params)
+	tenant, err := ts.TenantController().StartTenant(context.Background(), params)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -420,32 +418,8 @@ func WaitForTenantCapabilities(
 	targetCaps map[tenantcapabilities.ID]string,
 	errPrefix string,
 ) {
-	if errPrefix != "" && !strings.HasSuffix(errPrefix, ": ") {
-		errPrefix += ": "
+	err := s.TenantController().WaitForTenantCapabilities(context.Background(), tenID, targetCaps, errPrefix)
+	if err != nil {
+		t.Fatal(err)
 	}
-	testutils.SucceedsSoon(t, func() error {
-		if tenID.IsSystem() {
-			return nil
-		}
-		if len(targetCaps) == 0 {
-			return nil
-		}
-
-		missingCapabilityError := func(capID tenantcapabilities.ID) error {
-			return errors.Newf("%stenant %s cap %q not at expected value", errPrefix, tenID, capID)
-		}
-		capabilities, found := s.TenantCapabilitiesReader().GetCapabilities(tenID)
-		if !found {
-			return errors.Newf("%scapabilities not ready for tenant %v", errPrefix, tenID)
-		}
-
-		for capID, expectedValue := range targetCaps {
-			curVal := tenantcapabilities.MustGetValueByID(capabilities, capID).String()
-			if curVal != expectedValue {
-				return missingCapabilityError(capID)
-			}
-		}
-
-		return nil
-	})
 }

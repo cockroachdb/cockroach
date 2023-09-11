@@ -37,12 +37,14 @@ func TestStatusGetFiles(t *testing.T) {
 
 	storeSpec := base.StoreSpec{Path: tempDir}
 
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{
 			storeSpec,
 		},
 	})
-	defer ts.Stopper().Stop(context.Background())
+	defer srv.Stopper().Stop(context.Background())
+
+	ts := srv.ApplicationLayer()
 
 	client := ts.GetStatusClient(t)
 

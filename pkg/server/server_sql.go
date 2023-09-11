@@ -161,6 +161,7 @@ type SQLServer struct {
 	internalDB       descs.DB
 	leaseMgr         *lease.Manager
 	tracingService   *service.Service
+	nodeDialer       *nodedialer.Dialer
 	tenantConnect    kvtenant.Connector
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
@@ -1373,6 +1374,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sessionRegistry:                cfg.sessionRegistry,
 		closedSessionCache:             cfg.closedSessionCache,
 		jobRegistry:                    jobRegistry,
+		nodeDialer:                     cfg.podNodeDialer,
 		statsRefresher:                 statsRefresher,
 		temporaryObjectCleaner:         temporaryObjectCleaner,
 		internalMemMetrics:             internalMemMetrics,

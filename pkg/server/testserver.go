@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff"
@@ -425,10 +426,7 @@ func (ts *testServer) NodeLiveness() interface{} {
 
 // NodeDialer returns the NodeDialer used by the testServer.
 func (ts *testServer) NodeDialer() interface{} {
-	if ts != nil {
-		return ts.nodeDialer
-	}
-	return nil
+	return ts.nodeDialer
 }
 
 // HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
@@ -942,6 +940,11 @@ func (t *testTenant) JobRegistry() interface{} {
 	return t.sql.jobRegistry
 }
 
+// NodeDialer returns the NodeDialer used by the testServer.
+func (t *testTenant) NodeDialer() interface{} {
+	return t.sql.nodeDialer
+}
+
 // ExecutorConfig is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) ExecutorConfig() interface{} {
 	return *t.sql.execCfg
@@ -1074,6 +1077,50 @@ func (t *testTenant) DefaultZoneConfig() zonepb.ZoneConfig {
 // SettingsWatcher is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) SettingsWatcher() interface{} {
 	return t.sql.settingsWatcher
+}
+
+// WaitForTenantCapabilities is part of the serverutils.TenantControlInterface.
+func (ts *testServer) WaitForTenantCapabilities(
+	ctx context.Context,
+	tenID roachpb.TenantID,
+	targetCaps map[tenantcapabilities.ID]string,
+	errPrefix string,
+) error {
+	if tenID.IsSystem() {
+		return nil
+	}
+	if len(targetCaps) == 0 {
+		return nil
+	}
+
+	if errPrefix != "" && !strings.HasSuffix(errPrefix, ": ") {
+		errPrefix += ": "
+	}
+
+	missingCapabilityError := func(capID tenantcapabilities.ID) error {
+		return errors.Newf("%stenant %s cap %q not at expected value", errPrefix, tenID, capID)
+	}
+
+	// Restart the capabilities watcher. Restarting the watcher
+	// forces a new initial scan which is faster than waiting out
+	// the closed timestamp interval required to see new updates.
+	ts.tenantCapabilitiesWatcher.TestingRestart()
+
+	return testutils.SucceedsSoonError(func() error {
+		capabilities, found := ts.TenantCapabilitiesReader().GetCapabilities(tenID)
+		if !found {
+			return errors.Newf("%scapabilities not ready for tenant %v", errPrefix, tenID)
+		}
+
+		for capID, expectedValue := range targetCaps {
+			curVal := tenantcapabilities.MustGetValueByID(capabilities, capID).String()
+			if curVal != expectedValue {
+				return missingCapabilityError(capID)
+			}
+		}
+
+		return nil
+	})
 }
 
 // StartSharedProcessTenant is part of the serverutils.TenantControlInterface.
@@ -1476,7 +1523,10 @@ func (ts *testServer) StartTenant(
 	baseCfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
 	baseCfg.DisableTLSForHTTP = params.DisableTLSForHTTP
 	baseCfg.EnableDemoLoginEndpoint = params.EnableDemoLoginEndpoint
+	baseCfg.TestingInsecureWebAccess = ts.Cfg.TestingInsecureWebAccess
 	baseCfg.DefaultZoneConfig = ts.Cfg.DefaultZoneConfig
+	baseCfg.HeapProfileDirName = ts.Cfg.BaseConfig.HeapProfileDirName
+	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
 
 	// Waiting for capabilities can time To avoid paying this cost in all
 	// cases, we only set the nodelocal storage capability if the caller has
@@ -1497,22 +1547,9 @@ func (ts *testServer) StartTenant(
 				return nil, err
 			}
 		} else {
-			// Restart the capabilities watcher. Restarting the watcher
-			// forces a new initial scan which is faster than waiting out
-			// the closed timestamp interval required to see new updates.
-			ts.tenantCapabilitiesWatcher.TestingRestart()
-			if err := testutils.SucceedsSoonError(func() error {
-				capabilities, found := ts.TenantCapabilitiesReader().GetCapabilities(params.TenantID)
-				if !found {
-					return errors.Newf("capabilities not yet ready")
-				}
-				if !tenantcapabilities.MustGetBoolByID(
-					capabilities, tenantcapabilities.CanUseNodelocalStorage,
-				) {
-					return errors.Newf("capabilities not yet ready")
-				}
-				return nil
-			}); err != nil {
+			if err := ts.WaitForTenantCapabilities(ctx, params.TenantID, map[tenantcapabilities.ID]string{
+				tenantcapabilities.CanUseNodelocalStorage: "true",
+			}, ""); err != nil {
 				return nil, err
 			}
 		}

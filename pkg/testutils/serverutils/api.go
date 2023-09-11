@@ -174,6 +174,10 @@ type ApplicationLayerInterface interface {
 	// RPCAddr returns the server's RPC address.
 	RPCAddr() string
 
+	// NodeDialer exposes the instance-to-instance dialer interface{}.
+	// The concrete type is *nodedialer.Dialer.
+	NodeDialer() interface{}
+
 	// SQLConn returns a handle to the server's SQL interface, opened
 	// with the 'root' user.
 	// The connection is closed automatically when the server is stopped.
@@ -497,6 +501,16 @@ type TenantControlInterface interface {
 	// if the tenant record exists in KV.
 	WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error
 
+	// WaitForTenantCapabilities waits until the in-RAM cache of
+	// tenant capabilities has been populated for the given tenant ID
+	// with the expected target capability values.
+	WaitForTenantCapabilities(
+		ctx context.Context,
+		tenID roachpb.TenantID,
+		targetCaps map[tenantcapabilities.ID]string,
+		errPrefix string,
+	) error
+
 	// TestTenant returns the test tenant associated with the server.
 	//
 	// TODO(knz): rename to TestApplicationService.
@@ -537,10 +551,6 @@ type StorageLayerInterface interface {
 
 	// HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
 	HeartbeatNodeLiveness() error
-
-	// NodeDialer exposes the NodeDialer instance used by the TestServer as an
-	// interface{}.
-	NodeDialer() interface{}
 
 	// WriteSummaries records summaries of time-series data, which is required for
 	// any tests that query server stats.

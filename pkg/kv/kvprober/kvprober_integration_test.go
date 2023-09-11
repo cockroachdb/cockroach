@@ -377,6 +377,9 @@ func initTestServer(
 	t *testing.T, knobs base.TestingKnobs,
 ) (serverutils.TestServerInterface, *gosql.DB, *kvprober.Prober, func()) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// KV probes always go to the storage layer.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+
 		Settings: cluster.MakeClusterSettings(),
 		Knobs:    knobs,
 	})

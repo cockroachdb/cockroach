@@ -584,7 +584,7 @@ func assertEqualKVs(
 		return foundKVs
 	}
 	// Iterate over the store.
-	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+	store, err := srv.StorageLayer().GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 	require.NoError(t, err)
 	it, err := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound: targetSpan.Key,
@@ -669,9 +669,14 @@ func TestRandomClientGeneration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
 	defer srv.Stopper().Stop(ctx)
-	registry := srv.JobRegistry().(*jobs.Registry)
+
+	ts := srv.SystemLayer()
+
+	registry := ts.JobRegistry().(*jobs.Registry)
 
 	// TODO: Consider testing variations on these parameters.
 	tenantID := roachpb.MustMakeTenantID(20)
@@ -714,7 +719,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	randomStreamClient.RegisterInterception(cancelAfterCheckpoints)
 	randomStreamClient.RegisterInterception(validateFnWithValidator(t, streamValidator))
 
-	out, err := runStreamIngestionProcessor(ctx, t, registry, srv.InternalDB().(descs.DB),
+	out, err := runStreamIngestionProcessor(ctx, t, registry, ts.InternalDB().(descs.DB),
 		topo, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey,
 		randomStreamClient, noCutover{}, nil /* streamingTestingKnobs*/)
 	require.NoError(t, err)

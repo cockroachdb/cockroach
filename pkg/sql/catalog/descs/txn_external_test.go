@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -41,11 +42,15 @@ func TestTxnWithStepping(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
 
 	db := s.InternalDB().(descs.DB)
-	scratchKey, err := s.ScratchRange()
+
+	scratchKey := append(s.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	_, _, err := srv.StorageLayer().SplitRange(scratchKey)
 	require.NoError(t, err)
 	// Write a key, read in the transaction without stepping, ensure we
 	// do not see the value, step the transaction, then ensure that we do.
