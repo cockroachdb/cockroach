@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -584,44 +583,6 @@ func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 		if err := i.maybeSkipIntentRangeKey(); err != nil {
 			return
 		}
-	}
-	i.computePos()
-}
-
-func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
-	adjustRangeKeyChanged := i.shouldAdjustSeekRangeKeyChanged()
-
-	i.dir = +1
-	i.valid = true
-	i.err = nil
-
-	if i.constraint != notConstrained {
-		i.checkConstraint(key, false)
-	}
-	i.iter.SeekGE(MVCCKey{Key: key})
-	if err := i.tryDecodeKey(); err != nil {
-		return
-	}
-	i.rangeKeyChanged = i.iter.RangeKeyChanged()
-	if adjustRangeKeyChanged {
-		i.adjustSeekRangeKeyChanged()
-	}
-	var engineKey EngineKey
-	engineKey, i.intentKeyBuf = LockTableKey{
-		Key:      key,
-		Strength: lock.Intent,
-		TxnUUID:  txnUUID,
-	}.ToEngineKey(i.intentKeyBuf)
-	var limitKey roachpb.Key
-	if i.iterValid && !i.prefix {
-		limitKey = i.makeUpperLimitKey()
-	}
-	iterState, err := i.intentIter.SeekEngineKeyGEWithLimit(engineKey, limitKey)
-	if err = i.tryDecodeLockKey(iterState, err); err != nil {
-		return
-	}
-	if err := i.maybeSkipIntentRangeKey(); err != nil {
-		return
 	}
 	i.computePos()
 }
