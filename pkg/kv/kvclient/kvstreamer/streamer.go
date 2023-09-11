@@ -1466,7 +1466,7 @@ func calculateFootprint(
 			}
 			if get.ResumeSpan != nil {
 				// This Get wasn't completed.
-				fp.resumeReqsMemUsage += requestSize(get.ResumeSpan.Key, get.ResumeSpan.EndKey)
+				fp.resumeReqsMemUsage += getRequestSize(get.ResumeSpan.Key, get.ResumeSpan.EndKey)
 				fp.numIncompleteGets++
 			} else {
 				// This Get was completed.
@@ -1501,7 +1501,7 @@ func calculateFootprint(
 			}
 			if scan.ResumeSpan != nil {
 				// This Scan wasn't completed.
-				fp.resumeReqsMemUsage += requestSize(scan.ResumeSpan.Key, scan.ResumeSpan.EndKey)
+				fp.resumeReqsMemUsage += scanRequestSize(scan.ResumeSpan.Key, scan.ResumeSpan.EndKey)
 				fp.numIncompleteScans++
 			}
 		}
