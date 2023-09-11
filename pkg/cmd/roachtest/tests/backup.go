@@ -224,8 +224,8 @@ func registerBackupNodeShutdown(r registry.Registry) {
 			nodeToShutdown := 3
 			dest := loadBackupData(ctx, t, c)
 			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
-			startBackup := func(c cluster.Cluster, t test.Test) (jobID jobspb.JobID, err error) {
-				gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
+			startBackup := func(c cluster.Cluster, l *logger.Logger) (jobID jobspb.JobID, err error) {
+				gatewayDB := c.Conn(ctx, l, gatewayNode)
 				defer gatewayDB.Close()
 
 				err = gatewayDB.QueryRowContext(ctx, backupQuery).Scan(&jobID)
@@ -246,8 +246,8 @@ func registerBackupNodeShutdown(r registry.Registry) {
 			nodeToShutdown := 2
 			dest := loadBackupData(ctx, t, c)
 			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
-			startBackup := func(c cluster.Cluster, t test.Test) (jobID jobspb.JobID, err error) {
-				gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
+			startBackup := func(c cluster.Cluster, l *logger.Logger) (jobID jobspb.JobID, err error) {
+				gatewayDB := c.Conn(ctx, l, gatewayNode)
 				defer gatewayDB.Close()
 
 				err = gatewayDB.QueryRowContext(ctx, backupQuery).Scan(&jobID)

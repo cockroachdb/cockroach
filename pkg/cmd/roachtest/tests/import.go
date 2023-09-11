@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -44,7 +45,7 @@ func readCreateTableFromFixture(fixtureURI string, gatewayDB *gosql.DB) (string,
 
 func registerImportNodeShutdown(r registry.Registry) {
 	getImportRunner := func(ctx context.Context, t test.Test, gatewayNode int) jobStarter {
-		startImport := func(c cluster.Cluster, t test.Test) (jobspb.JobID, error) {
+		startImport := func(c cluster.Cluster, l *logger.Logger) (jobspb.JobID, error) {
 			var jobID jobspb.JobID
 			// partsupp is 11.2 GiB.
 			tableName := "partsupp"

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -57,7 +58,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 
 	makeRestoreStarter := func(ctx context.Context, t test.Test, c cluster.Cluster,
 		gatewayNode int, rd restoreDriver) jobStarter {
-		return func(c cluster.Cluster, t test.Test) (jobspb.JobID, error) {
+		return func(c cluster.Cluster, l *logger.Logger) (jobspb.JobID, error) {
 			return rd.runDetached(ctx, "DATABASE tpce", gatewayNode)
 		}
 	}
