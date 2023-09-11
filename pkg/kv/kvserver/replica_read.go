@@ -210,6 +210,7 @@ func (r *Replica) executeReadOnlyBatch(
 			ba.WaitPolicy != lock.WaitPolicy_SkipLocked
 		if err := r.store.intentResolver.CleanupIntentsAsync(
 			ctx,
+			ba.AdmissionHeader,
 			intents,
 			allowSyncProcessing,
 		); err != nil {

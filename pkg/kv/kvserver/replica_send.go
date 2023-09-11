@@ -472,6 +472,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			ReadConsistency: ba.ReadConsistency,
 			WaitPolicy:      ba.WaitPolicy,
 			LockTimeout:     ba.LockTimeout,
+			AdmissionHeader: ba.AdmissionHeader,
 			PoisonPolicy:    pp,
 			Requests:        ba.Requests,
 			LatchSpans:      latchSpans, // nil if g != nil

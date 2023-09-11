@@ -63,7 +63,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 	}
 	as := abortspan.New(desc.RangeID)
 
-	txn := roachpb.MakeTransaction("test", txnKey, 0, 0, hlc.Timestamp{WallTime: 1}, 0, 1)
+	txn := roachpb.MakeTransaction("test", txnKey, 0, 0, hlc.Timestamp{WallTime: 1}, 0, 1, 0)
 	newTxnAbortSpanEntry := roachpb.AbortSpanEntry{
 		Key:       txn.Key,
 		Timestamp: txn.WriteTimestamp,

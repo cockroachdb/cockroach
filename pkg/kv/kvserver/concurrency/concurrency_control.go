@@ -405,6 +405,10 @@ type Request struct {
 	// with a LockConflictError instead of entering the queue and waiting.
 	MaxLockWaitQueueLength int
 
+	// AdmissionHeader is the header in the request's BatchRequest. It is plumbed
+	// through for intent resolution admission control.
+	AdmissionHeader kvpb.AdmissionHeader
+
 	// The poison.Policy to use for this Request.
 	PoisonPolicy poison.Policy
 
@@ -835,7 +839,7 @@ type lockTableWaiter interface {
 	// ResolveDeferredIntents resolves the batch of intents if the provided
 	// error is nil. The batch of intents may be resolved more efficiently than
 	// if they were resolved individually.
-	ResolveDeferredIntents(context.Context, []roachpb.LockUpdate) *Error
+	ResolveDeferredIntents(context.Context, kvpb.AdmissionHeader, []roachpb.LockUpdate) *Error
 }
 
 // txnWaitQueue holds a collection of wait-queues for transaction records.
