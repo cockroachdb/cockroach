@@ -376,10 +376,10 @@ func (c *CustomFuncs) ConstructApplyJoin(
 // strong key exists and the input expression is a Scan or a Scan wrapped in a
 // Select, EnsureKey returns a new Scan (possibly wrapped in a Select) with the
 // preexisting primary key for the table. If the input is not a Scan or
-// Select(Scan), EnsureKey wraps the input in an Ordinality operator, which
+// Select(Scan), EnsureKey wraps the input in a UniqueKey operator, which
 // provides a key column by uniquely numbering the rows. EnsureKey returns the
 // input expression (perhaps augmented with a key column(s) or wrapped by
-// Ordinality).
+// UniqueKey).
 func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
 	_, ok := c.CandidateKey(in)
 	if ok {
@@ -392,10 +392,10 @@ func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
 		return res
 	}
 
-	// Otherwise, wrap the input in an Ordinality operator.
+	// Otherwise, wrap the input in an UniqueKey operator.
 	colID := c.f.Metadata().AddColumn("rownum", types.Int)
-	private := memo.OrdinalityPrivate{ColID: colID}
-	return c.f.ConstructOrdinality(in, &private)
+	private := memo.UniqueKeyPrivate{ColID: colID}
+	return c.f.ConstructUniqueKey(in, &private)
 }
 
 // TryAddKeyToScan checks whether the input expression is a non-virtual table

@@ -1310,6 +1310,53 @@ func (b *logicalPropsBuilder) buildOrdinalityProps(ord *OrdinalityExpr, rel *pro
 	}
 }
 
+func (b *logicalPropsBuilder) buildUniqueKeyProps(
+	uniqueKeyExpr *UniqueKeyExpr, rel *props.Relational,
+) {
+	BuildSharedProps(uniqueKeyExpr, &rel.Shared, b.evalCtx)
+
+	inputProps := uniqueKeyExpr.Input.Relational()
+
+	// Output Columns
+	// --------------
+	// An extra output column is added to those projected by input operator.
+	rel.OutputCols = inputProps.OutputCols.Copy()
+	rel.OutputCols.Add(uniqueKeyExpr.ColID)
+
+	// Not Null Columns
+	// ----------------
+	// The new output column is not null, and other columns inherit not null
+	// property from input.
+	rel.NotNullCols = inputProps.NotNullCols.Copy()
+	rel.NotNullCols.Add(uniqueKeyExpr.ColID)
+
+	// Outer Columns
+	// -------------
+	// Outer columns were already derived by BuildSharedProps.
+
+	// Functional Dependencies
+	// -----------------------
+	// Inherit functional dependencies from input, and add strict key FD for the
+	// additional key column.
+	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	if key, ok := rel.FuncDeps.StrictKey(); ok {
+		// Any existing keys are still keys.
+		rel.FuncDeps.AddStrictKey(key, rel.OutputCols)
+	}
+	rel.FuncDeps.AddStrictKey(opt.MakeColSet(uniqueKeyExpr.ColID), rel.OutputCols)
+
+	// Cardinality
+	// -----------
+	// Inherit cardinality from input.
+	rel.Cardinality = inputProps.Cardinality
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildUniqueKey(uniqueKeyExpr, rel)
+	}
+}
+
 func (b *logicalPropsBuilder) buildWindowProps(window *WindowExpr, rel *props.Relational) {
 	BuildSharedProps(window, &rel.Shared, b.evalCtx)
 

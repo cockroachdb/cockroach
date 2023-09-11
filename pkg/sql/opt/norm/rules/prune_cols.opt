@@ -342,6 +342,27 @@
     $passthrough
 )
 
+# PruneUniqueKeyCols discards UniqueKey input columns that are never used.
+[PruneUniqueKeyCols, Normalize]
+(Project
+    (UniqueKey $input:* $uniqueKeyPrivate:*)
+    $projections:*
+    $passthrough:* &
+        (CanPruneCols
+            $input
+            $needed:(UnionCols
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
+        )
+)
+=>
+(Project
+    (UniqueKey (PruneCols $input $needed) $uniqueKeyPrivate)
+    $projections
+    $passthrough
+)
+
 # PruneExplainCols discards Explain input columns that are never used by its
 # required physical properties.
 [PruneExplainCols, Normalize]

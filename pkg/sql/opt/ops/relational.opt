@@ -1244,6 +1244,19 @@ define ProjectSet {
     Zip ZipExpr
 }
 
+# UniqueKey adds a column to each row in its input containing a unique number.
+[Relational]
+define UniqueKey {
+    Input RelExpr
+    _ UniqueKeyPrivate
+}
+
+[Private]
+define UniqueKeyPrivate {
+    # ColID holds the id of the column introduced by this operator.
+    ColID ColumnID
+}
+
 # Window represents a window function. Window functions are operators which
 # allow computations that take into consideration other rows in the same result
 # set.

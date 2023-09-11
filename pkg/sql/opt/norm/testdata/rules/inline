@@ -1051,7 +1051,7 @@ project
  │    │    ├── columns: expr:8!null true:14 rownum:17!null
  │    │    ├── immutable
  │    │    ├── fd: (17)-->(8)
- │    │    ├── ordinality
+ │    │    ├── unique-key
  │    │    │    ├── columns: expr:8!null rownum:17!null
  │    │    │    ├── immutable
  │    │    │    ├── key: (17)
