@@ -256,12 +256,9 @@ func (ds *DistSender) RangeFeedSpans(
 				}
 				// Prior to spawning goroutine to process this feed, acquire catchup scan quota.
 				// This quota acquisition paces the rate of new goroutine creation.
-				catchupRes, err := acquireCatchupScanQuota(ctx, &ds.st.SV, &catchupSem, metrics)
-				if err != nil {
-					active.release()
+				if err := active.acquireCatchupScanQuota(ctx, &ds.st.SV, &catchupSem, metrics); err != nil {
 					return err
 				}
-				active.catchupRes = catchupRes
 				if log.V(1) {
 					log.Infof(ctx, "RangeFeed starting for span %s@%s (quota acquired in %s)",
 						span, sri.startAfter, timeutil.Since(acquireStart))
@@ -518,7 +515,6 @@ func newActiveRangeFeed(
 			Span:        span,
 			StartAfter:  startAfter,
 			CreatedTime: timeutil.Now(),
-			InCatchup:   true,
 		},
 	}
 
@@ -703,24 +699,28 @@ func (a catchupAlloc) Release() {
 	a()
 }
 
-func acquireCatchupScanQuota(
+func (a *activeRangeFeed) acquireCatchupScanQuota(
 	ctx context.Context,
 	sv *settings.Values,
 	catchupSem *limit.ConcurrentRequestLimiter,
 	metrics *DistSenderRangeFeedMetrics,
-) (catchupAlloc, error) {
+) error {
 	// Indicate catchup scan is starting;  Before potentially blocking on a semaphore, take
 	// opportunity to update semaphore limit.
 	catchupSem.SetLimit(maxConcurrentCatchupScans(sv))
 	res, err := catchupSem.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	metrics.RangefeedCatchupRanges.Inc(1)
-	return func() {
+	a.catchupRes = func() {
 		metrics.RangefeedCatchupRanges.Dec(1)
 		res.Release()
-	}, nil
+	}
+	a.Lock()
+	defer a.Unlock()
+	a.InCatchup = true
+	return nil
 }
 
 // nweTransportForRange returns Transport for the specified range descriptor.
