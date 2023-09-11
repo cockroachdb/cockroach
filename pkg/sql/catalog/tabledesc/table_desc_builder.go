@@ -244,13 +244,6 @@ func (tdb *tableDescriptorBuilder) StripDanglingBackReferences(
 			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
 		}
 	}
-	// ... in the row_level_ttl field,
-	if ttl := tbl.RowLevelTTL; ttl != nil {
-		if id := jobspb.JobID(ttl.ScheduleID); id != jobspb.InvalidJobID && !nonTerminalJobIDMightExist(id) {
-			tbl.RowLevelTTL = nil
-			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
-		}
-	}
 	// ... in the sequence ownership field.
 	if seq := tbl.SequenceOpts; seq != nil {
 		if id := seq.SequenceOwner.OwnerTableID; id != descpb.InvalidID && !descIDMightExist(id) {
