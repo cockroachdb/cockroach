@@ -140,6 +140,7 @@ go_test(
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":storage"],
+    exec_properties = {"Pool": "medium"},
     shard_count = 2,
     tags = ["no-remote-exec"],
     deps = [
