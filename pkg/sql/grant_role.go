@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -67,7 +68,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	var allowedToGrantWithoutAdminOption bool
 	var err error
 	if createRoleAllowsGrantRoleMembership.Get(&p.ExecCfg().Settings.SV) {
-		allowedToGrantWithoutAdminOption, err = p.HasRoleOption(ctx, roleoption.CREATEROLE)
+		allowedToGrantWithoutAdminOption, err = p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE)
 		if err != nil {
 			return nil, err
 		}

@@ -70,6 +70,9 @@ type AuthorizationAccessor interface {
 	// HasAdminRole mirrors sql.AuthorizationAccessor.
 	HasAdminRole(ctx context.Context) (bool, error)
 
+	// HasGlobalPrivilegeOrRoleOption mirrors sql.AuthorizationAccessor.
+	HasGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind) (bool, error)
+
 	// User mirrors sql.PlanHookState.
 	User() username.SQLUsername
 }
@@ -81,7 +84,7 @@ type AuthorizationAccessor interface {
 // TODO(#96432): sort out internal job owners and rules for accessing them
 // Authorize checks these rules in order:
 //  1. If the user is an admin, grant access.
-//  2. If the AccessLevel is ViewAccess, grant access if the user has CONTROLJOB
+//  2. If the AccessLevel is ViewAccess, grant access if the user has CONTROLJOB, VIEWJOB,
 //     or if the user owns the job.
 //  3. If the AccessLevel is ControlAccess, grant access if the user has CONTROLJOB
 //     and the job owner is not an admin.
@@ -101,12 +104,7 @@ func Authorize(
 		return nil
 	}
 
-	hasControlJob, err := a.HasRoleOption(ctx, roleoption.CONTROLJOB)
-	if err != nil {
-		return err
-	}
-
-	hasViewJob, err := a.HasPrivilege(ctx, &syntheticprivilege.GlobalPrivilege{}, privilege.VIEWJOB, a.User())
+	hasControlJob, err := a.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CONTROLJOB)
 	if err != nil {
 		return err
 	}
@@ -114,7 +112,14 @@ func Authorize(
 	jobOwnerUser := payload.UsernameProto.Decode()
 
 	if accessLevel == ViewAccess {
-		if a.User() == jobOwnerUser || hasControlJob || hasViewJob {
+		if a.User() == jobOwnerUser || hasControlJob {
+			return nil
+		}
+		hasViewJob, err := a.HasPrivilege(ctx, &syntheticprivilege.GlobalPrivilege{}, privilege.VIEWJOB, a.User())
+		if err != nil {
+			return err
+		}
+		if hasViewJob {
 			return nil
 		}
 	}
@@ -136,6 +141,6 @@ func Authorize(
 		return check(ctx, a, jobID, payload)
 	}
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
-		"user %s does not have privileges for job $d",
+		"user %s does not have privileges for job %d",
 		a.User(), jobID)
 }
