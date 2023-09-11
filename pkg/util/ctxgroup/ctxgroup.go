@@ -121,6 +121,11 @@ package ctxgroup
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errbase"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -129,6 +134,12 @@ import (
 type Group struct {
 	wrapped *errgroup.Group
 	ctx     context.Context
+	panicMu *recovered
+}
+
+type recovered struct {
+	syncutil.Mutex
+	payload error
 }
 
 // Wait blocks until all function calls from the Go method have returned, then
@@ -142,6 +153,11 @@ func (g Group) Wait() error {
 	}
 	ctxErr := g.ctx.Err()
 	err := g.wrapped.Wait()
+
+	if g.panicMu.payload != nil {
+		panic(g.panicMu.payload)
+	}
+
 	if err != nil {
 		return err
 	}
@@ -154,6 +170,7 @@ func WithContext(ctx context.Context) Group {
 	return Group{
 		wrapped: grp,
 		ctx:     ctx,
+		panicMu: &recovered{},
 	}
 }
 
@@ -162,9 +179,21 @@ func (g Group) Go(f func() error) {
 	g.wrapped.Go(f)
 }
 
-// GoCtx calls the given function in a new goroutine.
+// GoCtx calls the given function in a new goroutine. If the function passed
+// panics, the shared context is cancelled and then the subsequent call to Wait
+// will panic with the original panic payload wrapped in a Panic error.
+// If multiple tasks in the group panic, their panic errors are combined and
+// thrown as a single panic in Wait().
 func (g Group) GoCtx(f func(ctx context.Context) error) {
-	g.wrapped.Go(func() error {
+	g.wrapped.Go(func() (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = wrapPanic(1, r)
+				g.panicMu.Lock()
+				defer g.panicMu.Unlock()
+				g.panicMu.payload = errors.CombineErrors(g.panicMu.payload, err)
+			}
+		}()
 		return f(g.ctx)
 	})
 }
@@ -190,4 +219,36 @@ func GoAndWait(ctx context.Context, fs ...func(ctx context.Context) error) error
 		}
 	}
 	return group.Wait()
+}
+
+// Panic wraps a recovered panic in an error. The raw payload recovered
+// from the panic can be accessed via Recovered().
+type Panic struct {
+	error
+	recovered interface{}
+}
+
+// Recovered returns the original payload recovered from the panic.
+func (p Panic) Recovered() interface{} {
+	return p.recovered
+}
+
+func (p Panic) Format(s fmt.State, verb rune) {
+	errbase.FormatError(p.error, s, verb)
+}
+
+// wrapPanic turns r into an error if it is not one already, preserving the
+// raw recovered payload as well as the stack when recovered.
+//
+// TODO(dt): replace this with logcrash.PanicAsError after moving that to a new
+// standalone pkg (since we cannot depend on `util/log` here) and teaching it to
+// preserve the original payload.
+func wrapPanic(depth int, r interface{}) error {
+	var e error
+	if err, ok := r.(error); ok {
+		e = errors.WithStackDepth(err, depth+1)
+	} else {
+		e = errors.NewWithDepthf(depth+1, "panic: %v", r)
+	}
+	return Panic{recovered: r, error: e}
 }
