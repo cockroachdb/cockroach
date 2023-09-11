@@ -1174,9 +1174,8 @@ func makeTenantSQLServerArgs(
 	circularJobRegistry := &jobs.Registry{}
 
 	// Initialize the protectedts subsystem in multi-tenant clusters.
-	var protectedTSProvider protectedts.Provider
 	protectedtsKnobs, _ := baseCfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
-	pp, err := ptprovider.New(ptprovider.Config{
+	protectedTSProvider, err := ptprovider.New(ptprovider.Config{
 		DB:       internalExecutorFactory,
 		Settings: st,
 		Knobs:    protectedtsKnobs,
@@ -1192,8 +1191,7 @@ func makeTenantSQLServerArgs(
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
-	registry.AddMetricStruct(pp.Metrics())
-	protectedTSProvider = pp
+	registry.AddMetricStruct(protectedTSProvider.Metrics())
 
 	recorder := status.NewMetricsRecorder(
 		sqlCfg.TenantID, tenantNameContainer, nil /* nodeLiveness */, nil, /* remoteClocks */
