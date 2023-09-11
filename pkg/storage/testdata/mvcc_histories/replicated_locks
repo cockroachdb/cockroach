@@ -1,4 +1,14 @@
 run ok
+put k=k1 v=v1 ts=5,0
+put k=k2 v=v2 ts=5,0
+put k=k3 v=v3 ts=5,0
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
+
+run ok
 txn_begin t=A ts=10,0
 txn_begin t=B ts=11,0
 ----
@@ -212,6 +222,9 @@ run ok
 put t=A k=k4 v=v4
 ----
 >> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
 meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k4"/10.000000000,0 -> /BYTES/v4
 
@@ -257,6 +270,9 @@ with t=A
 ----
 >> at end:
 txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
 meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k4"/10.000000000,0 -> /BYTES/v4_prime
 
@@ -311,8 +327,177 @@ run ok
 with k=k1 end=k4
   scan t=A
   scan t=B
-  scan notxn
+  scan notxn ts=10,0
 ----
-scan: "k1"-"k4" -> <no data>
-scan: "k1"-"k4" -> <no data>
-scan: "k1"-"k4" -> <no data>
+scan: "k1" -> /BYTES/v1 @5.000000000,0
+scan: "k2" -> /BYTES/v2 @5.000000000,0
+scan: "k3" -> /BYTES/v3 @5.000000000,0
+scan: "k1" -> /BYTES/v1 @5.000000000,0
+scan: "k2" -> /BYTES/v2 @5.000000000,0
+scan: "k3" -> /BYTES/v3 @5.000000000,0
+scan: "k1" -> /BYTES/v1 @5.000000000,0
+scan: "k2" -> /BYTES/v2 @5.000000000,0
+scan: "k3" -> /BYTES/v3 @5.000000000,0
+
+# Writes to keys locked by other transactions should fail. This is true even if
+# the writer also has a shared lock on the key.
+
+run error
+put t=A k=k1 v=v1
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+error: (*kvpb.LockConflictError:) conflicting locks on "k1"
+
+run error
+put t=B k=k1 v=v1
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+error: (*kvpb.LockConflictError:) conflicting locks on "k1"
+
+run error
+put notxn k=k1 v=v1
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
+
+run error
+put t=B k=k2 v=v2
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+error: (*kvpb.LockConflictError:) conflicting locks on "k2", "k2"
+
+run error
+put t=B k=k3 v=v3
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+error: (*kvpb.LockConflictError:) conflicting locks on "k3"
+
+run error
+increment t=B k=k3
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+error: (*kvpb.LockConflictError:) conflicting locks on "k3"
+
+run error
+cput t=B k=k3 v=v3
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+error: (*kvpb.LockConflictError:) conflicting locks on "k3"
+
+run error
+initput t=B k=k3 v=v3
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+error: (*kvpb.LockConflictError:) conflicting locks on "k3"
+
+run error
+del_range t=B k=k3 k=k4
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+error: (*kvpb.LockConflictError:) conflicting locks on "k3"
+
+run error
+del_range_ts k=k3 k=k4 ts=10,0
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+error: (*kvpb.LockConflictError:) conflicting locks on "k3"
+
+run error
+del_range_pred k=k3 k=k4
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+data: "k2"/5.000000000,0 -> /BYTES/v2
+data: "k3"/5.000000000,0 -> /BYTES/v3
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+error: (*kvpb.LockConflictError:) conflicting locks on "k3"
+
+# Writes to keys locked by only the writer should succeed, regardless of the
+# strength of the writer's lock.
+
+run ok
+with t=A
+  put k=k2 v=v2
+  put k=k3 v=v3
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+meta: "k2"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=10.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k2"/10.000000000,0 -> /BYTES/v2
+data: "k2"/5.000000000,0 -> /BYTES/v2
+meta: "k3"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=10.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k3"/10.000000000,0 -> /BYTES/v3
+data: "k3"/5.000000000,0 -> /BYTES/v3
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+
+run ok
+with t=A
+  txn_step
+  del k=k2
+  del k=k3
+----
+del: "k2": found key true
+del: "k3": found key true
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+data: "k1"/5.000000000,0 -> /BYTES/v1
+meta: "k2"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4} ts=10.000000000,0 del=true klen=12 vlen=0 ih={{3 /BYTES/v2}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k2"/10.000000000,0 -> /<empty>
+data: "k2"/5.000000000,0 -> /BYTES/v2
+meta: "k3"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=4} ts=10.000000000,0 del=true klen=12 vlen=0 ih={{3 /BYTES/v3}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k3"/10.000000000,0 -> /<empty>
+data: "k3"/5.000000000,0 -> /BYTES/v3
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/10.000000000,0 -> /BYTES/v4_prime
