@@ -362,7 +362,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if count == 1 {
 		ignoreCache = true
 	} else if count != 0 {
-		args = append(args, fmt.Sprintf("--runs_per_test=%d", count))
+		args = append(args, fmt.Sprintf("--runs_per_test=%d", count), "--runs_per_test=.*disallowed_imports_test@1")
 	}
 	if vModule != "" {
 		args = append(args, "--test_arg", fmt.Sprintf("-vmodule=%s", vModule))
