@@ -661,11 +661,15 @@ func (ih *instrumentationHelper) Finish(
 				// collection was enabled _after_ the optimizer was done.
 				planString = "-- plan elided due to gist matching"
 			}
-			bundle = buildStatementBundle(
+			var err error
+			bundle, err = buildStatementBundle(
 				bundleCtx, ih.explainFlags, cfg.DB, ie.(*InternalExecutor),
 				stmtRawSQL, &p.curPlan, planString, trace, placeholders, res.Err(),
 				payloadErr, retErr, &p.extendedEvalCtx.Settings.SV, ih.inFlightTraceCollector,
 			)
+			if err != nil {
+				return err
+			}
 			// Include all non-critical errors as warnings. Note that these
 			// error strings might contain PII, but the warnings are only shown
 			// to the current user and aren't included into the bundle.
