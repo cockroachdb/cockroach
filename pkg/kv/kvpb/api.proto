@@ -2825,6 +2825,9 @@ message BoundedStalenessHeader {
 // request.
 message AdmissionHeader {
   // Priority is utilized within a tenant. See admission.WorkPriority.
+  //
+  // TODO(sumeer): Use gogoproto.customtype to make this
+  // admissionpb.WorkPriority.
   int32 priority = 1;
   // CreateTime is equivalent to Time.UnixNano() at the creation time of this
   // request or a parent request. See admission.WorkInfo.Priority for details.

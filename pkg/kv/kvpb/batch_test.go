@@ -389,7 +389,7 @@ func TestBatchResponseCombine(t *testing.T) {
 	{
 		txn := roachpb.MakeTransaction(
 			"test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
-			hlc.Timestamp{WallTime: 123}, 0 /* baseKey */, 99, /* coordinatorNodeID */
+			hlc.Timestamp{WallTime: 123}, 0 /* baseKey */, 99 /* coordinatorNodeID */, 0,
 		)
 		brTxn := &BatchResponse{
 			BatchResponse_Header: BatchResponse_Header{

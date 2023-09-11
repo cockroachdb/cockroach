@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -180,7 +181,16 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 ) error {
 	return tp.ir.ResolveIntents(ctx, intents,
 		// NB: Poison is ignored for non-ABORTED intents.
-		intentresolver.ResolveOptions{Poison: true},
+		intentresolver.ResolveOptions{Poison: true, AdmissionHeader: kvpb.AdmissionHeader{
+			// Use NormalPri for rangefeed intent resolution, since it needs to be
+			// timely. NB: makeRangeFeedRequest decides the priority based on
+			// isSystemRange, but that is only for the initial scan, which can be
+			// expensive.
+			Priority:                 int32(admissionpb.NormalPri),
+			CreateTime:               timeutil.Now().UnixNano(),
+			Source:                   kvpb.AdmissionHeader_FROM_SQL,
+			NoMemoryReservedAtSource: true,
+		}},
 	).GoError()
 }
 

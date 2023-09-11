@@ -944,7 +944,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 			now := db.Clock().NowAsClockTimestamp()
 			kvTxn := roachpb.MakeTransaction(
 				"unnamed", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
-				now.ToTimestamp(), db.Clock().MaxOffset().Nanoseconds(), int32(test.nodeID))
+				now.ToTimestamp(), db.Clock().MaxOffset().Nanoseconds(), int32(test.nodeID), 0)
 			txn := kv.NewTxnFromProto(ctx, db, test.nodeID, now, test.typ, &kvTxn)
 			ots := txn.TestingCloneTxn().ObservedTimestamps
 			if (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
