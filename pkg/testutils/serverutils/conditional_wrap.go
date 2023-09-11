@@ -27,6 +27,8 @@ to:
     srv, ... := serverutils.StartServer(t, ...)
     defer srv.Stopper().Stop(...)
     ts := srv.ApplicationLayer()
+
+See also: https://go.crdb.dev/p/testserver-and-cluster-virtualization
 `
 
 // When this env var is set, all the suspicious API calls are reported in test logs.
@@ -60,14 +62,12 @@ func wrapTestServer(
 
 	// Implicit implementation of ApplicationLayerInterface.
 	if opts.WarnImplicitInterfaces() {
-		wrapper.implicitAppLayerNotify = makeSeriousNotifyFn(&wrapper.loggerFn, "ApplicationLayerInterface", "ApplicationLayer", "SystemLayer")
+		wrapper.implicitAppLayerNotify = makeBenignNotifyFn(&wrapper.loggerFn, "ApplicationLayerInterface", "ApplicationLayer", true /* showTip */)
 	} else {
 		wrapper.implicitAppLayerNotify = func(string) {}
 	}
 	if opts.TestTenantAlwaysEnabled() {
-		// TODO(knz): change this to return raw.TestTenant() instead after
-		// we ascertain that this is what tests need.
-		wrapper.implicitAppLayer = func() ApplicationLayerInterface { return raw }
+		wrapper.implicitAppLayer = func() ApplicationLayerInterface { return raw.TestTenant() }
 	} else {
 		wrapper.implicitAppLayer = func() ApplicationLayerInterface { return raw }
 	}
@@ -216,7 +216,7 @@ func makeSeriousNotifyFn(
 	return func(methodName string) {
 		reportFn(func() {
 			(*logFn)("\n%s\n\tWARNING: risky use of implicit %s via .%s()\n"+
-				"See: https://go.crdb.dev/p/testserver-api-problem\n"+
+				"See: https://go.crdb.dev/p/testserver-and-cluster-virtualization\n"+
 				"HINT: clarify intent using .%s().%s() or .%s().%s() instead.\n",
 				GetExternalCaller(),
 				ifname, methodName, accessor1, methodName, accessor2, methodName)
@@ -224,6 +224,8 @@ func makeSeriousNotifyFn(
 		})
 	}
 }
+
+var _ = makeSeriousNotifyFn // silence unused linter
 
 // GetExternalCaller returns the file:line of the first function in
 // the call stack outside of this package. It is used as prefix for

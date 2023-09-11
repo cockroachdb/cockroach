@@ -65,11 +65,7 @@ type TestServerInterface interface {
 
 	// ApplicationLayerInterface is implemented by TestServerInterface
 	// for backward-compatibility with existing test code.
-	//
-	// It is CURRENTLY equivalent to .SystemLayer() however this is
-	// a misdesign and results in poor test semantics.
-	//
-	// See: https://go.crdb.dev/p/testserver-api-problem
+	// It is equivalent to the result of calling .ApplicationLayer().
 	//
 	// New tests should spell out their intent clearly by calling the
 	// .ApplicationLayer() (preferred) or .SystemLayer() methods
