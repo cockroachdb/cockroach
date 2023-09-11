@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/stretchr/testify/require"
 )
@@ -57,7 +58,8 @@ func TestStatusServer_StatementExecutionInsights(t *testing.T) {
 
 	// Generate insight with contention event
 	sqlConn := tc.ServerConn(0)
-	tableName := "t1"
+	rng, _ := randutil.NewTestRand()
+	tableName := fmt.Sprintf("t%s", randutil.RandString(rng, 128, "abcdefghijklmnopqrstuvwxyz"))
 	_, err := sqlConn.ExecContext(ctx, fmt.Sprintf("CREATE TABLE %s (k INT, i INT, f FLOAT, s STRING)", tableName))
 	require.NoError(t, err)
 	// Open transaction to insert values into table
@@ -98,6 +100,7 @@ func TestStatusServer_StatementExecutionInsights(t *testing.T) {
 	require.GreaterOrEqual(t, len(resp.StatementInsights), 1)
 
 	stmtInsight := resp.StatementInsights[0]
+	log.Infof(ctx, "111111111 num insights: %d", len(resp.StatementInsights))
 	require.Greater(t, stmtInsight.Contention.Nanoseconds(), int64(0))
 	require.NotNil(t, stmtInsight.ContentionInfo)
 	require.Equal(t, stmtInsight.ContentionInfo.TableName, tableName)
