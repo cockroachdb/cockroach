@@ -116,6 +116,7 @@ go_library(
         "//pkg/util/json",
         "//pkg/util/log",
         "//pkg/util/mon",
+        "//pkg/util/pretty",
         "//pkg/util/protoutil",
         "//pkg/util/randident",
         "//pkg/util/randident/randidentcfg",
