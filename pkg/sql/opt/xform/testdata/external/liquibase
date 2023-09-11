@@ -213,7 +213,7 @@ project
  │    │    │    │    │    │              └── objsubid:185 = 0 [outer=(185), constraints=(/185: [/0 - /0]; tight), fd=()-->(185)]
  │    │    │    │    │    └── scan kv_builtin_function_comments
  │    │    │    │    │         └── columns: crdb_internal.kv_builtin_function_comments.oid:181!null crdb_internal.kv_builtin_function_comments.description:182!null
- │    │    │    │    ├── ordinality
+ │    │    │    │    ├── unique-key
  │    │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.nspname:31!null spcname:37 c2.relname:50 n2.nspname:79 ci.relname:106 ftoptions:136 srvname:140 column172:172 rownum:192!null
  │    │    │    │    │    ├── immutable
  │    │    │    │    │    ├── key: (192)

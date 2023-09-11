@@ -356,7 +356,7 @@
 # column would not be constant necessarily, hence the use of ANY_NOT_NULL
 # instead of CONST_AGG.
 #
-# An ordinality column only needs to be synthesized if "left" does not already
+# A unique key column only needs to be synthesized if "left" does not already
 # have a strict key. We wrap the output in a Project operator to ensure that
 # the original output columns are preserved and the ordinality column is not
 # inadvertently added as a new output column.
@@ -485,7 +485,7 @@
 # In this example, the "notnull" canary is needed to determine if the value of
 # the ARRAY_AGG aggregation should be NULL or {NULL}.
 #
-# An ordinality column only needs to be synthesized if "left" does not already
+# A unique key column only needs to be synthesized if "left" does not already
 # have a key. The "true" column only needs to be added if "input" does not
 # already have a not-null column (and COUNT(*) is used).
 #

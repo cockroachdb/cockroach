@@ -465,6 +465,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.OrdinalityOp:
 		return sb.colStatOrdinality(colSet, e.(*OrdinalityExpr))
 
+	case opt.UniqueKeyOp:
+		return sb.colStatUniqueKey(colSet, e.(*UniqueKeyExpr))
+
 	case opt.WindowOp:
 		return sb.colStatWindow(colSet, e.(*WindowExpr))
 
@@ -2368,6 +2371,52 @@ func (sb *statisticsBuilder) colStatOrdinality(
 	inputColStat := sb.colStatFromChild(colSet, ord, 0 /* childIdx */)
 
 	if colSet.Contains(ord.ColID) {
+		// The ordinality column is a key, so every row is distinct.
+		colStat.DistinctCount = s.RowCount
+		colStat.NullCount = 0
+	} else {
+		colStat.DistinctCount = inputColStat.DistinctCount
+		colStat.NullCount = inputColStat.NullCount
+	}
+
+	if colSet.Intersects(relProps.NotNullCols) {
+		colStat.NullCount = 0
+	}
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
+	return colStat
+}
+
+// +---------------+
+// |   UniqueKey   |
+// +---------------+
+
+func (sb *statisticsBuilder) buildUniqueKey(
+	uniqueKeyExpr *UniqueKeyExpr, relProps *props.Relational,
+) {
+	s := relProps.Statistics()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	s.Available = sb.availabilityFromInput(uniqueKeyExpr)
+
+	inputStats := uniqueKeyExpr.Input.Relational().Statistics()
+
+	s.RowCount = inputStats.RowCount
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatUniqueKey(
+	colSet opt.ColSet, uniqueKeyExpr *UniqueKeyExpr,
+) *props.ColumnStatistic {
+	relProps := uniqueKeyExpr.Relational()
+	s := relProps.Statistics()
+
+	colStat, _ := s.ColStats.Add(colSet)
+
+	inputColStat := sb.colStatFromChild(colSet, uniqueKeyExpr, 0 /* childIdx */)
+
+	if colSet.Contains(uniqueKeyExpr.ColID) {
 		// The ordinality column is a key, so every row is distinct.
 		colStat.DistinctCount = s.RowCount
 		colStat.NullCount = 0

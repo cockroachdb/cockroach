@@ -172,7 +172,7 @@ func BuildChildPhysicalProps(
 			}
 		}
 
-	case opt.OrdinalityOp, opt.ProjectOp, opt.ProjectSetOp:
+	case opt.OrdinalityOp, opt.ProjectOp, opt.ProjectSetOp, opt.UniqueKeyOp:
 		childProps.LimitHint = parentProps.LimitHint
 
 	case opt.TopKOp:

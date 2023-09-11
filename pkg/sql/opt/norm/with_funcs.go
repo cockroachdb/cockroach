@@ -232,7 +232,7 @@ func (c *CustomFuncs) CanAddRecursiveLimit(
 	case *memo.WithScanExpr:
 		return t.With == withID
 	case *memo.ProjectExpr, *memo.SelectExpr, *memo.LimitExpr,
-		*memo.OrdinalityExpr, *memo.WindowExpr:
+		*memo.OrdinalityExpr, *memo.WindowExpr, *memo.UniqueKeyExpr:
 		// The operators never add rows to the input, although they can remove them.
 		// Therefore, a limit that applies to the input also applies to the output
 		// of these operators. In the case of a LimitExpr, we assume the limit is

@@ -21,6 +21,7 @@ go_library(
         "sort.go",
         "statement.go",
         "topk.go",
+        "uniquekey.go",
         "with.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/ordering",
