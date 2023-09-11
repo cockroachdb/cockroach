@@ -16,7 +16,6 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",
-        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//rangekey",
