@@ -614,4 +614,25 @@ func TestGCHint(t *testing.T) {
 			assert.Equal(t, tc.want, hint)
 		})
 	}
+
+	for _, tc := range []struct {
+		was  GCHint
+		add  hlc.Timestamp
+		want GCHint
+	}{
+		{was: GCHint{}, add: empty, want: GCHint{}},
+		{was: hint(ts2, empty, empty), add: empty, want: hint(ts2, empty, empty)},
+		{was: hint(ts2, empty, empty), add: ts1, want: hint(ts2, empty, empty)},
+		{was: hint(ts2, empty, empty), add: ts2, want: hint(ts2, empty, empty)},
+		{was: hint(ts2, empty, empty), add: ts3, want: hint(ts3, empty, empty)},
+	} {
+		t.Run("ForwardLatestRangeDeleteTimestamp", func(t *testing.T) {
+			hint := tc.was
+			checkInvariants(t, hint)
+			updated := hint.ForwardLatestRangeDeleteTimestamp(tc.add)
+			checkInvariants(t, hint)
+			assert.Equal(t, !hint.Equal(tc.was), updated, "returned incorrect 'updated' bit")
+			assert.Equal(t, tc.want, hint)
+		})
+	}
 }
