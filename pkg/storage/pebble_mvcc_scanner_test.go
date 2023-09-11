@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -131,6 +132,11 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 
 func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// This test has been observed to trip the disk-stall detector under -race
+	// because the -race build instrumentation slows the copying of write
+	// buffers sufficiently that a 7MB sstable block copy into a MemFile may
+	// exceed the disk-stall threshold of 20s.
+	skip.UnderRace(t, "copying the resulting large ssblock is too slow")
 
 	eng := createTestPebbleEngine()
 	defer eng.Close()
