@@ -998,63 +998,6 @@ iter_next_key: {h-k}/[1.000000000,0=/<empty>] !
 iter_seek_ge: "d"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 iter_next_key: "e"/3.000000000,0=/BYTES/e3 {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
 
-# Test SeekIntentGE both with and without intents and range keys.
-run ok
-iter_new types=pointsAndRanges
-iter_seek_intent_ge k=b txn=A
-iter_seek_intent_ge k=d txn=A
-iter_seek_intent_ge k=i txn=A
-iter_seek_intent_ge k=j txn=A
-iter_seek_intent_ge k=k txn=A
-----
-iter_seek_intent_ge: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_seek_intent_ge: "d"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_seek_intent_ge: {h-k}/[1.000000000,0=/<empty>] !
-iter_seek_intent_ge: "j"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {h-k}/[1.000000000,0=/<empty>]
-iter_seek_intent_ge: "k"/5.000000000,0=/BYTES/k5 !
-
-run ok
-iter_new kind=keys types=pointsAndRanges
-iter_seek_intent_ge k=b txn=A
-iter_seek_intent_ge k=d txn=A
-iter_seek_intent_ge k=i txn=A
-iter_seek_intent_ge k=j txn=A
-iter_seek_intent_ge k=k txn=A
-----
-iter_seek_intent_ge: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_seek_intent_ge: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_seek_intent_ge: {h-k}/[1.000000000,0=/<empty>] !
-iter_seek_intent_ge: {h-k}/[1.000000000,0=/<empty>]
-iter_seek_intent_ge: "k"/5.000000000,0=/BYTES/k5 !
-
-run ok
-iter_new types=pointsOnly
-iter_seek_intent_ge k=b txn=A
-iter_seek_intent_ge k=d txn=A
-iter_seek_intent_ge k=i txn=A
-iter_seek_intent_ge k=j txn=A
-iter_seek_intent_ge k=k txn=A
-----
-iter_seek_intent_ge: "b"/4.000000000,0=/<empty>
-iter_seek_intent_ge: "d"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_seek_intent_ge: "j"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_seek_intent_ge: "j"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_seek_intent_ge: "k"/5.000000000,0=/BYTES/k5
-
-run ok
-iter_new types=rangesOnly
-iter_seek_intent_ge k=b txn=A
-iter_seek_intent_ge k=d txn=A
-iter_seek_intent_ge k=i txn=A
-iter_seek_intent_ge k=j txn=A
-iter_seek_intent_ge k=k txn=A
-----
-iter_seek_intent_ge: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_seek_intent_ge: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-iter_seek_intent_ge: {h-k}/[1.000000000,0=/<empty>] !
-iter_seek_intent_ge: {h-k}/[1.000000000,0=/<empty>]
-iter_seek_intent_ge: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>] !
-
 # Try some masked scans at increasing timestamps.
 run ok
 iter_new types=pointsAndRanges maskBelow=1
