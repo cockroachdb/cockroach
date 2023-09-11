@@ -172,7 +172,7 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
       ),
       cell: job => (
         <Timestamp
-          time={TimestampToMoment(job?.created)}
+          time={TimestampToMoment(job?.created, null)}
           format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
         />
       ),
@@ -194,7 +194,7 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
       ),
       cell: job => (
         <Timestamp
-          time={TimestampToMoment(job?.modified)}
+          time={TimestampToMoment(job?.modified, null)}
           format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
         />
       ),
@@ -220,7 +220,7 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
       ),
       cell: job => (
         <Timestamp
-          time={TimestampToMoment(job?.finished)}
+          time={TimestampToMoment(job?.finished, null)}
           format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
         />
       ),
@@ -242,7 +242,7 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
       ),
       cell: job => (
         <Timestamp
-          time={TimestampToMoment(job?.last_run)}
+          time={TimestampToMoment(job?.last_run, null)}
           format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
         />
       ),
