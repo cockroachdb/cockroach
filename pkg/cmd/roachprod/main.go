@@ -534,9 +534,8 @@ var startInstanceAsSeparateProcessCmd = &cobra.Command{
 The --storage-cluster flag must be used to specify a storage cluster
 (with optional node selector) which is already running. The command
 will create the virtual cluster on the storage cluster if it does not
-exist already. The storage cluster and virtual cluster can use the
-same underlying roachprod VM cluster, as long as different subsets of
-nodes are selected.
+exist already.  If creating multiple virtual clusters on the same
+node, the --sql-instance flag must be passed to differentiate them.
 
 The --tenant-id flag can be used to specify the tenant ID; it defaults to 2.
 
