@@ -296,6 +296,11 @@ const (
 	// UserHigh denotes an end user QoS level higher than the default.
 	UserHigh = QoSLevel(admissionpb.UserHighPri)
 
+	// InternalNormal is a QoS level higher than any of the user priority
+	// levels. This level is only available to users defined by the
+	// COCKROACH_CLUSTER_ALLOWED_INTERNAL_USERS environment variable.
+	InternalNormal = QoSLevel(admissionpb.InternalNormalPri)
+
 	// Locking denotes an internal increased priority for transactions that are
 	// acquiring locks.
 	Locking = QoSLevel(admissionpb.LockingPri)
@@ -318,6 +323,9 @@ const (
 	// UserLow QoS level.
 	UserLowName = "background"
 
+	// InternalNormalName
+	InternalNormalName = "internal_regular"
+
 	// SystemHighName is the string value to display indicating a SystemHigh
 	// QoS level.
 	SystemHighName = "maximum"
@@ -334,13 +342,14 @@ const (
 )
 
 var qosLevelsDict = map[QoSLevel]string{
-	SystemLow:  SystemLowName,
-	TTLLow:     TTLLowName,
-	UserLow:    UserLowName,
-	Normal:     NormalName,
-	UserHigh:   UserHighName,
-	Locking:    LockingName,
-	SystemHigh: SystemHighName,
+	SystemLow:      SystemLowName,
+	TTLLow:         TTLLowName,
+	UserLow:        UserLowName,
+	Normal:         NormalName,
+	UserHigh:       UserHighName,
+	InternalNormal: InternalNormalName,
+	Locking:        LockingName,
+	SystemHigh:     SystemHighName,
 }
 
 // ParseQoSLevelFromString converts a string into a QoSLevel
@@ -352,8 +361,20 @@ func ParseQoSLevelFromString(val string) (_ QoSLevel, ok bool) {
 		return UserLow, true
 	case strings.ToUpper(NormalName):
 		return Normal, true
+	case strings.ToUpper(InternalNormalName):
+		return InternalNormal, true
 	default:
 		return 0, false
+	}
+}
+
+// Return true if qosLevel is an internal QoS level.
+func IsInternalQoSLevel(val QoSLevel) bool {
+	switch val {
+	case InternalNormal:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -379,7 +400,7 @@ func ToQoSLevelString(value int32) string {
 // Validate checks for a valid user QoSLevel setting before returning it.
 func (e QoSLevel) Validate() QoSLevel {
 	switch e {
-	case Normal, UserHigh, UserLow:
+	case Normal, UserHigh, UserLow, InternalNormal:
 		return e
 	default:
 		panic(errors.AssertionFailedf("use of illegal user QoSLevel: %s", e.String()))
