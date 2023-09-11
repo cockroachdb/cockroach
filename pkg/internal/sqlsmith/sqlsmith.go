@@ -190,7 +190,11 @@ func (s *Smither) Generate() string {
 			continue
 		}
 		i = 0
-		return prettyCfg.Pretty(stmt)
+		p, err := prettyCfg.Pretty(stmt)
+		if err != nil {
+			panic(err)
+		}
+		return p
 	}
 }
 

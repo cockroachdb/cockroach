@@ -169,7 +169,12 @@ func formatViewQueryForDisplay(
 				desc.GetName(), desc.GetID(), err)
 			return
 		}
-		query = cfg.Pretty(parsed.AST)
+		query, err = cfg.Pretty(parsed.AST)
+		if err != nil {
+			log.Warningf(ctx, "error printing query for view %s (%v): %+v",
+				desc.GetName(), desc.GetID(), err)
+			return
+		}
 	}()
 
 	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, semaCtx, sessionData, desc)
