@@ -23,8 +23,20 @@ import (
 func updateOrchestration(gitDir string, version string) error {
 	// make sure we have the leading "v" in the version
 	version = "v" + strings.TrimPrefix(version, "v")
-	templatesDir := path.Join(gitDir, "cloud/kubernetes/templates")
-	outputDir := path.Join(gitDir, "cloud/kubernetes")
+	// Switch to the git directory to prevent file prefixes in the generated templates.
+	currDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("getting current directory: %w", err)
+	}
+	if err := os.Chdir(gitDir); err != nil {
+		return fmt.Errorf("switching to git directory: %w", err)
+	}
+	defer func() {
+		_ = os.Chdir(currDir)
+	}()
+
+	const templatesDir = "cloud/kubernetes/templates"
+	const outputDir = "cloud/kubernetes"
 	dirInfo, err := os.Stat(templatesDir)
 	if err != nil {
 		return fmt.Errorf("cannot stat templates directory: %w", err)
