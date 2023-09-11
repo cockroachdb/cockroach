@@ -149,20 +149,20 @@ import (
 // standalone SQLServer instances per tenant (the KV layer is shared across all
 // tenants).
 type SQLServer struct {
-	ambientCtx       log.AmbientContext
-	stopper          *stop.Stopper
-	stopTrigger      *stopTrigger
-	sqlIDContainer   *base.SQLIDContainer
-	pgServer         *pgwire.Server
-	distSQLServer    *distsql.ServerImpl
-	execCfg          *sql.ExecutorConfig
-	cfg              *BaseConfig
-	internalExecutor *sql.InternalExecutor
-	internalDB       descs.DB
-	leaseMgr         *lease.Manager
-	tracingService   *service.Service
-	nodeDialer       *nodedialer.Dialer
-	tenantConnect    kvtenant.Connector
+	ambientCtx        log.AmbientContext
+	stopper           *stop.Stopper
+	stopTrigger       *stopTrigger
+	sqlIDContainer    *base.SQLIDContainer
+	pgServer          *pgwire.Server
+	distSQLServer     *distsql.ServerImpl
+	execCfg           *sql.ExecutorConfig
+	cfg               *BaseConfig
+	internalExecutor  *sql.InternalExecutor
+	internalDB        descs.DB
+	leaseMgr          *lease.Manager
+	tracingService    *service.Service
+	sqlInstanceDialer *nodedialer.Dialer
+	tenantConnect     kvtenant.Connector
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry        *sql.SessionRegistry
@@ -307,10 +307,10 @@ type sqlServerArgs struct {
 	keyVisServerAccessor *spanstatskvaccessor.SpanStatsKVAccessor
 
 	// Used by DistSQLPlanner to dial KV nodes.
-	nodeDialer *nodedialer.Dialer
+	kvNodeDialer *nodedialer.Dialer
 
-	// Used by DistSQLPlanner to dial other pods in a multi-tenant environment.
-	podNodeDialer *nodedialer.Dialer
+	// Used by DistSQLPlanner to dial other SQL instances.
+	sqlInstanceDialer *nodedialer.Dialer
 
 	// SQL mostly uses the DistSender "wrapped" under a *kv.DB, but SQL also
 	// uses range descriptors and leaseholders, which DistSender maintains,
@@ -606,14 +606,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.db,
 	)
 
-	// We can't use the nodeDialer as the podNodeDialer unless we
+	// We can't use the nodeDialer as the sqlInstanceDialer unless we
 	// are serving the system tenant despite the fact that we've
 	// arranged for pod IDs and instance IDs to match since the
 	// secondary tenant gRPC servers currently live on a different
 	// port.
-	canUseNodeDialerAsPodNodeDialer := isMixedSQLAndKVNode && codec.ForSystemTenant()
-	if canUseNodeDialerAsPodNodeDialer {
-		cfg.podNodeDialer = cfg.nodeDialer
+	canUseNodeDialerAsSQLInstanceDialer := isMixedSQLAndKVNode && codec.ForSystemTenant()
+	if canUseNodeDialerAsSQLInstanceDialer {
+		cfg.sqlInstanceDialer = cfg.kvNodeDialer
 	} else {
 		// In a multi-tenant environment, use the sqlInstanceReader to resolve
 		// SQL pod addresses.
@@ -624,7 +624,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			}
 			return &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}, nil
 		}
-		cfg.podNodeDialer = nodedialer.New(cfg.rpcContext, addressResolver)
+		cfg.sqlInstanceDialer = nodedialer.New(cfg.rpcContext, addressResolver)
 	}
 
 	jobRegistry := cfg.circularJobRegistry
@@ -837,7 +837,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		SQLLivenessReader: cfg.sqlLivenessProvider.CachedReader(),
 		JobRegistry:       jobRegistry,
 		Gossip:            cfg.gossip,
-		PodNodeDialer:     cfg.podNodeDialer,
+		SQLInstanceDialer: cfg.sqlInstanceDialer,
 		LeaseManager:      leaseMgr,
 
 		ExternalStorage:        cfg.externalStorage,
@@ -911,7 +911,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Setup the trace collector that is used to fetch inflight trace spans from
 	// all nodes in the cluster.
-	traceCollector := collector.New(cfg.Tracer, cfg.sqlInstanceReader.GetAllInstances, cfg.podNodeDialer)
+	traceCollector := collector.New(cfg.Tracer, cfg.sqlInstanceReader.GetAllInstances, cfg.sqlInstanceDialer)
 	contentionMetrics := contention.NewMetrics()
 	cfg.registry.AddMetricStruct(contentionMetrics)
 
@@ -921,7 +921,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		&contentionMetrics,
 	)
 
-	storageEngineClient := kvserver.NewStorageEngineClient(cfg.nodeDialer)
+	storageEngineClient := kvserver.NewStorageEngineClient(cfg.kvNodeDialer)
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
 		NodeInfo:                nodeInfo,
@@ -990,8 +990,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.gossip,
 			cfg.stopper,
 			isAvailable,
-			cfg.nodeDialer.ConnHealthTryDial,
-			cfg.podNodeDialer,
+			cfg.kvNodeDialer.ConnHealthTryDial, // only used by system tenant
+			cfg.sqlInstanceDialer,
 			codec,
 			cfg.sqlInstanceReader,
 			cfg.clock,
@@ -1218,14 +1218,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		if codec.ForSystemTenant() {
 			c = upgradecluster.New(upgradecluster.ClusterConfig{
 				NodeLiveness:     nodeLiveness,
-				Dialer:           cfg.nodeDialer,
+				Dialer:           cfg.kvNodeDialer,
 				RangeDescScanner: rangedesc.NewScanner(cfg.db),
 				DB:               cfg.db,
 			})
 		} else {
 			c = upgradecluster.NewTenantCluster(
 				upgradecluster.TenantClusterConfig{
-					Dialer:         cfg.podNodeDialer,
+					Dialer:         cfg.sqlInstanceDialer,
 					InstanceReader: cfg.sqlInstanceReader,
 					DB:             cfg.db,
 				})
@@ -1374,7 +1374,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sessionRegistry:                cfg.sessionRegistry,
 		closedSessionCache:             cfg.closedSessionCache,
 		jobRegistry:                    jobRegistry,
-		nodeDialer:                     cfg.podNodeDialer,
+		sqlInstanceDialer:              cfg.sqlInstanceDialer,
 		statsRefresher:                 statsRefresher,
 		temporaryObjectCleaner:         temporaryObjectCleaner,
 		internalMemMetrics:             internalMemMetrics,

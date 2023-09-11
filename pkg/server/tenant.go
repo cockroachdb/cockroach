@@ -98,12 +98,12 @@ type SQLServerWrapper struct {
 	clock      *hlc.Clock
 	rpcContext *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
-	grpc       *grpcServer
-	nodeDialer *nodedialer.Dialer
-	db         *kv.DB
-	registry   *metric.Registry
-	recorder   *status.MetricsRecorder
-	runtime    *status.RuntimeStatSampler
+	grpc         *grpcServer
+	kvNodeDialer *nodedialer.Dialer
+	db           *kv.DB
+	registry     *metric.Registry
+	recorder     *status.MetricsRecorder
+	runtime      *status.RuntimeStatSampler
 
 	http            *httpServer
 	adminAuthzCheck privchecker.CheckerForRPCHandlers
@@ -471,12 +471,12 @@ func newTenantServer(
 		clock:      args.clock,
 		rpcContext: args.rpcContext,
 
-		grpc:       args.grpc,
-		nodeDialer: args.nodeDialer,
-		db:         args.db,
-		registry:   args.registry,
-		recorder:   args.recorder,
-		runtime:    args.runtime,
+		grpc:         args.grpc,
+		kvNodeDialer: args.kvNodeDialer,
+		db:           args.db,
+		registry:     args.registry,
+		recorder:     args.recorder,
+		runtime:      args.runtime,
 
 		http:            sHTTP,
 		adminAuthzCheck: adminAuthzCheck,
@@ -809,7 +809,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.sqlCfg.ExternalIODirConfig,
 		s.sqlServer.cfg.Settings,
 		s.sqlServer.sqlIDContainer,
-		s.nodeDialer,
+		s.kvNodeDialer,
 		s.sqlServer.cfg.TestingKnobs,
 		false, /* allowLocalFastpath */
 		s.sqlServer.execCfg.InternalDB.
@@ -1101,7 +1101,7 @@ func makeTenantSQLServerArgs(
 		return sqlServerArgs{}, err
 	}
 	resolver := kvtenant.AddressResolver(tenantConnect)
-	nodeDialer := nodedialer.New(rpcContext, resolver)
+	kvNodeDialer := nodedialer.New(rpcContext, resolver)
 
 	provider := kvtenant.TokenBucketProvider(tenantConnect)
 	if tenantKnobs, ok := baseCfg.TestingKnobs.TenantTestingKnobs.(*sql.TenantTestingKnobs); ok &&
@@ -1120,7 +1120,7 @@ func makeTenantSQLServerArgs(
 		NodeDescs:         tenantConnect,
 		RPCRetryOptions:   &rpcRetryOptions,
 		RPCContext:        rpcContext,
-		NodeDialer:        nodeDialer,
+		NodeDialer:        kvNodeDialer,
 		RangeDescriptorDB: tenantConnect,
 		Locality:          baseCfg.Locality,
 		KVInterceptor:     costController,
@@ -1287,7 +1287,7 @@ func makeTenantSQLServerArgs(
 		nodeDescs:                tenantConnect,
 		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       tenantConnect,
-		nodeDialer:               nodeDialer,
+		kvNodeDialer:             kvNodeDialer,
 		distSender:               ds,
 		db:                       db,
 		registry:                 registry,

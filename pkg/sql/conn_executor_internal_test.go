@@ -336,7 +336,7 @@ func startConnExecutor(
 			stopper,
 			func(base.SQLInstanceID) bool { return true }, // everybody is available
 			nil, /* connHealthCheckerSystem */
-			nil, /* podNodeDialer */
+			nil, /* sqlInstanceDialer */
 			keys.SystemSQLCodec,
 			nil, /* sqlAddressResolver */
 			clock,
