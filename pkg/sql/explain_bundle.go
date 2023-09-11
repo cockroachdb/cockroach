@@ -255,7 +255,17 @@ func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) {
 		cfg.Align = tree.PrettyNoAlign
 		cfg.JSONFmt = true
 		cfg.ValueRedaction = b.flags.RedactValues
-		b.stmt = cfg.Pretty(b.plan.stmt.AST)
+		var err error
+		b.stmt, err = cfg.Pretty(b.plan.stmt.AST)
+		if err != nil {
+			// Use the raw statement string if pretty-printing fails.
+			b.stmt = stmtRawSQL
+			// If we're collecting a redacted bundle, redact the raw SQL
+			// completely.
+			if b.flags.RedactValues && b.stmt != "" {
+				b.stmt = string(redact.RedactedMarker())
+			}
+		}
 
 		// If we had ValueRedaction set, Pretty surrounded all constants with
 		// redaction markers. We must call Redact to fully redact them.
