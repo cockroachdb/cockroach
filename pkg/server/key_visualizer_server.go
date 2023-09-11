@@ -33,11 +33,11 @@ import (
 
 // KeyVisualizerServer is a concrete implementation of the keyvispb.KeyVisualizerServer interface.
 type KeyVisualizerServer struct {
-	ie         *sql.InternalExecutor
-	settings   *cluster.Settings
-	nodeDialer *nodedialer.Dialer
-	status     *systemStatusServer
-	node       *Node
+	ie           *sql.InternalExecutor
+	settings     *cluster.Settings
+	kvNodeDialer *nodedialer.Dialer
+	status       *systemStatusServer
+	node         *Node
 }
 
 var _ keyvispb.KeyVisualizerServer = &KeyVisualizerServer{}
@@ -75,7 +75,7 @@ func (s *KeyVisualizerServer) getSamplesFromFanOut(
 	samplePeriod := keyvissettings.SampleInterval.Get(&s.settings.SV)
 
 	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		conn, err := s.nodeDialer.Dial(ctx, nodeID, rpc.DefaultClass)
+		conn, err := s.kvNodeDialer.Dial(ctx, nodeID, rpc.DefaultClass)
 		return keyvispb.NewKeyVisualizerClient(conn), err
 	}
 

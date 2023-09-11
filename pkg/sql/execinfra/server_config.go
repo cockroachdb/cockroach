@@ -145,8 +145,8 @@ type ServerConfig struct {
 	// draining state.
 	Gossip gossip.OptionalGossip
 
-	// Dialer for communication between SQL nodes/pods.
-	PodNodeDialer *nodedialer.Dialer
+	// Dialer for communication between SQL instances.
+	SQLInstanceDialer *nodedialer.Dialer
 
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
