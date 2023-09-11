@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -536,6 +537,47 @@ func TestGCHint(t *testing.T) {
 			}
 		})
 	}
-
 	// TODO(pavelkalinnikov): test Merge with non-empty hints.
+
+	for _, tc := range []struct {
+		was  GCHint
+		add  hlc.Timestamp
+		want GCHint
+	}{
+		// Adding an empty timestamp is a no-op.
+		{was: GCHint{}, add: empty, want: GCHint{}},
+		{was: hint(empty, ts1, empty), add: empty, want: hint(empty, ts1, empty)},
+		{was: hint(empty, ts1, ts2), add: empty, want: hint(empty, ts1, ts2)},
+		{was: hint(ts1, ts1, ts2), add: empty, want: hint(ts1, ts1, ts2)},
+		// Any timestamp is added to a hint with empty timestamps.
+		{was: GCHint{}, add: ts1, want: hint(empty, ts1, empty)},
+		{was: hint(ts1, empty, empty), add: ts1, want: hint(ts1, ts1, empty)},
+		{was: hint(ts2, empty, empty), add: ts1, want: hint(ts2, ts1, empty)},
+		// For a hint with only one timestamp, test all possible relative positions
+		// of the newly added timestamp.
+		{was: hint(empty, ts2, empty), add: ts1, want: hint(empty, ts1, ts2)},
+		{was: hint(empty, ts2, empty), add: ts2, want: hint(empty, ts2, empty)}, // no-op
+		{was: hint(empty, ts1, empty), add: ts2, want: hint(empty, ts1, ts2)},
+		{was: hint(ts1, ts1, empty), add: ts2, want: hint(ts1, ts1, ts2)},
+		// For a hint with both timestamps, test all possible relative positions of
+		// the newly added timestamp.
+		{was: hint(empty, ts2, ts3), add: ts1, want: hint(empty, ts1, ts3)},
+		{was: hint(empty, ts2, ts3), add: ts2, want: hint(empty, ts2, ts3)}, // no-op
+		{was: hint(empty, ts1, ts3), add: ts2, want: hint(empty, ts1, ts3)}, // no-op
+		{was: hint(empty, ts1, ts3), add: ts3, want: hint(empty, ts1, ts3)}, // no-op
+		{was: hint(empty, ts1, ts2), add: ts2, want: hint(empty, ts1, ts2)}, // no-op
+		{was: hint(empty, ts1, ts2), add: ts3, want: hint(empty, ts1, ts3)},
+		{was: hint(ts1, ts1, ts2), add: ts3, want: hint(ts1, ts1, ts3)},
+		{was: hint(ts2, ts1, ts2), add: ts3, want: hint(ts2, ts1, ts3)},
+		{was: hint(ts3, ts1, ts2), add: ts3, want: hint(ts3, ts1, ts3)},
+	} {
+		t.Run("ScheduleGCFor", func(t *testing.T) {
+			hint := tc.was
+			checkInvariants(t, hint)
+			updated := hint.ScheduleGCFor(tc.add)
+			checkInvariants(t, hint)
+			assert.Equal(t, !hint.Equal(tc.was), updated, "returned incorrect 'updated' bit")
+			assert.Equal(t, tc.want, hint)
+		})
+	}
 }
