@@ -12,6 +12,8 @@ package main
 
 import (
 	"fmt"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -20,8 +22,10 @@ import (
 // outputs a formatted list of docs issues with valid release notes
 func constructDocsIssues(prs []cockroachPR) []docsIssue {
 	jiraIssueMeta, err := getJiraIssueCreateMeta()
-	fixVersions := jiraIssueMeta.Projects[0].Issuetypes[0].Fields.FixVersions.AllowedValues
-	fixVersionMap := make(map[string]string)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fixVersionMap, err := generateFixVersionMap(jiraIssueMeta.Projects[0].Issuetypes[0].Fields.FixVersions.AllowedValues)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -56,15 +60,61 @@ func constructDocsIssues(prs []cockroachPR) []docsIssue {
 						ProductChangePrNumber:  strconv.Itoa(pr.Number),
 					},
 				}
-				if epicRef != "" {
+				if epicRef != "" && jiraDocsProjectCode == "DOC" {
 					x.Fields.EpicLink = epicRef
 				}
+				_, ok := fixVersionMap[pr.BaseRefName]
+				if ok {
+					x.Fields.FixVersions = []jiraFieldId{
+						{
+							Id: fixVersionMap[pr.BaseRefName],
+						},
+					}
+				}
 				result = append(result, x)
-
 			}
 		}
 	}
 	return result
+}
+
+// generateFixVersionMap returns a mapping of release branches to the object ID in Jira of the matching fixVersions value
+func generateFixVersionMap(
+	fixVersions []jiraCreateIssueMetaFixVersionsAllowedValue,
+) (map[string]string, error) {
+	result := make(map[string]string)
+	labelNameRe := regexp.MustCompile(`^\d{2}\.\d \(`)
+	branchVersionRe := regexp.MustCompile(`release-(\d+\.\d+)`)
+	labelToLabelId := make(map[string]string)
+	for _, x := range fixVersions {
+		allMatches := labelNameRe.FindAllString(x.Name, -1)
+		if len(allMatches) > 0 {
+			labelToLabelId[x.Name] = x.Id
+		}
+	}
+	labelKeys := make([]string, 0, len(labelToLabelId))
+	for key := range labelToLabelId {
+		labelKeys = append(labelKeys, key)
+	}
+	sort.Strings(labelKeys)
+	releaseBranches, err := searchCockroachReleaseBranches()
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	result["master"] = labelToLabelId[labelKeys[len(labelKeys)-1]]
+	for _, branch := range releaseBranches {
+		branchMatches := branchVersionRe.FindStringSubmatch(branch)
+		if len(branchMatches) >= 2 {
+			for _, label := range labelKeys {
+				if strings.Contains(label, branchMatches[1]) {
+					result[branch] = labelToLabelId[label]
+					//break
+				}
+			}
+		}
+	}
+	return result, nil
 }
 
 func formatTitle(title string, prNumber int, index int, totalLength int) string {
@@ -76,31 +126,23 @@ func formatTitle(title string, prNumber int, index int, totalLength int) string 
 }
 
 // formatReleaseNotes generates a list of docsIssue bodies for the docs repo based on a given CRDB sha
-func formatReleaseNotes(commitMessage string, prNumber int, prBody, crdbSha string) []string {
-	rnBodySlice := []string{}
+func formatReleaseNotes(commitMessage string, prNumber int, prBody, crdbSha string) []adfRoot {
+	rnBodySlice := []adfRoot{}
 	if releaseNoteNoneRE.MatchString(commitMessage) {
 		return rnBodySlice
 	}
 	epicIssueRefs := extractIssueEpicRefs(prBody, commitMessage)
 	splitString := strings.Split(commitMessage, "\n")
 	releaseNoteLines := []string{}
-	var rnBody string
+	var rnBody adfRoot
 	for _, x := range splitString {
 		validRn := allRNRE.MatchString(x)
 		bugFixRn := bugFixRNRE.MatchString(x)
 		releaseJustification := releaseJustificationRE.MatchString(x)
 		if len(releaseNoteLines) > 0 && (validRn || releaseJustification) {
-			rnBody = fmt.Sprintf(
-				"Related PR: https://github.com/cockroachdb/cockroach/pull/%s\n"+
-					"Commit: https://github.com/cockroachdb/cockroach/commit/%s\n"+
-					"%s\n---\n\n%s",
-				strconv.Itoa(prNumber),
-				crdbSha,
-				epicIssueRefs,
-				strings.Join(releaseNoteLines, "\n"),
-			)
-			rnBodySlice = append(rnBodySlice, strings.TrimSuffix(rnBody, "\n"))
-			rnBody = ""
+			formattedRNText := strings.TrimSuffix(strings.Join(releaseNoteLines, "\n"), "\n")
+			rnBody = formatReleaseNotesSingle(prNumber, crdbSha, formattedRNText, epicIssueRefs)
+			rnBodySlice = append(rnBodySlice, rnBody)
 			releaseNoteLines = []string{}
 		}
 		if (validRn && !bugFixRn) || (len(releaseNoteLines) > 0 && !bugFixRn && !releaseJustification) {
@@ -108,25 +150,112 @@ func formatReleaseNotes(commitMessage string, prNumber int, prBody, crdbSha stri
 		}
 	}
 	if len(releaseNoteLines) > 0 { // commit whatever is left in the buffer to the rnBodySlice set
-		rnBody = fmt.Sprintf(
-			"Related PR: https://github.com/cockroachdb/cockroach/pull/%s\n"+
-				"Commit: https://github.com/cockroachdb/cockroach/commit/%s\n"+
-				"%s\n---\n\n%s",
-			strconv.Itoa(prNumber),
-			crdbSha,
-			epicIssueRefs,
-			strings.Join(releaseNoteLines, "\n"),
-		)
-		rnBodySlice = append(rnBodySlice, strings.TrimSuffix(rnBody, "\n"))
+		formattedRNText := strings.TrimSuffix(strings.Join(releaseNoteLines, "\n"), "\n")
+		rnBody = formatReleaseNotesSingle(prNumber, crdbSha, formattedRNText, epicIssueRefs)
+		rnBodySlice = append(rnBodySlice, rnBody)
 	}
 	if len(rnBodySlice) > 1 {
-		relatedProductChanges := "Related product changes: " +
-			"https://cockroachlabs.atlassian.net/issues/?jql=project%20%3D%20%22DOC%22%20and%20%22Doc%20Type%5BDropdown%5D" +
-			"%22%20%3D%20%22Product%20Change%22%20AND%20description%20~%20%22commit%2F" +
-			crdbSha + "%22%20ORDER%20BY%20created%20DESC\n\n---"
-		for i, rn := range rnBodySlice {
-			rnBodySlice[i] = strings.Replace(rn, "\n---", relatedProductChanges, -1)
+		relatedProductChanges := []adfNode{
+			{
+				Type: "hardBreak",
+			},
+			{
+				Type: "text",
+				Text: "Related product changes: ",
+			},
+			{
+				Type: "text",
+				Text: crlJiraBaseUrl + "issues/?jql=project%20%3D%20%22DOC%22%20and%20%22Doc%20Type%5BDropdown%5D" +
+					"%22%20%3D%20%22Product%20Change%22%20AND%20description%20~%20%22commit%2F" +
+					crdbSha + "%22%20ORDER%20BY%20created%20DESC\n\n---",
+				Marks: []adfMark{
+					{
+						Type: "link",
+						Attrs: map[string]string{
+							"href": crlJiraBaseUrl + "issues/?jql=project%20%3D%20%22DOC%22%20and%20%22Doc%20Type%5BDropdown%5D" +
+								"%22%20%3D%20%22Product%20Change%22%20AND%20description%20~%20%22commit%2F" +
+								crdbSha + "%22%20ORDER%20BY%20created%20DESC\n\n---",
+						},
+					},
+				},
+			},
+		}
+		for _, rnBody := range rnBodySlice {
+			rnBody.Content[0].Content = append(rnBody.Content[0].Content, relatedProductChanges...)
 		}
 	}
 	return rnBodySlice
+}
+
+func formatReleaseNotesSingle(
+	prNumber int, crdbSha, releaseNoteBody string, epicIssueRefs []adfNode,
+) adfRoot {
+	result := adfRoot{
+		Version: 1,
+		Type:    "doc",
+		Content: []adfNode{
+			{
+				Type: "paragraph",
+				Content: []adfNode{
+					{
+						Type: "text",
+						Text: "Related PR: ",
+					},
+					{
+						Type: "text",
+						Text: fmt.Sprintf("https://github.com/cockroachdb/cockroach/pull/%d", prNumber),
+						Marks: []adfMark{
+							{
+								Type: "link",
+								Attrs: map[string]string{
+									"href": fmt.Sprintf("https://github.com/cockroachdb/cockroach/pull/%d", prNumber),
+								},
+							},
+						},
+					},
+					{
+						Type: "hardBreak",
+					},
+					{
+						Type: "text",
+						Text: "Commit: ",
+					},
+					{
+						Type: "text",
+						Text: fmt.Sprintf("https://github.com/cockroachdb/cockroach/commit/%s", crdbSha),
+						Marks: []adfMark{
+							{
+								Type: "link",
+								Attrs: map[string]string{
+									"href": fmt.Sprintf("https://github.com/cockroachdb/cockroach/commit/%s", crdbSha),
+								},
+							},
+						},
+					},
+				},
+			},
+			{
+				Type: "paragraph",
+				Content: []adfNode{
+					{
+						Type: "text",
+						Text: "---",
+					},
+				},
+			},
+			{
+				Type: "paragraph",
+				Content: []adfNode{
+					{
+						Type: "text",
+						Text: releaseNoteBody, // TODO: Find a way to convert the Markdown contents in this variable to ADF
+					},
+				},
+			},
+		},
+	}
+	if len(epicIssueRefs) > 0 {
+		result.Content[0].Content = append(result.Content[0].Content, epicIssueRefs...)
+	}
+	return result
 }

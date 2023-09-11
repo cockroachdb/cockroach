@@ -26,10 +26,10 @@ type docsIssueFields struct {
 	Project                jiraFieldId   `json:"project"`
 	Summary                string        `json:"summary"`
 	Reporter               jiraFieldId   `json:"reporter"`
-	Description            string        `json:"description"`
+	Description            adfRoot       `json:"description"`
 	DocType                jiraFieldId   `json:"customfield_10175"`
 	FixVersions            []jiraFieldId `json:"fixVersions"`
-	EpicLink               string        `json:"customfield_10014"`
+	EpicLink               string        `json:"customfield_10014,omitempty"`
 	ProductChangePrNumber  string        `json:"customfield_10435"`
 	ProductChangeCommitSHA string        `json:"customfield_10436"`
 }
@@ -129,6 +129,21 @@ type gqlSingleIssue struct {
 			Issue struct {
 				Body string `json:"body"`
 			} `json:"issue"`
+		} `json:"repository"`
+	} `json:"data"`
+}
+
+type gqlRef struct {
+	Data struct {
+		Repository struct {
+			Refs struct {
+				Edges []struct {
+					Node struct {
+						Name string `json:"name"`
+					} `json:"node"`
+				} `json:"edges"`
+				PageInfo pageInfo `json:"pageInfo"`
+			} `json:"refs"`
 		} `json:"repository"`
 	} `json:"data"`
 }
@@ -341,4 +356,22 @@ type epicIssueRefInfo struct {
 	issueCloseRefs  map[string]int
 	issueInformRefs map[string]int
 	isBugFix        bool
+}
+
+type adfRoot struct {
+	Version int       `json:"version"` // 1
+	Type    string    `json:"type"`    // doc
+	Content []adfNode `json:"content"`
+}
+
+type adfNode struct {
+	Type    string    `json:"type"`
+	Content []adfNode `json:"content,omitempty"` // block nodes only, not inline nodes
+	Text    string    `json:"text,omitempty"`
+	Marks   []adfMark `json:"marks,omitempty"` // inline nodes only
+}
+
+type adfMark struct {
+	Type  string            `json:"type"`
+	Attrs map[string]string `json:"attrs"`
 }

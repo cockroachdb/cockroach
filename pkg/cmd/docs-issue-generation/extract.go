@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
 )
 
 func parseDocsIssueBody(body string) (int, string, error) {
@@ -89,45 +88,96 @@ func containsEpicNone(message string) bool {
 	return false
 }
 
-func containsBugFix(message string) bool {
-	if allMatches := bugFixRNRE.FindAllString(message, -1); len(allMatches) > 0 {
-		return true
-	}
-	return false
-}
-
-func extractIssueEpicRefs(prBody, commitBody string) string {
+func extractIssueEpicRefs(prBody, commitBody string) []adfNode {
 	refInfo := epicIssueRefInfo{
 		epicRefs:        extractEpicIDs(commitBody + "\n" + prBody),
 		epicNone:        containsEpicNone(commitBody + "\n" + prBody),
 		issueCloseRefs:  extractFixIssueIDs(commitBody + "\n" + prBody),
 		issueInformRefs: extractInformIssueIDs(commitBody + "\n" + prBody),
-		isBugFix:        containsBugFix(commitBody + "\n" + prBody),
 	}
-	var builder strings.Builder
+	var result []adfNode
+	hardBreak := adfNode{
+		Type: "hardBreak",
+	}
+	space := adfNode{
+		Type: "text",
+		Text: " ",
+	}
 	if len(refInfo.epicRefs) > 0 {
-		builder.WriteString("Epic:")
+		result = append(result, hardBreak)
+		result = append(result, adfNode{
+			Type: "text",
+			Text: "Epic:",
+		})
 		for x := range refInfo.epicRefs {
-			builder.WriteString(" " + getJiraIssueFromRef(x))
+			ref := getJiraIssueFromRef(x)
+			result = append(result, space)
+			result = append(result, adfNode{
+				Type: "text",
+				Text: ref,
+				Marks: []adfMark{
+					{
+						Type: "link",
+						Attrs: map[string]string{
+							"href": jiraBrowseUrlPart + ref,
+						},
+					},
+				},
+			})
 		}
-		builder.WriteString("\n")
 	}
 	if len(refInfo.issueCloseRefs) > 0 {
-		builder.WriteString("Fixes:")
+		result = append(result, hardBreak)
+		result = append(result, adfNode{
+			Type: "text",
+			Text: "Fixes:",
+		})
 		for x := range refInfo.issueCloseRefs {
-			builder.WriteString(" " + getJiraIssueFromRef(x))
+			ref := getJiraIssueFromRef(x)
+			result = append(result, space)
+			result = append(result, adfNode{
+				Type: "text",
+				Text: ref,
+				Marks: []adfMark{
+					{
+						Type: "link",
+						Attrs: map[string]string{
+							"href": jiraBrowseUrlPart + ref,
+						},
+					},
+				},
+			})
 		}
-		builder.WriteString("\n")
 	}
 	if len(refInfo.issueInformRefs) > 0 {
-		builder.WriteString("Informs:")
+		result = append(result, hardBreak)
+		result = append(result, adfNode{
+			Type: "text",
+			Text: "Informs:",
+		})
 		for x := range refInfo.issueInformRefs {
-			builder.WriteString(" " + getJiraIssueFromRef(x))
+			ref := getJiraIssueFromRef(x)
+			result = append(result, space)
+			result = append(result, adfNode{
+				Type: "text",
+				Text: ref,
+				Marks: []adfMark{
+					{
+						Type: "link",
+						Attrs: map[string]string{
+							"href": jiraBrowseUrlPart + ref,
+						},
+					},
+				},
+			})
 		}
-		builder.WriteString("\n")
 	}
-	if refInfo.epicNone && builder.Len() == 0 {
-		builder.WriteString("Epic: none\n")
+	if refInfo.epicNone && len(result) == 0 {
+		result = append(result, hardBreak)
+		result = append(result, adfNode{
+			Type: "text",
+			Text: "Epic: none",
+		})
 	}
-	return builder.String()
+	return result
 }

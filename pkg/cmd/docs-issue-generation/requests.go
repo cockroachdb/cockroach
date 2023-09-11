@@ -102,10 +102,9 @@ func httpRequest(
 		return err
 	}
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode != http.StatusOK && res.StatusCode != 201 {
 		err = fmt.Errorf("error: Request failed with status: %s", res.Status)
-		fmt.Println(err)
-		return err
+		fmt.Println(err) // deliberately not returning an error here to print out the tmp interface below
 	}
 	bs, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -115,12 +114,13 @@ func httpRequest(
 	var tmp interface{}
 	err = json.Unmarshal(bs, &tmp)
 	if err != nil {
-		fmt.Println("Error: unable to unmarshal JSON into an empty interface")
-		fmt.Println(string(bs[:]))
+		fmt.Printf("error: Unable to unmarshal JSON into an empty interface: %s", err)
+		fmt.Printf("Byte slice: %s", string(bs[:]))
 		return err
 	}
 	err = json.Unmarshal(bs, out)
 	if err != nil {
+		fmt.Printf("%#v\n", tmp)
 		return err
 	}
 	return nil

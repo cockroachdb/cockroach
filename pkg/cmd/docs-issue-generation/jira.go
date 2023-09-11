@@ -25,17 +25,16 @@ const (
 // start time. For reference, it's structured as map[crdb_pr_number]map[crdb_commit]docs_pr_number.
 func searchJiraDocsIssues(startTime time.Time) (map[int]map[string]string, error) {
 	var result = map[int]map[string]string{}
-	startAt := 0
-	pageSize := 100
-	maxResults, total, err := searchJiraDocsIssuesSingle(startTime, startAt, pageSize, result)
+	pageSize, startAt := 100, 0
+	maxResults, total, err := searchJiraDocsIssuesSingle(startTime, pageSize, startAt, result)
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
 	}
 	pageSize = maxResults // Jira REST API page sizes are subject to change at any time
-	for total > startAt+pageSize {
+	for total > startAt+pageSize && pageSize > 0 {
 		startAt += pageSize
-		_, _, err = searchJiraDocsIssuesSingle(startTime, startAt, pageSize, result)
+		_, _, err = searchJiraDocsIssuesSingle(startTime, pageSize, startAt, result)
 		if err != nil {
 			fmt.Println(err)
 			return nil, err
@@ -127,13 +126,13 @@ func (dib docsIssueBatch) createDocsIssuesInBulk() error {
 		fmt.Println(err)
 		return err
 	}
+	//os.Stdout.Write(b.Bytes())
 	var body map[string]interface{}
 	err = json.Unmarshal(b.Bytes(), &body)
 	if err != nil {
 		fmt.Println(err)
 		return err
 	}
-
 	err = queryJiraRESTAPI(apiEndpoint, method, headers, body, &res)
 	if err != nil {
 		fmt.Println(err)

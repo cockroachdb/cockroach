@@ -62,6 +62,7 @@ var (
 
 // the heart of the script to fetch and manipulate all data and create the individual docs issues
 func docsIssueGeneration(params queryParameters) {
+
 	prs, err := searchCockroachPRs(params.StartTime, params.EndTime)
 	if err != nil {
 		fmt.Println(err)
@@ -74,7 +75,7 @@ func docsIssueGeneration(params queryParameters) {
 		fmt.Printf("Number of PRs found: %d\n", len(prs))
 		if len(docsIssues) > 0 {
 			fmt.Printf("Dry run is enabled. The following %d docs issue(s) would be created:\n", len(docsIssues))
-			fmt.Println(docsIssues)
+			fmt.Printf("%#v\n", docsIssues)
 		} else {
 			fmt.Println("No docs issues need to be created.")
 		}
@@ -104,7 +105,7 @@ func getJiraIssueFromRef(ref string) string {
 	if jiraIssuePartRE.MatchString(ref) {
 		return ref
 	} else if jiraURLPartRE.MatchString(ref) {
-		return strings.Replace(ref, "https://cockroachlabs.atlassian.net/browse/", "", 1)
+		return strings.Replace(ref, jiraBrowseUrlPart, "", 1)
 	} else if ghIssueRepoPartRE.MatchString(ref) {
 		split := strings.FieldsFunc(ref, splitBySlashOrHash)
 		issueNumber, err := strconv.Atoi(split[2])
@@ -146,6 +147,3 @@ func getJiraIssueFromRef(ref string) string {
 		return "Malformed epic/issue ref (" + ref + ")"
 	}
 }
-
-// TODO: Redo this function
-// figure out if you can do this against an array once and bundle it by groups of 50

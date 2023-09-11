@@ -12,6 +12,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -153,22 +154,26 @@ func searchCockroachPRCommitsSingle(
 	var result []cockroachCommit
 	var search gqlCockroachPRCommit
 	query := `query ($cursor: String, $prNumber: Int!) {
-	  repository(owner: "cockroachdb", name: "cockroach") {
-	    pullRequest(number: $prNumber) {
-	      commits(first: 100, after: $cursor) {
-	        edges {
-	          node {
-	            commit {
-	              oid
-	              messageHeadline
-	              messageBody
-	            }
-	          }
-	        }
-	      }
-	    }
-	  }
-	}`
+  repository(owner: "cockroachdb", name: "cockroach") {
+    pullRequest(number: $prNumber) {
+      commits(first: 100, after: $cursor) {
+        edges {
+          node {
+            commit {
+              oid
+              messageHeadline
+              messageBody
+            }
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  }
+}`
 	queryVariables := map[string]interface{}{
 		"prNumber": prNumber,
 	}
@@ -196,6 +201,65 @@ func searchCockroachPRCommitsSingle(
 		}
 	}
 	pageInfo := search.Data.Repository.PullRequest.Commits.PageInfo
+	return pageInfo.HasNextPage, pageInfo.EndCursor, result, nil
+}
+
+var searchCockroachReleaseBranches = func() ([]string, error) {
+	var result []string
+	hasNextPage, nextCursor, branches, err := searchCockroachReleaseBranchesSingle("")
+	if err != nil {
+		fmt.Println(err)
+		return []string{}, err
+	}
+	result = append(result, branches...)
+	for hasNextPage {
+		hasNextPage, nextCursor, branches, err = searchCockroachReleaseBranchesSingle(nextCursor)
+		if err != nil {
+			fmt.Println(err)
+			return []string{}, err
+		}
+		result = append(result, branches...)
+	}
+	return result, nil
+}
+
+func searchCockroachReleaseBranchesSingle(cursor string) (bool, string, []string, error) {
+	var search gqlRef
+	var result []string
+	query := `query ($cursor: String) {
+  repository(owner: "cockroachdb", name: "cockroach") {
+    refs(
+      first: 100
+      refPrefix: "refs/"
+      query: "heads/release-"
+      after: $cursor
+      orderBy: {field: TAG_COMMIT_DATE, direction: DESC}
+    ) {
+      edges {
+        node {
+          name
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+}`
+	queryVariables := make(map[string]interface{})
+	if cursor != "" {
+		queryVariables["cursor"] = cursor
+	}
+	err := queryGraphQL(query, queryVariables, &search)
+	if err != nil {
+		fmt.Println(err)
+		return false, "", []string{}, err
+	}
+	for _, x := range search.Data.Repository.Refs.Edges {
+		result = append(result, strings.Replace(x.Node.Name, "heads/", "", -1))
+	}
+	pageInfo := search.Data.Repository.Refs.PageInfo
 	return pageInfo.HasNextPage, pageInfo.EndCursor, result, nil
 }
 
