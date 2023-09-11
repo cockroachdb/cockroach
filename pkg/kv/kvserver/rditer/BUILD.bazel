@@ -11,9 +11,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
+        "//pkg/kv/kvserver/spanset",
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//rangekey",
