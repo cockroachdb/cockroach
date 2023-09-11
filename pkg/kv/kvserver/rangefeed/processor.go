@@ -462,9 +462,9 @@ func (p *LegacyProcessor) run(
 
 		// Check whether any unresolved intents need a push.
 		case <-txnPushTickerC:
-			// Don't perform transaction push attempts until the resolved
-			// timestamp has been initialized.
-			if !p.rts.IsInit() {
+			// Don't perform transaction push attempts until the resolved timestamp
+			// has been initialized, or if we're not tracking any intents.
+			if !p.rts.IsInit() || p.rts.intentQ.Len() == 0 {
 				continue
 			}
 
