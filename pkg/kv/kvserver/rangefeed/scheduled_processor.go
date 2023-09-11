@@ -44,6 +44,9 @@ type ScheduledProcessor struct {
 	reg registry
 	rts resolvedTimestamp
 
+	// processCtx is the annotated background context used for process(). It is
+	// stored here to avoid reconstructing it on every call.
+	processCtx   context.Context
 	requestQueue chan request
 	eventC       chan *event
 	// If true, processor is not processing data anymore and waiting for registrations
@@ -65,10 +68,11 @@ func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
 	cfg.SetDefaults()
 	cfg.AmbientContext.AddLogTag("rangefeed", nil)
 	p := &ScheduledProcessor{
-		Config:    cfg,
-		scheduler: NewClientScheduler(cfg.Scheduler),
-		reg:       makeRegistry(cfg.Metrics),
-		rts:       makeResolvedTimestamp(),
+		Config:     cfg,
+		scheduler:  NewClientScheduler(cfg.Scheduler),
+		reg:        makeRegistry(cfg.Metrics),
+		rts:        makeResolvedTimestamp(),
+		processCtx: cfg.AmbientContext.AnnotateCtx(context.Background()),
 
 		requestQueue: make(chan request, 20),
 		eventC:       make(chan *event, cfg.EventChanCap),
@@ -121,7 +125,7 @@ func (p *ScheduledProcessor) Start(
 // process is a scheduler callback that is processing scheduled events and
 // requests.
 func (p *ScheduledProcessor) process(e processorEventType) processorEventType {
-	ctx := p.Config.AmbientContext.AnnotateCtx(context.Background())
+	ctx := p.processCtx
 	if e&RequestQueued != 0 {
 		p.processRequests(ctx)
 	}

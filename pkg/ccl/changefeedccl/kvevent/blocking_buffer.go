@@ -105,6 +105,7 @@ func newMemBuffer(
 
 	b.qp = allocPool{
 		AbstractPool: quotapool.New("changefeed", quota, opts...),
+		sv:           sv,
 		metrics:      metrics,
 	}
 
@@ -218,6 +219,7 @@ func (b *blockingBuffer) enqueue(ctx context.Context, e Event) (err error) {
 	}
 
 	b.metrics.BufferEntriesIn.Inc(1)
+	b.metrics.BufferEntriesByType[e.et.Index()].Inc(1)
 	b.mu.queue.enqueue(e)
 
 	select {
@@ -246,6 +248,7 @@ func (b *blockingBuffer) AcquireMemory(ctx context.Context, n int64) (alloc Allo
 		return alloc, err
 	}
 	b.metrics.BufferEntriesMemAcquired.Inc(n)
+	b.metrics.AllocatedMem.Inc(n)
 	return alloc, nil
 }
 
@@ -324,6 +327,7 @@ func (b *blockingBuffer) CloseWithReason(ctx context.Context, reason error) erro
 		quota := r.(*memQuota)
 		quota.closed = true
 		quota.acc.Close(ctx)
+		b.metrics.AllocatedMem.Dec(quota.allocated)
 		return false
 	})
 
@@ -442,9 +446,14 @@ func (r *memRequest) ShouldWait() bool {
 type allocPool struct {
 	*quotapool.AbstractPool
 	metrics *Metrics
+	sv      *settings.Values
 }
 
 func (ap allocPool) Release(ctx context.Context, bytes, entries int64) {
+	if bytes < 0 {
+		logcrash.ReportOrPanic(ctx, ap.sv, "attempt to release negative bytes (%d) into pool", bytes)
+	}
+
 	ap.AbstractPool.Update(func(r quotapool.Resource) (shouldNotify bool) {
 		quota := r.(*memQuota)
 		if quota.closed {
@@ -452,6 +461,7 @@ func (ap allocPool) Release(ctx context.Context, bytes, entries int64) {
 		}
 		quota.acc.Shrink(ctx, bytes)
 		quota.allocated -= bytes
+		ap.metrics.AllocatedMem.Dec(bytes)
 		ap.metrics.BufferEntriesMemReleased.Inc(bytes)
 		ap.metrics.BufferEntriesReleased.Inc(entries)
 		return true

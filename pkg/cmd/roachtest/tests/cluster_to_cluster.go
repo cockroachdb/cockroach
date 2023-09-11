@@ -1322,12 +1322,14 @@ func registerClusterReplicationResilience(r registry.Registry) {
 					t.L().Printf(`%s configured: Shutdown Node %d; Watcher node %d; Gateway nodes %s`,
 						rrd.rsp.name(), rrd.shutdownNode, rrd.watcherNode, rrd.setup.gatewayNodes)
 				}
-				m := rrd.newMonitor(ctx)
-				m.Go(func(ctx context.Context) error {
+				mainDriverCtx, cancelMain := context.WithCancel(ctx)
+				mainMonitor := rrd.newMonitor(mainDriverCtx)
+				mainMonitor.Go(func(ctx context.Context) error {
 					rrd.main(ctx)
 					return nil
 				})
-				defer m.Wait()
+				defer cancelMain()
+				defer mainMonitor.Wait()
 
 				// Don't begin shutdown process until c2c job is set up.
 				<-shutdownSetupDone
@@ -1341,8 +1343,10 @@ func registerClusterReplicationResilience(r registry.Registry) {
 				// DR scenario the src cluster may have gone belly up during a
 				// successful c2c replication execution.
 				shutdownStarter := func() jobStarter {
-					return func(c cluster.Cluster, t test.Test) (jobspb.JobID, error) {
-						require.NoError(t, waitForTargetPhase(ctx, rrd.replicationDriver, rrd.dstJobID, rrd.phase))
+					return func(c cluster.Cluster, l *logger.Logger) (jobspb.JobID, error) {
+						if err := waitForTargetPhase(ctx, rrd.replicationDriver, rrd.dstJobID, rrd.phase); err != nil {
+							return jobspb.JobID(0), err
+						}
 						sleepBeforeResiliencyEvent(rrd.replicationDriver, rrd.phase)
 						return rrd.dstJobID, nil
 					}
@@ -1356,8 +1360,12 @@ func registerClusterReplicationResilience(r registry.Registry) {
 					watcherNode:     destinationWatcherNode,
 					crdbNodes:       rrd.crdbNodes(),
 					restartSettings: []install.ClusterSettingOption{install.SecureOption(true)},
+					rng:             rrd.rng,
 				}
-				executeNodeShutdown(ctx, t, c, shutdownCfg, shutdownStarter())
+				if err := executeNodeShutdown(ctx, t, c, shutdownCfg, shutdownStarter()); err != nil {
+					cancelMain()
+					t.Fatalf("shutdown execution failed: %s", err)
+				}
 			},
 		)
 	}
