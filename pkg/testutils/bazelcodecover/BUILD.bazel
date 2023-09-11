@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+# keep
+go_library(
+    name = "bazelcodecover",
+    srcs = select({
+        "//build/toolchains:bazel_code_coverage": [":gen-bazel-code-cover-on"],
+        "//conditions:default": [":gen-bazel-code-cover-off"],
+    }),
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/bazelcodecover",
+    visibility = ["//visibility:public"],
+    deps = select({
+        "//build/toolchains:bazel_code_coverage": [
+            "@io_bazel_rules_go//go/tools/bzltestutil:go_default_library",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@"
+
+genrule(
+    name = "gen-bazel-code-cover-on",
+    srcs = ["code_cover_on.go"],
+    outs = ["gen-code_cover_on.go"],
+    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
+)
+
+genrule(
+    name = "gen-bazel-code-cover-off",
+    srcs = ["code_cover_off.go"],
+    outs = ["gen-code_cover_off.go"],
+    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
+)
