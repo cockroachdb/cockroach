@@ -174,7 +174,9 @@ func (p *ScheduledProcessor) processEvents(ctx context.Context) {
 }
 
 func (p *ScheduledProcessor) processPushTxn(ctx context.Context) {
-	if !p.txnPushActive && p.rts.IsInit() {
+	// NB: Len() check avoids hlc.Clock.Now() mutex acquisition in the common
+	// case, which can be a significant source of contention.
+	if !p.txnPushActive && p.rts.IsInit() && p.rts.intentQ.Len() > 0 {
 		now := p.Clock.Now()
 		before := now.Add(-p.PushTxnsAge.Nanoseconds(), 0)
 		oldTxns := p.rts.intentQ.Before(before)
