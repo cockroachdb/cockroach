@@ -140,3 +140,10 @@ func TestLogic_mixed_version_system_privileges_user_id(
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "mixed_version_system_privileges_user_id")
 }
+
+func TestLogic_mixed_version_upgrade_repair_descriptors(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_upgrade_repair_descriptors")
+}
