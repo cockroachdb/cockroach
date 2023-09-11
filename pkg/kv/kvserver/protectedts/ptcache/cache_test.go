@@ -298,7 +298,7 @@ func TestStart(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	setup := func() (serverutils.TestServerInterface, *ptcache.Cache) {
+	setup := func() (serverutils.ApplicationLayerInterface, *ptcache.Cache, func()) {
 		srv := serverutils.StartServerOnly(t,
 			base.TestServerArgs{
 				Knobs: base.TestingKnobs{
@@ -317,25 +317,26 @@ func TestStart(t *testing.T) {
 			DB:       execCfg.InternalDB,
 			Storage:  p,
 		})
-		return srv, c
+		return s, c, func() { srv.Stopper().Stop(ctx) }
 	}
 
 	t.Run("double start", func(t *testing.T) {
 		defer log.Scope(t).Close(t)
 
-		srv, c := setup()
-		defer srv.Stopper().Stop(ctx)
-		require.NoError(t, c.Start(ctx, srv.Stopper()))
-		require.EqualError(t, c.Start(ctx, srv.Stopper()),
+		s, c, cleanup := setup()
+		defer cleanup()
+		require.NoError(t, c.Start(ctx, s.AppStopper()))
+		require.EqualError(t, c.Start(ctx, s.AppStopper()),
 			"cannot start a Cache more than once")
 	})
 
 	t.Run("already stopped", func(t *testing.T) {
 		defer log.Scope(t).Close(t)
 
-		srv, c := setup()
-		srv.Stopper().Stop(ctx)
-		require.EqualError(t, c.Start(ctx, srv.Stopper()),
+		s, c, cleanup := setup()
+		defer cleanup()
+		s.AppStopper().Stop(ctx)
+		require.EqualError(t, c.Start(ctx, s.AppStopper()),
 			stop.ErrUnavailable.Error())
 	})
 }
