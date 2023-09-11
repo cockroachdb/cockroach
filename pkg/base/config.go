@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 	"math/big"
+	"net"
 	"net/url"
 	"os"
 	"time"
@@ -370,6 +371,14 @@ type Config struct {
 	// SQLAddr is the configured SQL listen address.
 	// This is used if SplitListenSQL is set to true.
 	SQLAddr string
+
+	// SQLAddrListener will only be considered if SplitListenSQL is set and
+	// DisableSQLListener is not. Under these conditions, if not nil, it will be
+	// used as a listener for incoming SQL connection requests. This allows
+	// creating a listener early in the server initialization process and not
+	// rejecting incoming connection requests that may come before the server is
+	// fully ready.
+	SQLAddrListener net.Listener
 
 	// SQLAdvertiseAddrH contains the advertised SQL address.
 	// This is computed from SQLAddr if specified otherwise Addr.

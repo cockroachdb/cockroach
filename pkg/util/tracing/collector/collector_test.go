@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
@@ -210,8 +209,6 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 func TestClusterInflightTraces(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ccl.TestingEnableEnterprise() // We'll create tenants.
-	defer ccl.TestingDisableEnterprise()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

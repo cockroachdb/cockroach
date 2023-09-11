@@ -884,10 +884,16 @@ func TestPlanDiagramReplicationStream(t *testing.T) {
       "core": {
         "title": "StreamIngestionData/1",
         "details": [
-          "Partitions",
-          "n1: [{a-b}]",
-          "n2: [{d-e}]",
-          "n3: [{f1-g1} {f2-g2} {f3-g3}] and 1 more spans",
+          "Partitions:",
+          "Source node 1, spans:",
+          "{a-b}",
+          "Source node 2, spans:",
+          "{d-e}",
+          "Source node 3, spans:",
+          "{f1-g1}",
+          "{f2-g2}",
+          "{f3-g3}",
+          "and 1 more spans",
           "and 1 more partitions"
         ]
       },
