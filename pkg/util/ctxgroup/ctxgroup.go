@@ -121,6 +121,10 @@ package ctxgroup
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/withstack"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -143,6 +147,9 @@ func (g Group) Wait() error {
 	ctxErr := g.ctx.Err()
 	err := g.wrapped.Wait()
 	if err != nil {
+		if recovered := (*ErrTaskPanic)(nil); errors.As(err, &recovered) {
+			panic(recovered)
+		}
 		return err
 	}
 	return ctxErr
@@ -162,9 +169,33 @@ func (g Group) Go(f func() error) {
 	g.wrapped.Go(f)
 }
 
+// ErrTaskPanic is used to wrap a panic thrown by a task in the group. It is
+// generally not returned directly to any call, but may be observed when
+// recovering a panic from Wait(). In such cases, `Payload` represents the
+// exact argument passed to panic() in the task, while wrapping it in an error
+// preserves the original stack in the task before it is captured and re-thrown
+// in Wait().
+type ErrTaskPanic struct {
+	Payload interface{}
+}
+
+func (e ErrTaskPanic) Error() string {
+	return fmt.Sprintf("%v", e.Payload)
+}
+
 // GoCtx calls the given function in a new goroutine.
+// If the function panics before another function has returned an error, calling
+// Wait() will panic with the original panic wrapped in ErrTaskPanic so as to
+// capture its original stack. NB: if another task in the group has already
+// returned an error, the panic will instead be recovered and ignored as the
+// error slot in the underlying errgroup is already used.
 func (g Group) GoCtx(f func(ctx context.Context) error) {
-	g.wrapped.Go(func() error {
+	g.wrapped.Go(func() (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = withstack.WithStack(&ErrTaskPanic{Payload: r})
+			}
+		}()
 		return f(g.ctx)
 	})
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestErrorAfterCancel(t *testing.T) {
@@ -40,5 +41,19 @@ func TestErrorAfterCancel(t *testing.T) {
 		if err := g.Wait(); !errors.Is(err, expErr) {
 			t.Errorf("expected %v, got %v", expErr, err)
 		}
+	})
+}
+
+func TestPanic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	panics := func(_ context.Context) error {
+		panic(1)
+	}
+
+	require.Panics(t, func() {
+		g := WithContext(context.Background())
+		g.GoCtx(panics)
+		t.Log(g.Wait())
 	})
 }
