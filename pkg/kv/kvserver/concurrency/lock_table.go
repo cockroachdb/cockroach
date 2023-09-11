@@ -455,6 +455,8 @@ type lockTableGuardImpl struct {
 		// queued{Readers,LockingRequests}. For locking requests, this includes both
 		// active and inactive waiters. For readers, there's no such thing as an
 		// inactive reader, so by definition the request must be an active waiter.
+		// The highest lock strength with which the request is trying to lock the
+		// key is also stored.
 		//
 		// TODO(sbhola): investigate whether the logic to maintain this locks map
 		// can be simplified so it doesn't need to be adjusted by various keyLocks
@@ -467,8 +469,7 @@ type lockTableGuardImpl struct {
 		// will. (a) doesn't necessarily require this map to be consistent -- the
 		// request could track the places where it is has enqueued as places where
 		// it could be present and then do the search.
-
-		locks map[*keyLocks]struct{}
+		locks map[*keyLocks]lock.Strength
 
 		// mustComputeWaitingState is set in context of the state change channel
 		// being signaled. It denotes whether the signaler has already computed the
@@ -514,7 +515,7 @@ var lockTableGuardImplPool = sync.Pool{
 	New: func() interface{} {
 		g := new(lockTableGuardImpl)
 		g.mu.signal = make(chan struct{}, 1)
-		g.mu.locks = make(map[*keyLocks]struct{})
+		g.mu.locks = make(map[*keyLocks]lock.Strength)
 		return g
 	},
 }
@@ -796,6 +797,19 @@ func (g *lockTableGuardImpl) curStrength() lock.Strength {
 // of the lock table progresses from lock to lock.
 func (g *lockTableGuardImpl) curLockMode() lock.Mode {
 	return makeLockMode(g.curStrength(), g.txnMeta(), g.ts)
+}
+
+// maybeAddToLocksMap adds the supplied lock to the guard's locks map if:
+// 1. It's not already present.
+// 2. OR it's being accessed with a higher lock strength than the one currently
+// associated.
+//
+// REQUIRES: g.mu to be locked.
+func (g *lockTableGuardImpl) maybeAddToLocksMap(kl *keyLocks, accessStr lock.Strength) {
+	str, present := g.mu.locks[kl]
+	if !present || str < accessStr {
+		g.mu.locks[kl] = accessStr
+	}
 }
 
 // makeLockMode constructs and returns a lock mode.
@@ -2514,37 +2528,33 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 					continue // check next lock
 				}
 			}
+		}
 
-			g.mu.Lock()
-			_, alsoLocksWithHigherStrength := g.mu.locks[kl]
-			g.mu.Unlock()
-			if alsoLocksWithHigherStrength {
-				// If the request already has this lock in its locks map, it must also
-				// be trying to acquire this lock at a higher strength. For it to be
-				// here, it must have a (possibly joint) claim on this lock. The claim
-				// may have been broken since, but that's besides the point -- we defer
-				// to the stronger lock strength and continue with our scan.
-				//
-				// NB: If we were to not defer to the stronger lock strength and start
-				// waiting here, we could potentially end up doing so in the wrong wait
-				// queue (queuedReaders vs. queuedLockingRequests). There wouldn't be a
-				// correctness issue in doing so, but it isn't ideal.
-				//
-				// NB: Non-transactional requests do not make claims or acquire locks.
-				// They can only perform reads or writes, which means they can only have
-				// lock spans with strength {None,Intent}. However, because they cannot
-				// make claims on locks, we can not detect a key is being accessed with
-				// both None and Intent locking strengths, like we can for transactional
-				// requests. In some rare cases, the lock may now be held at a timestamp
-				// that is not compatible with this request, and it will wait here --
-				// there's no correctness issue in doing so.
-				//
-				// TODO(arul): I'm not entirely sure I understand why we have the g.str
-				// == lock.None condition above. We do need it, because taking it out
-				// breaks some tests. Will need to figure this out when trying to extend
-				// the lock table to work with multiple lock strengths.
-				return false
-			}
+		g.mu.Lock()
+		str, present := g.mu.locks[kl]
+		g.mu.Unlock()
+		alsoLocksWithHigherStrength := present && str > g.curStrength()
+		if alsoLocksWithHigherStrength {
+			// If the request already has this lock in its locks map, it must also be
+			// trying to acquire this lock at a higher strength. For it to be here, it
+			// must have a (possibly joint) claim on this lock. The claim may have
+			// been broken since, but that's besides the point -- we defer to the
+			// stronger lock strength and continue with our scan.
+			//
+			// NB: If we were to not defer to the stronger lock strength and start
+			// waiting here, we could potentially end up doing so in the wrong wait
+			// queue (queuedReaders vs. queuedLockingRequests). There wouldn't be a
+			// correctness issue in doing so, but it isn't ideal.
+			//
+			// NB: Non-transactional requests do not make claims or acquire locks.
+			// They can only perform reads or writes, which means they can only have
+			// lock spans with strength {None,Intent}. However, because they cannot
+			// make claims on locks, we can not detect a key is being accessed with
+			// both None and Intent locking strengths, like we can for transactional
+			// requests. In some rare cases, the lock may now be held at a timestamp
+			// that is not compatible with this request, and it will wait here --
+			// there's no correctness issue in doing so.
+			return false
 		}
 
 		// The held lock neither belongs to the request's transaction (which has
@@ -2574,7 +2584,7 @@ func (kl *keyLocks) maybeEnqueueNonLockingReadRequest(g *lockTableGuardImpl) (co
 	kl.maybeMakeDistinguishedWaiter(g)
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.mu.locks[kl] = struct{}{}
+	g.maybeAddToLocksMap(kl, lock.None)
 	return true
 }
 
@@ -2646,7 +2656,7 @@ func (kl *keyLocks) enqueueLockingRequest(g *lockTableGuardImpl) (maxQueueLength
 	// This request may be a candidate to become a distinguished waiter if one
 	// doesn't exist yet; try making it such.
 	kl.maybeMakeDistinguishedWaiter(g)
-	g.mu.locks[kl] = struct{}{}
+	g.maybeAddToLocksMap(kl, g.curStrength())
 	return false /* maxQueueLengthExceeded */
 }
 
@@ -2999,8 +3009,9 @@ func (kl *keyLocks) discoveredLock(
 		_, presentHere := g.mu.locks[kl]
 		if !presentHere {
 			// Since g will place itself in queue as inactive waiter below.
-			g.mu.locks[kl] = struct{}{}
+			g.mu.locks[kl] = accessStrength
 		}
+		g.maybeAddToLocksMap(kl, accessStrength)
 		g.mu.Unlock()
 
 		if !presentHere {
