@@ -263,6 +263,9 @@ type streamIngestionProcessor struct {
 	// backupDataProcessors' trace recording.
 	agg      *bulkutil.TracingAggregator
 	aggTimer *timeutil.Timer
+
+	flushHistogram        *hdrhistogram.Histogram
+	betweenFlushHistogram *hdrhistogram.Histogram
 }
 
 // partitionEvent augments a normal event with the partition it came from.
@@ -643,6 +646,8 @@ func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
 	)
 	timeInHandleEventHistogram := hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
 	timeBetweenHandleEventHistogram := hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	sip.flushHistogram = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	sip.betweenFlushHistogram = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
 	var lastHandleEvent time.Time
 	var lastAggregatorStatsEmitted time.Time
 	var ingestionStats StreamIngestionStats
@@ -1173,6 +1178,7 @@ func splitRangeKeySSTAtKey(
 }
 
 func (sip *streamIngestionProcessor) flush() error {
+	// Time between flush.
 	bufferToFlush := sip.buffer
 	sip.buffer = getBuffer()
 
@@ -1182,11 +1188,24 @@ func (sip *streamIngestionProcessor) flush() error {
 		return span.ContinueMatch
 	})
 
+	// Add how long it takes to wait here.
+	// Record value here.
+	timeBeforeFlush := timeutil.Now()
 	select {
 	case sip.flushCh <- flushableBuffer{
 		buffer:     bufferToFlush,
 		checkpoint: checkpoint,
 	}:
+		err := sip.flushHistogram.RecordValue(timeutil.Since(timeBeforeFlush).Nanoseconds())
+		if err != nil {
+			log.Warningf(sip.Ctx(), "failed to record flush time: %v", err)
+		}
+		if !sip.lastFlushTime.IsZero() {
+			err := sip.betweenFlushHistogram.RecordValue(timeutil.Since(sip.lastFlushTime).Nanoseconds())
+			if err != nil {
+				log.Warningf(sip.Ctx(), "failed to record between flush time: %v", err)
+			}
+		}
 		sip.lastFlushTime = timeutil.Now()
 		return nil
 	case <-sip.stopCh:

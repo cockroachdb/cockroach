@@ -55,6 +55,8 @@ func (m *StreamIngestionStats) Combine(other bulk.TracingAggregatorEvent) {
 	}
 	m.TimeInHandleEvent = otherStats.TimeInHandleEvent
 	m.TimeBetweenHandleEvents = otherStats.TimeBetweenHandleEvents
+	m.TimeInFlush = otherStats.TimeInFlush
+	m.TimeBetweenFlush = otherStats.TimeBetweenFlush
 }
 
 func (m *StreamIngestionStats) ProtoName() string {
@@ -65,6 +67,8 @@ func (m *StreamIngestionStats) String() string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("time_in_handle: \n%s\n", m.TimeInHandleEvent.String()))
 	b.WriteString(fmt.Sprintf("time_between_handle: \n%s\n", m.TimeBetweenHandleEvents.String()))
+	b.WriteString(fmt.Sprintf("time_in_flush: \n%s\n", m.TimeInFlush.String()))
+	b.WriteString(fmt.Sprintf("time_between_flush: \n%s\n", m.TimeBetweenFlush.String()))
 	return b.String()
 }
 

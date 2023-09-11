@@ -31,6 +31,8 @@ message StreamIngestionStats {
 
   HistogramData time_in_handle_event = 1;
   HistogramData time_between_handle_events = 2;
+  HistogramData time_in_flush = 3;
+  HistogramData time_between_flush = 4;
 }
 
 
