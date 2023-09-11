@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
+	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -148,7 +149,10 @@ func buildStatementBundle(
 	if plan == nil {
 		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
 	}
-	b := makeStmtBundleBuilder(explainFlags, db, ie, stmtRawSQL, plan, trace, placeholders, sv)
+	b, err := makeStmtBundleBuilder(explainFlags, db, ie, stmtRawSQL, plan, trace, placeholders, sv)
+	if err != nil {
+		return diagnosticsBundle{collectionErr: err}
+	}
 
 	b.addStatement()
 	b.addOptPlans(ctx)
@@ -226,18 +230,21 @@ func makeStmtBundleBuilder(
 	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
 	sv *settings.Values,
-) stmtBundleBuilder {
+) (stmtBundleBuilder, error) {
 	b := stmtBundleBuilder{
 		flags: flags, db: db, ie: ie, plan: plan, trace: trace, placeholders: placeholders, sv: sv,
 	}
-	b.buildPrettyStatement(stmtRawSQL)
+	err := b.buildPrettyStatement(stmtRawSQL)
+	if err != nil {
+		return stmtBundleBuilder{}, err
+	}
 	b.z.Init()
-	return b
+	return b, nil
 }
 
 // buildPrettyStatement saves the pretty-printed statement (without any
 // placeholder arguments).
-func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) {
+func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) error {
 	// If we hit an early error, stmt or stmt.AST might not be initialized yet. In
 	// this case use the original raw SQL.
 	if b.plan.stmt == nil || b.plan.stmt.AST == nil {
@@ -255,7 +262,19 @@ func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) {
 		cfg.Align = tree.PrettyNoAlign
 		cfg.JSONFmt = true
 		cfg.ValueRedaction = b.flags.RedactValues
-		b.stmt = cfg.Pretty(b.plan.stmt.AST)
+		var err error
+		b.stmt, err = cfg.Pretty(b.plan.stmt.AST)
+		if errors.Is(err, pretty.ErrPrettyMaxRecursionDepthExceeded) {
+			// Use the raw statement string if pretty-printing fails.
+			b.stmt = stmtRawSQL
+			// If we're collecting a redacted bundle, redact the raw SQL
+			// completely.
+			if b.flags.RedactValues && b.stmt != "" {
+				b.stmt = string(redact.RedactedMarker())
+			}
+		} else if err != nil {
+			return err
+		}
 
 		// If we had ValueRedaction set, Pretty surrounded all constants with
 		// redaction markers. We must call Redact to fully redact them.
@@ -266,6 +285,7 @@ func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) {
 	if b.stmt == "" {
 		b.stmt = "-- no statement"
 	}
+	return nil
 }
 
 // addStatement adds the pretty-printed statement in b.stmt as file

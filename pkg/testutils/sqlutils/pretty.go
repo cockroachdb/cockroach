@@ -66,7 +66,10 @@ func VerifyStatementPrettyRoundtrip(t *testing.T, sql string) {
 		//
 		origStmt := stmts[i].AST
 		// Be careful to not simplify otherwise the tests won't round trip.
-		prettyStmt := cfg.Pretty(origStmt)
+		prettyStmt, err := cfg.Pretty(origStmt)
+		if err != nil {
+			t.Fatalf("%s: %s", err, prettyStmt)
+		}
 		parsedPretty, err := parser.ParseOne(prettyStmt)
 		if err != nil {
 			t.Fatalf("%s: %s", err, prettyStmt)
