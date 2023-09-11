@@ -60,6 +60,8 @@ message EventStreamPerformanceStats {
   HistogramData flush_event_wait = 15;
   HistogramData send_event_wait = 16;
   HistogramData since_next_wait = 20;
+  HistogramData since_last_checkpoint_flush = 23;
+  HistogramData since_last_batch_flush = 24;
 
   util.hlc.Timestamp last_span_complete_time = 22 [(gogoproto.nullable) = false];
 

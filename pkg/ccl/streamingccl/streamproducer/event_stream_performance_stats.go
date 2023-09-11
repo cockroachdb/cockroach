@@ -109,6 +109,8 @@ func (m *EventStreamPerformanceStats) String() string {
 	b.WriteString(fmt.Sprintf("flush_event_wait: \n%s\n", m.FlushEventWait.String()))
 	b.WriteString(fmt.Sprintf("send_event_wait: \n%s\n", m.SendEventWait.String()))
 	b.WriteString(fmt.Sprintf("since_next_wait: \n%s\n", m.SinceNextWait.String()))
+	b.WriteString(fmt.Sprintf("since_last_batch_flush: \n%s\n", m.SinceLastBatchFlush.String()))
+	b.WriteString(fmt.Sprintf("since_last_checkpoint_flush: \n%s\n", m.SinceLastCheckpointFlush.String()))
 
 	return b.String()
 }
@@ -149,6 +151,8 @@ func (m *EventStreamPerformanceStats) Combine(other bulk.TracingAggregatorEvent)
 	m.SendEventWait = otherStats.SendEventWait
 	m.FlushEventWait = otherStats.FlushEventWait
 	m.SinceNextWait = otherStats.SinceNextWait
+	m.SinceLastCheckpointFlush = otherStats.SinceLastCheckpointFlush
+	m.SinceLastBatchFlush = otherStats.SinceLastBatchFlush
 
 	m.RangefeedEventBars = otherStats.RangefeedEventBars
 	m.FlushEventBars = otherStats.FlushEventBars

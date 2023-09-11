@@ -62,14 +62,14 @@ func subscribeInternal(
 			}
 			return nil, nil
 		}
+		var data []byte
+		if err := feed.Scan(&data); err != nil {
+			return nil, err
+		}
 		timeSinceNext := timeutil.Since(beforeNext)
 		subscriptionStats.CumTimeInNext += timeSinceNext
 		if err := timeInNextHistogram.RecordValue(timeSinceNext.Nanoseconds()); err != nil {
 			log.Warningf(ctx, "failed to record value in histogram: %v", err)
-		}
-		var data []byte
-		if err := feed.Scan(&data); err != nil {
-			return nil, err
 		}
 		var streamEvent streampb.StreamEvent
 		if err := protoutil.Unmarshal(data, &streamEvent); err != nil {
