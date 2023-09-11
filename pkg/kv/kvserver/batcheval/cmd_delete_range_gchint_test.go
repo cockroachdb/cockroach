@@ -30,7 +30,7 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -38,12 +38,14 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
 
-	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	s := srv.ApplicationLayer()
+
+	store, err := srv.StorageLayer().GetStores().(*kvserver.Stores).GetStore(srv.StorageLayer().GetFirstStoreID())
 	require.NoError(t, err)
 
-	key := roachpb.Key("b")
+	key := append(s.Codec().TenantPrefix(), roachpb.Key("b")...)
 	content := []byte("test")
 
 	repl := store.LookupReplica(roachpb.RKey(key))
@@ -60,7 +62,7 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	r, err := s.LookupRange(key)
+	r, err := srv.LookupRange(key)
 	require.NoError(t, err, "failed to lookup range")
 
 	drArgs := &kvpb.DeleteRangeRequest{

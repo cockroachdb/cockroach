@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -89,20 +90,33 @@ func TestSSLEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		// This test is verifying the (unimplemented) authentication of SSL
 		// client certificates over HTTP endpoints. Web session authentication
 		// is disabled in order to avoid the need to authenticate the individual
 		// clients being instantiated.
 		InsecureWebAccess: true,
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+
+	if srv.TenantController().StartedDefaultTestTenant() {
+		// Enable access to the nodes endpoint for the test tenant.
+		_, err := srv.SystemLayer().SQLConn(t, "").Exec(
+			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+
+		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanViewNodeInfo: "true",
+		}, "")
+	}
+
+	s := srv.ApplicationLayer()
 
 	newRPCContext := func(insecure bool, user username.SQLUsername) *rpc.Context {
 		opts := rpc.DefaultContextOptions()
 		opts.Insecure = insecure
 		opts.User = user
-		opts.Stopper = s.Stopper()
+		opts.Stopper = s.AppStopper()
 		opts.Settings = s.ClusterSettings()
 		return rpc.NewContext(ctx, opts)
 	}
@@ -117,9 +131,6 @@ func TestSSLEnforcement(t *testing.T) {
 	noCertsContext := insecureCtx{}
 	// Plain http.
 	insecureContext := newRPCContext(true, username.TestUserName())
-
-	kvGet := &kvpb.GetRequest{}
-	kvGet.Key = roachpb.Key("/")
 
 	for _, tc := range []struct {
 		path string
@@ -164,7 +175,13 @@ func TestSSLEnforcement(t *testing.T) {
 		{ts.URLPrefix, noCertsContext, http.StatusNotFound},
 		{ts.URLPrefix, insecureContext, http.StatusTemporaryRedirect},
 	} {
-		t.Run("", func(t *testing.T) {
+		t.Run(tc.path, func(t *testing.T) {
+			if tc.path == apiconstants.StatusPrefix+"nodes" && srv.TenantController().StartedDefaultTestTenant() {
+				// TODO(multitenant): The /_status/nodes endpoint should be
+				// available subject to a tenant capability.
+				skip.WithIssue(t, 110009)
+			}
+
 			client, err := tc.ctx.GetHTTPClient()
 			if err != nil {
 				t.Fatal(err)

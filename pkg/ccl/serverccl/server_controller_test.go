@@ -535,8 +535,11 @@ func TestServerControllerLoginLogout(t *testing.T) {
 
 	ctx := context.Background()
 
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110002),
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	client, err := s.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
 	require.NoError(t, err)
@@ -556,8 +559,11 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	require.ElementsMatch(t, []string{"", ""}, cookieValues)
 
 	// Need a new server because the HTTP Client is memoized.
-	s2 := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s2.Stopper().Stop(ctx)
+	srv2 := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110002),
+	})
+	defer srv2.Stopper().Stop(ctx)
+	s2 := srv2.ApplicationLayer()
 
 	clientMT, err := s2.GetAuthenticatedHTTPClient(false, serverutils.MultiTenantSession)
 	require.NoError(t, err)

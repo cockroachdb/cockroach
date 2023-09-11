@@ -29,9 +29,14 @@ func TestEnqueueRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer testCluster.Stopper().Stop(context.Background())
+	s0 := testCluster.Server(0).SystemLayer()
 
 	// Up-replicate r1 to all 3 nodes. We use manual replication to avoid lease
 	// transfers causing temporary conditions in which no store is the
@@ -85,7 +90,7 @@ func TestEnqueueRange(t *testing.T) {
 				RangeID: tc.rangeID,
 			}
 			var resp serverpb.EnqueueRangeResponse
-			if err := srvtestutils.PostAdminJSONProto(testCluster.Server(0), "enqueue_range", req, &resp); err != nil {
+			if err := srvtestutils.PostAdminJSONProto(s0, "enqueue_range", req, &resp); err != nil {
 				t.Fatal(err)
 			}
 			if e, a := tc.expectedDetails, len(resp.Details); e != a {

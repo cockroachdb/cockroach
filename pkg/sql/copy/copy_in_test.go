@@ -749,19 +749,22 @@ func TestMessageSizeTooBig(t *testing.T) {
 // Test that a big copy results in an error and not crash.
 func TestCopyExceedsSQLMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 
 	for _, v := range []string{"on", "off"} {
 		for _, a := range []string{"on", "off"} {
 			for _, f := range []string{"on", "off"} {
 				t.Run(fmt.Sprintf("vector=%v/atomic=%v/fastpath=%v", v, a, f), func(t *testing.T) {
+					defer log.Scope(t).Close(t)
+
 					ctx := context.Background()
 					// Sometimes startup fails with lower than 10MiB.
 					params := base.TestServerArgs{
 						SQLMemoryPoolSize: 10 << 20,
 					}
-					s := serverutils.StartServerOnly(t, params)
-					defer s.Stopper().Stop(ctx)
+					srv := serverutils.StartServerOnly(t, params)
+					defer srv.Stopper().Stop(ctx)
+
+					s := srv.ApplicationLayer()
 
 					url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
 					defer cleanup()

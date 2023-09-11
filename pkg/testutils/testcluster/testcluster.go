@@ -1803,7 +1803,7 @@ func (tc *TestCluster) RestartServerWithInspect(
 						for i := 0; i < rpc.NumConnectionClasses; i++ {
 							class := rpc.ConnectionClass(i)
 							sl := s.StorageLayer()
-							if _, err := sl.NodeDialer().(*nodedialer.Dialer).Dial(ctx, sl.NodeID(), class); err != nil {
+							if _, err := s.SystemLayer().NodeDialer().(*nodedialer.Dialer).Dial(ctx, sl.NodeID(), class); err != nil {
 								return errors.Wrapf(err, "connecting n%d->n%d (class %v)", sl.NodeID(), sl.NodeID(), class)
 							}
 						}

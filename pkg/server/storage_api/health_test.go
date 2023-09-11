@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHealthAPI(t *testing.T) {
@@ -109,13 +111,26 @@ func TestLivenessAPI(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
-	startTime := tc.Server(0).Clock().PhysicalNow()
+	// The liveness endpoint needs a special tenant capability.
+	if tc.Server(0).TenantController().StartedDefaultTestTenant() {
+		// Enable access to the nodes endpoint for the test tenant.
+		_, err := tc.SystemLayer(0).SQLConn(t, "").Exec(
+			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+
+		tc.WaitForTenantCapabilities(t, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanViewNodeInfo: "true",
+		})
+	}
+
+	ts := tc.Server(0).ApplicationLayer()
+	startTime := ts.Clock().PhysicalNow()
 
 	// We need to retry because the gossiping of liveness status is an
 	// asynchronous process.
 	testutils.SucceedsSoon(t, func() error {
 		var resp serverpb.LivenessResponse
-		if err := serverutils.GetJSONProto(tc.Server(0), "/_admin/v1/liveness", &resp); err != nil {
+		if err := serverutils.GetJSONProto(ts, "/_admin/v1/liveness", &resp); err != nil {
 			return err
 		}
 		if a, e := len(resp.Livenesses), tc.NumServers(); a != e {
@@ -126,7 +141,7 @@ func TestLivenessAPI(t *testing.T) {
 			livenessMap[l.NodeID] = l
 		}
 		for i := 0; i < tc.NumServers(); i++ {
-			s := tc.Server(i)
+			s := tc.Server(i).StorageLayer()
 			sl, ok := livenessMap[s.NodeID()]
 			if !ok {
 				return errors.Errorf("found no liveness record for node %d", s.NodeID())

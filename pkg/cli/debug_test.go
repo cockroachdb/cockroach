@@ -97,11 +97,17 @@ func TestParseGossipValues(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 
+	sys := tc.Server(0).SystemLayer()
+
 	var gossipInfo gossip.InfoStatus
-	if err := serverutils.GetJSONProto(tc.Server(0), "/_status/gossip/1", &gossipInfo); err != nil {
+	if err := serverutils.GetJSONProto(sys, "/_status/gossip/1", &gossipInfo); err != nil {
 		t.Fatal(err)
 	}
 

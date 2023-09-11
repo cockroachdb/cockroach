@@ -71,7 +71,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) {
 	testServer := h.tc.Server(0)
 	tenantState := &Tenant{t: h.t, userToDB: make(map[string]*sqlutils.SQLRunner)}
 	if tenID == roachpb.SystemTenantID {
-		tenantState.ApplicationLayerInterface = testServer
+		tenantState.ApplicationLayerInterface = testServer.SystemLayer()
 		userSQLDB := tenantState.ApplicationLayerInterface.SQLConn(h.t, "")
 		tenantState.curDB = sqlutils.MakeSQLRunner(userSQLDB)
 		tenantState.userToDB[username.RootUserName().Normalized()] = tenantState.curDB
@@ -80,7 +80,7 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) {
 			TenantID: tenID,
 		}
 		var err error
-		tenantState.ApplicationLayerInterface, err = testServer.StartTenant(ctx, tenantArgs)
+		tenantState.ApplicationLayerInterface, err = testServer.TenantController().StartTenant(ctx, tenantArgs)
 		require.NoError(h.t, err)
 
 		tenantSQLDB := tenantState.ApplicationLayerInterface.SQLConn(h.t, "")
