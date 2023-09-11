@@ -66,7 +66,7 @@ export default function (props: GraphDashboardProps) {
             name="cr.node.sql.new_conns"
             title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
-            downsampler={TimeSeriesQueryAggregator.SUM}
+            downsampler={TimeSeriesQueryAggregator.MAX}
             nonNegativeRate
           />
         ))}
