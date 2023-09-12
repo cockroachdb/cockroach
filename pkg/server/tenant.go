@@ -1175,11 +1175,9 @@ func makeTenantSQLServerArgs(
 
 	// Initialize the protectedts subsystem in multi-tenant clusters.
 	var protectedTSProvider protectedts.Provider
-	protectedtsKnobs, _ := baseCfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
 	pp, err := ptprovider.New(ptprovider.Config{
 		DB:       internalExecutorFactory,
 		Settings: st,
-		Knobs:    protectedtsKnobs,
 		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
 			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
 				circularJobRegistry, jobsprotectedts.Jobs,

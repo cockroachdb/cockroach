@@ -633,11 +633,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	externalStorage := externalStorageBuilder.makeExternalStorage
 	externalStorageFromURI := externalStorageBuilder.makeExternalStorageFromURI
 
-	protectedtsKnobs, _ := cfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
 	protectedtsProvider, err := ptprovider.New(ptprovider.Config{
 		DB:       insqlDB,
 		Settings: st,
-		Knobs:    protectedtsKnobs,
 		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
 			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
 				jobRegistry, jobsprotectedts.Jobs,

@@ -33,7 +33,6 @@ type Config struct {
 	DB                   isql.DB
 	Stores               *kvserver.Stores
 	ReconcileStatusFuncs ptreconcile.StatusFuncs
-	Knobs                *protectedts.TestingKnobs
 }
 
 // Provider is the concrete implementation of protectedts.Provider interface.
@@ -49,7 +48,7 @@ func New(cfg Config) (protectedts.Provider, error) {
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
 	}
-	storage := ptstorage.New(cfg.Settings, cfg.Knobs)
+	storage := ptstorage.New(cfg.Settings)
 	reconciler := ptreconcile.New(cfg.Settings, cfg.DB, storage, cfg.ReconcileStatusFuncs)
 	cache := ptcache.New(ptcache.Config{
 		DB:       cfg.DB,

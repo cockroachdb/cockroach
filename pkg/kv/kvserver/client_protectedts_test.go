@@ -174,7 +174,7 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	beforeWrites := s0.Clock().Now()
 	gcSoon()
 
-	pts := ptstorage.New(s0.ClusterSettings(), nil)
+	pts := ptstorage.New(s0.ClusterSettings())
 	ptsWithDB := ptstorage.WithDatabase(pts, s0.InternalDB().(isql.DB))
 	ptsRec := ptpb.Record{
 		ID:        uuid.MakeV4().GetBytes(),

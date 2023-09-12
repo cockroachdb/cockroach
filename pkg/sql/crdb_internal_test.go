@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1695,47 +1694,6 @@ func scanRecord(
 	return systemRowData, virtualRowData
 }
 
-func TestVirtualPTSTableDeprecated(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx2 := context.Background()
-
-	var testServerArgs base.TestServerArgs
-	ptsKnobs := &protectedts.TestingKnobs{}
-	ptsKnobs.DisableProtectedTimestampForMultiTenant = true
-	testServerArgs.Knobs.ProtectedTS = ptsKnobs
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: testServerArgs})
-	defer tc.Stopper().Stop(ctx2)
-
-	s := tc.Server(0)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-	internalDB := s.InternalDB().(isql.DB)
-	ptm := ptstorage.New(s.ClusterSettings(), ptsKnobs)
-
-	t.Run("nil-targets", func(t *testing.T) {
-		rec := &ptpb.Record{
-			ID:        uuid.MakeV4().GetBytes(),
-			Timestamp: tc.Server(0).Clock().Now(),
-			Mode:      ptpb.PROTECT_AFTER,
-			DeprecatedSpans: []roachpb.Span{
-				{
-					Key:    keys.SystemSQLCodec.TablePrefix(42),
-					EndKey: keys.SystemSQLCodec.TablePrefix(42).PrefixEnd(),
-				},
-			},
-			MetaType: "foo",
-		}
-
-		protect(t, ctx2, internalDB, ptm, rec)
-		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
-		require.Equal(t, []byte(nil), virtualRow.decodedMeta)
-		require.Equal(t, []byte(nil), virtualRow.internalMeta)
-		require.Equal(t, []byte(nil), virtualRow.decodedTargets)
-		require.Equal(t, -1, virtualRow.numRanges)
-	})
-}
-
 // TestVirtualPTSTable asserts the behavior of
 // crdb_internal.kv_protected_ts_records, which includes showing records from
 // the underlying system table and decoding them.
@@ -1745,13 +1703,13 @@ func TestVirtualPTSTable(t *testing.T) {
 
 	ctx2 := context.Background()
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx2)
+	srv, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx2)
 
-	s := tc.Server(0)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	s := srv.ApplicationLayer()
+	sqlDB := sqlutils.MakeSQLRunner(sqlConn)
 	internalDB := s.InternalDB().(isql.DB)
-	ptm := ptstorage.New(s.ClusterSettings(), nil)
+	ptm := ptstorage.New(s.ClusterSettings())
 
 	tableTargets := func(ids ...uint32) *ptpb.Target {
 		var tableIDs []descpb.ID
@@ -1795,7 +1753,7 @@ func TestVirtualPTSTable(t *testing.T) {
 		rec := jobsprotectedts.MakeRecord(
 			uuid.MakeV4(),
 			int64(job.ID()),
-			tc.Server(0).Clock().Now(),
+			s.Clock().Now(),
 			[]roachpb.Span{},
 			jobsprotectedts.Jobs,
 			tableTargets(),
@@ -1838,7 +1796,7 @@ func TestVirtualPTSTable(t *testing.T) {
 		rec := jobsprotectedts.MakeRecord(
 			uuid.MakeV4(),
 			sj.ScheduleID(),
-			tc.Server(0).Clock().Now(),
+			s.Clock().Now(),
 			[]roachpb.Span{},
 			jobsprotectedts.Schedules,
 			tableTargets(),
@@ -1875,7 +1833,7 @@ func TestVirtualPTSTable(t *testing.T) {
 
 		rec := ptpb.Record{
 			ID:        uuid.MakeV4().GetBytes(),
-			Timestamp: tc.Server(0).Clock().Now(),
+			Timestamp: s.Clock().Now(),
 			Mode:      ptpb.PROTECT_AFTER,
 			MetaType:  "foo",
 			Meta:      []byte("bar"),
@@ -1894,7 +1852,7 @@ func TestVirtualPTSTable(t *testing.T) {
 	t.Run("last-updated", func(t *testing.T) {
 		rec := ptpb.Record{
 			ID:        uuid.MakeV4().GetBytes(),
-			Timestamp: tc.Server(0).Clock().Now(),
+			Timestamp: s.Clock().Now(),
 			Mode:      ptpb.PROTECT_AFTER,
 			MetaType:  "foo",
 			Meta:      []byte("bar"),
