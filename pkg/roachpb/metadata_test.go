@@ -537,7 +537,50 @@ func TestGCHint(t *testing.T) {
 			}
 		})
 	}
-	// TODO(pavelkalinnikov): test Merge with non-empty hints.
+
+	ts4 := makeTS(4567, 5)
+	for _, tc := range []struct {
+		lhs    GCHint
+		rhs    GCHint
+		lEmpty bool
+		rEmpty bool
+		want   GCHint
+	}{
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts1, empty), want: hint(empty, ts1, ts3)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts1, ts2), want: hint(empty, ts1, ts3)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts1, ts3), want: hint(empty, ts1, ts3)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts1, ts4), want: hint(empty, ts1, ts4)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts2, empty), want: hint(empty, ts1, ts3)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts2, ts3), want: hint(empty, ts1, ts3)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts2, ts4), want: hint(empty, ts1, ts4)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts3, empty), want: hint(empty, ts1, ts3)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts3, ts4), want: hint(empty, ts1, ts4)},
+
+		{lhs: hint(ts1, empty, empty), rhs: hint(ts2, empty, empty), lEmpty: false, rEmpty: false,
+			want: hint(ts2, empty, empty)},
+		{lhs: hint(ts1, empty, empty), rhs: hint(ts2, empty, empty), lEmpty: true, rEmpty: false,
+			want: hint(ts2, empty, empty)},
+		{lhs: hint(ts1, empty, empty), rhs: hint(ts2, empty, empty), lEmpty: false, rEmpty: true,
+			want: hint(ts2, empty, empty)},
+		{lhs: hint(ts1, empty, empty), rhs: hint(ts2, empty, empty), lEmpty: true, rEmpty: true,
+			want: hint(ts2, empty, empty)},
+
+		{lhs: hint(ts2, empty, empty), rhs: hint(empty, ts1, ts3), lEmpty: false, rEmpty: false,
+			want: hint(empty, ts1, ts3)},
+		{lhs: hint(ts2, empty, empty), rhs: hint(empty, ts1, ts3), lEmpty: true, rEmpty: false,
+			want: hint(empty, ts1, ts3)},
+		{lhs: hint(ts2, empty, empty), rhs: hint(empty, ts1, ts3), lEmpty: false, rEmpty: true,
+			want: hint(ts2, ts1, ts3)},
+		{lhs: hint(ts2, empty, empty), rhs: hint(empty, ts1, ts3), lEmpty: true, rEmpty: true,
+			want: hint(ts2, ts1, ts3)},
+	} {
+		t.Run("Merge", func(t *testing.T) {
+			checkInvariants(t, tc.lhs)
+			checkInvariants(t, tc.rhs)
+			got := checkMerge(t, tc.lhs, tc.rhs, tc.lEmpty, tc.rEmpty)
+			require.Equal(t, tc.want, got)
+		})
+	}
 
 	for _, tc := range []struct {
 		was  GCHint
