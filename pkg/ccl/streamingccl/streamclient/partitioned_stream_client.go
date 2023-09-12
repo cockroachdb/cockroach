@@ -83,12 +83,6 @@ func (p *partitionedStreamClient) Create(
 	return replicationProducerSpec, err
 }
 
-func (p *partitionedStreamClient) SetupSpanConfigsStream(
-	ctx context.Context, tenant roachpb.TenantName,
-) (Subscription, error) {
-	return nil, errors.New("partitioned stream client cannot setup a span config stream")
-}
-
 // Dial implements Client interface.
 func (p *partitionedStreamClient) Dial(ctx context.Context) error {
 	p.mu.Lock()

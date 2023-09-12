@@ -61,7 +61,7 @@ func (t *tsqueryFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	d := memo.ExtractConstDatum(constantVal)
 	if d.ResolvedType() != types.TSQuery {
 		panic(errors.AssertionFailedf(
-			"trying to apply tsvector inverted index to unsupported type %s", d.ResolvedType(),
+			"trying to apply tsvector inverted index to unsupported type %s", d.ResolvedType().SQLStringForError(),
 		))
 	}
 	q := d.(*tree.DTSQuery).TSQuery
