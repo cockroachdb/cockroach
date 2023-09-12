@@ -278,7 +278,9 @@ func GetStreamIngestionStats(
 	if err != nil {
 		return nil, err
 	}
-	client, err := streamclient.GetFirstActiveClient(ctx, stats.IngestionProgress.StreamAddresses)
+	// No need to pass a db into this call because the StreamAddresses do not have
+	// an external connection url scheme.
+	client, err := streamclient.GetFirstActiveClient(ctx, stats.IngestionProgress.StreamAddresses, nil)
 	if err != nil {
 		return nil, err
 	}

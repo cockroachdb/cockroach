@@ -173,7 +173,7 @@ func newHeartbeatSender(
 ) (*heartbeatSender, error) {
 
 	streamID := streampb.StreamID(spec.StreamID)
-	streamClient, err := streamclient.GetFirstActiveClient(ctx, spec.StreamAddresses, streamclient.WithStreamID(streamID))
+	streamClient, err := streamclient.GetFirstActiveClient(ctx, spec.StreamAddresses, flowCtx.Cfg.DB, streamclient.WithStreamID(streamID))
 	if err != nil {
 		return nil, err
 	}
