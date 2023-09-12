@@ -161,7 +161,10 @@ func (w *lockTableWaiterImpl) WaitOn(
 		// about another contending transaction on newStateC.
 		case <-newStateC:
 			timerC = nil
-			state := guard.CurState()
+			state, err := guard.CurState()
+			if err != nil {
+				return kvpb.NewError(err)
+			}
 			log.VEventf(ctx, 3, "lock wait-queue event: %s", state)
 			tracer.notify(ctx, state)
 			switch state.kind {
