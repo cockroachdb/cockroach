@@ -199,11 +199,9 @@ var validationMap = []struct {
 			"OwnsSequenceIds": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
-			"ComputeExpr": {status: iSolemnlySwearThisFieldIsValidated},
-			"Virtual":     {status: iSolemnlySwearThisFieldIsValidated},
-			"PGAttributeNum": {
-				status: todoIAmKnowinglyAddingTechDebt,
-				reason: "initial import: TODO(features): add validation"},
+			"ComputeExpr":               {status: iSolemnlySwearThisFieldIsValidated},
+			"Virtual":                   {status: iSolemnlySwearThisFieldIsValidated},
+			"PGAttributeNum":            {status: thisFieldReferencesNoObjects},
 			"AlterColumnTypeInProgress": {status: thisFieldReferencesNoObjects},
 			"SystemColumnKind":          {status: thisFieldReferencesNoObjects},
 			"OnUpdateExpr":              {status: iSolemnlySwearThisFieldIsValidated},
@@ -2905,6 +2903,9 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ParentID:                1,
 				UnexposedParentSchemaID: keys.PublicSchemaID,
 				FormatVersion:           descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "foo_1", Type: types.String},
+				},
 				OutboundFKs: []descpb.ForeignKeyConstraint{
 					{
 						Name:                "fk",
@@ -2921,6 +2922,9 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ParentID:                1,
 				UnexposedParentSchemaID: keys.PublicSchemaID,
 				FormatVersion:           descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "baz_1", Type: types.String},
+				},
 			}},
 		},
 		{ // 2
@@ -2993,6 +2997,84 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					},
 				},
 			},
+		},
+		{ // 5
+			err: `invalid foreign key backreference: missing column=52.2`,
+			desc: descpb.TableDescriptor{
+				ID:                      51,
+				Name:                    "foo",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:   1,
+					Name: "bar",
+				},
+				InboundFKs: []descpb.ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   51,
+						ReferencedColumnIDs: []descpb.ColumnID{1},
+						OriginTableID:       52,
+						OriginColumnIDs:     []descpb.ColumnID{2},
+					},
+				},
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				ID:                      52,
+				Name:                    "baz",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
+				OutboundFKs: []descpb.ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   51,
+						ReferencedColumnIDs: []descpb.ColumnID{1},
+						OriginTableID:       52,
+						OriginColumnIDs:     []descpb.ColumnID{2},
+					},
+				},
+			}},
+		},
+		{ // 5
+			err: `invalid foreign key backreference: missing column=51.1`,
+			desc: descpb.TableDescriptor{
+				ID:                      51,
+				Name:                    "foo",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:   1,
+					Name: "bar",
+				},
+				OutboundFKs: []descpb.ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   52,
+						ReferencedColumnIDs: []descpb.ColumnID{2},
+						OriginTableID:       51,
+						OriginColumnIDs:     []descpb.ColumnID{1},
+					},
+				},
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				ID:                      52,
+				Name:                    "baz",
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				FormatVersion:           descpb.InterleavedFormatVersion,
+				InboundFKs: []descpb.ForeignKeyConstraint{
+					{
+						Name:                "fk",
+						ReferencedTableID:   52,
+						ReferencedColumnIDs: []descpb.ColumnID{2},
+						OriginTableID:       51,
+						OriginColumnIDs:     []descpb.ColumnID{1},
+					},
+				},
+			}},
 		},
 		// Add some expressions with invalid type references.
 		{ // 5

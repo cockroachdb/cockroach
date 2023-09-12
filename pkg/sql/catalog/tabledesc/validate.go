@@ -466,6 +466,43 @@ func (desc *wrapper) validateOutboundFK(
 		return errors.AssertionFailedf("referenced table %q (%d) is dropped",
 			referencedTable.GetName(), referencedTable.GetID())
 	}
+
+	if len(fk.ReferencedColumnIDs) == 0 {
+		return errors.AssertionFailedf("invalid foreign key: no referenced columns")
+	}
+
+	if len(fk.OriginColumnIDs) == 0 {
+		return errors.AssertionFailedf("invalid foreign key: no origin columns")
+	}
+
+	// TODO is this a valid assertion?
+	if len(fk.ReferencedColumnIDs) != len(fk.OriginColumnIDs) {
+		return errors.AssertionFailedf("invalid foreign key: mismatch in number of origin and referenced columns")
+	}
+
+	// Validate that all referenced columns exist and are not dropped.
+	referencedColsByIDs := catalog.ColumnsByIDs(referencedTable)
+	for _, colID := range fk.ReferencedColumnIDs {
+		col, ok := referencedColsByIDs[colID]
+		if !ok {
+			return errors.AssertionFailedf(
+				"invalid foreign key to table %q: missing column=%d.%d",
+				referencedTable.GetName(),
+				referencedTable.GetID(),
+				colID,
+			)
+		}
+		if col.Dropped() { // TODO What are the possible states here and which are invalid??
+			return errors.AssertionFailedf(
+				"referenced column %q.%q (%d.%d) is dropped",
+				referencedTable.GetName(),
+				col.GetName(),
+				referencedTable.GetID(),
+				col.GetID(),
+			)
+		}
+	}
+
 	return nil
 }
 
@@ -484,6 +521,7 @@ func (desc *wrapper) validateOutboundFKBackReference(
 			return nil
 		}
 	}
+
 	return errors.AssertionFailedf("missing fk back reference %q to %q from %q",
 		fk.Name, desc.Name, referencedTable.GetName())
 }
@@ -496,17 +534,37 @@ func (desc *wrapper) validateInboundFK(
 		return errors.Wrapf(err,
 			"invalid foreign key backreference: missing table=%d", backref.OriginTableID)
 	}
+
 	if originTable.Dropped() {
 		return errors.AssertionFailedf("origin table %q (%d) is dropped",
 			originTable.GetName(), originTable.GetID())
 	}
+
+	foundFK := false
 	for _, fk := range originTable.OutboundForeignKeys() {
 		if fk.GetReferencedTableID() == desc.ID && fk.GetName() == backref.Name {
-			return nil
+			foundFK = true
+			break
 		}
 	}
-	return errors.AssertionFailedf("missing fk forward reference %q to %q from %q",
-		backref.Name, desc.Name, originTable.GetName())
+
+	if !foundFK {
+		return errors.AssertionFailedf("missing fk forward reference %q to %q from %q",
+			backref.Name, desc.Name, originTable.GetName())
+	}
+
+	originColsByIDs := catalog.ColumnsByIDs(originTable)
+	for _, colID := range backref.OriginColumnIDs {
+		col, ok := originColsByIDs[colID]
+		if !ok {
+			return errors.AssertionFailedf("invalid foreign key backreference: missing column=%d.%d", originTable.GetID(), colID)
+		}
+		if col.Dropped() {
+			return errors.AssertionFailedf("origin column %q.%q (%d.%d) is dropped", originTable.GetName(), col.GetName(), originTable.GetID(), col.GetID())
+		}
+	}
+
+	return nil
 }
 
 func (desc *wrapper) matchingPartitionbyAll(indexI catalog.Index) bool {
