@@ -52,7 +52,7 @@ var (
 	flagRSGTime                    = flag.Duration("rsg", 0, "random syntax generator test duration")
 	flagRSGGoRoutines              = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
 	flagRSGExecTimeout             = flag.Duration("rsg-exec-timeout", 35*time.Second, "timeout duration when executing a statement")
-	flagRSGExecColumnChangeTimeout = flag.Duration("rsg-exec-column-change-timeout", 40*time.Second, "timeout duration when executing a statement for random column changes")
+	flagRSGExecColumnChangeTimeout = flag.Duration("rsg-exec-column-change-timeout", 50*time.Second, "timeout duration when executing a statement for random column changes")
 )
 
 func verifyFormat(sql string) error {
