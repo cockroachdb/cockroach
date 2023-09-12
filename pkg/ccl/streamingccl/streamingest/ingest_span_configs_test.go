@@ -340,7 +340,7 @@ func createDummySpanConfigIngestor(
 		true /* restoreTenantFromStream */)
 	require.NoError(t, err)
 
-	session, err := h.SysServer.SQLLivenessProvider().(sqlliveness.Provider).Session(ctx)
+	session, err := h.TestServer.StorageLayer().SQLLivenessProvider().(sqlliveness.Provider).Session(ctx)
 	require.NoError(t, err)
 
 	stopperCh := make(chan struct{})

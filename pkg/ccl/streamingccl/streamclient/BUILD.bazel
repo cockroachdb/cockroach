@@ -67,6 +67,7 @@ go_test(
         "//pkg/ccl/streamingccl/replicationtestutils",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/keys",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
