@@ -61,11 +61,6 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 
 	firstServer := testCluster.Server(0)
 
-	// Enable zone configs for secondary tenants.
-	systemSqlDb := firstServer.SystemLayer().SQLConn(t, "system")
-	_, err := systemSqlDb.Exec("ALTER TENANT ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true")
-	require.NoError(t, err)
-
 	sqlDB := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 
 	sqlDB.Exec(t, `CREATE DATABASE roachblog`)
@@ -95,7 +90,7 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	}
 
 	var resp serverpb.DataDistributionResponse
-	err = serverutils.GetJSONProto(firstServer, adminPrefix+"data_distribution", &resp)
+	err := serverutils.GetJSONProto(firstServer, adminPrefix+"data_distribution", &resp)
 	require.NoError(t, err)
 
 	actualZoneConfigNames := map[string]struct{}{}

@@ -177,10 +177,10 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 		})
 
 		sqlDB.CheckQueryResults(t, "SHOW SCHEMAS", [][]string{
-			{"crdb_internal", "NULL"},
-			{"information_schema", "NULL"},
-			{"pg_catalog", "NULL"},
-			{"pg_extension", "NULL"},
+			{"crdb_internal", "node"},
+			{"information_schema", "node"},
+			{"pg_catalog", "node"},
+			{"pg_extension", "node"},
 			{"public", "admin"},
 		})
 

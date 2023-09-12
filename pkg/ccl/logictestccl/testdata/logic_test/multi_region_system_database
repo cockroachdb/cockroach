@@ -1,5 +1,4 @@
 # LogicTest: 3node-tenant-multiregion
-# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.multiregion.enabled=true
 
 # Only the root user can modify the system database's regions.
 user root

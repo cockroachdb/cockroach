@@ -3189,7 +3189,6 @@ func TestLeaseBulkInsertWithImplicitTxn(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	s := srv.Server(0).ApplicationLayer()
 	conn := srv.ServerConn(0)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	// Setup tables for the test.
 	_, err := conn.Exec(`
 CREATE TABLE t1(val int);

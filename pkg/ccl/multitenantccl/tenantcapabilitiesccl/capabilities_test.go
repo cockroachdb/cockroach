@@ -17,8 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -87,20 +85,8 @@ func TestDataDriven(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 		systemSQLDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
-		// Create a tenant; we also want to allow test writers to issue
-		// ALTER TABLE ... SPLIT statements, so configure the settings as such.
-		// TODO(knz): Once https://github.com/cockroachdb/cockroach/issues/96512 is
-		// resolved, we could override this cluster setting for the secondary tenant
-		// using SQL instead of reaching in using this testing knob. One way to do
-		// so would be to perform the override for all tenants and only then
-		// initializing our test tenant; However, the linked issue above prevents
-		// us from being able to do so.
-		settings := cluster.MakeTestingClusterSettings()
-		sql.SecondaryTenantSplitAtEnabled.Override(ctx, &settings.SV, true)
-		sql.SecondaryTenantScatterEnabled.Override(ctx, &settings.SV, true)
 		tenantArgs := base.TestTenantArgs{
 			TenantID: serverutils.TestTenantID(),
-			Settings: settings,
 		}
 		testTenantInterface, err := tc.Server(0).StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)

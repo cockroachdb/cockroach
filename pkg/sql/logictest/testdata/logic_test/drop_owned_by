@@ -484,10 +484,10 @@ SET DATABASE = d1
 query TT rowsort
 SHOW SCHEMAS FROM d1
 ----
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
 public              admin
 s1                  root
 s2                  root
@@ -526,10 +526,10 @@ DROP OWNED BY testuser
 query TT rowsort
 SHOW SCHEMAS FROM d1
 ----
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
 public              admin
 s1                  root
 s2                  root
@@ -560,10 +560,10 @@ SET DATABASE = d2
 query TT rowsort
 SHOW SCHEMAS FROM d2
 ----
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
 public              admin
 s1                  root
 s2                  testuser
@@ -587,10 +587,10 @@ DROP OWNED BY testuser
 query TT rowsort
 SHOW SCHEMAS FROM d2
 ----
-crdb_internal       NULL
-information_schema  NULL
-pg_catalog          NULL
-pg_extension        NULL
+crdb_internal       node
+information_schema  node
+pg_catalog          node
+pg_extension        node
 public              admin
 s1                  root
 

@@ -1,5 +1,4 @@
 # LogicTest: 3node-tenant-multiregion
-# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.manual_range_split.enabled=true sql.virtual_cluster.feature_access.zone_configs.enabled=true sql.virtual_cluster.feature_access.multiregion.enabled=true
 
 # Create a table on the secondary tenant.
 statement ok

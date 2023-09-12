@@ -6410,7 +6410,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		// Check that we have imported 4 schemas.
 		expectedSchemaNames := [][]string{{"bar"}, {"baz"}, {"foo"}, {"public"}}
 		sqlDB.CheckQueryResults(t,
-			`SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner IS NOT NULL ORDER BY schema_name`,
+			`SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner != 'node' ORDER BY schema_name`,
 			expectedSchemaNames)
 
 		// Check that we have a test table in each schema with the expected content.
@@ -6489,7 +6489,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 			sqlDB.Exec(t, `DROP TABLE schemadb.public.test`)
 		}
 		sqlDB.CheckQueryResults(t,
-			`SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner <> 'NULL' ORDER BY schema_name`,
+			`SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner <> 'node' ORDER BY schema_name`,
 			[][]string{{"bar"}, {"public"}})
 	})
 
@@ -6597,7 +6597,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		}
 
 		// As a final sanity check that the schemas have been removed.
-		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner IS NOT NULL`,
+		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner != 'node'`,
 			[][]string{{"public"}})
 
 		// Check that the database descriptor has been updated with the removed schemas.

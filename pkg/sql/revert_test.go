@@ -48,7 +48,6 @@ func TestTableRollback(t *testing.T) {
 	tt := s.ApplicationLayer()
 	codec, sv := tt.Codec(), &tt.ClusterSettings().SV
 	execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, sv, true)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, `CREATE DATABASE IF NOT EXISTS test`)

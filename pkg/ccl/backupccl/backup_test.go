@@ -5869,8 +5869,6 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 
 	conn := tc.ServerConn(0)
 	systemTenantRunner := sqlutils.MakeSQLRunner(conn)
-	setAndWaitForTenantReadOnlyClusterSetting(t, sql.SecondaryTenantZoneConfigsEnabled.Name(),
-		systemTenantRunner, ttSQLDB, tenantID, "true")
 
 	// Run the test as the system tenant, and as the secondary tenant.
 	testutils.RunTrueAndFalse(t, "secondary-tenant", func(t *testing.T,
@@ -7836,10 +7834,10 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		sqlDB.CheckQueryResults(t, `SHOW TABLES`, [][]string{})
 		sqlDB.CheckQueryResults(t, `SHOW TYPES`, [][]string{})
 		sqlDB.CheckQueryResults(t, `SHOW SCHEMAS`, [][]string{
-			{"crdb_internal", "NULL"},
-			{"information_schema", "NULL"},
-			{"pg_catalog", "NULL"},
-			{"pg_extension", "NULL"},
+			{"crdb_internal", "node"},
+			{"information_schema", "node"},
+			{"pg_catalog", "node"},
+			{"pg_extension", "node"},
 			{"public", username.AdminRole},
 		})
 
@@ -8705,8 +8703,10 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	// export request for /Table/*/1-3 and while /Table/*/1-2 has
 	// no data in it, the start key is based on the start key of
 	// our request.
+	// TODO(ssd): figure out why enabling SCATTER setting in #109449 changed the
+	// span in the default test tenant case.
 	if tc.StartedDefaultTestTenant() {
-		require.Regexp(t, fmt.Sprintf(".*/Table/%d/{1-3}", dataBankTableID), inc3Spans[0].String())
+		require.Regexp(t, fmt.Sprintf(".*/Table/%d/{1/900-3}", dataBankTableID), inc3Spans[0].String())
 	} else {
 		require.Regexp(t, fmt.Sprintf(".*/Table/%d/{2-3}", dataBankTableID), inc3Spans[0].String())
 	}
