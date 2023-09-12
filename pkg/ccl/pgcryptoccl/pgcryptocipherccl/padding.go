@@ -51,3 +51,17 @@ func pkcsUnpad(data []byte) ([]byte, error) {
 
 	return data[:len(data)-int(paddingLen)], nil
 }
+
+// zeroPadOrTruncate pads a slice of bytes with zeroes if its length is smaller
+// than size and truncates the slice to length size otherwise.
+func zeroPadOrTruncate(data []byte, size int) ([]byte, error) {
+	if size < 0 {
+		return nil, errors.AssertionFailedf("cannot zero pad or truncate to negative size")
+	}
+	if len(data) >= size {
+		return data[:size], nil
+	}
+	paddedData := make([]byte, size)
+	copy(paddedData, data)
+	return paddedData, nil
+}

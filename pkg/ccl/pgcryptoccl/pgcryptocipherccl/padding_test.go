@@ -110,3 +110,49 @@ func TestPKCSUnpad(t *testing.T) {
 		})
 	}
 }
+
+func TestZeroPadOrTruncate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for name, tc := range map[string]struct {
+		data        []byte
+		size        int
+		expected    []byte
+		expectedErr string
+	}{
+		"data length less than size": {
+			data:     []byte{1, 2},
+			size:     3,
+			expected: []byte{1, 2, 0},
+		},
+		"data length equal to size": {
+			data:     []byte{1, 2, 3},
+			size:     3,
+			expected: []byte{1, 2, 3},
+		},
+		"data length greater than size": {
+			data:     []byte{1, 2, 3, 4},
+			size:     3,
+			expected: []byte{1, 2, 3},
+		},
+		"empty data": {
+			data:     nil,
+			size:     3,
+			expected: []byte{0, 0, 0},
+		},
+		"negative size": {
+			data:        []byte{1, 2, 3},
+			size:        -1,
+			expectedErr: "cannot zero pad or truncate to negative size",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			actual, err := zeroPadOrTruncate(tc.data, tc.size)
+			if tc.expectedErr != "" {
+				require.EqualError(t, err, tc.expectedErr)
+				return
+			}
+			require.Equal(t, tc.expected, actual)
+		})
+	}
+}
