@@ -1688,9 +1688,9 @@ func MVCCScanDecodeKeyValues(repr [][]byte, fn func(key MVCCKey, rawBytes []byte
 // replayTransactionalWrite performs a transactional write under the assumption
 // that the transactional write was already executed before. Essentially a replay.
 // Since transactions should be idempotent, we must be particularly careful
-// about writing an intent if it was already written. If the sequence of the
-// transaction is at or below one found in `meta.Txn` then we should
-// simply assert the value we're trying to add against the value that was
+// about writing an intent if it was already written. The function is called
+// when the sequence of the transaction is at or below one found in `meta.Txn`,
+// so we assert the value we're trying to add against the value that was
 // previously written at that sequence.
 //
 // 1) Firstly, we find the value previously written as part of the same sequence.
@@ -1705,7 +1705,6 @@ func replayTransactionalWrite(
 	iter MVCCIterator,
 	meta *enginepb.MVCCMetadata,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 	valueFn func(optionalValue) (roachpb.Value, error),
@@ -1717,7 +1716,10 @@ func replayTransactionalWrite(
 		// This is a special case. This is when the intent hasn't made it
 		// to the intent history yet. We must now assert the value written
 		// in the intent to the value we're trying to write.
-		writtenValue, _, err = mvccGet(ctx, iter, key, timestamp, MVCCGetOptions{
+		writtenValue, _, err = mvccGet(ctx, iter, key, meta.Timestamp.ToTimestamp(), MVCCGetOptions{
+			// NOTE: we pass Txn here to ensure that this read succeeds even if
+			// iter is interleaving intents. This is not needed if iter is a raw
+			// MVCCIterator.
 			Txn:        txn,
 			Tombstones: true,
 		})
@@ -1979,7 +1981,7 @@ func mvccPutInternal(
 				// The transaction has executed at this sequence before. This is merely a
 				// replay of the transactional write. Assert that all is in order and return
 				// early.
-				return false, replayTransactionalWrite(ctx, iter, meta, key, readTimestamp, value, opts.Txn, valueFn, opts.ReplayWriteTimestampProtection)
+				return false, replayTransactionalWrite(ctx, iter, meta, key, value, opts.Txn, valueFn, opts.ReplayWriteTimestampProtection)
 			}
 
 			// We're overwriting the intent that was present at this key, before we do
@@ -2192,8 +2194,6 @@ func mvccPutInternal(
 			if valueFn != nil {
 				exVal, _, err := mvccGet(ctx, iter, key, readTimestamp, MVCCGetOptions{
 					Tombstones: true,
-					// Unlike above, we know that there are no intents on this
-					// key, so we don't need to perform an inconsistent read.
 				})
 				if err != nil {
 					return false, err
