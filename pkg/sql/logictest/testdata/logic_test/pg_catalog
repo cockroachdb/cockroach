@@ -427,10 +427,10 @@ query OTOT colnames,rowsort
 SELECT * FROM pg_catalog.pg_namespace
 ----
 oid         nspname             nspowner    nspacl
-4294967295  crdb_internal       NULL        NULL
-4294967197  information_schema  NULL        NULL
-4294967110  pg_catalog          NULL        NULL
-4294966980  pg_extension        NULL        NULL
+4294967295  crdb_internal       3233629770  NULL
+4294967197  information_schema  3233629770  NULL
+4294967110  pg_catalog          3233629770  NULL
+4294966980  pg_extension        3233629770  NULL
 105         public              2310524507  NULL
 
 # Verify that we can still see the schemas even if we don't have any privilege
@@ -446,10 +446,10 @@ query OTOT colnames,rowsort
 SELECT * FROM pg_catalog.pg_namespace
 ----
 oid         nspname             nspowner    nspacl
-4294967295  crdb_internal       NULL        NULL
-4294967197  information_schema  NULL        NULL
-4294967110  pg_catalog          NULL        NULL
-4294966980  pg_extension        NULL        NULL
+4294967295  crdb_internal       3233629770  NULL
+4294967197  information_schema  3233629770  NULL
+4294967110  pg_catalog          3233629770  NULL
+4294966980  pg_extension        3233629770  NULL
 105         public              2310524507  NULL
 
 user root

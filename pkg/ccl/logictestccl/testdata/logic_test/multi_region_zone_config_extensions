@@ -1,4 +1,3 @@
-# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.multiregion.enabled=true
 # LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-tenant
 
 query TTTTT rowsort

@@ -103,11 +103,6 @@ func TestValidationWithProtectedTS(t *testing.T) {
 		require.NoError(t, ptp.Refresh(ctx, asOf))
 	}
 
-	// By default, secondary tenants aren't allowed to muck with the zone
-	// config, so give them this ability if we happened to start the default
-	// test tenant.
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &tenantSettings.SV, true)
-
 	for _, sql := range []string{
 		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'",
 		"ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'",

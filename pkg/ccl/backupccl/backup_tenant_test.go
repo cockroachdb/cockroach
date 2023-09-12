@@ -148,15 +148,6 @@ func TestTenantBackupMultiRegionDatabases(t *testing.T) {
 	defer tSQL.Close()
 	tenSQLDB := sqlutils.MakeSQLRunner(tSQL)
 
-	setAndWaitForTenantReadOnlyClusterSetting(
-		t,
-		sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
-		sqlDB,
-		tenSQLDB,
-		tenID,
-		"true",
-	)
-
 	// Setup.
 	const tenDst = "userfile:///ten_backup"
 	const hostDst = "userfile:///host_backup"

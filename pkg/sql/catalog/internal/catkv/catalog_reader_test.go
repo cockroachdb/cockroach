@@ -71,8 +71,6 @@ func TestDataDriven(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := tc.layer
 
-			sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &s.ClusterSettings().SV, true)
-
 			sqlDB := s.SQLConn(t, "")
 			tdb := sqlutils.MakeSQLRunner(sqlDB)
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)

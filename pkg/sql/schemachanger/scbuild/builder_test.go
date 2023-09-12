@@ -118,7 +118,6 @@ func TestBuildDataDriven(t *testing.T) {
 				s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 				defer s.Stopper().Stop(ctx)
 				tt := s.ApplicationLayer()
-				sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &tt.ClusterSettings().SV, true)
 				tdb := sqlutils.MakeSQLRunner(sqlDB)
 				datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 					return run(ctx, t, depsType.name, d, tt, s.NodeID(), tdb, depsType.dependenciesWrapper)
