@@ -971,6 +971,22 @@ func registerClusterToCluster(r registry.Registry) {
 			sometimesTestFingerprintMismatchCode: true,
 		},
 		{
+			// Initial scan perf test.
+			name:      "c2c/initialscan/kv0",
+			benchmark: true,
+			srcNodes:  4,
+			dstNodes:  4,
+			cpus:      8,
+			// With the machine type and size we use, this is the smallest disk that
+			// gives us max write BW of 800MB/s.
+			pdSize: 1667,
+			// Write ~50GB total (~12.5GB per node).
+			workload:           replicateKV{readPercent: 0, initRows: 50000000, maxBlockBytes: 2048},
+			timeout:            1 * time.Hour,
+			additionalDuration: 1 * time.Minute,
+			cutover:            0,
+		},
+		{
 			name:     "c2c/UnitTest",
 			srcNodes: 1,
 			dstNodes: 1,
