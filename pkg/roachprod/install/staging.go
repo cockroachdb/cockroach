@@ -212,9 +212,14 @@ func StageApplication(
 		}
 		return nil
 	case "workload":
-		// N.B. workload binary is only available for linux amd64: https://github.com/cockroachdb/cockroach/issues/103563
+		// N.B. After https://github.com/cockroachdb/cockroach/issues/103563, only arm64 build uses the $os-$arch suffix.
+		// E.g., workload.LATEST is for linux-amd64, workload.linux-gnu-arm64.LATEST is for linux-arm64.
+		archSuffix := ""
+		if arch == vm.ArchARM64 {
+			archSuffix = archInfo.DebugArchitecture
+		}
 		err := stageRemoteBinary(
-			ctx, l, c, applicationName, "cockroach/workload", version, "" /* arch */, destDir,
+			ctx, l, c, applicationName, "cockroach/workload", version, archSuffix, destDir,
 		)
 		return err
 	case "release":
@@ -256,8 +261,13 @@ func URLsForApplication(
 		}
 		return urls, nil
 	case "workload":
-		// N.B. workload binary is only available for linux amd64: https://github.com/cockroachdb/cockroach/issues/103563
-		u, err := getEdgeURL("cockroach/workload", version, "" /* arch */, "" /* extension */)
+		// N.B. After https://github.com/cockroachdb/cockroach/issues/103563, only arm64 build uses the $os-$arch suffix.
+		// E.g., workload.LATEST is for linux-amd64, workload.linux-gnu-arm64.LATEST is for linux-arm64.
+		archSuffix := ""
+		if arch == vm.ArchARM64 {
+			archSuffix = archInfo.DebugArchitecture
+		}
+		u, err := getEdgeURL("cockroach/workload", version, archSuffix, "" /* extension */)
 		if err != nil {
 			return nil, err
 		}
