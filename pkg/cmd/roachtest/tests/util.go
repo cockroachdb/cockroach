@@ -106,7 +106,7 @@ func WaitForReplication(
 	var compStr string
 	switch waitForReplicationType {
 	case exactlyReplicationFactor:
-		compStr = "="
+		compStr = "!="
 	case atLeastReplicationFactor:
 		compStr = "<"
 	default:

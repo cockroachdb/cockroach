@@ -564,6 +564,7 @@ func TestLint(t *testing.T) {
 			":!*/doc.go",
 			":!util/syncutil/mutex_sync.go",
 			":!util/syncutil/mutex_sync_race.go",
+			":!testutils/lint/passes/deferunlockcheck/testdata/src/github.com/cockroachdb/cockroach/pkg/util/syncutil/mutex_sync.go",
 		)
 		if err != nil {
 			t.Fatal(err)
