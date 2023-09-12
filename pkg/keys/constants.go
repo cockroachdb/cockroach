@@ -506,7 +506,7 @@ var PseudoTableIDs = []uint32{
 	SystemRangesID,
 	TimeseriesRangesID,
 	LivenessRangesID,
-	PublicSchemaID,
+	SystemPublicSchemaID,
 	TenantsRangesID,
 }
 
