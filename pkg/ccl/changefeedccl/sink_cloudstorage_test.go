@@ -233,7 +233,7 @@ func TestCloudStorageSink(t *testing.T) {
 		require.Equal(t, `{"resolved":"5.0000000000"}`, string(resolvedFile))
 	})
 
-	forwardFrontier := func(f *span.Frontier, s roachpb.Span, wall int64) bool {
+	forwardFrontier := func(f span.Frontier, s roachpb.Span, wall int64) bool {
 		forwarded, err := f.Forward(s, ts(wall))
 		require.NoError(t, err)
 		return forwarded

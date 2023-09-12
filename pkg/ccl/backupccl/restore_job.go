@@ -295,6 +295,7 @@ func restore(
 	if err != nil {
 		return emptyRowCount, err
 	}
+	defer introducedSpanFrontier.Release()
 
 	if err := checkCoverage(restoreCtx, dataToRestore.getSpans(), backupManifests); err != nil {
 		return emptyRowCount, err
@@ -310,6 +311,7 @@ func restore(
 	if err != nil {
 		return emptyRowCount, err
 	}
+	defer progressTracker.close()
 
 	var filter spanCoveringFilter
 	if filter, err = func() (spanCoveringFilter, error) {
