@@ -246,6 +246,28 @@ func newTenantServer(
 		return nil, err
 	}
 
+	// Start the SQL listener early so any delay that happen from this point onward
+	// (until the server is ready) won't cause client connections to be rejected.
+	if baseCfg.SplitListenSQL && !baseCfg.DisableSQLListener {
+		sqlAddrListener, err := ListenAndUpdateAddrs(
+			ctx, &baseCfg.SQLAddr, &baseCfg.SQLAdvertiseAddr, "sql")
+		if err != nil {
+			return nil, err
+		}
+		baseCfg.SQLAddrListener = sqlAddrListener
+	}
+
+	// The setting of tenant id may have not been done until now. If this is the
+	// case, DelayedSetTenantID will be set and should be used to populate
+	// TenantID in the config. We call it here as we need a valid TenantID below.
+	if sqlCfg.DelayedSetTenantID != nil {
+		cfgTenantID, err := sqlCfg.DelayedSetTenantID()
+		if err != nil {
+			return nil, err
+		}
+		sqlCfg.TenantID = cfgTenantID
+	}
+	log.Ops.Infof(ctx, "server starting for tenant %q", redact.Safe(sqlCfg.TenantID))
 	// Inform the server identity provider that we're operating
 	// for a tenant server.
 	baseCfg.idProvider.SetTenant(sqlCfg.TenantID)
