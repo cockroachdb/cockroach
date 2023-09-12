@@ -186,7 +186,9 @@ export const ActionCell = ({
   const query = indexStat.indexRecommendations.map(recommendation => {
     switch (recommendation.type) {
       case "DROP_UNUSED":
-        return `DROP INDEX ${QuoteIdentifier(tableName)}@${QuoteIdentifier(
+        // Here, `tableName` is a fully qualified name whose identifiers have already been quoted.
+        // See the QuoteIdentifier unit tests for more details.
+        return `DROP INDEX ${tableName}@${QuoteIdentifier(
           indexStat.indexName,
         )};`;
     }
