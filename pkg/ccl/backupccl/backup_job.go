@@ -1229,6 +1229,11 @@ func (b *backupResumer) OnFailOrCancel(
 	return nil //nolint:returnerrcheck
 }
 
+// CollectProfile is a part of the Resumer interface.
+func (b *backupResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 func (b *backupResumer) deleteCheckpoint(
 	ctx context.Context, cfg *sql.ExecutorConfig, user username.SQLUsername,
 ) {

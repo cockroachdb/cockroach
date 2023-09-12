@@ -288,6 +288,10 @@ func (br *blockingResumer) OnFailOrCancel(context.Context, interface{}, error) e
 	panic("unimplemented")
 }
 
+func (br *blockingResumer) CollectProfile(context.Context, interface{}) error {
+	panic("unimplemented")
+}
+
 // TestTenantStatusWithFutureCutoverTime verifies we go through the tenants
 // states, including the state that the tenant is waiting for a future cutover.
 func TestTenantStatusWithFutureCutoverTime(t *testing.T) {

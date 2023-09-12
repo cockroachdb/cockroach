@@ -72,6 +72,11 @@ func (r *envRunner) OnFailOrCancel(ctx context.Context, execCtx interface{}, job
 	return nil
 }
 
+// CollectProfile is a part of the Resumer interface.
+func (r *envRunner) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // Resume is part of the Resumer interface.
 func (r *envRunner) Resume(ctx context.Context, execCtx interface{}) error {
 	ctx = logtags.AddTag(ctx, "taskenv", r.envID)

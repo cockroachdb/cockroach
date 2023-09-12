@@ -61,6 +61,10 @@ func (d fakeExecResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ er
 	return nil
 }
 
+func (d fakeExecResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // TestJobExecutionDetailsRouting tests that the request job execution details
 // endpoint redirects the request to the current coordinator node of the job.
 func TestJobExecutionDetailsRouting(t *testing.T) {

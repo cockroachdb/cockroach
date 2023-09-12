@@ -583,6 +583,11 @@ func (r schemaChangeGCResumer) OnFailOrCancel(context.Context, interface{}, erro
 	return nil
 }
 
+// CollectProfile is part of the jobs.Resumer interface.
+func (r schemaChangeGCResumer) CollectProfile(context.Context, interface{}) error {
+	return nil
+}
+
 // isPermanentGCError returns true if the error is a permanent job failure,
 // which indicates that the failed GC job cannot be retried.
 func (r *schemaChangeGCResumer) isPermanentGCError(err error) bool {
