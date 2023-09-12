@@ -82,6 +82,7 @@ type ClusterSpec struct {
 	Lifetime             time.Duration
 	ReusePolicy          clusterReusePolicy
 	TerminateOnMigration bool
+	UbuntuVersion        vm.UbuntuVersion
 
 	// FileSystem determines the underlying FileSystem
 	// to be used. The default is ext4.
