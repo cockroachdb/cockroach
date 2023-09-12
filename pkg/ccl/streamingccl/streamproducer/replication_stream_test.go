@@ -232,10 +232,6 @@ func testStreamReplicationStatus(
 		expectedStreamStatus.ProtectedTimestamp = &updatedFrontier
 	}
 	checkStreamStatus(t, updatedFrontier, expectedStreamStatus)
-	// Send a query.
-	// The expected protected timestamp is still 'updatedFrontier' as the protected
-	// timestamp doesn't get updated when this is a query.
-	checkStreamStatus(t, hlc.MaxTimestamp, expectedStreamStatus)
 }
 
 func TestReplicationStreamInitialization(t *testing.T) {

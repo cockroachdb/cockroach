@@ -22,8 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -64,7 +66,6 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 
 	require.NotNil(t, stats.ReplicationLagInfo)
 	require.True(t, srcTime.LessEq(stats.ReplicationLagInfo.MinIngestedTimestamp))
-	require.Equal(t, "", stats.ProducerError)
 
 	// Make producer job easily times out
 	c.SrcSysSQL.ExecMultiple(t, replicationtestutils.ConfigureClusterSettings(map[string]string{
@@ -333,6 +334,24 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 
 }
 
+func requireReleasedProducerPTSRecord(
+	t *testing.T,
+	ctx context.Context,
+	srv serverutils.ApplicationLayerInterface,
+	producerJobID jobspb.JobID,
+) {
+	t.Helper()
+	job, err := srv.JobRegistry().(*jobs.Registry).LoadJob(ctx, producerJobID)
+	require.NoError(t, err)
+	ptsRecordID := job.Payload().Details.(*jobspb.Payload_StreamReplication).StreamReplication.ProtectedTimestampRecordID
+	ptsProvider := srv.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+	err = srv.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := ptsProvider.WithTxn(txn).GetRecord(ctx, ptsRecordID)
+		return err
+	})
+	require.ErrorIs(t, err, protectedts.ErrNotExists)
+}
+
 func TestTenantStreamingCancelIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -362,9 +381,7 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 		jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 
 		// Check if the producer job has released protected timestamp.
-		stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
-		require.NotNil(t, stats.ProducerStatus)
-		require.Nil(t, stats.ProducerStatus.ProtectedTimestamp)
+		requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer.ApplicationLayer(), jobspb.JobID(producerJobID))
 
 		// Check if dest tenant key ranges are not cleaned up.
 		destTenantSpan := keys.MakeTenantSpan(args.DestTenantID)
@@ -432,9 +449,7 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 		jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 
 		// Check if the producer job has released protected timestamp.
-		stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
-		require.NotNil(t, stats.ProducerStatus)
-		require.Nil(t, stats.ProducerStatus.ProtectedTimestamp)
+		requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer.ApplicationLayer(), jobspb.JobID(producerJobID))
 
 		// Wait for the GC job to finish
 		c.DestSysSQL.Exec(t, "SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'")
@@ -785,19 +800,27 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			// waitForProducerProtection asserts that there is a PTS record protecting
 			// the source tenant. We ensure the PTS record is protecting a timestamp
 			// greater or equal to the frontier we know we have replicated up until.
-			waitForProducerProtection := func(c *replicationtestutils.TenantStreamingClusters, frontier hlc.Timestamp, replicationJobID int) {
+			waitForProducerProtection := func(c *replicationtestutils.TenantStreamingClusters, frontier hlc.Timestamp, producerJobID int) {
 				testutils.SucceedsSoon(t, func() error {
-					stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, replicationJobID)
-					if stats.ProducerStatus == nil {
-						return errors.New("nil ProducerStatus")
+					srv := c.SrcSysServer.ApplicationLayer()
+					job, err := srv.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobspb.JobID(producerJobID))
+					if err != nil {
+						return err
 					}
-					if stats.ProducerStatus.ProtectedTimestamp == nil {
-						return errors.New("nil ProducerStatus.ProtectedTimestamp")
+					ptsRecordID := job.Payload().Details.(*jobspb.Payload_StreamReplication).StreamReplication.ProtectedTimestampRecordID
+					ptsProvider := srv.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+
+					var ptsRecord *ptpb.Record
+					if err := srv.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+						var err error
+						ptsRecord, err = ptsProvider.WithTxn(txn).GetRecord(ctx, ptsRecordID)
+						return err
+					}); err != nil {
+						return err
 					}
-					pts := *stats.ProducerStatus.ProtectedTimestamp
-					if pts.Less(frontier) {
+					if ptsRecord.Timestamp.Less(frontier) {
 						return errors.Newf("protection is at %s, expected to be >= %s",
-							pts.String(), frontier.String())
+							ptsRecord.Timestamp.String(), frontier.String())
 					}
 					return nil
 				})
@@ -868,7 +891,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 
 			// Check that the producer and replication job have written a protected
 			// timestamp.
-			waitForProducerProtection(c, now, replicationJobID)
+			waitForProducerProtection(c, now, producerJobID)
 			checkDestinationProtection(c, now, replicationJobID)
 
 			now2 := now.Add(time.Second.Nanoseconds(), 0)
@@ -877,7 +900,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			// protected timestamp record has also been updated on the destination
 			// cluster. This update happens in the same txn in which we update the
 			// replication job's progress.
-			waitForProducerProtection(c, now2, replicationJobID)
+			waitForProducerProtection(c, now2, producerJobID)
 			checkDestinationProtection(c, now2, replicationJobID)
 
 			if pauseBeforeTerminal {
@@ -902,9 +925,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 			}
 
 			// Check if the producer job has released protected timestamp.
-			stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, replicationJobID)
-			require.NotNil(t, stats.ProducerStatus)
-			require.Nil(t, stats.ProducerStatus.ProtectedTimestamp)
+			requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer.ApplicationLayer(), jobspb.JobID(producerJobID))
 
 			// Check if the replication job has released protected timestamp.
 			checkNoDestinationProtection(c, replicationJobID)
