@@ -212,6 +212,7 @@ func (c clustersOpt) validate() error {
 type testOpts struct {
 	versionsBinaryOverride map[string]string
 	skipInit               bool
+	goCoverEnabled         bool
 }
 
 // Run runs tests.
@@ -608,8 +609,8 @@ func (r *testRunner) runWorker(
 				if err := c.WipeE(ctx, l, false /* preserveCerts */); err != nil {
 					return err
 				}
-				if err := c.RunE(ctx, c.All(), "rm -rf "+perfArtifactsDir); err != nil {
-					return errors.Wrapf(err, "failed to remove perf artifacts dir")
+				if err := c.RunE(ctx, c.All(), fmt.Sprintf("rm -rf %s %s", perfArtifactsDir, goCoverArtifactsDir)); err != nil {
+					return errors.Wrapf(err, "failed to remove perf/gocover artifacts dirs")
 				}
 				if c.localCertsDir != "" {
 					if err := os.RemoveAll(c.localCertsDir); err != nil {
@@ -730,6 +731,7 @@ func (r *testRunner) runWorker(
 			versionsBinaryOverride: topt.versionsBinaryOverride,
 			skipInit:               topt.skipInit,
 			debug:                  debugMode.IsDebug(),
+			goCoverEnabled:         topt.goCoverEnabled,
 		}
 		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts)
 
@@ -809,6 +811,8 @@ func (r *testRunner) runWorker(
 					t.Fatalf("unknown lease type %s", testSpec.Leases)
 				}
 
+				c.goCoverDir = t.GoCoverArtifactsDir()
+
 				wStatus.SetCluster(c)
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
@@ -879,7 +883,7 @@ func getPerfArtifacts(ctx context.Context, l *logger.Logger, c *clusterImpl, t t
 	g := ctxgroup.WithContext(ctx)
 	fetchNode := func(node int) func(context.Context) error {
 		return func(ctx context.Context) error {
-			testCmd := `'PERF_ARTIFACTS="` + perfArtifactsDir + `"
+			testCmd := `'PERF_ARTIFACTS="` + t.PerfArtifactsDir() + `"
 if [[ -d "${PERF_ARTIFACTS}" ]]; then
     echo true
 elif [[ -e "${PERF_ARTIFACTS}" ]]; then
@@ -896,7 +900,7 @@ fi'`
 			switch out {
 			case "true":
 				dst := fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), node, perfArtifactsDir)
-				return c.Get(ctx, l, perfArtifactsDir, dst, c.Node(node))
+				return c.Get(ctx, l, t.PerfArtifactsDir(), dst, c.Node(node))
 			case "false":
 				l.PrintfCtx(ctx, "no perf artifacts exist on node %v", c.Node(node))
 				return nil
@@ -910,6 +914,47 @@ fi'`
 	}
 	if err := g.Wait(); err != nil {
 		l.PrintfCtx(ctx, "failed to get perf artifacts: %v", err)
+	}
+}
+
+// getGoCoverArtifacts retrieves the go coverage artifacts for the test.
+// If there's an error, oh well, don't do anything rash like fail a test
+// which already passed.
+func getGoCoverArtifacts(ctx context.Context, l *logger.Logger, c *clusterImpl, t test.Test) {
+	g := ctxgroup.WithContext(ctx)
+	fetchNode := func(node int) func(context.Context) error {
+		return func(ctx context.Context) error {
+			testCmd := `'GOCOVER_ARTIFACTS="` + t.GoCoverArtifactsDir() + `"
+if [[ -d "${GOCOVER_ARTIFACTS}" ]]; then
+    echo true
+elif [[ -e "${GOCOVER_ARTIFACTS}" ]]; then
+    ls -la "${GOCOVER_ARTIFACTS}"
+    exit 1
+else
+    echo false
+fi'`
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(node), "bash", "-c", testCmd)
+			if err != nil {
+				return errors.Wrapf(err, "failed to check for gocover artifacts")
+			}
+			out := strings.TrimSpace(result.Stdout)
+			switch out {
+			case "true":
+				dst := fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), node, goCoverArtifactsDir)
+				return c.Get(ctx, l, t.GoCoverArtifactsDir(), dst, c.Node(node))
+			case "false":
+				l.PrintfCtx(ctx, "no gocover artifacts exist on node %v", c.Node(node))
+				return nil
+			default:
+				return errors.Errorf("unexpected output when checking for gocover artifacts: %s", out)
+			}
+		}
+	}
+	for _, i := range c.All() {
+		g.GoCtx(fetchNode(i))
+	}
+	if err := g.Wait(); err != nil {
+		l.PrintfCtx(ctx, "failed to get gocover artifacts: %v", err)
 	}
 }
 
@@ -1273,24 +1318,48 @@ func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
 ) error {
 	var err error
+
 	if timedOut || t.Failed() {
 		err = r.collectArtifacts(ctx, t, c, timedOut, time.Hour)
 		if err != nil {
 			t.L().Printf("error collecting artifacts: %v", err)
 		}
-	}
 
-	if timedOut {
-		// Shut down the cluster. We only do this on timeout to help the test terminate;
-		// for regular failures, if the --debug flag is used, we want the cluster to stay
-		// around so someone can poke at it.
-		_ = c.StopE(ctx, t.L(), option.DefaultStopOpts(), c.All())
+		if timedOut {
+			// Shut down the cluster. We only do this on timeout to help the test terminate;
+			// for regular failures, if the --debug flag is used, we want the cluster to stay
+			// around so someone can poke at it.
+			_ = c.StopE(ctx, t.L(), option.DefaultStopOpts(), c.All())
 
-		// We previously added a timeout failure without cancellation, so we cancel here.
-		if t.mu.cancel != nil {
-			t.mu.cancel()
+			// We previously added a timeout failure without cancellation, so we cancel here.
+			if t.mu.cancel != nil {
+				t.mu.cancel()
+			}
+			t.L().Printf("test timed out; check __stacks.log and CRDB logs for goroutine dumps")
 		}
-		t.L().Printf("test timed out; check __stacks.log and CRDB logs for goroutine dumps")
+	} else if t.goCoverEnabled {
+		// Go cover data is dumped when the cockroach process exits (it is not
+		// dumped if the process is killed). We want the process to terminate as
+		// soon as possible. We send two SIGINTs; the first one starts draining and
+		// the second causes the process to exit right away.
+		//
+		// TODO(radu): many tests stop the nodes with the default options
+		// (SIGKILL) during the test, which means some coverage data will be lost.
+		t.L().Printf("Shutting down cluster gracefully to obtain go cover artifacts")
+		stopOpts := option.DefaultStopOpts()
+		stopOpts.RoachprodOpts.Sig = 2 // SIGINT
+		stopOpts.RoachprodOpts.Wait = false
+		if err := c.StopE(ctx, t.L(), stopOpts, c.All()); err != nil {
+			t.L().PrintfCtx(ctx, "error stopping cluster: %v", err)
+		}
+		stopOpts.RoachprodOpts.Sig = 2 // SIGINT
+		stopOpts.RoachprodOpts.Wait = true
+		stopOpts.RoachprodOpts.MaxWait = 30
+		if err := c.StopE(ctx, t.L(), stopOpts, c.All()); err != nil {
+			t.L().PrintfCtx(ctx, "error stopping cluster: %v", err)
+		}
+		t.L().Printf("Retrieving go cover artifacts")
+		getGoCoverArtifacts(ctx, t.L(), c, t)
 	}
 
 	return err
