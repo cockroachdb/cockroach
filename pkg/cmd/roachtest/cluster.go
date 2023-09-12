@@ -893,6 +893,10 @@ func (f *clusterFactory) newCluster(
 		}
 		return c, nil, nil
 	}
+	// Ensure an allocation is specified.
+	if cfg.alloc == nil {
+		return nil, nil, errors.New("no allocation specified; cfg.alloc must be set")
+	}
 
 	if cfg.localCluster {
 		// Local clusters never expire.
@@ -1097,7 +1101,7 @@ func (c *clusterImpl) StopCockroachGracefullyOnNode(
 func (c *clusterImpl) Save(ctx context.Context, msg string, l *logger.Logger) {
 	l.PrintfCtx(ctx, "saving cluster %s for debugging (--debug specified)", c)
 	// TODO(andrei): should we extend the cluster here? For how long?
-	if c.destroyState.owned { // we won't have an alloc for an unowned cluster
+	if c.destroyState.owned && c.destroyState.alloc != nil { // we won't have an alloc for an unowned cluster
 		c.destroyState.alloc.Freeze()
 	}
 	c.r.markClusterAsSaved(c, msg)

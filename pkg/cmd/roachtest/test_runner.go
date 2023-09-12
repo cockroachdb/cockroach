@@ -635,10 +635,19 @@ func (r *testRunner) runWorker(
 				// N.B. we do not count reuse attempt error toward clusterCreateErr.
 				// Let's attempt to create a fresh one.
 				testToRun.canReuseCluster = false
-			}
-			// sanity check
-			if c.spec.Cloud != spec.Local && c.spec.Arch != "" && c.arch != c.spec.Arch {
-				return errors.Newf("cluster arch %q does not match specified arch %q on cloud: %q", c.arch, c.spec.Arch, c.spec.Cloud)
+				// Destroy the cluster since we're unable to reuse it.
+				// NB: This is a hack. If we destroy the cluster, the allocation quota will get released back into the pool.
+				// Thus, we can't immediately create a fresh cluster since another worker might grab the quota before us.
+				// Instead, we transfer the allocation quota to the new cluster and pretend the old one didn't have any.
+				testToRun.alloc = c.destroyState.alloc
+				c.destroyState.alloc = nil
+				c.Destroy(context.Background(), closeLogger, l)
+				c = nil
+			} else {
+				// Reuse is possible, let's do a sanity check.
+				if c.spec.Cloud != spec.Local && c.spec.Arch != "" && c.arch != c.spec.Arch {
+					return errors.Newf("cluster arch %q does not match specified arch %q on cloud: %q", c.arch, c.spec.Arch, c.spec.Cloud)
+				}
 			}
 		}
 		arch := testToRun.spec.Cluster.Arch
