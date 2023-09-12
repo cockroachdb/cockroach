@@ -33,7 +33,6 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/ts/tspb",
-        "//pkg/util/errorutil",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
