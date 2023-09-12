@@ -2924,6 +2924,11 @@ func (r schemaChangeResumer) OnFailOrCancel(
 	return nil
 }
 
+// CollectProfile is part of the jobs.Resumer interface.
+func (r schemaChangeResumer) CollectProfile(context.Context, interface{}) error {
+	return nil
+}
+
 func init() {
 	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &schemaChangeResumer{job: job}

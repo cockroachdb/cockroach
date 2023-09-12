@@ -144,3 +144,8 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 func (r resumer) OnFailOrCancel(ctx context.Context, execCtx interface{}, _ error) error {
 	return nil
 }
+
+// CollectProfile implements the jobs.Resumer interface.
+func (r resumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}

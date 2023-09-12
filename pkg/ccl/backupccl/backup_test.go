@@ -5634,6 +5634,10 @@ func (d *fakeResumer) OnFailOrCancel(context.Context, interface{}, error) error 
 	return nil
 }
 
+func (d *fakeResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // TestBatchedInsertStats is a test for the `insertStats` method used in a
 // cluster restore to restore backed up statistics.
 func TestBatchedInsertStats(t *testing.T) {

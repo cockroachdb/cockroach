@@ -512,6 +512,11 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 	})
 }
 
+// CollectProfile implements the jobs.Resumer interface.
+func (s *streamIngestionResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 func closeAndLog(ctx context.Context, d streamclient.Dialer) {
 	if err := d.Close(ctx); err != nil {
 		log.Warningf(ctx, "error closing stream client: %s", err.Error())

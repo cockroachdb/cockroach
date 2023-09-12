@@ -82,6 +82,10 @@ func (d fakeExecResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ er
 	return nil
 }
 
+func (d fakeExecResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // checkForPlanDiagram is a method used in tests to wait for the existence of a
 // DSP diagram for the provided jobID.
 func checkForPlanDiagrams(

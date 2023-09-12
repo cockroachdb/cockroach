@@ -89,6 +89,11 @@ func (r *resumer) OnFailOrCancel(ctx context.Context, _ interface{}, jobErr erro
 	return nil
 }
 
+// CollectProfile implements the jobs.Resumer interface.
+func (r *resumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 func init() {
 	jobs.RegisterConstructor(jobspb.TypeKeyVisualizer,
 		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {

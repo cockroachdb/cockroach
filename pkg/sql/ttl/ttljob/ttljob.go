@@ -371,6 +371,11 @@ func (t rowLevelTTLResumer) OnFailOrCancel(
 	return nil
 }
 
+// CollectProfile implements the jobs.Resumer interface.
+func (t rowLevelTTLResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 func init() {
 	jobs.RegisterConstructor(jobspb.TypeRowLevelTTL, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &rowLevelTTLResumer{

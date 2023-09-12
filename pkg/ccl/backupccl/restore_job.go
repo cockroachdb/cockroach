@@ -2506,6 +2506,11 @@ func (r *restoreResumer) OnFailOrCancel(
 	return nil
 }
 
+// CollectProfile implements jobs.Resumer interface
+func (r *restoreResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // dropDescriptors implements the OnFailOrCancel logic.
 // TODO (lucy): If the descriptors have already been published, we need to queue
 // drop jobs for all the descriptors.
