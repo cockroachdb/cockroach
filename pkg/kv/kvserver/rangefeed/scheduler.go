@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -88,6 +89,11 @@ func (e processorEventType) String() string {
 // scheduler lock.
 const enqueueBulkMaxChunk = 100
 
+// schedulerLatencyHistogramCollectionFrequency defines how frequently scheduler
+// will update histogram. we choose a prime number to reduce changes of periodic
+// events skewing sampling.
+const schedulerLatencyHistogramCollectionFrequency = 13
+
 // Callback is a callback to perform work set by processor. Event is a
 // combination of all event types scheduled since last callback invocation.
 //
@@ -113,6 +119,12 @@ type SchedulerConfig struct {
 	// enqueue operation. Chunking is done to avoid holding locks for too long
 	// as it will interfere with enqueue operations.
 	BulkChunkSize int
+
+	// Metrics for scheduler performance monitoring
+	Metrics *SchedulerMetrics
+	// histogramFrequency sets how frequently wait latency is recorded for metrics
+	// purposes.
+	HistogramFrequency int64
 }
 
 // priorityIDsValue is a placeholder value for Scheduler.priorityIDs. IntMap
@@ -166,6 +178,11 @@ type schedulerShard struct {
 	queue         *idQueue
 	// No more new registrations allowed. Workers are winding down.
 	quiescing bool
+
+	metrics *ShardMetrics
+	// histogramFrequency determines frequency of histogram collection
+	histogramFrequency int64
+	nextLatencyCheck   int64
 }
 
 // NewScheduler will instantiate an idle scheduler based on provided config.
@@ -175,6 +192,10 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 	if bulkChunkSize == 0 {
 		bulkChunkSize = enqueueBulkMaxChunk
 	}
+	histogramFrequency := cfg.HistogramFrequency
+	if histogramFrequency == 0 {
+		histogramFrequency = schedulerLatencyHistogramCollectionFrequency
+	}
 
 	s := &Scheduler{}
 
@@ -183,7 +204,8 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 	if cfg.PriorityWorkers > 0 {
 		priorityWorkers = cfg.PriorityWorkers
 	}
-	s.shards = append(s.shards, newSchedulerShard(priorityWorkers, bulkChunkSize))
+	s.shards = append(s.shards,
+		newSchedulerShard(priorityWorkers, bulkChunkSize, cfg.Metrics.SystemPriority, histogramFrequency))
 
 	// Regular shards, excluding priority shard.
 	numShards := 1
@@ -198,20 +220,25 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 		if shardWorkers <= 0 {
 			shardWorkers = 1 // ensure we always have a worker
 		}
-		s.shards = append(s.shards, newSchedulerShard(shardWorkers, bulkChunkSize))
+		s.shards = append(s.shards,
+			newSchedulerShard(shardWorkers, bulkChunkSize, cfg.Metrics.NormalPriority, histogramFrequency))
 	}
 
 	return s
 }
 
 // newSchedulerShard creates a new shard with the given number of workers.
-func newSchedulerShard(numWorkers, bulkChunkSize int) *schedulerShard {
+func newSchedulerShard(
+	numWorkers, bulkChunkSize int, metrics *ShardMetrics, histogramFrequency int64,
+) *schedulerShard {
 	ss := &schedulerShard{
-		numWorkers:    numWorkers,
-		bulkChunkSize: bulkChunkSize,
-		procs:         map[int64]Callback{},
-		status:        map[int64]processorEventType{},
-		queue:         newIDQueue(),
+		numWorkers:         numWorkers,
+		bulkChunkSize:      bulkChunkSize,
+		procs:              map[int64]Callback{},
+		status:             map[int64]processorEventType{},
+		queue:              newIDQueue(),
+		metrics:            metrics,
+		histogramFrequency: histogramFrequency,
 	}
 	ss.cond = sync.NewCond(&ss.Mutex)
 	return ss
@@ -359,33 +386,49 @@ func (ss *schedulerShard) unregister(id int64) {
 // enqueue enqueues a single event for a given processor in this shard, and wakes
 // up a worker to process it. The caller must not hold the shard lock.
 func (ss *schedulerShard) enqueue(id int64, evt processorEventType) {
+	// We get time outside of lock to get more realistic delay in case there's a
+	// scheduler contention.
+	now := ss.maybeEnqueueStartTime()
 	ss.Lock()
 	defer ss.Unlock()
-	if ss.enqueueLocked(id, evt) {
+	if ss.enqueueLocked(queueEntry{id: id, startTime: now}, evt) {
 		// Wake up potential waiting worker.
 		// We are allowed to do this under cond lock.
 		ss.cond.Signal()
+		ss.metrics.QueueSize.Inc(1)
 	}
+}
+
+// maybeEnqueueStartTime returns now in nanos or 0. 0 means event will have no start
+// time and hence won't be included in histogram. This is done to throttle
+// histogram collection by only recording every n-th event to reduce CPU waste.
+func (ss *schedulerShard) maybeEnqueueStartTime() int64 {
+	var now int64
+	if v := atomic.AddInt64(&ss.nextLatencyCheck, -1); v < 1 && (-v%ss.histogramFrequency) == 0 {
+		now = timeutil.Now().UnixNano()
+		atomic.AddInt64(&ss.nextLatencyCheck, ss.histogramFrequency)
+	}
+	return now
 }
 
 // enqueueLocked enqueues a single event for a given processor in this shard.
 // Does not wake up a worker to process it.
-func (ss *schedulerShard) enqueueLocked(id int64, evt processorEventType) bool {
-	if _, ok := ss.procs[id]; !ok {
+func (ss *schedulerShard) enqueueLocked(entry queueEntry, evt processorEventType) bool {
+	if _, ok := ss.procs[entry.id]; !ok {
 		return false
 	}
-	pending := ss.status[id]
+	pending := ss.status[entry.id]
 	if pending&Stopped != 0 {
 		return false
 	}
 	if pending == 0 {
 		// Enqueue if processor was idle.
-		ss.queue.pushBack(id)
+		ss.queue.pushBack(entry)
 	}
 	update := pending | evt | Queued
 	if update != pending {
 		// Only update if event actually changed.
-		ss.status[id] = update
+		ss.status[entry.id] = update
 	}
 	return pending == 0
 }
@@ -398,10 +441,17 @@ func (ss *schedulerShard) enqueueN(ids []int64, evt processorEventType) int {
 		return 0
 	}
 
+	// For bulk insertions we just apply sampling frequency within the batch
+	// to reduce contention.
+	now := timeutil.Now().UnixNano()
 	ss.Lock()
 	var count int
 	for i, id := range ids {
-		if ss.enqueueLocked(id, evt) {
+		time := int64(0)
+		if int64(i)%ss.histogramFrequency == 0 {
+			time = now
+		}
+		if ss.enqueueLocked(queueEntry{id: id, startTime: time}, evt) {
 			count++
 		}
 		if (i+1)%ss.bulkChunkSize == 0 {
@@ -410,6 +460,7 @@ func (ss *schedulerShard) enqueueN(ids []int64, evt processorEventType) int {
 		}
 	}
 	ss.Unlock()
+	ss.metrics.QueueSize.Inc(int64(count))
 
 	if count >= ss.numWorkers {
 		ss.cond.Broadcast()
@@ -425,7 +476,7 @@ func (ss *schedulerShard) enqueueN(ids []int64, evt processorEventType) int {
 // be launched in separate goroutine and will loop until scheduler is stopped.
 func (ss *schedulerShard) processEvents(ctx context.Context) {
 	for {
-		var id int64
+		var entry queueEntry
 		ss.Lock()
 		for {
 			if ss.quiescing {
@@ -433,17 +484,23 @@ func (ss *schedulerShard) processEvents(ctx context.Context) {
 				return
 			}
 			var ok bool
-			if id, ok = ss.queue.popFront(); ok {
+			if entry, ok = ss.queue.popFront(); ok {
 				break
 			}
 			ss.cond.Wait()
 		}
 
-		cb := ss.procs[id]
-		e := ss.status[id]
+		cb := ss.procs[entry.id]
+		e := ss.status[entry.id]
 		// Keep Queued status and preserve Stopped to block any more events.
-		ss.status[id] = Queued | (e & Stopped)
+		ss.status[entry.id] = Queued | (e & Stopped)
 		ss.Unlock()
+
+		if entry.startTime != 0 {
+			delay := timeutil.Now().UnixNano() - entry.startTime
+			ss.metrics.QueueTime.RecordValue(delay)
+		}
+		ss.metrics.QueueSize.Dec(1)
 
 		procEventType := Queued ^ e
 		remaining := cb(procEventType)
@@ -459,18 +516,18 @@ func (ss *schedulerShard) processEvents(ctx context.Context) {
 		if e&Stopped != 0 {
 			if remaining != 0 {
 				log.VWarningf(ctx, 5,
-					"rangefeed processor %d didn't process all events on close", id)
+					"rangefeed processor %d didn't process all events on close", entry.id)
 			}
 			// We'll keep Stopped state to avoid calling stopped processor again
 			// on scheduler shutdown.
 			ss.Lock()
-			ss.status[id] = Stopped
+			ss.status[entry.id] = Stopped
 			ss.Unlock()
 			continue
 		}
 
 		ss.Lock()
-		pendingStatus, ok := ss.status[id]
+		pendingStatus, ok := ss.status[entry.id]
 		if !ok {
 			ss.Unlock()
 			continue
@@ -478,15 +535,16 @@ func (ss *schedulerShard) processEvents(ctx context.Context) {
 		newStatus := pendingStatus | remaining
 		if newStatus == Queued {
 			// If no events arrived, get rid of id.
-			delete(ss.status, id)
+			delete(ss.status, entry.id)
 		} else {
 			// Since more events arrived during processing, reschedule.
-			ss.queue.pushBack(id)
+			ss.queue.pushBack(queueEntry{id: entry.id, startTime: ss.maybeEnqueueStartTime()})
 			// If remaining work was returned and not already planned, then update
 			// pending status to reflect that.
 			if newStatus != pendingStatus {
-				ss.status[id] = newStatus
+				ss.status[entry.id] = newStatus
 			}
+			ss.metrics.QueueSize.Inc(1)
 		}
 		ss.Unlock()
 	}
@@ -621,10 +679,15 @@ func (cs *ClientScheduler) Unregister() {
 // Number of queue elements allocated at once to amortize queue allocations.
 const idQueueChunkSize = 8000
 
+type queueEntry struct {
+	id        int64
+	startTime int64
+}
+
 // idQueueChunk is a queue chunk of a fixed size which idQueue uses to extend
 // its storage. Chunks are kept in the pool to reduce allocations.
 type idQueueChunk struct {
-	data      [idQueueChunkSize]int64
+	data      [idQueueChunkSize]queueEntry
 	nextChunk *idQueueChunk
 }
 
@@ -665,7 +728,7 @@ func newIDQueue() *idQueue {
 	}
 }
 
-func (q *idQueue) pushBack(id int64) {
+func (q *idQueue) pushBack(id queueEntry) {
 	if q.write == idQueueChunkSize {
 		nexChunk := getPooledIDQueueChunk()
 		q.last.nextChunk = nexChunk
@@ -677,9 +740,9 @@ func (q *idQueue) pushBack(id int64) {
 	q.size++
 }
 
-func (q *idQueue) popFront() (int64, bool) {
+func (q *idQueue) popFront() (queueEntry, bool) {
 	if q.size == 0 {
-		return 0, false
+		return queueEntry{}, false
 	}
 	if q.read == idQueueChunkSize {
 		removed := q.first

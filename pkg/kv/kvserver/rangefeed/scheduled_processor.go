@@ -159,8 +159,6 @@ func (p *ScheduledProcessor) processRequests(ctx context.Context) {
 
 // Transform and route pending events.
 func (p *ScheduledProcessor) processEvents(ctx context.Context) {
-	// TODO(oleg): maybe limit max count and allow returning some data for
-	// further processing on next iteration.
 	// Only process as much data as was present at the start of the processing
 	// run to avoid starving other processors.
 	for max := len(p.eventC); max > 0; max-- {
