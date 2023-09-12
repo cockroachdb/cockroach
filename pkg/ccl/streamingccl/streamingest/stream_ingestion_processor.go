@@ -677,6 +677,28 @@ func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
 					Mean:  float32(timeBetweenHandleEventHistogram.Mean()),
 					Count: timeBetweenHandleEventHistogram.TotalCount(),
 				}
+				ingestionStats.TimeInFlush = &HistogramData{
+					Min:   sip.flushHistogram.Min(),
+					P5:    sip.flushHistogram.ValueAtQuantile(5),
+					P50:   sip.flushHistogram.ValueAtQuantile(50),
+					P90:   sip.flushHistogram.ValueAtQuantile(90),
+					P99:   sip.flushHistogram.ValueAtQuantile(99),
+					P99_9: sip.flushHistogram.ValueAtQuantile(99.9),
+					Max:   sip.flushHistogram.Max(),
+					Mean:  float32(sip.flushHistogram.Mean()),
+					Count: sip.flushHistogram.TotalCount(),
+				}
+				ingestionStats.TimeBetweenFlush = &HistogramData{
+					Min:   sip.betweenFlushHistogram.Min(),
+					P5:    sip.betweenFlushHistogram.ValueAtQuantile(5),
+					P50:   sip.betweenFlushHistogram.ValueAtQuantile(50),
+					P90:   sip.betweenFlushHistogram.ValueAtQuantile(90),
+					P99:   sip.betweenFlushHistogram.ValueAtQuantile(99),
+					P99_9: sip.betweenFlushHistogram.ValueAtQuantile(99.9),
+					Max:   sip.betweenFlushHistogram.Max(),
+					Mean:  float32(sip.betweenFlushHistogram.Mean()),
+					Count: sip.betweenFlushHistogram.TotalCount(),
+				}
 				sp.RecordStructured(&ingestionStats)
 				ingestionStats = StreamIngestionStats{}
 				lastAggregatorStatsEmitted = timeutil.Now()

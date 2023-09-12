@@ -108,7 +108,6 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 		batchWaitHist = hdrhistogram.New(minLatency.Nanoseconds(),
 			maxLatency.Nanoseconds(), sigFigs)
 	}
-	fmt.Printf("other ns %d\n", otherStats.BatchWait.Nanoseconds())
 	_ = batchWaitHist.RecordValue(otherStats.BatchWait.Nanoseconds())
 	// Store the snapshot of this new merged histogram.
 	cumulativeSnapshot := batchWaitHist.Export()
