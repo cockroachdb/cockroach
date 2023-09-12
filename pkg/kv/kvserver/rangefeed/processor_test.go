@@ -297,7 +297,7 @@ func newTestProcessor(
 		o(&cfg)
 	}
 	if cfg.useScheduler {
-		sch := NewScheduler(SchedulerConfig{Workers: 1})
+		sch := NewScheduler(SchedulerConfig{Workers: 1, Metrics: NewSchedulerMetrics(time.Second)})
 		_ = sch.Start(context.Background(), stopper)
 		cfg.Scheduler = sch
 	}

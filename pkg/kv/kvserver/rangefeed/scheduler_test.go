@@ -29,7 +29,7 @@ func TestStopEmpty(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 1})
+	s := newTestScheduler(1)
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
 	s.Stop()
 
@@ -42,7 +42,7 @@ func TestStopNonEmpty(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 1})
+	s := newTestScheduler(1)
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
 	c := createAndRegisterConsumerOrFail(t, s)
 	s.StopProcessor(c.id)
@@ -212,7 +212,7 @@ func TestDeliverEvents(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 1})
+	s := newTestScheduler(1)
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
 	c := createAndRegisterConsumerOrFail(t, s)
 	s.Enqueue(c.id, te1)
@@ -226,7 +226,7 @@ func TestNoParallel(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 2})
+	s := newTestScheduler(2)
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
 	c := createAndRegisterConsumerOrFail(t, s)
 	c.pause()
@@ -244,7 +244,7 @@ func TestProcessOtherWhilePaused(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 2})
+	s := newTestScheduler(2)
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
 	c1 := createAndRegisterConsumerOrFail(t, s)
 	c2 := createAndRegisterConsumerOrFail(t, s)
@@ -266,7 +266,7 @@ func TestEventsCombined(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 2})
+	s := newTestScheduler(2)
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
 	c := createAndRegisterConsumerOrFail(t, s)
 	c.pause()
@@ -285,7 +285,7 @@ func TestRescheduleEvent(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 2})
+	s := newTestScheduler(2)
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
 	c := createAndRegisterConsumerOrFail(t, s)
 	c.pause()
@@ -303,7 +303,7 @@ func TestClientScheduler(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 2})
+	s := newTestScheduler(2)
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
 	cs := NewClientScheduler(s)
 	// Manually create consumer as we don't want it to start, but want to use it
@@ -333,7 +333,12 @@ func TestScheduleBatch(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 8, ShardSize: 2, BulkChunkSize: 2})
+	s := NewScheduler(SchedulerConfig{
+		Workers:       2,
+		BulkChunkSize: 2,
+		ShardSize:     2,
+		Metrics:       NewSchedulerMetrics(time.Minute),
+	})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
 	const consumerNumber = 100
 	consumers := make([]*schedulerConsumer, consumerNumber)
@@ -356,7 +361,7 @@ func TestPartialProcessing(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 1})
+	s := newTestScheduler(1)
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
 	c := createAndRegisterConsumerOrFail(t, s)
 	// Set process response to trigger process once again.
@@ -385,7 +390,7 @@ func TestUnregisterWithoutStop(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 1})
+	s := newTestScheduler(1)
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
 	c := createAndRegisterConsumerOrFail(t, s)
 	s.Enqueue(c.id, te1)
@@ -402,7 +407,7 @@ func TestStartupFailure(t *testing.T) {
 	stopper := stop.NewStopper()
 	stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 1})
+	s := newTestScheduler(1)
 	require.Error(t, s.Start(ctx, stopper), "started despite stopper stopped")
 }
 
@@ -412,7 +417,9 @@ func TestSchedulerShutdown(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 2, ShardSize: 1})
+	s := NewScheduler(SchedulerConfig{
+		Workers: 2, ShardSize: 1, Metrics: NewSchedulerMetrics(time.Minute),
+	})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
 	c1 := createAndRegisterConsumerOrFail(t, s)
 	c2 := createAndRegisterConsumerOrFail(t, s)
@@ -427,11 +434,11 @@ func TestQueueReadWrite1By1(t *testing.T) {
 	q := newIDQueue()
 	val := int64(7)
 	for i := 0; i < idQueueChunkSize*3; i++ {
-		q.pushBack(val)
+		q.pushBack(queueEntry{id: val})
 		require.Equal(t, 1, q.Len(), "queue size")
 		v, ok := q.popFront()
 		require.True(t, ok, "value not found after writing")
-		require.Equal(t, val, v, "read different from write")
+		require.Equal(t, val, v.id, "read different from write")
 		val = val*3 + 7
 	}
 	_, ok := q.popFront()
@@ -443,7 +450,7 @@ func TestQueueReadWriteFull(t *testing.T) {
 	val := int64(7)
 	for i := 0; i < idQueueChunkSize*3; i++ {
 		require.Equal(t, i, q.Len(), "queue size")
-		q.pushBack(val)
+		q.pushBack(queueEntry{id: val})
 		val = val*3 + 7
 	}
 	val = int64(7)
@@ -451,7 +458,7 @@ func TestQueueReadWriteFull(t *testing.T) {
 		require.Equal(t, idQueueChunkSize*3-i, q.Len(), "queue size")
 		v, ok := q.popFront()
 		require.True(t, ok, "value not found after writing")
-		require.Equal(t, val, v, "read different from write")
+		require.Equal(t, val, v.id, "read different from write")
 		val = val*3 + 7
 	}
 	require.Equal(t, 0, q.Len(), "queue size")
@@ -463,6 +470,10 @@ func TestQueueReadEmpty(t *testing.T) {
 	q := newIDQueue()
 	_, ok := q.popFront()
 	require.False(t, ok, "unexpected value in empty queue")
+}
+
+func newTestScheduler(workers int) *Scheduler {
+	return NewScheduler(SchedulerConfig{Workers: workers, Metrics: NewSchedulerMetrics(time.Minute)})
 }
 
 func TestNewSchedulerShards(t *testing.T) {
@@ -510,7 +521,9 @@ func TestNewSchedulerShards(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("workers=%d/shardSize=%d", tc.workers, tc.shardSize), func(t *testing.T) {
-			s := NewScheduler(SchedulerConfig{Workers: tc.workers, ShardSize: tc.shardSize})
+			s := NewScheduler(SchedulerConfig{
+				Workers: tc.workers, ShardSize: tc.shardSize, Metrics: NewSchedulerMetrics(time.Minute),
+			})
 
 			var shardWorkers []int
 			for _, shard := range s.shards {
