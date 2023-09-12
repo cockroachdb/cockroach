@@ -2723,6 +2723,7 @@ func (p projPlusDecimalDecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -2742,6 +2743,7 @@ func (p projPlusDecimalDecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -2760,6 +2762,7 @@ func (p projPlusDecimalDecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -2776,6 +2779,7 @@ func (p projPlusDecimalDecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -3117,6 +3121,7 @@ func (p projPlusInt16DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -3138,6 +3143,7 @@ func (p projPlusInt16DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -3158,6 +3164,7 @@ func (p projPlusInt16DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -3176,6 +3183,7 @@ func (p projPlusInt16DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -3636,6 +3644,7 @@ func (p projPlusInt32DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -3657,6 +3666,7 @@ func (p projPlusInt32DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -3677,6 +3687,7 @@ func (p projPlusInt32DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -3695,6 +3706,7 @@ func (p projPlusInt32DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -4155,6 +4167,7 @@ func (p projPlusInt64DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -4176,6 +4189,7 @@ func (p projPlusInt64DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -4196,6 +4210,7 @@ func (p projPlusInt64DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -4214,6 +4229,7 @@ func (p projPlusInt64DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -5611,6 +5627,7 @@ func (p projMinusDecimalDecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -5630,6 +5647,7 @@ func (p projMinusDecimalDecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -5648,6 +5666,7 @@ func (p projMinusDecimalDecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -5664,6 +5683,7 @@ func (p projMinusDecimalDecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -6005,6 +6025,7 @@ func (p projMinusInt16DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -6026,6 +6047,7 @@ func (p projMinusInt16DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -6046,6 +6068,7 @@ func (p projMinusInt16DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -6064,6 +6087,7 @@ func (p projMinusInt16DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -6524,6 +6548,7 @@ func (p projMinusInt32DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -6545,6 +6570,7 @@ func (p projMinusInt32DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -6565,6 +6591,7 @@ func (p projMinusInt32DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -6583,6 +6610,7 @@ func (p projMinusInt32DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -7043,6 +7071,7 @@ func (p projMinusInt64DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -7064,6 +7093,7 @@ func (p projMinusInt64DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -7084,6 +7114,7 @@ func (p projMinusInt64DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -7102,6 +7133,7 @@ func (p projMinusInt64DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -9079,6 +9111,7 @@ func (p projMultDecimalDecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -9098,6 +9131,7 @@ func (p projMultDecimalDecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -9116,6 +9150,7 @@ func (p projMultDecimalDecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -9132,6 +9167,7 @@ func (p projMultDecimalDecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -9655,6 +9691,7 @@ func (p projMultInt16DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -9676,6 +9713,7 @@ func (p projMultInt16DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -9696,6 +9734,7 @@ func (p projMultInt16DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -9714,6 +9753,7 @@ func (p projMultInt16DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -10217,6 +10257,7 @@ func (p projMultInt32DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -10238,6 +10279,7 @@ func (p projMultInt32DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -10258,6 +10300,7 @@ func (p projMultInt32DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -10276,6 +10319,7 @@ func (p projMultInt32DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -10779,6 +10823,7 @@ func (p projMultInt64DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -10800,6 +10845,7 @@ func (p projMultInt64DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -10820,6 +10866,7 @@ func (p projMultInt64DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -10838,6 +10885,7 @@ func (p projMultInt64DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -11447,7 +11495,7 @@ func (p projDivDecimalInt16ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -11471,7 +11519,7 @@ func (p projDivDecimalInt16ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -11494,7 +11542,7 @@ func (p projDivDecimalInt16ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -11515,7 +11563,7 @@ func (p projDivDecimalInt16ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -11565,7 +11613,7 @@ func (p projDivDecimalInt32ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -11589,7 +11637,7 @@ func (p projDivDecimalInt32ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -11612,7 +11660,7 @@ func (p projDivDecimalInt32ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -11633,7 +11681,7 @@ func (p projDivDecimalInt32ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -11683,7 +11731,7 @@ func (p projDivDecimalInt64ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -11707,7 +11755,7 @@ func (p projDivDecimalInt64ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -11730,7 +11778,7 @@ func (p projDivDecimalInt64ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -11751,7 +11799,7 @@ func (p projDivDecimalInt64ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -11801,7 +11849,7 @@ func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg.IsZero() {
+							if p.constArg.IsZero() && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -11809,6 +11857,11 @@ func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite && arg.Form == apd.Finite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -11824,7 +11877,7 @@ func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg.IsZero() {
+							if p.constArg.IsZero() && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -11832,6 +11885,11 @@ func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite && arg.Form == apd.Finite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -11846,7 +11904,7 @@ func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg.IsZero() {
+						if p.constArg.IsZero() && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -11854,6 +11912,11 @@ func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite && arg.Form == apd.Finite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -11866,7 +11929,7 @@ func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg.IsZero() {
+						if p.constArg.IsZero() && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -11874,6 +11937,11 @@ func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite && arg.Form == apd.Finite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -12267,6 +12335,11 @@ func (p projDivInt16DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -12292,6 +12365,11 @@ func (p projDivInt16DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -12316,6 +12394,11 @@ func (p projDivInt16DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -12338,6 +12421,11 @@ func (p projDivInt16DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -12731,6 +12819,11 @@ func (p projDivInt32DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -12756,6 +12849,11 @@ func (p projDivInt32DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -12780,6 +12878,11 @@ func (p projDivInt32DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -12802,6 +12905,11 @@ func (p projDivInt32DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -13195,6 +13303,11 @@ func (p projDivInt64DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -13220,6 +13333,11 @@ func (p projDivInt64DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -13244,6 +13362,11 @@ func (p projDivInt64DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -13266,6 +13389,11 @@ func (p projDivInt64DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -13307,7 +13435,7 @@ func (p projDivFloat64Float64ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0.0 {
+							if p.constArg == 0.0 && !math.IsNaN(arg) {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -13327,7 +13455,7 @@ func (p projDivFloat64Float64ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0.0 {
+							if p.constArg == 0.0 && !math.IsNaN(arg) {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -13346,7 +13474,7 @@ func (p projDivFloat64Float64ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0.0 {
+						if p.constArg == 0.0 && !math.IsNaN(arg) {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -13363,7 +13491,7 @@ func (p projDivFloat64Float64ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0.0 {
+						if p.constArg == 0.0 && !math.IsNaN(arg) {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -13737,7 +13865,7 @@ func (p projFloorDivDecimalInt16ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -13761,7 +13889,7 @@ func (p projFloorDivDecimalInt16ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -13784,7 +13912,7 @@ func (p projFloorDivDecimalInt16ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -13805,7 +13933,7 @@ func (p projFloorDivDecimalInt16ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -13855,7 +13983,7 @@ func (p projFloorDivDecimalInt32ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -13879,7 +14007,7 @@ func (p projFloorDivDecimalInt32ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -13902,7 +14030,7 @@ func (p projFloorDivDecimalInt32ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -13923,7 +14051,7 @@ func (p projFloorDivDecimalInt32ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -13973,7 +14101,7 @@ func (p projFloorDivDecimalInt64ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -13997,7 +14125,7 @@ func (p projFloorDivDecimalInt64ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -14020,7 +14148,7 @@ func (p projFloorDivDecimalInt64ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -14041,7 +14169,7 @@ func (p projFloorDivDecimalInt64ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -14091,7 +14219,7 @@ func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg.IsZero() {
+							if p.constArg.IsZero() && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -14099,6 +14227,11 @@ func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite && arg.Form == apd.Finite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -14114,7 +14247,7 @@ func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg.IsZero() {
+							if p.constArg.IsZero() && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -14122,6 +14255,11 @@ func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite && arg.Form == apd.Finite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -14136,7 +14274,7 @@ func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg.IsZero() {
+						if p.constArg.IsZero() && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -14144,6 +14282,11 @@ func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite && arg.Form == apd.Finite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -14156,7 +14299,7 @@ func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg.IsZero() {
+						if p.constArg.IsZero() && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -14164,6 +14307,11 @@ func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite && arg.Form == apd.Finite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -14497,6 +14645,11 @@ func (p projFloorDivInt16DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -14522,6 +14675,11 @@ func (p projFloorDivInt16DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -14546,6 +14704,11 @@ func (p projFloorDivInt16DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -14568,6 +14731,11 @@ func (p projFloorDivInt16DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -14901,6 +15069,11 @@ func (p projFloorDivInt32DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -14926,6 +15099,11 @@ func (p projFloorDivInt32DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -14950,6 +15128,11 @@ func (p projFloorDivInt32DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -14972,6 +15155,11 @@ func (p projFloorDivInt32DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -15305,6 +15493,11 @@ func (p projFloorDivInt64DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -15330,6 +15523,11 @@ func (p projFloorDivInt64DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
+							if p.constArg.Form == apd.Infinite {
+								projCol[i] = apd.Decimal{}
+							}
+
 						}
 
 					}
@@ -15354,6 +15552,11 @@ func (p projFloorDivInt64DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -15376,6 +15579,11 @@ func (p projFloorDivInt64DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
+						if p.constArg.Form == apd.Infinite {
+							projCol[i] = apd.Decimal{}
+						}
+
 					}
 
 				}
@@ -15417,7 +15625,7 @@ func (p projFloorDivFloat64Float64ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0.0 {
+							if p.constArg == 0.0 && !math.IsNaN(arg) {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -15437,7 +15645,7 @@ func (p projFloorDivFloat64Float64ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0.0 {
+							if p.constArg == 0.0 && !math.IsNaN(arg) {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -15456,7 +15664,7 @@ func (p projFloorDivFloat64Float64ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0.0 {
+						if p.constArg == 0.0 && !math.IsNaN(arg) {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -15473,7 +15681,7 @@ func (p projFloorDivFloat64Float64ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0.0 {
+						if p.constArg == 0.0 && !math.IsNaN(arg) {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -15519,7 +15727,7 @@ func (p projModDecimalInt16ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -15543,7 +15751,7 @@ func (p projModDecimalInt16ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -15566,7 +15774,7 @@ func (p projModDecimalInt16ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -15587,7 +15795,7 @@ func (p projModDecimalInt16ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -15637,7 +15845,7 @@ func (p projModDecimalInt32ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -15661,7 +15869,7 @@ func (p projModDecimalInt32ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -15684,7 +15892,7 @@ func (p projModDecimalInt32ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -15705,7 +15913,7 @@ func (p projModDecimalInt32ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -15755,7 +15963,7 @@ func (p projModDecimalInt64ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -15779,7 +15987,7 @@ func (p projModDecimalInt64ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0 {
+							if p.constArg == 0 && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -15802,7 +16010,7 @@ func (p projModDecimalInt64ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -15823,7 +16031,7 @@ func (p projModDecimalInt64ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0 {
+						if p.constArg == 0 && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -15873,7 +16081,7 @@ func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg.IsZero() {
+							if p.constArg.IsZero() && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -15881,6 +16089,7 @@ func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -15896,7 +16105,7 @@ func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg.IsZero() {
+							if p.constArg.IsZero() && arg.Form != apd.NaN {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -15904,6 +16113,7 @@ func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -15918,7 +16128,7 @@ func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg.IsZero() {
+						if p.constArg.IsZero() && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -15926,6 +16136,7 @@ func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -15938,7 +16149,7 @@ func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg.IsZero() {
+						if p.constArg.IsZero() && arg.Form != apd.NaN {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -15946,6 +16157,7 @@ func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -16279,6 +16491,7 @@ func (p projModInt16DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -16304,6 +16517,7 @@ func (p projModInt16DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -16328,6 +16542,7 @@ func (p projModInt16DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -16350,6 +16565,7 @@ func (p projModInt16DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -16683,6 +16899,7 @@ func (p projModInt32DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -16708,6 +16925,7 @@ func (p projModInt32DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -16732,6 +16950,7 @@ func (p projModInt32DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -16754,6 +16973,7 @@ func (p projModInt32DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -17087,6 +17307,7 @@ func (p projModInt64DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -17112,6 +17333,7 @@ func (p projModInt64DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -17136,6 +17358,7 @@ func (p projModInt64DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -17158,6 +17381,7 @@ func (p projModInt64DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -17199,7 +17423,7 @@ func (p projModFloat64Float64ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0.0 {
+							if p.constArg == 0.0 && !math.IsNaN(arg) {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -17219,7 +17443,7 @@ func (p projModFloat64Float64ConstOp) Next() coldata.Batch {
 
 						{
 
-							if p.constArg == 0.0 {
+							if p.constArg == 0.0 && !math.IsNaN(arg) {
 								colexecerror.ExpectedError(tree.ErrDivByZero)
 							}
 
@@ -17238,7 +17462,7 @@ func (p projModFloat64Float64ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0.0 {
+						if p.constArg == 0.0 && !math.IsNaN(arg) {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -17255,7 +17479,7 @@ func (p projModFloat64Float64ConstOp) Next() coldata.Batch {
 
 					{
 
-						if p.constArg == 0.0 {
+						if p.constArg == 0.0 && !math.IsNaN(arg) {
 							colexecerror.ExpectedError(tree.ErrDivByZero)
 						}
 
@@ -17611,6 +17835,7 @@ func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -17630,6 +17855,7 @@ func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -17648,6 +17874,7 @@ func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -17664,6 +17891,7 @@ func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -18077,6 +18305,7 @@ func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -18098,6 +18327,7 @@ func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -18118,6 +18348,7 @@ func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -18136,6 +18367,7 @@ func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -18549,6 +18781,7 @@ func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -18570,6 +18803,7 @@ func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -18590,6 +18824,7 @@ func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -18608,6 +18843,7 @@ func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -19021,6 +19257,7 @@ func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -19042,6 +19279,7 @@ func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 					}
@@ -19062,6 +19300,7 @@ func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
@@ -19080,6 +19319,7 @@ func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 						if err != nil {
 							colexecerror.ExpectedError(err)
 						}
+
 					}
 
 				}
