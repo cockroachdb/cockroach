@@ -464,7 +464,7 @@ func TestReplicaDataIteratorGlobalRangeKey(t *testing.T) {
 				if replicatedOnly {
 					expectedSpans = MakeReplicatedKeySpans(&desc)
 				} else {
-					expectedSpans = makeAllKeySpans(&desc)
+					expectedSpans = MakeAllKeySpans(&desc)
 				}
 
 				var actualSpans []roachpb.Span
@@ -500,7 +500,7 @@ func TestReplicaKeyRanges(t *testing.T) {
 		StartKey: roachpb.RKeyMin,
 		EndKey:   roachpb.RKeyMax,
 	}
-	checkOrdering(t, makeAllKeySpans(&desc))
+	checkOrdering(t, MakeAllKeySpans(&desc))
 	checkOrdering(t, MakeReplicatedKeySpans(&desc))
 	checkOrdering(t, makeReplicatedKeySpansExceptLockTable(&desc))
 }
@@ -554,7 +554,7 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 
 	for _, desc := range descs {
 		var keyBuf roachpb.Key
-		keySpans := makeAllKeySpans(&desc)
+		keySpans := MakeAllKeySpans(&desc)
 		for i := 0; i < numKeysPerRange; i++ {
 			keyBuf = append(keyBuf[:0], keySpans[i%len(keySpans)].Key...)
 			keyBuf = append(keyBuf, 0, 0, 0, 0)
