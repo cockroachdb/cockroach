@@ -72,11 +72,7 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.T
 
 		// Clear out all span config records left over by the tenant.
 		tenID := roachpb.MustMakeTenantID(info.ID)
-		tenantPrefix := keys.MakeTenantPrefix(tenID)
-		tenantSpan := roachpb.Span{
-			Key:    tenantPrefix,
-			EndKey: tenantPrefix.PrefixEnd(),
-		}
+		tenantSpan := keys.MakeTenantSpan(tenID)
 
 		systemTarget, err := spanconfig.MakeTenantKeyspaceTarget(tenID, tenID)
 		if err != nil {
