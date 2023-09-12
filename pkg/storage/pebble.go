@@ -2832,11 +2832,22 @@ func (p *pebbleEFOS) NewMVCCIterator(
 	// check for non-prefix iterators as prefix iterators often don't specify
 	// any bounds.
 	if !opts.Prefix {
-		if opts.LowerBound == nil || opts.UpperBound == nil {
+		if opts.LowerBound == nil && opts.UpperBound == nil {
 			return nil, errors.AssertionFailedf("cannot create iterators on EFOS without bounds")
 		}
 		var found bool
+		// Note that this assertion checking is imperfect as it assumes that if
+		// only one of the bounds is specified, we will really only read that key.
+		// Fixing this is non-trivial as a lot of NewMVCCIterator calls only specify
+		// one bound. We rely on spanset assertions to more accurately track cases
+		// of iterator reads outside of EFOS spans.
 		boundSpan := roachpb.Span{Key: opts.LowerBound, EndKey: opts.UpperBound}
+		switch {
+		case len(boundSpan.Key) == 0:
+			boundSpan.Key = boundSpan.EndKey
+		case len(boundSpan.EndKey) == 0:
+			boundSpan.EndKey = boundSpan.Key
+		}
 		for i := range p.keyRanges {
 			if p.keyRanges[i].Contains(boundSpan) {
 				found = true
