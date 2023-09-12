@@ -77,9 +77,9 @@ SELECT id FROM system.namespace WHERE name = 't1';
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(111,1,,)
-(111,2,"""[FUNCTION 100106]()""",[106])
-(111,3,,)
+(10007,1,,)
+(10007,2,"""[FUNCTION 110002]()""",[10002])
+(10007,3,,)
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1];
@@ -104,7 +104,7 @@ SELECT get_fn_depended_on_by($fn_id)
         "columnIds": [
             2
         ],
-        "id": 111
+        "id": 10007
     }
 ]
 
@@ -115,9 +115,9 @@ ALTER TABLE t1 ALTER COLUMN c SET DEFAULT f1();
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(111,1,,)
-(111,2,"""[FUNCTION 100106]()""",[106])
-(111,3,"""[FUNCTION 100106]()""",[106])
+(10007,1,,)
+(10007,2,"""[FUNCTION 110002]()""",[10002])
+(10007,3,"""[FUNCTION 110002]()""",[10002])
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1];
@@ -139,7 +139,7 @@ SELECT get_fn_depended_on_by($fn_id)
             2,
             3
         ],
-        "id": 111
+        "id": 10007
     }
 ]
 
@@ -150,9 +150,9 @@ ALTER TABLE t1 ALTER COLUMN c SET DEFAULT NULL;
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(111,1,,)
-(111,2,"""[FUNCTION 100106]()""",[106])
-(111,3,,)
+(10007,1,,)
+(10007,2,"""[FUNCTION 110002]()""",[10002])
+(10007,3,,)
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -162,7 +162,7 @@ SELECT get_fn_depended_on_by($fn_id)
         "columnIds": [
             2
         ],
-        "id": 111
+        "id": 10007
     }
 ]
 
@@ -172,9 +172,9 @@ ALTER TABLE t1 ALTER COLUMN b SET DEFAULT NULL;
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(111,1,,)
-(111,2,,)
-(111,3,,)
+(10007,1,,)
+(10007,2,,)
+(10007,3,,)
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -188,9 +188,9 @@ ALTER TABLE t1 ALTER COLUMN c SET DEFAULT f1();
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(111,1,,)
-(111,2,,)
-(111,3,"""[FUNCTION 100106]()""",[106])
+(10007,1,,)
+(10007,2,,)
+(10007,3,"""[FUNCTION 110002]()""",[10002])
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -200,7 +200,7 @@ SELECT get_fn_depended_on_by($fn_id)
         "columnIds": [
             3
         ],
-        "id": 111
+        "id": 10007
     }
 ]
 
@@ -210,8 +210,8 @@ ALTER TABLE t1 DROP COLUMN c;
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(111,1,,)
-(111,2,,)
+(10007,1,,)
+(10007,2,,)
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -225,8 +225,8 @@ ALTER TABLE t1 ALTER COLUMN b SET DEFAULT f1();
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(111,1,,)
-(111,2,"""[FUNCTION 100106]()""",[106])
+(10007,1,,)
+(10007,2,"""[FUNCTION 110002]()""",[10002])
 
 query T
 SELECT get_fn_depended_on_by($fn_id)
@@ -236,7 +236,7 @@ SELECT get_fn_depended_on_by($fn_id)
         "columnIds": [
             2
         ],
-        "id": 111
+        "id": 10007
     }
 ]
 
@@ -271,13 +271,13 @@ SELECT get_fn_depended_on_by($fn_id)
         "columnIds": [
             2
         ],
-        "id": 112
+        "id": 10008
     },
     {
         "columnIds": [
             2
         ],
-        "id": 113
+        "id": 10009
     }
 ]
 
@@ -313,7 +313,7 @@ SELECT get_fn_depended_on_by($fn_id)
         "columnIds": [
             2
         ],
-        "id": 115
+        "id": 10011
     }
 ]
 
@@ -325,7 +325,7 @@ SELECT get_fn_depended_on_by($fn_id_2)
         "columnIds": [
             3
         ],
-        "id": 115
+        "id": 10011
     }
 ]
 
@@ -387,8 +387,8 @@ SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(119,1,,)
-(119,2,"""[FUNCTION 100118]()""",[118])
+(10015,1,,)
+(10015,2,"""[FUNCTION 110014]()""",[10014])
 
 query T
 SELECT get_fn_depended_on_by($fn_id);
@@ -398,7 +398,7 @@ SELECT get_fn_depended_on_by($fn_id);
         "columnIds": [
             2
         ],
-        "id": 119
+        "id": 10015
     }
 ]
 
@@ -429,8 +429,8 @@ SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 query T rowsort
 SELECT get_col_fn_ids($tbl_id);
 ----
-(120,1,,)
-(120,2,"""[FUNCTION 100121]()""",[121])
+(10016,1,,)
+(10016,2,"""[FUNCTION 110017]()""",[10017])
 
 query T
 SELECT get_fn_depended_on_by($fn_id);
@@ -440,7 +440,7 @@ SELECT get_fn_depended_on_by($fn_id);
         "columnIds": [
             2
         ],
-        "id": 120
+        "id": 10016
     }
 ]
 

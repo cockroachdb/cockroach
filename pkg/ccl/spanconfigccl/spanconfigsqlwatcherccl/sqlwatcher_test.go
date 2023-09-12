@@ -75,6 +75,7 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	ts := tc.Server(0 /* idx */)
 
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
+	tdb.Exec(t, `CREATE DATABASE test`) // ensure idBase below arrives into the fixed descriptor ID range.
 	tdb.QueryRow(t, `SELECT max(id) FROM system.descriptor`).Scan(&idBase)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'`)

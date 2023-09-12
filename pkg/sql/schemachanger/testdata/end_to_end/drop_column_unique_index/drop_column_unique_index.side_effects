@@ -5,9 +5,9 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4') CHECK (x >= 0);
 ----
 ...
-+database {0 0 t} -> 104
-+schema {104 0 public} -> 105
-+object {104 105 test} -> 106
++database {0 0 t} -> 10000
++schema {10000 0 public} -> 10001
++object {10000 10001 test} -> 10002
 
 /* test */
 ALTER TABLE t.test DROP pi;
@@ -20,13 +20,13 @@ increment telemetry for sql.schema.alter_table.drop_column
 write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
-    descriptorId: 106
+    descriptorId: 10002
     statement: ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›
     tag: ALTER TABLE
     user: root
   tableName: t.public.test
 ## StatementPhase stage 1 of 1 with 10 MutationType ops
-upsert descriptor #106
+upsert descriptor #10002
   ...
          oid: 20
          width: 64
@@ -126,7 +126,7 @@ upsert descriptor #106
   -  nextIndexId: 6
   +  nextIndexId: 8
      nextMutationId: 1
-     parentId: 104
+     parentId: 10000
   ...
        storeColumnNames:
        - v
@@ -136,7 +136,7 @@ upsert descriptor #106
        unique: true
   ...
        time: {}
-     unexposedParentSchemaId: 105
+     unexposedParentSchemaId: 10001
   -  version: "15"
   +  version: "16"
 # end StatementPhase
@@ -145,7 +145,7 @@ upsert descriptor #106
 undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 14 MutationType ops
-upsert descriptor #106
+upsert descriptor #10002
   ...
          oid: 20
          width: 64
@@ -177,7 +177,7 @@ upsert descriptor #106
   +        "4": check_x
   +      families:
   +        "0": primary
-  +      id: 106
+  +      id: 10002
   +      indexes:
   +        "2": vidx
   +        "6": test_pkey
@@ -279,7 +279,7 @@ upsert descriptor #106
   -  nextIndexId: 6
   +  nextIndexId: 8
      nextMutationId: 1
-     parentId: 104
+     parentId: 10000
   ...
        storeColumnNames:
        - v
@@ -289,12 +289,12 @@ upsert descriptor #106
        unique: true
   ...
        time: {}
-     unexposedParentSchemaId: 105
+     unexposedParentSchemaId: 10001
   -  version: "15"
   +  version: "16"
 persist all catalog changes to storage
 create job #1 (non-cancelable: false): "ALTER TABLE t.public.test DROP COLUMN pi"
-  descriptor IDs: [106]
+  descriptor IDs: [10002]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -303,7 +303,7 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 3 MutationType ops
-upsert descriptor #106
+upsert descriptor #10002
   ...
          version: 4
        mutationId: 1
@@ -313,7 +313,7 @@ upsert descriptor #106
      nextColumnId: 5
   ...
        time: {}
-     unexposedParentSchemaId: 105
+     unexposedParentSchemaId: 10001
   -  version: "16"
   +  version: "17"
 persist all catalog changes to storage
@@ -321,11 +321,11 @@ update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 Ba
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 7 with 1 BackfillType op
-backfill indexes [6] from index #4 in table #106
+backfill indexes [6] from index #4 in table #10002
 commit transaction #4
 begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 3 MutationType ops
-upsert descriptor #106
+upsert descriptor #10002
   ...
          version: 4
        mutationId: 1
@@ -335,7 +335,7 @@ upsert descriptor #106
        index:
   ...
        time: {}
-     unexposedParentSchemaId: 105
+     unexposedParentSchemaId: 10001
   -  version: "17"
   +  version: "18"
 persist all catalog changes to storage
@@ -343,7 +343,7 @@ update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 Mu
 commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 3 MutationType ops
-upsert descriptor #106
+upsert descriptor #10002
   ...
          version: 4
        mutationId: 1
@@ -353,7 +353,7 @@ upsert descriptor #106
        index:
   ...
        time: {}
-     unexposedParentSchemaId: 105
+     unexposedParentSchemaId: 10001
   -  version: "18"
   +  version: "19"
 persist all catalog changes to storage
@@ -361,11 +361,11 @@ update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 Ba
 commit transaction #6
 begin transaction #7
 ## PostCommitPhase stage 5 of 7 with 1 BackfillType op
-merge temporary indexes [7] into backfilled indexes [6] in table #106
+merge temporary indexes [7] into backfilled indexes [6] in table #10002
 commit transaction #7
 begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 4 MutationType ops
-upsert descriptor #106
+upsert descriptor #10002
   ...
          version: 4
        mutationId: 1
@@ -384,7 +384,7 @@ upsert descriptor #106
      nextColumnId: 5
   ...
        time: {}
-     unexposedParentSchemaId: 105
+     unexposedParentSchemaId: 10001
   -  version: "19"
   +  version: "20"
 persist all catalog changes to storage
@@ -392,11 +392,11 @@ update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 1 Va
 commit transaction #8
 begin transaction #9
 ## PostCommitPhase stage 7 of 7 with 1 ValidationType op
-validate forward indexes [6] in table #106
+validate forward indexes [6] in table #10002
 commit transaction #9
 begin transaction #10
 ## PostCommitNonRevertiblePhase stage 1 of 3 with 11 MutationType ops
-upsert descriptor #106
+upsert descriptor #10002
   ...
            statement: ALTER TABLE t.test DROP COLUMN pi
            statementTag: ALTER TABLE
@@ -472,7 +472,7 @@ upsert descriptor #106
      name: test
      nextColumnId: 5
   ...
-     parentId: 104
+     parentId: 10000
      primaryIndex:
   -    constraintId: 5
   +    constraintId: 7
@@ -496,7 +496,7 @@ upsert descriptor #106
        unique: true
   ...
        time: {}
-     unexposedParentSchemaId: 105
+     unexposedParentSchemaId: 10001
   -  version: "20"
   +  version: "21"
 persist all catalog changes to storage
@@ -505,7 +505,7 @@ set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
 ## PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
-upsert descriptor #106
+upsert descriptor #10002
   ...
          version: 4
        mutationId: 1
@@ -515,7 +515,7 @@ upsert descriptor #106
      nextColumnId: 5
   ...
        time: {}
-     unexposedParentSchemaId: 105
+     unexposedParentSchemaId: 10001
   -  version: "21"
   +  version: "22"
 persist all catalog changes to storage
@@ -523,7 +523,7 @@ update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 o
 commit transaction #11
 begin transaction #12
 ## PostCommitNonRevertiblePhase stage 3 of 3 with 7 MutationType ops
-upsert descriptor #106
+upsert descriptor #10002
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -543,7 +543,7 @@ upsert descriptor #106
   -        "4": check_x
   -      families:
   -        "0": primary
-  -      id: 106
+  -      id: 10002
   -      indexes:
   -        "2": vidx
   -        "6": test_pkey
@@ -617,18 +617,18 @@ upsert descriptor #106
      nextColumnId: 5
   ...
        time: {}
-     unexposedParentSchemaId: 105
+     unexposedParentSchemaId: 10001
   -  version: "22"
   +  version: "23"
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE t.public.test DROP COLUMN pi"
-  descriptor IDs: [106]
+  descriptor IDs: [10002]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
-    descriptorId: 106
+    descriptorId: 10002
 commit transaction #12
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

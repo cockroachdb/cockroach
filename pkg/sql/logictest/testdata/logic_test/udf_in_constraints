@@ -68,7 +68,7 @@ SELECT get_checks($tbl_id);
             2
         ],
         "constraintId": 2,
-        "expr": "[FUNCTION 100106](b) \u003e 1:::INT8",
+        "expr": "[FUNCTION 110002](b) \u003e 1:::INT8",
         "name": "check_b"
     }
 ]
@@ -96,7 +96,7 @@ SELECT get_fn_depended_on_by($fn_id)
         "constraintIds": [
             2
         ],
-        "id": 111
+        "id": 10007
     }
 ]
 
@@ -113,7 +113,7 @@ SELECT get_checks($tbl_id);
             2
         ],
         "constraintId": 2,
-        "expr": "[FUNCTION 100106](b) \u003e 1:::INT8",
+        "expr": "[FUNCTION 110002](b) \u003e 1:::INT8",
         "name": "check_b"
     },
     {
@@ -121,7 +121,7 @@ SELECT get_checks($tbl_id);
             1
         ],
         "constraintId": 3,
-        "expr": "[FUNCTION 100106](a) \u003e 1:::INT8",
+        "expr": "[FUNCTION 110002](a) \u003e 1:::INT8",
         "name": "cka"
     }
 ]
@@ -135,7 +135,7 @@ SELECT get_fn_depended_on_by($fn_id)
             2,
             3
         ],
-        "id": 111
+        "id": 10007
     }
 ]
 
@@ -156,14 +156,14 @@ SELECT get_fn_depended_on_by($fn_id)
             2,
             3
         ],
-        "id": 111
+        "id": 10007
     },
     {
         "constraintIds": [
             2,
             3
         ],
-        "id": 112
+        "id": 10008
     }
 ]
 
@@ -180,13 +180,13 @@ SELECT get_fn_depended_on_by($fn_id)
             2,
             3
         ],
-        "id": 111
+        "id": 10007
     },
     {
         "constraintIds": [
             2
         ],
-        "id": 112
+        "id": 10008
     }
 ]
 
@@ -202,7 +202,7 @@ SELECT get_fn_depended_on_by($fn_id)
             2,
             3
         ],
-        "id": 111
+        "id": 10007
     }
 ]
 
@@ -269,7 +269,7 @@ SELECT get_checks($tbl_id);
             2
         ],
         "constraintId": 2,
-        "expr": "[FUNCTION 100115](b) \u003e 1:::INT8",
+        "expr": "[FUNCTION 110011](b) \u003e 1:::INT8",
         "name": "check_b"
     }
 ]
@@ -282,7 +282,7 @@ SELECT get_fn_depended_on_by($fn_id);
         "constraintIds": [
             2
         ],
-        "id": 116
+        "id": 10012
     }
 ]
 
@@ -321,7 +321,7 @@ SELECT get_checks($tbl_id);
             2
         ],
         "constraintId": 2,
-        "expr": "[FUNCTION 100118](b) \u003e 1:::INT8",
+        "expr": "[FUNCTION 110014](b) \u003e 1:::INT8",
         "name": "check_b"
     }
 ]
@@ -334,7 +334,7 @@ SELECT get_fn_depended_on_by($fn_id);
         "constraintIds": [
             2
         ],
-        "id": 117
+        "id": 10013
     }
 ]
 

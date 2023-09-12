@@ -11,189 +11,189 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 26 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-)}
- │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb)}
- │         │    ├── PUBLIC → ABSENT    Owner:{DescID: 106 (v3-)}
- │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
- │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "root"}
- │         │    ├── PUBLIC → DROPPED   View:{DescID: 106 (v3-)}
- │         │    ├── PUBLIC → ABSENT    SchemaChild:{DescID: 106 (v3-), ReferencedDescID: 101 (public)}
- │         │    ├── PUBLIC → ABSENT    ColumnFamily:{DescID: 106 (v3-), Name: "primary", ColumnFamilyID: 0 (primary-)}
- │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 1 (j-)}
- │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "j", ColumnID: 1 (j-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (j-)}
- │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
- │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-)}
- │         │    ├── PUBLIC → ABSENT    ColumnNotNull:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
- │         │    ├── PUBLIC → ABSENT    ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
- │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967294 (tableoid-)}
- │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
- │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 1 (v3_pkey-)}
- │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106 (v3-), ColumnID: 1 (j-), IndexID: 1 (v3_pkey-)}
- │         │    ├── PUBLIC → ABSENT    PrimaryIndex:{DescID: 106 (v3-), IndexID: 1 (v3_pkey-), ConstraintID: 1}
- │         │    └── PUBLIC → ABSENT    IndexName:{DescID: 106 (v3-), Name: "v3_pkey", IndexID: 1 (v3_pkey-)}
+ │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 10001 (v2), IndexID: 2 (idx-)}
+ │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 10002 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── PUBLIC → ABSENT    Owner:{DescID: 10002 (v3-)}
+ │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 10002 (v3-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 10002 (v3-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED   View:{DescID: 10002 (v3-)}
+ │         │    ├── PUBLIC → ABSENT    SchemaChild:{DescID: 10002 (v3-), ReferencedDescID: 101 (public)}
+ │         │    ├── PUBLIC → ABSENT    ColumnFamily:{DescID: 10002 (v3-), Name: "primary", ColumnFamilyID: 0 (primary-)}
+ │         │    ├── PUBLIC → ABSENT    Column:{DescID: 10002 (v3-), ColumnID: 1 (j-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 10002 (v3-), Name: "j", ColumnID: 1 (j-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 10002 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (j-)}
+ │         │    ├── PUBLIC → ABSENT    Column:{DescID: 10002 (v3-), ColumnID: 2 (rowid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 10002 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 10002 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnNotNull:{DescID: 10002 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
+ │         │    ├── PUBLIC → ABSENT    ColumnDefaultExpression:{DescID: 10002 (v3-), ColumnID: 2 (rowid-)}
+ │         │    ├── PUBLIC → ABSENT    Column:{DescID: 10002 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 10002 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 10002 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT    Column:{DescID: 10002 (v3-), ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 10002 (v3-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 10002 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 10002 (v3-), ColumnID: 2 (rowid-), IndexID: 1 (v3_pkey-)}
+ │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 10002 (v3-), ColumnID: 1 (j-), IndexID: 1 (v3_pkey-)}
+ │         │    ├── PUBLIC → ABSENT    PrimaryIndex:{DescID: 10002 (v3-), IndexID: 1 (v3_pkey-), ConstraintID: 1}
+ │         │    └── PUBLIC → ABSENT    IndexName:{DescID: 10002 (v3-), Name: "v3_pkey", IndexID: 1 (v3_pkey-)}
  │         └── 34 Mutation operations
- │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
- │              ├── RemoveBackReferencesInRelations {"BackReferencedID":106}
- │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":101}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":106}
- │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":106}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":106}
- │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
- │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":106}
- │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":106}
- │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":106}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":106}
- │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":106}
- │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":106}
- │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":106}
- │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":105}
- │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":106,"Name":"v3","SchemaID":101}}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
- │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
- │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":106}
- │              ├── RemoveColumnNotNull {"ColumnID":2,"TableID":106}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":106}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":106}
- │              ├── AssertColumnFamilyIsRemoved {"TableID":106}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":106}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":106}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":106}
- │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":106}
- │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"TableID":106}
- │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"Kind":2,"TableID":106}
- │              ├── MakeIndexAbsent {"IndexID":1,"TableID":106}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":106}
- │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":10002}
+ │              ├── RemoveBackReferencesInRelations {"BackReferencedID":10002}
+ │              ├── RemoveObjectParent {"ObjectID":10002,"ParentSchemaID":101}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":10002}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":10002}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":10002}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":10002}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":10002}
+ │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":10002}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":10002}
+ │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":10002}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":10002}
+ │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":10002}
+ │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":10002}
+ │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":10002}
+ │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":10001}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":10002,"Name":"v3","SchemaID":101}}
+ │              ├── NotImplementedForPublicObjects {"DescID":10002,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":10002,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":10002,"User":"root"}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":10002}
+ │              ├── RemoveColumnNotNull {"ColumnID":2,"TableID":10002}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":10002}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":10002}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":10002}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":10002}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":10002}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":10002}
+ │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":10002}
+ │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"TableID":10002}
+ │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"Kind":2,"TableID":10002}
+ │              ├── MakeIndexAbsent {"IndexID":1,"TableID":10002}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":10002}
+ │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":10002}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 26 elements transitioning toward ABSENT
- │    │    │    ├── VALIDATED → PUBLIC SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-)}
- │    │    │    ├── ABSENT    → PUBLIC Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb)}
- │    │    │    ├── ABSENT    → PUBLIC Owner:{DescID: 106 (v3-)}
- │    │    │    ├── ABSENT    → PUBLIC UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
- │    │    │    ├── ABSENT    → PUBLIC UserPrivileges:{DescID: 106 (v3-), Name: "root"}
- │    │    │    ├── DROPPED   → PUBLIC View:{DescID: 106 (v3-)}
- │    │    │    ├── ABSENT    → PUBLIC SchemaChild:{DescID: 106 (v3-), ReferencedDescID: 101 (public)}
- │    │    │    ├── ABSENT    → PUBLIC ColumnFamily:{DescID: 106 (v3-), Name: "primary", ColumnFamilyID: 0 (primary-)}
- │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 1 (j-)}
- │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "j", ColumnID: 1 (j-)}
- │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (j-)}
- │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
- │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
- │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-)}
- │    │    │    ├── ABSENT    → PUBLIC ColumnNotNull:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
- │    │    │    ├── ABSENT    → PUBLIC ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
- │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 4294967294 (tableoid-)}
- │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
- │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
- │    │    │    ├── ABSENT    → PUBLIC IndexColumn:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 1 (v3_pkey-)}
- │    │    │    ├── ABSENT    → PUBLIC IndexColumn:{DescID: 106 (v3-), ColumnID: 1 (j-), IndexID: 1 (v3_pkey-)}
- │    │    │    ├── ABSENT    → PUBLIC PrimaryIndex:{DescID: 106 (v3-), IndexID: 1 (v3_pkey-), ConstraintID: 1}
- │    │    │    └── ABSENT    → PUBLIC IndexName:{DescID: 106 (v3-), Name: "v3_pkey", IndexID: 1 (v3_pkey-)}
+ │    │    │    ├── VALIDATED → PUBLIC SecondaryIndex:{DescID: 10001 (v2), IndexID: 2 (idx-)}
+ │    │    │    ├── ABSENT    → PUBLIC Namespace:{DescID: 10002 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb)}
+ │    │    │    ├── ABSENT    → PUBLIC Owner:{DescID: 10002 (v3-)}
+ │    │    │    ├── ABSENT    → PUBLIC UserPrivileges:{DescID: 10002 (v3-), Name: "admin"}
+ │    │    │    ├── ABSENT    → PUBLIC UserPrivileges:{DescID: 10002 (v3-), Name: "root"}
+ │    │    │    ├── DROPPED   → PUBLIC View:{DescID: 10002 (v3-)}
+ │    │    │    ├── ABSENT    → PUBLIC SchemaChild:{DescID: 10002 (v3-), ReferencedDescID: 101 (public)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnFamily:{DescID: 10002 (v3-), Name: "primary", ColumnFamilyID: 0 (primary-)}
+ │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 10002 (v3-), ColumnID: 1 (j-)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 10002 (v3-), Name: "j", ColumnID: 1 (j-)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 10002 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (j-)}
+ │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 10002 (v3-), ColumnID: 2 (rowid-)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 10002 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 10002 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnNotNull:{DescID: 10002 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnDefaultExpression:{DescID: 10002 (v3-), ColumnID: 2 (rowid-)}
+ │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 10002 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 10002 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 10002 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 10002 (v3-), ColumnID: 4294967294 (tableoid-)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 10002 (v3-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 10002 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+ │    │    │    ├── ABSENT    → PUBLIC IndexColumn:{DescID: 10002 (v3-), ColumnID: 2 (rowid-), IndexID: 1 (v3_pkey-)}
+ │    │    │    ├── ABSENT    → PUBLIC IndexColumn:{DescID: 10002 (v3-), ColumnID: 1 (j-), IndexID: 1 (v3_pkey-)}
+ │    │    │    ├── ABSENT    → PUBLIC PrimaryIndex:{DescID: 10002 (v3-), IndexID: 1 (v3_pkey-), ConstraintID: 1}
+ │    │    │    └── ABSENT    → PUBLIC IndexName:{DescID: 10002 (v3-), Name: "v3_pkey", IndexID: 1 (v3_pkey-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 26 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-)}
- │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb)}
- │         │    ├── PUBLIC → ABSENT    Owner:{DescID: 106 (v3-)}
- │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
- │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "root"}
- │         │    ├── PUBLIC → DROPPED   View:{DescID: 106 (v3-)}
- │         │    ├── PUBLIC → ABSENT    SchemaChild:{DescID: 106 (v3-), ReferencedDescID: 101 (public)}
- │         │    ├── PUBLIC → ABSENT    ColumnFamily:{DescID: 106 (v3-), Name: "primary", ColumnFamilyID: 0 (primary-)}
- │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 1 (j-)}
- │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "j", ColumnID: 1 (j-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (j-)}
- │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
- │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-)}
- │         │    ├── PUBLIC → ABSENT    ColumnNotNull:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
- │         │    ├── PUBLIC → ABSENT    ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
- │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967294 (tableoid-)}
- │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
- │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 1 (v3_pkey-)}
- │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106 (v3-), ColumnID: 1 (j-), IndexID: 1 (v3_pkey-)}
- │         │    ├── PUBLIC → ABSENT    PrimaryIndex:{DescID: 106 (v3-), IndexID: 1 (v3_pkey-), ConstraintID: 1}
- │         │    └── PUBLIC → ABSENT    IndexName:{DescID: 106 (v3-), Name: "v3_pkey", IndexID: 1 (v3_pkey-)}
+ │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 10001 (v2), IndexID: 2 (idx-)}
+ │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 10002 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── PUBLIC → ABSENT    Owner:{DescID: 10002 (v3-)}
+ │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 10002 (v3-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 10002 (v3-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED   View:{DescID: 10002 (v3-)}
+ │         │    ├── PUBLIC → ABSENT    SchemaChild:{DescID: 10002 (v3-), ReferencedDescID: 101 (public)}
+ │         │    ├── PUBLIC → ABSENT    ColumnFamily:{DescID: 10002 (v3-), Name: "primary", ColumnFamilyID: 0 (primary-)}
+ │         │    ├── PUBLIC → ABSENT    Column:{DescID: 10002 (v3-), ColumnID: 1 (j-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 10002 (v3-), Name: "j", ColumnID: 1 (j-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 10002 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (j-)}
+ │         │    ├── PUBLIC → ABSENT    Column:{DescID: 10002 (v3-), ColumnID: 2 (rowid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 10002 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 10002 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnNotNull:{DescID: 10002 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
+ │         │    ├── PUBLIC → ABSENT    ColumnDefaultExpression:{DescID: 10002 (v3-), ColumnID: 2 (rowid-)}
+ │         │    ├── PUBLIC → ABSENT    Column:{DescID: 10002 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 10002 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 10002 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT    Column:{DescID: 10002 (v3-), ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 10002 (v3-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 10002 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 10002 (v3-), ColumnID: 2 (rowid-), IndexID: 1 (v3_pkey-)}
+ │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 10002 (v3-), ColumnID: 1 (j-), IndexID: 1 (v3_pkey-)}
+ │         │    ├── PUBLIC → ABSENT    PrimaryIndex:{DescID: 10002 (v3-), IndexID: 1 (v3_pkey-), ConstraintID: 1}
+ │         │    └── PUBLIC → ABSENT    IndexName:{DescID: 10002 (v3-), Name: "v3_pkey", IndexID: 1 (v3_pkey-)}
  │         └── 37 Mutation operations
- │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
- │              ├── RemoveBackReferencesInRelations {"BackReferencedID":106}
- │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":101}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":106}
- │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":106}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":106}
- │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
- │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":106}
- │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":106}
- │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":106}
- │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":106}
- │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":106}
- │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":106}
- │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":106}
- │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":105}
- │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":106,"Name":"v3","SchemaID":101}}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
- │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
- │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":106}
- │              ├── RemoveColumnNotNull {"ColumnID":2,"TableID":106}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":106}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":106}
- │              ├── AssertColumnFamilyIsRemoved {"TableID":106}
- │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":106}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":106}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":106}
- │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":106}
- │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"TableID":106}
- │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"Kind":2,"TableID":106}
- │              ├── MakeIndexAbsent {"IndexID":1,"TableID":106}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":106}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
- │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
- │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":10002}
+ │              ├── RemoveBackReferencesInRelations {"BackReferencedID":10002}
+ │              ├── RemoveObjectParent {"ObjectID":10002,"ParentSchemaID":101}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":10002}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":10002}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":10002}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":10002}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":10002}
+ │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":10002}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":10002}
+ │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":10002}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":10002}
+ │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":10002}
+ │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":10002}
+ │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":10002}
+ │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":10001}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":10002,"Name":"v3","SchemaID":101}}
+ │              ├── NotImplementedForPublicObjects {"DescID":10002,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":10002,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":10002,"User":"root"}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":10002}
+ │              ├── RemoveColumnNotNull {"ColumnID":2,"TableID":10002}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":10002}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":10002}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":10002}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":10002}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":10002}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":10002}
+ │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":10002}
+ │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"TableID":10002}
+ │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"Kind":2,"TableID":10002}
+ │              ├── MakeIndexAbsent {"IndexID":1,"TableID":10002}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":10002}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":10002}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":10001,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":10002,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 7 elements transitioning toward ABSENT
-      │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 105 (v2), ColumnID: 2 (j), IndexID: 2 (idx-)}
-      │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 105 (v2), ColumnID: 3 (rowid), IndexID: 2 (idx-)}
-      │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-)}
-      │    │    ├── PUBLIC    → ABSENT      IndexName:{DescID: 105 (v2), Name: "idx", IndexID: 2 (idx-)}
-      │    │    ├── DROPPED   → ABSENT      View:{DescID: 106 (v3-)}
-      │    │    ├── PUBLIC    → ABSENT      IndexData:{DescID: 106 (v3-), IndexID: 1 (v3_pkey-)}
-      │    │    └── PUBLIC    → ABSENT      TableData:{DescID: 106 (v3-), ReferencedDescID: 100 (defaultdb)}
+      │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 10001 (v2), ColumnID: 2 (j), IndexID: 2 (idx-)}
+      │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 10001 (v2), ColumnID: 3 (rowid), IndexID: 2 (idx-)}
+      │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 10001 (v2), IndexID: 2 (idx-)}
+      │    │    ├── PUBLIC    → ABSENT      IndexName:{DescID: 10001 (v2), Name: "idx", IndexID: 2 (idx-)}
+      │    │    ├── DROPPED   → ABSENT      View:{DescID: 10002 (v3-)}
+      │    │    ├── PUBLIC    → ABSENT      IndexData:{DescID: 10002 (v3-), IndexID: 1 (v3_pkey-)}
+      │    │    └── PUBLIC    → ABSENT      TableData:{DescID: 10002 (v3-), ReferencedDescID: 100 (defaultdb)}
       │    └── 8 Mutation operations
-      │         ├── CreateGCJobForTable {"DatabaseID":100,"TableID":106}
-      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":105}
-      │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":105}
-      │         ├── CreateGCJobForIndex {"IndexID":1,"TableID":106}
-      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":105}
-      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Kind":1,"TableID":105}
-      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         ├── CreateGCJobForTable {"DatabaseID":100,"TableID":10002}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":10001}
+      │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":10001}
+      │         ├── CreateGCJobForIndex {"IndexID":1,"TableID":10002}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":10001}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Kind":1,"TableID":10001}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":10001}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 2 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-)}
-           │    └── PUBLIC      → ABSENT IndexData:{DescID: 105 (v2), IndexID: 2 (idx-)}
+           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 10001 (v2), IndexID: 2 (idx-)}
+           │    └── PUBLIC      → ABSENT IndexData:{DescID: 10001 (v2), IndexID: 2 (idx-)}
            └── 4 Mutation operations
-                ├── MakeIndexAbsent {"IndexID":2,"TableID":105}
-                ├── CreateGCJobForIndex {"IndexID":2,"TableID":105}
-                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                ├── MakeIndexAbsent {"IndexID":2,"TableID":10001}
+                ├── CreateGCJobForIndex {"IndexID":2,"TableID":10001}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":10001}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

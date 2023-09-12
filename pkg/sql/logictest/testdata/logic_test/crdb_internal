@@ -559,23 +559,23 @@ skipif config local-mixed-22.2-23.1
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
-0    RANGE default
-1    DATABASE system
-16   RANGE meta
-17   RANGE system
-18   RANGE timeseries
-22   RANGE liveness
-25   TABLE system.public.replication_constraint_stats
-27   TABLE system.public.replication_stats
-42   TABLE system.public.statement_statistics
-43   TABLE system.public.transaction_statistics
-45   TABLE system.public.tenant_usage
-57   TABLE system.public.span_stats_tenant_boundaries
-60   TABLE system.public.statement_activity
-61   TABLE system.public.transaction_activity
-106  DATABASE testdb
-108  TABLE testdb.public.foo
-111  TABLE test.schema.bar
+0      RANGE default
+1      DATABASE system
+16     RANGE meta
+17     RANGE system
+18     RANGE timeseries
+22     RANGE liveness
+25     TABLE system.public.replication_constraint_stats
+27     TABLE system.public.replication_stats
+42     TABLE system.public.statement_statistics
+43     TABLE system.public.transaction_statistics
+45     TABLE system.public.tenant_usage
+57     TABLE system.public.span_stats_tenant_boundaries
+60     TABLE system.public.statement_activity
+61     TABLE system.public.transaction_activity
+10002  DATABASE testdb
+10004  TABLE testdb.public.foo
+10007  TABLE test.schema.bar
 
 query T
 SELECT quote_literal(raw_config_yaml) FROM crdb_internal.zones WHERE zone_id = 0
@@ -684,8 +684,8 @@ ALTER TABLE foo SPLIT AT VALUES(2)
 query TTT colnames
 SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty    end_pretty  split_enforced_until
-/Table/112/1/2  /Max        2262-04-11 23:47:16.854776 +0000 +0000
+start_pretty      end_pretty  split_enforced_until
+/Table/10008/1/2  /Max        2262-04-11 23:47:16.854776 +0000 +0000
 
 query TTT colnames
 SELECT start_key, end_key, split_enforced_until FROM [SHOW RANGES FROM TABLE foo] WHERE split_enforced_until IS NOT NULL
@@ -858,13 +858,13 @@ ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 query TT colnames,rowsort
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty    end_pretty
-/Table/112/1/1  /Table/112/1/2
-/Table/112/1/2  /Table/112/1/3
-/Table/112/1/3  /Table/112/2/1
-/Table/112/2/1  /Table/112/2/2
-/Table/112/2/2  /Table/112/2/3
-/Table/112/2/3  /Max
+start_pretty      end_pretty
+/Table/10008/1/1  /Table/10008/1/2
+/Table/10008/1/2  /Table/10008/1/3
+/Table/10008/1/3  /Table/10008/2/1
+/Table/10008/2/1  /Table/10008/2/2
+/Table/10008/2/2  /Table/10008/2/3
+/Table/10008/2/3  /Max
 
 # The cleanup we expect in the following truncate requires that the GCJob runs.
 # To avoid this taking 30 seconds, we lower the job adoption interval.
@@ -892,13 +892,13 @@ ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 query TT colnames,retry,rowsort
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty    end_pretty
-/Table/112/3/1  /Table/112/3/2
-/Table/112/3/2  /Table/112/3/3
-/Table/112/3/3  /Table/112/4/1
-/Table/112/4/1  /Table/112/4/2
-/Table/112/4/2  /Table/112/4/3
-/Table/112/4/3  /Max
+start_pretty      end_pretty
+/Table/10008/3/1  /Table/10008/3/2
+/Table/10008/3/2  /Table/10008/3/3
+/Table/10008/3/3  /Table/10008/4/1
+/Table/10008/4/1  /Table/10008/4/2
+/Table/10008/4/2  /Table/10008/4/3
+/Table/10008/4/3  /Max
 
 statement ok
 DROP TABLE foo
@@ -920,13 +920,13 @@ ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 query TT colnames,retry,rowsort
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty    end_pretty
-/Table/114/1/1  /Table/114/1/2
-/Table/114/1/2  /Table/114/1/3
-/Table/114/1/3  /Table/114/2/1
-/Table/114/2/1  /Table/114/2/2
-/Table/114/2/2  /Table/114/2/3
-/Table/114/2/3  /Max
+start_pretty      end_pretty
+/Table/10010/1/1  /Table/10010/1/2
+/Table/10010/1/2  /Table/10010/1/3
+/Table/10010/1/3  /Table/10010/2/1
+/Table/10010/2/1  /Table/10010/2/2
+/Table/10010/2/2  /Table/10010/2/3
+/Table/10010/2/3  /Max
 
 statement ok
 DROP INDEX foo@idx
@@ -937,9 +937,9 @@ query T colnames,retry,rowsort
 SELECT start_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty
-/Table/114/1/1
-/Table/114/1/2
-/Table/114/1/3
+/Table/10010/1/1
+/Table/10010/1/2
+/Table/10010/1/3
 
 query T
 SELECT crdb_internal.cluster_name()
@@ -1019,15 +1019,15 @@ CREATE TYPE enum2 AS ENUM ()
 query ITTITTT
 SELECT * FROM crdb_internal.create_type_statements ORDER BY descriptor_id
 ----
-104  test  public  116  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
-104  test  public  118  enum2  CREATE TYPE public.enum2 AS ENUM ()               {}
+10000  test  public  10012  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
+10000  test  public  10014  enum2  CREATE TYPE public.enum2 AS ENUM ()               {}
 
 # Test the virtual index as well.
 
 query ITTITTT
 SELECT * FROM crdb_internal.create_type_statements WHERE descriptor_id = (('enum1'::regtype::oid::int) - 100000)::oid
 ----
-104  test  public  116  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
+10000  test  public  10012  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
 
 query ITTITTT
 SELECT * FROM crdb_internal.create_type_statements WHERE descriptor_id = 'foo'::regclass::oid

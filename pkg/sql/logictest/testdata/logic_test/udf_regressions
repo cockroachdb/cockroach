@@ -99,10 +99,10 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
 ORDER BY oid;
 ----
-100110  f_93314         105  1546506610  14  false  false  false  v  0  100109  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
-100112  f_93314_alias   105  1546506610  14  false  false  false  v  0  100111  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
-100116  f_93314_comp    105  1546506610  14  false  false  false  v  0  100113  ·  {}  NULL  SELECT (1:::INT8, 2:::INT8);
-100117  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100115  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+110006  f_93314         10001  1546506610  14  false  false  false  v  0  110005  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+110008  f_93314_alias   10001  1546506610  14  false  false  false  v  0  110007  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+110012  f_93314_comp    10001  1546506610  14  false  false  false  v  0  110009  ·  {}  NULL  SELECT (1:::INT8, 2:::INT8);
+110013  f_93314_comp_t  10001  1546506610  14  false  false  false  v  0  110011  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
 
 # Regression test for #95240. Strict UDFs that are inlined should result in NULL
 # when presented with NULL arguments.

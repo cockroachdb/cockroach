@@ -63,9 +63,9 @@ full-translate
 /Tenant/10/Table/5{7-8}                    database system (tenant)
 /Tenant/10/Table/5{8-9}                    database system (tenant)
 /Tenant/10/Table/{59-60}                   database system (tenant)
-/Tenant/10/Table/11{0-1}                   range default
-/Tenant/10/Table/11{1-2}                   range default
-/Tenant/10/Table/11{2-3}                   range default
+/Tenant/10/Table/1000{6-7}                 range default
+/Tenant/10/Table/1000{7-8}                 range default
+/Tenant/10/Table/1000{8-9}                 range default
 
 # We should expect the same for RANGE DEFAULT.
 translate named-zone=default
@@ -116,6 +116,6 @@ translate named-zone=default
 /Tenant/10/Table/5{7-8}                    database system (tenant)
 /Tenant/10/Table/5{8-9}                    database system (tenant)
 /Tenant/10/Table/{59-60}                   database system (tenant)
-/Tenant/10/Table/11{0-1}                   range default
-/Tenant/10/Table/11{1-2}                   range default
-/Tenant/10/Table/11{2-3}                   range default
+/Tenant/10/Table/1000{6-7}                 range default
+/Tenant/10/Table/1000{7-8}                 range default
+/Tenant/10/Table/1000{8-9}                 range default

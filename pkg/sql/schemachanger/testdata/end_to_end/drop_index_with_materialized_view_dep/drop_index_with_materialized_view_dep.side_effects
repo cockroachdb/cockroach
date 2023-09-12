@@ -5,9 +5,9 @@ CREATE INDEX idx ON v2(j);
 CREATE MATERIALIZED VIEW v3 AS SELECT j FROM v2@idx;
 ----
 ...
-+object {100 101 t1} -> 104
-+object {100 101 v2} -> 105
-+object {100 101 v3} -> 106
++object {100 101 t1} -> 10000
++object {100 101 v2} -> 10001
++object {100 101 v3} -> 10002
 
 /* test */
 DROP INDEX idx CASCADE;
@@ -23,27 +23,27 @@ write *eventpb.DropIndex to event log:
   indexName: idx
   mutationId: 1
   sql:
-    descriptorId: 105
+    descriptorId: 10001
     statement: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
     tag: DROP INDEX
     user: root
   tableName: defaultdb.public.v2
 ## StatementPhase stage 1 of 1 with 34 MutationType ops
-delete object namespace entry {100 101 v3} -> 106
-upsert descriptor #105
+delete object namespace entry {100 101 v3} -> 10002
+upsert descriptor #10001
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
   -  dependedOnBy:
   -  - columnIds:
   -    - 2
-  -    id: 106
+  -    id: 10002
   -    indexId: 2
      dependsOn:
-     - 104
+     - 10000
   ...
      formatVersion: 3
-     id: 105
+     id: 10001
   -  indexes:
   -  - createdAtNanos: "1640995200000000000"
   -    createdExplicitly: true
@@ -97,7 +97,7 @@ upsert descriptor #105
   -  version: "9"
   +  version: "10"
      viewQuery: SELECT i, j FROM defaultdb.public.t1
-upsert descriptor #106
+upsert descriptor #10002
   ...
      replacementOf:
        time: {}
@@ -112,15 +112,15 @@ upsert descriptor #106
 undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 37 MutationType ops
-delete object namespace entry {100 101 v3} -> 106
-upsert descriptor #105
+delete object namespace entry {100 101 v3} -> 10002
+upsert descriptor #10001
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
   -  dependedOnBy:
   -  - columnIds:
   -    - 2
-  -    id: 106
+  -    id: 10002
   -    indexId: 2
   +  declarativeSchemaChangerState:
   +    authorization:
@@ -136,7 +136,7 @@ upsert descriptor #105
   +        "4294967295": crdb_internal_mvcc_timestamp
   +      families:
   +        "0": primary
-  +      id: 105
+  +      id: 10001
   +      indexes:
   +        "1": v2_pkey
   +      name: v2
@@ -148,10 +148,10 @@ upsert descriptor #105
   +    targetRanks: <redacted>
   +    targets: <redacted>
      dependsOn:
-     - 104
+     - 10000
   ...
      formatVersion: 3
-     id: 105
+     id: 10001
   -  indexes:
   -  - createdAtNanos: "1640995200000000000"
   -    createdExplicitly: true
@@ -205,7 +205,7 @@ upsert descriptor #105
   -  version: "9"
   +  version: "10"
      viewQuery: SELECT i, j FROM defaultdb.public.t1
-upsert descriptor #106
+upsert descriptor #10002
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -215,7 +215,7 @@ upsert descriptor #106
   +    currentStatuses: <redacted>
   +    jobId: "1"
   +    nameMapping:
-  +      id: 106
+  +      id: 10002
   +      name: v3
   +    relevantStatements:
   +    - statement:
@@ -225,7 +225,7 @@ upsert descriptor #106
   +    targetRanks: <redacted>
   +    targets: <redacted>
      dependsOn:
-     - 105
+     - 10001
   ...
      replacementOf:
        time: {}
@@ -236,7 +236,7 @@ upsert descriptor #106
      viewQuery: SELECT j FROM defaultdb.public.v2@idx
 persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.v2@idx CASCADE"
-  descriptor IDs: [105 106]
+  descriptor IDs: [10001 10002]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -245,7 +245,7 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
-upsert descriptor #105
+upsert descriptor #10001
   ...
          keySuffixColumnIds:
          - 3
@@ -267,15 +267,15 @@ upsert descriptor #105
      viewQuery: SELECT i, j FROM defaultdb.public.t1
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
-  descriptor IDs: [106]
+  descriptor IDs: [10002]
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
-updated schema change job #1 descriptor IDs to [105]
+updated schema change job #1 descriptor IDs to [10001]
 commit transaction #3
 notified job registry to adopt jobs: [2]
 begin transaction #4
 ## PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
-upsert descriptor #105
+upsert descriptor #10001
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -293,7 +293,7 @@ upsert descriptor #105
   -        "4294967295": crdb_internal_mvcc_timestamp
   -      families:
   -        "0": primary
-  -      id: 105
+  -      id: 10001
   -      indexes:
   -        "1": v2_pkey
   -      name: v2
@@ -305,7 +305,7 @@ upsert descriptor #105
   -    targetRanks: <redacted>
   -    targets: <redacted>
      dependsOn:
-     - 104
+     - 10000
   ...
      isMaterializedView: true
      modificationTime: {}
@@ -343,13 +343,13 @@ upsert descriptor #105
      viewQuery: SELECT i, j FROM defaultdb.public.t1
 persist all catalog changes to storage
 create job #3 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
-  descriptor IDs: [105]
+  descriptor IDs: [10001]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
-updated schema change job #1 descriptor IDs to [106]
+updated schema change job #1 descriptor IDs to [10002]
 write *eventpb.FinishSchemaChange to event log:
   sc:
-    descriptorId: 105
+    descriptorId: 10001
 commit transaction #4
 notified job registry to adopt jobs: [3]
 # end PostCommitPhase

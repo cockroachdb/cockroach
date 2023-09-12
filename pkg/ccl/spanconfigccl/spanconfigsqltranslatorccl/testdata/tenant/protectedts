@@ -25,14 +25,14 @@ mark-database-offline database=db
 
 # Write a protected timestamp on the offline db.
 protect record-id=9 ts=9
-descs 104
+descs 10000
 ----
 
 # We should still see the protectedts translate onto the offline db.
 translate database=db
 ----
-/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5 protection_policies=[{ts: 9}]
-/Tenant/10/Table/10{7-8}                   num_replicas=7 protection_policies=[{ts: 9}]
+/Tenant/10/Table/1000{2-3}                 num_replicas=7 num_voters=5 protection_policies=[{ts: 9}]
+/Tenant/10/Table/1000{3-4}                 num_replicas=7 protection_policies=[{ts: 9}]
 
 release record-id=9
 ----
@@ -42,28 +42,28 @@ mark-database-public database=db
 
 translate database=db
 ----
-/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5
-/Tenant/10/Table/10{7-8}                   num_replicas=7
+/Tenant/10/Table/1000{2-3}                 num_replicas=7 num_voters=5
+/Tenant/10/Table/1000{3-4}                 num_replicas=7
 
 # Write a protected timestamp on t1.
 protect record-id=1 ts=1
-descs 106
+descs 10002
 ----
 
 translate database=db
 ----
-/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5 protection_policies=[{ts: 1}]
-/Tenant/10/Table/10{7-8}                   num_replicas=7
+/Tenant/10/Table/1000{2-3}                 num_replicas=7 num_voters=5 protection_policies=[{ts: 1}]
+/Tenant/10/Table/1000{3-4}                 num_replicas=7
 
 # Write a protected timestamp on db, so we should see it on both t1 and t2.
 protect record-id=2 ts=2
-descs 104
+descs 10000
 ----
 
 translate database=db
 ----
-/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5 protection_policies=[{ts: 1} {ts: 2}]
-/Tenant/10/Table/10{7-8}                   num_replicas=7 protection_policies=[{ts: 2}]
+/Tenant/10/Table/1000{2-3}                 num_replicas=7 num_voters=5 protection_policies=[{ts: 1} {ts: 2}]
+/Tenant/10/Table/1000{3-4}                 num_replicas=7 protection_policies=[{ts: 2}]
 
 
 # Write a protected timestamp on the tenant cluster.
@@ -82,8 +82,8 @@ translate system-span-configurations
 
 translate database=db
 ----
-/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5 protection_policies=[{ts: 1} {ts: 2}]
-/Tenant/10/Table/10{7-8}                   num_replicas=7 protection_policies=[{ts: 2}]
+/Tenant/10/Table/1000{2-3}                 num_replicas=7 num_voters=5 protection_policies=[{ts: 1} {ts: 2}]
+/Tenant/10/Table/1000{3-4}                 num_replicas=7 protection_policies=[{ts: 2}]
 
 # Release the protected timestamp on table t1
 release record-id=1
@@ -95,8 +95,8 @@ translate system-span-configurations
 
 translate database=db
 ----
-/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5 protection_policies=[{ts: 2}]
-/Tenant/10/Table/10{7-8}                   num_replicas=7 protection_policies=[{ts: 2}]
+/Tenant/10/Table/1000{2-3}                 num_replicas=7 num_voters=5 protection_policies=[{ts: 2}]
+/Tenant/10/Table/1000{3-4}                 num_replicas=7 protection_policies=[{ts: 2}]
 
 # Release the protected timestamp on database db
 release record-id=2
@@ -108,8 +108,8 @@ translate system-span-configurations
 
 translate database=db
 ----
-/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5
-/Tenant/10/Table/10{7-8}                   num_replicas=7
+/Tenant/10/Table/1000{2-3}                 num_replicas=7 num_voters=5
+/Tenant/10/Table/1000{3-4}                 num_replicas=7
 
 # Create an index on t1 to ensure that subzones also see protected timestamps.
 exec-sql
@@ -127,7 +127,7 @@ SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS])
 ----
 
 protect record-id=5 ts=5
-descs 106
+descs 10002
 ----
 
 # Release the protected timestamp on the tenant cluster.
@@ -140,7 +140,7 @@ translate system-span-configurations
 
 translate database=db
 ----
-/Tenant/10/Table/106{-/2}                  num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
-/Tenant/10/Table/106/{2-3}                 ttl_seconds=1 num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
-/Tenant/10/Table/10{6/3-7}                 num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
-/Tenant/10/Table/10{7-8}                   num_replicas=7
+/Tenant/10/Table/10002{-/2}                num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
+/Tenant/10/Table/10002/{2-3}               ttl_seconds=1 num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
+/Tenant/10/Table/1000{2/3-3}               num_replicas=7 num_voters=5 protection_policies=[{ts: 5}]
+/Tenant/10/Table/1000{3-4}                 num_replicas=7

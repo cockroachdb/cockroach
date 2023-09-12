@@ -4,7 +4,7 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT);
 ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
 ----
 ...
-+object {100 101 t} -> 104
++object {100 101 t} -> 10000
 
 /* test */
 ALTER TABLE t DROP CONSTRAINT unique_j;
@@ -15,9 +15,9 @@ checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.drop_constraint
 ## StatementPhase stage 1 of 1 with 2 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
-     id: 104
+     id: 10000
      modificationTime: {}
   +  mutations:
   +  - constraint:
@@ -30,7 +30,7 @@ upsert descriptor #104
   +        - 2
   +        constraintId: 2
   +        name: crdb_internal_constraint_2_name_placeholder
-  +        tableId: 104
+  +        tableId: 10000
   +        validity: Dropping
   +    direction: DROP
   +    mutationId: 1
@@ -45,7 +45,7 @@ upsert descriptor #104
   -    - 2
   -    constraintId: 2
   -    name: unique_j
-  -    tableId: 104
+  -    tableId: 10000
   -  version: "3"
   +  version: "4"
 # end StatementPhase
@@ -54,7 +54,7 @@ upsert descriptor #104
 undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 4 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -71,7 +71,7 @@ upsert descriptor #104
   +        "4294967295": crdb_internal_mvcc_timestamp
   +      families:
   +        "0": primary
-  +      id: 104
+  +      id: 10000
   +      indexes:
   +        "1": t_pkey
   +      name: t
@@ -85,7 +85,7 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     id: 104
+     id: 10000
      modificationTime: {}
   +  mutations:
   +  - constraint:
@@ -98,7 +98,7 @@ upsert descriptor #104
   +        - 2
   +        constraintId: 2
   +        name: crdb_internal_constraint_2_name_placeholder
-  +        tableId: 104
+  +        tableId: 10000
   +        validity: Dropping
   +    direction: DROP
   +    mutationId: 1
@@ -113,12 +113,12 @@ upsert descriptor #104
   -    - 2
   -    constraintId: 2
   -    name: unique_j
-  -    tableId: 104
+  -    tableId: 10000
   -  version: "3"
   +  version: "4"
 persist all catalog changes to storage
 create job #1 (non-cancelable: true): "ALTER TABLE defaultdb.public.t DROP CONSTRAINT unique_j"
-  descriptor IDs: [104]
+  descriptor IDs: [10000]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -127,7 +127,7 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -144,7 +144,7 @@ upsert descriptor #104
   -        "4294967295": crdb_internal_mvcc_timestamp
   -      families:
   -        "0": primary
-  -      id: 104
+  -      id: 10000
   -      indexes:
   -        "1": t_pkey
   -      name: t
@@ -158,7 +158,7 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     id: 104
+     id: 10000
      modificationTime: {}
   -  mutations:
   -  - constraint:
@@ -171,7 +171,7 @@ upsert descriptor #104
   -        - 2
   -        constraintId: 2
   -        name: crdb_internal_constraint_2_name_placeholder
-  -        tableId: 104
+  -        tableId: 10000
   -        validity: Dropping
   -    direction: DROP
   -    mutationId: 1
@@ -189,6 +189,6 @@ set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
-    descriptorId: 104
+    descriptorId: 10000
 commit transaction #3
 # end PostCommitPhase

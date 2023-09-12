@@ -23,161 +23,161 @@ DROP FUNCTION f;
 ----
 StatementPhase stage 1 of 1 with 12 MutationType ops
   transitions:
-    [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 109, Name: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Function:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionName:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionVolatility:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionLeakProof:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionNullInputBehavior:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionBody:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10005}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10005, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10005, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10005, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Function:{DescID: 10005}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10005, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionName:{DescID: 10005}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionVolatility:{DescID: 10005}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionLeakProof:{DescID: 10005}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionNullInputBehavior:{DescID: 10005}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionBody:{DescID: 10005}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 109
+      DescriptorID: 10005
     *scop.RemoveObjectParent
-      ObjectID: 109
+      ObjectID: 10005
       ParentSchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 109
+      DescID: 10005
       ElementType: scpb.FunctionName
     *scop.NotImplementedForPublicObjects
-      DescID: 109
+      DescID: 10005
       ElementType: scpb.FunctionVolatility
     *scop.NotImplementedForPublicObjects
-      DescID: 109
+      DescID: 10005
       ElementType: scpb.FunctionLeakProof
     *scop.NotImplementedForPublicObjects
-      DescID: 109
+      DescID: 10005
       ElementType: scpb.FunctionNullInputBehavior
     *scop.RemoveBackReferenceInTypes
-      BackReferencedDescriptorID: 109
+      BackReferencedDescriptorID: 10005
       TypeIDs:
-      - 107
-      - 108
+      - 10003
+      - 10004
     *scop.RemoveBackReferencesInRelations
-      BackReferencedID: 109
+      BackReferencedID: 10005
       RelationIDs:
-      - 104
-      - 104
-      - 104
-      - 106
-      - 105
+      - 10000
+      - 10000
+      - 10000
+      - 10002
+      - 10001
     *scop.NotImplementedForPublicObjects
-      DescID: 109
+      DescID: 10005
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 109
+      DescriptorID: 10005
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 109
+      DescriptorID: 10005
       User: public
     *scop.RemoveUserPrivileges
-      DescriptorID: 109
+      DescriptorID: 10005
       User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Owner:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 109, Name: public}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], ABSENT] -> PUBLIC
-    [[Function:{DescID: 109}, ABSENT], DROPPED] -> PUBLIC
-    [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
-    [[FunctionName:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
-    [[FunctionVolatility:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
-    [[FunctionLeakProof:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
-    [[FunctionNullInputBehavior:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
-    [[FunctionBody:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 10005}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10005, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10005, Name: public}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10005, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[Function:{DescID: 10005}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 10005, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[FunctionName:{DescID: 10005}, ABSENT], ABSENT] -> PUBLIC
+    [[FunctionVolatility:{DescID: 10005}, ABSENT], ABSENT] -> PUBLIC
+    [[FunctionLeakProof:{DescID: 10005}, ABSENT], ABSENT] -> PUBLIC
+    [[FunctionNullInputBehavior:{DescID: 10005}, ABSENT], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 10005}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 19 MutationType ops
   transitions:
-    [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 109, Name: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Function:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionName:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionVolatility:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionLeakProof:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionNullInputBehavior:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
-    [[FunctionBody:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10005}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10005, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10005, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10005, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Function:{DescID: 10005}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10005, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionName:{DescID: 10005}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionVolatility:{DescID: 10005}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionLeakProof:{DescID: 10005}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionNullInputBehavior:{DescID: 10005}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionBody:{DescID: 10005}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 109
+      DescriptorID: 10005
     *scop.RemoveObjectParent
-      ObjectID: 109
+      ObjectID: 10005
       ParentSchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 109
+      DescID: 10005
       ElementType: scpb.FunctionName
     *scop.NotImplementedForPublicObjects
-      DescID: 109
+      DescID: 10005
       ElementType: scpb.FunctionVolatility
     *scop.NotImplementedForPublicObjects
-      DescID: 109
+      DescID: 10005
       ElementType: scpb.FunctionLeakProof
     *scop.NotImplementedForPublicObjects
-      DescID: 109
+      DescID: 10005
       ElementType: scpb.FunctionNullInputBehavior
     *scop.RemoveBackReferenceInTypes
-      BackReferencedDescriptorID: 109
+      BackReferencedDescriptorID: 10005
       TypeIDs:
-      - 107
-      - 108
+      - 10003
+      - 10004
     *scop.RemoveBackReferencesInRelations
-      BackReferencedID: 109
+      BackReferencedID: 10005
       RelationIDs:
-      - 104
-      - 104
-      - 104
-      - 106
-      - 105
+      - 10000
+      - 10000
+      - 10000
+      - 10002
+      - 10001
     *scop.NotImplementedForPublicObjects
-      DescID: 109
+      DescID: 10005
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 109
+      DescriptorID: 10005
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 109
+      DescriptorID: 10005
       User: public
     *scop.RemoveUserPrivileges
-      DescriptorID: 109
+      DescriptorID: 10005
       User: root
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 104
+      DescriptorID: 10000
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 105
+      DescriptorID: 10001
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 106
+      DescriptorID: 10002
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 107
+      DescriptorID: 10003
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 108
+      DescriptorID: 10004
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 109
+      DescriptorID: 10005
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
         AppName: $ internal-test
         UserName: root
       DescriptorIDs:
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
+      - 10000
+      - 10001
+      - 10002
+      - 10003
+      - 10004
+      - 10005
       JobID: 1
       NonCancelable: true
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 1 MutationType op pending
@@ -187,35 +187,35 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
         statementtag: DROP FUNCTION
 PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops
   transitions:
-    [[Function:{DescID: 109}, ABSENT], DROPPED] -> ABSENT
+    [[Function:{DescID: 10005}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.DeleteDescriptor
-      DescriptorID: 109
+      DescriptorID: 10005
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 104
+      DescriptorID: 10000
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 105
+      DescriptorID: 10001
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 106
+      DescriptorID: 10002
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 107
+      DescriptorID: 10003
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 108
+      DescriptorID: 10004
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 109
+      DescriptorID: 10005
       JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
+      - 10000
+      - 10001
+      - 10002
+      - 10003
+      - 10004
+      - 10005
       IsNonCancelable: true
       JobID: 1

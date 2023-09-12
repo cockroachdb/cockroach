@@ -3,7 +3,7 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
 INSERT INTO t SELECT val, val+1 FROM generate_series(1,10) AS temp(val);
 ----
 ...
-+object {100 101 t} -> 104
++object {100 101 t} -> 10000
 
 /* test */
 CREATE UNIQUE INDEX idx ON t(j) WHERE (i > 0);
@@ -18,15 +18,15 @@ write *eventpb.CreateIndex to event log:
   indexName: idx
   mutationId: 1
   sql:
-    descriptorId: 104
+    descriptorId: 10000
     statement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹j›) WHERE (‹i› > ‹0›)
     tag: CREATE INDEX
     user: root
   tableName: defaultdb.public.t
 ## StatementPhase stage 1 of 1 with 8 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
-     id: 104
+     id: 10000
      modificationTime: {}
   +  mutations:
   +  - direction: ADD
@@ -100,16 +100,16 @@ write *eventpb.CreateSchema to event log:
   owner: root
   schemaName: defaultdb.sc
   sql:
-    descriptorId: 105
+    descriptorId: 10001
     statement: CREATE SCHEMA ‹defaultdb›.‹sc›
     tag: CREATE SCHEMA
     user: root
 ## StatementPhase stage 1 of 1 with 8 MutationType ops
-add schema namespace entry {100 0 sc} -> 105
-upsert descriptor #105
+add schema namespace entry {100 0 sc} -> 10001
+upsert descriptor #10001
   -
   +schema:
-  +  id: 105
+  +  id: 10001
   +  modificationTime: {}
   +  name: sc
   +  parentId: 100
@@ -130,7 +130,7 @@ upsert descriptor #100
          id: 101
   -  version: "1"
   +    sc:
-  +      id: 105
+  +      id: 10001
   +  version: "2"
 # end StatementPhase
 # begin PreCommitPhase
@@ -138,8 +138,8 @@ upsert descriptor #100
 undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 21 MutationType ops
-add schema namespace entry {100 0 sc} -> 105
-upsert descriptor #105
+add schema namespace entry {100 0 sc} -> 10001
+upsert descriptor #10001
   -
   +schema:
   +  declarativeSchemaChangerState:
@@ -148,7 +148,7 @@ upsert descriptor #105
   +    currentStatuses: <redacted>
   +    jobId: "1"
   +    nameMapping:
-  +      id: 105
+  +      id: 10001
   +      name: sc
   +    relevantStatements:
   +    - statement:
@@ -159,7 +159,7 @@ upsert descriptor #105
   +    revertible: true
   +    targetRanks: <redacted>
   +    targets: <redacted>
-  +  id: 105
+  +  id: 10001
   +  modificationTime: {}
   +  name: sc
   +  parentId: 100
@@ -192,9 +192,9 @@ upsert descriptor #100
          id: 101
   -  version: "1"
   +    sc:
-  +      id: 105
+  +      id: 10001
   +  version: "2"
-upsert descriptor #104
+upsert descriptor #10000
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -211,7 +211,7 @@ upsert descriptor #104
   +        "4294967295": crdb_internal_mvcc_timestamp
   +      families:
   +        "0": primary
-  +      id: 104
+  +      id: 10000
   +      indexes:
   +        "1": t_pkey
   +        "2": idx
@@ -228,7 +228,7 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     id: 104
+     id: 10000
      modificationTime: {}
   +  mutations:
   +  - direction: ADD
@@ -298,7 +298,7 @@ upsert descriptor #104
   +  version: "2"
 persist all catalog changes to storage
 create job #1 (non-cancelable: false): "CREATE UNIQUE INDEX idx ON defaultdb.public.t (j) WHERE (i > 0); CREATE SCHEMA defaultdb.sc"
-  descriptor IDs: [100 104 105]
+  descriptor IDs: [100 10000 10001]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -310,10 +310,10 @@ begin transaction #3
 upsert descriptor #100
   ...
        sc:
-         id: 105
+         id: 10001
   -  version: "2"
   +  version: "3"
-upsert descriptor #104
+upsert descriptor #10000
   ...
          version: 4
        mutationId: 1
@@ -326,7 +326,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
-upsert descriptor #105
+upsert descriptor #10001
   ...
        version: 2
      state: ADD
@@ -337,17 +337,17 @@ update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 Ba
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 7 with 1 BackfillType op
-backfill indexes [2] from index #1 in table #104
+backfill indexes [2] from index #1 in table #10000
 commit transaction #4
 begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 5 MutationType ops
 upsert descriptor #100
   ...
        sc:
-         id: 105
+         id: 10001
   -  version: "3"
   +  version: "4"
-upsert descriptor #104
+upsert descriptor #10000
   ...
          version: 4
        mutationId: 1
@@ -360,7 +360,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "3"
   +  version: "4"
-upsert descriptor #105
+upsert descriptor #10001
   ...
        version: 2
      state: ADD
@@ -374,10 +374,10 @@ begin transaction #6
 upsert descriptor #100
   ...
        sc:
-         id: 105
+         id: 10001
   -  version: "4"
   +  version: "5"
-upsert descriptor #104
+upsert descriptor #10000
   ...
          version: 4
        mutationId: 1
@@ -390,7 +390,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "4"
   +  version: "5"
-upsert descriptor #105
+upsert descriptor #10001
   ...
        version: 2
      state: ADD
@@ -401,17 +401,17 @@ update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 Ba
 commit transaction #6
 begin transaction #7
 ## PostCommitPhase stage 5 of 7 with 1 BackfillType op
-merge temporary indexes [3] into backfilled indexes [2] in table #104
+merge temporary indexes [3] into backfilled indexes [2] in table #10000
 commit transaction #7
 begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 6 MutationType ops
 upsert descriptor #100
   ...
        sc:
-         id: 105
+         id: 10001
   -  version: "5"
   +  version: "6"
-upsert descriptor #104
+upsert descriptor #10000
   ...
          version: 4
        mutationId: 1
@@ -433,7 +433,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "5"
   +  version: "6"
-upsert descriptor #105
+upsert descriptor #10001
   ...
        version: 2
      state: ADD
@@ -444,7 +444,7 @@ update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 1 Va
 commit transaction #8
 begin transaction #9
 ## PostCommitPhase stage 7 of 7 with 1 ValidationType op
-validate forward indexes [2] in table #104
+validate forward indexes [2] in table #10000
 commit transaction #9
 begin transaction #10
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
@@ -462,10 +462,10 @@ upsert descriptor #100
      id: 100
   ...
        sc:
-         id: 105
+         id: 10001
   -  version: "6"
   +  version: "7"
-upsert descriptor #104
+upsert descriptor #10000
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -482,7 +482,7 @@ upsert descriptor #104
   -        "4294967295": crdb_internal_mvcc_timestamp
   -      families:
   -        "0": primary
-  -      id: 104
+  -      id: 10000
   -      indexes:
   -        "1": t_pkey
   -        "2": idx
@@ -500,7 +500,7 @@ upsert descriptor #104
      - columnIds:
   ...
      formatVersion: 3
-     id: 104
+     id: 10000
   +  indexes:
   +  - constraintId: 2
   +    createdAtNanos: "1640998800000000000"
@@ -585,7 +585,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "6"
   +  version: "7"
-upsert descriptor #105
+upsert descriptor #10001
    schema:
   -  declarativeSchemaChangerState:
   -    authorization:
@@ -593,7 +593,7 @@ upsert descriptor #105
   -    currentStatuses: <redacted>
   -    jobId: "1"
   -    nameMapping:
-  -      id: 105
+  -      id: 10001
   -      name: sc
   -    relevantStatements:
   -    - statement:
@@ -604,7 +604,7 @@ upsert descriptor #105
   -    revertible: true
   -    targetRanks: <redacted>
   -    targets: <redacted>
-     id: 105
+     id: 10001
      modificationTime: {}
   ...
          withGrantOption: "2"
@@ -613,18 +613,18 @@ upsert descriptor #105
   -  version: "5"
   +  version: "6"
 persist all catalog changes to storage
-adding table for stats refresh: 104
+adding table for stats refresh: 10000
 create job #2 (non-cancelable: true): "GC for CREATE UNIQUE INDEX idx ON defaultdb.public.t (j) WHERE (i > 0)"
-  descriptor IDs: [104]
+  descriptor IDs: [10000]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
-    descriptorId: 104
+    descriptorId: 10000
 write *eventpb.FinishSchemaChange to event log:
   sc:
-    descriptorId: 105
+    descriptorId: 10001
 commit transaction #10
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

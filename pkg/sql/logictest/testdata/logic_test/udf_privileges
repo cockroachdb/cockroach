@@ -14,43 +14,43 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin    test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin    test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin    test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public   test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public   test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public   test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root     test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root     test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root     test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     admin    test              public           test_priv_f1_110003  test             public          test_priv_f1  ALL             YES
+NULL     admin    test              public           test_priv_f2_110004  test             public          test_priv_f2  ALL             YES
+NULL     admin    test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     public   test              public           test_priv_f1_110003  test             public          test_priv_f1  EXECUTE         NO
+NULL     public   test              public           test_priv_f2_110004  test             public          test_priv_f2  EXECUTE         NO
+NULL     public   test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     root     test              public           test_priv_f1_110003  test             public          test_priv_f1  ALL             YES
+NULL     root     test              public           test_priv_f2_110004  test             public          test_priv_f2  ALL             YES
+NULL     root     test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  ALL             YES
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
-test           public         100107       test_priv_f1()      admin    ALL             true
-test           public         100107       test_priv_f1()      public   EXECUTE         false
-test           public         100107       test_priv_f1()      root     ALL             true
-test           public         100108       test_priv_f2(int8)  admin    ALL             true
-test           public         100108       test_priv_f2(int8)  public   EXECUTE         false
-test           public         100108       test_priv_f2(int8)  root     ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      admin    ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      public   EXECUTE         false
-test           test_priv_sc1  100109       test_priv_f3()      root     ALL             true
+test           public         110003       test_priv_f1()      admin    ALL             true
+test           public         110003       test_priv_f1()      public   EXECUTE         false
+test           public         110003       test_priv_f1()      root     ALL             true
+test           public         110004       test_priv_f2(int8)  admin    ALL             true
+test           public         110004       test_priv_f2(int8)  public   EXECUTE         false
+test           public         110004       test_priv_f2(int8)  root     ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      admin    ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      public   EXECUTE         false
+test           test_priv_sc1  110005       test_priv_f3()      root     ALL             true
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1(), test_priv_f2(INT), test_priv_f3()
 ----
 database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
-test           public         100107       test_priv_f1()      admin    ALL             true
-test           public         100107       test_priv_f1()      public   EXECUTE         false
-test           public         100107       test_priv_f1()      root     ALL             true
-test           public         100108       test_priv_f2(int8)  admin    ALL             true
-test           public         100108       test_priv_f2(int8)  public   EXECUTE         false
-test           public         100108       test_priv_f2(int8)  root     ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      admin    ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      public   EXECUTE         false
-test           test_priv_sc1  100109       test_priv_f3()      root     ALL             true
+test           public         110003       test_priv_f1()      admin    ALL             true
+test           public         110003       test_priv_f1()      public   EXECUTE         false
+test           public         110003       test_priv_f1()      root     ALL             true
+test           public         110004       test_priv_f2(int8)  admin    ALL             true
+test           public         110004       test_priv_f2(int8)  public   EXECUTE         false
+test           public         110004       test_priv_f2(int8)  root     ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      admin    ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      public   EXECUTE         false
+test           test_priv_sc1  110005       test_priv_f3()      root     ALL             true
 
 query TTTTTT colnames
 SELECT * FROM [SHOW FUNCTIONS] ORDER BY function_name, result_data_type
@@ -90,35 +90,35 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin          test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin          test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin          test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public         test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public         test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public         test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root           test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root           test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     udf_test_user  test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         YES
-NULL     udf_test_user  test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         YES
-NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     admin          test              public           test_priv_f1_110003  test             public          test_priv_f1  ALL             YES
+NULL     admin          test              public           test_priv_f2_110004  test             public          test_priv_f2  ALL             YES
+NULL     admin          test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     public         test              public           test_priv_f1_110003  test             public          test_priv_f1  EXECUTE         NO
+NULL     public         test              public           test_priv_f2_110004  test             public          test_priv_f2  EXECUTE         NO
+NULL     public         test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     root           test              public           test_priv_f1_110003  test             public          test_priv_f1  ALL             YES
+NULL     root           test              public           test_priv_f2_110004  test             public          test_priv_f2  ALL             YES
+NULL     root           test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     udf_test_user  test              public           test_priv_f1_110003  test             public          test_priv_f1  EXECUTE         YES
+NULL     udf_test_user  test              public           test_priv_f2_110004  test             public          test_priv_f2  EXECUTE         YES
+NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
-test           public         100107       test_priv_f1()      admin          ALL             true
-test           public         100107       test_priv_f1()      public         EXECUTE         false
-test           public         100107       test_priv_f1()      root           ALL             true
-test           public         100107       test_priv_f1()      udf_test_user  EXECUTE         true
-test           public         100108       test_priv_f2(int8)  admin          ALL             true
-test           public         100108       test_priv_f2(int8)  public         EXECUTE         false
-test           public         100108       test_priv_f2(int8)  root           ALL             true
-test           public         100108       test_priv_f2(int8)  udf_test_user  EXECUTE         true
-test           test_priv_sc1  100109       test_priv_f3()      admin          ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      public         EXECUTE         false
-test           test_priv_sc1  100109       test_priv_f3()      root           ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      udf_test_user  EXECUTE         true
+test           public         110003       test_priv_f1()      admin          ALL             true
+test           public         110003       test_priv_f1()      public         EXECUTE         false
+test           public         110003       test_priv_f1()      root           ALL             true
+test           public         110003       test_priv_f1()      udf_test_user  EXECUTE         true
+test           public         110004       test_priv_f2(int8)  admin          ALL             true
+test           public         110004       test_priv_f2(int8)  public         EXECUTE         false
+test           public         110004       test_priv_f2(int8)  root           ALL             true
+test           public         110004       test_priv_f2(int8)  udf_test_user  EXECUTE         true
+test           test_priv_sc1  110005       test_priv_f3()      admin          ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      public         EXECUTE         false
+test           test_priv_sc1  110005       test_priv_f3()      root           ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      udf_test_user  EXECUTE         true
 
 statement error pgcode 2BP01 pq: cannot drop role/user udf_test_user: grants still exist on.*
 DROP USER udf_test_user;
@@ -132,35 +132,35 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin          test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin          test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin          test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public         test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public         test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public         test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root           test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root           test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     udf_test_user  test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     udf_test_user  test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     admin          test              public           test_priv_f1_110003  test             public          test_priv_f1  ALL             YES
+NULL     admin          test              public           test_priv_f2_110004  test             public          test_priv_f2  ALL             YES
+NULL     admin          test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     public         test              public           test_priv_f1_110003  test             public          test_priv_f1  EXECUTE         NO
+NULL     public         test              public           test_priv_f2_110004  test             public          test_priv_f2  EXECUTE         NO
+NULL     public         test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     root           test              public           test_priv_f1_110003  test             public          test_priv_f1  ALL             YES
+NULL     root           test              public           test_priv_f2_110004  test             public          test_priv_f2  ALL             YES
+NULL     root           test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     udf_test_user  test              public           test_priv_f1_110003  test             public          test_priv_f1  EXECUTE         NO
+NULL     udf_test_user  test              public           test_priv_f2_110004  test             public          test_priv_f2  EXECUTE         NO
+NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
-test           public         100107       test_priv_f1()      admin          ALL             true
-test           public         100107       test_priv_f1()      public         EXECUTE         false
-test           public         100107       test_priv_f1()      root           ALL             true
-test           public         100107       test_priv_f1()      udf_test_user  EXECUTE         false
-test           public         100108       test_priv_f2(int8)  admin          ALL             true
-test           public         100108       test_priv_f2(int8)  public         EXECUTE         false
-test           public         100108       test_priv_f2(int8)  root           ALL             true
-test           public         100108       test_priv_f2(int8)  udf_test_user  EXECUTE         false
-test           test_priv_sc1  100109       test_priv_f3()      admin          ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      public         EXECUTE         false
-test           test_priv_sc1  100109       test_priv_f3()      root           ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      udf_test_user  EXECUTE         false
+test           public         110003       test_priv_f1()      admin          ALL             true
+test           public         110003       test_priv_f1()      public         EXECUTE         false
+test           public         110003       test_priv_f1()      root           ALL             true
+test           public         110003       test_priv_f1()      udf_test_user  EXECUTE         false
+test           public         110004       test_priv_f2(int8)  admin          ALL             true
+test           public         110004       test_priv_f2(int8)  public         EXECUTE         false
+test           public         110004       test_priv_f2(int8)  root           ALL             true
+test           public         110004       test_priv_f2(int8)  udf_test_user  EXECUTE         false
+test           test_priv_sc1  110005       test_priv_f3()      admin          ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      public         EXECUTE         false
+test           test_priv_sc1  110005       test_priv_f3()      root           ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      udf_test_user  EXECUTE         false
 
 statement ok
 REVOKE EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 FROM udf_test_user;
@@ -171,29 +171,29 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin    test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin    test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin    test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public   test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public   test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public   test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root     test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root     test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root     test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     admin    test              public           test_priv_f1_110003  test             public          test_priv_f1  ALL             YES
+NULL     admin    test              public           test_priv_f2_110004  test             public          test_priv_f2  ALL             YES
+NULL     admin    test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     public   test              public           test_priv_f1_110003  test             public          test_priv_f1  EXECUTE         NO
+NULL     public   test              public           test_priv_f2_110004  test             public          test_priv_f2  EXECUTE         NO
+NULL     public   test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     root     test              public           test_priv_f1_110003  test             public          test_priv_f1  ALL             YES
+NULL     root     test              public           test_priv_f2_110004  test             public          test_priv_f2  ALL             YES
+NULL     root     test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  ALL             YES
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
-test           public         100107       test_priv_f1()      admin    ALL             true
-test           public         100107       test_priv_f1()      public   EXECUTE         false
-test           public         100107       test_priv_f1()      root     ALL             true
-test           public         100108       test_priv_f2(int8)  admin    ALL             true
-test           public         100108       test_priv_f2(int8)  public   EXECUTE         false
-test           public         100108       test_priv_f2(int8)  root     ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      admin    ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      public   EXECUTE         false
-test           test_priv_sc1  100109       test_priv_f3()      root     ALL             true
+test           public         110003       test_priv_f1()      admin    ALL             true
+test           public         110003       test_priv_f1()      public   EXECUTE         false
+test           public         110003       test_priv_f1()      root     ALL             true
+test           public         110004       test_priv_f2(int8)  admin    ALL             true
+test           public         110004       test_priv_f2(int8)  public   EXECUTE         false
+test           public         110004       test_priv_f2(int8)  root     ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      admin    ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      public   EXECUTE         false
+test           test_priv_sc1  110005       test_priv_f3()      root     ALL             true
 
 statement ok
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public, test_priv_sc1 TO udf_test_user WITH GRANT OPTION;
@@ -204,35 +204,35 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin          test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin          test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin          test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public         test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public         test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public         test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root           test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root           test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     udf_test_user  test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         YES
-NULL     udf_test_user  test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         YES
-NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     admin          test              public           test_priv_f1_110003  test             public          test_priv_f1  ALL             YES
+NULL     admin          test              public           test_priv_f2_110004  test             public          test_priv_f2  ALL             YES
+NULL     admin          test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     public         test              public           test_priv_f1_110003  test             public          test_priv_f1  EXECUTE         NO
+NULL     public         test              public           test_priv_f2_110004  test             public          test_priv_f2  EXECUTE         NO
+NULL     public         test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     root           test              public           test_priv_f1_110003  test             public          test_priv_f1  ALL             YES
+NULL     root           test              public           test_priv_f2_110004  test             public          test_priv_f2  ALL             YES
+NULL     root           test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     udf_test_user  test              public           test_priv_f1_110003  test             public          test_priv_f1  EXECUTE         YES
+NULL     udf_test_user  test              public           test_priv_f2_110004  test             public          test_priv_f2  EXECUTE         YES
+NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
-test           public         100107       test_priv_f1()      admin          ALL             true
-test           public         100107       test_priv_f1()      public         EXECUTE         false
-test           public         100107       test_priv_f1()      root           ALL             true
-test           public         100107       test_priv_f1()      udf_test_user  EXECUTE         true
-test           public         100108       test_priv_f2(int8)  admin          ALL             true
-test           public         100108       test_priv_f2(int8)  public         EXECUTE         false
-test           public         100108       test_priv_f2(int8)  root           ALL             true
-test           public         100108       test_priv_f2(int8)  udf_test_user  EXECUTE         true
-test           test_priv_sc1  100109       test_priv_f3()      admin          ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      public         EXECUTE         false
-test           test_priv_sc1  100109       test_priv_f3()      root           ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      udf_test_user  EXECUTE         true
+test           public         110003       test_priv_f1()      admin          ALL             true
+test           public         110003       test_priv_f1()      public         EXECUTE         false
+test           public         110003       test_priv_f1()      root           ALL             true
+test           public         110003       test_priv_f1()      udf_test_user  EXECUTE         true
+test           public         110004       test_priv_f2(int8)  admin          ALL             true
+test           public         110004       test_priv_f2(int8)  public         EXECUTE         false
+test           public         110004       test_priv_f2(int8)  root           ALL             true
+test           public         110004       test_priv_f2(int8)  udf_test_user  EXECUTE         true
+test           test_priv_sc1  110005       test_priv_f3()      admin          ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      public         EXECUTE         false
+test           test_priv_sc1  110005       test_priv_f3()      root           ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      udf_test_user  EXECUTE         true
 
 statement ok
 REVOKE GRANT OPTION FOR EXECUTE ON ALL FUNCTIONS in schema public, test_priv_sc1 FROM udf_test_user;
@@ -243,35 +243,35 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin          test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin          test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin          test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public         test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public         test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public         test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root           test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root           test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     udf_test_user  test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     udf_test_user  test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     admin          test              public           test_priv_f1_110003  test             public          test_priv_f1  ALL             YES
+NULL     admin          test              public           test_priv_f2_110004  test             public          test_priv_f2  ALL             YES
+NULL     admin          test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     public         test              public           test_priv_f1_110003  test             public          test_priv_f1  EXECUTE         NO
+NULL     public         test              public           test_priv_f2_110004  test             public          test_priv_f2  EXECUTE         NO
+NULL     public         test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     root           test              public           test_priv_f1_110003  test             public          test_priv_f1  ALL             YES
+NULL     root           test              public           test_priv_f2_110004  test             public          test_priv_f2  ALL             YES
+NULL     root           test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     udf_test_user  test              public           test_priv_f1_110003  test             public          test_priv_f1  EXECUTE         NO
+NULL     udf_test_user  test              public           test_priv_f2_110004  test             public          test_priv_f2  EXECUTE         NO
+NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
-test           public         100107       test_priv_f1()      admin          ALL             true
-test           public         100107       test_priv_f1()      public         EXECUTE         false
-test           public         100107       test_priv_f1()      root           ALL             true
-test           public         100107       test_priv_f1()      udf_test_user  EXECUTE         false
-test           public         100108       test_priv_f2(int8)  admin          ALL             true
-test           public         100108       test_priv_f2(int8)  public         EXECUTE         false
-test           public         100108       test_priv_f2(int8)  root           ALL             true
-test           public         100108       test_priv_f2(int8)  udf_test_user  EXECUTE         false
-test           test_priv_sc1  100109       test_priv_f3()      admin          ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      public         EXECUTE         false
-test           test_priv_sc1  100109       test_priv_f3()      root           ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      udf_test_user  EXECUTE         false
+test           public         110003       test_priv_f1()      admin          ALL             true
+test           public         110003       test_priv_f1()      public         EXECUTE         false
+test           public         110003       test_priv_f1()      root           ALL             true
+test           public         110003       test_priv_f1()      udf_test_user  EXECUTE         false
+test           public         110004       test_priv_f2(int8)  admin          ALL             true
+test           public         110004       test_priv_f2(int8)  public         EXECUTE         false
+test           public         110004       test_priv_f2(int8)  root           ALL             true
+test           public         110004       test_priv_f2(int8)  udf_test_user  EXECUTE         false
+test           test_priv_sc1  110005       test_priv_f3()      admin          ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      public         EXECUTE         false
+test           test_priv_sc1  110005       test_priv_f3()      root           ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      udf_test_user  EXECUTE         false
 
 statement ok
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public, test_priv_sc1 FROM udf_test_user;
@@ -282,29 +282,29 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin    test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     admin    test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     admin    test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public   test              public           test_priv_f1_100107  test             public          test_priv_f1  EXECUTE         NO
-NULL     public   test              public           test_priv_f2_100108  test             public          test_priv_f2  EXECUTE         NO
-NULL     public   test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root     test              public           test_priv_f1_100107  test             public          test_priv_f1  ALL             YES
-NULL     root     test              public           test_priv_f2_100108  test             public          test_priv_f2  ALL             YES
-NULL     root     test              test_priv_sc1    test_priv_f3_100109  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     admin    test              public           test_priv_f1_110003  test             public          test_priv_f1  ALL             YES
+NULL     admin    test              public           test_priv_f2_110004  test             public          test_priv_f2  ALL             YES
+NULL     admin    test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     public   test              public           test_priv_f1_110003  test             public          test_priv_f1  EXECUTE         NO
+NULL     public   test              public           test_priv_f2_110004  test             public          test_priv_f2  EXECUTE         NO
+NULL     public   test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     root     test              public           test_priv_f1_110003  test             public          test_priv_f1  ALL             YES
+NULL     root     test              public           test_priv_f2_110004  test             public          test_priv_f2  ALL             YES
+NULL     root     test              test_priv_sc1    test_priv_f3_110005  test             test_priv_sc1   test_priv_f3  ALL             YES
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
-test           public         100107       test_priv_f1()      admin    ALL             true
-test           public         100107       test_priv_f1()      public   EXECUTE         false
-test           public         100107       test_priv_f1()      root     ALL             true
-test           public         100108       test_priv_f2(int8)  admin    ALL             true
-test           public         100108       test_priv_f2(int8)  public   EXECUTE         false
-test           public         100108       test_priv_f2(int8)  root     ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      admin    ALL             true
-test           test_priv_sc1  100109       test_priv_f3()      public   EXECUTE         false
-test           test_priv_sc1  100109       test_priv_f3()      root     ALL             true
+test           public         110003       test_priv_f1()      admin    ALL             true
+test           public         110003       test_priv_f1()      public   EXECUTE         false
+test           public         110003       test_priv_f1()      root     ALL             true
+test           public         110004       test_priv_f2(int8)  admin    ALL             true
+test           public         110004       test_priv_f2(int8)  public   EXECUTE         false
+test           public         110004       test_priv_f2(int8)  root     ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      admin    ALL             true
+test           test_priv_sc1  110005       test_priv_f3()      public   EXECUTE         false
+test           test_priv_sc1  110005       test_priv_f3()      root     ALL             true
 
 statement ok
 DROP FUNCTION test_priv_f1;
@@ -326,17 +326,17 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin    test              public           test_priv_f1_100110  test             public          test_priv_f1  ALL             YES
-NULL     public   test              public           test_priv_f1_100110  test             public          test_priv_f1  EXECUTE         NO
-NULL     root     test              public           test_priv_f1_100110  test             public          test_priv_f1  ALL             YES
+NULL     admin    test              public           test_priv_f1_110006  test             public          test_priv_f1  ALL             YES
+NULL     public   test              public           test_priv_f1_110006  test             public          test_priv_f1  EXECUTE         NO
+NULL     root     test              public           test_priv_f1_110006  test             public          test_priv_f1  ALL             YES
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1
 ----
 database_name  schema_name  function_id  function_signature  grantee  privilege_type  is_grantable
-test           public       100110       test_priv_f1()      admin    ALL             true
-test           public       100110       test_priv_f1()      public   EXECUTE         false
-test           public       100110       test_priv_f1()      root     ALL             true
+test           public       110006       test_priv_f1()      admin    ALL             true
+test           public       110006       test_priv_f1()      public   EXECUTE         false
+test           public       110006       test_priv_f1()      root     ALL             true
 
 # Add default privilege and make sure new function
 statement ok
@@ -352,33 +352,33 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee        specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin          test              public           test_priv_f1_100110  test             public          test_priv_f1  ALL             YES
-NULL     admin          test              public           test_priv_f2_100111  test             public          test_priv_f2  ALL             YES
-NULL     admin          test              test_priv_sc1    test_priv_f3_100112  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public         test              public           test_priv_f1_100110  test             public          test_priv_f1  EXECUTE         NO
-NULL     public         test              public           test_priv_f2_100111  test             public          test_priv_f2  EXECUTE         NO
-NULL     public         test              test_priv_sc1    test_priv_f3_100112  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root           test              public           test_priv_f1_100110  test             public          test_priv_f1  ALL             YES
-NULL     root           test              public           test_priv_f2_100111  test             public          test_priv_f2  ALL             YES
-NULL     root           test              test_priv_sc1    test_priv_f3_100112  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     udf_test_user  test              public           test_priv_f2_100111  test             public          test_priv_f2  EXECUTE         YES
-NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100112  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+NULL     admin          test              public           test_priv_f1_110006  test             public          test_priv_f1  ALL             YES
+NULL     admin          test              public           test_priv_f2_110007  test             public          test_priv_f2  ALL             YES
+NULL     admin          test              test_priv_sc1    test_priv_f3_110008  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     public         test              public           test_priv_f1_110006  test             public          test_priv_f1  EXECUTE         NO
+NULL     public         test              public           test_priv_f2_110007  test             public          test_priv_f2  EXECUTE         NO
+NULL     public         test              test_priv_sc1    test_priv_f3_110008  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     root           test              public           test_priv_f1_110006  test             public          test_priv_f1  ALL             YES
+NULL     root           test              public           test_priv_f2_110007  test             public          test_priv_f2  ALL             YES
+NULL     root           test              test_priv_sc1    test_priv_f3_110008  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     udf_test_user  test              public           test_priv_f2_110007  test             public          test_priv_f2  EXECUTE         YES
+NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_110008  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
-test           public         100110       test_priv_f1()      admin          ALL             true
-test           public         100110       test_priv_f1()      public         EXECUTE         false
-test           public         100110       test_priv_f1()      root           ALL             true
-test           public         100111       test_priv_f2(int8)  admin          ALL             true
-test           public         100111       test_priv_f2(int8)  public         EXECUTE         false
-test           public         100111       test_priv_f2(int8)  root           ALL             true
-test           public         100111       test_priv_f2(int8)  udf_test_user  EXECUTE         true
-test           test_priv_sc1  100112       test_priv_f3()      admin          ALL             true
-test           test_priv_sc1  100112       test_priv_f3()      public         EXECUTE         false
-test           test_priv_sc1  100112       test_priv_f3()      root           ALL             true
-test           test_priv_sc1  100112       test_priv_f3()      udf_test_user  EXECUTE         true
+test           public         110006       test_priv_f1()      admin          ALL             true
+test           public         110006       test_priv_f1()      public         EXECUTE         false
+test           public         110006       test_priv_f1()      root           ALL             true
+test           public         110007       test_priv_f2(int8)  admin          ALL             true
+test           public         110007       test_priv_f2(int8)  public         EXECUTE         false
+test           public         110007       test_priv_f2(int8)  root           ALL             true
+test           public         110007       test_priv_f2(int8)  udf_test_user  EXECUTE         true
+test           test_priv_sc1  110008       test_priv_f3()      admin          ALL             true
+test           test_priv_sc1  110008       test_priv_f3()      public         EXECUTE         false
+test           test_priv_sc1  110008       test_priv_f3()      root           ALL             true
+test           test_priv_sc1  110008       test_priv_f3()      udf_test_user  EXECUTE         true
 
 statement ok
 DROP FUNCTION test_priv_f2;
@@ -390,17 +390,17 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin    test              public           test_priv_f1_100110  test             public          test_priv_f1  ALL             YES
-NULL     public   test              public           test_priv_f1_100110  test             public          test_priv_f1  EXECUTE         NO
-NULL     root     test              public           test_priv_f1_100110  test             public          test_priv_f1  ALL             YES
+NULL     admin    test              public           test_priv_f1_110006  test             public          test_priv_f1  ALL             YES
+NULL     public   test              public           test_priv_f1_110006  test             public          test_priv_f1  EXECUTE         NO
+NULL     root     test              public           test_priv_f1_110006  test             public          test_priv_f1  ALL             YES
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1
 ----
 database_name  schema_name  function_id  function_signature  grantee  privilege_type  is_grantable
-test           public       100110       test_priv_f1()      admin    ALL             true
-test           public       100110       test_priv_f1()      public   EXECUTE         false
-test           public       100110       test_priv_f1()      root     ALL             true
+test           public       110006       test_priv_f1()      admin    ALL             true
+test           public       110006       test_priv_f1()      public   EXECUTE         false
+test           public       110006       test_priv_f1()      root     ALL             true
 
 statement ok
 ALTER DEFAULT PRIVILEGES IN SCHEMA public, test_priv_sc1 REVOKE EXECUTE ON FUNCTIONS FROM udf_test_user;
@@ -415,29 +415,29 @@ WHERE routine_name IN ('test_priv_f1', 'test_priv_f2', 'test_priv_f3')
 ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
-NULL     admin    test              public           test_priv_f1_100110  test             public          test_priv_f1  ALL             YES
-NULL     admin    test              public           test_priv_f2_100113  test             public          test_priv_f2  ALL             YES
-NULL     admin    test              test_priv_sc1    test_priv_f3_100114  test             test_priv_sc1   test_priv_f3  ALL             YES
-NULL     public   test              public           test_priv_f1_100110  test             public          test_priv_f1  EXECUTE         NO
-NULL     public   test              public           test_priv_f2_100113  test             public          test_priv_f2  EXECUTE         NO
-NULL     public   test              test_priv_sc1    test_priv_f3_100114  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
-NULL     root     test              public           test_priv_f1_100110  test             public          test_priv_f1  ALL             YES
-NULL     root     test              public           test_priv_f2_100113  test             public          test_priv_f2  ALL             YES
-NULL     root     test              test_priv_sc1    test_priv_f3_100114  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     admin    test              public           test_priv_f1_110006  test             public          test_priv_f1  ALL             YES
+NULL     admin    test              public           test_priv_f2_110009  test             public          test_priv_f2  ALL             YES
+NULL     admin    test              test_priv_sc1    test_priv_f3_110010  test             test_priv_sc1   test_priv_f3  ALL             YES
+NULL     public   test              public           test_priv_f1_110006  test             public          test_priv_f1  EXECUTE         NO
+NULL     public   test              public           test_priv_f2_110009  test             public          test_priv_f2  EXECUTE         NO
+NULL     public   test              test_priv_sc1    test_priv_f3_110010  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
+NULL     root     test              public           test_priv_f1_110006  test             public          test_priv_f1  ALL             YES
+NULL     root     test              public           test_priv_f2_110009  test             public          test_priv_f2  ALL             YES
+NULL     root     test              test_priv_sc1    test_priv_f3_110010  test             test_priv_sc1   test_priv_f3  ALL             YES
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
-test           public         100110       test_priv_f1()      admin    ALL             true
-test           public         100110       test_priv_f1()      public   EXECUTE         false
-test           public         100110       test_priv_f1()      root     ALL             true
-test           public         100113       test_priv_f2(int8)  admin    ALL             true
-test           public         100113       test_priv_f2(int8)  public   EXECUTE         false
-test           public         100113       test_priv_f2(int8)  root     ALL             true
-test           test_priv_sc1  100114       test_priv_f3()      admin    ALL             true
-test           test_priv_sc1  100114       test_priv_f3()      public   EXECUTE         false
-test           test_priv_sc1  100114       test_priv_f3()      root     ALL             true
+test           public         110006       test_priv_f1()      admin    ALL             true
+test           public         110006       test_priv_f1()      public   EXECUTE         false
+test           public         110006       test_priv_f1()      root     ALL             true
+test           public         110009       test_priv_f2(int8)  admin    ALL             true
+test           public         110009       test_priv_f2(int8)  public   EXECUTE         false
+test           public         110009       test_priv_f2(int8)  root     ALL             true
+test           test_priv_sc1  110010       test_priv_f3()      admin    ALL             true
+test           test_priv_sc1  110010       test_priv_f3()      public   EXECUTE         false
+test           test_priv_sc1  110010       test_priv_f3()      root     ALL             true
 
 # Make sure has_function_privilege works.
 query B
@@ -542,14 +542,14 @@ SELECT * FROM [
 ] ORDER BY function_signature, grantee
 ----
 database_name  schema_name          function_id  function_signature                   grantee             privilege_type  is_grantable
-test           sc_test_show_grants  100116       f_test_show_grants(int8)             admin               ALL             true
-test           sc_test_show_grants  100116       f_test_show_grants(int8)             public              EXECUTE         false
-test           sc_test_show_grants  100116       f_test_show_grants(int8)             root                ALL             true
-test           sc_test_show_grants  100116       f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
-test           sc_test_show_grants  100117       f_test_show_grants(int8, text, oid)  admin               ALL             true
-test           sc_test_show_grants  100117       f_test_show_grants(int8, text, oid)  public              EXECUTE         false
-test           sc_test_show_grants  100117       f_test_show_grants(int8, text, oid)  root                ALL             true
-test           sc_test_show_grants  100117       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  110012       f_test_show_grants(int8)             admin               ALL             true
+test           sc_test_show_grants  110012       f_test_show_grants(int8)             public              EXECUTE         false
+test           sc_test_show_grants  110012       f_test_show_grants(int8)             root                ALL             true
+test           sc_test_show_grants  110012       f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  110013       f_test_show_grants(int8, text, oid)  admin               ALL             true
+test           sc_test_show_grants  110013       f_test_show_grants(int8, text, oid)  public              EXECUTE         false
+test           sc_test_show_grants  110013       f_test_show_grants(int8, text, oid)  root                ALL             true
+test           sc_test_show_grants  110013       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
 statement error pgcode 42883 pq: function f_test_show_grants\(string\) does not exist: function undefined
 SHOW GRANTS ON FUNCTION f_test_show_grants(string);
@@ -558,19 +558,19 @@ query TTTTTTB colnames
 SELECT * FROM [SHOW GRANTS ON FUNCTION f_test_show_grants(INT)] ORDER BY grantee
 ----
 database_name  schema_name          function_id  function_signature        grantee             privilege_type  is_grantable
-test           sc_test_show_grants  100116       f_test_show_grants(int8)  admin               ALL             true
-test           sc_test_show_grants  100116       f_test_show_grants(int8)  public              EXECUTE         false
-test           sc_test_show_grants  100116       f_test_show_grants(int8)  root                ALL             true
-test           sc_test_show_grants  100116       f_test_show_grants(int8)  u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  110012       f_test_show_grants(int8)  admin               ALL             true
+test           sc_test_show_grants  110012       f_test_show_grants(int8)  public              EXECUTE         false
+test           sc_test_show_grants  110012       f_test_show_grants(int8)  root                ALL             true
+test           sc_test_show_grants  110012       f_test_show_grants(int8)  u_test_show_grants  EXECUTE         false
 
 query TTTTTTB colnames
 SELECT * FROM [SHOW GRANTS ON FUNCTION f_test_show_grants(INT, string, OID)] ORDER BY function_signature, grantee
 ----
 database_name  schema_name          function_id  function_signature                   grantee             privilege_type  is_grantable
-test           sc_test_show_grants  100117       f_test_show_grants(int8, text, oid)  admin               ALL             true
-test           sc_test_show_grants  100117       f_test_show_grants(int8, text, oid)  public              EXECUTE         false
-test           sc_test_show_grants  100117       f_test_show_grants(int8, text, oid)  root                ALL             true
-test           sc_test_show_grants  100117       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  110013       f_test_show_grants(int8, text, oid)  admin               ALL             true
+test           sc_test_show_grants  110013       f_test_show_grants(int8, text, oid)  public              EXECUTE         false
+test           sc_test_show_grants  110013       f_test_show_grants(int8, text, oid)  root                ALL             true
+test           sc_test_show_grants  110013       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
 statement error pgcode 42883 pq: unknown function: f_not_existing\(\): function undefined
 SHOW GRANTS ON FUNCTION f_not_existing;
@@ -581,8 +581,8 @@ SELECT * FROM [
 ] ORDER BY function_id
 ----
 database_name  schema_name          function_id  function_signature                   grantee             privilege_type  is_grantable
-test           sc_test_show_grants  100116       f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
-test           sc_test_show_grants  100117       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  110012       f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  110013       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
 query TTTTTB colnames
 SELECT * FROM [SHOW GRANTS FOR u_test_show_grants] ORDER BY relation_name

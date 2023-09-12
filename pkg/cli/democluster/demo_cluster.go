@@ -903,13 +903,18 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		AutoConfigProvider:      demoCtx.AutoConfigProvider,
 		NoAutoInitializeCluster: true,
 		EnableDemoLoginEndpoint: true,
+
 		// Demo clusters by default will create their own tenants, so we
 		// don't need to create them here.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				StickyVFSRegistry: stickyVFSRegistry,
+
+				// Demo clusters should look and feel like regular clusters, so
+				// let's not change the way descriptor IDs get generated.
+				DisableFixedDescIDOffset: true,
 			},
 			JobsTestingKnobs: &jobs.TestingKnobs{
 				// Allow the scheduler daemon to start earlier in demo.

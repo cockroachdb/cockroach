@@ -671,9 +671,9 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-Put /Table/117/1/1/0 -> /TUPLE/
-Del /Table/117/1/1/1/1
-Del /Table/117/1/1/2/1
+Put /Table/10013/1/1/0 -> /TUPLE/
+Del /Table/10013/1/1/1/1
+Del /Table/10013/1/1/2/1
 fast path completed
 rows affected: 1
 
@@ -691,9 +691,9 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan  Scan /Table/120/1/2/0
-count         CPut /Table/120/1/2/0 -> /TUPLE/2:2:Int/3
-count         InitPut /Table/120/2/3/0 -> /BYTES/0x8a
+colbatchscan  Scan /Table/10016/1/2/0
+count         CPut /Table/10016/1/2/0 -> /TUPLE/2:2:Int/3
+count         InitPut /Table/10016/2/3/0 -> /BYTES/0x8a
 count         fast path completed
 sql query     rows affected: 1
 
@@ -704,9 +704,9 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan  Scan /Table/120/1/1/0
-count         CPut /Table/120/1/1/0 -> /TUPLE/2:2:Int/2
-count         InitPut /Table/120/2/2/0 -> /BYTES/0x89
+colbatchscan  Scan /Table/10016/1/1/0
+count         CPut /Table/10016/1/1/0 -> /TUPLE/2:2:Int/2
+count         InitPut /Table/10016/2/2/0 -> /BYTES/0x89
 count         fast path completed
 sql query     rows affected: 1
 
@@ -718,9 +718,9 @@ set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan  Scan /Table/120/1/2/0
+colbatchscan  Scan /Table/10016/1/2/0
 colbatchscan  fetched: /kv/kv_pkey/2/v -> /3
-count         Put /Table/120/1/2/0 -> /TUPLE/2:2:Int/2
-count         Del /Table/120/2/3/0
-count         CPut /Table/120/2/2/0 -> /BYTES/0x8a (expecting does not exist)
+count         Put /Table/10016/1/2/0 -> /TUPLE/2:2:Int/2
+count         Del /Table/10016/2/3/0
+count         CPut /Table/10016/2/2/0 -> /BYTES/0x8a (expecting does not exist)
 sql query     execution failed after 0 rows: duplicate key value violates unique constraint "woo"

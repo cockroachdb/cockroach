@@ -1068,7 +1068,7 @@ vectorized: true
   columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
   estimated row count: 10 (missing stats)
   table: pg_class@pg_class_oid_idx
-  spans: [/106 - /106]
+  spans: [/10002 - /10002]
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_class WHERE oid = 101::oid

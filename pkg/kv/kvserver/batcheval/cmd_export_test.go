@@ -297,7 +297,7 @@ INTO
 		// the max overage being exceeded.
 		defer resetMaxOverage(t)
 		setMaxOverage(t, "'1b'")
-		const expectedError = `export size \(11 bytes\) exceeds max size \(2 bytes\)`
+		const expectedError = `export size \(13 bytes\) exceeds max size \(2 bytes\)`
 		_, pErr := export(t, res5.end, kvpb.MVCCFilter_Latest, noTargetBytes)
 		require.Regexp(t, expectedError, pErr)
 		hints := errors.GetAllHints(pErr.GoError())
@@ -317,7 +317,7 @@ INTO
 	var res7 ExportAndSlurpResult
 	t.Run("ts7", func(t *testing.T) {
 		var maxResponseSSTBytes int64
-		kvByteSize := int64(11)
+		kvByteSize := int64(13)
 		// Because of the above split, there are going to be two ExportRequests by
 		// the DistSender. One for the first KV and the next one for the remaining
 		// KVs.

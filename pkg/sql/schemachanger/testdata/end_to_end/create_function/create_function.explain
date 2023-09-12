@@ -28,63 +28,63 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f›(IN �
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 9 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → PUBLIC Function:{DescID: 110 (f+)}
- │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 110 (f+), ReferencedDescID: 101 (public)}
- │         │    ├── ABSENT → PUBLIC FunctionName:{DescID: 110 (f+)}
- │         │    ├── ABSENT → PUBLIC FunctionVolatility:{DescID: 110 (f+)}
- │         │    ├── ABSENT → PUBLIC Owner:{DescID: 110 (f+)}
- │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "admin"}
- │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "public"}
- │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "root"}
- │         │    └── ABSENT → PUBLIC FunctionBody:{DescID: 110 (f+)}
+ │         │    ├── ABSENT → PUBLIC Function:{DescID: 10006 (f+)}
+ │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 10006 (f+), ReferencedDescID: 101 (public)}
+ │         │    ├── ABSENT → PUBLIC FunctionName:{DescID: 10006 (f+)}
+ │         │    ├── ABSENT → PUBLIC FunctionVolatility:{DescID: 10006 (f+)}
+ │         │    ├── ABSENT → PUBLIC Owner:{DescID: 10006 (f+)}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 10006 (f+), Name: "admin"}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 10006 (f+), Name: "public"}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 10006 (f+), Name: "root"}
+ │         │    └── ABSENT → PUBLIC FunctionBody:{DescID: 10006 (f+)}
  │         └── 12 Mutation operations
- │              ├── CreateFunctionDescriptor {"Function":{"FunctionID":110}}
- │              ├── SetFunctionName {"FunctionID":110,"Name":"f"}
- │              ├── SetFunctionVolatility {"FunctionID":110,"Volatility":1}
- │              ├── UpdateOwner {"Owner":{"DescriptorID":110,"Owner":"root"}}
- │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":110,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
- │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":110,"Privileges":1048576,"UserName":"public"}}
- │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":110,"Privileges":2,"UserName":"root","WithGrantOption":2}}
- │              ├── SetFunctionBody {"Body":{"Body":"SELECT a FROM t;...","FunctionID":110}}
- │              ├── UpdateFunctionTypeReferences {"FunctionID":110}
- │              ├── UpdateFunctionRelationReferences {"FunctionID":110}
- │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":110,"SchemaID":101}}
- │              └── MarkDescriptorAsPublic {"DescriptorID":110}
+ │              ├── CreateFunctionDescriptor {"Function":{"FunctionID":10006}}
+ │              ├── SetFunctionName {"FunctionID":10006,"Name":"f"}
+ │              ├── SetFunctionVolatility {"FunctionID":10006,"Volatility":1}
+ │              ├── UpdateOwner {"Owner":{"DescriptorID":10006,"Owner":"root"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":10006,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":10006,"Privileges":1048576,"UserName":"public"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":10006,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+ │              ├── SetFunctionBody {"Body":{"Body":"SELECT a FROM t;...","FunctionID":10006}}
+ │              ├── UpdateFunctionTypeReferences {"FunctionID":10006}
+ │              ├── UpdateFunctionRelationReferences {"FunctionID":10006}
+ │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":10006,"SchemaID":101}}
+ │              └── MarkDescriptorAsPublic {"DescriptorID":10006}
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
       │    ├── 9 elements transitioning toward PUBLIC
-      │    │    ├── PUBLIC → ABSENT Function:{DescID: 110 (f+)}
-      │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 110 (f+), ReferencedDescID: 101 (public)}
-      │    │    ├── PUBLIC → ABSENT FunctionName:{DescID: 110 (f+)}
-      │    │    ├── PUBLIC → ABSENT FunctionVolatility:{DescID: 110 (f+)}
-      │    │    ├── PUBLIC → ABSENT Owner:{DescID: 110 (f+)}
-      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 110 (f+), Name: "admin"}
-      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 110 (f+), Name: "public"}
-      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 110 (f+), Name: "root"}
-      │    │    └── PUBLIC → ABSENT FunctionBody:{DescID: 110 (f+)}
+      │    │    ├── PUBLIC → ABSENT Function:{DescID: 10006 (f+)}
+      │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 10006 (f+), ReferencedDescID: 101 (public)}
+      │    │    ├── PUBLIC → ABSENT FunctionName:{DescID: 10006 (f+)}
+      │    │    ├── PUBLIC → ABSENT FunctionVolatility:{DescID: 10006 (f+)}
+      │    │    ├── PUBLIC → ABSENT Owner:{DescID: 10006 (f+)}
+      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 10006 (f+), Name: "admin"}
+      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 10006 (f+), Name: "public"}
+      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 10006 (f+), Name: "root"}
+      │    │    └── PUBLIC → ABSENT FunctionBody:{DescID: 10006 (f+)}
       │    └── 1 Mutation operation
       │         └── UndoAllInTxnImmediateMutationOpSideEffects
       └── Stage 2 of 2 in PreCommitPhase
            ├── 9 elements transitioning toward PUBLIC
-           │    ├── ABSENT → PUBLIC Function:{DescID: 110 (f+)}
-           │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 110 (f+), ReferencedDescID: 101 (public)}
-           │    ├── ABSENT → PUBLIC FunctionName:{DescID: 110 (f+)}
-           │    ├── ABSENT → PUBLIC FunctionVolatility:{DescID: 110 (f+)}
-           │    ├── ABSENT → PUBLIC Owner:{DescID: 110 (f+)}
-           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "admin"}
-           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "public"}
-           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "root"}
-           │    └── ABSENT → PUBLIC FunctionBody:{DescID: 110 (f+)}
+           │    ├── ABSENT → PUBLIC Function:{DescID: 10006 (f+)}
+           │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 10006 (f+), ReferencedDescID: 101 (public)}
+           │    ├── ABSENT → PUBLIC FunctionName:{DescID: 10006 (f+)}
+           │    ├── ABSENT → PUBLIC FunctionVolatility:{DescID: 10006 (f+)}
+           │    ├── ABSENT → PUBLIC Owner:{DescID: 10006 (f+)}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 10006 (f+), Name: "admin"}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 10006 (f+), Name: "public"}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 10006 (f+), Name: "root"}
+           │    └── ABSENT → PUBLIC FunctionBody:{DescID: 10006 (f+)}
            └── 12 Mutation operations
-                ├── CreateFunctionDescriptor {"Function":{"FunctionID":110}}
-                ├── SetFunctionName {"FunctionID":110,"Name":"f"}
-                ├── SetFunctionVolatility {"FunctionID":110,"Volatility":1}
-                ├── UpdateOwner {"Owner":{"DescriptorID":110,"Owner":"root"}}
-                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":110,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
-                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":110,"Privileges":1048576,"UserName":"public"}}
-                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":110,"Privileges":2,"UserName":"root","WithGrantOption":2}}
-                ├── SetFunctionBody {"Body":{"Body":"SELECT a FROM t;...","FunctionID":110}}
-                ├── UpdateFunctionTypeReferences {"FunctionID":110}
-                ├── UpdateFunctionRelationReferences {"FunctionID":110}
-                ├── SetObjectParentID {"ObjParent":{"ChildObjectID":110,"SchemaID":101}}
-                └── MarkDescriptorAsPublic {"DescriptorID":110}
+                ├── CreateFunctionDescriptor {"Function":{"FunctionID":10006}}
+                ├── SetFunctionName {"FunctionID":10006,"Name":"f"}
+                ├── SetFunctionVolatility {"FunctionID":10006,"Volatility":1}
+                ├── UpdateOwner {"Owner":{"DescriptorID":10006,"Owner":"root"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":10006,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":10006,"Privileges":1048576,"UserName":"public"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":10006,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+                ├── SetFunctionBody {"Body":{"Body":"SELECT a FROM t;...","FunctionID":10006}}
+                ├── UpdateFunctionTypeReferences {"FunctionID":10006}
+                ├── UpdateFunctionRelationReferences {"FunctionID":10006}
+                ├── SetObjectParentID {"ObjParent":{"ChildObjectID":10006,"SchemaID":101}}
+                └── MarkDescriptorAsPublic {"DescriptorID":10006}

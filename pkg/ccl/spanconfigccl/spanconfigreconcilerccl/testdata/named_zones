@@ -92,7 +92,7 @@ CREATE TABLE db.t1();
 
 mutations
 ----
-upsert /Table/10{6-7}                      range default
+upsert /Table/1000{2-3}                    range default
 
 exec-sql
 ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 50;
@@ -108,8 +108,8 @@ delete /System{/tsd-tse}
 upsert /System{/tsd-tse}                   ttl_seconds=50
 delete /System{tse-/SystemSpanConfigKeys}
 upsert /System{tse-/SystemSpanConfigKeys}  ttl_seconds=50
-delete /Table/10{6-7}
-upsert /Table/10{6-7}                      ttl_seconds=50
+delete /Table/1000{2-3}
+upsert /Table/1000{2-3}                    ttl_seconds=50
 
 state limit=5
 ----
@@ -140,7 +140,7 @@ state offset=46
 /Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{2-3}                              database system (host)
-/Table/10{6-7}                             ttl_seconds=50
+/Table/1000{2-3}                           ttl_seconds=50
 
 # Make sure future descendants observe the same.
 exec-sql
@@ -149,7 +149,7 @@ CREATE TABLE db.t2();
 
 mutations
 ----
-upsert /Table/10{7-8}                      ttl_seconds=50
+upsert /Table/1000{3-4}                    ttl_seconds=50
 
 state offset=46
 ----
@@ -171,8 +171,8 @@ state offset=46
 /Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{2-3}                              database system (host)
-/Table/10{6-7}                             ttl_seconds=50
-/Table/10{7-8}                             ttl_seconds=50
+/Table/1000{2-3}                           ttl_seconds=50
+/Table/1000{3-4}                           ttl_seconds=50
 
 exec-sql
 ALTER RANGE system CONFIGURE ZONE USING gc.ttlseconds = 100;

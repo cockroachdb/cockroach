@@ -989,12 +989,12 @@ func TestHydrateCatalog(t *testing.T) {
 			expectedError string
 		}
 		for _, tc := range []testCase{
-			{deleteDescriptor("typ"), "type \"[107]\" does not exist"},
-			{deleteDescriptor("ctyp"), "type \"[109]\" does not exist"},
-			{deleteDescriptor("db"), "database \"[104]\" does not exist"},
-			{deleteDescriptor("schema"), "unknown schema \"[106]\""},
-			{replaceTypeDescWithNonTypeDesc("typ"), "referenced type ID 107: descriptor is a *dbdesc." + "immutable: unexpected descriptor type"},
-			{replaceTypeDescWithNonTypeDesc("ctyp"), "referenced type ID 109: descriptor is a *dbdesc." + "" + "immutable: unexpected descriptor type"},
+			{deleteDescriptor("typ"), "type \"[10003]\" does not exist"},
+			{deleteDescriptor("ctyp"), "type \"[10005]\" does not exist"},
+			{deleteDescriptor("db"), "database \"[10000]\" does not exist"},
+			{deleteDescriptor("schema"), "unknown schema \"[10002]\""},
+			{replaceTypeDescWithNonTypeDesc("typ"), "referenced type ID 10003: descriptor is a *dbdesc." + "immutable: unexpected descriptor type"},
+			{replaceTypeDescWithNonTypeDesc("ctyp"), "referenced type ID 10005: descriptor is a *dbdesc." + "" + "immutable: unexpected descriptor type"},
 		} {
 			require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 				ctx context.Context, txn isql.Txn, descriptors *descs.Collection,

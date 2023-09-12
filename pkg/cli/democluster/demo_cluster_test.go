@@ -67,7 +67,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			sqlPoolMemorySize: 2 << 10,
 			cacheSize:         1 << 10,
 			expected: base.TestServerArgs{
-				DefaultTestTenant:         base.TODOTestTenantDisabled,
+				DefaultTestTenant:         base.TestControlsTenantsExplicitly,
 				PartOfCluster:             true,
 				JoinAddr:                  "127.0.0.1",
 				DisableTLSForHTTP:         true,
@@ -81,7 +81,8 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				EnableDemoLoginEndpoint:   true,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyVFSRegistry: stickyVFSRegistry,
+						StickyVFSRegistry:        stickyVFSRegistry,
+						DisableFixedDescIDOffset: true,
 					},
 				},
 			},
@@ -92,7 +93,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			sqlPoolMemorySize: 4 << 10,
 			cacheSize:         4 << 10,
 			expected: base.TestServerArgs{
-				DefaultTestTenant:         base.TODOTestTenantDisabled,
+				DefaultTestTenant:         base.TestControlsTenantsExplicitly,
 				PartOfCluster:             true,
 				JoinAddr:                  "127.0.0.1",
 				Addr:                      "127.0.0.1:1336",
@@ -106,7 +107,8 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				EnableDemoLoginEndpoint:   true,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyVFSRegistry: stickyVFSRegistry,
+						StickyVFSRegistry:        stickyVFSRegistry,
+						DisableFixedDescIDOffset: true,
 					},
 				},
 			},

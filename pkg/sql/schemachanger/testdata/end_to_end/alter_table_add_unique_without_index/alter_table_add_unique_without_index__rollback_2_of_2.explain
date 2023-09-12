@@ -11,10 +11,10 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 2 elements transitioning toward ABSENT
-           │    ├── WRITE_ONLY → ABSENT UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j-)}
-           │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 104 (t), Name: "unique_j", ConstraintID: 2 (unique_j-)}
+           │    ├── WRITE_ONLY → ABSENT UniqueWithoutIndexConstraint:{DescID: 10000 (t), IndexID: 0, ConstraintID: 2 (unique_j-)}
+           │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 10000 (t), Name: "unique_j", ConstraintID: 2 (unique_j-)}
            └── 4 Mutation operations
-                ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
-                ├── RemoveUniqueWithoutIndexConstraint {"ConstraintID":2,"TableID":104}
-                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":10000}
+                ├── RemoveUniqueWithoutIndexConstraint {"ConstraintID":2,"TableID":10000}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":10000}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

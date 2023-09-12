@@ -845,10 +845,10 @@ func TestDescriptorRepairIdGeneration(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(db)
 
-	const q = `SELECT crdb_internal.unsafe_upsert_descriptor(1234, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', $2::JSONB), $1)`
+	const q = `SELECT crdb_internal.unsafe_upsert_descriptor(12345, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', $2::JSONB), $1)`
 	const d = `{
   "database": {
-    "id": 1234,
+    "id": 12345,
     "name": "foo",
     "privileges": {
       "ownerProto": "root",
@@ -871,18 +871,18 @@ func TestDescriptorRepairIdGeneration(t *testing.T) {
 	tdb.Exec(t, `SET descriptor_validation = read_only`)
 
 	// Inserting a descriptor with an ID too high should fail.
-	tdb.ExpectErr(t, "descriptor ID 1234 must be less than the descriptor ID sequence value", q, false /* force */, d)
-	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.descriptor WHERE id >= 1234", [][]string{{"0"}})
+	tdb.ExpectErr(t, "descriptor ID 12345 must be less than the descriptor ID sequence value", q, false /* force */, d)
+	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.descriptor WHERE id >= 12345", [][]string{{"0"}})
 
 	// Force the insertion.
 	tdb.Exec(t, q, true /* force */, d)
-	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.descriptor WHERE id >= 1234", [][]string{{"1"}})
+	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.descriptor WHERE id >= 12345", [][]string{{"1"}})
 
 	// Subsequent new descriptors should have an even greater ID.
 	tdb.Exec(t, "CREATE DATABASE bar;")
 	// There should be 3 descriptors with an id >= 123, including the database
 	// descriptor and the public schema descriptor.
-	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.descriptor WHERE id >= 1234", [][]string{{"3"}})
+	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.descriptor WHERE id >= 12345", [][]string{{"3"}})
 }
 
 // TestCorruptDescriptorRepair tests that a corrupt table descriptor can be

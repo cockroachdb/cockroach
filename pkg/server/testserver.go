@@ -622,6 +622,7 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 
 	if ts.params.Knobs.Server != nil {
 		params.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+		params.TestingKnobs.Server.(*TestingKnobs).DisableFixedDescIDOffset = ts.params.Knobs.Server.(*TestingKnobs).DisableFixedDescIDOffset
 	}
 
 	// Temporarily disable the error that is returned if a tenant should not be started manually,
@@ -700,6 +701,13 @@ func (ts *testServer) Activate(ctx context.Context) error {
 
 	if ts.StartedDefaultTestTenant() {
 		if err := maybeRunVersionUpgrade(ts.TestTenant()); err != nil {
+			return err
+		}
+	}
+
+	// Unless disabled, force SQL desc ID generation to start at a known value.
+	if knobs := ts.params.Knobs.Server; knobs == nil || !knobs.(*TestingKnobs).DisableFixedDescIDOffset {
+		if err := sql.TestingInjectFixedDescIDOffset(ctx, ts.sqlServer.internalExecutor); err != nil {
 			return err
 		}
 	}
@@ -1223,6 +1231,14 @@ func (ts *testServer) StartSharedProcessTenant(
 
 	sqlServerWrapper := s.(*tenantServerWrapper).server
 	sqlServer := sqlServerWrapper.sqlServer
+
+	// Unless disabled, force SQL desc ID generation to start at a known value.
+	if knobs := ts.TestingKnobs().Server; knobs == nil || !knobs.(*TestingKnobs).DisableFixedDescIDOffset {
+		if err := sql.TestingInjectFixedDescIDOffset(ctx, sqlServer.internalExecutor); err != nil {
+			return nil, nil, err
+		}
+	}
+
 	hts := &httpTestServer{}
 	hts.t.authentication = sqlServerWrapper.authentication
 	hts.t.sqlServer = sqlServer
@@ -1627,6 +1643,13 @@ func (ts *testServer) StartTenant(
 
 	if err := sw.Start(ctx); err != nil {
 		return nil, err
+	}
+
+	// Unless disabled, force SQL desc ID generation to start at a known value.
+	if knobs := ts.TestingKnobs().Server; knobs == nil || !knobs.(*TestingKnobs).DisableFixedDescIDOffset {
+		if err := sql.TestingInjectFixedDescIDOffset(ctx, sw.sqlServer.internalExecutor); err != nil {
+			return nil, err
+		}
 	}
 
 	hts := &httpTestServer{}

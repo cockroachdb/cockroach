@@ -615,8 +615,8 @@ SELECT descriptor_id, descriptor_name, index_id, index_name, index_type, is_uniq
  WHERE descriptor_name = 'poor_t'
 ----
 descriptor_id  descriptor_name  index_id  index_name   index_type  is_unique  is_inverted  is_sharded  shard_bucket_count
-121            poor_t           1         poor_t_pkey  primary     true       false        false       NULL
-121            poor_t           2         t_idx_b      secondary   false      false        true        8
+10017          poor_t           1         poor_t_pkey  primary     true       false        false       NULL
+10017          poor_t           2         t_idx_b      secondary   false      false        true        8
 
 statement ok
 DROP TABLE poor_t
@@ -816,7 +816,7 @@ SELECT table_name, table_id, index_name, start_key, end_key
   FROM [SHOW RANGES FROM DATABASE test WITH INDEXES]
  WHERE table_name = 't_hash_pre_split'
 ----
-t_hash_pre_split  133  t_hash_pre_split_pkey  /Table/128/3/7  /Max
+t_hash_pre_split  10029  t_hash_pre_split_pkey  /Table/10024/3/7  /Max
 
 statement ok
 CREATE INDEX t_hash_pre_split_idx_b ON t_hash_pre_split (b) USING HASH WITH (bucket_count=8);
@@ -827,17 +827,17 @@ SELECT table_name, table_id, index_name, start_key, end_key
   FROM [SHOW RANGES FROM DATABASE test WITH INDEXES]
  WHERE table_name = 't_hash_pre_split'
 ----
-table_name        table_id  index_name              start_key       end_key
-t_hash_pre_split  133       t_hash_pre_split_pkey   /Table/128/3/7  /Table/133/2
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2    /Table/133/2/0
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/0  /Table/133/2/1
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/1  /Table/133/2/2
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/2  /Table/133/2/3
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/3  /Table/133/2/4
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/4  /Table/133/2/5
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/5  /Table/133/2/6
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/6  /Table/133/2/7
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/7  /Table/133/3/0
+table_name        table_id  index_name              start_key         end_key
+t_hash_pre_split  10029     t_hash_pre_split_pkey   /Table/10024/3/7  /Table/10029/2
+t_hash_pre_split  10029     t_hash_pre_split_idx_b  /Table/10029/2    /Table/10029/2/0
+t_hash_pre_split  10029     t_hash_pre_split_idx_b  /Table/10029/2/0  /Table/10029/2/1
+t_hash_pre_split  10029     t_hash_pre_split_idx_b  /Table/10029/2/1  /Table/10029/2/2
+t_hash_pre_split  10029     t_hash_pre_split_idx_b  /Table/10029/2/2  /Table/10029/2/3
+t_hash_pre_split  10029     t_hash_pre_split_idx_b  /Table/10029/2/3  /Table/10029/2/4
+t_hash_pre_split  10029     t_hash_pre_split_idx_b  /Table/10029/2/4  /Table/10029/2/5
+t_hash_pre_split  10029     t_hash_pre_split_idx_b  /Table/10029/2/5  /Table/10029/2/6
+t_hash_pre_split  10029     t_hash_pre_split_idx_b  /Table/10029/2/6  /Table/10029/2/7
+t_hash_pre_split  10029     t_hash_pre_split_idx_b  /Table/10029/2/7  /Table/10029/3/0
 
 subtest test_default_bucket_count
 

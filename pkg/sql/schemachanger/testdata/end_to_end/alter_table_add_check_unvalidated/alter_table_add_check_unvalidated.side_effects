@@ -3,7 +3,7 @@ CREATE TABLE t (i INT PRIMARY KEY);
 INSERT INTO t VALUES (0);
 ----
 ...
-+object {100 101 t} -> 104
++object {100 101 t} -> 10000
 
 /* test */
 ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
@@ -16,13 +16,13 @@ increment telemetry for sql.schema.alter_table.add_constraint
 write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
-    descriptorId: 104
+    descriptorId: 10000
     statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK (‹i› > ‹0›) NOT VALID
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
 ## StatementPhase stage 1 of 1 with 2 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
    table:
   +  checks:
   +  - columnIds:
@@ -51,7 +51,7 @@ upsert descriptor #104
 undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 2 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
    table:
   +  checks:
   +  - columnIds:

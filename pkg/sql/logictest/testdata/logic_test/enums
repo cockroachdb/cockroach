@@ -450,10 +450,10 @@ FROM
 WHERE
   typname IN ('collision', '_collision', '__collision', '___collision')
 ----
-_collision    100136  0       100137
-__collision   100137  100136  0
-collision     100138  0       100139
-___collision  100139  100138  0
+_collision    110032  0       110033
+__collision   110033  110032  0
+collision     110034  0       110035
+___collision  110035  110034  0
 
 # Regression for #49756.
 query TT
@@ -464,7 +464,7 @@ FROM
 WHERE
   descriptor_name = 'enum_array' AND column_name = 'x'
 ----
-x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:100118 array_contents:<family: EnumFamily width: 0 precision: 0 locale: "" visible_type: 0 oid: 100117 time_precision_is_set: false udt_metadata: <   array_type_oid: 100118 > > time_precision_is_set:false
+x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:110014 array_contents:<family: EnumFamily width: 0 precision: 0 locale: "" visible_type: 0 oid: 110013 time_precision_is_set: false udt_metadata: <   array_type_oid: 110014 > > time_precision_is_set:false
 
 # Test tables using enums in DEFAULT expressions.
 statement ok

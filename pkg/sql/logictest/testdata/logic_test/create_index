@@ -352,7 +352,7 @@ FROM (
   SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) j FROM crdb_internal.system_jobs
 ) WHERE j->>'description' LIKE 'CREATE INDEX pauseidx%';
 ----
-/103/Table/114/1  /103/Table/114/1/100  /114/1/100  /114/2
+/103/Table/10010/1  /103/Table/10010/1/100  /10010/1/100  /10010/2
 
 # resume the job and ensure it completes, which includes validation.
 statement ok

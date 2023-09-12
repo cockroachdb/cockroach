@@ -8,199 +8,199 @@ DROP VIEW defaultdb.v1
 ----
 StatementPhase stage 1 of 1 with 19 MutationType ops
   transitions:
-    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 105}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10001, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10001}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10001, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10001, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 10001}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10001, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10001, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10001, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10001, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10001, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10001, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 105
+      DescriptorID: 10001
     *scop.RemoveBackReferencesInRelations
-      BackReferencedID: 105
+      BackReferencedID: 10001
       RelationIDs:
-      - 104
+      - 10000
     *scop.RemoveObjectParent
-      ObjectID: 105
+      ObjectID: 10001
       ParentSchemaID: 101
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
-      TableID: 105
+      TableID: 10001
     *scop.SetColumnName
       ColumnID: 1
       Name: crdb_internal_column_1_name_placeholder
-      TableID: 105
+      TableID: 10001
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967295
-      TableID: 105
+      TableID: 10001
     *scop.SetColumnName
       ColumnID: 4294967295
       Name: crdb_internal_column_4294967295_name_placeholder
-      TableID: 105
+      TableID: 10001
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967294
-      TableID: 105
+      TableID: 10001
     *scop.SetColumnName
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
-      TableID: 105
+      TableID: 10001
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 105
+        DescriptorID: 10001
         Name: v1
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 105
+      DescID: 10001
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 105
+      DescriptorID: 10001
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 105
+      DescriptorID: 10001
       User: root
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
-      TableID: 105
+      TableID: 10001
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967295
-      TableID: 105
+      TableID: 10001
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
-      TableID: 105
+      TableID: 10001
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      TableID: 105
+      TableID: 10001
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      TableID: 105
+      TableID: 10001
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      TableID: 105
+      TableID: 10001
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
-    [[Owner:{DescID: 105}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], ABSENT] -> PUBLIC
-    [[View:{DescID: 105}, ABSENT], DROPPED] -> PUBLIC
-    [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 105, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 10001, Name: v1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 10001}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10001, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10001, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[View:{DescID: 10001}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10001, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10001, Name: name, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10001, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10001, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10001, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10001, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 22 MutationType ops
   transitions:
-    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 105}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10001, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10001}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10001, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10001, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 10001}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10001, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10001, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10001, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10001, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10001, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10001, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 105
+      DescriptorID: 10001
     *scop.RemoveBackReferencesInRelations
-      BackReferencedID: 105
+      BackReferencedID: 10001
       RelationIDs:
-      - 104
+      - 10000
     *scop.RemoveObjectParent
-      ObjectID: 105
+      ObjectID: 10001
       ParentSchemaID: 101
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
-      TableID: 105
+      TableID: 10001
     *scop.SetColumnName
       ColumnID: 1
       Name: crdb_internal_column_1_name_placeholder
-      TableID: 105
+      TableID: 10001
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967295
-      TableID: 105
+      TableID: 10001
     *scop.SetColumnName
       ColumnID: 4294967295
       Name: crdb_internal_column_4294967295_name_placeholder
-      TableID: 105
+      TableID: 10001
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967294
-      TableID: 105
+      TableID: 10001
     *scop.SetColumnName
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
-      TableID: 105
+      TableID: 10001
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 105
+        DescriptorID: 10001
         Name: v1
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 105
+      DescID: 10001
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 105
+      DescriptorID: 10001
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 105
+      DescriptorID: 10001
       User: root
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
-      TableID: 105
+      TableID: 10001
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967295
-      TableID: 105
+      TableID: 10001
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
-      TableID: 105
+      TableID: 10001
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      TableID: 105
+      TableID: 10001
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      TableID: 105
+      TableID: 10001
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      TableID: 105
+      TableID: 10001
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 104
+      DescriptorID: 10000
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 105
+      DescriptorID: 10001
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
         AppName: $ internal-test
         UserName: root
       DescriptorIDs:
-      - 104
-      - 105
+      - 10000
+      - 10001
       JobID: 1
       NonCancelable: true
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 1 MutationType op pending
@@ -210,188 +210,188 @@ PreCommitPhase stage 2 of 2 with 22 MutationType ops
         statementtag: DROP VIEW
 PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
   transitions:
-    [[View:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 10001}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.DeleteDescriptor
-      DescriptorID: 105
+      DescriptorID: 10001
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 104
+      DescriptorID: 10000
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 105
+      DescriptorID: 10001
       JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
-      - 104
-      - 105
+      - 10000
+      - 10001
       IsNonCancelable: true
       JobID: 1
 
 deps
 DROP VIEW defaultdb.v1
 ----
-- from: [Column:{DescID: 105, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 105, ColumnID: 1}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10001, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 105, ColumnID: 1}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 105, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10001, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 105, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 105, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 105, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10001, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 105, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  to:   [Column:{DescID: 105, ColumnID: 4294967295}, ABSENT]
+- from: [ColumnName:{DescID: 10001, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 10001, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [ColumnName:{DescID: 10001, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 105, ColumnID: 1}, ABSENT]
+- from: [ColumnName:{DescID: 10001, Name: name, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 10001, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [ColumnName:{DescID: 10001, Name: name, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  to:   [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
+- from: [ColumnName:{DescID: 10001, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 10001, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [ColumnName:{DescID: 10001, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 105, ColumnID: 1}, ABSENT]
+- from: [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 10001, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  to:   [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
+- from: [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 10001, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  to:   [Column:{DescID: 105, ColumnID: 4294967295}, ABSENT]
+- from: [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 10001, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [Namespace:{DescID: 10001, Name: v1, ReferencedDescID: 100}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 105}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [Owner:{DescID: 10001}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [UserPrivileges:{DescID: 10001, Name: admin}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [UserPrivileges:{DescID: 10001, Name: root}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [Column:{DescID: 105, ColumnID: 1}, WRITE_ONLY]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [Column:{DescID: 10001, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [Column:{DescID: 105, ColumnID: 4294967294}, WRITE_ONLY]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [Column:{DescID: 10001, ColumnID: 4294967294}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [Column:{DescID: 105, ColumnID: 4294967295}, WRITE_ONLY]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [Column:{DescID: 10001, ColumnID: 4294967295}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [ColumnName:{DescID: 10001, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [ColumnName:{DescID: 10001, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [ColumnName:{DescID: 10001, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [Namespace:{DescID: 10001, Name: v1, ReferencedDescID: 100}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [Owner:{DescID: 105}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [Owner:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT]
   kind: SameStagePrecedence
   rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10001, Name: admin}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10001, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
 
@@ -408,1094 +408,1094 @@ DROP VIEW defaultdb.v1 CASCADE
 ----
 StatementPhase stage 1 of 1 with 116 MutationType ops
   transitions:
-    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 105}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 106}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 106, Name: n1, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 106, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 107}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 107, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 108}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 108, Name: n2, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 108, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 111}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 111, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 111, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 111, Name: n1, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10001, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10001}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10001, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10001, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 10001}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10001, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10001, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10001, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10001, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10001, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10001, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10002, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10002}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10002, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10002, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 10002}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10002, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10002, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10002, Name: n1, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10002, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10002, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10002, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10002, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10002, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10002, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10003, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10003}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10003, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10003, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 10003}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10003, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10003, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10003, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10003, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10003, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10003, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10003, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10003, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10003, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10004, Name: v4, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10004}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10004, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10004, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 10004}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10004, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10004, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10004, Name: n2, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10004, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10004, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10004, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10004, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10004, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10004, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10007, Name: v5, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10007}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10007, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10007, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 10007}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10007, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10007, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10007, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10007, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10007, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10007, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10007, Name: n1, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10007, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10007, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10007, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10007, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 105
+      DescriptorID: 10001
     *scop.RemoveBackReferencesInRelations
-      BackReferencedID: 105
+      BackReferencedID: 10001
       RelationIDs:
-      - 104
+      - 10000
     *scop.RemoveObjectParent
-      ObjectID: 105
+      ObjectID: 10001
       ParentSchemaID: 101
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
-      TableID: 105
+      TableID: 10001
     *scop.SetColumnName
       ColumnID: 1
       Name: crdb_internal_column_1_name_placeholder
-      TableID: 105
+      TableID: 10001
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967295
-      TableID: 105
+      TableID: 10001
     *scop.SetColumnName
       ColumnID: 4294967295
       Name: crdb_internal_column_4294967295_name_placeholder
-      TableID: 105
+      TableID: 10001
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967294
-      TableID: 105
+      TableID: 10001
     *scop.SetColumnName
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
-      TableID: 105
+      TableID: 10001
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 106
+      DescriptorID: 10002
     *scop.RemoveBackReferencesInRelations
-      BackReferencedID: 106
+      BackReferencedID: 10002
       RelationIDs:
-      - 105
+      - 10001
     *scop.RemoveObjectParent
-      ObjectID: 106
+      ObjectID: 10002
       ParentSchemaID: 101
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
-      TableID: 106
+      TableID: 10002
     *scop.SetColumnName
       ColumnID: 1
       Name: crdb_internal_column_1_name_placeholder
-      TableID: 106
+      TableID: 10002
     *scop.MakePublicColumnWriteOnly
       ColumnID: 2
-      TableID: 106
+      TableID: 10002
     *scop.SetColumnName
       ColumnID: 2
       Name: crdb_internal_column_2_name_placeholder
-      TableID: 106
+      TableID: 10002
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967295
-      TableID: 106
+      TableID: 10002
     *scop.SetColumnName
       ColumnID: 4294967295
       Name: crdb_internal_column_4294967295_name_placeholder
-      TableID: 106
+      TableID: 10002
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967294
-      TableID: 106
+      TableID: 10002
     *scop.SetColumnName
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
-      TableID: 106
+      TableID: 10002
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 107
+      DescriptorID: 10003
     *scop.RemoveBackReferencesInRelations
-      BackReferencedID: 107
+      BackReferencedID: 10003
       RelationIDs:
-      - 105
-      - 106
+      - 10001
+      - 10002
     *scop.RemoveObjectParent
-      ObjectID: 107
+      ObjectID: 10003
       ParentSchemaID: 101
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
-      TableID: 107
+      TableID: 10003
     *scop.SetColumnName
       ColumnID: 1
       Name: crdb_internal_column_1_name_placeholder
-      TableID: 107
+      TableID: 10003
     *scop.MakePublicColumnWriteOnly
       ColumnID: 2
-      TableID: 107
+      TableID: 10003
     *scop.SetColumnName
       ColumnID: 2
       Name: crdb_internal_column_2_name_placeholder
-      TableID: 107
+      TableID: 10003
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967295
-      TableID: 107
+      TableID: 10003
     *scop.SetColumnName
       ColumnID: 4294967295
       Name: crdb_internal_column_4294967295_name_placeholder
-      TableID: 107
+      TableID: 10003
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967294
-      TableID: 107
+      TableID: 10003
     *scop.SetColumnName
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
-      TableID: 107
+      TableID: 10003
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 108
+      DescriptorID: 10004
     *scop.RemoveBackReferencesInRelations
-      BackReferencedID: 108
+      BackReferencedID: 10004
       RelationIDs:
-      - 106
+      - 10002
     *scop.RemoveObjectParent
-      ObjectID: 108
+      ObjectID: 10004
       ParentSchemaID: 101
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
-      TableID: 108
+      TableID: 10004
     *scop.SetColumnName
       ColumnID: 1
       Name: crdb_internal_column_1_name_placeholder
-      TableID: 108
+      TableID: 10004
     *scop.MakePublicColumnWriteOnly
       ColumnID: 2
-      TableID: 108
+      TableID: 10004
     *scop.SetColumnName
       ColumnID: 2
       Name: crdb_internal_column_2_name_placeholder
-      TableID: 108
+      TableID: 10004
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967295
-      TableID: 108
+      TableID: 10004
     *scop.SetColumnName
       ColumnID: 4294967295
       Name: crdb_internal_column_4294967295_name_placeholder
-      TableID: 108
+      TableID: 10004
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967294
-      TableID: 108
+      TableID: 10004
     *scop.SetColumnName
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
-      TableID: 108
+      TableID: 10004
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 111
+      DescriptorID: 10007
     *scop.RemoveBackReferenceInTypes
-      BackReferencedDescriptorID: 111
+      BackReferencedDescriptorID: 10007
       TypeIDs:
-      - 109
-      - 110
+      - 10005
+      - 10006
     *scop.RemoveBackReferencesInRelations
-      BackReferencedID: 111
+      BackReferencedID: 10007
       RelationIDs:
-      - 108
+      - 10004
     *scop.RemoveObjectParent
-      ObjectID: 111
+      ObjectID: 10007
       ParentSchemaID: 101
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
-      TableID: 111
+      TableID: 10007
     *scop.SetColumnName
       ColumnID: 1
       Name: crdb_internal_column_1_name_placeholder
-      TableID: 111
+      TableID: 10007
     *scop.MakePublicColumnWriteOnly
       ColumnID: 2
-      TableID: 111
+      TableID: 10007
     *scop.SetColumnName
       ColumnID: 2
       Name: crdb_internal_column_2_name_placeholder
-      TableID: 111
+      TableID: 10007
     *scop.MakePublicColumnWriteOnly
       ColumnID: 3
-      TableID: 111
+      TableID: 10007
     *scop.SetColumnName
       ColumnID: 3
       Name: crdb_internal_column_3_name_placeholder
-      TableID: 111
+      TableID: 10007
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967295
-      TableID: 111
+      TableID: 10007
     *scop.SetColumnName
       ColumnID: 4294967295
       Name: crdb_internal_column_4294967295_name_placeholder
-      TableID: 111
+      TableID: 10007
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967294
-      TableID: 111
+      TableID: 10007
     *scop.SetColumnName
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
-      TableID: 111
+      TableID: 10007
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 105
+        DescriptorID: 10001
         Name: v1
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 105
+      DescID: 10001
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 105
+      DescriptorID: 10001
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 105
+      DescriptorID: 10001
       User: root
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
-      TableID: 105
+      TableID: 10001
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967295
-      TableID: 105
+      TableID: 10001
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
-      TableID: 105
+      TableID: 10001
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 106
+        DescriptorID: 10002
         Name: v2
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 106
+      DescID: 10002
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 106
+      DescriptorID: 10002
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 106
+      DescriptorID: 10002
       User: root
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
-      TableID: 106
+      TableID: 10002
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 2
-      TableID: 106
+      TableID: 10002
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967295
-      TableID: 106
+      TableID: 10002
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
-      TableID: 106
+      TableID: 10002
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 107
+        DescriptorID: 10003
         Name: v3
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 107
+      DescID: 10003
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 107
+      DescriptorID: 10003
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 107
+      DescriptorID: 10003
       User: root
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
-      TableID: 107
+      TableID: 10003
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 2
-      TableID: 107
+      TableID: 10003
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967295
-      TableID: 107
+      TableID: 10003
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
-      TableID: 107
+      TableID: 10003
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 108
+        DescriptorID: 10004
         Name: v4
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 108
+      DescID: 10004
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 108
+      DescriptorID: 10004
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 108
+      DescriptorID: 10004
       User: root
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
-      TableID: 108
+      TableID: 10004
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 2
-      TableID: 108
+      TableID: 10004
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967295
-      TableID: 108
+      TableID: 10004
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
-      TableID: 108
+      TableID: 10004
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 111
+        DescriptorID: 10007
         Name: v5
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 111
+      DescID: 10007
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 111
+      DescriptorID: 10007
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 111
+      DescriptorID: 10007
       User: root
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
-      TableID: 111
+      TableID: 10007
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 2
-      TableID: 111
+      TableID: 10007
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 3
-      TableID: 111
+      TableID: 10007
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967295
-      TableID: 111
+      TableID: 10007
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
-      TableID: 111
+      TableID: 10007
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      TableID: 105
+      TableID: 10001
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      TableID: 105
+      TableID: 10001
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      TableID: 105
+      TableID: 10001
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      TableID: 106
+      TableID: 10002
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      TableID: 106
+      TableID: 10002
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      TableID: 106
+      TableID: 10002
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      TableID: 106
+      TableID: 10002
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      TableID: 107
+      TableID: 10003
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      TableID: 107
+      TableID: 10003
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      TableID: 107
+      TableID: 10003
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      TableID: 107
+      TableID: 10003
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      TableID: 108
+      TableID: 10004
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      TableID: 108
+      TableID: 10004
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      TableID: 108
+      TableID: 10004
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      TableID: 108
+      TableID: 10004
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      TableID: 111
+      TableID: 10007
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      TableID: 111
+      TableID: 10007
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
-      TableID: 111
+      TableID: 10007
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      TableID: 111
+      TableID: 10007
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      TableID: 111
+      TableID: 10007
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
-    [[Owner:{DescID: 105}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], ABSENT] -> PUBLIC
-    [[View:{DescID: 105}, ABSENT], DROPPED] -> PUBLIC
-    [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 105, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
-    [[Owner:{DescID: 106}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], ABSENT] -> PUBLIC
-    [[View:{DescID: 106}, ABSENT], DROPPED] -> PUBLIC
-    [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 106, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 106, Name: n1, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 106, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 106, Name: n2, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 106, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 106, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
-    [[Owner:{DescID: 107}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], ABSENT] -> PUBLIC
-    [[View:{DescID: 107}, ABSENT], DROPPED] -> PUBLIC
-    [[SchemaChild:{DescID: 107, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 107, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 107, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 107, Name: n1, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
-    [[Owner:{DescID: 108}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], ABSENT] -> PUBLIC
-    [[View:{DescID: 108}, ABSENT], DROPPED] -> PUBLIC
-    [[SchemaChild:{DescID: 108, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 108, Name: n2, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 108, Name: n1, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
-    [[Owner:{DescID: 111}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], ABSENT] -> PUBLIC
-    [[View:{DescID: 111}, ABSENT], DROPPED] -> PUBLIC
-    [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 111, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 111, Name: k, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 111, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 111, Name: n2, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 111, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 111, Name: n1, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 111, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 10001, Name: v1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 10001}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10001, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10001, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[View:{DescID: 10001}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10001, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10001, Name: name, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10001, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10001, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10001, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10001, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 10002, Name: v2, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 10002}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10002, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10002, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[View:{DescID: 10002}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 10002, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10002, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10002, Name: n1, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10002, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10002, Name: n2, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10002, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10002, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10002, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10002, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 10003, Name: v3, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 10003}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10003, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10003, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[View:{DescID: 10003}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 10003, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10003, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10003, Name: name, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10003, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10003, Name: n1, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10003, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10003, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10003, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10003, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 10004, Name: v4, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 10004}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10004, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10004, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[View:{DescID: 10004}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 10004, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10004, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10004, Name: n2, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10004, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10004, Name: n1, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10004, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10004, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10004, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10004, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 10007, Name: v5, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 10007}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10007, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10007, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[View:{DescID: 10007}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 10007, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10007, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10007, Name: k, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10007, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10007, Name: n2, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10007, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10007, Name: n1, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10007, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10007, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 10007, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 10007, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 125 MutationType ops
   transitions:
-    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 105}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 105, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 106}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 106, Name: n1, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 106, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 107}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 107, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 108}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 108, Name: n2, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 108, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 111}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 111, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 111, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 111, Name: n1, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10001, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10001}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10001, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10001, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 10001}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10001, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10001, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10001, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10001, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10001, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10001, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10002, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10002}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10002, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10002, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 10002}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10002, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10002, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10002, Name: n1, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10002, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10002, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10002, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10002, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10002, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10002, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10003, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10003}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10003, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10003, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 10003}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10003, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10003, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10003, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10003, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10003, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10003, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10003, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10003, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10003, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10004, Name: v4, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10004}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10004, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10004, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 10004}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10004, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10004, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10004, Name: n2, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10004, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10004, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10004, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10004, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10004, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10004, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10007, Name: v5, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10007}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10007, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10007, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 10007}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10007, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10007, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10007, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10007, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10007, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10007, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10007, Name: n1, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10007, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10007, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 10007, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 10007, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 105
+      DescriptorID: 10001
     *scop.RemoveBackReferencesInRelations
-      BackReferencedID: 105
+      BackReferencedID: 10001
       RelationIDs:
-      - 104
+      - 10000
     *scop.RemoveObjectParent
-      ObjectID: 105
+      ObjectID: 10001
       ParentSchemaID: 101
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
-      TableID: 105
+      TableID: 10001
     *scop.SetColumnName
       ColumnID: 1
       Name: crdb_internal_column_1_name_placeholder
-      TableID: 105
+      TableID: 10001
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967295
-      TableID: 105
+      TableID: 10001
     *scop.SetColumnName
       ColumnID: 4294967295
       Name: crdb_internal_column_4294967295_name_placeholder
-      TableID: 105
+      TableID: 10001
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967294
-      TableID: 105
+      TableID: 10001
     *scop.SetColumnName
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
-      TableID: 105
+      TableID: 10001
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 106
+      DescriptorID: 10002
     *scop.RemoveBackReferencesInRelations
-      BackReferencedID: 106
+      BackReferencedID: 10002
       RelationIDs:
-      - 105
+      - 10001
     *scop.RemoveObjectParent
-      ObjectID: 106
+      ObjectID: 10002
       ParentSchemaID: 101
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
-      TableID: 106
+      TableID: 10002
     *scop.SetColumnName
       ColumnID: 1
       Name: crdb_internal_column_1_name_placeholder
-      TableID: 106
+      TableID: 10002
     *scop.MakePublicColumnWriteOnly
       ColumnID: 2
-      TableID: 106
+      TableID: 10002
     *scop.SetColumnName
       ColumnID: 2
       Name: crdb_internal_column_2_name_placeholder
-      TableID: 106
+      TableID: 10002
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967295
-      TableID: 106
+      TableID: 10002
     *scop.SetColumnName
       ColumnID: 4294967295
       Name: crdb_internal_column_4294967295_name_placeholder
-      TableID: 106
+      TableID: 10002
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967294
-      TableID: 106
+      TableID: 10002
     *scop.SetColumnName
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
-      TableID: 106
+      TableID: 10002
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 107
+      DescriptorID: 10003
     *scop.RemoveBackReferencesInRelations
-      BackReferencedID: 107
+      BackReferencedID: 10003
       RelationIDs:
-      - 105
-      - 106
+      - 10001
+      - 10002
     *scop.RemoveObjectParent
-      ObjectID: 107
+      ObjectID: 10003
       ParentSchemaID: 101
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
-      TableID: 107
+      TableID: 10003
     *scop.SetColumnName
       ColumnID: 1
       Name: crdb_internal_column_1_name_placeholder
-      TableID: 107
+      TableID: 10003
     *scop.MakePublicColumnWriteOnly
       ColumnID: 2
-      TableID: 107
+      TableID: 10003
     *scop.SetColumnName
       ColumnID: 2
       Name: crdb_internal_column_2_name_placeholder
-      TableID: 107
+      TableID: 10003
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967295
-      TableID: 107
+      TableID: 10003
     *scop.SetColumnName
       ColumnID: 4294967295
       Name: crdb_internal_column_4294967295_name_placeholder
-      TableID: 107
+      TableID: 10003
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967294
-      TableID: 107
+      TableID: 10003
     *scop.SetColumnName
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
-      TableID: 107
+      TableID: 10003
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 108
+      DescriptorID: 10004
     *scop.RemoveBackReferencesInRelations
-      BackReferencedID: 108
+      BackReferencedID: 10004
       RelationIDs:
-      - 106
+      - 10002
     *scop.RemoveObjectParent
-      ObjectID: 108
+      ObjectID: 10004
       ParentSchemaID: 101
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
-      TableID: 108
+      TableID: 10004
     *scop.SetColumnName
       ColumnID: 1
       Name: crdb_internal_column_1_name_placeholder
-      TableID: 108
+      TableID: 10004
     *scop.MakePublicColumnWriteOnly
       ColumnID: 2
-      TableID: 108
+      TableID: 10004
     *scop.SetColumnName
       ColumnID: 2
       Name: crdb_internal_column_2_name_placeholder
-      TableID: 108
+      TableID: 10004
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967295
-      TableID: 108
+      TableID: 10004
     *scop.SetColumnName
       ColumnID: 4294967295
       Name: crdb_internal_column_4294967295_name_placeholder
-      TableID: 108
+      TableID: 10004
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967294
-      TableID: 108
+      TableID: 10004
     *scop.SetColumnName
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
-      TableID: 108
+      TableID: 10004
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 111
+      DescriptorID: 10007
     *scop.RemoveBackReferenceInTypes
-      BackReferencedDescriptorID: 111
+      BackReferencedDescriptorID: 10007
       TypeIDs:
-      - 109
-      - 110
+      - 10005
+      - 10006
     *scop.RemoveBackReferencesInRelations
-      BackReferencedID: 111
+      BackReferencedID: 10007
       RelationIDs:
-      - 108
+      - 10004
     *scop.RemoveObjectParent
-      ObjectID: 111
+      ObjectID: 10007
       ParentSchemaID: 101
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
-      TableID: 111
+      TableID: 10007
     *scop.SetColumnName
       ColumnID: 1
       Name: crdb_internal_column_1_name_placeholder
-      TableID: 111
+      TableID: 10007
     *scop.MakePublicColumnWriteOnly
       ColumnID: 2
-      TableID: 111
+      TableID: 10007
     *scop.SetColumnName
       ColumnID: 2
       Name: crdb_internal_column_2_name_placeholder
-      TableID: 111
+      TableID: 10007
     *scop.MakePublicColumnWriteOnly
       ColumnID: 3
-      TableID: 111
+      TableID: 10007
     *scop.SetColumnName
       ColumnID: 3
       Name: crdb_internal_column_3_name_placeholder
-      TableID: 111
+      TableID: 10007
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967295
-      TableID: 111
+      TableID: 10007
     *scop.SetColumnName
       ColumnID: 4294967295
       Name: crdb_internal_column_4294967295_name_placeholder
-      TableID: 111
+      TableID: 10007
     *scop.MakePublicColumnWriteOnly
       ColumnID: 4294967294
-      TableID: 111
+      TableID: 10007
     *scop.SetColumnName
       ColumnID: 4294967294
       Name: crdb_internal_column_4294967294_name_placeholder
-      TableID: 111
+      TableID: 10007
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 105
+        DescriptorID: 10001
         Name: v1
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 105
+      DescID: 10001
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 105
+      DescriptorID: 10001
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 105
+      DescriptorID: 10001
       User: root
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
-      TableID: 105
+      TableID: 10001
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967295
-      TableID: 105
+      TableID: 10001
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
-      TableID: 105
+      TableID: 10001
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 106
+        DescriptorID: 10002
         Name: v2
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 106
+      DescID: 10002
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 106
+      DescriptorID: 10002
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 106
+      DescriptorID: 10002
       User: root
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
-      TableID: 106
+      TableID: 10002
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 2
-      TableID: 106
+      TableID: 10002
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967295
-      TableID: 106
+      TableID: 10002
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
-      TableID: 106
+      TableID: 10002
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 107
+        DescriptorID: 10003
         Name: v3
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 107
+      DescID: 10003
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 107
+      DescriptorID: 10003
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 107
+      DescriptorID: 10003
       User: root
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
-      TableID: 107
+      TableID: 10003
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 2
-      TableID: 107
+      TableID: 10003
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967295
-      TableID: 107
+      TableID: 10003
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
-      TableID: 107
+      TableID: 10003
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 108
+        DescriptorID: 10004
         Name: v4
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 108
+      DescID: 10004
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 108
+      DescriptorID: 10004
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 108
+      DescriptorID: 10004
       User: root
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
-      TableID: 108
+      TableID: 10004
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 2
-      TableID: 108
+      TableID: 10004
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967295
-      TableID: 108
+      TableID: 10004
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
-      TableID: 108
+      TableID: 10004
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 111
+        DescriptorID: 10007
         Name: v5
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 111
+      DescID: 10007
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 111
+      DescriptorID: 10007
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 111
+      DescriptorID: 10007
       User: root
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
-      TableID: 111
+      TableID: 10007
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 2
-      TableID: 111
+      TableID: 10007
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 3
-      TableID: 111
+      TableID: 10007
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967295
-      TableID: 111
+      TableID: 10007
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
-      TableID: 111
+      TableID: 10007
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      TableID: 105
+      TableID: 10001
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      TableID: 105
+      TableID: 10001
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      TableID: 105
+      TableID: 10001
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      TableID: 106
+      TableID: 10002
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      TableID: 106
+      TableID: 10002
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      TableID: 106
+      TableID: 10002
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      TableID: 106
+      TableID: 10002
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      TableID: 107
+      TableID: 10003
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      TableID: 107
+      TableID: 10003
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      TableID: 107
+      TableID: 10003
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      TableID: 107
+      TableID: 10003
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      TableID: 108
+      TableID: 10004
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      TableID: 108
+      TableID: 10004
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      TableID: 108
+      TableID: 10004
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      TableID: 108
+      TableID: 10004
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      TableID: 111
+      TableID: 10007
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      TableID: 111
+      TableID: 10007
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
-      TableID: 111
+      TableID: 10007
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      TableID: 111
+      TableID: 10007
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      TableID: 111
+      TableID: 10007
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 104
+      DescriptorID: 10000
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 105
+      DescriptorID: 10001
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 106
+      DescriptorID: 10002
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 107
+      DescriptorID: 10003
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 108
+      DescriptorID: 10004
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 109
+      DescriptorID: 10005
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 110
+      DescriptorID: 10006
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 111
+      DescriptorID: 10007
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
         AppName: $ internal-test
         UserName: root
       DescriptorIDs:
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
+      - 10000
+      - 10001
+      - 10002
+      - 10003
+      - 10004
+      - 10005
+      - 10006
+      - 10007
       JobID: 1
       NonCancelable: true
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops pending
@@ -1505,1079 +1505,1079 @@ PreCommitPhase stage 2 of 2 with 125 MutationType ops
         statementtag: DROP VIEW
 PostCommitNonRevertiblePhase stage 1 of 1 with 14 MutationType ops
   transitions:
-    [[View:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
-    [[View:{DescID: 106}, ABSENT], DROPPED] -> ABSENT
-    [[View:{DescID: 107}, ABSENT], DROPPED] -> ABSENT
-    [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
-    [[View:{DescID: 111}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 10001}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 10002}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 10003}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 10004}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 10007}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.DeleteDescriptor
-      DescriptorID: 105
+      DescriptorID: 10001
     *scop.DeleteDescriptor
-      DescriptorID: 106
+      DescriptorID: 10002
     *scop.DeleteDescriptor
-      DescriptorID: 107
+      DescriptorID: 10003
     *scop.DeleteDescriptor
-      DescriptorID: 108
+      DescriptorID: 10004
     *scop.DeleteDescriptor
-      DescriptorID: 111
+      DescriptorID: 10007
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 104
+      DescriptorID: 10000
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 105
+      DescriptorID: 10001
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 106
+      DescriptorID: 10002
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 107
+      DescriptorID: 10003
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 108
+      DescriptorID: 10004
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 109
+      DescriptorID: 10005
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 110
+      DescriptorID: 10006
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 111
+      DescriptorID: 10007
       JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
-      - 104
-      - 105
-      - 106
-      - 107
-      - 108
-      - 109
-      - 110
-      - 111
+      - 10000
+      - 10001
+      - 10002
+      - 10003
+      - 10004
+      - 10005
+      - 10006
+      - 10007
       IsNonCancelable: true
       JobID: 1
 
 deps
 DROP VIEW defaultdb.v1 CASCADE
 ----
-- from: [Column:{DescID: 105, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 105, ColumnID: 1}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT]
-  kind: Precedence
-  rule: column no longer public before dependents
-- from: [Column:{DescID: 105, ColumnID: 1}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10001, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 105, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 105, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10001, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10001, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 105, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 105, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 105, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10001, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10001, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 106, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 106, Name: n1, ColumnID: 1}, ABSENT]
+- from: [Column:{DescID: 10001, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+- from: [Column:{DescID: 10002, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10002, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10002, Name: n1, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 106, ColumnID: 2}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 106, ColumnID: 2}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 106, Name: n2, ColumnID: 2}, ABSENT]
+- from: [Column:{DescID: 10002, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 106, ColumnID: 2}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+- from: [Column:{DescID: 10002, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10002, ColumnID: 2}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10002, Name: n2, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 106, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 106, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+- from: [Column:{DescID: 10002, ColumnID: 2}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 106, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+- from: [Column:{DescID: 10002, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10002, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10002, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 106, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 106, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+- from: [Column:{DescID: 10002, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 106, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+- from: [Column:{DescID: 10002, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10002, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10002, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 107, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 107, ColumnID: 1}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT]
+- from: [Column:{DescID: 10002, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 107, ColumnID: 1}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+- from: [Column:{DescID: 10003, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10003, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10003, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 107, ColumnID: 2}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 107, ColumnID: 2}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 107, Name: n1, ColumnID: 2}, ABSENT]
+- from: [Column:{DescID: 10003, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 107, ColumnID: 2}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+- from: [Column:{DescID: 10003, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10003, ColumnID: 2}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10003, Name: n1, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 107, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 107, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+- from: [Column:{DescID: 10003, ColumnID: 2}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 107, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+- from: [Column:{DescID: 10003, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10003, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10003, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 107, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 107, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+- from: [Column:{DescID: 10003, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 107, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+- from: [Column:{DescID: 10003, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10003, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10003, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 108, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 108, Name: n2, ColumnID: 1}, ABSENT]
+- from: [Column:{DescID: 10003, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+- from: [Column:{DescID: 10004, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10004, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10004, Name: n2, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 108, ColumnID: 2}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 108, ColumnID: 2}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 108, Name: n1, ColumnID: 2}, ABSENT]
+- from: [Column:{DescID: 10004, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 108, ColumnID: 2}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+- from: [Column:{DescID: 10004, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10004, ColumnID: 2}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10004, Name: n1, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 108, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+- from: [Column:{DescID: 10004, ColumnID: 2}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 108, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+- from: [Column:{DescID: 10004, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10004, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10004, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 108, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+- from: [Column:{DescID: 10004, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 108, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+- from: [Column:{DescID: 10004, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10004, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10004, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 111, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 111, ColumnID: 1}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 111, Name: k, ColumnID: 1}, ABSENT]
+- from: [Column:{DescID: 10004, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 111, ColumnID: 1}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+- from: [Column:{DescID: 10007, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10007, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10007, Name: k, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 111, ColumnID: 2}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 111, ColumnID: 2}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 111, Name: n2, ColumnID: 2}, ABSENT]
+- from: [Column:{DescID: 10007, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 111, ColumnID: 2}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+- from: [Column:{DescID: 10007, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10007, ColumnID: 2}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10007, Name: n2, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 111, ColumnID: 3}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 111, ColumnID: 3}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 111, Name: n1, ColumnID: 3}, ABSENT]
+- from: [Column:{DescID: 10007, ColumnID: 2}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 111, ColumnID: 3}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
+- from: [Column:{DescID: 10007, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10007, ColumnID: 3}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10007, Name: n1, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 111, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 111, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+- from: [Column:{DescID: 10007, ColumnID: 3}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 111, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+- from: [Column:{DescID: 10007, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10007, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10007, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 111, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 111, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+- from: [Column:{DescID: 10007, ColumnID: 4294967294}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [Column:{DescID: 111, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+- from: [Column:{DescID: 10007, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [Column:{DescID: 10007, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnName:{DescID: 10007, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
-- from: [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  to:   [Column:{DescID: 105, ColumnID: 4294967295}, ABSENT]
+- from: [Column:{DescID: 10007, ColumnID: 4294967295}, WRITE_ONLY]
+  to:   [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [ColumnName:{DescID: 10001, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 10001, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [ColumnName:{DescID: 10001, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 105, ColumnID: 1}, ABSENT]
-  kind: Precedence
-  rule: dependents removed before column
-- from: [ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  to:   [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
+- from: [ColumnName:{DescID: 10001, Name: name, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 10001, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [ColumnName:{DescID: 10001, Name: name, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  to:   [Column:{DescID: 106, ColumnID: 4294967295}, ABSENT]
+- from: [ColumnName:{DescID: 10001, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 10001, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
+- from: [ColumnName:{DescID: 10001, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 106, Name: n1, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 106, ColumnID: 1}, ABSENT]
+- from: [ColumnName:{DescID: 10002, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 10002, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 106, Name: n1, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
+- from: [ColumnName:{DescID: 10002, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 106, Name: n2, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 106, ColumnID: 2}, ABSENT]
+- from: [ColumnName:{DescID: 10002, Name: n1, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 10002, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 106, Name: n2, ColumnID: 2}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
+- from: [ColumnName:{DescID: 10002, Name: n1, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  to:   [Column:{DescID: 106, ColumnID: 4294967294}, ABSENT]
+- from: [ColumnName:{DescID: 10002, Name: n2, ColumnID: 2}, ABSENT]
+  to:   [Column:{DescID: 10002, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
+- from: [ColumnName:{DescID: 10002, Name: n2, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  to:   [Column:{DescID: 107, ColumnID: 4294967295}, ABSENT]
+- from: [ColumnName:{DescID: 10002, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 10002, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
+- from: [ColumnName:{DescID: 10002, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 107, Name: n1, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 107, ColumnID: 2}, ABSENT]
+- from: [ColumnName:{DescID: 10003, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 10003, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 107, Name: n1, ColumnID: 2}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
+- from: [ColumnName:{DescID: 10003, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 107, ColumnID: 1}, ABSENT]
+- from: [ColumnName:{DescID: 10003, Name: n1, ColumnID: 2}, ABSENT]
+  to:   [Column:{DescID: 10003, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
+- from: [ColumnName:{DescID: 10003, Name: n1, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  to:   [Column:{DescID: 107, ColumnID: 4294967294}, ABSENT]
+- from: [ColumnName:{DescID: 10003, Name: name, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 10003, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
+- from: [ColumnName:{DescID: 10003, Name: name, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
+- from: [ColumnName:{DescID: 10003, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 10003, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
+- from: [ColumnName:{DescID: 10003, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 108, Name: n1, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
+- from: [ColumnName:{DescID: 10004, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 10004, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 108, Name: n1, ColumnID: 2}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
+- from: [ColumnName:{DescID: 10004, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 108, Name: n2, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
+- from: [ColumnName:{DescID: 10004, Name: n1, ColumnID: 2}, ABSENT]
+  to:   [Column:{DescID: 10004, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 108, Name: n2, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
+- from: [ColumnName:{DescID: 10004, Name: n1, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
+- from: [ColumnName:{DescID: 10004, Name: n2, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 10004, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
+- from: [ColumnName:{DescID: 10004, Name: n2, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 4294967295}, ABSENT]
+- from: [ColumnName:{DescID: 10004, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 10004, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [ColumnName:{DescID: 10004, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 111, Name: k, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 1}, ABSENT]
+- from: [ColumnName:{DescID: 10007, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 10007, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 111, Name: k, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [ColumnName:{DescID: 10007, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 111, Name: n1, ColumnID: 3}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 3}, ABSENT]
+- from: [ColumnName:{DescID: 10007, Name: k, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 10007, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 111, Name: n1, ColumnID: 3}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [ColumnName:{DescID: 10007, Name: k, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 111, Name: n2, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 2}, ABSENT]
+- from: [ColumnName:{DescID: 10007, Name: n1, ColumnID: 3}, ABSENT]
+  to:   [Column:{DescID: 10007, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 111, Name: n2, ColumnID: 2}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [ColumnName:{DescID: 10007, Name: n1, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 4294967294}, ABSENT]
+- from: [ColumnName:{DescID: 10007, Name: n2, ColumnID: 2}, ABSENT]
+  to:   [Column:{DescID: 10007, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [ColumnName:{DescID: 10007, Name: n2, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 105, ColumnID: 1}, ABSENT]
+- from: [ColumnName:{DescID: 10007, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 10007, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [ColumnName:{DescID: 10007, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  to:   [Column:{DescID: 105, ColumnID: 4294967294}, ABSENT]
+- from: [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 10001, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  to:   [Column:{DescID: 105, ColumnID: 4294967295}, ABSENT]
+- from: [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 10001, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 106, ColumnID: 1}, ABSENT]
+- from: [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 10001, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
+- from: [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 106, ColumnID: 2}, ABSENT]
+- from: [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 10002, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
+- from: [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  to:   [Column:{DescID: 106, ColumnID: 4294967294}, ABSENT]
+- from: [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  to:   [Column:{DescID: 10002, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
+- from: [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  to:   [Column:{DescID: 106, ColumnID: 4294967295}, ABSENT]
+- from: [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 10002, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
+- from: [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 107, ColumnID: 1}, ABSENT]
+- from: [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 10002, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
+- from: [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 107, ColumnID: 2}, ABSENT]
+- from: [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 10003, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
+- from: [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  to:   [Column:{DescID: 107, ColumnID: 4294967294}, ABSENT]
+- from: [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  to:   [Column:{DescID: 10003, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
+- from: [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  to:   [Column:{DescID: 107, ColumnID: 4294967295}, ABSENT]
+- from: [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 10003, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
+- from: [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
+- from: [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 10003, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
+- from: [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
+- from: [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 10004, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
+- from: [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
+- from: [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  to:   [Column:{DescID: 10004, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
+- from: [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
+- from: [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 10004, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
+- from: [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 1}, ABSENT]
+- from: [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 10004, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 2}, ABSENT]
+- from: [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [Column:{DescID: 10007, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 3}, ABSENT]
+- from: [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  to:   [Column:{DescID: 10007, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 4294967294}, ABSENT]
+- from: [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
+  to:   [Column:{DescID: 10007, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 4294967295}, ABSENT]
+- from: [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [Column:{DescID: 10007, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [Column:{DescID: 10007, ColumnID: 4294967295}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
+- from: [Namespace:{DescID: 10001, Name: v1, ReferencedDescID: 100}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
+- from: [Namespace:{DescID: 10002, Name: v2, ReferencedDescID: 100}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
+- from: [Namespace:{DescID: 10003, Name: v3, ReferencedDescID: 100}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [Namespace:{DescID: 10004, Name: v4, ReferencedDescID: 100}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 105}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [Namespace:{DescID: 10007, Name: v5, ReferencedDescID: 100}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 106}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
+- from: [Owner:{DescID: 10001}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 107}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
+- from: [Owner:{DescID: 10002}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 108}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
+- from: [Owner:{DescID: 10003}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 111}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [Owner:{DescID: 10004}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [Owner:{DescID: 10007}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
+- from: [SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 107, ReferencedDescID: 101}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
+- from: [SchemaChild:{DescID: 10002, ReferencedDescID: 101}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 108, ReferencedDescID: 101}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
+- from: [SchemaChild:{DescID: 10003, ReferencedDescID: 101}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 111, ReferencedDescID: 101}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [SchemaChild:{DescID: 10004, ReferencedDescID: 101}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [SchemaChild:{DescID: 10007, ReferencedDescID: 101}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [UserPrivileges:{DescID: 10001, Name: admin}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 106, Name: admin}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
+- from: [UserPrivileges:{DescID: 10001, Name: root}, ABSENT]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
-  to:   [View:{DescID: 106}, ABSENT]
+- from: [UserPrivileges:{DescID: 10002, Name: admin}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 107, Name: admin}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
+- from: [UserPrivileges:{DescID: 10002, Name: root}, ABSENT]
+  to:   [View:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 107, Name: root}, ABSENT]
-  to:   [View:{DescID: 107}, ABSENT]
+- from: [UserPrivileges:{DescID: 10003, Name: admin}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 108, Name: admin}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
+- from: [UserPrivileges:{DescID: 10003, Name: root}, ABSENT]
+  to:   [View:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
-  to:   [View:{DescID: 108}, ABSENT]
+- from: [UserPrivileges:{DescID: 10004, Name: admin}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 111, Name: admin}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [UserPrivileges:{DescID: 10004, Name: root}, ABSENT]
+  to:   [View:{DescID: 10004}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 111, Name: root}, ABSENT]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [UserPrivileges:{DescID: 10007, Name: admin}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [Column:{DescID: 105, ColumnID: 1}, WRITE_ONLY]
+- from: [UserPrivileges:{DescID: 10007, Name: root}, ABSENT]
+  to:   [View:{DescID: 10007}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [Column:{DescID: 10001, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [Column:{DescID: 105, ColumnID: 4294967294}, WRITE_ONLY]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [Column:{DescID: 10001, ColumnID: 4294967294}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [Column:{DescID: 105, ColumnID: 4294967295}, WRITE_ONLY]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [Column:{DescID: 10001, ColumnID: 4294967295}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [ColumnName:{DescID: 10001, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [ColumnName:{DescID: 10001, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [ColumnName:{DescID: 10001, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [ColumnType:{DescID: 10001, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [Namespace:{DescID: 10001, Name: v1, ReferencedDescID: 100}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [Owner:{DescID: 105}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [Owner:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT]
   kind: SameStagePrecedence
   rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10001, Name: admin}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10001, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 105}, DROPPED]
-  to:   [View:{DescID: 105}, ABSENT]
+- from: [View:{DescID: 10001}, DROPPED]
+  to:   [View:{DescID: 10001}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [Column:{DescID: 10002, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [Column:{DescID: 106, ColumnID: 2}, WRITE_ONLY]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [Column:{DescID: 10002, ColumnID: 2}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [Column:{DescID: 106, ColumnID: 4294967294}, WRITE_ONLY]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [Column:{DescID: 10002, ColumnID: 4294967294}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [Column:{DescID: 106, ColumnID: 4294967295}, WRITE_ONLY]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [Column:{DescID: 10002, ColumnID: 4294967295}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [ColumnName:{DescID: 10002, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [ColumnName:{DescID: 106, Name: n1, ColumnID: 1}, ABSENT]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [ColumnName:{DescID: 10002, Name: n1, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [ColumnName:{DescID: 106, Name: n2, ColumnID: 2}, ABSENT]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [ColumnName:{DescID: 10002, Name: n2, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [ColumnName:{DescID: 10002, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [ColumnType:{DescID: 10002, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100}, ABSENT]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [Namespace:{DescID: 10002, Name: v2, ReferencedDescID: 100}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [Owner:{DescID: 106}, ABSENT]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [Owner:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [SchemaChild:{DescID: 10002, ReferencedDescID: 101}, ABSENT]
   kind: SameStagePrecedence
   rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [UserPrivileges:{DescID: 106, Name: admin}, ABSENT]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10002, Name: admin}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10002, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 106}, DROPPED]
-  to:   [View:{DescID: 106}, ABSENT]
+- from: [View:{DescID: 10002}, DROPPED]
+  to:   [View:{DescID: 10002}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [Column:{DescID: 107, ColumnID: 1}, WRITE_ONLY]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [Column:{DescID: 10003, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [Column:{DescID: 107, ColumnID: 2}, WRITE_ONLY]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [Column:{DescID: 10003, ColumnID: 2}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [Column:{DescID: 107, ColumnID: 4294967294}, WRITE_ONLY]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [Column:{DescID: 10003, ColumnID: 4294967294}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [Column:{DescID: 107, ColumnID: 4294967295}, WRITE_ONLY]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [Column:{DescID: 10003, ColumnID: 4294967295}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [ColumnName:{DescID: 10003, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [ColumnName:{DescID: 107, Name: n1, ColumnID: 2}, ABSENT]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [ColumnName:{DescID: 10003, Name: n1, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [ColumnName:{DescID: 10003, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [ColumnName:{DescID: 10003, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [ColumnType:{DescID: 10003, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [Namespace:{DescID: 10003, Name: v3, ReferencedDescID: 100}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [Owner:{DescID: 107}, ABSENT]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [Owner:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [SchemaChild:{DescID: 107, ReferencedDescID: 101}, ABSENT]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [SchemaChild:{DescID: 10003, ReferencedDescID: 101}, ABSENT]
   kind: SameStagePrecedence
   rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [UserPrivileges:{DescID: 107, Name: admin}, ABSENT]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10003, Name: admin}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [UserPrivileges:{DescID: 107, Name: root}, ABSENT]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10003, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [View:{DescID: 107}, ABSENT]
+- from: [View:{DescID: 10003}, DROPPED]
+  to:   [View:{DescID: 10003}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [Column:{DescID: 10004, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [Column:{DescID: 108, ColumnID: 2}, WRITE_ONLY]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [Column:{DescID: 10004, ColumnID: 2}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [Column:{DescID: 108, ColumnID: 4294967294}, WRITE_ONLY]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [Column:{DescID: 10004, ColumnID: 4294967294}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [Column:{DescID: 108, ColumnID: 4294967295}, WRITE_ONLY]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [Column:{DescID: 10004, ColumnID: 4294967295}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [ColumnName:{DescID: 10004, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [ColumnName:{DescID: 108, Name: n1, ColumnID: 2}, ABSENT]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [ColumnName:{DescID: 10004, Name: n1, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [ColumnName:{DescID: 108, Name: n2, ColumnID: 1}, ABSENT]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [ColumnName:{DescID: 10004, Name: n2, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [ColumnName:{DescID: 10004, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [ColumnType:{DescID: 10004, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100}, ABSENT]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [Namespace:{DescID: 10004, Name: v4, ReferencedDescID: 100}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [Owner:{DescID: 108}, ABSENT]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [Owner:{DescID: 10004}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [SchemaChild:{DescID: 108, ReferencedDescID: 101}, ABSENT]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [SchemaChild:{DescID: 10004, ReferencedDescID: 101}, ABSENT]
   kind: SameStagePrecedence
   rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [UserPrivileges:{DescID: 108, Name: admin}, ABSENT]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10004, Name: admin}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10004, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [View:{DescID: 108}, ABSENT]
+- from: [View:{DescID: 10004}, DROPPED]
+  to:   [View:{DescID: 10004}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [Column:{DescID: 111, ColumnID: 1}, WRITE_ONLY]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [Column:{DescID: 10007, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [Column:{DescID: 111, ColumnID: 2}, WRITE_ONLY]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [Column:{DescID: 10007, ColumnID: 2}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [Column:{DescID: 111, ColumnID: 3}, WRITE_ONLY]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [Column:{DescID: 10007, ColumnID: 3}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [Column:{DescID: 111, ColumnID: 4294967294}, WRITE_ONLY]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [Column:{DescID: 10007, ColumnID: 4294967294}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [Column:{DescID: 111, ColumnID: 4294967295}, WRITE_ONLY]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [Column:{DescID: 10007, ColumnID: 4294967295}, WRITE_ONLY]
   kind: Precedence
   rule: relation dropped before dependent column
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [ColumnName:{DescID: 10007, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [ColumnName:{DescID: 111, Name: k, ColumnID: 1}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [ColumnName:{DescID: 10007, Name: k, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [ColumnName:{DescID: 111, Name: n1, ColumnID: 3}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [ColumnName:{DescID: 10007, Name: n1, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [ColumnName:{DescID: 111, Name: n2, ColumnID: 2}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [ColumnName:{DescID: 10007, Name: n2, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [ColumnName:{DescID: 10007, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [ColumnType:{DescID: 10007, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [Namespace:{DescID: 10007, Name: v5, ReferencedDescID: 100}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [Owner:{DescID: 111}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [Owner:{DescID: 10007}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [SchemaChild:{DescID: 111, ReferencedDescID: 101}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [SchemaChild:{DescID: 10007, ReferencedDescID: 101}, ABSENT]
   kind: SameStagePrecedence
   rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [UserPrivileges:{DescID: 111, Name: admin}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10007, Name: admin}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [UserPrivileges:{DescID: 111, Name: root}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10007, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [View:{DescID: 111}, DROPPED]
-  to:   [View:{DescID: 111}, ABSENT]
+- from: [View:{DescID: 10007}, DROPPED]
+  to:   [View:{DescID: 10007}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal

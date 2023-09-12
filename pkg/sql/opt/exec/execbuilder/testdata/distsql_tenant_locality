@@ -26,12 +26,12 @@ ALTER RANGE RELOCATE LEASE TO 1 FOR SELECT range_id FROM crdb_internal.ranges WH
 query TI rowsort,retry
 SELECT start_pretty, lease_holder FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%Table%/1/%'
 ----
-/Tenant/10/Table/106/1/1  2
-/Tenant/10/Table/106/1/2  2
-/Tenant/10/Table/106/1/3  3
-/Tenant/10/Table/106/1/4  3
-/Tenant/10/Table/106/1/5  1
-/Tenant/10/Table/106/1/6  1
+/Tenant/10/Table/10002/1/1  2
+/Tenant/10/Table/10002/1/2  2
+/Tenant/10/Table/10002/1/3  3
+/Tenant/10/Table/10002/1/4  3
+/Tenant/10/Table/10002/1/5  1
+/Tenant/10/Table/10002/1/6  1
 
 user root
 
@@ -63,7 +63,7 @@ vectorized: true
   table: t@t_pkey
   spans: [/1 - /1] [/3 - /3] [/5 - /5]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycklFv0zAQgN_5FdY9MeQqdsJ48BNoDSJS142mEkiomkx8K1HTONgOY6ry35FdYG3IUBs_RDrf5btPd96B_V6BgPTz7exdNicvp1m-zD_OLkieztKrJXlF3i9urokjnz6ki5RsiC_ilCSUXF4AhVornMstWhBfgAOFGCgksKLQGF2gtdr41C4UZuonCEahrJvW-esVhUIbBLEDV7oKQcBSfq1wgVKhiTxLoZNlFfDurbtrNvgIFK501W5rK8iGkh9AIW-kjyLO3kQ8uowYrDoKunVPjayTawTBD8yyKYi4o8_IPTm1tTYKDaojn1U3oD_XE91ESa9wWCXuqSRHKvz0ObGRc-JnzIkdycWny_GRcskZcvzZJQ7ILdA2urZ40o5Yr9OE-62jWuP-iVjdmgJvjS5C7T68CaBwodC6fZbvg6wOKe47GJTbv2_wkMT_S3p9RGKHJNYnxWOd_iElY0lhYveVfrgrFQhgv89k4PPngP9Brq1fW_5NPwTs8rHxQ7-XlUUK13KDU3RotmVdWlcWIJxpsete_AoAAP__yB-H8A==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycklFv0zAQgN_5FdY9MeQqdsJe_ARag4jUdaOpBBKqJhPfStQ0DrbDmKr8d2QXWBuyqY0fKp3v-t2XO-_A_qhAQPrldvY-m5PX0yxf5p9mFyRPZ-nVkrwhHxY318SRzx_TRUo2xBdxShJKLi-AQq0VzuUWLYivwIFCDBQSWFFojC7QWm18ahcKM_ULBKNQ1k3r_PWKQqENgtiBK12FIGApv1W4QKnQRJ6l0MmyCnj3zt01G3wECle6are1FWRDyU-gkDfSRxFnjMURjy4jBquOgm7dUyvr5BpB8AO3bAoi7ugzek9Wba2NQoPqyGjVDXzAXE90EyW9wmGVuKeSHKnw0yfFRk-KnzEpdqQXn67HR-slZ-jxZxc5oLdA2-ja4kl7Yr1OE-43j2qN-2didWsKvDW6CLX78CaAwoVC6_ZZvg-yOqS472BQbv-9w0MSf5H09ojEDkmsT4rHOv1HSsaSwsTuK_1wVyoQwP6cycDP3wP-D3Jt_dry7_ohYJePjR_6vawsUriWG5yiQ7Mt69K6sgDhTItd9-p3AAAA__9j7IkE
 
 # Ensure that a single scan that touches multiple ranges is represented by a
 # single span after physical planning. We expect to only have a single
@@ -79,7 +79,7 @@ vectorized: true
   table: t@t_pkey
   spans: [/3 - /4]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUe9r2zAQ_b6_QrxPzVCw1NB9EAxWGo8Z0rSLDRtspmj2NTP-IU-S15Xg_33Ybrs0bFnvg9C9u3vv6bSD-1FBIfx8vTqP1uxkGcVJ_HE1Y3G4Ci8S9pq931xdMs8-fQg3ITsp2ddOiAW9ZYsZO18vn5CMnc3A0Zic1romB_UFEhwLpBytNRk5Z-wA78amKP8FJTiKpu38AKccmbEEtYMvfEVQWJu5aYOBJSevi2ps6zlM5_8MOa-3BHW6pxItoWTP94TkcaFEf6toQzonG4hncvDv_E1b0j04LkzV1Y1TrOTsJzjiVg9ZIMWbQAaL-cPlDP_yKA88imce_7OMDbnWNI5etA1xoDSXfcpB-ZamH3CmsxldW5ONvVN6NRKNQE7OT9XTKYmax5LzlnT9ZH-fSR5lEseYUo7bytzdFDkUxEPM_3I8BoYBvXXDiuLv5m6kTe7b4YG3unLEcalLWpInWxdN4XyRQXnbUd-_-h0AAP__pWPszQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUe9r2zAQ_b6_QrxPzVCwlNAvgsFK4zFDmnaxYYPNFM2-ZsY_5EnyuhL8vw_ba5aWLet9ELp3d-89nfZw3ysohJ9u1hfRhp2tojiJP6xnLA7X4WXCXrN32-sr5tnH9-E2ZGcl-9IJsaQ3bDljF5vVAcnY-Qwcjclpo2tyUJ8hwbFEytFak5Fzxg7wfmyK8p9QgqNo2s4PcMqRGUtQe_jCVwSFjZmbNhhYcvK6qMa2nsN0_s-Q83pHUIsjlWgFJXt-JCRPCyX6a0Vb0jnZQDyRg3_rb9uSHsBxaaqubpxiJWc_wBG3esgCKYRYBDJYzg_Xc_zLp3zmUzzx-Z-FbMm1pnH0oo2IZ0pz2acclO9o-gVnOpvRjTXZ2Dul1yPRCOTk_FRdTEnUPJact6Trg_1jJnmSSZxiSjnuKnN_W-RQEL9j_pfjMTAM6J0bVhR_M_cjbfLQDg-805Ujjitd0oo82bpoCueLDMrbjvr-1a8AAAD__2vy7YU=
 
 # Ensure that a query with a LIMIT is planned on the instance that is the
 # "leaseholder" of the first range touched by the scan. We expect to only have a
@@ -96,7 +96,7 @@ vectorized: true
   spans: [/1 - ]
   limit: 10
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUV2L1DAUffdXhPOkkqHJCD4EBGWnYqEzu04LCjossb07hmmbmqSuy9D_Lum4OjvouPch5H6dc3Kyh__WQCH9eJW_yVbs6SIryuJ9_owVaZ5elOw5e7u-XLLAPrxL1ynbsc-DEC_oFZMsz5ZZyaQAR2drWumWPNQnSHDMseHona3Ie-tieT8NZfUPKMFhun4IsbzhqKwjqD2CCQ1BYWVntk8iSk1Bm2YaGznsEP4s-aC3BDU_YskWUHLkR0TyPFGpvzS0Jl2TS8QDOoTX4brf0R04LmwztJ1XbMfZd3AUvY5ZIsXLRCZyNl3m4MhNa0L0419i5YlY8UDsf1xZk-9t5-lRtogTppkcNxxUb-nwFd4OrqIrZ6tp9pBeTkBToSYfDt35Icm6-5YPjnT7W_4xkjyLJM4hbThuGnt7bWooiF8x-8txH4gLeuujRcVXezvBlnd9fOCNbjxxLPWOFhTItaYzPpgKKriBxvHJzwAAAP__psbtGQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUV2L1DAUffdXhPOkkqFJfQsIyk7FQmd2nRYUdFhie3cM0zY1SV2Xof9d2u7q7KDj3oeQ-3XOyckB_nsNheTTVfY2XbPnyzQv8g_ZC5YnWXJRsJfs3eZyxQL7-D7ZJGzPvvRCvKLXTLIsXaUFkwIcra1orRvyUJ8hwRFjy9E5W5L31o3lwzSUVj-hBIdpuz6M5S1HaR1BHRBMqAkKa7uwXTSiVBS0qaexgcP24c-SD3pHUPERS7qEkgM_IpLniQr9taYN6YpcJB7RIbwJ192e7sBxYeu-ab1ie85-gCPv9JhFUggRRzKSi_trDI7MNCaMnvxLsDwRLB4J_o8zG_KdbT09yRpxwrSQw5aDqh3N3-Ft70q6cracZuf0cgKaChX5MHfjOUnbh5YPjnTzW_4xkjyLJM4hbTluant7bSooiPtY_OV4CIwLeudHi_Jv9naCLe668YE3uvbEsdJ7WlIg15jW-GBKqOB6GoZnvwIAAP__as3t0Q==
 
 
 # Regression test for #93887 - don't panic when generating index recommendations

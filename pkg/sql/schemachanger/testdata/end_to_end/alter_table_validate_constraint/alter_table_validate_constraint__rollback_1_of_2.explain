@@ -10,15 +10,15 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› V
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 2 elements transitioning toward PUBLIC
-           │    ├── ABSENT     → PUBLIC CheckConstraintUnvalidated:{DescID: 104 (t), ConstraintID: 2 (check_i+)}
-           │    └── ABSENT     → PUBLIC ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_i", ConstraintID: 2 (check_i+)}
+           │    ├── ABSENT     → PUBLIC CheckConstraintUnvalidated:{DescID: 10000 (t), ConstraintID: 2 (check_i+)}
+           │    └── ABSENT     → PUBLIC ConstraintWithoutIndexName:{DescID: 10000 (t), Name: "check_i", ConstraintID: 2 (check_i+)}
            ├── 2 elements transitioning toward ABSENT
-           │    ├── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 3 (check_i-)}
-           │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_i", ConstraintID: 3 (check_i-)}
+           │    ├── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 10000 (t), IndexID: 0, ConstraintID: 3 (check_i-)}
+           │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 10000 (t), Name: "check_i", ConstraintID: 3 (check_i-)}
            └── 6 Mutation operations
-                ├── AddCheckConstraint {"CheckExpr":"i \u003e 0:::INT8","ConstraintID":2,"TableID":104,"Validity":1}
-                ├── SetConstraintName {"ConstraintID":2,"Name":"check_i","TableID":104}
-                ├── SetConstraintName {"ConstraintID":3,"Name":"crdb_internal_co...","TableID":104}
-                ├── RemoveCheckConstraint {"ConstraintID":3,"TableID":104}
-                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── AddCheckConstraint {"CheckExpr":"i \u003e 0:::INT8","ConstraintID":2,"TableID":10000,"Validity":1}
+                ├── SetConstraintName {"ConstraintID":2,"Name":"check_i","TableID":10000}
+                ├── SetConstraintName {"ConstraintID":3,"Name":"crdb_internal_co...","TableID":10000}
+                ├── RemoveCheckConstraint {"ConstraintID":3,"TableID":10000}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":10000}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

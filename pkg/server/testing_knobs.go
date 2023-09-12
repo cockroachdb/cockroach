@@ -161,6 +161,13 @@ type TestingKnobs struct {
 	// DialNodeCallback is used to mock dial errors when dialing a node. It is
 	// invoked by the dialNode method of server.serverIterator.
 	DialNodeCallback func(ctx context.Context, nodeID roachpb.NodeID) error
+
+	// DisableFixedDescIDOffset, when set, disables the introduction of
+	// a fixed descriptor ID offset to create additional SQL objects in
+	// the test. The offset is added by default to ensure that tests are
+	// agnostic of how many objects are created during cluster
+	// initialization.
+	DisableFixedDescIDOffset bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

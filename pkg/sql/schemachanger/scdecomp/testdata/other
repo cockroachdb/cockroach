@@ -29,37 +29,37 @@ sc1
 BackReferencedIDs:
 ElementState:
 - Namespace:
-    databaseId: 104
-    descriptorId: 106
+    databaseId: 10000
+    descriptorId: 10002
     name: sc1
     schemaId: 0
   Status: PUBLIC
 - Owner:
-    descriptorId: 106
+    descriptorId: 10002
     owner: root
   Status: PUBLIC
 - Schema:
     isPublic: false
     isTemporary: false
     isVirtual: false
-    schemaId: 106
+    schemaId: 10002
   Status: PUBLIC
 - SchemaComment:
     comment: sc1 is good
-    schemaId: 106
+    schemaId: 10002
   Status: PUBLIC
 - SchemaParent:
-    parentDatabaseId: 104
-    schemaId: 106
+    parentDatabaseId: 10000
+    schemaId: 10002
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 106
+    descriptorId: 10002
     privileges: "2"
     userName: admin
     withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 106
+    descriptorId: 10002
     privileges: "2"
     userName: root
     withGrantOption: "2"
@@ -71,39 +71,39 @@ public
 BackReferencedIDs:
 ElementState:
 - Namespace:
-    databaseId: 104
-    descriptorId: 105
+    databaseId: 10000
+    descriptorId: 10001
     name: public
     schemaId: 0
   Status: PUBLIC
 - Owner:
-    descriptorId: 105
+    descriptorId: 10001
     owner: admin
   Status: PUBLIC
 - Schema:
     isPublic: true
     isTemporary: false
     isVirtual: false
-    schemaId: 105
+    schemaId: 10001
   Status: PUBLIC
 - SchemaParent:
-    parentDatabaseId: 104
-    schemaId: 105
+    parentDatabaseId: 10000
+    schemaId: 10001
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 105
+    descriptorId: 10001
     privileges: "2"
     userName: admin
     withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 105
+    descriptorId: 10001
     privileges: "2"
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 105
+    descriptorId: 10001
     privileges: "516"
     userName: public
     withGrantOption: "0"
@@ -113,47 +113,47 @@ decompose
 db1
 ----
 BackReferencedIDs:
-  - 105
-  - 106
+  - 10001
+  - 10002
 ElementState:
 - Database:
-    databaseId: 104
+    databaseId: 10000
   Status: PUBLIC
 - DatabaseComment:
     comment: db1 is good
-    databaseId: 104
+    databaseId: 10000
   Status: PUBLIC
 - DatabaseData:
-    databaseId: 104
+    databaseId: 10000
   Status: PUBLIC
 - DatabaseRoleSetting:
-    databaseId: 104
+    databaseId: 10000
     roleName: __placeholder_role_name__
   Status: PUBLIC
 - Namespace:
     databaseId: 0
-    descriptorId: 104
+    descriptorId: 10000
     name: db1
     schemaId: 0
   Status: PUBLIC
 - Owner:
-    descriptorId: 104
+    descriptorId: 10000
     owner: root
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 104
+    descriptorId: 10000
     privileges: "2"
     userName: admin
     withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 104
+    descriptorId: 10000
     privileges: "2"
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 104
+    descriptorId: 10000
     privileges: "2048"
     userName: public
     withGrantOption: "0"
@@ -163,46 +163,46 @@ decompose
 typ
 ----
 BackReferencedIDs:
-  - 113
+  - 10009
 ElementState:
 - EnumType:
-    arrayTypeId: 111
+    arrayTypeId: 10007
     isMultiRegion: false
-    typeId: 110
+    typeId: 10006
   Status: PUBLIC
 - EnumTypeValue:
     logicalRepresentation: a
     physicalRepresentation: gA==
-    typeId: 110
+    typeId: 10006
   Status: PUBLIC
 - Namespace:
-    databaseId: 104
-    descriptorId: 110
+    databaseId: 10000
+    descriptorId: 10006
     name: typ
-    schemaId: 106
+    schemaId: 10002
   Status: PUBLIC
 - Owner:
-    descriptorId: 110
+    descriptorId: 10006
     owner: root
   Status: PUBLIC
 - SchemaChild:
-    childObjectId: 110
-    schemaId: 106
+    childObjectId: 10006
+    schemaId: 10002
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 110
+    descriptorId: 10006
     privileges: "2"
     userName: admin
     withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 110
+    descriptorId: 10006
     privileges: "2"
     userName: root
     withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 110
+    descriptorId: 10006
     privileges: "512"
     userName: public
     withGrantOption: "0"
@@ -212,7 +212,7 @@ decompose
 v1
 ----
 BackReferencedIDs:
-  - 113
+  - 10009
 ElementState:
 - Column:
     columnId: 1
@@ -222,7 +222,7 @@ ElementState:
     isInaccessible: false
     isSystemColumn: false
     pgAttributeNum: 0
-    tableId: 112
+    tableId: 10008
   Status: PUBLIC
 - Column:
     columnId: 4.294967294e+09
@@ -232,7 +232,7 @@ ElementState:
     isInaccessible: false
     isSystemColumn: true
     pgAttributeNum: 0
-    tableId: 112
+    tableId: 10008
   Status: PUBLIC
 - Column:
     columnId: 4.294967295e+09
@@ -242,22 +242,22 @@ ElementState:
     isInaccessible: false
     isSystemColumn: true
     pgAttributeNum: 0
-    tableId: 112
+    tableId: 10008
   Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: id
-    tableId: 112
+    tableId: 10008
   Status: PUBLIC
 - ColumnName:
     columnId: 4.294967294e+09
     name: tableoid
-    tableId: 112
+    tableId: 10008
   Status: PUBLIC
 - ColumnName:
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
-    tableId: 112
+    tableId: 10008
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -268,7 +268,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
-    tableId: 112
+    tableId: 10008
     type:
       arrayContents: null
       arrayDimensions: []
@@ -295,7 +295,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
-    tableId: 112
+    tableId: 10008
     type:
       arrayContents: null
       arrayDimensions: []
@@ -322,7 +322,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
-    tableId: 112
+    tableId: 10008
     type:
       arrayContents: null
       arrayDimensions: []
@@ -341,27 +341,27 @@ ElementState:
       width: 0
   Status: PUBLIC
 - Namespace:
-    databaseId: 104
-    descriptorId: 112
+    databaseId: 10000
+    descriptorId: 10008
     name: v1
-    schemaId: 106
+    schemaId: 10002
   Status: PUBLIC
 - Owner:
-    descriptorId: 112
+    descriptorId: 10008
     owner: root
   Status: PUBLIC
 - SchemaChild:
-    childObjectId: 112
-    schemaId: 106
+    childObjectId: 10008
+    schemaId: 10002
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 112
+    descriptorId: 10008
     privileges: "2"
     userName: admin
     withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 112
+    descriptorId: 10008
     privileges: "2"
     userName: root
     withGrantOption: "2"
@@ -371,13 +371,13 @@ ElementState:
     - columnIds:
       - 1
       indexId: 0
-      toId: 109
+      toId: 10005
     isMaterialized: false
     isTemporary: false
     usesRelationIds:
-    - 109
+    - 10005
     usesTypeIds: []
-    viewId: 112
+    viewId: 10008
   Status: PUBLIC
 
 decompose
@@ -393,7 +393,7 @@ ElementState:
     isInaccessible: false
     isSystemColumn: false
     pgAttributeNum: 0
-    tableId: 113
+    tableId: 10009
   Status: PUBLIC
 - Column:
     columnId: 2
@@ -403,7 +403,7 @@ ElementState:
     isInaccessible: false
     isSystemColumn: false
     pgAttributeNum: 0
-    tableId: 113
+    tableId: 10009
   Status: PUBLIC
 - Column:
     columnId: 4.294967294e+09
@@ -413,7 +413,7 @@ ElementState:
     isInaccessible: false
     isSystemColumn: true
     pgAttributeNum: 0
-    tableId: 113
+    tableId: 10009
   Status: PUBLIC
 - Column:
     columnId: 4.294967295e+09
@@ -423,27 +423,27 @@ ElementState:
     isInaccessible: false
     isSystemColumn: true
     pgAttributeNum: 0
-    tableId: 113
+    tableId: 10009
   Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: k
-    tableId: 113
+    tableId: 10009
   Status: PUBLIC
 - ColumnName:
     columnId: 2
     name: id
-    tableId: 113
+    tableId: 10009
   Status: PUBLIC
 - ColumnName:
     columnId: 4.294967294e+09
     name: tableoid
-    tableId: 113
+    tableId: 10009
   Status: PUBLIC
 - ColumnName:
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
-    tableId: 113
+    tableId: 10009
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -454,7 +454,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
-    tableId: 113
+    tableId: 10009
     type:
       arrayContents: null
       arrayDimensions: []
@@ -481,7 +481,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
-    tableId: 113
+    tableId: 10009
     type:
       arrayContents: null
       arrayDimensions: []
@@ -508,7 +508,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
-    tableId: 113
+    tableId: 10009
     type:
       arrayContents: null
       arrayDimensions: []
@@ -535,7 +535,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
-    tableId: 113
+    tableId: 10009
     type:
       arrayContents: null
       arrayDimensions: []
@@ -554,27 +554,27 @@ ElementState:
       width: 0
   Status: PUBLIC
 - Namespace:
-    databaseId: 104
-    descriptorId: 113
+    databaseId: 10000
+    descriptorId: 10009
     name: v2
-    schemaId: 106
+    schemaId: 10002
   Status: PUBLIC
 - Owner:
-    descriptorId: 113
+    descriptorId: 10009
     owner: root
   Status: PUBLIC
 - SchemaChild:
-    childObjectId: 113
-    schemaId: 106
+    childObjectId: 10009
+    schemaId: 10002
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 113
+    descriptorId: 10009
     privileges: "2"
     userName: admin
     withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 113
+    descriptorId: 10009
     privileges: "2"
     userName: root
     withGrantOption: "2"
@@ -584,13 +584,13 @@ ElementState:
     - columnIds:
       - 1
       indexId: 0
-      toId: 112
+      toId: 10008
     isMaterialized: false
     isTemporary: false
     usesRelationIds:
-    - 112
+    - 10008
     usesTypeIds:
-    - 110
-    - 111
-    viewId: 113
+    - 10006
+    - 10007
+    viewId: 10009
   Status: PUBLIC

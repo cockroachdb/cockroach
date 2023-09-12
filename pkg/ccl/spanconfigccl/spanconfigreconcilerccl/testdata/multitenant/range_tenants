@@ -154,8 +154,8 @@ CREATE TABLE db.t2();
 
 mutations tenant=10
 ----
-upsert /Tenant/10/Table/10{6-7}            range default
-upsert /Tenant/10/Table/10{7-8}            range default
+upsert /Tenant/10/Table/1000{2-3}          range default
+upsert /Tenant/10/Table/1000{3-4}          range default
 
 # Start the reconciliation loop for the tenant=11. It should have a modified
 # RANGE DEFAULT. Check against the underlying KV state, the SQL view of the
@@ -197,8 +197,8 @@ state offset=81
 /Tenant/10/Table/5{7-8}                    database system (tenant)
 /Tenant/10/Table/5{8-9}                    database system (tenant)
 /Tenant/10/Table/{59-60}                   database system (tenant)
-/Tenant/10/Table/10{6-7}                   range default
-/Tenant/10/Table/10{7-8}                   range default
+/Tenant/10/Table/1000{2-3}                 range default
+/Tenant/10/Table/1000{3-4}                 range default
 /Tenant/11{-/Table/4}                      ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 /Tenant/11/Table/{4-5}                     ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 /Tenant/11/Table/{5-6}                     ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
@@ -266,5 +266,5 @@ CREATE TABLE db.t2();
 
 mutations tenant=11
 ----
-upsert /Tenant/11/Table/10{6-7}            ttl_seconds=18000
-upsert /Tenant/11/Table/10{7-8}            ttl_seconds=18000
+upsert /Tenant/11/Table/1000{2-3}          ttl_seconds=18000
+upsert /Tenant/11/Table/1000{3-4}          ttl_seconds=18000

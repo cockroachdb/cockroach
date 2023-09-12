@@ -207,11 +207,11 @@ WHERE c.relname IN ('is_updatable', 'is_updatable_view', 'pg_class')
 ORDER BY c.oid, a.attnum
 ----
 relname            attname              oid         attnum  pg_relation_is_updatable  pg_column_is_updatable
-is_updatable       a                    123         1       28                        true
-is_updatable       b                    123         2       28                        true
-is_updatable       c                    123         3       28                        false
-is_updatable_view  a                    124         1       0                         false
-is_updatable_view  b                    124         2       0                         false
+is_updatable       a                    10019       1       28                        true
+is_updatable       b                    10019       2       28                        true
+is_updatable       c                    10019       3       28                        false
+is_updatable_view  a                    10020       1       0                         false
+is_updatable_view  b                    10020       2       0                         false
 pg_class           oid                  4294967098  1       0                         false
 pg_class           relname              4294967098  2       0                         false
 pg_class           relnamespace         4294967098  3       0                         false

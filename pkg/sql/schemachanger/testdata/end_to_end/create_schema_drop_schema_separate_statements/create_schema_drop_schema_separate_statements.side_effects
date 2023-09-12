@@ -15,16 +15,16 @@ write *eventpb.CreateSchema to event log:
   owner: root
   schemaName: defaultdb.sc
   sql:
-    descriptorId: 104
+    descriptorId: 10000
     statement: CREATE SCHEMA ‹defaultdb›.‹sc›
     tag: CREATE SCHEMA
     user: root
 ## StatementPhase stage 1 of 1 with 8 MutationType ops
-add schema namespace entry {100 0 sc} -> 104
-upsert descriptor #104
+add schema namespace entry {100 0 sc} -> 10000
+upsert descriptor #10000
   -
   +schema:
-  +  id: 104
+  +  id: 10000
   +  modificationTime: {}
   +  name: sc
   +  parentId: 100
@@ -45,30 +45,30 @@ upsert descriptor #100
          id: 101
   -  version: "1"
   +    sc:
-  +      id: 104
+  +      id: 10000
   +  version: "2"
 checking for feature: DROP SCHEMA
 increment telemetry for sql.schema.drop_schema
 increment telemetry for sql.uds.drop_schema
-getting all objects in schema: 104
+getting all objects in schema: 10000
 write *eventpb.DropSchema to event log:
   schemaName: defaultdb.sc
   sql:
-    descriptorId: 104
+    descriptorId: 10000
     statement: DROP SCHEMA ‹""›.‹sc›
     tag: DROP SCHEMA
     user: root
 ## StatementPhase stage 1 of 1 with 6 MutationType ops
-delete schema namespace entry {100 0 sc} -> 104
+delete schema namespace entry {100 0 sc} -> 10000
 upsert descriptor #100
   ...
        public:
          id: 101
   -    sc:
-  -      id: 104
+  -      id: 10000
   -  version: "1"
   +  version: "2"
-upsert descriptor #104
+upsert descriptor #10000
   ...
          withGrantOption: "2"
        version: 2
@@ -80,16 +80,16 @@ write *eventpb.CreateSchema to event log:
   owner: root
   schemaName: defaultdb.sc
   sql:
-    descriptorId: 105
+    descriptorId: 10001
     statement: CREATE SCHEMA ‹defaultdb›.‹sc›
     tag: CREATE SCHEMA
     user: root
 ## StatementPhase stage 1 of 1 with 8 MutationType ops
-add schema namespace entry {100 0 sc} -> 105
-upsert descriptor #105
+add schema namespace entry {100 0 sc} -> 10001
+upsert descriptor #10001
   -
   +schema:
-  +  id: 105
+  +  id: 10001
   +  modificationTime: {}
   +  name: sc
   +  parentId: 100
@@ -110,7 +110,7 @@ upsert descriptor #100
          id: 101
   -  version: "1"
   +    sc:
-  +      id: 105
+  +      id: 10001
   +  version: "2"
 # end StatementPhase
 # begin PreCommitPhase
@@ -118,11 +118,11 @@ upsert descriptor #100
 undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 8 MutationType ops
-add schema namespace entry {100 0 sc} -> 105
-upsert descriptor #105
+add schema namespace entry {100 0 sc} -> 10001
+upsert descriptor #10001
   -
   +schema:
-  +  id: 105
+  +  id: 10001
   +  modificationTime: {}
   +  name: sc
   +  parentId: 100
@@ -143,7 +143,7 @@ upsert descriptor #100
          id: 101
   -  version: "1"
   +    sc:
-  +      id: 105
+  +      id: 10001
   +  version: "2"
 persist all catalog changes to storage
 # end PreCommitPhase

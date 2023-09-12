@@ -99,7 +99,7 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
             }
         ],
         "formatVersion": 3,
-        "id": 106,
+        "id": 10002,
         "modificationTime": {},
         "name": "collate_partition",
         "nextColumnId": 3,
@@ -107,7 +107,7 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
         "nextFamilyId": 1,
         "nextIndexId": 4,
         "nextMutationId": 1,
-        "parentId": 104,
+        "parentId": 10000,
         "primaryIndex": {
             "compositeColumnIds": [
                 1
@@ -168,7 +168,7 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
         "replacementOf": {
             "time": {}
         },
-        "unexposedParentSchemaId": 105,
+        "unexposedParentSchemaId": 10001,
         "version": "9"
     }
 }
@@ -377,7 +377,7 @@ SELECT descriptor from redacted_descriptors where id = 'subpartition'::REGCLASS;
             }
         ],
         "formatVersion": 3,
-        "id": 108,
+        "id": 10004,
         "modificationTime": {},
         "name": "subpartition",
         "nextColumnId": 4,
@@ -385,7 +385,7 @@ SELECT descriptor from redacted_descriptors where id = 'subpartition'::REGCLASS;
         "nextFamilyId": 1,
         "nextIndexId": 2,
         "nextMutationId": 1,
-        "parentId": 104,
+        "parentId": 10000,
         "primaryIndex": {
             "constraintId": 1,
             "createdAtNanos": "0",
@@ -491,7 +491,7 @@ SELECT descriptor from redacted_descriptors where id = 'subpartition'::REGCLASS;
         "replacementOf": {
             "time": {}
         },
-        "unexposedParentSchemaId": 105,
+        "unexposedParentSchemaId": 10001,
         "version": "1"
     }
 }

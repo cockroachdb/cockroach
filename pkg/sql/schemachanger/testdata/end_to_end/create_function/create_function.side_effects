@@ -12,12 +12,12 @@ CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
 CREATE TABLE t2(a notmyworkday);
 ----
 ...
-+object {100 101 t} -> 104
-+object {100 101 sq1} -> 105
-+object {100 101 v} -> 106
-+object {100 101 notmyworkday} -> 107
-+object {100 101 _notmyworkday} -> 108
-+object {100 101 t2} -> 109
++object {100 101 t} -> 10000
++object {100 101 sq1} -> 10001
++object {100 101 v} -> 10002
++object {100 101 notmyworkday} -> 10003
++object {100 101 _notmyworkday} -> 10004
++object {100 101 t2} -> 10005
 
 /* test */
 CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
@@ -35,28 +35,28 @@ increment telemetry for sql.schema.create_function
 write *eventpb.CreateFunction to event log:
   functionName: defaultdb.public.f
   sql:
-    descriptorId: 110
+    descriptorId: 10006
     statement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹f›(IN ‹a› ‹notmyworkday›)\n\tRETURNS INT8\n\tVOLATILE\n\tLANGUAGE SQL\n\tAS $$SELECT ‹a› FROM ‹defaultdb›.‹public›.‹t›; SELECT ‹b› FROM ‹defaultdb›.‹public›.‹t›@‹t_idx_b›; SELECT ‹c› FROM ‹defaultdb›.‹public›.‹t›@‹t_idx_c›; SELECT ‹a› FROM ‹defaultdb›.‹public›.‹v›; SELECT nextval(‹'sq1'›);$$"
     tag: CREATE FUNCTION
     user: root
 ## StatementPhase stage 1 of 1 with 12 MutationType ops
-upsert descriptor #110
+upsert descriptor #10006
   -
   +function:
   +  dependsOn:
-  +  - 104
-  +  - 105
-  +  - 106
+  +  - 10000
+  +  - 10001
+  +  - 10002
   +  dependsOnTypes:
-  +  - 107
-  +  - 108
+  +  - 10003
+  +  - 10004
   +  functionBody: |-
   +    SELECT a FROM t;
   +    SELECT b FROM t@t_idx_b;
   +    SELECT c FROM t@t_idx_c;
   +    SELECT a FROM v;
-  +    SELECT nextval(105:::REGCLASS);
-  +  id: 110
+  +    SELECT nextval(10001:::REGCLASS);
+  +  id: 10006
   +  lang: SQL
   +  modificationTime: {}
   +  name: f
@@ -66,9 +66,9 @@ upsert descriptor #110
   +    name: a
   +    type:
   +      family: EnumFamily
-  +      oid: 100107
+  +      oid: 110003
   +      udtMetadata:
-  +        arrayTypeOid: 100108
+  +        arrayTypeOid: 110004
   +  parentId: 100
   +  parentSchemaId: 101
   +  privileges:
@@ -97,10 +97,10 @@ upsert descriptor #101
   +      signatures:
   +      - argTypes:
   +        - family: EnumFamily
-  +          oid: 100107
+  +          oid: 110003
   +          udtMetadata:
-  +            arrayTypeOid: 100108
-  +        id: 110
+  +            arrayTypeOid: 110004
+  +        id: 10006
   +        returnType:
   +          family: IntFamily
   +          oid: 20
@@ -112,20 +112,20 @@ upsert descriptor #101
        version: 2
   -  version: "1"
   +  version: "2"
-upsert descriptor #104
+upsert descriptor #10000
   ...
        - 1
-       id: 106
+       id: 10002
   +  - columnIds:
   +    - 1
-  +    id: 110
+  +    id: 10006
   +  - columnIds:
   +    - 2
-  +    id: 110
+  +    id: 10006
   +    indexId: 2
   +  - columnIds:
   +    - 3
-  +    id: 110
+  +    id: 10006
   +    indexId: 3
      families:
      - columnIds:
@@ -134,13 +134,13 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
-upsert descriptor #105
+upsert descriptor #10001
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
   +  dependedOnBy:
   +  - byId: true
-  +    id: 110
+  +    id: 10006
      families:
      - columnIds:
   ...
@@ -148,35 +148,35 @@ upsert descriptor #105
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
-upsert descriptor #106
+upsert descriptor #10002
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
   +  dependedOnBy:
   +  - columnIds:
   +    - 1
-  +    id: 110
+  +    id: 10006
      dependsOn:
-     - 104
+     - 10000
   ...
        time: {}
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
      viewQuery: SELECT a FROM defaultdb.public.t
-upsert descriptor #107
+upsert descriptor #10003
   ...
      referencingDescriptorIds:
-     - 109
+     - 10005
   -  version: "2"
-  +  - 110
+  +  - 10006
   +  version: "3"
-upsert descriptor #108
+upsert descriptor #10004
   ...
      referencingDescriptorIds:
-     - 109
+     - 10005
   -  version: "2"
-  +  - 110
+  +  - 10006
   +  version: "3"
 # end StatementPhase
 # begin PreCommitPhase
@@ -184,23 +184,23 @@ upsert descriptor #108
 undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 12 MutationType ops
-upsert descriptor #110
+upsert descriptor #10006
   -
   +function:
   +  dependsOn:
-  +  - 104
-  +  - 105
-  +  - 106
+  +  - 10000
+  +  - 10001
+  +  - 10002
   +  dependsOnTypes:
-  +  - 107
-  +  - 108
+  +  - 10003
+  +  - 10004
   +  functionBody: |-
   +    SELECT a FROM t;
   +    SELECT b FROM t@t_idx_b;
   +    SELECT c FROM t@t_idx_c;
   +    SELECT a FROM v;
-  +    SELECT nextval(105:::REGCLASS);
-  +  id: 110
+  +    SELECT nextval(10001:::REGCLASS);
+  +  id: 10006
   +  lang: SQL
   +  modificationTime: {}
   +  name: f
@@ -210,9 +210,9 @@ upsert descriptor #110
   +    name: a
   +    type:
   +      family: EnumFamily
-  +      oid: 100107
+  +      oid: 110003
   +      udtMetadata:
-  +        arrayTypeOid: 100108
+  +        arrayTypeOid: 110004
   +  parentId: 100
   +  parentSchemaId: 101
   +  privileges:
@@ -241,10 +241,10 @@ upsert descriptor #101
   +      signatures:
   +      - argTypes:
   +        - family: EnumFamily
-  +          oid: 100107
+  +          oid: 110003
   +          udtMetadata:
-  +            arrayTypeOid: 100108
-  +        id: 110
+  +            arrayTypeOid: 110004
+  +        id: 10006
   +        returnType:
   +          family: IntFamily
   +          oid: 20
@@ -256,20 +256,20 @@ upsert descriptor #101
        version: 2
   -  version: "1"
   +  version: "2"
-upsert descriptor #104
+upsert descriptor #10000
   ...
        - 1
-       id: 106
+       id: 10002
   +  - columnIds:
   +    - 1
-  +    id: 110
+  +    id: 10006
   +  - columnIds:
   +    - 2
-  +    id: 110
+  +    id: 10006
   +    indexId: 2
   +  - columnIds:
   +    - 3
-  +    id: 110
+  +    id: 10006
   +    indexId: 3
      families:
      - columnIds:
@@ -278,13 +278,13 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
-upsert descriptor #105
+upsert descriptor #10001
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
   +  dependedOnBy:
   +  - byId: true
-  +    id: 110
+  +    id: 10006
      families:
      - columnIds:
   ...
@@ -292,35 +292,35 @@ upsert descriptor #105
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
-upsert descriptor #106
+upsert descriptor #10002
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
   +  dependedOnBy:
   +  - columnIds:
   +    - 1
-  +    id: 110
+  +    id: 10006
      dependsOn:
-     - 104
+     - 10000
   ...
        time: {}
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
      viewQuery: SELECT a FROM defaultdb.public.t
-upsert descriptor #107
+upsert descriptor #10003
   ...
      referencingDescriptorIds:
-     - 109
+     - 10005
   -  version: "2"
-  +  - 110
+  +  - 10006
   +  version: "3"
-upsert descriptor #108
+upsert descriptor #10004
   ...
      referencingDescriptorIds:
-     - 109
+     - 10005
   -  version: "2"
-  +  - 110
+  +  - 10006
   +  version: "3"
 persist all catalog changes to storage
 # end PreCommitPhase

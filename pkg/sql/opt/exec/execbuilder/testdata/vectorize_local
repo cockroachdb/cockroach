@@ -249,9 +249,9 @@ SELECT DISTINCT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE 'querying next range at %' OR
       message = '=== SPAN START: kv.DistSender: sending partial batch ==='
 ----
-querying next range at /Table/109/1/0/0
+querying next range at /Table/10005/1/0/0
+querying next range at /Table/10005/1/10/0
 === SPAN START: kv.DistSender: sending partial batch ===
-querying next range at /Table/109/1/10/0
 
 # Used to be a regression test for #46123 (rowexec.TableReader not implementing
 # execopnode.OpNode interface).

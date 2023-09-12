@@ -8,171 +8,171 @@ DROP TYPE defaultdb.typ
 ----
 StatementPhase stage 1 of 1 with 15 MutationType ops
   transitions:
-    [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[EnumType:{DescID: 104}, ABSENT], PUBLIC] -> DROPPED
-    [[EnumTypeValue:{DescID: 104, Name: a}, ABSENT], PUBLIC] -> ABSENT
-    [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10000, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10000}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10000, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10000, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10000, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[EnumType:{DescID: 10000}, ABSENT], PUBLIC] -> DROPPED
+    [[EnumTypeValue:{DescID: 10000, Name: a}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 10000, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10001, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10001}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10001, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10001, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10001, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 104
+      DescriptorID: 10000
     *scop.NotImplementedForPublicObjects
-      DescID: 104
+      DescID: 10000
       ElementType: scpb.EnumTypeValue
     *scop.RemoveObjectParent
-      ObjectID: 104
+      ObjectID: 10000
       ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 105
+      DescriptorID: 10001
     *scop.RemoveObjectParent
-      ObjectID: 105
+      ObjectID: 10001
       ParentSchemaID: 101
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 104
+        DescriptorID: 10000
         Name: typ
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 104
+      DescID: 10000
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 104
+      DescriptorID: 10000
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 104
+      DescriptorID: 10000
       User: public
     *scop.RemoveUserPrivileges
-      DescriptorID: 104
+      DescriptorID: 10000
       User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 105
+        DescriptorID: 10001
         Name: _typ
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 105
+      DescID: 10001
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 105
+      DescriptorID: 10001
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 105
+      DescriptorID: 10001
       User: public
     *scop.RemoveUserPrivileges
-      DescriptorID: 105
+      DescriptorID: 10001
       User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
-    [[Owner:{DescID: 104}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], ABSENT] -> PUBLIC
-    [[EnumType:{DescID: 104}, ABSENT], DROPPED] -> PUBLIC
-    [[EnumTypeValue:{DescID: 104, Name: a}, ABSENT], ABSENT] -> PUBLIC
-    [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
-    [[Owner:{DescID: 105}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], ABSENT] -> PUBLIC
-    [[AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT], DROPPED] -> PUBLIC
-    [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 10000, Name: typ, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 10000}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10000, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10000, Name: public}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10000, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[EnumType:{DescID: 10000}, ABSENT], DROPPED] -> PUBLIC
+    [[EnumTypeValue:{DescID: 10000, Name: a}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 10000, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 10001, Name: _typ, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 10001}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10001, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10001, Name: public}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10001, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 18 MutationType ops
   transitions:
-    [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[EnumType:{DescID: 104}, ABSENT], PUBLIC] -> DROPPED
-    [[EnumTypeValue:{DescID: 104, Name: a}, ABSENT], PUBLIC] -> ABSENT
-    [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10000, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10000}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10000, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10000, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10000, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[EnumType:{DescID: 10000}, ABSENT], PUBLIC] -> DROPPED
+    [[EnumTypeValue:{DescID: 10000, Name: a}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 10000, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10001, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10001}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10001, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10001, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10001, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 104
+      DescriptorID: 10000
     *scop.NotImplementedForPublicObjects
-      DescID: 104
+      DescID: 10000
       ElementType: scpb.EnumTypeValue
     *scop.RemoveObjectParent
-      ObjectID: 104
+      ObjectID: 10000
       ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 105
+      DescriptorID: 10001
     *scop.RemoveObjectParent
-      ObjectID: 105
+      ObjectID: 10001
       ParentSchemaID: 101
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 104
+        DescriptorID: 10000
         Name: typ
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 104
+      DescID: 10000
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 104
+      DescriptorID: 10000
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 104
+      DescriptorID: 10000
       User: public
     *scop.RemoveUserPrivileges
-      DescriptorID: 104
+      DescriptorID: 10000
       User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 105
+        DescriptorID: 10001
         Name: _typ
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 105
+      DescID: 10001
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 105
+      DescriptorID: 10001
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 105
+      DescriptorID: 10001
       User: public
     *scop.RemoveUserPrivileges
-      DescriptorID: 105
+      DescriptorID: 10001
       User: root
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 104
+      DescriptorID: 10000
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 105
+      DescriptorID: 10001
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
         AppName: $ internal-test
         UserName: root
       DescriptorIDs:
-      - 104
-      - 105
+      - 10000
+      - 10001
       JobID: 1
       NonCancelable: true
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
@@ -182,139 +182,139 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
         statementtag: DROP TYPE
 PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:
-    [[EnumType:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
-    [[AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT], DROPPED] -> ABSENT
+    [[EnumType:{DescID: 10000}, ABSENT], DROPPED] -> ABSENT
+    [[AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.DeleteDescriptor
-      DescriptorID: 104
+      DescriptorID: 10000
     *scop.DeleteDescriptor
-      DescriptorID: 105
+      DescriptorID: 10001
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 104
+      DescriptorID: 10000
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 105
+      DescriptorID: 10001
       JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
-      - 104
-      - 105
+      - 10000
+      - 10001
       IsNonCancelable: true
       JobID: 1
 
 deps
 DROP TYPE defaultdb.typ
 ----
-- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
-  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
+- from: [AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, DROPPED]
+  to:   [AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
-- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
-  to:   [Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT]
+- from: [AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, DROPPED]
+  to:   [Namespace:{DescID: 10001, Name: _typ, ReferencedDescID: 100}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
-  to:   [Owner:{DescID: 105}, ABSENT]
+- from: [AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, DROPPED]
+  to:   [Owner:{DescID: 10001}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
-  to:   [SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT]
+- from: [AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, DROPPED]
+  to:   [SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT]
   kind: SameStagePrecedence
   rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
-  to:   [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
+- from: [AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10001, Name: admin}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
-  to:   [UserPrivileges:{DescID: 105, Name: public}, ABSENT]
+- from: [AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10001, Name: public}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
-  to:   [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
+- from: [AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10001, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [EnumType:{DescID: 104}, DROPPED]
-  to:   [EnumType:{DescID: 104}, ABSENT]
+- from: [EnumType:{DescID: 10000}, DROPPED]
+  to:   [EnumType:{DescID: 10000}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
-- from: [EnumType:{DescID: 104}, DROPPED]
-  to:   [EnumTypeValue:{DescID: 104, Name: a}, ABSENT]
+- from: [EnumType:{DescID: 10000}, DROPPED]
+  to:   [EnumTypeValue:{DescID: 10000, Name: a}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [EnumType:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT]
+- from: [EnumType:{DescID: 10000}, DROPPED]
+  to:   [Namespace:{DescID: 10000, Name: typ, ReferencedDescID: 100}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [EnumType:{DescID: 104}, DROPPED]
-  to:   [Owner:{DescID: 104}, ABSENT]
+- from: [EnumType:{DescID: 10000}, DROPPED]
+  to:   [Owner:{DescID: 10000}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [EnumType:{DescID: 104}, DROPPED]
-  to:   [SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT]
+- from: [EnumType:{DescID: 10000}, DROPPED]
+  to:   [SchemaChild:{DescID: 10000, ReferencedDescID: 101}, ABSENT]
   kind: SameStagePrecedence
   rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [EnumType:{DescID: 104}, DROPPED]
-  to:   [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
+- from: [EnumType:{DescID: 10000}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10000, Name: admin}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [EnumType:{DescID: 104}, DROPPED]
-  to:   [UserPrivileges:{DescID: 104, Name: public}, ABSENT]
+- from: [EnumType:{DescID: 10000}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10000, Name: public}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [EnumType:{DescID: 104}, DROPPED]
-  to:   [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
+- from: [EnumType:{DescID: 10000}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10000, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [EnumTypeValue:{DescID: 104, Name: a}, ABSENT]
-  to:   [EnumType:{DescID: 104}, ABSENT]
+- from: [EnumTypeValue:{DescID: 10000, Name: a}, ABSENT]
+  to:   [EnumType:{DescID: 10000}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT]
-  to:   [EnumType:{DescID: 104}, ABSENT]
+- from: [Namespace:{DescID: 10000, Name: typ, ReferencedDescID: 100}, ABSENT]
+  to:   [EnumType:{DescID: 10000}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT]
-  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
+- from: [Namespace:{DescID: 10001, Name: _typ, ReferencedDescID: 100}, ABSENT]
+  to:   [AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 104}, ABSENT]
-  to:   [EnumType:{DescID: 104}, ABSENT]
+- from: [Owner:{DescID: 10000}, ABSENT]
+  to:   [EnumType:{DescID: 10000}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 105}, ABSENT]
-  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
+- from: [Owner:{DescID: 10001}, ABSENT]
+  to:   [AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT]
-  to:   [EnumType:{DescID: 104}, ABSENT]
+- from: [SchemaChild:{DescID: 10000, ReferencedDescID: 101}, ABSENT]
+  to:   [EnumType:{DescID: 10000}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT]
-  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
+- from: [SchemaChild:{DescID: 10001, ReferencedDescID: 101}, ABSENT]
+  to:   [AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
-  to:   [EnumType:{DescID: 104}, ABSENT]
+- from: [UserPrivileges:{DescID: 10000, Name: admin}, ABSENT]
+  to:   [EnumType:{DescID: 10000}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 104, Name: public}, ABSENT]
-  to:   [EnumType:{DescID: 104}, ABSENT]
+- from: [UserPrivileges:{DescID: 10000, Name: public}, ABSENT]
+  to:   [EnumType:{DescID: 10000}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
-  to:   [EnumType:{DescID: 104}, ABSENT]
+- from: [UserPrivileges:{DescID: 10000, Name: root}, ABSENT]
+  to:   [EnumType:{DescID: 10000}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
-  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
+- from: [UserPrivileges:{DescID: 10001, Name: admin}, ABSENT]
+  to:   [AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 105, Name: public}, ABSENT]
-  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
+- from: [UserPrivileges:{DescID: 10001, Name: public}, ABSENT]
+  to:   [AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
-  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
+- from: [UserPrivileges:{DescID: 10001, Name: root}, ABSENT]
+  to:   [AliasType:{DescID: 10001, ReferencedTypeIDs: [10000 10001]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
 
@@ -323,183 +323,183 @@ DROP TYPE defaultdb.ctyp
 ----
 StatementPhase stage 1 of 1 with 16 MutationType ops
   transitions:
-    [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 106, Name: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[CompositeType:{DescID: 106}, ABSENT], PUBLIC] -> DROPPED
-    [[CompositeTypeAttrName:{DescID: 106, Name: a}, ABSENT], PUBLIC] -> ABSENT
-    [[CompositeTypeAttrType:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[CompositeTypeAttrName:{DescID: 106, Name: b}, ABSENT], PUBLIC] -> ABSENT
-    [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 107, Name: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10002, Name: ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10002}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10002, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10002, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10002, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[CompositeType:{DescID: 10002}, ABSENT], PUBLIC] -> DROPPED
+    [[CompositeTypeAttrName:{DescID: 10002, Name: a}, ABSENT], PUBLIC] -> ABSENT
+    [[CompositeTypeAttrType:{DescID: 10002}, ABSENT], PUBLIC] -> ABSENT
+    [[CompositeTypeAttrName:{DescID: 10002, Name: b}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 10002, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10003, Name: _ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10003}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10003, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10003, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10003, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10003, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 106
+      DescriptorID: 10002
     *scop.NotImplementedForPublicObjects
-      DescID: 106
+      DescID: 10002
       ElementType: scpb.CompositeTypeAttrName
     *scop.NotImplementedForPublicObjects
-      DescID: 106
+      DescID: 10002
       ElementType: scpb.CompositeTypeAttrName
     *scop.RemoveObjectParent
-      ObjectID: 106
+      ObjectID: 10002
       ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 107
+      DescriptorID: 10003
     *scop.RemoveObjectParent
-      ObjectID: 107
+      ObjectID: 10003
       ParentSchemaID: 101
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 106
+        DescriptorID: 10002
         Name: ctyp
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 106
+      DescID: 10002
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 106
+      DescriptorID: 10002
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 106
+      DescriptorID: 10002
       User: public
     *scop.RemoveUserPrivileges
-      DescriptorID: 106
+      DescriptorID: 10002
       User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 107
+        DescriptorID: 10003
         Name: _ctyp
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 107
+      DescID: 10003
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 107
+      DescriptorID: 10003
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 107
+      DescriptorID: 10003
       User: public
     *scop.RemoveUserPrivileges
-      DescriptorID: 107
+      DescriptorID: 10003
       User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
-    [[Owner:{DescID: 106}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 106, Name: public}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], ABSENT] -> PUBLIC
-    [[CompositeType:{DescID: 106}, ABSENT], DROPPED] -> PUBLIC
-    [[CompositeTypeAttrName:{DescID: 106, Name: a}, ABSENT], ABSENT] -> PUBLIC
-    [[CompositeTypeAttrType:{DescID: 106}, ABSENT], ABSENT] -> PUBLIC
-    [[CompositeTypeAttrName:{DescID: 106, Name: b}, ABSENT], ABSENT] -> PUBLIC
-    [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
-    [[Owner:{DescID: 107}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 107, Name: public}, ABSENT], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], ABSENT] -> PUBLIC
-    [[AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT], DROPPED] -> PUBLIC
-    [[SchemaChild:{DescID: 107, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 10002, Name: ctyp, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 10002}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10002, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10002, Name: public}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10002, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[CompositeType:{DescID: 10002}, ABSENT], DROPPED] -> PUBLIC
+    [[CompositeTypeAttrName:{DescID: 10002, Name: a}, ABSENT], ABSENT] -> PUBLIC
+    [[CompositeTypeAttrType:{DescID: 10002}, ABSENT], ABSENT] -> PUBLIC
+    [[CompositeTypeAttrName:{DescID: 10002, Name: b}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 10002, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 10003, Name: _ctyp, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 10003}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10003, Name: admin}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10003, Name: public}, ABSENT], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10003, Name: root}, ABSENT], ABSENT] -> PUBLIC
+    [[AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, ABSENT], DROPPED] -> PUBLIC
+    [[SchemaChild:{DescID: 10003, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 19 MutationType ops
   transitions:
-    [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 106, Name: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[CompositeType:{DescID: 106}, ABSENT], PUBLIC] -> DROPPED
-    [[CompositeTypeAttrName:{DescID: 106, Name: a}, ABSENT], PUBLIC] -> ABSENT
-    [[CompositeTypeAttrType:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[CompositeTypeAttrName:{DescID: 106, Name: b}, ABSENT], PUBLIC] -> ABSENT
-    [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 107, Name: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT], PUBLIC] -> DROPPED
-    [[SchemaChild:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10002, Name: ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10002}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10002, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10002, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10002, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[CompositeType:{DescID: 10002}, ABSENT], PUBLIC] -> DROPPED
+    [[CompositeTypeAttrName:{DescID: 10002, Name: a}, ABSENT], PUBLIC] -> ABSENT
+    [[CompositeTypeAttrType:{DescID: 10002}, ABSENT], PUBLIC] -> ABSENT
+    [[CompositeTypeAttrName:{DescID: 10002, Name: b}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 10002, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10003, Name: _ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10003}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10003, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10003, Name: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10003, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, ABSENT], PUBLIC] -> DROPPED
+    [[SchemaChild:{DescID: 10003, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 106
+      DescriptorID: 10002
     *scop.NotImplementedForPublicObjects
-      DescID: 106
+      DescID: 10002
       ElementType: scpb.CompositeTypeAttrName
     *scop.NotImplementedForPublicObjects
-      DescID: 106
+      DescID: 10002
       ElementType: scpb.CompositeTypeAttrName
     *scop.RemoveObjectParent
-      ObjectID: 106
+      ObjectID: 10002
       ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
-      DescriptorID: 107
+      DescriptorID: 10003
     *scop.RemoveObjectParent
-      ObjectID: 107
+      ObjectID: 10003
       ParentSchemaID: 101
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 106
+        DescriptorID: 10002
         Name: ctyp
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 106
+      DescID: 10002
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 106
+      DescriptorID: 10002
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 106
+      DescriptorID: 10002
       User: public
     *scop.RemoveUserPrivileges
-      DescriptorID: 106
+      DescriptorID: 10002
       User: root
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 107
+        DescriptorID: 10003
         Name: _ctyp
         SchemaID: 101
     *scop.NotImplementedForPublicObjects
-      DescID: 107
+      DescID: 10003
       ElementType: scpb.Owner
     *scop.RemoveUserPrivileges
-      DescriptorID: 107
+      DescriptorID: 10003
       User: admin
     *scop.RemoveUserPrivileges
-      DescriptorID: 107
+      DescriptorID: 10003
       User: public
     *scop.RemoveUserPrivileges
-      DescriptorID: 107
+      DescriptorID: 10003
       User: root
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 106
+      DescriptorID: 10002
       Initialize: true
     *scop.SetJobStateOnDescriptor
-      DescriptorID: 107
+      DescriptorID: 10003
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
         AppName: $ internal-test
         UserName: root
       DescriptorIDs:
-      - 106
-      - 107
+      - 10002
+      - 10003
       JobID: 1
       NonCancelable: true
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
@@ -509,154 +509,154 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
         statementtag: DROP TYPE
 PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:
-    [[CompositeType:{DescID: 106}, ABSENT], DROPPED] -> ABSENT
-    [[AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT], DROPPED] -> ABSENT
+    [[CompositeType:{DescID: 10002}, ABSENT], DROPPED] -> ABSENT
+    [[AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.DeleteDescriptor
-      DescriptorID: 106
+      DescriptorID: 10002
     *scop.DeleteDescriptor
-      DescriptorID: 107
+      DescriptorID: 10003
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 106
+      DescriptorID: 10002
       JobID: 1
     *scop.RemoveJobStateFromDescriptor
-      DescriptorID: 107
+      DescriptorID: 10003
       JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
-      - 106
-      - 107
+      - 10002
+      - 10003
       IsNonCancelable: true
       JobID: 1
 
 deps
 DROP TYPE defaultdb.ctyp
 ----
-- from: [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, DROPPED]
-  to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
+- from: [AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, DROPPED]
+  to:   [AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
-- from: [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, DROPPED]
-  to:   [Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100}, ABSENT]
+- from: [AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, DROPPED]
+  to:   [Namespace:{DescID: 10003, Name: _ctyp, ReferencedDescID: 100}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, DROPPED]
-  to:   [Owner:{DescID: 107}, ABSENT]
+- from: [AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, DROPPED]
+  to:   [Owner:{DescID: 10003}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, DROPPED]
-  to:   [SchemaChild:{DescID: 107, ReferencedDescID: 101}, ABSENT]
+- from: [AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, DROPPED]
+  to:   [SchemaChild:{DescID: 10003, ReferencedDescID: 101}, ABSENT]
   kind: SameStagePrecedence
   rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, DROPPED]
-  to:   [UserPrivileges:{DescID: 107, Name: admin}, ABSENT]
+- from: [AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10003, Name: admin}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, DROPPED]
-  to:   [UserPrivileges:{DescID: 107, Name: public}, ABSENT]
+- from: [AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10003, Name: public}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, DROPPED]
-  to:   [UserPrivileges:{DescID: 107, Name: root}, ABSENT]
+- from: [AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10003, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [CompositeType:{DescID: 106}, DROPPED]
-  to:   [CompositeType:{DescID: 106}, ABSENT]
+- from: [CompositeType:{DescID: 10002}, DROPPED]
+  to:   [CompositeType:{DescID: 10002}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
-- from: [CompositeType:{DescID: 106}, DROPPED]
-  to:   [CompositeTypeAttrName:{DescID: 106, Name: a}, ABSENT]
+- from: [CompositeType:{DescID: 10002}, DROPPED]
+  to:   [CompositeTypeAttrName:{DescID: 10002, Name: a}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [CompositeType:{DescID: 106}, DROPPED]
-  to:   [CompositeTypeAttrName:{DescID: 106, Name: b}, ABSENT]
+- from: [CompositeType:{DescID: 10002}, DROPPED]
+  to:   [CompositeTypeAttrName:{DescID: 10002, Name: b}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [CompositeType:{DescID: 106}, DROPPED]
-  to:   [CompositeTypeAttrType:{DescID: 106}, ABSENT]
+- from: [CompositeType:{DescID: 10002}, DROPPED]
+  to:   [CompositeTypeAttrType:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [CompositeType:{DescID: 106}, DROPPED]
-  to:   [Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT]
+- from: [CompositeType:{DescID: 10002}, DROPPED]
+  to:   [Namespace:{DescID: 10002, Name: ctyp, ReferencedDescID: 100}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [CompositeType:{DescID: 106}, DROPPED]
-  to:   [Owner:{DescID: 106}, ABSENT]
+- from: [CompositeType:{DescID: 10002}, DROPPED]
+  to:   [Owner:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [CompositeType:{DescID: 106}, DROPPED]
-  to:   [SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT]
+- from: [CompositeType:{DescID: 10002}, DROPPED]
+  to:   [SchemaChild:{DescID: 10002, ReferencedDescID: 101}, ABSENT]
   kind: SameStagePrecedence
   rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
-- from: [CompositeType:{DescID: 106}, DROPPED]
-  to:   [UserPrivileges:{DescID: 106, Name: admin}, ABSENT]
+- from: [CompositeType:{DescID: 10002}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10002, Name: admin}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [CompositeType:{DescID: 106}, DROPPED]
-  to:   [UserPrivileges:{DescID: 106, Name: public}, ABSENT]
+- from: [CompositeType:{DescID: 10002}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10002, Name: public}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [CompositeType:{DescID: 106}, DROPPED]
-  to:   [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
+- from: [CompositeType:{DescID: 10002}, DROPPED]
+  to:   [UserPrivileges:{DescID: 10002, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [CompositeTypeAttrName:{DescID: 106, Name: a}, ABSENT]
-  to:   [CompositeType:{DescID: 106}, ABSENT]
+- from: [CompositeTypeAttrName:{DescID: 10002, Name: a}, ABSENT]
+  to:   [CompositeType:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [CompositeTypeAttrName:{DescID: 106, Name: b}, ABSENT]
-  to:   [CompositeType:{DescID: 106}, ABSENT]
+- from: [CompositeTypeAttrName:{DescID: 10002, Name: b}, ABSENT]
+  to:   [CompositeType:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [CompositeTypeAttrType:{DescID: 106}, ABSENT]
-  to:   [CompositeType:{DescID: 106}, ABSENT]
+- from: [CompositeTypeAttrType:{DescID: 10002}, ABSENT]
+  to:   [CompositeType:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT]
-  to:   [CompositeType:{DescID: 106}, ABSENT]
+- from: [Namespace:{DescID: 10002, Name: ctyp, ReferencedDescID: 100}, ABSENT]
+  to:   [CompositeType:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100}, ABSENT]
-  to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
+- from: [Namespace:{DescID: 10003, Name: _ctyp, ReferencedDescID: 100}, ABSENT]
+  to:   [AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 106}, ABSENT]
-  to:   [CompositeType:{DescID: 106}, ABSENT]
+- from: [Owner:{DescID: 10002}, ABSENT]
+  to:   [CompositeType:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 107}, ABSENT]
-  to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
+- from: [Owner:{DescID: 10003}, ABSENT]
+  to:   [AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT]
-  to:   [CompositeType:{DescID: 106}, ABSENT]
+- from: [SchemaChild:{DescID: 10002, ReferencedDescID: 101}, ABSENT]
+  to:   [CompositeType:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 107, ReferencedDescID: 101}, ABSENT]
-  to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
+- from: [SchemaChild:{DescID: 10003, ReferencedDescID: 101}, ABSENT]
+  to:   [AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 106, Name: admin}, ABSENT]
-  to:   [CompositeType:{DescID: 106}, ABSENT]
+- from: [UserPrivileges:{DescID: 10002, Name: admin}, ABSENT]
+  to:   [CompositeType:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 106, Name: public}, ABSENT]
-  to:   [CompositeType:{DescID: 106}, ABSENT]
+- from: [UserPrivileges:{DescID: 10002, Name: public}, ABSENT]
+  to:   [CompositeType:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
-  to:   [CompositeType:{DescID: 106}, ABSENT]
+- from: [UserPrivileges:{DescID: 10002, Name: root}, ABSENT]
+  to:   [CompositeType:{DescID: 10002}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 107, Name: admin}, ABSENT]
-  to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
+- from: [UserPrivileges:{DescID: 10003, Name: admin}, ABSENT]
+  to:   [AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 107, Name: public}, ABSENT]
-  to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
+- from: [UserPrivileges:{DescID: 10003, Name: public}, ABSENT]
+  to:   [AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 107, Name: root}, ABSENT]
-  to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
+- from: [UserPrivileges:{DescID: 10003, Name: root}, ABSENT]
+  to:   [AliasType:{DescID: 10003, ReferencedTypeIDs: [10002 10003]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
