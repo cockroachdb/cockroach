@@ -53,22 +53,25 @@ type srcInitExecFunc func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *s
 type destInitExecFunc func(t *testing.T, sysSQL *sqlutils.SQLRunner) // Tenant is created by the replication stream
 
 type TenantStreamingClustersArgs struct {
-	SrcTenantName      roachpb.TenantName
-	SrcTenantID        roachpb.TenantID
-	SrcInitFunc        srcInitExecFunc
-	SrcNumNodes        int
-	SrcClusterSettings map[string]string
+	SrcTenantName         roachpb.TenantName
+	SrcTenantID           roachpb.TenantID
+	SrcInitFunc           srcInitExecFunc
+	SrcNumNodes           int
+	SrcClusterSettings    map[string]string
+	SrcClusterTestRegions []string
 
 	DestTenantName                 roachpb.TenantName
 	DestTenantID                   roachpb.TenantID
 	DestInitFunc                   destInitExecFunc
 	DestNumNodes                   int
 	DestClusterSettings            map[string]string
+	DestClusterTestRegions         []string
 	RetentionTTLSeconds            int
 	TestingKnobs                   *sql.StreamingTestingKnobs
 	TenantCapabilitiesTestingKnobs *tenantcapabilities.TestingKnobs
 
-	MultitenantSingleClusterNumNodes int
+	MultitenantSingleClusterNumNodes    int
+	MultiTenantSingleClusterTestRegions []string
 }
 
 var DefaultTenantStreamingClustersArgs = TenantStreamingClustersArgs{
@@ -133,6 +136,7 @@ func (c *TenantStreamingClusters) init() {
 	c.SrcSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_split.enabled=true`, c.Args.SrcTenantName)
 	c.SrcSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING sql.virtual_cluster.feature_access.manual_range_scatter.enabled=true`, c.Args.SrcTenantName)
 	c.SrcSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled=true`, c.Args.SrcTenantName)
+	c.SrcSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled=true`, c.Args.SrcTenantName)
 	if c.Args.SrcInitFunc != nil {
 		c.Args.SrcInitFunc(c.T, c.SrcSysSQL, c.SrcTenantSQL)
 	}
@@ -284,9 +288,28 @@ func CreateServerArgs(args TenantStreamingClustersArgs) base.TestServerArgs {
 }
 
 func startC2CTestCluster(
-	ctx context.Context, t *testing.T, serverArgs base.TestServerArgs, numNodes int,
+	ctx context.Context, t *testing.T, serverArgs base.TestServerArgs, numNodes int, regions []string,
 ) (*testcluster.TestCluster, url.URL, func()) {
+
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
+
+	makeLocality := func(locStr string) roachpb.Locality {
+		return roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: locStr}}}
+	}
+	if len(regions) == 1 {
+		params.ServerArgs.Locality = makeLocality(regions[0])
+	}
+	if len(regions) > 1 {
+		require.Equal(t, len(regions), numNodes)
+		serverArgsPerNode := make(map[int]base.TestServerArgs)
+		for i, locality := range regions {
+			param := serverArgs
+			param.Locality = makeLocality(locality)
+			serverArgsPerNode[i] = param
+		}
+		params.ServerArgsPerNode = serverArgsPerNode
+	}
+
 	c := testcluster.StartTestCluster(t, numNodes, params)
 	c.Server(0).Clock().Now()
 	// TODO(casper): support adding splits when we have multiple nodes.
@@ -303,7 +326,7 @@ func CreateMultiTenantStreamingCluster(
 
 	serverArgs := CreateServerArgs(args)
 	cluster, url, cleanup := startC2CTestCluster(ctx, t, serverArgs,
-		args.MultitenantSingleClusterNumNodes)
+		args.MultitenantSingleClusterNumNodes, args.MultiTenantSingleClusterTestRegions)
 
 	destNodeIdx := args.MultitenantSingleClusterNumNodes - 1
 	tsc := &TenantStreamingClusters{
@@ -338,7 +361,7 @@ func CreateTenantStreamingClusters(
 	var srcCleanup func()
 	g.GoCtx(func(ctx context.Context) error {
 		// Start the source cluster.
-		srcCluster, srcURL, srcCleanup = startC2CTestCluster(ctx, t, serverArgs, args.SrcNumNodes)
+		srcCluster, srcURL, srcCleanup = startC2CTestCluster(ctx, t, serverArgs, args.SrcNumNodes, args.SrcClusterTestRegions)
 		return nil
 	})
 
@@ -346,7 +369,7 @@ func CreateTenantStreamingClusters(
 	var destCleanup func()
 	g.GoCtx(func(ctx context.Context) error {
 		// Start the destination cluster.
-		destCluster, _, destCleanup = startC2CTestCluster(ctx, t, serverArgs, args.DestNumNodes)
+		destCluster, _, destCleanup = startC2CTestCluster(ctx, t, serverArgs, args.DestNumNodes, args.DestClusterTestRegions)
 		return nil
 	})
 
@@ -449,8 +472,12 @@ func CreateScatteredTable(t *testing.T, c *TenantStreamingClusters, numNodes int
 }
 
 var defaultSrcClusterSetting = map[string]string{
-	`kv.rangefeed.enabled`:                `true`,
-	`kv.closed_timestamp.target_duration`: `'1s'`,
+	`kv.rangefeed.enabled`: `true`,
+	// Speed up the rangefeed. These were set by squinting at the settings set in
+	// the changefeed integration tests.
+	`kv.closed_timestamp.target_duration`:            `'100ms'`,
+	`kv.rangefeed.closed_timestamp_refresh_interval`: `'200ms'`,
+	`kv.closed_timestamp.side_transport_interval`:    `'50ms'`,
 	// Large timeout makes test to not fail with unexpected timeout failures.
 	`stream_replication.job_liveness.timeout`:            `'3m'`,
 	`stream_replication.stream_liveness_track_frequency`: `'2s'`,

@@ -5,8 +5,8 @@ load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 go_library(
     name = "cli",
     srcs = [
-        "absolute_fs.go",
         "auth.go",
+        "auto_decrypt_fs.go",
         "cert.go",
         "cli.go",
         "client_url.go",
@@ -56,7 +56,6 @@ go_library(
         "start_windows.go",
         "statement_bundle.go",
         "statement_diag.go",
-        "swappable_fs.go",
         "testutils.go",
         "tsdump.go",
         "userfile.go",
@@ -238,6 +237,7 @@ go_library(
         "@com_github_cockroachdb_errors//hintdetail",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//objstorage/remote",
         "@com_github_cockroachdb_pebble//tool",
         "@com_github_cockroachdb_pebble//vfs",
@@ -309,6 +309,7 @@ go_test(
     name = "cli_test",
     size = "large",
     srcs = [
+        "auto_decrypt_fs_test.go",
         "cert_test.go",
         "cli_debug_test.go",
         "cli_test.go",
