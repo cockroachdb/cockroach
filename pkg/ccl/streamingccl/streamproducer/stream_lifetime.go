@@ -192,8 +192,7 @@ func updateReplicationStreamProgress(
 }
 
 // heartbeatReplicationStream updates replication stream progress and advances protected timestamp
-// record to the specified frontier. If 'frontier' is hlc.MaxTimestamp, returns the producer job
-// progress without updating it.
+// record to the specified frontier.
 func heartbeatReplicationStream(
 	ctx context.Context,
 	evalCtx *eval.Context,
@@ -204,32 +203,10 @@ func heartbeatReplicationStream(
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
 	expirationTime := timeutil.Now().Add(timeout)
-	// MaxTimestamp indicates not a real heartbeat, skip updating the producer
-	// job progress.
 	if frontier == hlc.MaxTimestamp {
-		var status streampb.StreamReplicationStatus
-		pj, err := execConfig.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(streamID), txn)
-		if jobs.HasJobNotFoundError(err) || testutils.IsError(err, "not found in system.jobs table") {
-			status.StreamStatus = streampb.StreamReplicationStatus_STREAM_INACTIVE
-			return status, nil
-		}
-		if err != nil {
-			return streampb.StreamReplicationStatus{}, err
-		}
-		status.StreamStatus = convertProducerJobStatusToStreamStatus(pj.Status())
-		payload := pj.Payload()
-		ptsRecord, err := execConfig.ProtectedTimestampProvider.WithTxn(txn).GetRecord(
-			ctx, payload.GetStreamReplication().ProtectedTimestampRecordID,
-		)
-		// Nil protected timestamp indicates it was not created or has been released.
-		if errors.Is(err, protectedts.ErrNotExists) {
-			return status, nil
-		}
-		if err != nil {
-			return streampb.StreamReplicationStatus{}, err
-		}
-		status.ProtectedTimestamp = &ptsRecord.Timestamp
-		return status, nil
+		// NB: We used to allow this as a no-op update to get
+		// the status. That code was removed.
+		return streampb.StreamReplicationStatus{}, pgerror.Newf(pgcode.InvalidParameterValue, "MaxTimestamp no longer accepted as frontier")
 	}
 
 	return updateReplicationStreamProgress(ctx,
