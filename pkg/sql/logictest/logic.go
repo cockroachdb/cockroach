@@ -3051,34 +3051,45 @@ func (t *logicTest) processSubtest(
 			if t.testserverCluster == nil {
 				return errors.Errorf(`could not perform "upgrade", not a cockroach-go/testserver cluster`)
 			}
-			nodeIdx, err := strconv.Atoi(fields[1])
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := t.testserverCluster.UpgradeNode(nodeIdx); err != nil {
-				t.Fatal(err)
-			}
-			for i := 0; i < t.cfg.NumNodes; i++ {
-				// Wait for each node to be reachable, since UpgradeNode uses `kill`
-				// to terminate nodes, and may introduce temporary unavailability in
-				// the system range.
-				if err := t.testserverCluster.WaitForInitFinishForNode(i); err != nil {
+			upgradeNode := func(nodeIdx int) {
+				if err := t.testserverCluster.UpgradeNode(nodeIdx); err != nil {
 					t.Fatal(err)
 				}
-			}
-			// The port may have changed, so we must remove all the cached connections
-			// to this node.
-			for _, m := range t.clients {
-				if c, ok := m[nodeIdx]; ok {
-					_ = c.Close()
+				for i := 0; i < t.cfg.NumNodes; i++ {
+					// Wait for each node to be reachable, since UpgradeNode uses `kill`
+					// to terminate nodes, and may introduce temporary unavailability in
+					// the system range.
+					if err := t.testserverCluster.WaitForInitFinishForNode(i); err != nil {
+						t.Fatal(err)
+					}
 				}
-				delete(m, nodeIdx)
-			}
-			// If we upgraded the node we are currently on, we need to open a new
-			// connection since the previous one might now be invalid.
-			if t.nodeIdx == nodeIdx {
+				// The port may have changed, so we must remove all the cached connections
+				// to this node.
+				for _, m := range t.clients {
+					if c, ok := m[nodeIdx]; ok {
+						_ = c.Close()
+					}
+					delete(m, nodeIdx)
+				}
+				// If we upgraded the node we are currently on, we need to open a new
+				// connection since the previous one might now be invalid.
+				if t.nodeIdx == nodeIdx {
 				t.setUser(t.user, nodeIdx)
+				}
 			}
+			nodeStr := fields[1]
+			if nodeStr == "all" {
+				for i := 0; i < t.cfg.NumNodes; i++ {
+					upgradeNode(i)
+				}
+			} else {
+				nodeIdx, err := strconv.Atoi(nodeStr)
+				if err != nil {
+					t.Fatal(err)
+				}
+				upgradeNode(nodeIdx)
+			}
+
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",
 				path, s.Line+subtest.lineLineIndexIntoFile, cmd,
