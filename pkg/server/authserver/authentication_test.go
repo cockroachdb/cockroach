@@ -792,9 +792,9 @@ func TestAuthenticationMux(t *testing.T) {
 		t.Run("path="+tc.path, func(t *testing.T) {
 			if s.StartedDefaultTestTenant() && strings.HasPrefix(tc.path, ts.URLPrefix) {
 				// As of this writing, timeseries requests to secondary
-				// tenants are overly restricted. This is a bug. See
+				// tenants are overly restricted. This is a feature gap. See
 				// issue #102378.
-				skip.WithIssue(t, 102378)
+				skip.Unimplemented(t, 102378)
 			}
 
 			// Verify normal client returns 401 Unauthorized.
