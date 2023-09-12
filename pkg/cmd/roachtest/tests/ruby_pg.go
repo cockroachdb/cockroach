@@ -22,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -235,10 +237,13 @@ func registerRubyPG(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:             "ruby-pg",
-		Timeout:          1 * time.Hour,
-		Owner:            registry.OwnerSQLFoundations,
-		Cluster:          r.MakeClusterSpec(1),
+		Name:    "ruby-pg",
+		Timeout: 1 * time.Hour,
+		Owner:   registry.OwnerSQLFoundations,
+		// TODO(DarrylWong): This test currently fails on Ubuntu 22.04 so we run it on 20.04.
+		// See: https://github.com/cockroachdb/cockroach/issues/112109
+		// Once this issue is fixed we should remove this Ubuntu Version override.
+		Cluster:          r.MakeClusterSpec(1, spec.UbuntuVersion(vm.FocalFossa)),
 		Leases:           registry.MetamorphicLeases,
 		NativeLibs:       registry.LibGEOS,
 		CompatibleClouds: registry.AllExceptAWS,

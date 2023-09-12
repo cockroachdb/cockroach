@@ -36,10 +36,11 @@ import (
 )
 
 const (
-	defaultProject      = "cockroach-ephemeral"
-	ProviderName        = "gce"
-	DefaultImage        = "ubuntu-2004-focal-v20230817"
-	ARM64Image          = "ubuntu-2004-focal-arm64-v20230817"
+	defaultProject = "cockroach-ephemeral"
+	ProviderName   = "gce"
+	DefaultImage   = "ubuntu-2204-jammy-v20230727"
+	ARM64Image     = "ubuntu-2204-jammy-arm64-v20230727"
+	// TODO(DarrylWong): Upgrade FIPS to Ubuntu 22 when it is available.
 	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
 	defaultImageProject = "ubuntu-os-cloud"
 	FIPSImageProject    = "ubuntu-os-pro-cloud"
@@ -1005,6 +1006,14 @@ func (p *Provider) Create(
 		imageProject = FIPSImageProject
 		l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", image, providerOpts.MachineType)
 	}
+	// If a non default Ubuntu version was specified, we want to use that instead.
+	if opts.UbuntuVersion.IsOverridden() {
+		image, err = getUbuntuImage(opts.UbuntuVersion, opts.Arch)
+		if err != nil {
+			return err
+		}
+		l.Printf("Overriding default Ubuntu image with %s", image)
+	}
 	args := []string{
 		"compute", "instances", "create",
 		"--subnet", "default",
@@ -1079,7 +1088,7 @@ func (p *Provider) Create(
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS))
+	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS), !shouldEnableRSAForSSH(opts.UbuntuVersion, opts.Arch))
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}
@@ -1664,4 +1673,46 @@ func (p *Provider) ProjectActive(project string) bool {
 func lastComponent(url string) string {
 	s := strings.Split(url, "/")
 	return s[len(s)-1]
+}
+
+var (
+	// We define the actual image here because it's different for every provider.
+	focalFossa = vm.UbuntuImages{
+		DefaultImage: "ubuntu-2004-focal-v20230817",
+		ARM64Image:   "ubuntu-2004-focal-arm64-v20230817",
+		FIPSImage:    "ubuntu-pro-fips-2004-focal-v20230811",
+	}
+
+	gceUbuntuImages = map[vm.UbuntuVersion]vm.UbuntuImages{
+		vm.FocalFossa: focalFossa,
+	}
+)
+
+// getUbuntuImage returns the correct Ubuntu image for the specified Ubuntu version and architecture.
+func getUbuntuImage(version vm.UbuntuVersion, arch string) (string, error) {
+	image, ok := gceUbuntuImages[version]
+	if ok {
+		switch arch {
+		case string(vm.ArchAMD64):
+			return image.DefaultImage, nil
+		case string(vm.ArchARM64):
+			return image.ARM64Image, nil
+		case string(vm.ArchFIPS):
+			return image.FIPSImage, nil
+		default:
+			return "", errors.Errorf("Unknown architecture specified.")
+		}
+	}
+
+	return "", errors.Errorf("Unknown Ubuntu version specified.")
+}
+
+// Returns true if the current Ubuntu image is 22.04. RSA SHA1 is no longer supported
+// in 22.04, but is required by Jepsen tests so we enable it. However, some tests are
+// still on Ubuntu 20.04, which will break sshd if we try to enable.
+// TODO(DarrylWong): In the future, when all tests are run on Ubuntu 22.04, we can remove this check and default true.
+// See: https://github.com/cockroachdb/cockroach/issues/112112
+func shouldEnableRSAForSSH(version vm.UbuntuVersion, arch string) bool {
+	// FIPS is not yet available on 22.04, it's still using Ubuntu 20.04.
+	return version.IsOverridden() || arch == string(vm.ArchFIPS)
 }
