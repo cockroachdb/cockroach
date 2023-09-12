@@ -480,7 +480,6 @@ go_test(
         "//pkg/util/circuit",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
-        "//pkg/util/errorutil",
         "//pkg/util/future",
         "//pkg/util/grunning",
         "//pkg/util/hlc",

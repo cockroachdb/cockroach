@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1627,10 +1628,50 @@ func (e *MissingRecordError) SafeFormatError(p errors.Printer) (next error) {
 	return nil
 }
 
+// DescNotFoundError is reported when a descriptor is missing.
+type DescNotFoundError struct {
+	storeID roachpb.StoreID
+	nodeID  roachpb.NodeID
+	isStore bool
+}
+
+// NewStoreDescNotFoundError initializes a new DescNotFoundError for a missing
+// store descriptor.
+func NewStoreDescNotFoundError(storeID roachpb.StoreID) *DescNotFoundError {
+	return &DescNotFoundError{
+		storeID: storeID,
+		isStore: true,
+	}
+}
+
+// NewNodeDescNotFoundError initializes a new DescNotFoundError for a missing
+// node descriptor.
+func NewNodeDescNotFoundError(nodeID roachpb.NodeID) *DescNotFoundError {
+	return &DescNotFoundError{
+		nodeID:  nodeID,
+		isStore: false,
+	}
+}
+
+func (e *DescNotFoundError) Error() string {
+	return redact.Sprint(e).StripMarkers()
+}
+
+func (e *DescNotFoundError) SafeFormatError(p errors.Printer) (next error) {
+	if e.isStore {
+		p.Printf("store descriptor with store ID %d was not found", e.storeID)
+	} else {
+		p.Printf("node descriptor with node ID %d was not found", e.nodeID)
+	}
+	return nil
+}
+
 func init() {
 	errors.RegisterLeafDecoder(errors.GetTypeKey((*MissingRecordError)(nil)), func(_ context.Context, _ string, _ []string, _ proto.Message) error {
 		return &MissingRecordError{}
 	})
+	errorutilpath := reflect.TypeOf(errorutil.TempSentinel{}).PkgPath()
+	errors.RegisterTypeMigration(errorutilpath, "*errorutil.descriptorNotFound", &DescNotFoundError{})
 }
 
 var _ errors.SafeFormatter = &MissingRecordError{}
