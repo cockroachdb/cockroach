@@ -32,6 +32,8 @@ import (
 const commitTemplate = `release: released CockroachDB version %s%s
 
 Release note: None
+Epic: None
+Release justification: non-production (release infra) change.
 `
 
 const releasedVersionFlag = "released-version"
@@ -208,7 +210,7 @@ func (r prRepo) createPullRequest() (string, error) {
 	cmd := exec.Command(parts[0], parts[1:]...)
 	log.Printf("creating PR by running `%s`", strings.Join(parts, " "))
 	cmd.Dir = r.checkoutDir()
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed creating pull request via `%s` with message '%s': %w", cmd.String(), string(out), err)
 	}
