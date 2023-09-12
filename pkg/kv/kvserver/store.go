@@ -179,10 +179,10 @@ var logStoreTelemetryTicks = envutil.EnvOrDefaultInt(
 	6*60,
 )
 
-// defaultRangefeedSchedulerConcurency specifies how many workers rangefeed
+// defaultRangefeedSchedulerConcurrency specifies how many workers rangefeed
 // scheduler will use to perform rangefeed work. This number will be divided
 // between stores of the node.
-var defaultRangefeedSchedulerConcurency = envutil.EnvOrDefaultInt(
+var defaultRangefeedSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_RANGEFEED_SCHEDULER_WORKERS", min(4*runtime.GOMAXPROCS(0), 64))
 
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
@@ -1311,7 +1311,7 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 		sc.TestingKnobs.DisableQuiescence = true
 	}
 	if sc.RangeFeedSchedulerConcurrency == 0 {
-		sc.RangeFeedSchedulerConcurrency = defaultRangefeedSchedulerConcurency
+		sc.RangeFeedSchedulerConcurrency = defaultRangefeedSchedulerConcurrency
 		if numStores > 1 && sc.RangeFeedSchedulerConcurrency > 1 {
 			// We want at least two workers per store to avoid any blocking.
 			sc.RangeFeedSchedulerConcurrency = min(
