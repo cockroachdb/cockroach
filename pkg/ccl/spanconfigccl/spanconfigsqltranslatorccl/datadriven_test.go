@@ -12,9 +12,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -34,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -43,8 +42,6 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
-
-var tableIDPrefixRegexp = regexp.MustCompile("(/Table/)([0-9]+)(.*)")
 
 // TestDataDriven is a data-driven test for the spanconfig.SQLTranslator. It
 // allows users to set up zone config hierarchies and validate their translation
@@ -91,7 +88,7 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		t.Parallel() // SAFE FOR TESTING
+		//t.Parallel() // SAFE FOR TESTING
 		gcWaiter := sync.NewCond(&syncutil.Mutex{})
 		allowGC := true
 		gcTestingKnobs := &sql.GCJobTestingKnobs{
@@ -156,7 +153,17 @@ func TestDataDriven(t *testing.T) {
 		} else {
 			tenant = spanConfigTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)
 		}
+
 		execCfg := tenant.ExecCfg()
+		codec := execCfg.Codec
+
+		// Stop-gap until this issue gets fixed:
+		// https://github.com/cockroachdb/cockroach/issues/110487
+		ie := tenant.InternalExecutor().(*sql.InternalExecutor)
+		_, err := ie.ExecEx(ctx, "force-desc-id", nil, /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			`SELECT setval('system.descriptor_id_seq', 10000)`)
+		require.NoError(t, err)
 
 		var f func(t *testing.T, d *datadriven.TestData) string
 		f = func(t *testing.T, d *datadriven.TestData) string {
@@ -222,46 +229,35 @@ func TestDataDriven(t *testing.T) {
 				for _, record := range records {
 					switch {
 					case record.GetTarget().IsSpanTarget():
-						var translateOutputFmt, spanStr string
+						span := record.GetTarget().GetSpan()
+
+						spanStr := fmt.Sprintf("[%s, %s)", span.Key.String(), span.EndKey.String())
+
 						// The span's table ID may change in multi-node tests. Replace the
 						// table ID with <table-id> or <table-id+1> to make output
 						// deterministic.
-						if isMultiNode {
-							translateOutputFmt = "%-54s %s\n"
-							span := record.GetTarget().GetSpan()
-							parseKey := func(key roachpb.Key) (prefix string, tableID int, suffix string) {
-								keyStr := key.String()
-								matches := tableIDPrefixRegexp.FindStringSubmatch(keyStr)
-								require.Lenf(t, matches, 4, keyStr)
-								prefix = matches[1]
-								var err error
-								tableID, err = strconv.Atoi(matches[2])
-								require.NoErrorf(t, err, keyStr)
-								suffix = matches[3]
-								return
-							}
-							startPrefix, startTableID, startSuffix := parseKey(span.Key)
-							var tableIDPlaceholder = "<table-id>"
-							startKeyStr := fmt.Sprintf("%s%s%s", startPrefix, tableIDPlaceholder, startSuffix)
-							endPrefix, endTableID, endSuffix := parseKey(span.EndKey)
-							switch endTableID {
-							case startTableID:
-							case startTableID + 1:
-								tableIDPlaceholder = "<table-id+1>"
-							default:
-								t.Fatalf("invalid table IDs startTableID=%d endTableID=%d", startTableID, endTableID)
-							}
-							endKeyStr := fmt.Sprintf("%s%s%s", endPrefix, tableIDPlaceholder, endSuffix)
-							spanStr = fmt.Sprintf("[%s, %s)", startKeyStr, endKeyStr)
-						} else {
-							translateOutputFmt = "%-42s %s\n"
-							spanStr = record.GetTarget().GetSpan().String()
+						//
+						// Until this issue gets fixed:
+						// https://github.com/cockroachdb/cockroach/issues/110499
+						// and
+						// https://github.com/cockroachdb/cockroach/issues/110491
+						_, tableID, err := codec.DecodeTablePrefix(span.Key)
+						if err == nil {
+							spanStr = strings.ReplaceAll(spanStr, fmt.Sprintf("/Table/%d", tableID), "/Table/<id>")
+							spanStr = strings.ReplaceAll(spanStr, fmt.Sprintf("/Table/%d", tableID+1), "/Table/<id+1>")
 						}
-						output.WriteString(fmt.Sprintf(translateOutputFmt, spanStr,
-							spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.GetConfig())))
+
+						fmt.Fprintf(&output,
+							"%-54s %s\n",
+							spanStr,
+							spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.GetConfig()),
+						)
 					case record.GetTarget().IsSystemTarget():
-						output.WriteString(fmt.Sprintf("%-42s %s\n", record.GetTarget().GetSystemTarget(),
-							spanconfigtestutils.PrintSystemSpanConfigDiffedAgainstDefault(record.GetConfig())))
+						fmt.Fprintf(&output,
+							"%-42s %s\n",
+							record.GetTarget().GetSystemTarget(),
+							spanconfigtestutils.PrintSystemSpanConfigDiffedAgainstDefault(record.GetConfig()),
+						)
 					default:
 						panic("unsupported target type")
 					}
