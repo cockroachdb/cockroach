@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -34,6 +36,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+// notAReplicationJobError returns an error that is returned anytime
+// the user passes a job ID not related to a replication stream job.
+func notAReplicationJobError(id jobspb.JobID) error {
+	return pgerror.Newf(pgcode.InvalidParameterValue, "job %d is not a replication stream job", id)
+}
+
+// jobIsNotRunningError returns an error that is returned by
+// operations that require a running producer side job.
+func jobIsNotRunningError(id jobspb.JobID, status jobs.Status, op string) error {
+	return pgerror.Newf(pgcode.InvalidParameterValue, "replication job %d must be running (is %s) to %s",
+		id, status, op,
+	)
+}
 
 // startReplicationProducerJob initializes a replication stream producer job on
 // the source cluster that:
@@ -117,6 +133,9 @@ func updateReplicationStreamProgress(
 		if err != nil {
 			return status, err
 		}
+		if _, ok := j.Details().(jobspb.StreamReplicationDetails); !ok {
+			return status, notAReplicationJobError(jobspb.JobID(streamID))
+		}
 		if err := j.WithTxn(txn).Update(ctx, func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
@@ -135,6 +154,7 @@ func updateReplicationStreamProgress(
 				return err
 			}
 			status.ProtectedTimestamp = &ptsRecord.Timestamp
+
 			if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
 				return nil
 			}
@@ -222,17 +242,18 @@ func getReplicationStreamSpec(
 	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, streamID streampb.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
 	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
+	jobID := jobspb.JobID(streamID)
 	// Returns error if the replication stream is not active
-	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(streamID), txn)
+	j, err := jobExecCtx.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not load job for replication stream %d", streamID)
 	}
 	if j.Status() != jobs.StatusRunning {
-		return nil, errors.Errorf("replication stream %d is not running", streamID)
+		return nil, jobIsNotRunningError(jobID, j.Status(), "create stream spec")
 	}
 	details, ok := j.Details().(jobspb.StreamReplicationDetails)
 	if !ok {
-		return nil, errors.Errorf("job with id %d is not a replication stream job", streamID)
+		return nil, notAReplicationJobError(jobspb.JobID(streamID))
 	}
 	return buildReplicationStreamSpec(ctx, evalCtx, details.TenantID, false, details.Spans)
 
@@ -300,6 +321,9 @@ func completeReplicationStream(
 	j, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(streamID), txn)
 	if err != nil {
 		return err
+	}
+	if _, ok := j.Details().(jobspb.StreamReplicationDetails); !ok {
+		return notAReplicationJobError(jobspb.JobID(streamID))
 	}
 	return j.WithTxn(txn).Update(ctx, func(
 		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,

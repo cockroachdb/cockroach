@@ -199,7 +199,8 @@ type TenantState struct {
 // as a PGUrl to the underlying server.
 type ReplicationHelper struct {
 	// SysServer is the backing server.
-	SysServer serverutils.TestServerInterface
+	SysServer  serverutils.ApplicationLayerInterface
+	TestServer serverutils.TestServerInterface
 	// SysSQL is a sql connection to the system tenant.
 	SysSQL *sqlutils.SQLRunner
 	// PGUrl is the pgurl of this server.
@@ -215,7 +216,8 @@ func NewReplicationHelper(
 	ctx := context.Background()
 
 	// Start server
-	s, db, _ := serverutils.StartServer(t, serverArgs)
+	srv, db, _ := serverutils.StartServer(t, serverArgs)
+	s := srv.SystemLayer()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.ExecMultiple(t,
@@ -239,15 +241,16 @@ func NewReplicationHelper(
 	t.Logf("Replication helper seed %d", seed)
 
 	h := &ReplicationHelper{
-		SysServer: s,
-		SysSQL:    sqlutils.MakeSQLRunner(db),
-		PGUrl:     sink,
-		rng:       rng,
+		SysServer:  s,
+		TestServer: srv,
+		SysSQL:     sqlutils.MakeSQLRunner(db),
+		PGUrl:      sink,
+		rng:        rng,
 	}
 
 	return h, func() {
 		cleanupSink()
-		s.Stopper().Stop(ctx)
+		srv.Stopper().Stop(ctx)
 	}
 }
 
@@ -255,7 +258,7 @@ func NewReplicationHelper(
 func (rh *ReplicationHelper) CreateTenant(
 	t *testing.T, tenantID roachpb.TenantID, tenantName roachpb.TenantName,
 ) (TenantState, func()) {
-	_, tenantConn := serverutils.StartTenant(t, rh.SysServer, base.TestTenantArgs{
+	_, tenantConn := serverutils.StartTenant(t, rh.TestServer, base.TestTenantArgs{
 		TenantID:   tenantID,
 		TenantName: tenantName,
 	})

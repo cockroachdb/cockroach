@@ -15,7 +15,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -23,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -45,7 +49,6 @@ type eventStream struct {
 	spec            streampb.StreamPartitionSpec
 	subscribedSpans roachpb.SpanGroup
 	mon             *mon.BytesMonitor
-	acc             mon.BoundAccount
 
 	data tree.Datums // Data to send to the consumer
 
@@ -57,6 +60,7 @@ type eventStream struct {
 	errCh       chan error                    // Signaled when error occurs in rangefeed.
 	streamCh    chan tree.Datums              // Channel signaled to forward datums to consumer.
 	sp          *tracing.Span                 // Span representing the lifetime of the eventStream.
+	acc         mon.BoundAccount
 }
 
 var _ eval.ValueGenerator = (*eventStream)(nil)
@@ -80,6 +84,14 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 	if s.errCh != nil {
 		return errors.AssertionFailedf("expected to be started once")
 	}
+
+	sourceTenantID, err := s.validateProducerJobAndSpec(ctx)
+	if err != nil {
+		return err
+	}
+
+	log.Infof(ctx, "starting physical replication event stream: tenant=%s initial_scan_timestamp=%s previous_replicated_time=%s",
+		sourceTenantID, s.spec.InitialScanTimestamp, s.spec.PreviousReplicatedTimestamp)
 
 	s.acc = s.mon.MakeBoundAccount()
 
@@ -209,7 +221,6 @@ func (s *eventStream) startStreamProcessor(ctx context.Context, frontier *span.F
 	}))
 
 	// TODO(yevgeniy): Add go routine to monitor stream job liveness.
-	// TODO(yevgeniy): Add validation that partition spans are a subset of stream spans.
 }
 
 // Next implements tree.ValueGenerator interface.
@@ -231,15 +242,20 @@ func (s *eventStream) Values() (tree.Datums, error) {
 
 // Close implements tree.ValueGenerator interface.
 func (s *eventStream) Close(ctx context.Context) {
-	s.rf.Close()
+	if s.rf != nil {
+		s.rf.Close()
+	}
 	s.acc.Close(ctx)
-
-	close(s.doneChan)
+	if s.doneChan != nil {
+		close(s.doneChan)
+	}
 	if err := s.streamGroup.Wait(); err != nil {
 		// Note: error in close is normal; we expect to be terminated with context canceled.
 		log.Errorf(ctx, "partition stream %d terminated with error %v", s.streamID, err)
 	}
-	s.sp.Finish()
+	if s.sp != nil {
+		s.sp.Finish()
+	}
 }
 
 func (s *eventStream) onValue(ctx context.Context, value *kvpb.RangeFeedValue) {
@@ -482,6 +498,40 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 			}
 		}
 	}
+}
+
+func (s *eventStream) validateProducerJobAndSpec(ctx context.Context) (roachpb.TenantID, error) {
+	producerJobID := jobspb.JobID(s.streamID)
+	job, err := s.execCfg.JobRegistry.LoadJob(ctx, producerJobID)
+	if err != nil {
+		return roachpb.TenantID{}, err
+	}
+	if job.Status() != jobs.StatusRunning {
+		return roachpb.TenantID{}, jobIsNotRunningError(producerJobID, job.Status(), "stream events")
+	}
+
+	payload := job.Payload()
+	sp, ok := payload.GetDetails().(*jobspb.Payload_StreamReplication)
+	if !ok {
+		return roachpb.TenantID{}, notAReplicationJobError(producerJobID)
+	}
+	if sp.StreamReplication == nil {
+		return roachpb.TenantID{}, errors.AssertionFailedf("unexpected nil StreamReplication in producer job %d payload", producerJobID)
+	}
+
+	// Validate that the requested spans are a subset of the
+	// source tenant's keyspace.
+	sourceTenantID := sp.StreamReplication.TenantID
+	sourceTenantSpans := keys.MakeTenantSpan(sourceTenantID)
+	for _, sp := range s.spec.Spans {
+		if !sourceTenantSpans.Contains(sp) {
+			err := pgerror.Newf(pgcode.InvalidParameterValue, "requested span %s is not contained within the keyspace of source tenant %d",
+				sp,
+				sourceTenantID)
+			return roachpb.TenantID{}, err
+		}
+	}
+	return sourceTenantID, nil
 }
 
 const defaultBatchSize = 1 << 20
