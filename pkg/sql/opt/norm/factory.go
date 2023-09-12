@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/sentryutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -411,7 +412,7 @@ func (f *Factory) onMaxConstructorStackDepthExceeded() {
 	if buildutil.CrdbTestBuild {
 		panic(err)
 	}
-	errorutil.SendReport(f.ctx, &f.evalCtx.Settings.SV, err)
+	sentryutil.SendReport(f.ctx, &f.evalCtx.Settings.SV, err)
 }
 
 // onConstructRelational is called as a final step by each factory method that
