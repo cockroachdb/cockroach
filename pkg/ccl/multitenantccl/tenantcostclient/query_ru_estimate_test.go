@@ -49,6 +49,7 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 	// background load, so we disable running it under stress and/or race.
 	skip.UnderStress(t)
 	skip.UnderRace(t)
+	skip.WithIssue(t, 109179, "this test is flaky due to background activity when run during CI")
 
 	ctx := context.Background()
 
