@@ -87,6 +87,9 @@ type PersistedSQLStats struct {
 	setDraining sync.Once
 	// tasksDoneWG is used to wait for all background tasks to finish.
 	tasksDoneWG sync.WaitGroup
+
+	// The last time the size was checked before doing a flush.
+	lastSizeCheck time.Time
 }
 
 var _ sqlstats.Provider = &PersistedSQLStats{}
