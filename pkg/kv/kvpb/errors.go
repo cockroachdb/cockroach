@@ -1627,6 +1627,55 @@ func (e *MissingRecordError) SafeFormatError(p errors.Printer) (next error) {
 	return nil
 }
 
+// StoreDescNotFoundError is reported when a stored descriptor is missing.
+type StoreDescNotFoundError struct {
+	storeID roachpb.StoreID
+}
+
+// NewStoreDescNotFoundError initializes a new StoreDescNotFoundError.
+func NewStoreDescNotFoundError(storeID roachpb.StoreID) *StoreDescNotFoundError {
+	return &StoreDescNotFoundError{
+		storeID: storeID,
+	}
+}
+
+func (e *StoreDescNotFoundError) Error() string {
+	return redact.Sprint(e).StripMarkers()
+}
+
+func (e *StoreDescNotFoundError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("store descriptor with store ID %d was not found", e.storeID)
+	return nil
+}
+
+// StoreDescNotFoundError is reported when a node descriptor is missing.
+type NodeDescNotFoundError struct {
+	nodeID roachpb.NodeID
+}
+
+// NewNodeDescNotFoundError initializes a new NodeDescNotFoundError.
+func NewNodeDescNotFoundError(nodeID roachpb.NodeID) *NodeDescNotFoundError {
+	return &NodeDescNotFoundError{
+		nodeID: nodeID,
+	}
+}
+
+func (e *NodeDescNotFoundError) Error() string {
+	return redact.Sprint(e).StripMarkers()
+}
+
+func (e *NodeDescNotFoundError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("store descriptor with store ID %d was not found", e.nodeID)
+	return nil
+}
+
+// IsDescriptorNotFoundError returns true if err is a StoreDescNotFoundError or
+// a NodeDescNotFoundError.
+func IsDescriptorNotFoundError(err error) bool {
+	return errors.Is(err, &StoreDescNotFoundError{}) ||
+		errors.Is(err, &NodeDescNotFoundError{})
+}
+
 func init() {
 	errors.RegisterLeafDecoder(errors.GetTypeKey((*MissingRecordError)(nil)), func(_ context.Context, _ string, _ []string, _ proto.Message) error {
 		return &MissingRecordError{}
