@@ -39,15 +39,27 @@ func (h *HistogramData) String() string {
 		SignificantFigures:    h.SignificantFigures,
 		Counts:                h.Counts,
 	})
-	b.WriteString(fmt.Sprintf("min: %.6f\n", float64(hist.Min())/float64(time.Second)))
-	b.WriteString(fmt.Sprintf("max: %.6f\n", float64(hist.Max())/float64(time.Second)))
-	b.WriteString(fmt.Sprintf("p5: %.6f\n", float64(hist.ValueAtQuantile(5))/float64(time.Second)))
-	b.WriteString(fmt.Sprintf("p50: %.6f\n", float64(hist.ValueAtQuantile(50))/float64(time.Second)))
-	b.WriteString(fmt.Sprintf("p90: %.6f\n", float64(hist.ValueAtQuantile(90))/float64(time.Second)))
-	b.WriteString(fmt.Sprintf("p99: %.6f\n", float64(hist.ValueAtQuantile(99))/float64(time.Second)))
-	b.WriteString(fmt.Sprintf("p99_9: %.6f\n", float64(hist.ValueAtQuantile(99.9))/float64(time.Second)))
-	b.WriteString(fmt.Sprintf("mean: %.6f\n", float32(hist.Mean())/float32(time.Second)))
-	b.WriteString(fmt.Sprintf("count: %d\n", hist.TotalCount()))
+	if h.Name == "batch_wait_hist" {
+		b.WriteString(fmt.Sprintf("min: %.6f\n", float64(hist.Min())/float64(time.Second)))
+		b.WriteString(fmt.Sprintf("max: %.6f\n", float64(hist.Max())/float64(time.Second)))
+		b.WriteString(fmt.Sprintf("p5: %.6f\n", float64(hist.ValueAtQuantile(5))/float64(time.Second)))
+		b.WriteString(fmt.Sprintf("p50: %.6f\n", float64(hist.ValueAtQuantile(50))/float64(time.Second)))
+		b.WriteString(fmt.Sprintf("p90: %.6f\n", float64(hist.ValueAtQuantile(90))/float64(time.Second)))
+		b.WriteString(fmt.Sprintf("p99: %.6f\n", float64(hist.ValueAtQuantile(99))/float64(time.Second)))
+		b.WriteString(fmt.Sprintf("p99_9: %.6f\n", float64(hist.ValueAtQuantile(99.9))/float64(time.Second)))
+		b.WriteString(fmt.Sprintf("mean: %.6f\n", float32(hist.Mean())/float32(time.Second)))
+		b.WriteString(fmt.Sprintf("count: %d\n", hist.TotalCount()))
+	} else {
+		b.WriteString(fmt.Sprintf("min: %.6f\n", float64(hist.Min())/float64(1<<20)))
+		b.WriteString(fmt.Sprintf("max: %.6f\n", float64(hist.Max())/float64(1<<20)))
+		b.WriteString(fmt.Sprintf("p5: %.6f\n", float64(hist.ValueAtQuantile(5))/float64(1<<20)))
+		b.WriteString(fmt.Sprintf("p50: %.6f\n", float64(hist.ValueAtQuantile(50))/float64(1<<20)))
+		b.WriteString(fmt.Sprintf("p90: %.6f\n", float64(hist.ValueAtQuantile(90))/float64(1<<20)))
+		b.WriteString(fmt.Sprintf("p99: %.6f\n", float64(hist.ValueAtQuantile(99))/float64(1<<20)))
+		b.WriteString(fmt.Sprintf("p99_9: %.6f\n", float64(hist.ValueAtQuantile(99.9))/float64(1<<20)))
+		b.WriteString(fmt.Sprintf("mean: %.6f\n", float32(hist.Mean())/float32(1<<20)))
+		b.WriteString(fmt.Sprintf("count: %d\n", hist.TotalCount()))
+	}
 
 	return b.String()
 }
@@ -56,6 +68,9 @@ const (
 	sigFigs    = 1
 	minLatency = time.Microsecond
 	maxLatency = 100 * time.Second
+
+	minBytes = 1024              // 1 KB
+	maxBytes = 256 * 1024 * 1024 // 256 MB
 )
 
 // Identity implements the TracingAggregatorEvent interface.
@@ -94,6 +109,7 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 	s.SplitWait += otherStats.SplitWait
 	s.ScatterWait += otherStats.ScatterWait
 	s.CommitWait += otherStats.CommitWait
+	s.AsWrites += otherStats.AsWrites
 
 	// Import the current stats into a new histogram.
 	var batchWaitHist *hdrhistogram.Histogram
@@ -112,10 +128,34 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 	// Store the snapshot of this new merged histogram.
 	cumulativeSnapshot := batchWaitHist.Export()
 	s.BatchWaitHist = &HistogramData{
+		Name:                  "batch_wait_hist",
 		LowestTrackableValue:  cumulativeSnapshot.LowestTrackableValue,
 		HighestTrackableValue: cumulativeSnapshot.HighestTrackableValue,
 		SignificantFigures:    cumulativeSnapshot.SignificantFigures,
 		Counts:                cumulativeSnapshot.Counts,
+	}
+
+	// Import the current stats into a new histogram.
+	var sstSizeHist *hdrhistogram.Histogram
+	if s.SstSizeHist != nil {
+		sstSizeHist = hdrhistogram.Import(&hdrhistogram.Snapshot{
+			LowestTrackableValue:  s.SstSizeHist.LowestTrackableValue,
+			HighestTrackableValue: s.SstSizeHist.HighestTrackableValue,
+			SignificantFigures:    s.SstSizeHist.SignificantFigures,
+			Counts:                s.SstSizeHist.Counts,
+		})
+	} else {
+		sstSizeHist = hdrhistogram.New(minBytes, maxBytes, sigFigs)
+	}
+	_ = sstSizeHist.RecordValue(otherStats.SSTDataSize)
+	// Store the snapshot of this new merged histogram.
+	cumulativeSSTSizeSnapshot := sstSizeHist.Export()
+	s.SstSizeHist = &HistogramData{
+		Name:                  "sst_data_hist",
+		LowestTrackableValue:  cumulativeSSTSizeSnapshot.LowestTrackableValue,
+		HighestTrackableValue: cumulativeSSTSizeSnapshot.HighestTrackableValue,
+		SignificantFigures:    cumulativeSSTSizeSnapshot.SignificantFigures,
+		Counts:                cumulativeSSTSizeSnapshot.Counts,
 	}
 
 	// Duration should not be used in throughput calculations as adding durations
@@ -177,6 +217,7 @@ func (s *IngestionPerformanceStats) String() string {
 	if s.SSTDataSize > 0 {
 		sstDataSizeMB := float64(s.SSTDataSize) / mb
 		b.WriteString(fmt.Sprintf("sst_data_size: %.2f MB\n", sstDataSizeMB))
+		b.WriteString(fmt.Sprintf("sst_data_hist:\n%s\n", s.SstSizeHist.String()))
 
 		if !s.CurrentFlushTime.IsEmpty() && !s.LastFlushTime.IsEmpty() {
 			duration := s.CurrentFlushTime.GoTime().Sub(s.LastFlushTime.GoTime())
@@ -198,6 +239,7 @@ func (s *IngestionPerformanceStats) String() string {
 	b.WriteString(fmt.Sprintf("splits: %d\n", s.Splits))
 	b.WriteString(fmt.Sprintf("scatters: %d\n", s.Scatters))
 	b.WriteString(fmt.Sprintf("scatter_moved: %d\n", s.ScatterMoved))
+	b.WriteString(fmt.Sprintf("as_writes: %d\n", s.AsWrites))
 
 	// Sort store send wait by IDs before adding them as tags.
 	ids := make(roachpb.StoreIDSlice, 0, len(s.SendWaitByStore))

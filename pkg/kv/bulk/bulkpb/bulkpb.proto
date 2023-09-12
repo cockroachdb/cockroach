@@ -19,6 +19,7 @@ import "util/hlc/timestamp.proto";
 message HistogramData {
   option (gogoproto.goproto_stringer) = false;
 
+  string name = 5;
   int64 lowest_trackable_value = 1;
   int64 highest_trackable_value = 2;
   int64 significant_figures = 3;
@@ -103,4 +104,8 @@ message IngestionPerformanceStats {
 
   // SendWaitByStore is the time spent sending batches to each store.
   map<int32, int64> send_wait_by_store = 20 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID", (gogoproto.castvalue) = "time.Duration"];
+
+  int64 as_writes = 25;
+
+  HistogramData sst_size_hist = 26;
 }
