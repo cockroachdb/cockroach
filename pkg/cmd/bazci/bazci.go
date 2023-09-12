@@ -48,6 +48,7 @@ const (
 	buildSubcmd             = "build"
 	runSubcmd               = "run"
 	testSubcmd              = "test"
+	coverageSubcmd          = "coverage"
 	mergeTestXMLsSubcmd     = "merge-test-xmls"
 	mungeTestXMLSubcmd      = "munge-test-xml"
 	beaverHubServerEndpoint = "https://beaver-hub-server-jjd2v2r2dq-uk.a.run.app/process"
@@ -206,7 +207,6 @@ func (s *monitorBuildServer) handleBuildEvent(
 			outputDir = strings.ReplaceAll(outputDir, ":", "/")
 			outputDir = filepath.Join("bazel-testlogs", outputDir)
 			summary := bazelBuildEvent.GetTestSummary()
-			lastAttempt := summary.AttemptCount
 			for _, testResult := range s.testResults[label] {
 				outputDir := outputDir
 				if testResult.run > 1 {
@@ -215,15 +215,16 @@ func (s *monitorBuildServer) handleBuildEvent(
 				if summary != nil && summary.ShardCount > 1 {
 					outputDir = filepath.Join(outputDir, fmt.Sprintf("shard_%d_of_%d", testResult.shard, summary.ShardCount))
 				}
-				// Add `.tc_ignore_attempt#` to the filename of all attempts but the last one. This ensures that
-				// those results are uploaded to TC in case we need them but the results are ignored
-				// by TC because the filename doesn't end with `.xml`.
-				append_tc_ignore := testResult.attempt != lastAttempt
+				// Add `.tc_ignore_attempt#` to the filename of all attempts but the
+				// last one. This ensures that those results are uploaded to TC in case
+				// we need them but the results are ignored by TC because the filename
+				// doesn't end with `.xml`.
+				append_tc_ignore := summary != nil && testResult.attempt != summary.AttemptCount
 				if testResult.testResult == nil {
 					continue
 				}
 				for _, output := range testResult.testResult.TestActionOutput {
-					if output.Name == "test.log" || output.Name == "test.xml" {
+					if output.Name == "test.log" || output.Name == "test.xml" || output.Name == "test.lcov" {
 						src := strings.TrimPrefix(output.GetUri(), "file://")
 						dst := filepath.Join(artifactsDir, outputDir, filepath.Base(src))
 						if append_tc_ignore {
@@ -236,7 +237,7 @@ func (s *monitorBuildServer) handleBuildEvent(
 							s.testXmls = append(s.testXmls, src)
 						}
 					} else {
-						panic(output)
+						panic(fmt.Sprintf("Unknown TestActionOutput: %v", output))
 					}
 				}
 			}
@@ -318,8 +319,9 @@ func sendBepDataToBeaverHub(bepFilepath string) error {
 }
 
 func bazciImpl(cmd *cobra.Command, args []string) error {
-	if args[0] != buildSubcmd && args[0] != runSubcmd && args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd && args[0] != mergeTestXMLsSubcmd {
-		return errors.Newf("First argument must be `build`, `run`, `test`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])
+	if args[0] != buildSubcmd && args[0] != runSubcmd && args[0] != coverageSubcmd &&
+		args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd && args[0] != mergeTestXMLsSubcmd {
+		return errors.Newf("First argument must be `build`, `run`, `test`, `coverage`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])
 	}
 
 	// Special case: munge-test-xml/merge-test-xmls don't require running Bazel at all.

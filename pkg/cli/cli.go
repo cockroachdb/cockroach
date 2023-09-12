@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// Package cli is the command-line library used by the cockroach binary and
+// other utilities. See README.md.
 package cli
 
 import (

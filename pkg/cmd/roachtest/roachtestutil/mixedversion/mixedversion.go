@@ -86,6 +86,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -132,6 +133,12 @@ var (
 	defaultClusterSettings = []install.ClusterSettingOption{
 		install.SecureOption(true),
 	}
+
+	// minSupportedARM64Version is the minimum version for which there
+	// is a published ARM64 build. If we are running a mixedversion test
+	// on ARM64, older versions will be skipped even if the test
+	// requested a certain number of upgrades.
+	minSupportedARM64Version = version.MustParse("v22.2.0")
 
 	defaultTestOptions = testOptions{
 		// We use fixtures more often than not as they are more likely to
@@ -282,6 +289,9 @@ type (
 		// test-only field, allowing us to avoid passing a test.Test
 		// implementation in the tests
 		_buildVersion *version.Version
+		// test-only field, allowing tests to simulate cluster
+		// architectures without passing a cluster.Cluster implementation.
+		_arch *vm.CPUArch
 	}
 
 	shouldStop chan struct{}
@@ -545,7 +555,7 @@ func (t *Test) run(plan *TestPlan) error {
 }
 
 func (t *Test) plan() (*TestPlan, error) {
-	previousReleases, err := t.predecessorFunc(t.prng, t.buildVersion(), t.numUpgrades())
+	previousReleases, err := t.choosePreviousReleases()
 	if err != nil {
 		return nil, err
 	}
@@ -571,11 +581,49 @@ func (t *Test) buildVersion() *version.Version {
 	return t.rt.BuildVersion()
 }
 
+func (t *Test) clusterArch() vm.CPUArch {
+	if t._arch != nil {
+		return *t._arch // test-only
+	}
+
+	return t.cluster.Architecture()
+}
+
 func (t *Test) runCommandFunc(nodes option.NodeListOption, cmd string) userFunc {
 	return func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
 		l.Printf("running command `%s` on nodes %v", cmd, nodes)
 		return t.cluster.RunE(ctx, nodes, cmd)
 	}
+}
+
+// choosePreviousReleases returns a list of predecessor releases
+// relative to the current build version. It uses the
+// `predecessorFunc` field to compute the actual list of
+// predecessors. Special care is taken to avoid using releases that
+// are not available under a certain cluster architecture.
+// Specifically, ARM64 builds are only available on v22.2.0+.
+func (t *Test) choosePreviousReleases() ([]string, error) {
+	history, err := t.predecessorFunc(t.prng, t.buildVersion(), t.numUpgrades())
+	if err != nil {
+		return nil, err
+	}
+
+	if t.clusterArch() != vm.ArchARM64 {
+		return history, nil
+	}
+
+	var releases []string
+	for _, r := range history {
+		if version.MustParse("v" + r).AtLeast(minSupportedARM64Version) {
+			releases = append(releases, r)
+		}
+	}
+
+	if len(releases) != len(history) {
+		t.logger.Printf("WARNING: skipping upgrades as ARM64 is only supported on %s+", minSupportedARM64Version)
+	}
+
+	return releases, nil
 }
 
 // numUpgrades returns the number of upgrades that will be performed
