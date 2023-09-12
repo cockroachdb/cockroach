@@ -59,14 +59,38 @@ type ReplicaMVCCDataIterator struct {
 	err error
 }
 
-// makeAllKeySpans returns all key spans for the given Range, in
+// MakeAllKeySpans returns all key spans for the given Range, in
 // sorted order.
-func makeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
+func MakeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
 		ReplicatedBySpan:      d.RSpan(),
 		ReplicatedByRangeID:   true,
 		UnreplicatedByRangeID: true,
 	})
+}
+
+// MakeAllKeySpanSet is similar to makeAllKeySpans, except it creates a SpanSet
+// instead of a slice of spans. Note that lock table spans are skipped.
+func MakeAllKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
+	spans := Select(d.RangeID, SelectOpts{
+		ReplicatedBySpan:      d.RSpan(),
+		ReplicatedByRangeID:   true,
+		UnreplicatedByRangeID: true,
+		// NB: We don't need to add lock table spans. The caller is expected to add
+		// these.
+		ReplicatedSpansFilter: ReplicatedSpansExcludeLocks,
+	})
+	ss := spanset.New()
+	for _, span := range spans {
+		// Declaring non-MVCC access to the MVCC user keyspan is equivalent to
+		// declaring access at all timestamps.
+		ss.AddNonMVCC(spanset.SpanReadWrite, span)
+	}
+	ss.SortAndDedup()
+	if err := ss.Validate(); err != nil {
+		panic(err)
+	}
+	return ss
 }
 
 // MakeReplicatedKeySpans returns all key spans that are fully Raft
