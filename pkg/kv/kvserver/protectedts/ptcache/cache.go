@@ -83,15 +83,8 @@ func (c *Cache) Iterate(
 	state, lastUpdate := c.mu.state, c.mu.lastUpdate
 	c.mu.RUnlock()
 
-	sp := roachpb.Span{
-		Key:    from,
-		EndKey: to,
-	}
 	for i := range state.Records {
 		r := &state.Records[i]
-		if !overlaps(r, sp) {
-			continue
-		}
 		if wantMore := it(r); !wantMore {
 			break
 		}
@@ -277,13 +270,4 @@ func (c *Cache) upToDate(asOf hlc.Timestamp) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return asOf.LessEq(c.mu.lastUpdate)
-}
-
-func overlaps(r *ptpb.Record, sp roachpb.Span) bool {
-	for i := range r.DeprecatedSpans {
-		if r.DeprecatedSpans[i].Overlaps(sp) {
-			return true
-		}
-	}
-	return false
 }

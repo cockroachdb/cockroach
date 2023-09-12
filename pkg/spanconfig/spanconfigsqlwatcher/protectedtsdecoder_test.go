@@ -71,9 +71,7 @@ func TestProtectedTimestampDecoder(t *testing.T) {
 			pts := ptstorage.WithDatabase(ptp, s0.InternalDB().(isql.DB))
 
 			rec := jobsprotectedts.MakeRecord(
-				uuid.MakeV4(), int64(jobID), ts,
-				nil, /* deprecatedSpans */
-				jobsprotectedts.Jobs, testCase.target,
+				uuid.MakeV4(), int64(jobID), ts, jobsprotectedts.Jobs, testCase.target,
 			)
 			require.NoError(t, pts.Protect(ctx, rec))
 

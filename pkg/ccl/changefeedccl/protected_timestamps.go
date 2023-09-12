@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,12 +32,11 @@ func createProtectedTimestampRecord(
 	resolved hlc.Timestamp,
 ) *ptpb.Record {
 	ptsID := uuid.MakeV4()
-	deprecatedSpansToProtect := makeSpansToProtect(codec, targets)
 	targetToProtect := makeTargetToProtect(targets)
 
 	log.VEventf(ctx, 2, "creating protected timestamp %v at %v", ptsID, resolved)
 	return jobsprotectedts.MakeRecord(
-		ptsID, int64(jobID), resolved, deprecatedSpansToProtect,
+		ptsID, int64(jobID), resolved,
 		jobsprotectedts.Jobs, targetToProtect)
 }
 
@@ -53,24 +51,4 @@ func makeTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
 	})
 	tablesToProtect = append(tablesToProtect, keys.DescriptorTableID)
 	return ptpb.MakeSchemaObjectsTarget(tablesToProtect)
-}
-
-func makeSpansToProtect(codec keys.SQLCodec, targets changefeedbase.Targets) []roachpb.Span {
-	// NB: We add 1 because we're also going to protect system.descriptors.
-	// We protect system.descriptors because a changefeed needs all of the history
-	// of table descriptors to version data.
-	spansToProtect := make([]roachpb.Span, 0, targets.NumUniqueTables()+1)
-	addTablePrefix := func(id uint32) {
-		tablePrefix := codec.TablePrefix(id)
-		spansToProtect = append(spansToProtect, roachpb.Span{
-			Key:    tablePrefix,
-			EndKey: tablePrefix.PrefixEnd(),
-		})
-	}
-	_ = targets.EachTableID(func(id descpb.ID) error {
-		addTablePrefix(uint32(id))
-		return nil
-	})
-	addTablePrefix(keys.DescriptorTableID)
-	return spansToProtect
 }

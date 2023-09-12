@@ -1304,7 +1304,6 @@ func protectTimestampForBackup(
 		*backupDetails.ProtectedTimestampRecord,
 		int64(jobID),
 		tsToProtect,
-		backupManifest.Spans,
 		jobsprotectedts.Jobs,
 		target,
 	))

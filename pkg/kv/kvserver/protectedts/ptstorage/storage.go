@@ -65,11 +65,6 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 		meta = []byte{}
 	}
 
-	// Clear the `DeprecatedSpans` field even if it has been set by the caller.
-	// Once the `AlterSystemProtectedTimestampAddColumn` migration has run, we
-	// only want to persist the `target` on which the pts record applies. We have
-	// already verified that the record has a valid `target`.
-	r.DeprecatedSpans = nil
 	s := makeSettings(p.settings)
 	encodedTarget, err := protoutil.Marshal(&ptpb.Target{Union: r.Target.GetUnion(),
 		IgnoreIfExcludedFromBackup: r.Target.IgnoreIfExcludedFromBackup})
@@ -79,10 +74,11 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 	it, err := p.txn.QueryIteratorEx(ctx, "protectedts-protect", p.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		protectQuery,
-		s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
+		s.maxSpans, s.maxBytes, 0, // TODO(XXX): len(r.DeprecatedSpans),
 		r.ID, r.Timestamp.WithSynthetic(false).AsOfSystemTime(),
 		r.MetaType, meta,
-		len(r.DeprecatedSpans), encodedTarget, encodedTarget)
+		0, // TODO(XXX): len(r.DeprecatedSpans),
+		encodedTarget, encodedTarget)
 	if err != nil {
 		return errors.Wrapf(err, "failed to write record %v", r.ID)
 	}
@@ -265,7 +261,6 @@ func rowToRecord(row tree.Datums, r *ptpb.Record, isDeprecatedRow bool) error {
 	if err := protoutil.Unmarshal([]byte(*row[4].(*tree.DBytes)), &spans); err != nil {
 		return errors.Wrapf(err, "failed to unmarshal span for %v", r.ID)
 	}
-	r.DeprecatedSpans = spans.Spans
 	r.Verified = bool(*row[5].(*tree.DBool))
 
 	if !isDeprecatedRow {

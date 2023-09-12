@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -196,7 +195,7 @@ func manageFullBackupPTSChaining(
 
 	// Resolve the target that needs to be protected on this execution of the
 	// scheduled backup.
-	targetToProtect, deprecatedSpansToProtect, err := getTargetProtectedByBackup(ctx, pts, backupDetails)
+	targetToProtect, err := getTargetProtectedByBackup(ctx, pts, backupDetails)
 	if err != nil {
 		return errors.Wrap(err, "getting target to protect")
 	}
@@ -219,7 +218,7 @@ func manageFullBackupPTSChaining(
 	// schedule is dropped, the reconciliation job will not release the pts
 	// record stored on the inc schedule, and the chaining will continue.
 	ptsRecord, err := protectTimestampRecordForSchedule(
-		ctx, pts, targetToProtect, deprecatedSpansToProtect,
+		ctx, pts, targetToProtect,
 		backupDetails.EndTime, incSj.ScheduleID(),
 	)
 	if err != nil {
@@ -288,30 +287,29 @@ func manageIncrementalBackupPTSChaining(
 
 func getTargetProtectedByBackup(
 	ctx context.Context, pts protectedts.Storage, backupDetails jobspb.BackupDetails,
-) (target *ptpb.Target, deprecatedSpans []roachpb.Span, err error) {
+) (target *ptpb.Target, err error) {
 	if backupDetails.ProtectedTimestampRecord == nil {
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	ptsRecord, err := pts.GetRecord(ctx, *backupDetails.ProtectedTimestampRecord)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return ptsRecord.Target, ptsRecord.DeprecatedSpans, nil
+	return ptsRecord.Target, nil
 }
 
 func protectTimestampRecordForSchedule(
 	ctx context.Context,
 	pts protectedts.Storage,
 	targetToProtect *ptpb.Target,
-	deprecatedSpansToProtect roachpb.Spans,
 	tsToProtect hlc.Timestamp,
 	scheduleID int64,
 ) (uuid.UUID, error) {
 	protectedtsID := uuid.MakeV4()
 	return protectedtsID, pts.Protect(ctx, jobsprotectedts.MakeRecord(
-		protectedtsID, scheduleID, tsToProtect, deprecatedSpansToProtect,
+		protectedtsID, scheduleID, tsToProtect,
 		jobsprotectedts.Schedules, targetToProtect,
 	))
 }

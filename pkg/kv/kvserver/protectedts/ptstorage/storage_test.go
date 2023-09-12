@@ -86,7 +86,7 @@ var testCases = []testCase{
 		name: "Protect - zero timestamp",
 		ops: []op{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
-				rec := newRecord(tCtx, hlc.Timestamp{}, "", nil, tableTarget(42), tableSpan(42))
+				rec := newRecord(hlc.Timestamp{}, "", nil, tableTarget(42))
 				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 					return tCtx.pts.WithTxn(txn).Protect(ctx, &rec)
 				})
@@ -98,8 +98,7 @@ var testCases = []testCase{
 		name: "Protect - already verified",
 		ops: []op{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
-				rec := newRecord(tCtx, tCtx.s.Clock().Now(), "", nil, tableTarget(42),
-					tableSpan(42))
+				rec := newRecord(tCtx.s.Clock().Now(), "", nil, tableTarget(42))
 				rec.Verified = true
 				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 					return tCtx.pts.WithTxn(txn).Protect(ctx, &rec)
@@ -122,7 +121,7 @@ var testCases = []testCase{
 				setMaxSpans(ctx, tCtx, 0)
 			}),
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
-				rec := newRecord(tCtx, tCtx.s.Clock().Now(), "", nil, tableTarget(42), tableSpan(42))
+				rec := newRecord(tCtx.s.Clock().Now(), "", nil, tableTarget(42))
 				rec.ID = pickOneRecord(tCtx).GetBytes()
 				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 					return tCtx.pts.WithTxn(txn).Protect(ctx, &rec)
@@ -296,8 +295,7 @@ var testCases = []testCase{
 		name: "Protect using synthetic timestamp",
 		ops: []op{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
-				rec := newRecord(tCtx, tCtx.s.Clock().Now().WithSynthetic(true), "", nil, tableTarget(42),
-					tableSpan(42))
+				rec := newRecord(tCtx.s.Clock().Now().WithSynthetic(true), "", nil, tableTarget(42))
 				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 					return tCtx.pts.WithTxn(txn).Protect(ctx, &rec)
 				})
@@ -308,7 +306,8 @@ var testCases = []testCase{
 				tCtx.state.Records = append(tCtx.state.Records, rec)
 				tCtx.state.Version++
 				tCtx.state.NumRecords++
-				tCtx.state.NumSpans += uint64(len(rec.DeprecatedSpans))
+				// TODO(XXX)
+				//tCtx.state.NumSpans += uint64(len(rec.DeprecatedSpans))
 				encoded, err := protoutil.Marshal(&ptpb.Target{Union: rec.Target.GetUnion()})
 				require.NoError(t, err)
 				tCtx.state.TotalBytes += uint64(len(encoded))
@@ -358,7 +357,8 @@ func (r releaseOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 		}
 		tCtx.state.Version++
 		tCtx.state.NumRecords--
-		tCtx.state.NumSpans -= uint64(len(rec.DeprecatedSpans))
+		// TODO(XXX)
+		//tCtx.state.NumSpans -= uint64(len(rec.DeprecatedSpans))
 		encoded, err := protoutil.Marshal(&ptpb.Target{Union: rec.Target.GetUnion()})
 		require.NoError(t, err)
 		tCtx.state.TotalBytes -= uint64(len(encoded) + len(rec.Meta) + len(rec.MetaType))
@@ -396,7 +396,7 @@ type protectOp struct {
 }
 
 func (p protectOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
-	rec := newRecord(tCtx, tCtx.s.Clock().Now(), p.metaType, p.meta, p.target, p.spans...)
+	rec := newRecord(tCtx.s.Clock().Now(), p.metaType, p.meta, p.target)
 	if p.idFunc != nil {
 		rec.ID = p.idFunc(tCtx).GetBytes()
 	}
@@ -415,7 +415,8 @@ func (p protectOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 		tCtx.state.Records = append(tCtx.state.Records, tail...)
 		tCtx.state.Version++
 		tCtx.state.NumRecords++
-		tCtx.state.NumSpans += uint64(len(rec.DeprecatedSpans))
+		// TODO(XXX)
+		//tCtx.state.NumSpans += uint64(len(rec.DeprecatedSpans))
 		encoded, err := protoutil.Marshal(&ptpb.Target{Union: rec.Target.GetUnion()})
 		require.NoError(t, err)
 		tCtx.state.TotalBytes += uint64(len(encoded) + len(p.meta) + len(p.metaType))
@@ -541,24 +542,14 @@ func tableSpans(tableIDs ...uint32) []roachpb.Span {
 	return spans
 }
 
-func newRecord(
-	tCtx *testContext,
-	ts hlc.Timestamp,
-	metaType string,
-	meta []byte,
-	target *ptpb.Target,
-	spans ...roachpb.Span,
-) ptpb.Record {
-	// TODO(XXX): remove spans.
-	spans = nil
+func newRecord(ts hlc.Timestamp, metaType string, meta []byte, target *ptpb.Target) ptpb.Record {
 	return ptpb.Record{
-		ID:              uuid.MakeV4().GetBytes(),
-		Timestamp:       ts,
-		Mode:            ptpb.PROTECT_AFTER,
-		MetaType:        metaType,
-		Meta:            meta,
-		DeprecatedSpans: spans,
-		Target:          target,
+		ID:        uuid.MakeV4().GetBytes(),
+		Timestamp: ts,
+		Mode:      ptpb.PROTECT_AFTER,
+		MetaType:  metaType,
+		Meta:      meta,
+		Target:    target,
 	}
 }
 
@@ -583,7 +574,7 @@ func TestCorruptData(t *testing.T) {
 
 	runCorruptDataTest := func(tCtx *testContext, s serverutils.TestServerInterface,
 		tc *testcluster.TestCluster, pts protectedts.Storage) {
-		rec := newRecord(tCtx, s.Clock().Now(), "foo", []byte("bar"), tableTarget(42), tableSpan(42))
+		rec := newRecord(s.Clock().Now(), "foo", []byte("bar"), tableTarget(42))
 		require.NoError(t, pts.Protect(ctx, &rec))
 
 		db := tc.Server(0).InternalDB().(isql.DB)
@@ -646,7 +637,7 @@ func TestCorruptData(t *testing.T) {
 		s := tc.Server(0)
 		ptp := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		pts := ptstorage.WithDatabase(ptp, s.InternalDB().(isql.DB))
-		rec := newRecord(&testContext{}, s.Clock().Now(), "foo", []byte("bar"), tableTarget(42), tableSpan(42))
+		rec := newRecord(s.Clock().Now(), "foo", []byte("bar"), tableTarget(42))
 		require.NoError(t, pts.Protect(ctx, &rec))
 
 		// This timestamp has too many logical digits and thus will fail parsing.
@@ -694,7 +685,7 @@ func TestErrorsFromSQL(t *testing.T) {
 	pts := ptstorage.New(s.ClusterSettings())
 	db := s.InternalDB().(isql.DB)
 	errFunc := func(string) error { return errors.New("boom") }
-	rec := newRecord(&testContext{}, s.Clock().Now(), "foo", []byte("bar"), tableTarget(42), tableSpan(42))
+	rec := newRecord(s.Clock().Now(), "foo", []byte("bar"), tableTarget(42))
 	require.EqualError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return pts.WithTxn(wrapTxn(txn, errFunc)).Protect(ctx, &rec)
 	}), fmt.Sprintf("failed to write record %v: boom", rec.ID))

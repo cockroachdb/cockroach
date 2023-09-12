@@ -248,9 +248,9 @@ func (s *Tenant) MakeProtectedTimestampRecordAndProtect(
 				"datadriven test only supports single character record IDs")
 			recID, err := uuid.FromBytes([]byte(strings.Repeat(recordID, 16)))
 			require.NoError(s.t, err)
-			rec := jobsprotectedts.MakeRecord(recID, int64(jobID),
-				hlc.Timestamp{WallTime: int64(protectTS)}, nil, /* deprecatedSpans */
-				jobsprotectedts.Jobs, target)
+			rec := jobsprotectedts.MakeRecord(
+				recID, int64(jobID), hlc.Timestamp{WallTime: int64(protectTS)}, jobsprotectedts.Jobs, target,
+			)
 			return s.ProtectedTimestampProvider().WithTxn(txn).Protect(ctx, rec)
 		}))
 	s.updateTimestampAfterLastSQLChange()

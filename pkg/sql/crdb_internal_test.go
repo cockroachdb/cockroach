@@ -1754,7 +1754,6 @@ func TestVirtualPTSTable(t *testing.T) {
 			uuid.MakeV4(),
 			int64(job.ID()),
 			s.Clock().Now(),
-			[]roachpb.Span{},
 			jobsprotectedts.Jobs,
 			tableTargets(),
 		)
@@ -1797,7 +1796,6 @@ func TestVirtualPTSTable(t *testing.T) {
 			uuid.MakeV4(),
 			sj.ScheduleID(),
 			s.Clock().Now(),
-			[]roachpb.Span{},
 			jobsprotectedts.Schedules,
 			tableTargets(),
 		)
