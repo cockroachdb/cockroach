@@ -26,6 +26,9 @@ const (
 	// ReplicatedSpansUserOnly includes just user keys, and no other replicated
 	// spans.
 	ReplicatedSpansUserOnly
+	// ReplicatedSpansExcludeLockTable includes all replicated spans except for the
+	// lock table.
+	ReplicatedSpansExcludeLocks
 )
 
 // SelectOpts configures which spans for a Replica to return from Select.
@@ -81,7 +84,7 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 			sl = append(sl, makeRangeLocalKeySpan(in))
 
 			// Lock table.
-			{
+			if opts.ReplicatedSpansFilter != ReplicatedSpansExcludeLocks {
 				// Handle doubly-local lock table keys since range descriptor key
 				// is a range local key that can have a replicated lock acquired on it.
 				startRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(in.Key), nil)

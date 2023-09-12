@@ -15,7 +15,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
-        "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//rangekey",

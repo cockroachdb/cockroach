@@ -243,10 +243,10 @@ func (r *Replica) GetSnapshot(
 	if r.store.cfg.SharedStorageEnabled || storage.UseEFOS.Get(&r.ClusterSettings().SV) {
 		var ss *spanset.SpanSet
 		r.mu.RLock()
-		spans := rditer.MakeReplicatedKeySpans(r.mu.state.Desc)
+		spans := rditer.MakeAllKeySpans(r.mu.state.Desc) // needs unreplicated to access Raft state
 		startKey = r.mu.state.Desc.StartKey
 		if util.RaceEnabled {
-			ss = rditer.MakeReplicatedKeySpanSet(r.mu.state.Desc)
+			ss = rditer.MakeAllKeySpanSet(r.mu.state.Desc)
 			defer ss.Release()
 		}
 		r.mu.RUnlock()
