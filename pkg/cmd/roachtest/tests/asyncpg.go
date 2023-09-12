@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
 const asyncpgRunTestCmd = `
@@ -140,7 +141,7 @@ func registerAsyncpg(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "asyncpg",
 		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1, spec.CPU(16)),
+		Cluster: r.MakeClusterSpec(1, spec.CPU(16), spec.UbuntuVersion(vm.FocalFossa)),
 		Tags:    registry.Tags(`default`, `orm`),
 		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

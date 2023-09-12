@@ -254,3 +254,14 @@ func (r *randomlyUseZfs) apply(spec *ClusterSpec) {
 func RandomlyUseZfs() Option {
 	return &randomlyUseZfs{}
 }
+
+type ubuntuVersion vm.UbuntuVersion
+
+func (u ubuntuVersion) apply(spec *ClusterSpec) {
+	spec.UbuntuVersion = vm.UbuntuVersion(u)
+}
+
+// UbuntuVersion controls what Ubuntu Version is used to create the cluster.
+func UbuntuVersion(u vm.UbuntuVersion) Option {
+	return ubuntuVersion(u)
+}
