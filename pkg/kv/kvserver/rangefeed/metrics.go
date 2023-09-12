@@ -38,7 +38,7 @@ var (
 	}
 	metaRangeFeedRegistrations = metric.Metadata{
 		Name:        "kv.rangefeed.registrations",
-		Help:        "Number of active rangefeed registrations",
+		Help:        "Number of active RangeFeed registrations",
 		Measurement: "Registrations",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -52,6 +52,18 @@ var (
 		Name:        "kv.rangefeed.processors_scheduler",
 		Help:        "Number of active RangeFeed processors using scheduler",
 		Measurement: "Processors",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaQueueTimeHistograms = metric.Metadata{
+		Name:        "kv.rangefeed.scheduler.latency",
+		Help:        "KV RangeFeed scheduler latency",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaQueueSize = metric.Metadata{
+		Name:        "kv.rangefeed.scheduler.queue_size",
+		Help:        "Number of entries in the KV RangeFeed scheduler queue",
+		Measurement: "Pending Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
 )
@@ -118,5 +130,28 @@ func NewFeedBudgetMetrics(histogramWindow time.Duration) *FeedBudgetPoolMetrics 
 			"Memory usage by rangefeeds on system ranges")),
 		SharedBytesCount: metric.NewGauge(makeMemMetricMetadata("shared",
 			"Memory usage by rangefeeds")),
+	}
+}
+
+// SchedulerMetrics for production monitoring of rangefeed Scheduler.
+type SchedulerMetrics struct {
+	// QueueTime is time spent by range in scheduler queue.
+	QueueTime metric.IHistogram
+	// QueueSize is number of elements in the queue recently observed by reader.
+	QueueSize *metric.Gauge
+}
+
+// MetricStruct implements metrics.Struct interface.
+func (*SchedulerMetrics) MetricStruct() {}
+
+func NewSchedulerMetrics(histogramWindow time.Duration) *SchedulerMetrics {
+	return &SchedulerMetrics{
+		QueueTime: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     metaQueueTimeHistograms,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
+		QueueSize: metric.NewGauge(metaQueueSize),
 	}
 }

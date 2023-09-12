@@ -1996,14 +1996,19 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return err
 	}
 
-	rfs := rangefeed.NewScheduler(rangefeed.SchedulerConfig{
-		Workers:   s.cfg.RangeFeedSchedulerConcurrency,
-		ShardSize: s.cfg.RangeFeedSchedulerShardSize,
-	})
-	if err = rfs.Start(ctx, s.stopper); err != nil {
-		return err
+	{
+		m := rangefeed.NewSchedulerMetrics(s.cfg.HistogramWindowInterval)
+		rfs := rangefeed.NewScheduler(rangefeed.SchedulerConfig{
+			Workers:   s.cfg.RangeFeedSchedulerConcurrency,
+			ShardSize: s.cfg.RangeFeedSchedulerShardSize,
+			Metrics:   m,
+		})
+		s.Registry().AddMetricStruct(m)
+		if err = rfs.Start(ctx, s.stopper); err != nil {
+			return err
+		}
+		s.rangefeedScheduler = rfs
 	}
-	s.rangefeedScheduler = rfs
 
 	s.rangefeedRestarter.start(ctx, stopper)
 
