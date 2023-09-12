@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
@@ -386,10 +387,15 @@ func newTest(options ...customOption) *Test {
 		crdbNodes:       nodes,
 		options:         testOptions,
 		_buildVersion:   buildVersion,
+		_arch:           archP(vm.ArchAMD64),
 		prng:            prng,
 		hooks:           &testHooks{prng: prng, crdbNodes: nodes},
 		predecessorFunc: testPredecessorFunc,
 	}
+}
+
+func archP(a vm.CPUArch) *vm.CPUArch {
+	return &a
 }
 
 // Always use the same predecessor version to make this test
