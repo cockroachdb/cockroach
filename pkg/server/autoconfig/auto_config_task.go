@@ -93,6 +93,11 @@ func (r *taskRunner) OnFailOrCancel(ctx context.Context, execCtx interface{}, jo
 	return nil
 }
 
+// CollectProfile implements the jobs.Resumer interface.
+func (r *taskRunner) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // Resume is part of the Resumer interface.
 func (r *taskRunner) Resume(ctx context.Context, execCtx interface{}) error {
 	ctx = logtags.AddTag(ctx, "taskenv", r.envID)

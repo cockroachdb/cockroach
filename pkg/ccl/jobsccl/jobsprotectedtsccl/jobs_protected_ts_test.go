@@ -64,6 +64,10 @@ func (f fakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ error)
 	return ctx.Err()
 }
 
+func (f fakeResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 func testJobsProtectedTimestamp(
 	ctx context.Context,
 	t *testing.T,

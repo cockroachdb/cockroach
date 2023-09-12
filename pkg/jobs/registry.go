@@ -1454,6 +1454,11 @@ type Resumer interface {
 	// cannot assume that any other methods have been called on this Resumer
 	// object.
 	OnFailOrCancel(ctx context.Context, execCtx interface{}, jobErr error) error
+
+	// CollectProfile is called when a job has been requested to collect a job
+	// profile. This profile may contain any information that provides enhanced
+	// observability into a job's execution.
+	CollectProfile(ctx context.Context, execCtx interface{}) error
 }
 
 // RegisterOption is the template for options passed to the RegisterConstructor

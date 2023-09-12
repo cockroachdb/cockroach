@@ -93,6 +93,11 @@ func (r *sqlStatsCompactionResumer) OnFailOrCancel(
 	return r.maybeNotifyJobTerminated(ctx, execCfg.InternalDB, execCfg.JobsKnobs(), jobs.StatusFailed)
 }
 
+// CollectProfile implements the jobs.Resumer interface.
+func (r *sqlStatsCompactionResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // maybeNotifyJobTerminated will notify the job termination
 // (with termination status).
 func (r *sqlStatsCompactionResumer) maybeNotifyJobTerminated(

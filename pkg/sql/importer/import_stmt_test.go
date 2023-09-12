@@ -5281,6 +5281,10 @@ func (d fakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ error)
 	return nil
 }
 
+func (d fakeResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // TestImportControlJobRBAC tests that a root user can control any job, but
 // a non-admin user can only control jobs which are created by them.
 // TODO(adityamaru): Verifying the state of the job after the control command
