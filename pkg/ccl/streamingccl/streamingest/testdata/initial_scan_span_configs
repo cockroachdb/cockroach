@@ -77,3 +77,13 @@ list-ttls as=destination-system min_table_id=$min_table_id max_table_id=$max_tab
 1234
 14400
 
+let $cutover as=source-system
+SELECT clock_timestamp()::timestamp::string
+----
+
+cutover ts=$cutover
+----
+
+start-replicated-tenant
+----
+
