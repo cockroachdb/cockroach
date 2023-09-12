@@ -107,17 +107,17 @@ func ClearRange(
 		},
 	}
 
-	// Check for any intents, and return them for the caller to resolve. This
+	// Check for any locks, and return them for the caller to resolve. This
 	// prevents removal of intents belonging to implicitly committed STAGING
 	// txns. Otherwise, txn recovery would fail to find these intents and
 	// consider the txn incomplete, uncommitting it and its writes (even those
 	// outside of the cleared range).
 	maxIntents := storage.MaxIntentsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
-	intents, err := storage.ScanIntents(ctx, readWriter, from, to, maxIntents, 0)
+	locks, err := storage.ScanLocks(ctx, readWriter, from, to, maxIntents, 0)
 	if err != nil {
 		return result.Result{}, err
-	} else if len(intents) > 0 {
-		return result.Result{}, &kvpb.LockConflictError{Locks: roachpb.AsLocks(intents)}
+	} else if len(locks) > 0 {
+		return result.Result{}, &kvpb.LockConflictError{Locks: locks}
 	}
 
 	// Before clearing, compute the delta in MVCCStats.

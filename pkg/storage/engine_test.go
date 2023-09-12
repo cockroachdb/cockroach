@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -1546,24 +1547,30 @@ func TestGetIntent(t *testing.T) {
 	}
 }
 
-func TestScanIntents(t *testing.T) {
+func TestScanLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	maxKey := keys.MaxKey
 
-	keys := []roachpb.Key{
-		roachpb.Key("a"),
-		roachpb.Key("b"),
-		roachpb.Key("c"),
+	locks := map[string]lock.Strength{
+		"a": lock.Shared,
+		"b": lock.Exclusive,
+		"c": lock.Intent,
 	}
+	var keys []roachpb.Key
+	for k := range locks {
+		keys = append(keys, roachpb.Key(k))
+	}
+	sort.Slice(keys, func(i, j int) bool { return bytes.Compare(keys[i], keys[j]) < 0 })
+
 	testcases := map[string]struct {
-		from          roachpb.Key
-		to            roachpb.Key
-		max           int64
-		targetBytes   int64
-		expectIntents []roachpb.Key
+		from        roachpb.Key
+		to          roachpb.Key
+		max         int64
+		targetBytes int64
+		expectLocks []roachpb.Key
 	}{
 		"no keys":         {keys[0], keys[0], 0, 0, keys[:0]},
 		"one key":         {keys[0], keys[1], 0, 0, keys[0:1]},
@@ -1586,19 +1593,26 @@ func TestScanIntents(t *testing.T) {
 	require.NoError(t, err)
 	defer eng.Close()
 
-	for _, key := range keys {
-		err := MVCCPut(ctx, eng, key, txn1.ReadTimestamp, roachpb.Value{RawBytes: key}, MVCCWriteOptions{Txn: txn1})
+	for k, str := range locks {
+		var err error
+		if str == lock.Intent {
+			err = MVCCPut(ctx, eng, roachpb.Key(k), txn1.ReadTimestamp, roachpb.Value{RawBytes: roachpb.Key(k)}, MVCCWriteOptions{Txn: txn1})
+		} else {
+			err = MVCCAcquireLock(ctx, eng, txn1, str, roachpb.Key(k), nil, 0)
+		}
 		require.NoError(t, err)
 	}
 
 	for name, tc := range testcases {
 		tc := tc
 		t.Run(name, func(t *testing.T) {
-			intents, err := ScanIntents(ctx, eng, tc.from, tc.to, tc.max, tc.targetBytes)
+			scannedLocks, err := ScanLocks(ctx, eng, tc.from, tc.to, tc.max, tc.targetBytes)
 			require.NoError(t, err)
-			require.Len(t, intents, len(tc.expectIntents), "unexpected number of separated intents")
-			for i, intent := range intents {
-				require.Equal(t, tc.expectIntents[i], intent.Key)
+			require.Len(t, scannedLocks, len(tc.expectLocks), "unexpected number of locks")
+			for i, l := range scannedLocks {
+				require.Equal(t, tc.expectLocks[i], l.Key)
+				require.Equal(t, txn1.TxnMeta, l.Txn)
+				require.Equal(t, locks[string(l.Key)], l.Strength)
 			}
 		})
 	}
@@ -1825,11 +1839,11 @@ func TestEngineClearRange(t *testing.T) {
 
 				// Check intent clears.
 				if tc.clearsIntents {
-					require.Equal(t, []roachpb.Key{roachpb.Key("a"), roachpb.Key("g")}, scanIntentKeys(t, rw))
+					require.Equal(t, []roachpb.Key{roachpb.Key("a"), roachpb.Key("g")}, scanLockKeys(t, rw))
 				} else {
 					require.Equal(t, []roachpb.Key{
 						roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("e"), roachpb.Key("g"),
-					}, scanIntentKeys(t, rw))
+					}, scanLockKeys(t, rw))
 				}
 
 				// Which range keys we find will depend on the clearer.
@@ -2600,18 +2614,18 @@ func scanPointKeys(t *testing.T, r Reader) []MVCCKey {
 	return pointKeys
 }
 
-// scanIntentKeys scans all separated intents from the reader, ignoring
-// provisional values.
-func scanIntentKeys(t *testing.T, r Reader) []roachpb.Key {
+// scanLockKeys scans all locks from the reader, ignoring the provisional values
+// of intents.
+func scanLockKeys(t *testing.T, r Reader) []roachpb.Key {
 	t.Helper()
 
-	var intentKeys []roachpb.Key
-	intents, err := ScanIntents(context.Background(), r, keys.LocalMax, keys.MaxKey, 0, 0)
+	var lockKeys []roachpb.Key
+	locks, err := ScanLocks(context.Background(), r, keys.LocalMax, keys.MaxKey, 0, 0)
 	require.NoError(t, err)
-	for _, intent := range intents {
-		intentKeys = append(intentKeys, intent.Key.Clone())
+	for _, l := range locks {
+		lockKeys = append(lockKeys, l.Key)
 	}
-	return intentKeys
+	return lockKeys
 }
 
 // scanIter scans all point/range keys from the iterator, and returns a combined
