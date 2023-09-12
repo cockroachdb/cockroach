@@ -989,6 +989,17 @@ func ColumnTypesWithInvertedCol(columns []Column, invertedCol Column) []*types.T
 	return t
 }
 
+// ColumnsByIDs returns a map of Columns keyed by their ID for the given table.
+func ColumnsByIDs(tbl TableDescriptor) map[descpb.ColumnID]Column {
+	cols := tbl.AllColumns()
+	byID := make(map[descpb.ColumnID]Column, len(cols))
+	for i := range cols {
+		col := cols[i]
+		byID[col.GetID()] = col
+	}
+	return byID
+}
+
 // ColumnNeedsBackfill returns true if adding or dropping (according to
 // the direction) the given column requires backfill.
 func ColumnNeedsBackfill(col Column) bool {
