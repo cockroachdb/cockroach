@@ -694,11 +694,6 @@ func (ts *testServer) Activate(ctx context.Context) error {
 		return err
 	}
 
-	// Let clients connect.
-	if err := ts.topLevelServer.AcceptClients(ctx); err != nil {
-		return err
-	}
-
 	if err := ts.maybeStartDefaultTestTenant(ctx); err != nil {
 		return err
 	}
@@ -707,6 +702,11 @@ func (ts *testServer) Activate(ctx context.Context) error {
 		if err := maybeRunVersionUpgrade(ts.TestTenant()); err != nil {
 			return err
 		}
+	}
+
+	// Let clients connect.
+	if err := ts.topLevelServer.AcceptClients(ctx); err != nil {
+		return err
 	}
 
 	go func() {
@@ -723,6 +723,7 @@ func (ts *testServer) Activate(ctx context.Context) error {
 		case <-ts.Stopper().ShouldQuiesce():
 		}
 	}()
+
 	return nil
 }
 
