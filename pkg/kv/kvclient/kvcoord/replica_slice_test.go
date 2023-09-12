@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
@@ -39,7 +39,7 @@ func (ns *mockNodeStore) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.Node
 			return &nd, nil
 		}
 	}
-	return nil, errorutil.NewNodeNotFoundError(nodeID)
+	return nil, kvpb.NewNodeDescNotFoundError(nodeID)
 }
 
 // GetNodeDescriptorCount is part of the NodeDescStore interface.
@@ -51,7 +51,7 @@ func (ns *mockNodeStore) GetNodeDescriptorCount() int {
 func (ns *mockNodeStore) GetStoreDescriptor(
 	storeID roachpb.StoreID,
 ) (*roachpb.StoreDescriptor, error) {
-	return nil, errorutil.NewStoreNotFoundError(storeID)
+	return nil, kvpb.NewStoreDescNotFoundError(storeID)
 }
 
 func TestNewReplicaSlice(t *testing.T) {
