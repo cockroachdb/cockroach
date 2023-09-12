@@ -67,6 +67,7 @@ func registerAcceptance(r registry.Registry) {
 				fn:            runVersionUpgrade,
 				timeout:       30 * time.Minute,
 				defaultLeases: true,
+				skip:          "https://github.com/cockroachdb/cockroach/issues/110455",
 			},
 		},
 		registry.OwnerDisasterRecovery: {
