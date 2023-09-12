@@ -13,11 +13,6 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
-	"fmt"
-	"math/rand"
-	"strings"
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -29,16 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
+	"math/rand"
+	"time"
 )
-
-// possibleNumIncrementalBackups are the possible lengths of the incremental
-// backup chain for the backup in the round trip test.
-var possibleNumIncrementalBackups = []int{
-	1,
-	5,
-	20,
-}
 
 func registerBackupRestoreRoundTrip(r registry.Registry) {
 	// backup-restore/round-trip tests that a round trip of creating a backup and
@@ -73,113 +61,64 @@ func backupRestoreRoundTrip(ctx context.Context, t test.Test, c cluster.Cluster)
 	m := c.NewMonitor(ctx, roachNodes)
 
 	m.Go(func(ctx context.Context) error {
-		d, err := newBackupRestoreTestDriver(ctx, t, c, roachNodes, "bank", "tpcc")
+		testUtils, err := newCommonTestUtils(ctx, t, c, roachNodes)
+		if err != nil {
+			return err
+		}
+		defer testUtils.CloseConnections()
+
+		dbs := []string{"bank", "tpcc"}
+		stopBackgroundCommands, err := startBackgroundWorkloads(ctx, t.L(), c, m, testRNG, roachNodes, workloadNode, testUtils, dbs)
 		if err != nil {
 			return err
 		}
 
-		stopBackgroundCommands, err := startBackgroundWorkloads(ctx, t.L(), c, testRNG, workloadNode, d)
+		tables, err := testUtils.loadTablesForDBs(ctx, t.L(), testRNG, dbs...)
 		if err != nil {
 			return err
 		}
 
-		if err := d.loadTables(ctx, t.L(), testRNG); err != nil {
+		d, err := newBackupRestoreTestDriver(ctx, t, c, testUtils, roachNodes, dbs, tables)
+		if err != nil {
 			return err
 		}
-		if err := d.setShortJobIntervals(testRNG); err != nil {
+
+		if err := testUtils.setShortJobIntervals(ctx, testRNG); err != nil {
 			return err
 		}
-		if err := d.setClusterSettings(t.L(), testRNG); err != nil {
+		if err := testUtils.setClusterSettings(ctx, t.L(), testRNG); err != nil {
 			return err
 		}
 
 		// Run backups.
-		if err := runBackupsAndSaveContents(ctx, t.L(), testRNG, roachNodes, pauseProbability, d); err != nil {
+		allNodes := labeledNodes{Nodes: roachNodes, Version: clusterupgrade.MainVersion}
+		bspec := backupSpec{
+			PauseProbability: pauseProbability,
+			Plan:             allNodes,
+			Execute:          allNodes,
+		}
+		collection, err := d.createBackupCollection(ctx, t.L(), testRNG, bspec, bspec, "round-trip-test-backup", true)
+		if err != nil {
 			return err
 		}
 
-		if err := stopBackgroundCommands(); err != nil {
-			return err
-		}
+		stopBackgroundCommands()
 
-		expectDeathsFn := func(n int) {
-			m.ExpectDeaths(int32(n))
+		if _, ok := collection.btype.(*clusterBackup); ok {
+			expectDeathsFn := func(n int) {
+				m.ExpectDeaths(int32(n))
+			}
+
+			if err := testUtils.resetCluster(ctx, t.L(), clusterupgrade.MainVersion, expectDeathsFn); err != nil {
+				return err
+			}
 		}
 
 		// Verify content in backups.
-		if err := d.verifyAllBackupsOnVersions(ctx, t.L(), testRNG, expectDeathsFn, clusterupgrade.MainVersion); err != nil {
-			return err
-		}
-		return nil
+		return collection.verifyBackupCollection(ctx, t.L(), testRNG, d, true /* checkFiles */, true /* internalSystemJobs */)
 	})
 
 	m.Wait()
-}
-
-func runBackupsAndSaveContents(
-	ctx context.Context,
-	l *logger.Logger,
-	rng *rand.Rand,
-	nodes option.NodeListOption,
-	pauseProbability float64,
-	driver *BackupRestoreTestDriver,
-) error {
-	var collection backupCollection
-	var timestamp string
-
-	numIncs := possibleNumIncrementalBackups[rng.Intn(len(possibleNumIncrementalBackups))]
-	l.Printf("creating backup with %d incremental backups", numIncs)
-
-	// Create full backup.
-	l.Printf("creating full backup")
-	if err := driver.runJobOnOneOf(ctx, l, nodes, func() error {
-		var err error
-		scope := driver.newBackupScope(rng)
-		collection, _, err = driver.runBackup(ctx, l, rng, nodes, pauseProbability, fullBackup{name: "round-trip-test-backup", scope: scope})
-		return err
-	}); err != nil {
-		return err
-	}
-
-	// Create incremental backups.
-	for incNum := 0; incNum < numIncs; incNum++ {
-		l.Printf("creating incremental backup number %d", incNum+1)
-		if err := driver.runJobOnOneOf(ctx, l, nodes, func() error {
-			var err error
-			collection, timestamp, err = driver.runBackup(ctx, l, rng, nodes, pauseProbability, incrementalBackup{collection: collection})
-			return err
-		}); err != nil {
-			return err
-		}
-	}
-
-	l.Printf("saving contents of backup for %s", collection.name)
-	if err := driver.saveContents(ctx, l, rng, &collection, timestamp); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func runInBackground(ctx context.Context, fn func(context.Context) error) func() error {
-	cmdDone := make(chan error, 1)
-	ctx, cancel := context.WithCancel(ctx)
-
-	go func() {
-		cmdDone <- fn(ctx)
-	}()
-
-	cleanup := func() error {
-		select {
-		case err := <-cmdDone:
-			return errors.Wrapf(err, "command prematurely exited")
-		default:
-		}
-		cancel()
-		return nil
-	}
-
-	return cleanup
 }
 
 // startBackgroundWorkloads starts a TPCC, bank, and a system table workload in
@@ -188,16 +127,18 @@ func startBackgroundWorkloads(
 	ctx context.Context,
 	l *logger.Logger,
 	c cluster.Cluster,
+	m cluster.Monitor,
 	testRNG *rand.Rand,
-	workloadNode option.NodeListOption,
-	driver *BackupRestoreTestDriver,
-) (func() error, error) {
+	roachNodes, workloadNode option.NodeListOption,
+	testUtils *CommonTestUtils,
+	dbs []string,
+) (func(), error) {
 	// numWarehouses is picked as a number that provides enough work
 	// for the cluster used in this test without overloading it,
 	// which can make the backups take much longer to finish.
 	const numWarehouses = 100
-	tpccInit, tpccRun := driver.tpccWorkloadCmd(numWarehouses)
-	bankInit, bankRun := driver.bankWorkloadCmd(testRNG)
+	tpccInit, tpccRun := tpccWorkloadCmd(numWarehouses, roachNodes)
+	bankInit, bankRun := bankWorkloadCmd(testRNG, roachNodes)
 
 	err := c.RunE(ctx, workloadNode, bankInit.String())
 	if err != nil {
@@ -209,80 +150,76 @@ func startBackgroundWorkloads(
 		return nil, err
 	}
 
-	stopBank := runInBackground(ctx, func(ctx context.Context) error {
+	tables, err := testUtils.loadTablesForDBs(ctx, l, testRNG, dbs...)
+	if err != nil {
+		return nil, err
+	}
+
+	stopBank := m.GoWithCancel(func(ctx context.Context) error {
 		return c.RunE(ctx, workloadNode, bankRun.String())
 	})
-	stopTPCC := runInBackground(ctx, func(ctx context.Context) error {
+	stopTPCC := m.GoWithCancel(func(ctx context.Context) error {
 		return c.RunE(ctx, workloadNode, tpccRun.String())
 	})
 
-	stopSystemWriter := runInBackground(ctx, func(ctx context.Context) error {
-		return driver.systemTableWriter(ctx, l, testRNG)
+	stopSystemWriter := m.GoWithCancel(func(ctx context.Context) error {
+		return testUtils.systemTableWriter(ctx, l, testRNG, dbs, tables)
 	})
 
-	stopBackgroundCommands := func() error {
-		var stopErrors []error
-		if err := stopBank(); err != nil {
-			stopErrors = append(stopErrors, errors.Wrapf(err, "bank workload"))
-		}
-
-		if err := stopTPCC(); err != nil {
-			stopErrors = append(stopErrors, errors.Wrapf(err, "tpcc workload"))
-		}
-		if err := stopSystemWriter(); err != nil {
-			stopErrors = append(stopErrors, errors.Wrapf(err, "system writer workload"))
-		}
-
-		if len(stopErrors) > 0 {
-			msgs := make([]string, 0, len(stopErrors))
-			for i, stopErr := range stopErrors {
-				msgs = append(msgs, fmt.Sprintf("%d: %s", i, stopErr.Error()))
-			}
-
-			return errors.Newf("%d errors while stopping background commands: %s", len(stopErrors), strings.Join(msgs, "\n"))
-		}
-
-		return nil
+	stopBackgroundCommands := func() {
+		stopBank()
+		stopTPCC()
+		stopSystemWriter()
 	}
 
 	return stopBackgroundCommands, nil
 }
 
 // Connect makes a database handle to the node.
-func (d *BackupRestoreTestDriver) Connect(node int) *gosql.DB {
-	d.connCache.mu.Lock()
-	defer d.connCache.mu.Unlock()
-	return d.connCache.cache[node-1]
+func (u *CommonTestUtils) Connect(node int) *gosql.DB {
+	u.connCache.mu.Lock()
+	defer u.connCache.mu.Unlock()
+	return u.connCache.cache[node-1]
 }
 
 // RandomNode returns a random nodeID in the cluster.
-func (d *BackupRestoreTestDriver) RandomNode(rng *rand.Rand, nodes option.NodeListOption) int {
+func (u *CommonTestUtils) RandomNode(rng *rand.Rand, nodes option.NodeListOption) int {
 	return nodes[rng.Intn(len(nodes))]
 }
 
-func (d *BackupRestoreTestDriver) RandomDB(
+func (u *CommonTestUtils) RandomDB(
 	rng *rand.Rand, nodes option.NodeListOption,
 ) (int, *gosql.DB) {
-	node := d.RandomNode(rng, nodes)
-	return node, d.Connect(node)
+	node := u.RandomNode(rng, nodes)
+	return node, u.Connect(node)
 }
 
-func (d *BackupRestoreTestDriver) Exec(rng *rand.Rand, query string, args ...interface{}) error {
-	_, db := d.RandomDB(rng, d.roachNodes)
-	// TODO: add ctx to driver
-	_, err := db.ExecContext(d.ctx, query, args...)
+func (u *CommonTestUtils) Exec(ctx context.Context, rng *rand.Rand, query string, args ...interface{}) error {
+	_, db := u.RandomDB(rng, u.roachNodes)
+	_, err := db.ExecContext(ctx, query, args...)
 	return err
 }
 
 // QueryRow executes a query that is expected to return at most one row on a
 // random node.
-func (d *BackupRestoreTestDriver) QueryRow(
-	rng *rand.Rand, query string, args ...interface{},
+func (u *CommonTestUtils) QueryRow(
+	ctx context.Context, rng *rand.Rand, query string, args ...interface{},
 ) *gosql.Row {
-	_, db := d.RandomDB(rng, d.roachNodes)
-	return db.QueryRowContext(d.ctx, query, args...)
+	_, db := u.RandomDB(rng, u.roachNodes)
+	return db.QueryRowContext(ctx, query, args...)
 }
 
-func (d *BackupRestoreTestDriver) now() string {
+func (u *CommonTestUtils) now() string {
 	return hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}.AsOfSystemTime()
+}
+
+func (u *CommonTestUtils) CloseConnections() {
+	u.connCache.mu.Lock()
+	defer u.connCache.mu.Unlock()
+
+	for _, db := range u.connCache.cache {
+		if db != nil {
+			_ = db.Close()
+		}
+	}
 }
