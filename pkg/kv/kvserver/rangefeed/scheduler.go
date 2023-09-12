@@ -68,7 +68,7 @@ const (
 var eventNames = map[processorEventType]string{
 	Queued:        "Queued",
 	Stopped:       "Stopped",
-	EventQueued:   "Data",
+	EventQueued:   "Event",
 	RequestQueued: "Request",
 	PushTxnQueued: "PushTxn",
 }
