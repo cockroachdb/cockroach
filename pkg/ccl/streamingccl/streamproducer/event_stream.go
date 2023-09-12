@@ -108,7 +108,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		rangefeed.WithMemoryMonitor(s.mon),
 
 		rangefeed.WithOnSSTable(s.onSSTable),
-
+		rangefeed.WithMuxRangefeed(true),
 		rangefeed.WithOnDeleteRange(s.onDeleteRange),
 	}
 
