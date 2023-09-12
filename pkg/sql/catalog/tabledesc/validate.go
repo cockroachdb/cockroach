@@ -454,6 +454,83 @@ func (desc *wrapper) validateInboundTableRef(
 		backReferencedTable.GetName(), by.ID)
 }
 
+// validateFK asserts that references to desc from inbound and outbound FKs are
+// valid.
+func (desc *wrapper) validateSelfFKs() error {
+	colsByID := catalog.ColumnsByIDs(desc)
+
+	// Validate all FKs where desc is the origin table.
+	// We'll validate the referenced table elsewhere.
+	for _, wrapper := range desc.OutboundForeignKeys() {
+		fk := wrapper.ForeignKeyDesc()
+
+		// OriginTableID should be equal to desc's ID because desc is the origin.
+		if fk.OriginTableID != desc.GetID() {
+			return errors.AssertionFailedf(
+				"invalid outbound foreign key: origin table ID should be %d. got %d",
+				desc.GetID(),
+				fk.OriginTableID,
+			)
+		}
+
+		if len(fk.OriginColumnIDs) == 0 {
+			return errors.AssertionFailedf("invalid outbound foreign key: no origin columns")
+		}
+
+		if len(fk.OriginColumnIDs) != len(fk.ReferencedColumnIDs) {
+			return errors.AssertionFailedf("invalid outbound foreign key: mismatched number of referenced and origin columns")
+		}
+
+		for _, colID := range fk.OriginColumnIDs {
+			if _, ok := colsByID[colID]; !ok {
+				return errors.AssertionFailedf(
+					"invalid outbound foreign key from table %q (%d): missing origin column=%d",
+					desc.GetName(),
+					desc.GetID(),
+					colID,
+				)
+			}
+		}
+	}
+
+	// Validate all FKs where desc is the referenced table.
+	// We'll validate the origin table elsewhere.
+	for _, wrapper := range desc.InboundForeignKeys() {
+		fk := wrapper.ForeignKeyDesc()
+
+		// ReferencedTableID should be equal to desc's ID because desc is the
+		// referenced table.
+		if fk.ReferencedTableID != desc.GetID() {
+			return errors.AssertionFailedf(
+				"invalid inbound foreign key: referenced table ID should be %d. got %d",
+				desc.GetID(),
+				fk.ReferencedTableID,
+			)
+		}
+
+		if len(fk.ReferencedColumnIDs) == 0 {
+			return errors.AssertionFailedf("invalid inbound foreign key: no referenced columns")
+		}
+
+		if len(fk.ReferencedColumnIDs) != len(fk.OriginColumnIDs) {
+			return errors.AssertionFailedf("invalid inbound foreign key: mismatched number of referenced and origin columns")
+		}
+
+		for _, colID := range fk.ReferencedColumnIDs {
+			if _, ok := colsByID[colID]; !ok {
+				return errors.AssertionFailedf(
+					"invalid inbound foreign key to table %q (%d): missing referenced column=%d",
+					desc.GetName(),
+					desc.GetID(),
+					colID,
+				)
+			}
+		}
+	}
+
+	return nil
+}
+
 func (desc *wrapper) validateOutboundFK(
 	fk *descpb.ForeignKeyConstraint, vdg catalog.ValidationDescGetter,
 ) error {
@@ -466,6 +543,7 @@ func (desc *wrapper) validateOutboundFK(
 		return errors.AssertionFailedf("referenced table %q (%d) is dropped",
 			referencedTable.GetName(), referencedTable.GetID())
 	}
+
 	return nil
 }
 
@@ -479,11 +557,24 @@ func (desc *wrapper) validateOutboundFKBackReference(
 		return nil
 	}
 
+	colsByID := catalog.ColumnsByIDs(referencedTable)
+	for _, colID := range fk.ReferencedColumnIDs {
+		if _, ok := colsByID[colID]; !ok {
+			return errors.AssertionFailedf(
+				"invalid outbound foreign key backreference from table %q (%d): missing referenced column=%d",
+				referencedTable.GetName(),
+				referencedTable.GetID(),
+				colID,
+			)
+		}
+	}
+
 	for _, backref := range referencedTable.InboundForeignKeys() {
 		if backref.GetOriginTableID() == desc.ID && backref.GetName() == fk.Name {
 			return nil
 		}
 	}
+
 	return errors.AssertionFailedf("missing fk back reference %q to %q from %q",
 		fk.Name, desc.Name, referencedTable.GetName())
 }
@@ -496,15 +587,30 @@ func (desc *wrapper) validateInboundFK(
 		return errors.Wrapf(err,
 			"invalid foreign key backreference: missing table=%d", backref.OriginTableID)
 	}
+
 	if originTable.Dropped() {
 		return errors.AssertionFailedf("origin table %q (%d) is dropped",
 			originTable.GetName(), originTable.GetID())
 	}
+
+	colsByID := catalog.ColumnsByIDs(originTable)
+	for _, colID := range backref.OriginColumnIDs {
+		if _, ok := colsByID[colID]; !ok {
+			return errors.AssertionFailedf(
+				"invalid foreign key backreference from table %q (%d): missing origin column=%d",
+				originTable.GetName(),
+				originTable.GetID(),
+				colID,
+			)
+		}
+	}
+
 	for _, fk := range originTable.OutboundForeignKeys() {
 		if fk.GetReferencedTableID() == desc.ID && fk.GetName() == backref.Name {
 			return nil
 		}
 	}
+
 	return errors.AssertionFailedf("missing fk forward reference %q to %q from %q",
 		backref.Name, desc.Name, originTable.GetName())
 }
@@ -684,6 +790,11 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	}
 
 	if err := desc.validateColumns(); err != nil {
+		vea.Report(err)
+		return
+	}
+
+	if err := desc.validateSelfFKs(); err != nil {
 		vea.Report(err)
 		return
 	}
