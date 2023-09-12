@@ -30,7 +30,7 @@ import {
 } from "./diagnosticsUtils";
 import { EmptyTable } from "src/empty";
 import styles from "./diagnosticsView.module.scss";
-import { getBasePath } from "../../api";
+import { withBasePath } from "../../api";
 import { DATE_FORMAT_24_UTC } from "../../util";
 
 type IStatementDiagnosticsReport =
@@ -165,9 +165,9 @@ export class DiagnosticsView extends React.Component<
                   as="a"
                   size="small"
                   intent="tertiary"
-                  href={`${getBasePath()}/_admin/v1/stmtbundle/${
-                    record.statement_diagnostics_id
-                  }`}
+                  href={withBasePath(
+                    `_admin/v1/stmtbundle/${record.statement_diagnostics_id}`,
+                  )}
                   onClick={() =>
                     onDownloadDiagnosticBundleClick &&
                     onDownloadDiagnosticBundleClick(
