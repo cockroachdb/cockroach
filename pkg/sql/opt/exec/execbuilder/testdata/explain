@@ -2241,7 +2241,7 @@ quality of service: regular
 query T
 EXPLAIN (OPT, MEMO) SELECT * FROM tc JOIN t ON k=a
 ----
-memo (optimized, ~12KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~17KB, required=[presentation: info:10] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:6,v:7] [distribution: test])
  │    └── [presentation: info:10] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:6,v:7] [distribution: test]" [presentation: a:1,b:2,k:6,v:7] [distribution: test])
@@ -2318,7 +2318,7 @@ TABLE t
  ├── tableoid oid [hidden] [system]
  └── PRIMARY INDEX t_pkey
       └── k int not null
-memo (optimized, ~12KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~17KB, required=[presentation: info:10] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:6,v:7] [distribution: test])
  │    └── [presentation: info:10] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:6,v:7] [distribution: test]" [presentation: a:1,b:2,k:6,v:7] [distribution: test])

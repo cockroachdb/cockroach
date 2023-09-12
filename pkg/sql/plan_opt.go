@@ -579,8 +579,13 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 
 	// For index recommendations, after building we must interrupt the flow to
 	// find potential index candidates in the memo.
-	_, isExplain := opc.p.stmt.AST.(*tree.Explain)
-	if isExplain && p.SessionData().IndexRecommendationsEnabled {
+	explainModeShowsRec := func(m tree.ExplainMode) bool {
+		// Only the PLAN (the default), DISTSQL, and GIST explain modes show
+		// index recommendations.
+		return m == tree.ExplainPlan || m == tree.ExplainDistSQL || m == tree.ExplainGist
+	}
+	e, isExplain := opc.p.stmt.AST.(*tree.Explain)
+	if isExplain && explainModeShowsRec(e.Mode) && p.SessionData().IndexRecommendationsEnabled {
 		indexRecs, err := opc.makeQueryIndexRecommendation(ctx)
 		if err != nil {
 			return nil, err

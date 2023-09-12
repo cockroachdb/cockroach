@@ -176,7 +176,7 @@ func TestTxnHeartbeaterLoopStartedOnFirstLock(t *testing.T) {
 		if write {
 			ba.Add(&kvpb.PutRequest{RequestHeader: keyAHeader})
 		} else {
-			ba.Add(&kvpb.ScanRequest{RequestHeader: keyAHeader, KeyLocking: lock.Exclusive})
+			ba.Add(&kvpb.ScanRequest{RequestHeader: keyAHeader, KeyLockingStrength: lock.Exclusive})
 		}
 
 		br, pErr = th.SendLocked(ctx, ba)
@@ -344,7 +344,7 @@ func TestTxnHeartbeaterLoopStartsBeforeExpiry(t *testing.T) {
 			ba.Header = kvpb.Header{Txn: txn.Clone()}
 			keyA := roachpb.Key("a")
 			keyAHeader := kvpb.RequestHeader{Key: keyA}
-			ba.Add(&kvpb.GetRequest{RequestHeader: keyAHeader, KeyLocking: lock.Exclusive})
+			ba.Add(&kvpb.GetRequest{RequestHeader: keyAHeader, KeyLockingStrength: lock.Exclusive})
 
 			br, pErr := th.SendLocked(ctx, ba)
 			require.Nil(t, pErr)

@@ -208,7 +208,7 @@ func TestCanSendToFollower(t *testing.T) {
 		},
 		{
 			name: "stale locking read",
-			ba:   batch(txn(stale), &kvpb.GetRequest{KeyLocking: lock.Exclusive}),
+			ba:   batch(txn(stale), &kvpb.GetRequest{KeyLockingStrength: lock.Exclusive}),
 			exp:  false,
 		},
 		{
@@ -345,7 +345,7 @@ func TestCanSendToFollower(t *testing.T) {
 		},
 		{
 			name:     "stale locking read, global reads policy",
-			ba:       batch(txn(stale), &kvpb.GetRequest{KeyLocking: lock.Exclusive}),
+			ba:       batch(txn(stale), &kvpb.GetRequest{KeyLockingStrength: lock.Exclusive}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},

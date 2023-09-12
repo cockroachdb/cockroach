@@ -57,7 +57,7 @@ const MaxStrength = Intent
 const NumLockStrength = MaxStrength + 1
 
 // MaxDurability is the maximum value in the Durability enum.
-const MaxDurability = Unreplicated
+const MaxDurability = Replicated
 
 func init() {
 	for v := range Strength_name {
