@@ -12,6 +12,7 @@ package rangefeed
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -326,22 +327,23 @@ func TestClientScheduler(t *testing.T) {
 	assertStopsWithinTimeout(t, s)
 }
 
-func TestScheduleMultiple(t *testing.T) {
+func TestScheduleBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 2, BulkChunkSize: 2})
+	s := NewScheduler(SchedulerConfig{Workers: 8, ShardSize: 2, BulkChunkSize: 2})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	const consumerNumber = 10
+	const consumerNumber = 100
 	consumers := make([]*schedulerConsumer, consumerNumber)
-	ids := make([]int64, consumerNumber)
+	batch := s.NewEnqueueBatch()
+	defer batch.Close()
 	for i := 0; i < consumerNumber; i++ {
 		consumers[i] = createAndRegisterConsumerOrFail(t, s)
-		ids[i] = consumers[i].id
+		batch.Add(consumers[i].id)
 	}
-	s.EnqueueAll(ids, te1)
+	s.EnqueueBatch(batch, te1)
 	for _, c := range consumers {
 		c.requireEvent(t, time.Second*30000, te1, 1)
 	}
@@ -410,7 +412,7 @@ func TestSchedulerShutdown(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	s := NewScheduler(SchedulerConfig{Workers: 1})
+	s := NewScheduler(SchedulerConfig{Workers: 2, ShardSize: 1})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
 	c1 := createAndRegisterConsumerOrFail(t, s)
 	c2 := createAndRegisterConsumerOrFail(t, s)
@@ -461,4 +463,60 @@ func TestQueueReadEmpty(t *testing.T) {
 	q := newIDQueue()
 	_, ok := q.popFront()
 	require.False(t, ok, "unexpected value in empty queue")
+}
+
+func TestNewSchedulerShards(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testcases := []struct {
+		workers      int
+		shardSize    int
+		expectShards []int
+	}{
+		// We balance workers across shards instead of filling up shards. We assume
+		// ranges are evenly distributed across shards, and want ranges to have
+		// about the same number of workers available on average.
+		{-1, -1, []int{1}},
+		{0, 0, []int{1}},
+		{1, -1, []int{1}},
+		{1, 0, []int{1}},
+		{1, 1, []int{1}},
+		{1, 2, []int{1}},
+		{2, 2, []int{2}},
+		{3, 2, []int{2, 1}},
+		{1, 3, []int{1}},
+		{2, 3, []int{2}},
+		{3, 3, []int{3}},
+		{4, 3, []int{2, 2}},
+		{5, 3, []int{3, 2}},
+		{6, 3, []int{3, 3}},
+		{7, 3, []int{3, 2, 2}},
+		{8, 3, []int{3, 3, 2}},
+		{9, 3, []int{3, 3, 3}},
+		{10, 3, []int{3, 3, 2, 2}},
+		{11, 3, []int{3, 3, 3, 2}},
+		{12, 3, []int{3, 3, 3, 3}},
+
+		// Typical examples, using 4 workers per CPU core and 8 workers per shard.
+		// Note that we cap workers at 64 by default.
+		{1 * 4, 8, []int{4}},
+		{2 * 4, 8, []int{8}},
+		{3 * 4, 8, []int{6, 6}},
+		{4 * 4, 8, []int{8, 8}},
+		{6 * 4, 8, []int{8, 8, 8}},
+		{8 * 4, 8, []int{8, 8, 8, 8}},
+		{12 * 4, 8, []int{8, 8, 8, 8, 8, 8}},
+		{16 * 4, 8, []int{8, 8, 8, 8, 8, 8, 8, 8}}, // 64 workers
+	}
+	for _, tc := range testcases {
+		t.Run(fmt.Sprintf("workers=%d/shardSize=%d", tc.workers, tc.shardSize), func(t *testing.T) {
+			s := NewScheduler(SchedulerConfig{Workers: tc.workers, ShardSize: tc.shardSize})
+
+			var shardWorkers []int
+			for _, shard := range s.shards {
+				shardWorkers = append(shardWorkers, shard.numWorkers)
+			}
+			require.Equal(t, tc.expectShards, shardWorkers)
+		})
+	}
 }

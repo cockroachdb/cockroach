@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -101,10 +102,20 @@ type Callback func(event processorEventType) (remaining processorEventType)
 type SchedulerConfig struct {
 	// Workers is the number of pool workers for scheduler to use.
 	Workers int
+	// ShardSize is the maximum number of workers per scheduler shard. Once a
+	// shard is full, new shards are split off, and workers are evently distribued
+	// across all shards.
+	ShardSize int
 	// BulkChunkSize is number of ids that would be enqueued in a single bulk
 	// enqueue operation. Chunking is done to avoid holding locks for too long
 	// as it will interfere with enqueue operations.
 	BulkChunkSize int
+}
+
+// shardIndex returns the shard index of the given processor ID.
+// gcassert:inline
+func shardIndex(id int64, numShards int) int {
+	return int(id % int64(numShards))
 }
 
 // Scheduler is a simple scheduler that allows work to be scheduler
@@ -118,55 +129,96 @@ type SchedulerConfig struct {
 // Each event is represented as a bit mask and multiple pending events could be
 // ORed together before being delivered to processor.
 type Scheduler struct {
-	SchedulerConfig
-
-	mu struct {
-		syncutil.Mutex
-		nextID int64
-		procs  map[int64]Callback
-		status map[int64]processorEventType
-		queue  *idQueue
-		// No more new registrations allowed. Workers are winding down.
-		quiescing bool
-	}
-	cond *sync.Cond
-	wg   sync.WaitGroup
+	nextID atomic.Int64
+	shards []*schedulerShard // id % len(shards)
+	wg     sync.WaitGroup
 }
 
 // NewScheduler will instantiate an idle scheduler based on provided config.
 // Scheduler needs to be started to become operational.
 func NewScheduler(cfg SchedulerConfig) *Scheduler {
-	if cfg.BulkChunkSize == 0 {
-		cfg.BulkChunkSize = enqueueBulkMaxChunk
+	bulkChunkSize := cfg.BulkChunkSize
+	if bulkChunkSize == 0 {
+		bulkChunkSize = enqueueBulkMaxChunk
 	}
-	s := &Scheduler{
-		SchedulerConfig: cfg,
-		wg:              sync.WaitGroup{},
+
+	s := &Scheduler{}
+
+	// Create shards.
+	numShards := 1
+	if cfg.ShardSize > 0 && cfg.Workers > cfg.ShardSize {
+		numShards = (cfg.Workers-1)/cfg.ShardSize + 1 // ceiling division
 	}
-	s.mu.procs = make(map[int64]Callback)
-	s.mu.status = make(map[int64]processorEventType)
-	s.mu.queue = newIDQueue()
-	s.cond = sync.NewCond(&s.mu)
+	for i := 0; i < numShards; i++ {
+		shardWorkers := cfg.Workers / numShards
+		if i < cfg.Workers%numShards { // distribute remainder
+			shardWorkers++
+		}
+		if shardWorkers <= 0 {
+			shardWorkers = 1 // ensure we always have a worker
+		}
+		s.shards = append(s.shards, newSchedulerShard(shardWorkers, bulkChunkSize))
+	}
+
 	return s
+}
+
+// schedulerShard is a mutex shard, which reduces contention: workers in a shard
+// share a mutex for scheduling bookkeeping, and this mutex becomes highly
+// contended without sharding. Processors are assigned round-robin to a shard
+// when registered, see shardIndex().
+type schedulerShard struct {
+	syncutil.Mutex
+	numWorkers    int
+	bulkChunkSize int
+	cond          *sync.Cond
+	procs         map[int64]Callback
+	status        map[int64]processorEventType
+	queue         *idQueue
+	// No more new registrations allowed. Workers are winding down.
+	quiescing bool
+}
+
+// newSchedulerShard creates a new shard with the given number of workers.
+func newSchedulerShard(numWorkers, bulkChunkSize int) *schedulerShard {
+	ss := &schedulerShard{
+		numWorkers:    numWorkers,
+		bulkChunkSize: bulkChunkSize,
+		procs:         map[int64]Callback{},
+		status:        map[int64]processorEventType{},
+		queue:         newIDQueue(),
+	}
+	ss.cond = sync.NewCond(&ss.Mutex)
+	return ss
 }
 
 // Start scheduler workers.
 func (s *Scheduler) Start(ctx context.Context, stopper *stop.Stopper) error {
-	for i := 0; i < s.Workers; i++ {
-		s.wg.Add(1)
-		workerID := i
-		if err := stopper.RunAsyncTask(ctx, fmt.Sprintf("rangefeed-scheduler-worker-%d", workerID),
-			func(ctx context.Context) {
-				log.VEventf(ctx, 3, "%d scheduler worker started", workerID)
-				defer s.wg.Done()
-				s.processEvents(ctx)
-				log.VEventf(ctx, 3, "%d scheduler worker finished", workerID)
-			}); err != nil {
-			s.wg.Done()
-			s.Stop()
-			return err
+	// Start each shard.
+	for shardID, shard := range s.shards {
+		shardID, shard := shardID, shard // pin loop variables
+
+		// Start the shard's workers.
+		for workerID := 0; workerID < shard.numWorkers; workerID++ {
+			workerID := workerID // pin loop variable
+			s.wg.Add(1)
+
+			if err := stopper.RunAsyncTask(ctx,
+				fmt.Sprintf("rangefeed-scheduler-worker-shard%d-%d", shardID, workerID),
+				func(ctx context.Context) {
+					defer s.wg.Done()
+					log.VEventf(ctx, 3, "scheduler worker %d:%d started", shardID, workerID)
+					shard.processEvents(ctx)
+					log.VEventf(ctx, 3, "scheduler worker %d:%d finished", shardID, workerID)
+				},
+			); err != nil {
+				s.wg.Done()
+				s.Stop()
+				return err
+			}
 		}
 	}
+
 	if err := stopper.RunAsyncTask(ctx, "terminate scheduler",
 		func(ctx context.Context) {
 			<-stopper.ShouldQuiesce()
@@ -183,15 +235,16 @@ func (s *Scheduler) Start(ctx context.Context, stopper *stop.Stopper) error {
 // which should be used to send notifications to the callback. Returns error if
 // Scheduler is stopped.
 func (s *Scheduler) Register(f Callback) (int64, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.mu.quiescing {
+	id := s.nextID.Add(1)
+	shard := s.shards[shardIndex(id, len(s.shards))]
+
+	shard.Lock()
+	defer shard.Unlock()
+	if shard.quiescing {
 		// Don't accept new registrations if quiesced.
 		return 0, errors.New("server stopping")
 	}
-	s.mu.nextID++
-	id := s.mu.nextID
-	s.mu.procs[id] = f
+	shard.procs[id] = f
 	return id, nil
 }
 
@@ -200,74 +253,87 @@ func (s *Scheduler) Register(f Callback) (int64, error) {
 // that processor actually handled stopped event it may either be pending or
 // processed.
 func (s *Scheduler) Enqueue(id int64, evt processorEventType) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.mu.procs[id]; !ok {
+	shard := s.shards[shardIndex(id, len(s.shards))]
+
+	shard.Lock()
+	defer shard.Unlock()
+	if _, ok := shard.procs[id]; !ok {
 		return
 	}
-	newWork := s.enqueueInternalLocked(id, evt)
+	newWork := shard.enqueueLocked(id, evt)
 	if newWork {
 		// Wake up potential waiting worker.
 		// We are allowed to do this under cond lock.
-		s.cond.Signal()
+		shard.cond.Signal()
 	}
 }
 
-func (s *Scheduler) enqueueInternalLocked(id int64, evt processorEventType) bool {
-	pending := s.mu.status[id]
+// enqueueLocked enqueues a single event for a given processor in this shard.
+func (ss *schedulerShard) enqueueLocked(id int64, evt processorEventType) bool {
+	pending := ss.status[id]
 	if pending&Stopped != 0 {
 		return false
 	}
 	if pending == 0 {
 		// Enqueue if processor was idle.
-		s.mu.queue.pushBack(id)
+		ss.queue.pushBack(id)
 	}
 	update := pending | evt | Queued
 	if update != pending {
 		// Only update if event actually changed.
-		s.mu.status[id] = update
+		ss.status[id] = update
 	}
 	return pending == 0
 }
 
-// EnqueueAll enqueues event for all existing non-stopped id's. Enqueueing is
-// done in chunks to avoid holding lock for too long and interfering with other
-// enqueue operations.
-//
-// If id is not known or already stopped it is ignored.
-func (s *Scheduler) EnqueueAll(ids []int64, evt processorEventType) {
-	scheduleChunk := func(chunk []int64) int {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		wake := 0
-		for _, id := range chunk {
-			if _, ok := s.mu.procs[id]; ok {
-				if newWork := s.enqueueInternalLocked(id, evt); newWork {
-					wake++
-				}
+// enqueueN enqueues an event for multiple processors on this shard. The
+// caller must not hold the shard lock.
+func (ss *schedulerShard) enqueueN(ids []int64, evt processorEventType) int {
+	// Avoid locking for 0 new processors.
+	if len(ids) == 0 {
+		return 0
+	}
+
+	ss.Lock()
+	var count int
+	for i, id := range ids {
+		if ss.enqueueLocked(id, evt) {
+			count++
+		}
+		if (i+1)%ss.bulkChunkSize == 0 {
+			ss.Unlock()
+			ss.Lock()
+		}
+	}
+	ss.Unlock()
+	return count
+}
+
+// EnqueueBatch enqueues an event for a set of processors across all shards.
+// Using a batch allows efficient enqueueing with minimal lock contention.
+func (s *Scheduler) EnqueueBatch(batch *SchedulerBatch, evt processorEventType) {
+	for shardIdx, ids := range batch.ids {
+		if len(ids) == 0 {
+			continue // skip shards with no new work
+		}
+		shard := s.shards[shardIdx]
+		count := shard.enqueueN(ids, evt)
+
+		if count >= shard.numWorkers {
+			shard.cond.Broadcast()
+		} else {
+			for i := 0; i < count; i++ {
+				shard.cond.Signal()
 			}
 		}
-		return wake
 	}
-	wake := 0
-	total := len(ids)
-	for first := 0; first < total; first += s.BulkChunkSize {
-		last := first + s.BulkChunkSize
-		if last > total {
-			last = total
-		}
-		added := scheduleChunk(ids[first:last])
-		wake += added
-	}
-	// Wake up potential waiting workers. We wake all of them as we expect more
-	// than total number of workers.
-	if wake >= s.Workers {
-		s.cond.Broadcast()
-	} else {
-		for ; wake > 0; wake-- {
-			s.cond.Signal()
-		}
-	}
+}
+
+// NewEnqueueBatch creates a new batch that can be used to efficiently enqueue
+// events for multiple processors via EnqueueBatch(). The batch should be closed
+// when done by calling Close().
+func (s *Scheduler) NewEnqueueBatch() *SchedulerBatch {
+	return newSchedulerBatch(len(s.shards))
 }
 
 // StopProcessor instructs processor to stop gracefully by sending it Stopped event.
@@ -279,27 +345,27 @@ func (s *Scheduler) StopProcessor(id int64) {
 
 // processEvents is a main worker method of a scheduler pool. each one should
 // be launched in separate goroutine and will loop until scheduler is stopped.
-func (s *Scheduler) processEvents(ctx context.Context) {
+func (ss *schedulerShard) processEvents(ctx context.Context) {
 	for {
 		var id int64
-		s.mu.Lock()
+		ss.Lock()
 		for {
-			if s.mu.quiescing {
-				s.mu.Unlock()
+			if ss.quiescing {
+				ss.Unlock()
 				return
 			}
 			var ok bool
-			if id, ok = s.mu.queue.popFront(); ok {
+			if id, ok = ss.queue.popFront(); ok {
 				break
 			}
-			s.cond.Wait()
+			ss.cond.Wait()
 		}
 
-		cb := s.mu.procs[id]
-		e := s.mu.status[id]
+		cb := ss.procs[id]
+		e := ss.status[id]
 		// Keep Queued status and preserve Stopped to block any more events.
-		s.mu.status[id] = Queued | (e & Stopped)
-		s.mu.Unlock()
+		ss.status[id] = Queued | (e & Stopped)
+		ss.Unlock()
 
 		procEventType := Queued ^ e
 		remaining := cb(procEventType)
@@ -319,32 +385,32 @@ func (s *Scheduler) processEvents(ctx context.Context) {
 			}
 			// We'll keep Stopped state to avoid calling stopped processor again
 			// on scheduler shutdown.
-			s.mu.Lock()
-			s.mu.status[id] = Stopped
-			s.mu.Unlock()
+			ss.Lock()
+			ss.status[id] = Stopped
+			ss.Unlock()
 			continue
 		}
 
-		s.mu.Lock()
-		pendingStatus, ok := s.mu.status[id]
+		ss.Lock()
+		pendingStatus, ok := ss.status[id]
 		if !ok {
-			s.mu.Unlock()
+			ss.Unlock()
 			continue
 		}
 		newStatus := pendingStatus | remaining
 		if newStatus == Queued {
 			// If no events arrived, get rid of id.
-			delete(s.mu.status, id)
+			delete(ss.status, id)
 		} else {
 			// Since more events arrived during processing, reschedule.
-			s.mu.queue.pushBack(id)
+			ss.queue.pushBack(id)
 			// If remaining work was returned and not already planned, then update
 			// pending status to reflect that.
 			if newStatus != pendingStatus {
-				s.mu.status[id] = newStatus
+				ss.status[id] = newStatus
 			}
 		}
-		s.mu.Unlock()
+		ss.Unlock()
 	}
 }
 
@@ -357,41 +423,83 @@ func (s *Scheduler) processEvents(ctx context.Context) {
 // Any attempts to enqueue events for processor after this call will return an
 // error.
 func (s *Scheduler) Unregister(id int64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	shard := s.shards[shardIndex(id, len(s.shards))]
+	shard.Lock()
+	defer shard.Unlock()
 
-	delete(s.mu.procs, id)
-	delete(s.mu.status, id)
+	delete(shard.procs, id)
+	delete(shard.status, id)
 }
 
 func (s *Scheduler) Stop() {
-	// Stop all processors.
-	s.mu.Lock()
-	if !s.mu.quiescing {
-		// On first close attempt trigger termination of all unfinished callbacks,
-		// we only need to do that once to avoid closing s.drained channel multiple
-		// times.
-		s.mu.quiescing = true
+	// Stop all processors across all shards.
+	for _, shard := range s.shards {
+		shard.Lock()
+		if !shard.quiescing {
+			// On first close attempt trigger termination of all unfinished callbacks,
+			// we only need to do that once to avoid closing s.drained channel multiple
+			// times.
+			shard.quiescing = true
+		}
+		shard.Unlock()
+		shard.cond.Broadcast()
 	}
-	s.mu.Unlock()
-	s.cond.Broadcast()
 	s.wg.Wait()
 
 	// Synchronously notify all non-stopped processors about stop.
-	s.mu.Lock()
-	for id, p := range s.mu.procs {
-		pending := s.mu.status[id]
-		// Ignore processors that already processed their stopped event.
-		if pending == Stopped {
-			continue
+	for _, shard := range s.shards {
+		shard.Lock()
+		for id, p := range shard.procs {
+			pending := shard.status[id]
+			// Ignore processors that already processed their stopped event.
+			if pending == Stopped {
+				continue
+			}
+			// Add stopped event on top of what was pending and remove queued.
+			pending = (^Queued & pending) | Stopped
+			shard.Unlock()
+			p(pending)
+			shard.Lock()
 		}
-		// Add stopped event on top of what was pending and remove queued.
-		pending = (^Queued & pending) | Stopped
-		s.mu.Unlock()
-		p(pending)
-		s.mu.Lock()
+		shard.Unlock()
 	}
-	s.mu.Unlock()
+}
+
+var schedulerBatchPool = sync.Pool{
+	New: func() interface{} {
+		return new(SchedulerBatch)
+	},
+}
+
+// SchedulerBatch is a batch of IDs to enqueue. It enables efficient per-shard
+// enqueueing, by pre-sharding the IDs and only locking a single shard at a time
+// while bulk-enqueueing.
+type SchedulerBatch struct {
+	ids [][]int64 // by shard
+}
+
+func newSchedulerBatch(numShards int) *SchedulerBatch {
+	b := schedulerBatchPool.Get().(*SchedulerBatch)
+	if cap(b.ids) >= numShards {
+		b.ids = b.ids[:numShards]
+	} else {
+		b.ids = make([][]int64, numShards)
+	}
+	return b
+}
+
+// Add adds a processor ID to the batch.
+func (b *SchedulerBatch) Add(id int64) {
+	shardIdx := shardIndex(id, len(b.ids))
+	b.ids[shardIdx] = append(b.ids[shardIdx], id)
+}
+
+// Close returns the batch to the pool for reuse.
+func (b *SchedulerBatch) Close() {
+	for i := range b.ids {
+		b.ids[i] = b.ids[i][:0]
+	}
+	schedulerBatchPool.Put(b)
 }
 
 // ClientScheduler is a wrapper on top of scheduler that could be passed to a
