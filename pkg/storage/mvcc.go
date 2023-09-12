@@ -4550,8 +4550,7 @@ func MVCCResolveWriteIntent(
 			}
 			ok, err = mvccResolveWriteIntent(ctx, rw, iter, ms, intent, &buf.meta, buf)
 		} else {
-			// TODO(nvanbenschoten): implement.
-			_ = str
+			ok, err = mvccReleaseLockInternal(ctx, rw, ms, intent, &buf.meta, str, buf)
 		}
 		if err != nil {
 			return false, 0, nil, err
@@ -5241,8 +5240,7 @@ func MVCCResolveWriteIntentRange(
 		if ltKey.Strength == lock.Intent {
 			ok, err = mvccResolveWriteIntent(ctx, rw, mvccIter, ms, intent, &buf.meta, buf)
 		} else {
-			// TODO(nvanbenschoten): implement.
-			_ = ltKey.Strength
+			ok, err = mvccReleaseLockInternal(ctx, rw, ms, intent, &buf.meta, ltKey.Strength, buf)
 		}
 		if err != nil {
 			log.Warningf(ctx, "failed to resolve intent for key %q: %+v", lastResolvedKey, err)
@@ -5378,6 +5376,57 @@ func validateLockAcquisition(txn *roachpb.Transaction, str lock.Strength) error 
 		return errors.Errorf("invalid lock strength to acquire lock: %s", str.String())
 	}
 	return nil
+}
+
+// mvccReleaseLockInternal releases a lock at the specified key and strength and
+// by the specified transaction. The function accepts the instructions for how
+// to release the lock (encoded in the LockUpdate), and the current value of the
+// lock (meta).
+func mvccReleaseLockInternal(
+	ctx context.Context,
+	writer Writer,
+	ms *enginepb.MVCCStats,
+	intent roachpb.LockUpdate,
+	meta *enginepb.MVCCMetadata,
+	str lock.Strength,
+	buf *putBuffer,
+) (bool, error) {
+	finalized := intent.Status.IsFinalized()
+	rolledBack := meta.Txn.Epoch < intent.Txn.Epoch || enginepb.TxnSeqIsIgnored(meta.Txn.Sequence, intent.IgnoredSeqNums)
+	if !(finalized || rolledBack) {
+		return false, nil
+	}
+
+	canSingleDelHelper := singleDelOptimizationHelper{
+		_didNotUpdateMeta: meta.TxnDidNotUpdateMeta,
+		_hasIgnoredSeqs:   len(intent.IgnoredSeqNums) > 0,
+		// NB: the value is only used if epochs match, so it doesn't
+		// matter if we use the one from meta or incoming request here.
+		_epoch: intent.Txn.Epoch,
+	}
+	var txnDidNotUpdateMeta bool
+	if intent.Status == roachpb.COMMITTED {
+		txnDidNotUpdateMeta = canSingleDelHelper.onCommitIntent()
+	} else {
+		txnDidNotUpdateMeta = canSingleDelHelper.onAbortIntent()
+	}
+
+	metaKey := MakeMVCCMetadataKey(intent.Key)
+	origMetaKeySize := int64(metaKey.EncodedSize())
+	origMetaValSize := int64(meta.Size())
+	keyBytes, valBytes, err := buf.clearLockMeta(writer, metaKey, str, txnDidNotUpdateMeta, meta.Txn.ID, ClearOptions{
+		ValueSizeKnown: true,
+		ValueSize:      uint32(meta.Size()),
+	})
+	if err != nil {
+		return false, err
+	}
+
+	// TODO(nvanbenschoten): handle MVCCStats update after addressing #109645.
+	_, _, _, _, _ = ms, origMetaKeySize, origMetaValSize, keyBytes, valBytes
+
+	return true, nil
+
 }
 
 // MVCCGarbageCollect creates an iterator on the ReadWriter. In parallel
