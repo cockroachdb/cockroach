@@ -332,7 +332,10 @@ func (m *managerImpl) sequenceReqWithGuard(
 		} else {
 			// Scan for conflicting locks.
 			log.Event(ctx, "scanning lock table for conflicting locks")
-			g.ltg = m.lt.ScanAndEnqueue(g.Req, g.ltg)
+			g.ltg, err = m.lt.ScanAndEnqueue(g.Req, g.ltg)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// Wait on conflicting locks, if necessary. Note that this will never be
