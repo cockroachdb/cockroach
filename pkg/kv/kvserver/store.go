@@ -1993,14 +1993,19 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return err
 	}
 
-	rfs := rangefeed.NewScheduler(rangefeed.SchedulerConfig{
-		Workers:   s.cfg.RangeFeedSchedulerConcurrency,
-		ShardSize: s.cfg.RangeFeedSchedulerShardSize,
-	})
-	if err = rfs.Start(ctx, s.stopper); err != nil {
-		return err
+	{
+		m := rangefeed.NewSchedulerMetrics(s.cfg.HistogramWindowInterval)
+		rfs := rangefeed.NewScheduler(rangefeed.SchedulerConfig{
+			Workers:   s.cfg.RangeFeedSchedulerConcurrency,
+			ShardSize: s.cfg.RangeFeedSchedulerShardSize,
+			Metrics:   m,
+		})
+		s.Registry().AddMetricStruct(m)
+		if err = rfs.Start(ctx, s.stopper); err != nil {
+			return err
+		}
+		s.rangefeedScheduler = rfs
 	}
-	s.rangefeedScheduler = rfs
 
 	// Add the store ID to the scanner's AmbientContext before starting it, since
 	// the AmbientContext provided during construction did not include it.
