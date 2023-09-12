@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -45,7 +46,7 @@ func registerDiskStalledDetection(r registry.Registry) {
 		},
 	}
 	makeSpec := func() spec.ClusterSpec {
-		s := r.MakeClusterSpec(4, spec.ReuseNone())
+		s := r.MakeClusterSpec(4, spec.ReuseNone(), spec.UbuntuVersion(vm.FocalFossa))
 		// Use PDs in an attempt to work around flakes encountered when using SSDs.
 		// See #97968.
 		s.PreferLocalSSD = false

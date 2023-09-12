@@ -637,6 +637,11 @@ func (p *Provider) createVM(
 		lun := 42
 		startupArgs.AttachedDiskLun = &lun
 	}
+
+	// In the future, when all tests are run on Ubuntu 22.04, we can remove this
+	// check and always enable RSA SHA1 and create a tcpdump symlink.
+	startupArgs.IsUbuntu22 = !opts.UbuntuVersion.IsOverridden()
+
 	startupScript, err := evalStartupTemplate(startupArgs)
 	if err != nil {
 		return vm, err
@@ -689,14 +694,14 @@ func (p *Provider) createVM(
 				// From https://discourse.ubuntu.com/t/find-ubuntu-images-on-microsoft-azure/18918
 				// You can find available versions by running the following command:
 				// az vm image list --all --publisher Canonical
-				// To get the latest 20.04 version:
+				// To get the latest 22.04 version:
 				// az vm image list --all --publisher Canonical | \
-				// jq '[.[] | select(.sku=="20_04-lts")] | max_by(.version)'
+				// jq '[.[] | select(.sku=="22_04-lts")] | max_by(.version)'
 				ImageReference: &compute.ImageReference{
 					Publisher: to.StringPtr("Canonical"),
-					Offer:     to.StringPtr("0001-com-ubuntu-server-focal"),
-					Sku:       to.StringPtr("20_04-lts"),
-					Version:   to.StringPtr("20.04.202109080"),
+					Offer:     to.StringPtr("0001-com-ubuntu-server-jammy"),
+					Sku:       to.StringPtr("22_04-lts"),
+					Version:   to.StringPtr("22.04.202309190"),
 				},
 				OsDisk: &compute.OSDisk{
 					CreateOption: compute.DiskCreateOptionTypesFromImage,
@@ -734,6 +739,20 @@ func (p *Provider) createVM(
 				},
 			},
 		},
+	}
+	if opts.UbuntuVersion.IsOverridden() {
+		var image []string
+		image, err = getUbuntuImage(opts.UbuntuVersion)
+		if err != nil {
+			return
+		}
+		vm.VirtualMachineProperties.StorageProfile.ImageReference = &compute.ImageReference{
+			Publisher: to.StringPtr("Canonical"),
+			Offer:     to.StringPtr(image[0]),
+			Sku:       to.StringPtr(image[1]),
+			Version:   to.StringPtr(image[2]),
+		}
+		l.Printf("Overriding default Ubuntu image with %s", image)
 	}
 	if !opts.SSDOpts.UseLocalSSD {
 		caching := compute.CachingTypesNone
@@ -1529,4 +1548,25 @@ func (p *Provider) getResourcesAndSecurityGroupByName(
 		sGroup = p.mu.securityGroups[sName]
 	}
 	return rGroup, sGroup
+}
+
+var (
+	// We define the actual image here because it's different for every provider.
+	focalFossa = vm.UbuntuImages{
+		DefaultImage: "0001-com-ubuntu-server-focal;20_04-lts;20.04.202109080",
+	}
+
+	azUbuntuImages = map[vm.UbuntuVersion]vm.UbuntuImages{
+		vm.FocalFossa: focalFossa,
+	}
+)
+
+// getUbuntuImage returns the correct Ubuntu image for the specified Ubuntu version.
+func getUbuntuImage(version vm.UbuntuVersion) ([]string, error) {
+	image, ok := azUbuntuImages[version]
+	if ok {
+		return strings.Split(image.DefaultImage, ";"), nil
+	}
+
+	return nil, errors.Errorf("Unknown Ubuntu version specified.")
 }

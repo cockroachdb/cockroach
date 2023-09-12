@@ -22,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -231,7 +233,7 @@ func registerRubyPG(r registry.Registry) {
 		Name:             "ruby-pg",
 		Timeout:          1 * time.Hour,
 		Owner:            registry.OwnerSQLFoundations,
-		Cluster:          r.MakeClusterSpec(1),
+		Cluster:          r.MakeClusterSpec(1, spec.UbuntuVersion(vm.FocalFossa)),
 		Leases:           registry.MetamorphicLeases,
 		NativeLibs:       registry.LibGEOS,
 		CompatibleClouds: registry.AllExceptAWS,
