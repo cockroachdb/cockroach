@@ -27,6 +27,7 @@ jobs:
         stale-pr-label: 'no-pr-activity'
         close-issue-label: 'X-stale'
         close-pr-label: 'X-stale'
+        close-issue-reason: 'not_planned'
         # Disable this for PR's, by setting a very high bar
         days-before-pr-stale: 99999
         days-before-issue-stale: 540
