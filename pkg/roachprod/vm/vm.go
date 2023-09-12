@@ -12,6 +12,7 @@ package vm
 
 import (
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"regexp"
 	"sort"
 	"strconv"
@@ -251,6 +252,7 @@ type CreateOpts struct {
 
 	GeoDistributed bool
 	Arch           string
+	UbuntuVersion  spec.UbuntuVersion
 	VMProviders    []string
 	SSDOpts        struct {
 		UseLocalSSD bool

@@ -60,7 +60,7 @@ func registerFlowable(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle maven`,
+			`sudo apt-get -qq install default-jre openjdk-17-jdk-headless gradle maven`,
 		); err != nil {
 			t.Fatal(err)
 		}

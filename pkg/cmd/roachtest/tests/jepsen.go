@@ -163,7 +163,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenCon
 	// Install Jepsen's prereqs on the controller.
 	if result, err := c.RunWithDetailsSingleNode(
 		ctx, t.L(), controller, "sh", "-c",
-		`"sudo DEBIAN_FRONTEND=noninteractive apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot > /dev/null 2>&1"`,
+		`"sudo DEBIAN_FRONTEND=noninteractive apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot bzip2 > /dev/null 2>&1"`,
 	); err != nil {
 		if result.RemoteExitStatus == 100 {
 			t.Skip("apt-get failure (#31944)", result.Stdout+result.Stderr)
@@ -297,7 +297,7 @@ func (j jepsenConfig) startTest(
 	} else {
 		go func() {
 			errCh <- run("bash", "-e", "-c", fmt.Sprintf(
-				`"cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && java -jar %s %s > invoke.log 2>&1"`,
+				`"cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && java -jar %s %s  > invoke.log 2>&1"`,
 				j.binaryName(), testArgs))
 		}()
 	}

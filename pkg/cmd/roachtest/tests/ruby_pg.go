@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"regexp"
 	"strconv"
 	"time"
@@ -227,11 +228,13 @@ func registerRubyPG(r registry.Registry) {
 		results.summarizeAll(t, "ruby-pg", blocklistName, expectedFailures, version, rubyPGVersion)
 	}
 
+	c := r.MakeClusterSpec(1)
+	c.UbuntuVersion = spec.FocalFossa
 	r.Add(registry.TestSpec{
 		Name:             "ruby-pg",
 		Timeout:          1 * time.Hour,
 		Owner:            registry.OwnerSQLFoundations,
-		Cluster:          r.MakeClusterSpec(1),
+		Cluster:          c,
 		Leases:           registry.MetamorphicLeases,
 		NativeLibs:       registry.LibGEOS,
 		CompatibleClouds: registry.AllExceptAWS,

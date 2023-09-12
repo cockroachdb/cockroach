@@ -78,6 +78,7 @@ type ClusterSpec struct {
 	Lifetime             time.Duration
 	ReusePolicy          clusterReusePolicy
 	TerminateOnMigration bool
+	UbuntuVersion        UbuntuVersion
 
 	// FileSystem determines the underlying FileSystem
 	// to be used. The default is ext4.
@@ -341,4 +342,21 @@ func (s *ClusterSpec) Expiration() time.Time {
 		l = 12 * time.Hour
 	}
 	return timeutil.Now().Add(l)
+}
+
+// UbuntuVersion specifies the version of Ubuntu used.
+type UbuntuVersion int
+
+type UbuntuImages struct {
+	DefaultImage string
+	ARM64Image   string
+	FIPSImage    string
+}
+
+const (
+	FocalFossa UbuntuVersion = 1 << iota
+)
+
+func (u UbuntuVersion) IsOverridden() bool {
+	return u != 0
 }

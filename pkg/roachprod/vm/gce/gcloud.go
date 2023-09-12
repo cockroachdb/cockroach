@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"os"
 	"os/exec"
 	"regexp"
@@ -38,8 +39,8 @@ import (
 const (
 	defaultProject      = "cockroach-ephemeral"
 	ProviderName        = "gce"
-	DefaultImage        = "ubuntu-2004-focal-v20230817"
-	ARM64Image          = "ubuntu-2004-focal-arm64-v20230817"
+	DefaultImage        = "ubuntu-2204-jammy-v20230727"
+	ARM64Image          = "ubuntu-2204-jammy-arm64-v20230727"
 	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
 	defaultImageProject = "ubuntu-os-cloud"
 	FIPSImageProject    = "ubuntu-os-pro-cloud"
@@ -994,6 +995,9 @@ func (p *Provider) Create(
 		imageProject = FIPSImageProject
 		l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", image, providerOpts.MachineType)
 	}
+	if opts.UbuntuVersion.IsOverridden() {
+		image = getUbuntuImage(opts.UbuntuVersion, opts.Arch)
+	}
 	args := []string{
 		"compute", "instances", "create",
 		"--subnet", "default",
@@ -1620,4 +1624,34 @@ func (p *Provider) ProjectActive(project string) bool {
 func lastComponent(url string) string {
 	s := strings.Split(url, "/")
 	return s[len(s)-1]
+}
+
+var (
+	// FocalFossa is Ubuntu version 20.04.
+	focalFossa = spec.UbuntuImages{
+		DefaultImage: "ubuntu-2004-focal-v20230817",
+		ARM64Image:   "ubuntu-2004-focal-arm64-v20230817",
+		FIPSImage:    "ubuntu-pro-fips-2004-focal-v20230811",
+	}
+
+	gceUbuntuImages = map[spec.UbuntuVersion]spec.UbuntuImages{
+		spec.FocalFossa: focalFossa,
+	}
+)
+
+func getUbuntuImage(version spec.UbuntuVersion, arch string) string {
+	image, ok := gceUbuntuImages[version]
+	if !ok {
+		switch arch {
+		case string(vm.ArchAMD64):
+			return image.DefaultImage
+		case string(vm.ArchARM64):
+			return image.ARM64Image
+		case string(vm.ArchFIPS):
+			return image.FIPSImage
+		default:
+			return image.DefaultImage
+		}
+	}
+	return ""
 }
