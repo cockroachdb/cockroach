@@ -44,8 +44,12 @@ const (
 	//  [mean - mean_tolerance, mean + mean_tolerance].
 	//
 	// The store rebalancer watches the replica CPU load and balances within
-	// +-10% of the mean. To reduce noise, add a buffer (5%) ontop.
-	meanCPUTolerance = 0.15
+	// +-10% of the mean (by default). To reduce noise, add a buffer (+10%)
+	// ontop.
+	// TODO(kvoli): Reduce the buffer once we attribute other CPU usage to a
+	// store via a node, such a SQL execution, stats collection and compactions.
+	// See #109768.
+	meanCPUTolerance = 0.20
 	// statSamplePeriod is the period at which timeseries stats are sampled.
 	statSamplePeriod = 10 * time.Second
 	// stableDuration is the duration which the cluster's load must remain
