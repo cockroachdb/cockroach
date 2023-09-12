@@ -2889,34 +2889,47 @@ func TestValidateTableDesc(t *testing.T) {
 				NextConstraintID: 2,
 			}},
 		{err: `invalid outbound foreign key "to_this_table": origin table ID should be 4. got 99`,
+			version: clusterversion.V23_2Start,
 			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
 				desc.OutboundFKs[0].OriginTableID = 99
 			})},
 		{err: `invalid outbound foreign key "to_this_table": no origin columns`,
+			version: clusterversion.V23_2Start,
 			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
 				desc.OutboundFKs[0].OriginColumnIDs = nil
 			})},
 		{err: `invalid outbound foreign key "to_this_table": mismatched number of referenced and origin columns`,
+			version: clusterversion.V23_2Start,
 			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
 				desc.OutboundFKs[0].ReferencedColumnIDs = []descpb.ColumnID{1, 2, 3}
 			})},
 		{err: `invalid outbound foreign key "to_this_table" from table "bar" (4): missing origin column=13`,
+			version: clusterversion.V23_2Start,
 			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
 				desc.OutboundFKs[0].OriginColumnIDs = []descpb.ColumnID{13}
 			})},
 		{err: `invalid inbound foreign key "from_this_table": referenced table ID should be 4. got 99`,
+			version: clusterversion.V23_2Start,
 			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
 				desc.InboundFKs[0].ReferencedTableID = 99
 			})},
 		{err: `invalid inbound foreign key "from_this_table": no referenced columns`,
+			version: clusterversion.V23_2Start,
 			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
 				desc.InboundFKs[0].ReferencedColumnIDs = nil
 			})},
 		{err: `invalid inbound foreign key "from_this_table": mismatched number of referenced and origin columns`,
+			version: clusterversion.V23_2Start,
 			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
 				desc.InboundFKs[0].OriginColumnIDs = []descpb.ColumnID{1, 2, 3}
 			})},
 		{err: `invalid inbound foreign key "from_this_table" to table "bar" (4): missing referenced column=13`,
+			version: clusterversion.V23_2Start,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.InboundFKs[0].ReferencedColumnIDs = []descpb.ColumnID{13}
+			})},
+		{err: ``, // ReferencedColumnIDs validation does not run on versions < V23_2Start.
+			version: clusterversion.V22_2,
 			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
 				desc.InboundFKs[0].ReferencedColumnIDs = []descpb.ColumnID{13}
 			})},

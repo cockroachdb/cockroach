@@ -798,9 +798,14 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		return
 	}
 
-	if err := desc.validateSelfFKs(); err != nil {
-		vea.Report(err)
-		return
+	// Only run this check on V23_2Start. This ensures that we don't break any
+	// non-upgraded clusters and that we'll block the finalization process if
+	// there are any corruptions found.
+	if vea.IsActive(clusterversion.V23_2Start) {
+		if err := desc.validateSelfFKs(); err != nil {
+			vea.Report(err)
+			return
+		}
 	}
 
 	if desc.IsVirtualTable() {
