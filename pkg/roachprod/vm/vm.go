@@ -278,6 +278,7 @@ type CreateOpts struct {
 
 	GeoDistributed bool
 	Arch           string
+	UbuntuVersion  UbuntuVersion
 	VMProviders    []string
 	SSDOpts        struct {
 		UseLocalSSD bool
@@ -693,4 +694,25 @@ func SanitizeLabel(label string) string {
 	// Remove any leading or trailing hyphens
 	label = strings.Trim(label, "-")
 	return label
+}
+
+// UbuntuVersion specifies the version of Ubuntu used. Note that a default
+// version is already provided and this is only for overriding that default.
+// TODO(Darryl): Remove after all tests are upgraded to Ubuntu 22.04.
+// See: https://github.com/cockroachdb/cockroach/issues/112112.
+type UbuntuVersion string
+
+type UbuntuImages struct {
+	DefaultImage string
+	ARM64Image   string
+	FIPSImage    string
+}
+
+const (
+	FocalFossa UbuntuVersion = "20.04"
+)
+
+// IsOverridden returns true if an Ubuntu version was specified.
+func (u UbuntuVersion) IsOverridden() bool {
+	return u != ""
 }
