@@ -334,6 +334,46 @@ type validationStatusInfo struct {
 	reason string
 }
 
+// ModifyDescriptor is a helper function that invokes the provided closure with
+// a predefined, valid, TableDescriptor and then returns the modified result.
+// Usage:
+//
+//	testCaseInvalidDecField: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+//		desc.InboundFKs = nil  // Clear InbounFKs to cause an error.
+//	})
+func ModifyDescriptor(fn func(*descpb.TableDescriptor)) descpb.TableDescriptor {
+	validDesc := descpb.TableDescriptor{
+		ID:            4,
+		ParentID:      1,
+		Name:          "bar",
+		FormatVersion: descpb.InterleavedFormatVersion,
+		Columns: []descpb.ColumnDescriptor{
+			{ID: 1, Name: "bar"},
+		},
+		Families: []descpb.ColumnFamilyDescriptor{
+			{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
+		},
+		PrimaryIndex: descpb.IndexDescriptor{ID: 1, Name: "bar", ConstraintID: 1,
+			KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"bar"},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+			EncodingType:        catenumpb.PrimaryIndexEncoding,
+			Version:             descpb.LatestIndexDescriptorVersion,
+		},
+		OutboundFKs: []descpb.ForeignKeyConstraint{
+			{
+				ReferencedColumnIDs: []descpb.ColumnID{},
+				ReferencedTableID:   14,
+			},
+		},
+		NextColumnID:     2,
+		NextFamilyID:     1,
+		NextIndexID:      3,
+		NextConstraintID: 2,
+	}
+	fn(&validDesc)
+	return validDesc
+}
+
 // Hello! If you're seeing this test fail, you probably just added a new
 // protobuf field to a descriptor. Please read the documentation at the top of
 // this file.
@@ -2835,7 +2875,25 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      3,
 				NextConstraintID: 2,
 			}},
+		{err: `invalid outbound foreign key: no origin columns`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.InboundFKs[0].OriginColumnIDs = nil
+			})},
+		{err: `invalid outbound foreign key from table`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.InboundFKs[0].OriginColumnIDs = []descpb.ColumnID{13}
+			})},
+		{err: `invalid outbound foreign key from table`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				// desc.Mutations = append(desc.Mutations, descpb.DescriptorMutation{
+				// 	Direction: descpb.DescriptorMutation_DROP,
+				// 	Descriptor_: &descpb.DescriptorMutation_Column{
+				// 		Column: &desc.Columns[0],
+				// 	},
+				// })
+			})},
 	}
+
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
 			d.desc.Privileges = catpb.NewBasePrivilegeDescriptor(username.RootUserName())
@@ -2957,6 +3015,9 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:   1,
 					Name: "bar",
+				},
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Type: types.String, Name: "foo_1"},
 				},
 				InboundFKs: []descpb.ForeignKeyConstraint{
 					{
