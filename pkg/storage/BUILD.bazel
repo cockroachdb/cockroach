@@ -142,7 +142,6 @@ go_test(
     embed = [":storage"],
     exec_properties = {"Pool": "medium"},
     shard_count = 2,
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
