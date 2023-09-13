@@ -920,6 +920,7 @@ func resolveOptionsForRestoreJobDescription(
 		SchemaOnly:                       opts.SchemaOnly,
 		VerifyData:                       opts.VerifyData,
 		UnsafeRestoreIncompatibleVersion: opts.UnsafeRestoreIncompatibleVersion,
+		StripLocalities:                  opts.StripLocalities,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -1921,6 +1922,15 @@ func doRestorePlan(
 		}
 	}
 
+	// If we are stripping localities, wipe tables of their LocalityConfig before we allocate
+	// descriptor rewrites - as validation in remapTables compares these tables with the non-mr
+	// database and fails otherwise
+	if restoreStmt.Options.StripLocalities {
+		for _, t := range filteredTablesByID {
+			t.TableDesc().LocalityConfig = nil
+		}
+	}
+
 	descriptorRewrites, err := allocateDescriptorRewrites(
 		ctx,
 		p,
@@ -2036,6 +2046,7 @@ func doRestorePlan(
 		VerifyData:          restoreStmt.Options.VerifyData,
 		SkipLocalitiesCheck: restoreStmt.Options.SkipLocalitiesCheck,
 		ExecutionLocality:   execLocality,
+		StripLocalities:     restoreStmt.Options.StripLocalities,
 	}
 
 	jr := jobs.Record{
