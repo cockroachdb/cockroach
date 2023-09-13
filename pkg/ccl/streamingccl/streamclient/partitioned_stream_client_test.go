@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -58,6 +59,150 @@ func (f *subscriptionFeedSource) Error() error {
 
 // Close implements the streamingtest.FeedSource interface.
 func (f *subscriptionFeedSource) Close(ctx context.Context) {}
+
+func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	h, cleanup := replicationtestutils.NewReplicationHelper(t,
+		base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	)
+	defer cleanup()
+
+	testTenantName := roachpb.TenantName("test-tenant")
+	_, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID(), testTenantName)
+	defer cleanupTenant()
+
+	ctx := context.Background()
+	client, err := streamclient.NewPartitionedStreamClient(ctx, h.MaybeGenerateInlineURL(t))
+	defer func() {
+		require.NoError(t, client.Close(ctx))
+	}()
+	require.NoError(t, err)
+
+	expectStreamState := func(streamID streampb.StreamID, status jobs.Status) {
+		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
+			[][]string{{string(status)}})
+	}
+	initialScanTimstamp := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	encodedSpec, err := protoutil.Marshal(&streampb.StreamPartitionSpec{
+		InitialScanTimestamp: initialScanTimstamp,
+		Spans:                []roachpb.Span{keys.MakeTenantSpan(serverutils.TestTenantID())},
+		Config: streampb.StreamPartitionSpec_ExecutionConfig{
+			MinCheckpointFrequency: 10 * time.Millisecond,
+		},
+	})
+	require.NoError(t, err)
+
+	t.Run("non-existent-job", func(t *testing.T) {
+		targetStreamID := streampb.StreamID(999)
+		expectedErr := fmt.Sprintf("job with ID %d does not exist", targetStreamID)
+		t.Run("plan fails", func(t *testing.T) {
+			_, err := client.Plan(ctx, targetStreamID)
+			require.ErrorContains(t, err, expectedErr)
+		})
+		t.Run("heartbeat returns STREAM_INACTIVE", func(t *testing.T) {
+			status, err := client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			require.NoError(t, err)
+			require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
+		})
+		t.Run("subscribe fails", func(t *testing.T) {
+			subscription, err := client.Subscribe(ctx, targetStreamID, encodedSpec, initialScanTimstamp, hlc.Timestamp{})
+			require.NoError(t, err)
+			err = subscription.Subscribe(ctx)
+			require.ErrorContains(t, err, expectedErr)
+		})
+
+		t.Run("complete fails", func(t *testing.T) {
+			err := client.Complete(ctx, targetStreamID, true)
+			require.ErrorContains(t, err, expectedErr)
+		})
+	})
+	t.Run("wrong-job-type", func(t *testing.T) {
+		var targetStreamID streampb.StreamID
+		h.SysSQL.QueryRow(t, "SELECT crdb_internal.create_sql_schema_telemetry_job()").Scan(&targetStreamID)
+
+		t.Run("plan fails", func(t *testing.T) {
+			_, err := client.Plan(ctx, targetStreamID)
+			require.ErrorContains(t, err, "not a replication stream job")
+		})
+		t.Run("heartbeat fails", func(t *testing.T) {
+			_, err := client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			require.ErrorContains(t, err, "not a replication stream job")
+		})
+		t.Run("subscribe fails", func(t *testing.T) {
+			subscription, err := client.Subscribe(ctx, targetStreamID, encodedSpec, initialScanTimstamp, hlc.Timestamp{})
+			require.NoError(t, err)
+			err = subscription.Subscribe(ctx)
+			require.ErrorContains(t, err, "not a replication stream job")
+		})
+		t.Run("complete fails", func(t *testing.T) {
+			err := client.Complete(ctx, targetStreamID, true)
+			require.ErrorContains(t, err, "not a replication stream job")
+		})
+	})
+	t.Run("paused-job", func(t *testing.T) {
+		rps, err := client.Create(ctx, testTenantName)
+		require.NoError(t, err)
+		targetStreamID := rps.StreamID
+		h.SysSQL.Exec(t, `PAUSE JOB $1`, targetStreamID)
+		expectStreamState(targetStreamID, jobs.StatusPaused)
+		t.Run("plan fails", func(t *testing.T) {
+			_, err := client.Plan(ctx, targetStreamID)
+			require.ErrorContains(t, err, "must be running")
+		})
+		t.Run("heartbeat returns STREAM_PAUSED", func(t *testing.T) {
+			status, err := client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			require.NoError(t, err)
+			require.Equal(t, streampb.StreamReplicationStatus_STREAM_PAUSED, status.StreamStatus)
+		})
+		t.Run("subscribe fails", func(t *testing.T) {
+			subscription, err := client.Subscribe(ctx, targetStreamID, encodedSpec, initialScanTimstamp, hlc.Timestamp{})
+			require.NoError(t, err)
+			err = subscription.Subscribe(ctx)
+			require.ErrorContains(t, err, "must be running")
+		})
+		t.Run("complete succeeds", func(t *testing.T) {
+			err := client.Complete(ctx, targetStreamID, true)
+			require.NoError(t, err)
+		})
+	})
+	t.Run("cancelled-job", func(t *testing.T) {
+		rps, err := client.Create(ctx, testTenantName)
+		require.NoError(t, err)
+		targetStreamID := rps.StreamID
+		h.SysSQL.Exec(t, `CANCEL JOB $1`, targetStreamID)
+		expectStreamState(targetStreamID, jobs.StatusCanceled)
+		t.Run("plan fails", func(t *testing.T) {
+			_, err := client.Plan(ctx, targetStreamID)
+			require.ErrorContains(t, err, "must be running")
+		})
+		t.Run("heartbeat returns STREAM_INACTIVE", func(t *testing.T) {
+			// Heartbeat early exits but with a nil error if the job
+			// isn't running or paused.
+			status, err := client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			require.NoError(t, err)
+			require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
+		})
+		t.Run("subscribe fails", func(t *testing.T) {
+			subscription, err := client.Subscribe(ctx, targetStreamID, encodedSpec, initialScanTimstamp, hlc.Timestamp{})
+			require.NoError(t, err)
+			err = subscription.Subscribe(ctx)
+			require.ErrorContains(t, err, "must be running")
+		})
+		t.Run("complete succeeds", func(t *testing.T) {
+			// This one is a bit surprising that we allow updating
+			// the producer job status when it has been cancelled.
+			err := client.Complete(ctx, targetStreamID, true)
+			require.NoError(t, err)
+		})
+	})
+}
 
 func TestPartitionedStreamReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -111,42 +256,15 @@ INSERT INTO d.t2 VALUES (2);
 	_, err = client.Create(ctx, testTenantName)
 	require.NoError(t, err)
 
+	expectStreamState(streamID, jobs.StatusRunning)
+
 	top, err := client.Plan(ctx, streamID)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(top.Partitions))
-	// Plan for a non-existent stream
-	_, err = client.Plan(ctx, 999)
-	require.True(t, testutils.IsError(err, fmt.Sprintf("job with ID %d does not exist", 999)), err)
 
-	var telemetryJobID int64
-	h.SysSQL.QueryRow(t, "SELECT crdb_internal.create_sql_schema_telemetry_job()").Scan(&telemetryJobID)
-	_, err = client.Plan(ctx, streampb.StreamID(telemetryJobID))
-	require.True(t, testutils.IsError(err, fmt.Sprintf("job with id %d is not a replication stream job", telemetryJobID)), err)
-
-	expectStreamState(streamID, jobs.StatusRunning)
 	status, err := client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 	require.NoError(t, err)
 	require.Equal(t, streampb.StreamReplicationStatus_STREAM_ACTIVE, status.StreamStatus)
-
-	// Pause the underlying producer job of the replication stream
-	h.SysSQL.Exec(t, `PAUSE JOB $1`, streamID)
-	expectStreamState(streamID, jobs.StatusPaused)
-	status, err = client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
-	require.NoError(t, err)
-	require.Equal(t, streampb.StreamReplicationStatus_STREAM_PAUSED, status.StreamStatus)
-
-	// Cancel the underlying producer job of the replication stream
-	h.SysSQL.Exec(t, `CANCEL JOB $1`, streamID)
-	expectStreamState(streamID, jobs.StatusCanceled)
-
-	status, err = client.Heartbeat(ctx, streamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
-	require.NoError(t, err)
-	require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
-
-	// Non-existent stream is not active in the source cluster.
-	status, err = client.Heartbeat(ctx, 999, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
-	require.NoError(t, err)
-	require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
 
 	initialScanTimestamp := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 

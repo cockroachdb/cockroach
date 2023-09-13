@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -141,6 +140,12 @@ const (
 // one of the lower or upper bound. We use that to "constrain" the iterator as
 // either a local key iterator or global key iterator and panic if a caller
 // violates that in a subsequent SeekGE/SeekLT call.
+//
+// intentInterleavingIter ignores locks in the lock table keyspace with
+// strengths other than lock.Intent (i.e. shared and exclusive locks). Future
+// versions of the iterator may expose information to users about whether any
+// non-intent locks were observed and, if so, which keys they were found on. For
+// now, no such information is exposed.
 type intentInterleavingIter struct {
 	prefix     bool
 	constraint intentInterleavingIterConstraint
@@ -154,9 +159,10 @@ type intentInterleavingIter struct {
 	// key parsing.
 	iterKey MVCCKey
 
-	// intentIter is for iterating over separated intents, so that
-	// intentInterleavingIter can make them look as if they were interleaved.
-	intentIter      *pebbleIterator // EngineIterator
+	// intentIter is for iterating over the lock table keyspace and finding
+	// intents, so that intentInterleavingIter can make them look as if they
+	// were interleaved.
+	intentIter      *LockTableIterator // EngineIterator
 	intentIterState pebble.IterValidityState
 	// The decoded key from the lock table. This is an unsafe key
 	// in that it is only valid when intentIter has not been
@@ -279,48 +285,42 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) (MVCCIterato
 	// bound for prefix iteration, though since they don't need to, most callers
 	// don't.
 
-	intentOpts := opts
-
 	// There cannot be any range keys across the lock table, so create the intent
 	// iterator for point keys only, or return a normal MVCC iterator if only
 	// range keys are requested.
-	if intentOpts.KeyTypes == IterKeyTypeRangesOnly {
+	if opts.KeyTypes == IterKeyTypeRangesOnly {
 		return reader.NewMVCCIterator(MVCCKeyIterKind, opts)
 	}
-	intentOpts.KeyTypes = IterKeyTypePointsOnly
-	intentOpts.RangeKeyMaskingBelow = hlc.Timestamp{}
 
 	iiIter := intentInterleavingIterPool.Get().(*intentInterleavingIter)
 	intentKeyBuf := iiIter.intentKeyBuf
 	intentLimitKeyBuf := iiIter.intentLimitKeyBuf
+
+	ltOpts := LockTableIteratorOptions{Prefix: opts.Prefix, MatchMinStr: lock.Intent}
 	if opts.LowerBound != nil {
-		intentOpts.LowerBound, intentKeyBuf = keys.LockTableSingleKey(opts.LowerBound, intentKeyBuf)
+		ltOpts.LowerBound, intentKeyBuf = keys.LockTableSingleKey(opts.LowerBound, intentKeyBuf)
 	} else if !opts.Prefix {
 		// Make sure we don't step outside the lock table key space. Note that
 		// this is the case where the lower bound was not set and
 		// constrainedToLocal.
-		intentOpts.LowerBound = keys.LockTableSingleKeyStart
+		ltOpts.LowerBound = keys.LockTableSingleKeyStart
 	}
 	if opts.UpperBound != nil {
-		intentOpts.UpperBound, intentLimitKeyBuf =
+		ltOpts.UpperBound, intentLimitKeyBuf =
 			keys.LockTableSingleKey(opts.UpperBound, intentLimitKeyBuf)
 	} else if !opts.Prefix {
 		// Make sure we don't step outside the lock table key space. Note that
 		// this is the case where the upper bound was not set and
 		// constrainedToGlobal.
-		intentOpts.UpperBound = keys.LockTableSingleKeyEnd
+		ltOpts.UpperBound = keys.LockTableSingleKeyEnd
 	}
 
-	// All readers given to intentInterleavingIter construct pebbleIterators, so
-	// we can use the concrete type here to avoid the cost of dynamic dispatch.
-	//
 	// Note that we can reuse intentKeyBuf, intentLimitKeyBuf after
-	// NewEngineIterator returns.
-	intentEngineIter, err := reader.NewEngineIterator(intentOpts)
+	// NewLockTableIter returns.
+	intentIter, err := NewLockTableIterator(reader, ltOpts)
 	if err != nil {
 		return nil, err
 	}
-	intentIter := intentEngineIter.(*pebbleIterator)
 
 	// The creation of these iterators can race with concurrent mutations, which
 	// may make them inconsistent with each other. So we clone here, to ensure

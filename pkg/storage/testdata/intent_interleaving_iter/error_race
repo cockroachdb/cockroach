@@ -6,8 +6,8 @@
 # Error case: Multiple separated intents with no provisional values
 define
 locks
-meta k=b ts=20 txn=2
-meta k=d ts=40 txn=4
+meta k=b str=intent ts=20 txn=2
+meta k=d str=intent ts=40 txn=4
 ----
 
 iter lower=a upper=f
@@ -36,10 +36,10 @@ prev: output: err: reverse iteration discovered intent without provisional value
 # Error case: Multiple intents for a key
 define
 locks
-meta k=a ts=10 txn=1
-meta k=b ts=20 txn=2
-meta k=b ts=20 txn=4
-meta k=c ts=30 txn=4
+meta k=a str=intent ts=10 txn=1
+meta k=b str=intent ts=20 txn=2
+meta k=b str=intent ts=20 txn=4
+meta k=c str=intent ts=30 txn=4
 mvcc
 value k=a ts=10 v=a10
 value k=b ts=20 v=b20
