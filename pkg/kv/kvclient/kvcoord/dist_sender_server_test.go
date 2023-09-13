@@ -1113,8 +1113,8 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 			// OpRequiresTxnError. We set the local clock to the timestamp of
 			// just above the first key to verify it's used to read only key "a".
 			for i, request := range []kvpb.Request{
-				kvpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), false),
-				kvpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), false),
+				kvpb.NewScan(roachpb.Key("a"), roachpb.Key("c"), kvpb.NonLocking),
+				kvpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c"), kvpb.NonLocking),
 			} {
 				// The looping is necessary since the Put above of a may not have been
 				// applied by time we execute the scan. If it has not run, then try the
@@ -1194,7 +1194,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		if _, err := kv.SendWrapped(ctx, tds, put); err != nil {
 			t.Fatal(err)
 		}
-		scan := kvpb.NewScan(writes[0], writes[len(writes)-1].Next(), false)
+		scan := kvpb.NewScan(writes[0], writes[len(writes)-1].Next(), kvpb.NonLocking)
 		reply, err := kv.SendWrapped(ctx, tds, scan)
 		if err != nil {
 			t.Fatal(err)
@@ -1233,7 +1233,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	txnProto := roachpb.MakeTransaction("MyTxn", nil, isolation.Serializable, 0, now.ToTimestamp(), 0, int32(s.SQLInstanceID()), 0)
 	txn := kv.NewTxnFromProto(ctx, db, s.NodeID(), now, kv.RootTxn, &txnProto)
 
-	scan := kvpb.NewScan(writes[0], writes[len(writes)-1].Next(), false)
+	scan := kvpb.NewScan(writes[0], writes[len(writes)-1].Next(), kvpb.NonLocking)
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txnProto}
 	ba.Add(scan)
@@ -1351,7 +1351,7 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 			// happens above this.
 			var maxTargetBytes int64
 			{
-				scan := kvpb.NewScan(tc.keys[0], tc.keys[len(tc.keys)-1].Next(), false)
+				scan := kvpb.NewScan(tc.keys[0], tc.keys[len(tc.keys)-1].Next(), kvpb.NonLocking)
 				resp, pErr := kv.SendWrapped(ctx, tds, scan)
 				require.Nil(t, pErr)
 				require.Nil(t, resp.Header().ResumeSpan)
@@ -1392,11 +1392,11 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 									var req kvpb.Request
 									switch {
 									case span.EndKey == nil:
-										req = kvpb.NewGet(span.Key, false /* forUpdate */)
+										req = kvpb.NewGet(span.Key, kvpb.NonLocking)
 									case reverse:
-										req = kvpb.NewReverseScan(span.Key, span.EndKey, false /* forUpdate */)
+										req = kvpb.NewReverseScan(span.Key, span.EndKey, kvpb.NonLocking)
 									default:
-										req = kvpb.NewScan(span.Key, span.EndKey, false /* forUpdate */)
+										req = kvpb.NewScan(span.Key, span.EndKey, kvpb.NonLocking)
 									}
 									ba.Add(req)
 								}

@@ -356,6 +356,20 @@ func (db *DB) GetForUpdate(ctx context.Context, key interface{}) (KeyValue, erro
 	return getOneRow(db.Run(ctx, b), b)
 }
 
+// GetForShare retrieves the value for a key, returning the retrieved key/value
+// or an error. An unreplicated, shared lock is acquired on the key, if it
+// exists. It is not considered an error for the key not to exist.
+//
+//	r, err := db.GetForShare("a")
+//	// string(r.Key) == "a"
+//
+// key can be either a byte slice or a string.
+func (db *DB) GetForShare(ctx context.Context, key interface{}) (KeyValue, error) {
+	b := &Batch{}
+	b.GetForShare(key)
+	return getOneRow(db.Run(ctx, b), b)
+}
+
 // GetProto retrieves the value for a key and decodes the result as a proto
 // message. If the key doesn't exist, the proto will simply be reset.
 //
@@ -478,7 +492,7 @@ func (db *DB) scan(
 	begin, end interface{},
 	maxRows int64,
 	isReverse bool,
-	forUpdate bool,
+	str kvpb.KeyLockingStrengthType,
 	readConsistency kvpb.ReadConsistencyType,
 ) ([]KeyValue, error) {
 	b := &Batch{}
@@ -486,7 +500,7 @@ func (db *DB) scan(
 	if maxRows > 0 {
 		b.Header.MaxSpanRequestKeys = maxRows
 	}
-	b.scan(begin, end, isReverse, forUpdate)
+	b.scan(begin, end, isReverse, str)
 	r, err := getOneResult(db.Run(ctx, b), b)
 	return r.Rows, err
 }
@@ -498,7 +512,7 @@ func (db *DB) scan(
 //
 // key can be either a byte slice or a string.
 func (db *DB) Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, false /* forUpdate */, kvpb.CONSISTENT)
+	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.NonLocking, kvpb.CONSISTENT)
 }
 
 // ScanForUpdate retrieves the rows between begin (inclusive) and end
@@ -511,7 +525,20 @@ func (db *DB) Scan(ctx context.Context, begin, end interface{}, maxRows int64) (
 func (db *DB) ScanForUpdate(
 	ctx context.Context, begin, end interface{}, maxRows int64,
 ) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, true /* forUpdate */, kvpb.CONSISTENT)
+	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForUpdate, kvpb.CONSISTENT)
+}
+
+// ScanForShare retrieves the rows between begin (inclusive) and end
+// (exclusive) in ascending order. Unreplicated, shared locks are
+// acquired on each of the returned keys.
+//
+// The returned []KeyValue will contain up to maxRows elements.
+//
+// key can be either a byte slice or a string.
+func (db *DB) ScanForShare(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]KeyValue, error) {
+	return db.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForShare, kvpb.CONSISTENT)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -523,7 +550,7 @@ func (db *DB) ScanForUpdate(
 func (db *DB) ReverseScan(
 	ctx context.Context, begin, end interface{}, maxRows int64,
 ) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, false /* forUpdate */, kvpb.CONSISTENT)
+	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.NonLocking, kvpb.CONSISTENT)
 }
 
 // ReverseScanForUpdate retrieves the rows between begin (inclusive) and end
@@ -536,7 +563,20 @@ func (db *DB) ReverseScan(
 func (db *DB) ReverseScanForUpdate(
 	ctx context.Context, begin, end interface{}, maxRows int64,
 ) ([]KeyValue, error) {
-	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, true /* forUpdate */, kvpb.CONSISTENT)
+	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForUpdate, kvpb.CONSISTENT)
+}
+
+// ReverseScanForShare retrieves the rows between begin (inclusive) and end
+// (exclusive) in descending order. Unreplicated, shared locks are acquired
+// on each of the returned keys.
+//
+// The returned []KeyValue will contain up to maxRows elements.
+//
+// key can be either a byte slice or a string.
+func (db *DB) ReverseScanForShare(
+	ctx context.Context, begin, end interface{}, maxRows int64,
+) ([]KeyValue, error) {
+	return db.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForShare, kvpb.CONSISTENT)
 }
 
 // Del deletes one or more keys.
