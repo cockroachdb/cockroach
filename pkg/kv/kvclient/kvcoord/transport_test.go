@@ -154,7 +154,7 @@ func TestResponseVerifyFailure(t *testing.T) {
 	}
 
 	ba := &kvpb.BatchRequest{}
-	req := kvpb.NewScan(roachpb.KeyMin, roachpb.KeyMax, false /* forUpdate */)
+	req := kvpb.NewScan(roachpb.KeyMin, roachpb.KeyMax, kvpb.NonLocking)
 	ba.Add(req)
 	br := ba.CreateReply()
 	resp := br.Responses[0].GetInner().(*kvpb.ScanResponse)

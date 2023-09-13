@@ -344,9 +344,9 @@ func TestRefreshSpanIterate(t *testing.T) {
 
 func TestRefreshSpanIterateSkipLocked(t *testing.T) {
 	ba := BatchRequest{}
-	ba.Add(NewGet(roachpb.Key("a"), false))
-	ba.Add(NewScan(roachpb.Key("b"), roachpb.Key("d"), false))
-	ba.Add(NewReverseScan(roachpb.Key("e"), roachpb.Key("g"), false))
+	ba.Add(NewGet(roachpb.Key("a"), NonLocking))
+	ba.Add(NewScan(roachpb.Key("b"), roachpb.Key("d"), NonLocking))
+	ba.Add(NewReverseScan(roachpb.Key("e"), roachpb.Key("g"), NonLocking))
 	br := ba.CreateReply()
 
 	// Without a SkipLocked wait policy.
