@@ -1683,6 +1683,9 @@ func cmdIterNew(e *evalCtx) error {
 	}
 	if len(opts.UpperBound) == 0 {
 		opts.UpperBound = keys.MaxKey
+		if len(opts.LowerBound) == 0 {
+			opts.LowerBound = keys.LocalMax
+		}
 	}
 	kind := storage.MVCCKeyAndIntentsIterKind
 	if e.hasArg("kind") {
@@ -1741,6 +1744,9 @@ func cmdIterNewIncremental(e *evalCtx) error {
 	}
 	if len(opts.EndKey) == 0 {
 		opts.EndKey = keys.MaxKey
+		if len(opts.StartKey) == 0 {
+			opts.StartKey = keys.LocalMax
+		}
 	}
 
 	opts.StartTime = e.getTsWithName("startTs")
@@ -1818,6 +1824,9 @@ func cmdIterNewReadAsOf(e *evalCtx) error {
 	}
 	if len(opts.UpperBound) == 0 {
 		opts.UpperBound = keys.MaxKey
+		if len(opts.LowerBound) == 0 {
+			opts.LowerBound = keys.LocalMax
+		}
 	}
 	r := e.newReader()
 	mvccIter, err := r.NewMVCCIterator(storage.MVCCKeyIterKind, opts)
