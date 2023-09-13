@@ -7,40 +7,46 @@ CREATE TABLE t (k INT PRIMARY KEY, v e NOT NULL);
 +object {100 101 _e} -> 105
 +object {100 101 t} -> 106
 
-
+# Intentionally, insert one value for the partial index ('a')
+# (see below). Update one value so it will get added into
+# the partial index. The $stageKeyValue + 1 will not be in the
+# partial index. The delete remove the first insert which will
+# get added back again after. All these changes are propogated in
+# the temporary index.
 stage-exec phase=PostCommitPhase stage=:
 INSERT INTO t VALUES($stageKey, 'a');
 INSERT INTO t VALUES($stageKey + 1, 'b');
 INSERT INTO t VALUES($stageKey + 2, 'c');
 DELETE FROM t WHERE v = 'a' and k=$stageKey;
 INSERT INTO t VALUES($stageKey, 'a');
-UPDATE t SET v='a' WHERE k > 0;
+UPDATE t SET v='a' WHERE k % 2 = 0 
 ----
 
-# Each insert will be injected thrice per stage, so we should always,
-# see a count of 2.
+
+# The value 'a' is added twice per stage, see the rational above.
 stage-query phase=PostCommitPhase stage=:
-SELECT count(*)=$successfulStageCount*3 FROM t where v='a';
+SELECT count(*)=$successfulStageCount*2 FROM t where v='a';
 ----
 true
 
-
+# Similar to the sequence above in the PostCommitPhase.
 stage-exec phase=PostCommitNonRevertiblePhase stage=:
 INSERT INTO t VALUES($stageKey, 'a');
 INSERT INTO t VALUES($stageKey + 1, 'b');
 INSERT INTO t VALUES($stageKey + 2, 'c');
 DELETE FROM t WHERE v = 'a' and k=$stageKey;
 INSERT INTO t VALUES($stageKey, 'a');
-UPDATE t SET v='a' WHERE k > 0;
+UPDATE t SET v='a' WHERE k % 2 = 0;
 ----
 
-# Each insert will be injected twice per stage, so we should always,
-# see a count of 2.
+
+# The value 'a' is added twice per stage, see the rational above.
 stage-query phase=PostCommitNonRevertiblePhase stage=:
-SELECT count(*)=$successfulStageCount*3 FROM t where v='a';
+SELECT count(*)=$successfulStageCount*2 FROM t where v='a';
 ----
 true
 
+# Create a partial index on column V where the value is A
 test
 CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 ----
@@ -58,7 +64,7 @@ write *eventpb.CreateIndex to event log:
     tag: CREATE INDEX
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 9 MutationType ops
+## StatementPhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #104
   ...
      referencingDescriptorIds:
@@ -118,6 +124,7 @@ upsert descriptor #106
   +      - 1
   +      name: crdb_internal_index_3_name_placeholder
   +      partitioning: {}
+  +      predicate: v = b'@':::@100104
   +      sharded: {}
   +      storeColumnNames: []
   +      useDeletePreservingEncoding: true
@@ -142,7 +149,7 @@ upsert descriptor #106
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 15 MutationType ops
+## PreCommitPhase stage 2 of 2 with 16 MutationType ops
 upsert descriptor #104
    type:
      arrayTypeId: 105
@@ -240,6 +247,7 @@ upsert descriptor #106
   +      - 1
   +      name: crdb_internal_index_3_name_placeholder
   +      partitioning: {}
+  +      predicate: v = b'@':::@100104
   +      sharded: {}
   +      storeColumnNames: []
   +      useDeletePreservingEncoding: true
@@ -577,6 +585,7 @@ upsert descriptor #106
   -      - 1
   -      name: crdb_internal_index_3_name_placeholder
   -      partitioning: {}
+  -      predicate: v = b'@':::@100104
   -      sharded: {}
   -      storeColumnNames: []
   -      useDeletePreservingEncoding: true
