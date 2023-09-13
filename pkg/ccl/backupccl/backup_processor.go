@@ -174,7 +174,7 @@ func newBackupDataProcessor(
 				bp.close()
 				if bp.agg != nil {
 					meta := bulk.ConstructTracingAggregatorProducerMeta(ctx,
-						bp.flowCtx.NodeID.SQLInstanceID(), bp.flowCtx.ID, bp.agg)
+						bp.flowCtx.NodeID.SQLInstanceID(), bp.flowCtx.ID, bp.ProcessorID, bp.agg)
 					return []execinfrapb.ProducerMetadata{*meta}
 				}
 				return nil
@@ -265,7 +265,7 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 		bp.aggTimer.Read = true
 		bp.aggTimer.Reset(15 * time.Second)
 		return nil, bulk.ConstructTracingAggregatorProducerMeta(bp.Ctx(),
-			bp.flowCtx.NodeID.SQLInstanceID(), bp.flowCtx.ID, bp.agg)
+			bp.flowCtx.NodeID.SQLInstanceID(), bp.flowCtx.ID, bp.ProcessorID, bp.agg)
 	}
 }
 

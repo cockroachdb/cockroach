@@ -394,5 +394,10 @@ message TracingAggregatorEvents {
   optional bytes flow_id = 2 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "FlowID",
     (gogoproto.customtype) = "FlowID"];
+  // Identifier of this component, within the domain of components of the same
+  // type.
+  optional int32 id = 4 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ID"];
+
   map<string, bytes> events = 3;
 }

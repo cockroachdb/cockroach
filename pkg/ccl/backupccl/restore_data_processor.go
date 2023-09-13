@@ -213,7 +213,7 @@ func newRestoreDataProcessor(
 				rd.ConsumerClosed()
 				if rd.agg != nil {
 					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
-						rd.flowCtx.NodeID.SQLInstanceID(), rd.flowCtx.ID, rd.agg)
+						rd.flowCtx.NodeID.SQLInstanceID(), rd.flowCtx.ID, rd.ProcessorID, rd.agg)
 					return []execinfrapb.ProducerMetadata{*meta}
 				}
 				return nil
@@ -718,7 +718,7 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 		rd.aggTimer.Read = true
 		rd.aggTimer.Reset(15 * time.Second)
 		return nil, bulkutil.ConstructTracingAggregatorProducerMeta(rd.Ctx(),
-			rd.flowCtx.NodeID.SQLInstanceID(), rd.flowCtx.ID, rd.agg)
+			rd.flowCtx.NodeID.SQLInstanceID(), rd.flowCtx.ID, rd.ProcessorID, rd.agg)
 	case meta := <-rd.metaCh:
 		return nil, meta
 	case <-rd.Ctx().Done():

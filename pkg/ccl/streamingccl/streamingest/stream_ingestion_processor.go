@@ -336,7 +336,7 @@ func newStreamIngestionDataProcessor(
 				sip.close()
 				if sip.agg != nil {
 					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
-						sip.flowCtx.NodeID.SQLInstanceID(), sip.flowCtx.ID, sip.agg)
+						sip.flowCtx.NodeID.SQLInstanceID(), sip.flowCtx.ID, sip.ProcessorID, sip.agg)
 					return []execinfrapb.ProducerMetadata{*meta}
 				}
 				return nil
@@ -498,7 +498,7 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		sip.aggTimer.Read = true
 		sip.aggTimer.Reset(15 * time.Second)
 		return nil, bulkutil.ConstructTracingAggregatorProducerMeta(sip.Ctx(),
-			sip.flowCtx.NodeID.SQLInstanceID(), sip.flowCtx.ID, sip.agg)
+			sip.flowCtx.NodeID.SQLInstanceID(), sip.flowCtx.ID, sip.ProcessorID, sip.agg)
 	case err := <-sip.errCh:
 		sip.MoveToDraining(err)
 		return nil, sip.DrainHelper()
