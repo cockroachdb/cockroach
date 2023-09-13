@@ -2601,4 +2601,11 @@ service Status {
       body: "*"
     };
   }
+
+  rpc QueryPersistedStatementInsights(StatementExecutionInsightsRequest) returns (StatementExecutionInsightsResponse) {
+    option (google.api.http) = {
+      post: "/_status/insights/statements/persisted"
+      body: "*"
+    };
+  }
 }

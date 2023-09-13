@@ -60,7 +60,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -3748,46 +3747,6 @@ func (s *statusServer) ListExecutionInsights(
 		return nil, srverrors.ServerError(ctx, err)
 	}
 	return &response, nil
-}
-
-// StatementExecutionInsights requests statement insights that satisfy specified
-// parameters in request payload if any provided.
-func (s *statusServer) StatementExecutionInsights(
-	ctx context.Context, req *serverpb.StatementExecutionInsightsRequest,
-) (*serverpb.StatementExecutionInsightsResponse, error) {
-	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
-	ctx = s.AnnotateCtx(ctx)
-	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
-		return nil, err
-	}
-	// Validate that either both start and end time are defined or not.
-	if (req.StartTime != nil && req.EndTime == nil) || (req.EndTime != nil && req.StartTime == nil) {
-		return nil, errors.New("required that both StartTime and EndTime to be set")
-	}
-	resp := &serverpb.StatementExecutionInsightsResponse{
-		StatementInsights: make([]*insights.Statement, 0),
-	}
-
-	inMemoryInsights, err := s.ListExecutionInsights(ctx, &serverpb.ListExecutionInsightsRequest{WithContentionInfo: true})
-	if err != nil {
-		return nil, err
-	}
-	for _, insight := range inMemoryInsights.Insights {
-		for _, stmt := range insight.Statements {
-			if req.StatementID != nil && stmt.ID != *req.StatementID {
-				continue
-			}
-			if req.StmtFingerprintID != appstatspb.StmtFingerprintID(0) && stmt.FingerprintID != req.StmtFingerprintID {
-				continue
-			}
-			if req.StartTime != nil && req.EndTime != nil &&
-				!timeutil.IsOverlappingTimeRanges(*req.StartTime, *req.EndTime, stmt.StartTime, stmt.EndTime) {
-				continue
-			}
-			resp.StatementInsights = append(resp.StatementInsights, stmt)
-		}
-	}
-	return resp, nil
 }
 
 // SpanStats requests the total statistics stored on a node for a given key

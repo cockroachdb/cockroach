@@ -17,21 +17,31 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -180,4 +190,85 @@ func TestStatusServer_StatementExecutionInsights(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestStatusServer_QueryPersistedStatementInsights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // speeds up test
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	srv := tc.ApplicationLayer(0)
+
+	startTime := timeutil.FromUnixNanos(1693561818000000)
+	endTime := timeutil.FromUnixNanos(1693562118000000)
+	contentionDuration := 15 * time.Second
+	s := insights.Statement{
+		ID:                   clusterunique.IDFromBytes([]byte{1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8}),
+		FingerprintID:        appstatspb.StmtFingerprintID(1),
+		LatencyInSeconds:     4,
+		Query:                "SELECT * FROM users",
+		Status:               insights.Statement_Completed,
+		StartTime:            startTime,
+		EndTime:              endTime,
+		FullScan:             false,
+		Database:             "movr",
+		PlanGist:             "plan_gist",
+		RowsRead:             42,
+		RowsWritten:          15,
+		Retries:              3,
+		AutoRetryReason:      "auto_retry_reason",
+		Nodes:                []int64{1, 2, 3},
+		Contention:           &contentionDuration,
+		IndexRecommendations: []string{"idx_recommendation_1", "idx_recommendation_2"},
+		Problem:              insights.Problem_SlowExecution,
+		Causes:               []insights.Cause{insights.Cause_HighContention, insights.Cause_PlanRegression},
+		CPUSQLNanos:          500000,
+		ErrorCode:            "error_code",
+		ContentionInfo: &insights.ContentionInfo{
+			Event: &contentionpb.ExtendedContentionEvent{
+				BlockingEvent: kvpb.ContentionEvent{
+					Key: roachpb.Key("a"),
+					TxnMeta: enginepb.TxnMeta{
+						ID:                uuid.FastMakeV4(),
+						Key:               []byte{1, 2, 3, 4, 5, 6, 7, 8},
+						IsoLevel:          isolation.Serializable,
+						Epoch:             14,
+						WriteTimestamp:    hlc.Timestamp{WallTime: 10},
+						MinTimestamp:      hlc.Timestamp{WallTime: 20},
+						Priority:          2,
+						Sequence:          4,
+						CoordinatorNodeID: 3,
+					},
+					Duration: 3 * time.Second,
+				},
+				BlockingTxnFingerprintID: appstatspb.TransactionFingerprintID(33),
+				WaitingTxnID:             uuid.FastMakeV4(),
+				WaitingTxnFingerprintID:  appstatspb.TransactionFingerprintID(55),
+				CollectionTs:             time.Now().UTC(),
+				WaitingStmtFingerprintID: appstatspb.StmtFingerprintID(88),
+				WaitingStmtID:            clusterunique.IDFromBytes([]byte{1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8}),
+			},
+			DatabaseName: "movr",
+			SchemaName:   "demo",
+			IndexName:    "users_idx",
+			TableName:    "users",
+		},
+	}
+
+	_, err := server.PersistStmtInsight(ctx, srv.InternalExecutor().(*sql.InternalExecutor), &s)
+	require.NoError(t, err)
+
+	ss := srv.StatusServer().(serverpb.StatusServer)
+	resp, err := ss.QueryPersistedStatementInsights(ctx, &serverpb.StatementExecutionInsightsRequest{})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(resp.StatementInsights))
+	require.Equal(t, &s, resp.StatementInsights[0])
 }

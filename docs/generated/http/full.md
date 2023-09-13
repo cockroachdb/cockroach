@@ -5342,6 +5342,54 @@ StatementExecutionInsightsResponse returns list of requested statement execution
 
 
 
+## QueryPersistedStatementInsights
+
+`POST /_status/insights/statements/persisted`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+StatementExecutionInsightsRequest requests a list of statement execution insights that match
+specified statement ID or fingerprint ID in case they're specified.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| statement_id | [bytes](#cockroach.server.serverpb.StatementExecutionInsightsRequest-bytes) |  |  | [reserved](#support-status) |
+| stmt_fingerprint_id | [uint64](#cockroach.server.serverpb.StatementExecutionInsightsRequest-uint64) |  |  | [reserved](#support-status) |
+| start_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementExecutionInsightsRequest-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| end_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementExecutionInsightsRequest-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+StatementExecutionInsightsResponse returns list of requested statement execution insights.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| statement_insights | [cockroach.sql.insights.Statement](#cockroach.server.serverpb.StatementExecutionInsightsResponse-cockroach.sql.insights.Statement) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`
