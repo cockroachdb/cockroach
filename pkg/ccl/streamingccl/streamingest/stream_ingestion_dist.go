@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -315,12 +316,16 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 		}
 
 		// Setup a one-stage plan with one proc per input spec.
-		corePlacement := make([]physicalplan.ProcessorCorePlacement, len(streamIngestionSpecs))
-		i := 0
+		corePlacement := make([]physicalplan.ProcessorCorePlacement, 0, len(streamIngestionSpecs))
 		for instanceID := range streamIngestionSpecs {
-			corePlacement[i].SQLInstanceID = instanceID
-			corePlacement[i].Core.StreamIngestionData = streamIngestionSpecs[instanceID]
-			i++
+			for _, partSpec := range streamIngestionSpecs[instanceID] {
+				corePlacement = append(corePlacement, physicalplan.ProcessorCorePlacement{
+					SQLInstanceID: instanceID,
+					Core: execinfrapb.ProcessorCoreUnion{
+						StreamIngestionData: partSpec,
+					},
+				})
+			}
 		}
 
 		p := planCtx.NewPhysicalPlan()
@@ -505,6 +510,10 @@ func getDestNodeLocalities(
 	return instanceInfos, nil
 }
 
+// maxProcessorsPerSQLInstance controls how many ingestion processors
+// we allow to be assigned to a given SQL instance.
+const maxProcessorsPerSQLInstance = 1
+
 func constructStreamIngestionPlanSpecs(
 	ctx context.Context,
 	streamAddress streamingccl.StreamAddress,
@@ -518,31 +527,29 @@ func constructStreamIngestionPlanSpecs(
 	sourceTenantID roachpb.TenantID,
 	destinationTenantID roachpb.TenantID,
 ) (
-	map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+	map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec,
 	*execinfrapb.StreamIngestionFrontierSpec,
 	error,
 ) {
+	streamIngestionSpecs := make(map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec, len(destSQLInstances))
+	trackedSpans := make([]roachpb.Span, 0)
+	subscribingSQLInstances := make(map[string]uint32)
 
-	streamIngestionSpecs := make(map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec, len(destSQLInstances))
-	for _, id := range destSQLInstances {
-		spec := &execinfrapb.StreamIngestionDataSpec{
+	ingestionDataSpec := func() *execinfrapb.StreamIngestionDataSpec {
+		return &execinfrapb.StreamIngestionDataSpec{
 			StreamID:                    uint64(streamID),
 			JobID:                       int64(jobID),
 			PreviousReplicatedTimestamp: previousReplicatedTimestamp,
 			InitialScanTimestamp:        initialScanTimestamp,
+			PartitionSpecs:              make(map[string]execinfrapb.StreamIngestionPartitionSpec),
 			Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
 			StreamAddress:               string(streamAddress),
-			PartitionSpecs:              make(map[string]execinfrapb.StreamIngestionPartitionSpec),
 			TenantRekey: execinfrapb.TenantRekey{
 				OldID: sourceTenantID,
 				NewID: destinationTenantID,
 			},
 		}
-		streamIngestionSpecs[id.GetInstanceID()] = spec
 	}
-
-	trackedSpans := make([]roachpb.Span, 0)
-	subscribingSQLInstances := make(map[string]uint32)
 
 	// Update stream ingestion specs with their matched source node.
 	matcher := makeNodeMatcher(destSQLInstances)
@@ -563,15 +570,36 @@ func constructStreamIngestionPlanSpecs(
 			Address:           string(partition.SrcAddr),
 			Spans:             partition.Spans,
 		}
-		streamIngestionSpecs[destID].PartitionSpecs[partition.ID] = partSpec
+
+		if len(streamIngestionSpecs[destID]) < maxProcessorsPerSQLInstance {
+			spec := ingestionDataSpec()
+			spec.PartitionSpecs[partition.ID] = partSpec
+			streamIngestionSpecs[destID] = append(streamIngestionSpecs[destID], spec)
+		} else {
+			// Add this to an existing processor that has
+			// the fewest partitions already assigned to
+			// it.
+			fewestPartitions := func(specs []*execinfrapb.StreamIngestionDataSpec) int {
+				lowestIdx := 0
+				lowestCount := 0
+				for i := range specs {
+					partSpecCount := len(specs[i].PartitionSpecs)
+					if partSpecCount < lowestCount {
+						lowestCount = partSpecCount
+						lowestIdx = i
+					}
+				}
+				return lowestIdx
+			}
+			procIdx := fewestPartitions(streamIngestionSpecs[destID])
+			streamIngestionSpecs[destID][procIdx].PartitionSpecs[partition.ID] = partSpec
+		}
 		trackedSpans = append(trackedSpans, partition.Spans...)
 	}
 
-	// Remove any ingestion processors that haven't been assigned any work.
-	for key, spec := range streamIngestionSpecs {
-		if len(spec.PartitionSpecs) == 0 {
-			delete(streamIngestionSpecs, key)
-		}
+	err := divideSpecsIfCapacity(streamIngestionSpecs, ingestionDataSpec, maxProcessorsPerSQLInstance)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// Create a spec for the StreamIngestionFrontier processor on the coordinator
@@ -587,6 +615,111 @@ func constructStreamIngestionPlanSpecs(
 	}
 
 	return streamIngestionSpecs, streamIngestionFrontierSpec, nil
+}
+
+// divideSpecsIfCapacity iterates the given spec map and if processors
+// are available for a given SQL instance it finds the partition with
+// the most spans and splits them amongst the remaining processor
+// capacity.
+//
+// We don't look to divide specs across nodes since we've already done
+// locality matching by the time we call this code.
+func divideSpecsIfCapacity(
+	specMap map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec,
+	defaultSpecBuilder func() *execinfrapb.StreamIngestionDataSpec,
+	maxWorkerCount int,
+) error {
+
+	splitSpans := func(spans []roachpb.Span, maxBatches int) [][]roachpb.Span {
+		batchSize := len(spans) / maxBatches
+		if batchSize == 0 {
+			batchSize = 1
+		}
+		batches := make([][]roachpb.Span, 0, maxBatches)
+		for batchSize < len(spans) && len(batches) < (maxBatches-1) {
+			spans, batches = spans[batchSize:], append(batches, spans[0:batchSize:batchSize])
+		}
+		batches = append(batches, spans)
+		return batches
+	}
+
+	partitionSpecWithMostSpans := func(processors []*execinfrapb.StreamIngestionDataSpec) (int, string) {
+		processorIdx := 0
+		partitionSpecID := ""
+		maxSpansSeen := 0
+		for i := range processors {
+			for partID, partSpec := range processors[i].PartitionSpecs {
+				if len(partSpec.Spans) > maxSpansSeen {
+					processorIdx = i
+					partitionSpecID = partID
+					maxSpansSeen = len(partSpec.Spans)
+				}
+			}
+		}
+		return processorIdx, partitionSpecID
+	}
+
+	tokenForPartitionSpecWithSpans := func(spec streampb.StreamPartitionSpec, spans []roachpb.Span) (string, error) {
+		spec.Spans = spans
+		marshaledToken, err := protoutil.Marshal(&spec)
+		if err != nil {
+			return "", err
+		}
+		return string(marshaledToken), nil
+	}
+
+	for destID, specs := range specMap {
+		if len(specs) < maxWorkerCount {
+			remainingProcs := maxWorkerCount - len(specs)
+			processorID, partID := partitionSpecWithMostSpans(specs)
+			if partID == "" {
+				continue
+			}
+
+			origPartSpec := specs[processorID].PartitionSpecs[partID]
+			if len(origPartSpec.Spans) == 1 {
+				continue
+			}
+
+			// Parse the original subscription token. We
+			// need to rewrite this to represent the new
+			// set of spans.
+			origSubscriptionSpec := streampb.StreamPartitionSpec{}
+			err := protoutil.Unmarshal(
+				streamclient.SubscriptionToken(origPartSpec.SubscriptionToken),
+				&origSubscriptionSpec)
+			if err != nil {
+				return err
+			}
+
+			spanBatches := splitSpans(origPartSpec.Spans, remainingProcs+1)
+
+			// Modify the existing processor that contained this
+			// partition.
+			spec := origPartSpec
+			spec.Spans = spanBatches[0]
+			spec.SubscriptionToken, err = tokenForPartitionSpecWithSpans(origSubscriptionSpec, spec.Spans)
+			if err != nil {
+				return err
+			}
+			specMap[destID][processorID].PartitionSpecs[partID] = spec
+
+			// Add additional processors for the remaining batches.
+			for i := 1; i < len(spanBatches); i++ {
+				spec := defaultSpecBuilder()
+				partSpec := origPartSpec
+				partSpec.Spans = spanBatches[i]
+				partSpec.SubscriptionToken, err = tokenForPartitionSpecWithSpans(origSubscriptionSpec, partSpec.Spans)
+				if err != nil {
+					return err
+				}
+				spec.PartitionSpecs[partID] = partSpec
+				specMap[destID] = append(specMap[destID], spec)
+			}
+
+		}
+	}
+	return nil
 }
 
 // waitUntilProducerActive pings the producer job and waits until it

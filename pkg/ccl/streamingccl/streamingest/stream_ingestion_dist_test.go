@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -179,17 +180,20 @@ func TestSourceDestMatching(t *testing.T) {
 
 	// validatePairs tests that src-dst assignments are expected.
 	validatePairs := func(t *testing.T,
-		sipSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+		sipSpecs map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec,
 		expected map[pair]struct{}) {
-		for dstID, spec := range sipSpecs {
-			require.True(t, len(spec.PartitionSpecs) > 0, "empty node %s included in partition specs", dstID)
-			for srcID := range spec.PartitionSpecs {
-				srcIDNum, err := strconv.Atoi(srcID)
-				require.NoError(t, err)
-				expectKey := pair{srcIDNum, int(dstID)}
-				_, ok := expected[expectKey]
-				require.True(t, ok, "Src %s,Dst %d do not match", srcID, dstID)
-				delete(expected, expectKey)
+		for dstID, specs := range sipSpecs {
+			require.True(t, len(specs) > 0, "empty node %s included in partition specs", dstID)
+			for _, spec := range specs {
+				require.True(t, len(spec.PartitionSpecs) > 0, "empty node %s included in partition specs", dstID)
+				for srcID := range spec.PartitionSpecs {
+					srcIDNum, err := strconv.Atoi(srcID)
+					require.NoError(t, err)
+					expectKey := pair{srcIDNum, int(dstID)}
+					_, ok := expected[expectKey]
+					require.True(t, ok, "Src %s,Dst %d do not match", srcID, dstID)
+					delete(expected, expectKey)
+				}
 			}
 		}
 		require.Equal(t, 0, len(expected), "expected matches not included")
@@ -198,13 +202,15 @@ func TestSourceDestMatching(t *testing.T) {
 	// validateEvenDistribution tests that source node assignments were evenly
 	// distributed across destination nodes. This function is only called on test
 	// cases without an expected exact src-dst node match.
-	validateEvenDistribution := func(t *testing.T, sipSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec, dstNodes []sql.InstanceLocality) {
+	validateEvenDistribution := func(t *testing.T, sipSpecs map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec, dstNodes []sql.InstanceLocality) {
 		require.Equal(t, len(sipSpecs), len(dstNodes))
 		dstNodeAssignmentCount := make(map[base.SQLInstanceID]int, len(dstNodes))
-		for dstID, spec := range sipSpecs {
-			dstNodeAssignmentCount[dstID] = 0
-			for range spec.PartitionSpecs {
-				dstNodeAssignmentCount[dstID]++
+		for dstID, specs := range sipSpecs {
+			for _, spec := range specs {
+				dstNodeAssignmentCount[dstID] = 0
+				for range spec.PartitionSpecs {
+					dstNodeAssignmentCount[dstID]++
+				}
 			}
 		}
 
@@ -323,4 +329,205 @@ func TestSourceDestMatching(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDivideSpecsIfCapacity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ingestionDataSpec := func() *execinfrapb.StreamIngestionDataSpec {
+		return &execinfrapb.StreamIngestionDataSpec{
+			PartitionSpecs: make(map[string]execinfrapb.StreamIngestionPartitionSpec),
+		}
+	}
+
+	// All of the test cases start with some input that has these
+	// spans divided amongst the nodes.
+	src1Spans := []roachpb.Span{
+		{Key: []byte("1a"), EndKey: []byte("1b")},
+		{Key: []byte("1e"), EndKey: []byte("1f")},
+		{Key: []byte("1x"), EndKey: []byte("1y")},
+	}
+	src2Spans := []roachpb.Span{
+		{Key: []byte("2a"), EndKey: []byte("2b")},
+		{Key: []byte("2e"), EndKey: []byte("2f")},
+		{Key: []byte("2x"), EndKey: []byte("2y")},
+	}
+	src3Spans := []roachpb.Span{
+		{Key: []byte("3a"), EndKey: []byte("3z")},
+	}
+	subsriptionTokenForSpan := func(t *testing.T, spans []roachpb.Span) string {
+		out, err := protoutil.Marshal(&streampb.StreamPartitionSpec{Spans: spans})
+		require.NoError(t, err)
+		return string(out)
+	}
+
+	validateFinal := func(t *testing.T, input map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec, maxProcessorCount int) {
+		src1FinalSpans := []roachpb.Span{}
+		src2FinalSpans := []roachpb.Span{}
+		src3FinalSpans := []roachpb.Span{}
+		for _, procSpecList := range input {
+			require.True(t, len(procSpecList) <= maxProcessorCount)
+			for _, procSpec := range procSpecList {
+				src1FinalSpans = append(src1FinalSpans, procSpec.PartitionSpecs["src1"].Spans...)
+				src2FinalSpans = append(src2FinalSpans, procSpec.PartitionSpecs["src2"].Spans...)
+				src3FinalSpans = append(src3FinalSpans, procSpec.PartitionSpecs["src3"].Spans...)
+
+				for _, partSpec := range procSpec.PartitionSpecs {
+					subscriptionToken := streampb.StreamPartitionSpec{}
+					err := protoutil.Unmarshal(
+						streamclient.SubscriptionToken(partSpec.SubscriptionToken),
+						&subscriptionToken)
+					require.NoError(t, err)
+					require.Equal(t, subscriptionToken.Spans, partSpec.Spans, "partition spec spans should matched serialized token")
+				}
+			}
+		}
+		require.Equal(t, src1Spans, src1FinalSpans)
+		require.Equal(t, src2Spans, src2FinalSpans)
+		require.Equal(t, src3Spans, src3FinalSpans)
+	}
+
+	t.Run("processors not yet at the processor count (processor count = 7)", func(t *testing.T) {
+		input := map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec{
+			1: {
+				{
+					PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
+						"src1": {
+							Spans:             append([]roachpb.Span(nil), src1Spans...),
+							SubscriptionToken: subsriptionTokenForSpan(t, src1Spans),
+						},
+					},
+				},
+			},
+			2: {
+				{
+					PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
+						"src2": {
+							Spans:             append([]roachpb.Span(nil), src2Spans...),
+							SubscriptionToken: subsriptionTokenForSpan(t, src2Spans),
+						},
+					},
+				},
+				{
+					PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
+						"src3": {
+							Spans:             append([]roachpb.Span(nil), src3Spans...),
+							SubscriptionToken: subsriptionTokenForSpan(t, src3Spans),
+						},
+					},
+				},
+			},
+		}
+
+		err := divideSpecsIfCapacity(input, ingestionDataSpec, 7)
+		require.NoError(t, err)
+		validateFinal(t, input, 7)
+	})
+	t.Run("processors not yet at the processor count (processor count = 3)", func(t *testing.T) {
+		input := map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec{
+			1: {
+				{
+					PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
+						"src1": {
+							Spans:             append([]roachpb.Span(nil), src1Spans...),
+							SubscriptionToken: subsriptionTokenForSpan(t, src1Spans),
+						},
+					},
+				},
+			},
+			2: {
+				{
+					PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
+						"src2": {
+							Spans:             append([]roachpb.Span(nil), src2Spans...),
+							SubscriptionToken: subsriptionTokenForSpan(t, src2Spans),
+						},
+					},
+				},
+				{
+					PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
+						"src3": {
+							Spans:             append([]roachpb.Span(nil), src3Spans...),
+							SubscriptionToken: subsriptionTokenForSpan(t, src3Spans),
+						},
+					},
+				},
+			},
+		}
+
+		err := divideSpecsIfCapacity(input, ingestionDataSpec, 3)
+		require.NoError(t, err)
+		validateFinal(t, input, 3)
+	})
+	t.Run("processors already at the processor count (processor count = 1)", func(t *testing.T) {
+		input := map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec{
+			1: {
+				{
+					PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
+						"src1": {
+							Spans:             append([]roachpb.Span(nil), src1Spans...),
+							SubscriptionToken: subsriptionTokenForSpan(t, src1Spans),
+						},
+					},
+				},
+			},
+			2: {
+				{
+					PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
+						"src2": {
+							Spans:             append([]roachpb.Span(nil), src2Spans...),
+							SubscriptionToken: subsriptionTokenForSpan(t, src2Spans),
+						},
+					},
+				},
+			},
+			3: {
+				{
+					PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
+						"src3": {
+							Spans:             append([]roachpb.Span(nil), src3Spans...),
+							SubscriptionToken: subsriptionTokenForSpan(t, src3Spans),
+						},
+					},
+				},
+			},
+		}
+		err := divideSpecsIfCapacity(input, ingestionDataSpec, 1)
+		require.NoError(t, err)
+		validateFinal(t, input, 1)
+	})
+	t.Run("processors already at the processor count (processor count = 3)", func(t *testing.T) {
+		input := map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec{
+			1: {
+				{
+					PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
+						"src1": {
+							Spans:             append([]roachpb.Span(nil), src1Spans...),
+							SubscriptionToken: subsriptionTokenForSpan(t, src1Spans),
+						},
+					},
+				},
+				{
+					PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
+						"src2": {
+							Spans:             append([]roachpb.Span(nil), src2Spans...),
+							SubscriptionToken: subsriptionTokenForSpan(t, src2Spans),
+						},
+					},
+				},
+				{
+					PartitionSpecs: map[string]execinfrapb.StreamIngestionPartitionSpec{
+						"src3": {
+							Spans:             append([]roachpb.Span(nil), src3Spans...),
+							SubscriptionToken: subsriptionTokenForSpan(t, src3Spans),
+						},
+					},
+				},
+			},
+		}
+		err := divideSpecsIfCapacity(input, ingestionDataSpec, 3)
+		require.NoError(t, err)
+		validateFinal(t, input, 3)
+	})
 }
