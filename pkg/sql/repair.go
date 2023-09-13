@@ -712,12 +712,8 @@ func checkPlannerStateForRepairFunctions(ctx context.Context, p *planner, method
 	if p.extendedEvalCtx.TxnReadOnly {
 		return readOnlyError(method)
 	}
-	hasAdmin, err := p.UserHasAdminRole(ctx, p.User())
-	if err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA); err != nil {
 		return err
-	}
-	if !hasAdmin {
-		return pgerror.Newf(pgcode.InsufficientPrivilege, "admin role required for %s", method)
 	}
 	return nil
 }
