@@ -1346,6 +1346,8 @@ CREATE TABLE t.test2 ();
 			return errors.Errorf("expected new lease expiration (%s) to be after old lease expiration (%s)",
 				en1, eo1)
 		} else if count := atomic.LoadInt32(&testAcquiredCount); count < 2 {
+			// acquireCount is 2 or 3: initial acquire on t1 (done), initial acquire
+			// on t2 (done), asyn renew on t1 (maybe done)
 			return errors.Errorf("expected at least 2 leases to be acquired, but acquired %d times",
 				count)
 		} else if blockCount := atomic.LoadInt32(&testAcquisitionBlockCount); blockCount > 0 {
@@ -1372,8 +1374,11 @@ CREATE TABLE t.test2 ();
 		if en2.WallTime <= eo2.WallTime {
 			return errors.Errorf("expected new lease expiration (%s) to be after old lease expiration (%s)",
 				en2, eo2)
-		} else if count := atomic.LoadInt32(&testAcquiredCount); count < 3 {
-			return errors.Errorf("expected at least 3 leases to be acquired, but acquired %d times",
+		} else if count := atomic.LoadInt32(&testAcquiredCount); count < 2 {
+			// acquireCount is 2 or 3 or 4: initial acquire on t1 (done), initial
+			// acquire on t2 (done), asyn renew on t1 (maybe done), asyn renew on t2
+			// (maybe done)
+			return errors.Errorf("expected at least 2 leases to be acquired, but acquired %d times",
 				count)
 		} else if blockCount := atomic.LoadInt32(&testAcquisitionBlockCount); blockCount > 0 {
 			t.Fatalf("expected repeated lease acquisition to not block, but blockCount is: %d", blockCount)
@@ -1932,8 +1937,11 @@ CREATE TABLE t.test2 ();
 
 	// Check that lease acquisition happens independent of lease being requested.
 	testutils.SucceedsSoon(t, func() error {
-		if count := atomic.LoadInt32(&testAcquiredCount); count <= 4 {
-			return errors.Errorf("expected more than 4 leases to be acquired, but acquired %d times", count)
+		if count := atomic.LoadInt32(&testAcquiredCount); count < 4 {
+			// Wait for the background renew goroutine to renew t1 and t2 at least
+			// once, making AcquireCount at least 4: initial acquire on t1, initial
+			// acquire on t2, renew on t1, renew on t2.
+			return errors.Errorf("expected at least 4 leases to be acquired, but acquired %d times", count)
 		}
 		released := releasedLeases()
 		if notYetReleased := expected.Difference(released); notYetReleased.Len() != 0 {
