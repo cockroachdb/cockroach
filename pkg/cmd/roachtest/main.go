@@ -34,6 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -48,19 +51,21 @@ import (
 // details. Also, if the exit codes here change, they need to updated
 // on that script accordingly.
 
-// ExitCodeTestsFailed is the exit code that results from a run of
-// roachtest in which the infrastructure worked, but at least one
-// test failed.
-const ExitCodeTestsFailed = 10
+const (
+	// ExitCodeTestsFailed is the exit code that results from a run of
+	// roachtest in which the infrastructure worked, but at least one
+	// test failed.
+	ExitCodeTestsFailed = 10
 
-// ExitCodeClusterProvisioningFailed is the exit code that results
-// from a run of roachtest in which some clusters could not be
-// created due to errors during cloud hardware allocation.
-const ExitCodeClusterProvisioningFailed = 11
+	// ExitCodeClusterProvisioningFailed is the exit code that results
+	// from a run of roachtest in which some clusters could not be
+	// created due to errors during cloud hardware allocation.
+	ExitCodeClusterProvisioningFailed = 11
 
-// runnerLogsDir is the dir under the artifacts root where the test runner log
-// and other runner-related logs (i.e. cluster creation logs) will be written.
-const runnerLogsDir = "_runner-logs"
+	// runnerLogsDir is the dir under the artifacts root where the test runner log
+	// and other runner-related logs (i.e. cluster creation logs) will be written.
+	runnerLogsDir = "_runner-logs"
+)
 
 // Only used if passed otherwise refer to ClusterSpec.
 // If a new flag is added here it should also be added to createFlagsOverride().
@@ -437,6 +442,20 @@ the cluster nodes on start.
 	}
 }
 
+// This diverts all the default non fatal logging to a file in `baseDir`. This is particularly
+// useful in CI, where without this, stderr/stdout are cluttered with logs from various
+// packages used in roachtest like sarama and testutils.
+func setLogConfig(baseDir string) {
+	logConf := logconfig.DefaultStderrConfig()
+	logConf.Sinks.Stderr.Filter = logpb.Severity_FATAL
+	if err := logConf.Validate(&baseDir); err != nil {
+		panic(err)
+	}
+	if _, err := log.ApplyConfig(logConf); err != nil {
+		panic(err)
+	}
+}
+
 type cliCfg struct {
 	args                   []string
 	count                  int
@@ -513,6 +532,7 @@ func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) erro
 		return errors.Newf("--debug-always is only allowed when running a single test")
 	}
 
+	setLogConfig(cfg.artifactsDir)
 	runnerDir := filepath.Join(cfg.artifactsDir, runnerLogsDir)
 	runnerLogPath := filepath.Join(
 		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
