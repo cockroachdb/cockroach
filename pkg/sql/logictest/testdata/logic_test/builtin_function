@@ -4005,7 +4005,8 @@ FROM crdb_internal.check_consistency(true, crdb_internal.tenant_span()[1], crdb_
 ORDER BY range_id
 LIMIT 1
 ----
-RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SeparatedIntentCount: RangeKeyCount: RangeKeyBytes: RangeValCount: RangeValBytes: SysBytes: SysCount: AbortSpanBytes:}
+RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: LockAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: LockCount: RangeKeyCount: RangeKeyBytes: RangeValCount: RangeValBytes: SysBytes: SysCount: AbortSpanBytes:}
+
 
 # Fill a table with consistency check results. This used to panic.
 # See: https://github.com/cockroachdb/cockroach/issues/88222
