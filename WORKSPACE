@@ -602,6 +602,10 @@ http_archive(
     ],
 )
 
+# Cockroach binaries for use by mixed-version logictests.
+load("//pkg/sql/logictest:REPOSITORIES.bzl", "cockroach_binaries_for_testing")
+cockroach_binaries_for_testing()
+
 load("//build/bazelutil:repositories.bzl", "distdir_repositories")
 
 distdir_repositories()
