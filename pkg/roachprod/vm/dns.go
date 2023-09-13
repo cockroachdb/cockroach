@@ -11,6 +11,7 @@
 package vm
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"regexp"
@@ -47,8 +48,8 @@ type DNSRecord struct {
 // DNSProvider is an optional capability for a Provider that provides DNS
 // management services.
 type DNSProvider interface {
-	CreateRecords(records ...DNSRecord) error
-	LookupSRVRecords(service, proto, subdomain string) ([]DNSRecord, error)
+	CreateRecords(ctx context.Context, records ...DNSRecord) error
+	LookupSRVRecords(ctx context.Context, service, proto, subdomain string) ([]DNSRecord, error)
 	DeleteRecordsBySubdomain(subdomain string) error
 	Domain() string
 }

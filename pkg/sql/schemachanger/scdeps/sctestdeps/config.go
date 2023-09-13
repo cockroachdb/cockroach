@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -68,6 +69,17 @@ func WithDescriptors(c nstree.Catalog) Option {
 			state.committed.UpsertDescriptor(desc)
 			return nil
 		})
+	})
+}
+
+// WithSystemDatabaseDescriptor adds the system database descriptor to the
+// catalog.
+//
+// TODO(jeffswenson): delete this once `DROP DATABASE` works with a
+// multi-region system database. (See PR #109844).
+func WithSystemDatabaseDescriptor() Option {
+	return optionFunc(func(state *TestState) {
+		state.committed.UpsertDescriptor(systemschema.MakeSystemDatabaseDesc())
 	})
 }
 

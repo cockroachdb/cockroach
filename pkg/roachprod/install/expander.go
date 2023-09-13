@@ -204,7 +204,7 @@ func (e *expander) maybeExpandPgPort(
 	if e.pgPorts == nil {
 		e.pgPorts = make(map[Node]string, len(c.VMs))
 		for _, node := range allNodes(len(c.VMs)) {
-			desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL, tenantInstance)
+			desc, err := c.DiscoverService(ctx, node, tenantName, ServiceTypeSQL, tenantInstance)
 			if err != nil {
 				return s, false, err
 			}
@@ -229,7 +229,7 @@ func (e *expander) maybeExpandUIPort(
 		e.uiPorts = make(map[Node]string, len(c.VMs))
 		for _, node := range allNodes(len(c.VMs)) {
 			// TODO(herko): Add support for external tenants.
-			e.uiPorts[node] = fmt.Sprint(c.NodeUIPort(node))
+			e.uiPorts[node] = fmt.Sprint(c.NodeUIPort(ctx, node))
 		}
 	}
 

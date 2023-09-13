@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "gce",
     srcs = [
+        "dns.go",
         "gcloud.go",
         "utils.go",
     ],
@@ -13,10 +14,12 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/flagstub",
+        "//pkg/util/retry",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_pflag//:pflag",
         "@org_golang_google_api//cloudbilling/v1beta",
+        "@org_golang_x_exp//maps",
         "@org_golang_x_sync//errgroup",
     ],
 )
