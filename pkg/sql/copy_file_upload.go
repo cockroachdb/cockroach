@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -108,7 +110,8 @@ func newFileUploadMachine(
 	c.parsingEvalCtx = c.p.EvalContext()
 
 	if n.Table.Table() == NodelocalFileUploadTable {
-		if err := c.p.RequireAdminRole(ctx, "upload to nodelocal"); err != nil {
+		// Note that admins implicitly have the REPAIRCLUSTERMETADATA privilege.
+		if err := c.p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA); err != nil {
 			return nil, err
 		}
 	}

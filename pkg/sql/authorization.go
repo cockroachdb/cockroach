@@ -107,11 +107,6 @@ type AuthorizationAccessor interface {
 	// HasAdminRole checks if the current session's user has admin role.
 	HasAdminRole(ctx context.Context) (bool, error)
 
-	// RequireAdminRole is a wrapper on top of HasAdminRole.
-	// It errors if HasAdminRole errors or if the user isn't a super-user.
-	// Includes the named action in the error message.
-	RequireAdminRole(ctx context.Context, action string) error
-
 	// MemberOfWithAdminOption looks up all the roles (direct and indirect) that 'member' is a member
 	// of and returns a map of role -> isAdmin.
 	MemberOfWithAdminOption(ctx context.Context, member username.SQLUsername) (map[username.SQLUsername]bool, error)
@@ -506,22 +501,6 @@ func (p *planner) UserHasAdminRole(ctx context.Context, user username.SQLUsernam
 // Requires a valid transaction to be open.
 func (p *planner) HasAdminRole(ctx context.Context) (bool, error) {
 	return p.UserHasAdminRole(ctx, p.User())
-}
-
-// RequireAdminRole implements the AuthorizationAccessor interface.
-// Requires a valid transaction to be open.
-func (p *planner) RequireAdminRole(ctx context.Context, action string) error {
-	ok, err := p.HasAdminRole(ctx)
-
-	if err != nil {
-		return err
-	}
-	if !ok {
-		// raise error if user is not a super-user
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only users with the admin role are allowed to %s", action)
-	}
-	return nil
 }
 
 // MemberOfWithAdminOption is a wrapper around the MemberOfWithAdminOption

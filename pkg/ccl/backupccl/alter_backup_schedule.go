@@ -24,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -299,8 +301,11 @@ func processScheduleOptions(
 			// NB: as of 20.2, schedule creation requires admin so this is duplicative
 			// but in the future we might relax so you can schedule anything that you
 			// can backup, but then this cluster-wide metric should be admin-only.
-			if err := p.RequireAdminRole(ctx, optUpdatesLastBackupMetric); err != nil {
-				return pgerror.Wrap(err, pgcode.InsufficientPrivilege, "")
+			// Note that admins implicitly have the REPAIRCLUSTERMETADATA privilege.
+			if err := p.CheckPrivilege(
+				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+			); err != nil {
+				return pgerror.Wrapf(err, pgcode.InsufficientPrivilege, "changing %s", optUpdatesLastBackupMetric)
 			}
 
 			updatesLastBackupMetric, err := strconv.ParseBool(v)
