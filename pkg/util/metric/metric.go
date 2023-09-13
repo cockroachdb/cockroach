@@ -42,9 +42,6 @@ type Iterable interface {
 	GetName() string
 	// GetHelp returns the help text for the metric.
 	GetHelp() string
-	// GetMeasurement returns the label for the metric, which describes the entity
-	// it measures.
-	GetMeasurement() string
 	// GetUnit returns the unit that should be used to display the metric
 	// (e.g. in bytes).
 	GetUnit() Unit
@@ -119,11 +116,6 @@ func (m *Metadata) GetName() string {
 // GetHelp returns the metric's help string.
 func (m *Metadata) GetHelp() string {
 	return m.Help
-}
-
-// GetMeasurement returns the entity measured by the metric.
-func (m *Metadata) GetMeasurement() string {
-	return m.Measurement
 }
 
 // GetUnit returns the metric's unit of measurement.

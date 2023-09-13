@@ -149,11 +149,6 @@ func (c CounterWithMetric) GetHelp() string {
 	return c.metric.GetHelp()
 }
 
-// GetMeasurement implements metric.Iterable
-func (c CounterWithMetric) GetMeasurement() string {
-	return c.metric.GetMeasurement()
-}
-
 // GetUnit implements metric.Iterable
 func (c CounterWithMetric) GetUnit() metric.Unit {
 	return c.metric.GetUnit()

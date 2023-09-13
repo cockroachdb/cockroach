@@ -49,9 +49,6 @@ func (a *AggHistogram) GetName() string { return a.h.GetName() }
 // GetHelp is part of the metric.Iterable interface.
 func (a *AggHistogram) GetHelp() string { return a.h.GetHelp() }
 
-// GetMeasurement is part of the metric.Iterable interface.
-func (a *AggHistogram) GetMeasurement() string { return a.h.GetMeasurement() }
-
 // GetUnit is part of the metric.Iterable interface.
 func (a *AggHistogram) GetUnit() metric.Unit { return a.h.GetUnit() }
 
