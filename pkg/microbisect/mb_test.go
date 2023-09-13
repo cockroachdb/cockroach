@@ -6,5 +6,5 @@ import (
 )
 
 func BenchmarkTest(t *testing.B) {
-	time.Sleep(5 * time.Millisecond)
+	time.Sleep(25 * time.Millisecond)
 }
