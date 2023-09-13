@@ -232,7 +232,7 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.vectorize	enumeration	on	"default vectorize mode [on = 0, on = 2, experimental_always = 3, off = 4]
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
-sql.defaults.zigzag_join.enabled	boolean	true	"default value for enable_zigzag_join session setting; allows use of zig-zag join by default
+sql.defaults.zigzag_join.enabled	boolean	false	"default value for enable_zigzag_join session setting; disallows use of zig-zag join by default
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	tenant-rw
 sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in bytes a processor can use before falling back to temp storage	tenant-rw

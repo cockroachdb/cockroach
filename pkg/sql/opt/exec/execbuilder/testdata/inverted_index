@@ -26,6 +26,9 @@ CREATE TABLE f (
 statement ok
 CREATE INVERTED INDEX foo_inv ON d(b)
 
+statement ok
+SET enable_zigzag_join = true
+
 # Tests for json inverted indexes.
 
 query T kvtrace

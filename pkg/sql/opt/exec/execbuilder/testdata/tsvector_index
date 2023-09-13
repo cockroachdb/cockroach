@@ -91,6 +91,9 @@ vectorized: true
           table: a@a_b_idx
           spans: 3 spans
 
+statement ok
+SET enable_zigzag_join = true
+
 query T
 EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo & bar'
 ----
@@ -129,6 +132,9 @@ vectorized: true
       right table: a@a_b_idx
       right columns: (a, b_inverted_key)
       right fixed values: 1 column
+
+statement ok
+RESET enable_zigzag_join
 
 query T
 EXPLAIN SELECT * FROM a@a_b_idx WHERE b @@ 'foo & !bar'

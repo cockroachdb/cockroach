@@ -71,12 +71,12 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	}
 
 	expectedStatsIndexB := roachpb.IndexUsageStatistics{
-		TotalReadCount: 2,
+		TotalReadCount: 1,
 		LastRead:       timeutil.Now(),
 	}
 
 	expectedStatsIndexPrimary := roachpb.IndexUsageStatistics{
-		TotalReadCount: 1,
+		TotalReadCount: 2,
 		LastRead:       timeutil.Now(),
 	}
 

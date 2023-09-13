@@ -363,8 +363,8 @@ var maxHashShardedIndexRangePreSplit = settings.RegisterIntSetting(
 var zigzagJoinClusterMode = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.defaults.zigzag_join.enabled",
-	"default value for enable_zigzag_join session setting; allows use of zig-zag join by default",
-	true,
+	"default value for enable_zigzag_join session setting; disallows use of zig-zag join by default",
+	false,
 	settings.WithPublic)
 
 var optDrivenFKCascadesClusterLimit = settings.RegisterIntSetting(

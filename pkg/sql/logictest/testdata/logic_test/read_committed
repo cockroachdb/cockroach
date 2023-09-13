@@ -139,11 +139,17 @@ SELECT aisle
   FOR UPDATE
 
 # SELECT FOR UPDATE using a zigzag join should also fail.
+statement ok
+SET enable_zigzag_join = true
+
 query error pgcode 0A000 guaranteed-durable locking not yet implemented
 SELECT aisle
   FROM supermarket@{FORCE_ZIGZAG}
   WHERE starts_with = 'm' AND ends_with = 'lda'
   FOR UPDATE
+
+statement ok
+RESET enable_zigzag_join
 
 subtest end
 
