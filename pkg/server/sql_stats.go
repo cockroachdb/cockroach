@@ -26,7 +26,7 @@ func (s *statusServer) ResetSQLStats(
 	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.requireRepairClusterMetadataPermission(ctx); err != nil {
 		return nil, err
 	}
 
