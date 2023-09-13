@@ -624,7 +624,7 @@ func EncodeInvertedIndexTableKeys(
 	case types.TSVectorFamily:
 		return tsearch.EncodeInvertedIndexKeys(inKey, val.(*tree.DTSVector).TSVector)
 	}
-	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType())
+	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError())
 }
 
 // EncodeContainingInvertedIndexSpans returns the spans that must be scanned in
@@ -652,7 +652,7 @@ func EncodeContainingInvertedIndexSpans(
 		return encodeContainingArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
 	default:
 		return nil, errors.AssertionFailedf(
-			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+			"trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError(),
 		)
 	}
 }
@@ -683,7 +683,7 @@ func EncodeContainedInvertedIndexSpans(
 		return json.EncodeContainedInvertedIndexSpans(nil /* inKey */, val.(*tree.DJSON).JSON)
 	default:
 		return nil, errors.AssertionFailedf(
-			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+			"trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError(),
 		)
 	}
 }
@@ -714,7 +714,7 @@ func EncodeExistsInvertedIndexSpans(
 	case types.ArrayFamily:
 		if val.ResolvedType().ArrayContents().Family() != types.StringFamily {
 			return nil, errors.AssertionFailedf(
-				"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+				"trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError(),
 			)
 		}
 		var expr inverted.Expression
@@ -738,7 +738,7 @@ func EncodeExistsInvertedIndexSpans(
 		return expr, nil
 	default:
 		return nil, errors.AssertionFailedf(
-			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+			"trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError(),
 		)
 	}
 }
@@ -766,7 +766,7 @@ func EncodeOverlapsInvertedIndexSpans(
 		return encodeOverlapsArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
 	default:
 		return nil, errors.AssertionFailedf(
-			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+			"trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError(),
 		)
 	}
 }
