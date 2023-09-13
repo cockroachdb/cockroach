@@ -17,9 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
+
+// RunFirstUpgradePrecondition short-circuits FirstUpgradeFromReleasePrecondition if set to false.
+var RunFirstUpgradePrecondition = envutil.EnvOrDefaultBool("COCKROACH_RUN_FIRST_UPGRADE_PRECONDITION", false)
 
 // FirstUpgradeFromReleasePrecondition is the precondition check for upgrading
 // from any supported major release.
@@ -38,6 +42,9 @@ import (
 func FirstUpgradeFromReleasePrecondition(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
+	if !RunFirstUpgradePrecondition {
+		return nil
+	}
 	// For performance reasons, we look back in time when performing
 	// a diagnostic query. If no corruptions were found back then, we assume that
 	// there are no corruptions now. Otherwise, we retry and do everything
