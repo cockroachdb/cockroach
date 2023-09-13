@@ -244,8 +244,18 @@ type replicateKV struct {
 	// the number of rows inserted into the cluster before c2c begins
 	initRows int
 
-	// max size of raw data written during each insertion
+	// initWithSplitAndScatter splits and scatters the kv table after
+	// initialization. This should be set for tests that init little or no data.
+	initWithSplitAndScatter bool
+
+	// maxBlockBytes indicates the maximum size of the kv payload value written
+	// during each insertion. The kv workload will randomly choose a value in the
+	// interval [1,maxBlockSize] with equal probability, i.e. via
+	// x~Uniform[1,maxBlockSize].
 	maxBlockBytes int
+
+	// maxQPS caps the queries per second sent to the source cluster after initialization.
+	maxQPS int
 
 	// partitionKVDatabaseInRegion constrains the kv database in the specified
 	// region and asserts, before cutover, that the replicated span configuration
@@ -260,9 +270,11 @@ type replicateKV struct {
 func (kv replicateKV) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
 	cmd := roachtestutil.NewCommand(`./workload init kv`).
 		MaybeFlag(kv.initRows > 0, "insert-count", kv.initRows).
+		// Only set the max block byte values for the init command if we
+		// actually need to insert rows.
 		MaybeFlag(kv.initRows > 0, "max-block-bytes", kv.maxBlockBytes).
-		Flag("splits", 100).
-		Option("scatter").
+		MaybeFlag(kv.initWithSplitAndScatter, "splits", 100).
+		MaybeOption(kv.initWithSplitAndScatter, "scatter").
 		Arg("{pgurl%s:%s}", nodes, tenantName)
 	return cmd.String()
 }
@@ -273,6 +285,7 @@ func (kv replicateKV) sourceRunCmd(tenantName string, nodes option.NodeListOptio
 		Flag("max-block-bytes", kv.maxBlockBytes).
 		Flag("read-percent", kv.readPercent).
 		MaybeFlag(kv.debugRunDuration > 0, "duration", kv.debugRunDuration).
+		MaybeFlag(kv.maxQPS > 0, "max-rate", kv.maxQPS).
 		Arg("{pgurl%s:%s}", nodes, tenantName)
 	return cmd.String()
 }
@@ -982,7 +995,7 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 		dstNodes: 1,
 		// The timeout field ensures the c2c roachtest driver behaves properly.
 		timeout:                   10 * time.Minute,
-		workload:                  replicateKV{readPercent: 0, debugRunDuration: 1 * time.Minute, maxBlockBytes: 1},
+		workload:                  replicateKV{readPercent: 0, debugRunDuration: 1 * time.Minute, maxBlockBytes: 1, initWithSplitAndScatter: true},
 		additionalDuration:        0 * time.Minute,
 		cutover:                   30 * time.Second,
 		skipNodeDistributionCheck: true,
@@ -1035,13 +1048,17 @@ func registerClusterToCluster(r registry.Registry) {
 			cutover:            30 * time.Minute,
 		},
 		{
-			name:                                 "c2c/kv0",
-			benchmark:                            true,
-			srcNodes:                             3,
-			dstNodes:                             3,
-			cpus:                                 8,
-			pdSize:                               100,
-			workload:                             replicateKV{readPercent: 0, maxBlockBytes: 1024},
+			name:      "c2c/kv0",
+			benchmark: true,
+			srcNodes:  3,
+			dstNodes:  3,
+			cpus:      8,
+			pdSize:    100,
+			workload: replicateKV{
+				readPercent:             0,
+				maxBlockBytes:           1024,
+				initWithSplitAndScatter: true,
+			},
 			timeout:                              1 * time.Hour,
 			additionalDuration:                   10 * time.Minute,
 			cutover:                              5 * time.Minute,
@@ -1065,6 +1082,27 @@ func registerClusterToCluster(r registry.Registry) {
 			cutover:            0,
 		},
 		{
+			// Large workload to test our 23.2 perf goals.
+			name:      "c2c/weekly/kv50",
+			benchmark: true,
+			srcNodes:  8,
+			dstNodes:  8,
+			cpus:      8,
+			pdSize:    1000,
+
+			workload: replicateKV{
+				// Write a ~2TB initial scan.
+				initRows:      350000000,
+				readPercent:   50,
+				maxBlockBytes: 4096,
+				maxQPS:        2000,
+			},
+			timeout:            12 * time.Hour,
+			additionalDuration: 4 * time.Hour,
+			cutover:            0,
+			tags:               registry.Tags("weekly", "aws-weekly"),
+		},
+		{
 			name:      "c2c/MultiRegion/SameRegions/kv0",
 			benchmark: true,
 			srcNodes:  4,
@@ -1074,6 +1112,7 @@ func registerClusterToCluster(r registry.Registry) {
 			workload: replicateKV{
 				readPercent:                 0,
 				maxBlockBytes:               1024,
+				initWithSplitAndScatter:     true,
 				partitionKVDatabaseInRegion: "us-west1",
 				antiRegion:                  "us-central1",
 			},
@@ -1093,8 +1132,11 @@ func registerClusterToCluster(r registry.Registry) {
 			dstNodes: 1,
 			cpus:     4,
 			pdSize:   10,
-			workload: replicateKV{readPercent: 0, debugRunDuration: 1 * time.Minute,
-				maxBlockBytes: 1024},
+			workload: replicateKV{
+				readPercent:             0,
+				debugRunDuration:        1 * time.Minute,
+				initWithSplitAndScatter: true,
+				maxBlockBytes:           1024},
 			timeout:                   5 * time.Minute,
 			additionalDuration:        0 * time.Minute,
 			cutover:                   30 * time.Second,
@@ -1394,7 +1436,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 			srcNodes:                             4,
 			dstNodes:                             4,
 			cpus:                                 8,
-			workload:                             replicateKV{readPercent: 0, initRows: 5000000, maxBlockBytes: 1024},
+			workload:                             replicateKV{readPercent: 0, initRows: 5000000, maxBlockBytes: 1024, initWithSplitAndScatter: true},
 			timeout:                              20 * time.Minute,
 			additionalDuration:                   6 * time.Minute,
 			cutover:                              3 * time.Minute,
@@ -1507,7 +1549,7 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		srcNodes:           3,
 		dstNodes:           3,
 		cpus:               4,
-		workload:           replicateKV{readPercent: 0, initRows: 1000000, maxBlockBytes: 1024},
+		workload:           replicateKV{readPercent: 0, initRows: 1000000, maxBlockBytes: 1024, initWithSplitAndScatter: true},
 		timeout:            20 * time.Minute,
 		additionalDuration: 10 * time.Minute,
 		cutover:            2 * time.Minute,
