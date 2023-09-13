@@ -352,7 +352,12 @@ func TestFailedInsights(t *testing.T) {
 			}
 
 			if problems != tc.problems {
-				return fmt.Errorf("expected problems to be '%s', but was '%s'. stmts: %s", tc.problems, problems, tc.stmts)
+				// During tests some transactions can stay open for longer, adding an extra `SlowExecution` to the problems
+				// list. This checks for that possibility.
+				withSlow := strings.Replace(tc.problems, "{", "{SlowExecution,", -1)
+				if problems != withSlow {
+					return fmt.Errorf("expected problems to be '%s', but was '%s'. stmts: %s", tc.problems, problems, tc.stmts)
+				}
 			}
 
 			if status != tc.txnStatus {

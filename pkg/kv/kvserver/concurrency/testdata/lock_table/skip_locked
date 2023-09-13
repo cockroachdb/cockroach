@@ -356,11 +356,11 @@ locked: true, holder: 00000000-0000-0000-0000-000000000001
 
 is-key-locked-by-conflicting-txn r=req8 k=h strength=exclusive
 ----
-locked: false
+lock promotion from Shared to Exclusive is not allowed
 
 is-key-locked-by-conflicting-txn r=req8 k=i strength=exclusive
 ----
-locked: true, holder: <nil>
+lock promotion from Shared to Exclusive is not allowed
 
 dequeue r=req8
 ----

@@ -347,7 +347,11 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 				g := guardsByReqName[reqName]
-				g = lt.ScanAndEnqueue(req, g)
+				var err *Error
+				g, err = lt.ScanAndEnqueue(req, g)
+				if err != nil {
+					return err.String()
+				}
 				guardsByReqName[reqName] = g
 				return fmt.Sprintf("start-waiting: %t", g.ShouldWait())
 
@@ -553,7 +557,10 @@ func TestLockTableBasic(t *testing.T) {
 				default:
 					str = "old: "
 				}
-				state := g.CurState()
+				state, err := g.CurState()
+				if err != nil {
+					return err.Error()
+				}
 				var typeStr string
 				switch state.kind {
 				case waitForDistinguished:
@@ -858,7 +865,8 @@ func TestLockTableMaxLocks(t *testing.T) {
 			LockSpans:  lockSpans,
 		}
 		reqs = append(reqs, req)
-		ltg := lt.ScanAndEnqueue(req, nil)
+		ltg, err := lt.ScanAndEnqueue(req, nil)
+		require.Nil(t, err)
 		require.Nil(t, ltg.ResolveBeforeScanning())
 		require.False(t, ltg.ShouldWait())
 		guards = append(guards, ltg)
@@ -885,7 +893,9 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.Equal(t, int64(10), lt.lockCountForTesting())
 	// Two guards do ScanAndEnqueue.
 	for i := 2; i < 4; i++ {
-		guards[i] = lt.ScanAndEnqueue(reqs[i], guards[i])
+		var err *Error
+		guards[i], err = lt.ScanAndEnqueue(reqs[i], guards[i])
+		require.Nil(t, err)
 		require.True(t, guards[i].ShouldWait())
 	}
 	require.Equal(t, int64(10), lt.lockCountForTesting())
@@ -991,7 +1001,8 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 			LatchSpans: latchSpans,
 			LockSpans:  lockSpans,
 		}
-		ltg := lt.ScanAndEnqueue(req, nil)
+		ltg, err := lt.ScanAndEnqueue(req, nil)
+		require.Nil(t, err)
 		require.Nil(t, ltg.ResolveBeforeScanning())
 		require.False(t, ltg.ShouldWait())
 		guards = append(guards, ltg)
@@ -1079,7 +1090,11 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			if err != nil {
 				return err
 			}
-			g = e.lt.ScanAndEnqueue(*item.request, g)
+			var kvErr *Error
+			g, kvErr = e.lt.ScanAndEnqueue(*item.request, g)
+			if kvErr != nil {
+				return kvErr.GoError()
+			}
 			if !g.ShouldWait() {
 				break
 			}
@@ -1092,7 +1107,10 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 				case <-ctx.Done():
 					return ctx.Err()
 				}
-				state := g.CurState()
+				state, err := g.CurState()
+				if err != nil {
+					return err
+				}
 				switch state.kind {
 				case doneWaiting:
 					if !lastID.Equal(uuid.UUID{}) && item.request.Txn != nil {
@@ -1638,7 +1656,12 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 			doneCh <- err
 			return
 		}
-		g = env.lt.ScanAndEnqueue(item.Request, g)
+		var kvErr *Error
+		g, kvErr = env.lt.ScanAndEnqueue(item.Request, g)
+		if kvErr != nil {
+			doneCh <- kvErr.GoError()
+			return
+		}
 		atomic.AddUint64(env.numScanCalls, 1)
 		if !g.ShouldWait() {
 			break
@@ -1650,7 +1673,11 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		env.lm.Release(lg)
 		for {
 			<-g.NewStateChan()
-			state := g.CurState()
+			state, err := g.CurState()
+			if err != nil {
+				doneCh <- err
+				return
+			}
 			if state.kind == doneWaiting {
 				break
 			}

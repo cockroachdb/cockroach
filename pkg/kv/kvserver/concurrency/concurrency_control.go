@@ -592,7 +592,7 @@ type lockTable interface {
 	// lockTableGuard and the subsequent calls reuse the previously returned
 	// one. The latches needed by the request must be held when calling this
 	// function.
-	ScanAndEnqueue(Request, lockTableGuard) lockTableGuard
+	ScanAndEnqueue(Request, lockTableGuard) (lockTableGuard, *Error)
 
 	// ScanOptimistic takes a snapshot of the lock table for later checking for
 	// conflicts, and returns a guard. It is for optimistic evaluation of
@@ -760,7 +760,7 @@ type lockTableGuard interface {
 	NewStateChan() chan struct{}
 
 	// CurState returns the latest waiting state.
-	CurState() waitingState
+	CurState() (waitingState, error)
 
 	// ResolveBeforeScanning lists the locks to resolve before scanning again.
 	// This must be called after:
