@@ -1037,6 +1037,19 @@ func createImportingDescriptors(
 		typesByID[types[i].GetID()] = types[i]
 	}
 
+	if details.StripLocalities {
+		// Can't restore multi-region tables into non-multi-region database
+		for _, t := range tables {
+			t.TableDesc().LocalityConfig = nil
+		}
+
+		for _, d := range databases {
+			if d.IsMultiRegion() {
+				d.DatabaseDesc().RegionConfig = nil
+			}
+		}
+	}
+
 	// Collect all databases, for doing lookups of whether a database is new when
 	// updating schema references later on.
 	dbsByID := make(map[descpb.ID]catalog.DatabaseDescriptor)
@@ -1059,6 +1072,13 @@ func createImportingDescriptors(
 			for _, t := range typesByID {
 				regionTypeDesc := typedesc.NewBuilder(t.TypeDesc()).BuildImmutableType().AsRegionEnumTypeDescriptor()
 				if regionTypeDesc == nil {
+					continue
+				}
+
+				if details.StripLocalities {
+					t.TypeDesc().Kind = descpb.TypeDescriptor_ENUM
+					t.TypeDesc().RegionConfig = nil
+					delete(details.DescriptorRewrites, t.GetID())
 					continue
 				}
 				// Check to see if we've found more than one multi-region enum on any
@@ -1085,29 +1105,32 @@ func createImportingDescriptors(
 					if details.DescriptorCoverage != tree.AllDescriptors {
 						log.Infof(ctx, "restoring zone configuration for database %d", desc.ID)
 						var regionNames []catpb.RegionName
-						_ = regionTypeDesc.ForEachPublicRegion(func(name catpb.RegionName) error {
-							regionNames = append(regionNames, name)
-							return nil
-						})
-						regionConfig := multiregion.MakeRegionConfig(
-							regionNames,
-							desc.RegionConfig.PrimaryRegion,
-							desc.RegionConfig.SurvivalGoal,
-							desc.RegionConfig.RegionEnumID,
-							desc.RegionConfig.Placement,
-							regionTypeDesc.TypeDesc().RegionConfig.SuperRegions,
-							regionTypeDesc.TypeDesc().RegionConfig.ZoneConfigExtensions,
-						)
-						if err := sql.ApplyZoneConfigFromDatabaseRegionConfig(
-							ctx,
-							desc.GetID(),
-							regionConfig,
-							txn,
-							p.ExecCfg(),
-							!details.SkipLocalitiesCheck,
-							p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-						); err != nil {
-							return err
+						if !details.StripLocalities {
+							_ = regionTypeDesc.ForEachPublicRegion(func(name catpb.RegionName) error {
+								regionNames = append(regionNames, name)
+
+								return nil
+							})
+							regionConfig := multiregion.MakeRegionConfig(
+								regionNames,
+								desc.RegionConfig.PrimaryRegion,
+								desc.RegionConfig.SurvivalGoal,
+								desc.RegionConfig.RegionEnumID,
+								desc.RegionConfig.Placement,
+								regionTypeDesc.TypeDesc().RegionConfig.SuperRegions,
+								regionTypeDesc.TypeDesc().RegionConfig.ZoneConfigExtensions,
+							)
+							if err := sql.ApplyZoneConfigFromDatabaseRegionConfig(
+								ctx,
+								desc.GetID(),
+								regionConfig,
+								txn,
+								p.ExecCfg(),
+								!details.SkipLocalitiesCheck,
+								p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+							); err != nil {
+								return err
+							}
 						}
 					}
 				}

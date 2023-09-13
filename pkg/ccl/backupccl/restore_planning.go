@@ -1081,6 +1081,7 @@ func resolveOptionsForRestoreJobDescription(
 		VerifyData:                       opts.VerifyData,
 		UnsafeRestoreIncompatibleVersion: opts.UnsafeRestoreIncompatibleVersion,
 		ExperimentalOnline:               opts.ExperimentalOnline,
+		StripLocalities:                  opts.StripLocalities,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -2029,6 +2030,14 @@ func doRestorePlan(
 		}
 	}
 
+	if restoreStmt.Options.StripLocalities {
+		for _, t := range typesByID {
+			t.TypeDesc().Kind = descpb.TypeDescriptor_ENUM
+			t.TypeDesc().RegionConfig = nil
+			continue
+		}
+	}
+
 	if !restoreStmt.Options.SkipLocalitiesCheck {
 		if err := checkClusterRegions(ctx, p, typesByID); err != nil {
 			return err
@@ -2187,6 +2196,7 @@ func doRestorePlan(
 		SkipLocalitiesCheck: restoreStmt.Options.SkipLocalitiesCheck,
 		ExecutionLocality:   execLocality,
 		ExperimentalOnline:  restoreStmt.Options.ExperimentalOnline,
+		StripLocalities:     restoreStmt.Options.StripLocalities,
 	}
 
 	jr := jobs.Record{
