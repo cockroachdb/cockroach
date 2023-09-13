@@ -43,11 +43,13 @@ func ConstructTracingAggregatorProducerMeta(
 	ctx context.Context,
 	sqlInstanceID base.SQLInstanceID,
 	flowID execinfrapb.FlowID,
+	processorID int32,
 	agg *TracingAggregator,
 ) *execinfrapb.ProducerMetadata {
 	aggEvents := &execinfrapb.TracingAggregatorEvents{
 		SQLInstanceID: sqlInstanceID,
 		FlowID:        flowID,
+		ID:            processorID,
 		Events:        make(map[string][]byte),
 	}
 
@@ -84,14 +86,14 @@ func flushTracingStats(
 
 		var clusterWideSummary bytes.Buffer
 		for component, nameToEvent := range perNodeStats {
-			clusterWideSummary.WriteString(fmt.Sprintf("## SQL Instance ID: %s; Flow ID: %s\n\n",
-				component.SQLInstanceID.String(), component.FlowID.String()))
+			clusterWideSummary.WriteString(fmt.Sprintf("## SQL Instance ID: %s; Flow ID: %s; ProcessorID: %d\n\n",
+				component.SQLInstanceID.String(), component.FlowID.String(), component.ID))
 			for name, event := range nameToEvent {
 				// Write a proto file per tag. This machine-readable file can be consumed
 				// by other places we want to display this information egs: annotated
 				// DistSQL diagrams, DBConsole etc.
-				filename := fmt.Sprintf("%s/%s",
-					component.SQLInstanceID.String(), asOf)
+				filename := fmt.Sprintf("%s/%d/%s",
+					component.SQLInstanceID.String(), component.ID, asOf)
 				msg, err := protoreflect.DecodeMessage(name, event)
 				if err != nil {
 					clusterWideSummary.WriteString(fmt.Sprintf("invalid protocol message: %v", err))
@@ -161,6 +163,7 @@ func AggregateTracingStats(
 	for agg := range tracingAgg {
 		flushOnClose = true
 		componentID := execinfrapb.ComponentID{
+			ID:            agg.ID,
 			FlowID:        agg.FlowID,
 			SQLInstanceID: agg.SQLInstanceID,
 		}
