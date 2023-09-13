@@ -481,8 +481,11 @@ message RestoreDetails {
   bool SkipLocalitiesCheck = 29;
 
   roachpb.Locality execution_locality = 30 [(gogoproto.nullable) = false];
-  
-  // NEXT ID: 31.
+
+  // Removes regions
+  bool RemoveRegions = 31;
+
+  // NEXT ID: 32.
 }
 
 

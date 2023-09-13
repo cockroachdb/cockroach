@@ -1,0 +1,240 @@
+# perform backups with regional by row table
+subtest mrbackup-rbr
+
+# disabled to run within tenant because multiregion primitives are not supported within tenant
+new-cluster name=s1 allow-implicit-access disable-tenant localities=us-east-1,us-west-1,eu-central-1
+----
+
+exec-sql
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1";
+CREATE TABLE d.t (x INT);
+INSERT INTO d.t VALUES (1), (2), (3);
+----
+
+query-sql
+SELECT region FROM [SHOW REGIONS FROM DATABASE d] ORDER BY 1;
+----
+eu-central-1
+us-east-1
+us-west-1
+
+query-sql
+SHOW DATABASES;
+----
+d root us-east-1  {eu-central-1,us-east-1,us-west-1} zone
+data root <nil> <nil> {} <nil>
+defaultdb root <nil> <nil> {} <nil>
+postgres root <nil> <nil> {} <nil>
+system node <nil> <nil> {} <nil>
+
+# make our table regional by row
+exec-sql
+ALTER TABLE d.t SET LOCALITY REGIONAL BY ROW;
+----
+NOTICE: LOCALITY changes will be finalized asynchronously; further schema changes on this table may be restricted until the job completes
+
+query-sql
+SELECT crdb_region FROM d.t;
+----
+us-east-1
+us-east-1
+us-east-1
+
+# backup db, table, and cluster with regional by row table
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://1/rbr_database_backup/';
+----
+
+exec-sql
+BACKUP TABLE d.t INTO 'nodelocal://1/rbr_table_backup/';
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/rbr_cluster_backup/';
+----
+
+subtest end
+
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access localities=us-east-1
+----
+
+# restoring a cluster with a table that has regional by row on a single region cluster
+subtest restore_regionless_cluster_rbr
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/rbr_cluster_backup/' WITH strip_localities;
+----
+
+# check cluster's regions
+query-sql
+SHOW REGIONS FROM CLUSTER;
+----
+us-east-1 {us-east1}
+
+query-sql
+SHOW DATABASES;
+----
+d root <nil> <nil> {} <nil>
+data root <nil> <nil> {} <nil>
+defaultdb root <nil> <nil> {} <nil>
+postgres root <nil> <nil> {} <nil>
+system node <nil> <nil> {} <nil>
+
+# ensure that database d is regionless
+query-sql
+SELECT region FROM [SHOW REGIONS FROM DATABASE d] ORDER BY 1;
+----
+
+# show tables - make sure these are regionless as well
+query-sql
+SELECT table_name, locality FROM [SHOW TABLES FROM d] ORDER BY 1;
+----
+t <nil>
+
+# ensure that tables belonging to d can be modified & have the correct values
+exec-sql
+INSERT INTO d.t VALUES (4), (5);
+----
+pq: default_to_database_primary_region(): current database defaultdb is not multi-region enabled
+
+# here is how we unblock ourselves from the error above
+exec-sql
+ALTER TABLE d.t ALTER COLUMN crdb_region SET DEFAULT 'us-east-1';
+----
+
+exec-sql
+ALTER TABLE d.t CONFIGURE ZONE DISCARD;
+----
+
+exec-sql
+INSERT INTO d.t VALUES (4), (5);
+----
+
+query-sql
+SELECT * FROM d.t;
+----
+1
+2
+3
+4
+5
+
+subtest end
+
+# restoring a database with a table that has regional by row on a single region cluster
+subtest restore_regionless_rbr_db
+
+exec-sql
+DROP DATABASE d;
+----
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/rbr_database_backup/' WITH strip_localities;
+----
+
+# check to see if restored database, d, shows up
+query-sql
+SHOW DATABASES;
+----
+d root <nil> <nil> {} <nil>
+data root <nil> <nil> {} <nil>
+defaultdb root <nil> <nil> {} <nil>
+postgres root <nil> <nil> {} <nil>
+system node <nil> <nil> {} <nil>
+
+# ensure that database d is regionless
+query-sql
+SELECT region FROM [SHOW REGIONS FROM DATABASE d] ORDER BY 1;
+----
+
+# show tables - make sure these are regionless as well
+query-sql
+SELECT table_name, locality FROM [SHOW TABLES FROM d] ORDER BY 1;
+----
+t <nil>
+
+# ensure that tables belonging to d can be modified & have the correct values
+exec-sql
+INSERT INTO d.t VALUES (4), (5);
+----
+pq: default_to_database_primary_region(): current database defaultdb is not multi-region enabled
+
+# here is how we unblock ourselves from the error above
+exec-sql
+ALTER TABLE d.t ALTER COLUMN crdb_region SET DEFAULT 'us-east-1';
+----
+
+exec-sql
+ALTER TABLE d.t CONFIGURE ZONE DISCARD;
+----
+
+exec-sql
+INSERT INTO d.t VALUES (4), (5);
+----
+
+query-sql
+SELECT * FROM d.t;
+----
+1
+2
+3
+4
+5
+
+subtest end
+
+# restoring a table that has regional by row on a single region cluster
+subtest restore_regionless_rbr_table
+
+exec-sql
+DROP TABLE d.t;
+----
+
+exec-sql
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/rbr_table_backup/' WITH strip_localities;
+----
+pq: "crdb_internal_region" is not compatible with type "crdb_internal_region" existing in cluster: "crdb_internal_region" of type "ENUM" is not compatible with type "MULTIREGION_ENUM"
+
+# let's drop the type
+exec-sql
+DROP TYPE d.public.crdb_internal_region;
+----
+
+exec-sql
+RESTORE TABLE d.t FROM LATEST IN 'nodelocal://1/rbr_table_backup/' WITH strip_localities;
+----
+
+query-sql
+SELECT table_name, locality FROM [SHOW TABLES FROM d] ORDER BY 1;
+----
+t <nil>
+
+# ensure that tables belonging to d can be modified & have the correct values
+exec-sql
+INSERT INTO d.t VALUES (4), (5);
+----
+pq: default_to_database_primary_region(): current database defaultdb is not multi-region enabled
+
+# here is how we unblock ourselves from the error above
+exec-sql
+ALTER TABLE d.t ALTER COLUMN crdb_region SET DEFAULT 'us-east-1';
+----
+
+exec-sql
+ALTER TABLE d.t CONFIGURE ZONE DISCARD;
+----
+
+exec-sql
+INSERT INTO d.t VALUES (4), (5);
+----
+
+query-sql
+SELECT * FROM d.t;
+----
+1
+2
+3
+4
+5
+
+subtest end
