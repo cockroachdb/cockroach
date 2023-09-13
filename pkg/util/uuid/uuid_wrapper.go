@@ -11,10 +11,10 @@
 package uuid
 
 import (
-	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
@@ -114,6 +114,7 @@ func FastMakeV4() UUID {
 type defaultRandReader struct{}
 
 func (r defaultRandReader) Read(p []byte) (n int, err error) {
+	//lint:ignore SA1019 deprecated
 	return rand.Read(p)
 }
 
