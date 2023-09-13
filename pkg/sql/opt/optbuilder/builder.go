@@ -298,15 +298,13 @@ func (b *Builder) buildStmtAtRootWithScope(
 //	rather than a return value so its scopeColumns can be built up
 //	incrementally across several function calls.
 //
-// inScope   This parameter contains the name bindings that are visible for this
+// inScope - This parameter contains the name bindings that are visible for this
+// statement/expression (e.g., passed in from an enclosing statement).
 //
-//	statement/expression (e.g., passed in from an enclosing statement).
-//
-// outScope  This return value contains the newly bound variables that will be
-//
-//	visible to enclosing statements, as well as a pointer to any
-//	"parent" scope that is still visible. The top-level memo expression
-//	for the built statement/expression is returned in outScope.expr.
+// outScope - This return value contains the newly bound variables that will be
+// visible to enclosing statements, as well as a pointer to any
+// "parent" scope that is still visible. The top-level memo expression
+// for the built statement/expression is returned in outScope.expr.
 func (b *Builder) buildStmt(
 	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
@@ -362,6 +360,9 @@ func (b *Builder) buildStmt(
 
 	case *tree.CreateRoutine:
 		return b.buildCreateFunction(stmt, inScope)
+
+	case *tree.Call:
+		return b.buildProcedure(stmt, inScope)
 
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)

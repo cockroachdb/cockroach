@@ -369,6 +369,12 @@ func (oc *optCatalog) ResolveFunctionByOID(
 	return oc.planner.ResolveFunctionByOID(ctx, oid)
 }
 
+func (oc *optCatalog) ResolveProcedure(
+	ctx context.Context, name *tree.UnresolvedObjectName, path tree.SearchPath,
+) (*tree.Overload, error) {
+	return oc.planner.ResolveProcedure(ctx, name, path)
+}
+
 func getDescFromCatalogObjectForPermissions(o cat.Object) (catalog.Descriptor, error) {
 	switch t := o.(type) {
 	case *optSchema:

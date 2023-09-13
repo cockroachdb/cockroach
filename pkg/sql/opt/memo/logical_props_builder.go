@@ -1109,6 +1109,10 @@ func (b *logicalPropsBuilder) buildExportProps(export *ExportExpr, rel *props.Re
 	b.buildBasicProps(export, export.Columns, rel)
 }
 
+func (b *logicalPropsBuilder) buildCallProps(c *CallExpr, rel *props.Relational) {
+	b.buildBasicProps(c, opt.ColList{}, rel)
+}
+
 func (b *logicalPropsBuilder) buildTopKProps(topK *TopKExpr, rel *props.Relational) {
 	// TopK has the same logical properties as limit.
 	b.buildLimitOrTopKProps(topK, rel, topK.K, true /* haveConstLimit */)

@@ -416,10 +416,11 @@ func (p *planner) mustGetMutableFunctionForAlter(
 
 func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor_FunctionSignature {
 	ret := descpb.SchemaDescriptor_FunctionSignature{
-		ID:         fnDesc.GetID(),
-		ArgTypes:   make([]*types.T, len(fnDesc.GetParams())),
-		ReturnType: fnDesc.ReturnType.Type,
-		ReturnSet:  fnDesc.ReturnType.ReturnSet,
+		ID:          fnDesc.GetID(),
+		ArgTypes:    make([]*types.T, len(fnDesc.GetParams())),
+		ReturnType:  fnDesc.ReturnType.Type,
+		ReturnSet:   fnDesc.ReturnType.ReturnSet,
+		IsProcedure: fnDesc.IsProcedure,
 	}
 	for i := range fnDesc.Params {
 		ret.ArgTypes[i] = fnDesc.Params[i].Type

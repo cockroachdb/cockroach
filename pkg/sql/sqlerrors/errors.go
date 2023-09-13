@@ -365,6 +365,10 @@ func NewCannotModifyVirtualSchemaError(schema string) error {
 		"%s is a virtual schema and cannot be modified", tree.ErrNameString(schema))
 }
 
+func NewProcedureUndefinedError(proc *tree.UnresolvedObjectName) error {
+	return pgerror.Newf(pgcode.UndefinedFunction, "procedure %s does not exist", proc)
+}
+
 // QueryTimeoutError is an error representing a query timeout.
 var QueryTimeoutError = pgerror.New(
 	pgcode.QueryCanceled, "query execution canceled due to statement timeout")

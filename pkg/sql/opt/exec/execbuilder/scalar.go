@@ -701,6 +701,7 @@ func (b *Builder) buildExistsSubquery(
 				false, /* multiColOutput */
 				false, /* generator */
 				false, /* tailCall */
+				false, /* procedure */
 				nil,   /* exceptionHandler */
 			),
 			tree.DBoolFalse,
@@ -818,6 +819,7 @@ func (b *Builder) buildSubquery(
 			false, /* multiColOutput */
 			false, /* generator */
 			false, /* tailCall */
+			false, /* procedure */
 			nil,   /* exceptionHandler */
 		), nil
 	}
@@ -874,6 +876,7 @@ func (b *Builder) buildSubquery(
 			false, /* multiColOutput */
 			false, /* generator */
 			false, /* tailCall */
+			false, /* procedure */
 			nil,   /* exceptionHandler */
 		), nil
 	}
@@ -957,7 +960,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	)
 
 	// Enable stepping for volatile functions so that statements within the UDF
-	// see mutations made by the invoking statement and by previous executed
+	// see mutations made by the invoking statement and by previously executed
 	// statements.
 	enableStepping := udf.Def.Volatility == volatility.Volatile
 
@@ -989,6 +992,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 				action.MultiColDataSource,
 				action.SetReturning,
 				false, /* tailCall */
+				false, /* procedure */
 				nil,   /* exceptionHandler */
 			)
 		}
@@ -1004,6 +1008,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.MultiColDataSource,
 		udf.Def.SetReturning,
 		udf.TailCall,
+		false, /* procedure */
 		exceptionHandler,
 	), nil
 }

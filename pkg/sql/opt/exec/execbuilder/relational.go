@@ -308,6 +308,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.RecursiveCTEExpr:
 		ep, err = b.buildRecursiveCTE(t)
 
+	case *memo.CallExpr:
+		ep, err = b.buildCall(t)
+
 	case *memo.ExplainExpr:
 		ep, err = b.buildExplain(t)
 
@@ -3109,6 +3112,52 @@ func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, er
 		return execPlan{}, err
 	}
 
+	return ep, nil
+}
+
+func (b *Builder) buildCall(c *memo.CallExpr) (execPlan, error) {
+	udf := c.Proc.(*memo.UDFCallExpr)
+	if udf.Def == nil {
+		return execPlan{}, errors.AssertionFailedf("expected non-nil UDF definition")
+	}
+
+	for _, s := range udf.Def.Body {
+		if s.Relational().CanMutate {
+			b.ContainsMutation = true
+			break
+		}
+	}
+
+	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
+	planGen := b.buildRoutinePlanGenerator(
+		udf.Def.Params,
+		udf.Def.Body,
+		udf.Def.BodyProps,
+		false, /* allowOuterWithRefs */
+		nil,   /* wrapRootExpr */
+	)
+
+	var args tree.TypedExprs
+	r := tree.NewTypedRoutineExpr(
+		udf.Def.Name,
+		args,
+		planGen,
+		udf.Typ,
+		true, /* enableStepping */
+		udf.Def.CalledOnNullInput,
+		udf.Def.MultiColDataSource,
+		udf.Def.SetReturning,
+		udf.TailCall,
+		true, /* procedure */
+		nil,  /* exceptionHandler */
+	)
+
+	var ep execPlan
+	var err error
+	ep.root, err = b.factory.ConstructCall(r)
+	if err != nil {
+		return execPlan{}, err
+	}
 	return ep, nil
 }
 

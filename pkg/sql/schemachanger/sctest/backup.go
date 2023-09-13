@@ -509,7 +509,7 @@ func containsUDF(expr tree.Expr) (bool, error) {
 	_, err := tree.SimpleVisit(expr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, _ error) {
 		if fe, ok := expr.(*tree.FuncExpr); ok {
 			ref := fe.Func.FunctionReference.(*tree.UnresolvedName)
-			fn, err := ref.ToFunctionName()
+			fn, err := ref.ToRoutineName()
 			if err != nil {
 				return false, nil, err
 			}

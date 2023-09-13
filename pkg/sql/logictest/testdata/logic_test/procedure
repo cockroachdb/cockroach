@@ -1,7 +1,55 @@
-statement error pgcode 0A000 procedures not supported
-CREATE PROCEDURE p() LANGUAGE SQL AS $$
+statement ok
+CREATE PROCEDURE p() LANGUAGE SQL AS 'SELECT 1'
+
+# The isProcedure field of the descriptor should be set to true for a procedure.
+query T
+SELECT d->'function'->'isProcedure' FROM (
+  SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) d
+  FROM system.descriptor
+) WHERE d->'function'->'name' = '"p"'
+----
+true
+
+statement ok
+CREATE SEQUENCE s
+
+statement ok
+CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS $$
   SELECT nextval('s');
 $$
 
-statement error pgcode 0A000 unimplemented: this syntax\nHINT.*\n.*17511
-CALL err()
+statement ok
+CALL p()
+
+query I
+SELECT currval('s')
+----
+1
+
+statement ok
+CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS $$
+  SELECT 1;
+$$
+
+statement ok
+CALL p()
+
+# Ensure that the memo for the first execution of p was not re-used.
+query I
+SELECT currval('s')
+----
+1
+
+statement ok
+CREATE OR REPLACE PROCEDURE p_arg(i INT) LANGUAGE SQL AS $$
+  SELECT i;
+$$
+
+statement error pgcode 0A000 unimplemented: procedures with arguments not supported
+CALL p_arg(1)
+
+# TODO(mgartner): The error should state "procedure definition" too.
+statement error pgcode 0A000 unimplemented: CALL usage inside a function definition
+CREATE OR REPLACE PROCEDURE p2() LANGUAGE SQL AS $$
+  CALL p();
+$$
