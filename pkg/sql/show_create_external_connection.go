@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -74,12 +75,13 @@ func (p *planner) ShowCreateExternalConnection(
 ) (planNode, error) {
 	var hasPrivileges bool
 	var err error
-	if hasPrivileges, err = p.UserHasAdminRole(ctx, p.User()); err != nil {
+	if hasPrivileges, err = p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA, p.User()); err != nil {
 		return nil, err
 	}
 
-	// If the user is not admin, and is running a `SHOW CREATE EXTERNAL CONNECTION foo`
-	// check if the user is the owner of the object.
+	// If the user does not have VIEWCLUSTERMETADATA, and is running a `SHOW
+	// CREATE EXTERNAL CONNECTION foo` check if the user is the owner of the
+	// object.
 	exprEval := p.ExprEvaluator(externalConnectionOp)
 	if !hasPrivileges && n.ConnectionLabel != nil {
 		name, err := exprEval.String(ctx, n.ConnectionLabel)
@@ -94,10 +96,10 @@ func (p *planner) ShowCreateExternalConnection(
 			return nil, err
 		}
 		if !isOwner {
-			return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "must be admin or owner of the External Connection %q", name)
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "must have %s privilege or be owner of the External Connection %q", privilege.VIEWCLUSTERMETADATA, name)
 		}
 	} else if !hasPrivileges {
-		return nil, pgerror.New(pgcode.InsufficientPrivilege, "must be admin to run `SHOW CREATE ALL EXTERNAL CONNECTIONS")
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "must have %s privilege to run `SHOW CREATE ALL EXTERNAL CONNECTIONS`", privilege.VIEWCLUSTERMETADATA)
 	}
 
 	sqltelemetry.IncrementShowCounter(sqltelemetry.CreateExternalConnection)

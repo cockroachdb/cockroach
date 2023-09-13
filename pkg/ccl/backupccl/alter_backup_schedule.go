@@ -24,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -127,16 +129,16 @@ func doAlterBackupSchedules(
 			s.incJob.ScheduleID())
 	}
 
-	// Check that the user is admin or the owner of the schedules being altered.
-	isAdmin, err := p.UserHasAdminRole(ctx, p.User())
+	// Check that the user has privileges or is the owner of the schedules being altered.
+	hasPriv, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA, p.User())
 	if err != nil {
 		return err
 	}
 	isOwnerOfFullJob := s.fullJob == nil || s.fullJob.Owner() == p.User()
 	isOwnerOfIncJob := s.incJob == nil || s.incJob.Owner() == p.User()
-	if !isAdmin && !(isOwnerOfFullJob && isOwnerOfIncJob) {
-		return pgerror.New(pgcode.InsufficientPrivilege, "must be admin or owner of the "+
-			"schedules being altered.")
+	if !hasPriv && !(isOwnerOfFullJob && isOwnerOfIncJob) {
+		return pgerror.Newf(pgcode.InsufficientPrivilege, "must be admin or the owner of the "+
+			"schedules being altered, or have %s privilege", privilege.REPAIRCLUSTERMETADATA)
 	}
 
 	if s, err = processFullBackupRecurrence(
