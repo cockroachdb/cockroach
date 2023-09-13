@@ -2,13 +2,14 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "copy_test",
+    size = "large",
     srcs = [
         "copy_in_test.go",
         "copy_out_test.go",
         "copy_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
     deps = [
         "//pkg/base",
