@@ -2130,7 +2130,7 @@ func formatStats(ms enginepb.MVCCStats, delta bool) string {
 	order := []string{"key_count", "key_bytes", "val_count", "val_bytes",
 		"range_key_count", "range_key_bytes", "range_val_count", "range_val_bytes",
 		"live_count", "live_bytes", "gc_bytes_age",
-		"intent_count", "intent_bytes", "separated_intent_count", "intent_age"}
+		"intent_count", "intent_bytes", "lock_count", "lock_age"}
 	sort.SliceStable(fields, func(i, j int) bool {
 		for _, name := range order {
 			if fields[i][1] == name {

@@ -210,7 +210,7 @@ data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
 data: "n"/3.000000000,0 -> /<empty>
 meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
-stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=3 range_key_bytes=48 range_val_count=4 live_count=5 live_bytes=155 gc_bytes_age=14602 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=94
+stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=3 range_key_bytes=48 range_val_count=4 live_count=5 live_bytes=155 gc_bytes_age=14602 intent_count=1 intent_bytes=19 lock_count=1 lock_age=94
 
 # Non-idempotent writes above tombstone and point.
 run stats ok
@@ -239,7 +239,7 @@ data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
 data: "n"/3.000000000,0 -> /<empty>
 meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
-stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=5 range_key_bytes=92 range_val_count=8 live_count=4 live_bytes=134 gc_bytes_age=20813 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=94
+stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=5 range_key_bytes=92 range_val_count=8 live_count=4 live_bytes=134 gc_bytes_age=20813 intent_count=1 intent_bytes=19 lock_count=1 lock_age=94
 
 # Writing on top of stacked range keys is also idempotent.
 run stats ok
@@ -265,7 +265,7 @@ data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
 data: "n"/3.000000000,0 -> /<empty>
 meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
-stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=5 range_key_bytes=92 range_val_count=8 live_count=4 live_bytes=134 gc_bytes_age=20813 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=94
+stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=5 range_key_bytes=92 range_val_count=8 live_count=4 live_bytes=134 gc_bytes_age=20813 intent_count=1 intent_bytes=19 lock_count=1 lock_age=94
 
 # Non-idempotent writes on top of bare point keys.
 run stats ok
@@ -295,7 +295,7 @@ data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
 data: "n"/3.000000000,0 -> /<empty>
 meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
-stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=6 range_key_bytes=105 range_val_count=9 live_count=3 live_bytes=113 gc_bytes_age=24043 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=94
+stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=6 range_key_bytes=105 range_val_count=9 live_count=3 live_bytes=113 gc_bytes_age=24043 intent_count=1 intent_bytes=19 lock_count=1 lock_age=94
 
 
 # Writes across empty key space is considered idempotent.
@@ -326,4 +326,4 @@ data: "k"/3.000000000,0 -> /BYTES/k3
 data: "m"/1.000000000,0 -> /BYTES/m1
 data: "n"/3.000000000,0 -> /<empty>
 meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
-stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=6 range_key_bytes=105 range_val_count=9 live_count=3 live_bytes=113 gc_bytes_age=24043 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=94
+stats: key_count=10 key_bytes=140 val_count=11 val_bytes=118 range_key_count=6 range_key_bytes=105 range_val_count=9 live_count=3 live_bytes=113 gc_bytes_age=24043 intent_count=1 intent_bytes=19 lock_count=1 lock_age=94

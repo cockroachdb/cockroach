@@ -255,7 +255,7 @@ message MVCCPersistentStats {
 
   int64 contains_estimates = 14; // must never go negative absent a bug
   sfixed64 last_update_nanos = 1;
-  sfixed64 intent_age = 2;
+  sfixed64 lock_age = 2;
   sfixed64 gc_bytes_age = 3 [(gogoproto.customname) = "GCBytesAge"];
   int64 live_bytes = 4;
   int64 live_count = 5;
@@ -265,7 +265,7 @@ message MVCCPersistentStats {
   int64 val_count = 9;
   int64 intent_bytes = 10;
   int64 intent_count = 11;
-  int64 separated_intent_count = 16;
+  int64 lock_count = 16;
   int64 range_key_count = 17;
   int64 range_key_bytes = 18;
   int64 range_val_count = 19;

@@ -395,7 +395,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
       return this.contentDuration(Long.fromNumber(0));
     }
     if (!mvcc.intent_count.eq(0)) {
-      const avgIntentAgeSec = mvcc.intent_age.div(mvcc.intent_count);
+      const avgIntentAgeSec = mvcc.lock_age.div(mvcc.intent_count);
       return this.contentDuration(
         Long.fromNumber(util.SecondsToNano(avgIntentAgeSec.toNumber())),
       );
@@ -827,14 +827,14 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
           FixLong(mvcc.sys_count),
         ),
         rangeMaxBytes: this.contentBytes(FixLong(info.state.range_max_bytes)),
-        mvccIntentAge: this.contentDuration(FixLong(mvcc.intent_age)),
+        mvccIntentAge: this.contentDuration(FixLong(mvcc.lock_age)),
 
         gcAvgAge: this.contentGCAvgAge(mvcc),
         gcBytesAge: this.createContent(FixLong(mvcc.gc_bytes_age)),
 
         numIntents: this.createContent(FixLong(mvcc.intent_count)),
         intentAvgAge: this.createContentIntentAvgAge(mvcc),
-        intentAge: this.createContent(FixLong(mvcc.intent_age)),
+        intentAge: this.createContent(FixLong(mvcc.lock_age)),
 
         readLatches: this.createContent(FixLong(info.read_latches)),
         writeLatches: this.createContent(FixLong(info.write_latches)),

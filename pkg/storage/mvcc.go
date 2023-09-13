@@ -316,7 +316,7 @@ func updateStatsOnPut(
 			if orig.Txn != nil {
 				// If the original value was an intent, we're replacing the
 				// intent. Note that since it's a system key, it doesn't affect
-				// IntentByte, IntentCount, and correspondingly, IntentAge.
+				// IntentByte, IntentCount, and correspondingly, LockAge.
 				ms.SysBytes -= orig.KeyBytes + orig.ValBytes
 			}
 			ms.SysCount--
@@ -329,8 +329,8 @@ func updateStatsOnPut(
 	// Handle non-sys keys. This follows the same scheme: if there was a previous
 	// value, perhaps even an intent, subtract its contributions, and then add the
 	// new contributions. The complexity here is that we need to properly update
-	// GCBytesAge and IntentAge, which don't follow the same semantics. The difference
-	// between them is that an intent accrues IntentAge from its own timestamp on,
+	// GCBytesAge and LockAge, which don't follow the same semantics. The difference
+	// between them is that an intent accrues LockAge from its own timestamp on,
 	// while GCBytesAge is accrued by versions according to the following rules:
 	// 1. a (non-tombstone) value that is shadowed by a newer write accrues age at
 	// 	  the point in time at which it is shadowed (i.e. the newer write's timestamp).
@@ -358,7 +358,7 @@ func updateStatsOnPut(
 			ms.ValCount--
 			ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 			ms.IntentCount--
-			ms.SeparatedIntentCount--
+			ms.LockCount--
 		}
 
 		// If the original intent is a deletion, we're removing the intent. This
@@ -448,7 +448,7 @@ func updateStatsOnPut(
 	if meta.Txn != nil {
 		ms.IntentBytes += meta.KeyBytes + meta.ValBytes
 		ms.IntentCount++
-		ms.SeparatedIntentCount++
+		ms.LockCount++
 	}
 	return ms
 }
@@ -483,7 +483,7 @@ func updateStatsOnResolve(
 
 	// In the main case, we had an old intent at orig.Timestamp, and a new intent
 	// or value at meta.Timestamp. We'll walk through the contributions below,
-	// taking special care for IntentAge and GCBytesAge.
+	// taking special care for LockAge and GCBytesAge.
 	//
 	// Jump into the method below for extensive commentary on their semantics
 	// and "rules one and two".
@@ -509,10 +509,10 @@ func updateStatsOnResolve(
 		ms.LiveBytes -= orig.KeyBytes + orig.ValBytes
 	}
 
-	// IntentAge is always accrued from the intent's own timestamp on.
+	// LockAge is always accrued from the intent's own timestamp on.
 	ms.IntentBytes -= orig.KeyBytes + orig.ValBytes
 	ms.IntentCount--
-	ms.SeparatedIntentCount--
+	ms.LockCount--
 
 	// If there was a previous value (before orig.Timestamp), and it was not a
 	// deletion tombstone, then we have to adjust its GCBytesAge contribution
@@ -553,7 +553,7 @@ func updateStatsOnResolve(
 		// updateStatsOnPut, not this method).
 		ms.IntentBytes += meta.KeyBytes + meta.ValBytes
 		ms.IntentCount++
-		ms.SeparatedIntentCount++
+		ms.LockCount++
 	}
 	return ms
 }
@@ -774,7 +774,7 @@ func updateStatsOnClear(
 	if orig.Txn != nil {
 		ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 		ms.IntentCount--
-		ms.SeparatedIntentCount--
+		ms.LockCount--
 	}
 	return ms
 }
@@ -5826,8 +5826,8 @@ func MVCCGarbageCollectWholeRange(
 		// information was not accurate.
 		ms.IntentCount -= rangeStats.IntentCount
 		ms.IntentBytes -= rangeStats.IntentBytes
-		ms.IntentAge -= rangeStats.IntentAge
-		ms.SeparatedIntentCount -= rangeStats.SeparatedIntentCount
+		ms.LockAge -= rangeStats.LockAge
+		ms.LockCount -= rangeStats.LockCount
 	}
 	return nil
 }
@@ -6462,8 +6462,8 @@ func computeStatsForIterWithVisitors(
 				if meta.Txn != nil {
 					ms.IntentBytes += totalBytes
 					ms.IntentCount++
-					ms.SeparatedIntentCount++
-					ms.IntentAge += nowNanos/1e9 - meta.Timestamp.WallTime/1e9
+					ms.LockCount++
+					ms.LockAge += nowNanos/1e9 - meta.Timestamp.WallTime/1e9
 				}
 				if meta.KeyBytes != MVCCVersionTimestampSize {
 					return ms, errors.Errorf("expected mvcc metadata key bytes to equal %d; got %d "+

@@ -114,7 +114,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 		re := regexp.MustCompile(`^(\w+)\{.*,tenant_id="` + tenantID.String() + `"\} (\d+)`)
 		metricsToVal := map[string]int64{
 			"gcbytesage":    aggregateStats.GCBytesAge,
-			"intentage":     aggregateStats.IntentAge,
+			"intentage":     aggregateStats.LockAge,
 			"livebytes":     aggregateStats.LiveBytes,
 			"livecount":     aggregateStats.LiveCount,
 			"keybytes":      aggregateStats.KeyBytes,
