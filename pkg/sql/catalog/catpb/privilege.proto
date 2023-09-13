@@ -19,8 +19,14 @@ message UserPrivileges {
   option (gogoproto.equal) = true;
   optional string user_proto = 1 [(gogoproto.nullable) = false,
                                   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
-  // privileges is a bitfield of 1<<Privilege values.
+  // Privileges is a bitfield of 1<<Privilege values.
   optional uint64 privileges = 2 [(gogoproto.nullable) = false];
+  // WithGrantOption is a bitfield where each bit corresponds to a bit in
+  // Privileges. If the corresponding bit in Privileges is 0, then the
+  // WithGrantOption bit is zero. If the corresponding bit in Privileges is 1,
+  // then the WithGrantOption bit is either 1, indicating that the privilege can
+  // be granted to other users, or 0, indicating that the privilege cannot be
+  // granted to other users.
   optional uint64 with_grant_option = 3 [(gogoproto.nullable) = false];
 }
 
