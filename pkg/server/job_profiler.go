@@ -39,8 +39,7 @@ func (s *statusServer) RequestJobProfilerExecutionDetails(
 	ctx context.Context, req *serverpb.RequestJobProfilerExecutionDetailsRequest,
 ) (*serverpb.RequestJobProfilerExecutionDetailsResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	// TODO(adityamaru): Figure out the correct privileges required to request execution details.
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
