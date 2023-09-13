@@ -4867,13 +4867,12 @@ func TestChangefeedErrors(t *testing.T) {
 
 	// Feature flag for changefeeds is off — test that CREATE CHANGEFEED and
 	// EXPERIMENTAL CHANGEFEED FOR surface error.
-	sqlDB.Exec(t, `SET CLUSTER SETTING feature.changefeed.enabled = false`)
+	featureChangefeedEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 	sqlDB.ExpectErr(t, `feature CHANGEFEED was disabled by the database administrator`,
 		`CREATE CHANGEFEED FOR foo`)
 	sqlDB.ExpectErr(t, `feature CHANGEFEED was disabled by the database administrator`,
 		`EXPERIMENTAL CHANGEFEED FOR foo`)
-
-	sqlDB.Exec(t, `SET CLUSTER SETTING feature.changefeed.enabled = true`)
+	featureChangefeedEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	sqlDB.ExpectErr(
 		t, `unknown format: nope`,
