@@ -40,6 +40,8 @@ var logSlowAcquisition = quotapool.OnSlowAcquisition(2*time.Second, quotapool.Lo
 func TestQuotaPoolBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Error("FOO")
+
 	quotas := []uint64{1, 10, 100, 1000}
 	goroutineCounts := []int{1, 10, 100}
 

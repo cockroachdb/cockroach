@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// FOO
+
 // IntPool manages allocating integer units of quota to clients.
 // Clients may acquire quota in two ways, using Acquire which requires the
 // client to specify the quantity of quota at call time and AcquireFunc which
