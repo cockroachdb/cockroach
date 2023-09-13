@@ -68,3 +68,16 @@ query B nodeidx=2
 SELECT crdb_internal.node_executable_version() SIMILAR TO '23.1-%'
 ----
 true
+
+# Makes sure the upgrade job has finished, and the cluster version gate is
+# passed.
+query B retry
+SELECT crdb_internal.is_at_least_version('23.1-26')
+----
+false
+
+# Makes sure the user still has the ability to execute f.
+query I
+SELECT f()
+----
+1
