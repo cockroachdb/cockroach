@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -286,8 +288,11 @@ func doCreateBackupSchedules(
 		// NB: as of 20.2, schedule creation requires admin so this is duplicative
 		// but in the future we might relax so you can schedule anything that you
 		// can backup, but then this cluster-wide metric should be admin-only.
-		if err := p.RequireAdminRole(ctx, optUpdatesLastBackupMetric); err != nil {
+		if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
 			return err
+		} else if !hasAdmin {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to change %s", optUpdatesLastBackupMetric)
 		}
 	}
 

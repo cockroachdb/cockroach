@@ -84,6 +84,7 @@ go_library(
         "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
+        "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/errorutil",

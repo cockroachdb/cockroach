@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
@@ -283,6 +284,8 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 		if t.Revoked {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "user does not have privilege to access %v", t.SeqName)
 		}
+	case *syntheticprivilege.GlobalPrivilege:
+
 	default:
 		panic("invalid Object")
 	}
@@ -292,11 +295,6 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 // HasAdminRole is part of the cat.Catalog interface.
 func (tc *Catalog) HasAdminRole(ctx context.Context) (bool, error) {
 	return true, nil
-}
-
-// RequireAdminRole is part of the cat.Catalog interface.
-func (tc *Catalog) RequireAdminRole(ctx context.Context, action string) error {
-	return nil
 }
 
 // HasRoleOption is part of the cat.Catalog interface.

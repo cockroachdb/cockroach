@@ -112,7 +112,7 @@ test           public       t7          testuser2  ALL             false
 user testuser
 
 # Must be an admin to alter default privileges for all roles.
-statement error pq: only users with the admin role are allowed to ALTER DEFAULT PRIVILEGES
+statement error pq: only users with the admin role are allowed to ALTER DEFAULT PRIVILEGES FOR ALL ROLES
 ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT ON TABLES TO testuser
 
 user root
