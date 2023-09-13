@@ -38,11 +38,6 @@ type CheckerForRPCHandlers interface {
 	// responsibility to convert them through srverrors.ServerError.
 	GetUserAndRole(ctx context.Context) (userName username.SQLUsername, isAdmin bool, err error)
 
-	// RequireAdminUser validates the current user is
-	// an admin user. It returns the current user's name.
-	// Its error return is a gRPC error.
-	RequireAdminUser(ctx context.Context) (userName username.SQLUsername, err error)
-
 	// RequireViewActivityPermission validates the current user has the VIEWACTIVITY
 	// privilege or role option.
 	// Its error return is a gRPC error.
@@ -52,6 +47,7 @@ type CheckerForRPCHandlers interface {
 	RequireViewClusterSettingOrModifyClusterSettingPermission(ctx context.Context) error
 	RequireViewActivityAndNoViewActivityRedactedPermission(ctx context.Context) error
 	RequireViewClusterMetadataPermission(ctx context.Context) error
+	RequireRepairClusterMetadataPermission(ctx context.Context) error
 	RequireViewDebugPermission(ctx context.Context) error
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -40,8 +41,7 @@ func (s *statusServer) RequestJobProfilerExecutionDetails(
 	ctx context.Context, req *serverpb.RequestJobProfilerExecutionDetailsRequest,
 ) (*serverpb.RequestJobProfilerExecutionDetailsResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	// TODO(adityamaru): Figure out the correct privileges required to request execution details.
-	user, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -79,6 +79,10 @@ func (s *statusServer) RequestJobProfilerExecutionDetails(
 		e.addLabelledGoroutines(ctx)
 		e.addClusterWideTraces(ctx)
 
+		user, err := authserver.UserFromIncomingRPCContext(ctx)
+		if err != nil {
+			return nil, srverrors.ServerError(ctx, err)
+		}
 		r, err := execCfg.JobRegistry.GetResumerForClaimedJob(jobID)
 		if err != nil {
 			return nil, err
