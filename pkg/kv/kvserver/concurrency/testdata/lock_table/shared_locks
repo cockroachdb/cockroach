@@ -86,14 +86,14 @@ num=1
            txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
 
 
-new-request r=req5 txn=txn2 ts=10 spans=exclusive@a
+new-request r=req5 txn=txn4 ts=10 spans=exclusive@a
 ----
 
 scan r=req5
 ----
 start-waiting: true
 
-new-request r=req6 txn=txn2 ts=10 spans=intent@a
+new-request r=req6 txn=txn4 ts=10 spans=intent@a
 ----
 
 scan r=req6
@@ -107,8 +107,8 @@ num=1
   holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000004
    distinguished req: 5
 
 # ------------------------------------------------------------------------------
@@ -131,8 +131,8 @@ num=1
   holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000004
     active: true req: 7, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 5
 
@@ -153,8 +153,8 @@ num=1
   holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
            txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
-    active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 5, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
+    active: true req: 6, strength: Intent, txn: 00000000-0000-0000-0000-000000000004
     active: true req: 7, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 5
 
@@ -934,6 +934,142 @@ num=1
     active: true req: 46, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 46
 
+# ------------------------------------------------------------------------------
+# Test for lock promotion. When a lock is held with strength Shared, we do not
+# allow the holder to promote it to Exclusive or write to the key. The same
+# applies if the lock isn't held, but there's a request from our transaction
+# trying to acquire a Shared lock (that's waiting in front of us).
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req47 txn=txn1 ts=10 spans=shared@b
+----
+
+scan r=req47
+----
+start-waiting: false
+
+acquire k=b r=req47 strength=shared durability=u
+----
+num=1
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req48 txn=txn1 ts=10 spans=exclusive@b
+----
+
+scan r=req48
+----
+lock promotion from Shared to Exclusive is not allowed
+
+new-request r=req49 txn=txn1 ts=10 spans=intent@b
+----
+
+scan r=req49
+----
+lock promotion from Shared to Intent is not allowed
+
+new-request r=req50 txn=txn2 ts=10 spans=exclusive@b
+----
+
+scan r=req50
+----
+start-waiting: true
+
+new-request r=req51 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req51
+----
+start-waiting: false
+
+acquire r=req51 k=a durability=u strength=exclusive
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 50, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 50
+
+new-request r=req52 txn=txn3 ts=10 spans=exclusive@a+exclusive@b
+----
+
+scan r=req52
+----
+start-waiting: true
+
+new-request r=req53 txn=txn3 ts=10 spans=shared@b
+----
+
+scan r=req53
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
+   queued locking requests:
+    active: true req: 52, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 52
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 50, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 53, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 50
+
+new-request r=req54 txn=txn3 ts=10 spans=exclusive@b
+----
+
+scan r=req54
+----
+lock promotion from Shared to Exclusive is not allowed
+
+new-request r=req55 txn=txn3 ts=10 spans=intent@b
+----
+
+scan r=req55
+----
+lock promotion from Shared to Intent is not allowed
+
+release txn=txn1 span=a
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 52, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 50, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 53, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 50
+
+scan r=req52
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+   queued locking requests:
+    active: false req: 52, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+   queued locking requests:
+    active: true req: 50, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 52, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 53, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 50
 
 # TODO(arul): (non-exhaustive list) of shared lock state transitions that aren't
 # currently supported (and we need to add support for):
@@ -947,8 +1083,6 @@ num=1
 # reservation). Ditto for a partial break, where the exclusive locking request
 # inserts itself in the middle of the queue.
 #
-# 3. Lock promotion cases where the lock is held with strength shared, and
-# there's another request (from the same txn) with lock strength exclusive
-# that's trying to acquire the lock further back in the wait queue. We'll be
-# disallowing these in the short term, so this case might not be tested for a
-# while.
+# 3. Lock promotion -- add a test where we discover that we're trying to promote
+# a lock from shared -> exclusive when resuming a scan from the lock table
+# waiter. An error should be returned to the client.
