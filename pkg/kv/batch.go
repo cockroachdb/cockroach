@@ -379,13 +379,13 @@ func (b *Batch) AddRawRequest(reqs ...kvpb.Request) {
 	}
 }
 
-func (b *Batch) get(key interface{}, forUpdate bool) {
+func (b *Batch) get(key interface{}, str kvpb.KeyLockingStrengthType) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(kvpb.NewGet(k, forUpdate))
+	b.appendReqs(kvpb.NewGet(k, str))
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -397,7 +397,7 @@ func (b *Batch) get(key interface{}, forUpdate bool) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Get(key interface{}) {
-	b.get(key, false /* forUpdate */)
+	b.get(key, kvpb.NonLocking)
 }
 
 // GetForUpdate retrieves the value for a key. An unreplicated, exclusive lock
@@ -409,7 +409,19 @@ func (b *Batch) Get(key interface{}) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) GetForUpdate(key interface{}) {
-	b.get(key, true /* forUpdate */)
+	b.get(key, kvpb.ForUpdate)
+}
+
+// GetForShare retrieves the value for a key. An unreplicated, shared lock
+// is acquired on the key, if it exists. A new result will be appended to the
+// batch which will contain a single row.
+//
+//	r, err := db.GetForShare("a")
+//	// string(r.Rows[0].Key) == "a"
+//
+// key can be either a byte slice or a string.
+func (b *Batch) GetForShare(key interface{}) {
+	b.get(key, kvpb.ForShare)
 }
 
 func (b *Batch) put(key, value interface{}, inline bool) {
@@ -716,7 +728,7 @@ func (b *Batch) Inc(key interface{}, value int64) {
 	b.initResult(1, 1, notRaw, nil)
 }
 
-func (b *Batch) scan(s, e interface{}, isReverse, forUpdate bool) {
+func (b *Batch) scan(s, e interface{}, isReverse bool, str kvpb.KeyLockingStrengthType) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -728,9 +740,9 @@ func (b *Batch) scan(s, e interface{}, isReverse, forUpdate bool) {
 		return
 	}
 	if !isReverse {
-		b.appendReqs(kvpb.NewScan(begin, end, forUpdate))
+		b.appendReqs(kvpb.NewScan(begin, end, str))
 	} else {
-		b.appendReqs(kvpb.NewReverseScan(begin, end, forUpdate))
+		b.appendReqs(kvpb.NewReverseScan(begin, end, str))
 	}
 	b.initResult(1, 0, notRaw, nil)
 }
@@ -743,7 +755,7 @@ func (b *Batch) scan(s, e interface{}, isReverse, forUpdate bool) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Scan(s, e interface{}) {
-	b.scan(s, e, false /* isReverse */, false /* forUpdate */)
+	b.scan(s, e, false /* isReverse */, kvpb.NonLocking)
 }
 
 // ScanForUpdate retrieves the key/values between begin (inclusive) and end
@@ -755,7 +767,19 @@ func (b *Batch) Scan(s, e interface{}) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) ScanForUpdate(s, e interface{}) {
-	b.scan(s, e, false /* isReverse */, true /* forUpdate */)
+	b.scan(s, e, false /* isReverse */, kvpb.ForUpdate)
+}
+
+// ScanForShare retrieves the key/values between begin (inclusive) and end
+// (exclusive) in ascending order. Unreplicated, shared locks are acquired on
+// each of the returned keys.
+//
+// A new result will be appended to the batch which will contain "rows" (each
+// row is a key/value pair) and Result.Err will indicate success or failure.
+//
+// key can be either a byte slice or a string.
+func (b *Batch) ScanForShare(s, e interface{}) {
+	b.scan(s, e, false /* isReverse */, kvpb.ForShare)
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -766,7 +790,7 @@ func (b *Batch) ScanForUpdate(s, e interface{}) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) ReverseScan(s, e interface{}) {
-	b.scan(s, e, true /* isReverse */, false /* forUpdate */)
+	b.scan(s, e, true /* isReverse */, kvpb.NonLocking)
 }
 
 // ReverseScanForUpdate retrieves the rows between begin (inclusive) and end
@@ -778,7 +802,19 @@ func (b *Batch) ReverseScan(s, e interface{}) {
 //
 // key can be either a byte slice or a string.
 func (b *Batch) ReverseScanForUpdate(s, e interface{}) {
-	b.scan(s, e, true /* isReverse */, true /* forUpdate */)
+	b.scan(s, e, true /* isReverse */, kvpb.ForUpdate)
+}
+
+// ReverseScanForShare retrieves the rows between begin (inclusive) and end
+// (exclusive) in descending order. Unreplicated, shared locks are acquired
+// on each of the returned keys.
+//
+// A new result will be appended to the batch which will contain "rows" (each
+// "row" is a key/value pair) and Result.Err will indicate success or failure.
+//
+// key can be either a byte slice or a string.
+func (b *Batch) ReverseScanForShare(s, e interface{}) {
+	b.scan(s, e, true /* isReverse */, kvpb.ForShare)
 }
 
 // Del deletes one or more keys.

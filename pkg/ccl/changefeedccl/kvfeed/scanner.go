@@ -188,7 +188,7 @@ func (p *scanRequestScanner) exportSpan(
 	for remaining := &span; remaining != nil; {
 		start := timeutil.Now()
 		b := txn.NewBatch()
-		r := kvpb.NewScan(remaining.Key, remaining.EndKey, false /* forUpdate */).(*kvpb.ScanRequest)
+		r := kvpb.NewScan(remaining.Key, remaining.EndKey, kvpb.NonLocking).(*kvpb.ScanRequest)
 		r.ScanFormat = kvpb.BATCH_RESPONSE
 		b.Header.TargetBytes = targetBytesPerScan
 		b.AdmissionHeader = kvpb.AdmissionHeader{
