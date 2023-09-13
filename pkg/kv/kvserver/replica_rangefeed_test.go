@@ -21,11 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	clientrf "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -499,6 +501,61 @@ func TestReplicaRangefeed(t *testing.T) {
 func waitErrorFuture(f *future.ErrorFuture) error {
 	resultErr, _ := future.Wait(context.Background(), f)
 	return resultErr
+}
+
+func TestScheduledProcessorKillSwitch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	kvserver.RangefeedSchedulerDisabled = true
+	defer func() { kvserver.RangefeedSchedulerDisabled = false }()
+
+	ctx := context.Background()
+	ts, err := serverutils.NewServer(base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	require.NoError(t, err, "failed to start test server")
+	require.NoError(t, ts.Start(ctx), "start server")
+	defer ts.Stopper().Stop(ctx)
+
+	db := ts.SystemLayer().SQLConn(t, "")
+	_, err = db.Exec("set cluster setting kv.rangefeed.enabled = t")
+	require.NoError(t, err, "can't enable rangefeeds")
+	_, err = db.Exec("set cluster setting kv.rangefeed.scheduler.enabled = t")
+	require.NoError(t, err, "can't enable rangefeed scheduler")
+
+	sr, err := ts.ScratchRange()
+	require.NoError(t, err, "can't create scratch range")
+	f := ts.RangeFeedFactory().(*clientrf.Factory)
+	rf, err := f.RangeFeed(ctx, "test-feed", []roachpb.Span{{Key: sr, EndKey: sr.PrefixEnd()}},
+		hlc.Timestamp{},
+		func(ctx context.Context, value *kvpb.RangeFeedValue) {},
+	)
+	require.NoError(t, err, "failed to start rangefeed")
+	defer rf.Close()
+
+	rd, err := ts.LookupRange(sr)
+	require.NoError(t, err, "failed to get descriptor for scratch range")
+
+	stores := ts.GetStores().(*kvserver.Stores)
+	_ = stores.VisitStores(func(s *kvserver.Store) error {
+		repl, err := s.GetReplica(rd.RangeID)
+		require.NoError(t, err, "failed to find scratch range replica in store")
+		var proc rangefeed.Processor
+		// Note that we can't rely on checkpoint or event because client rangefeed
+		// call can return and emit first checkpoint and data before processor is
+		// actually attached to replica.
+		testutils.SucceedsSoon(t, func() error {
+			proc = kvserver.TestGetReplicaRangefeedProcessor(repl)
+			if proc == nil {
+				return errors.New("scratch range must have processor")
+			}
+			return nil
+		})
+		require.IsType(t, (*rangefeed.LegacyProcessor)(nil), proc,
+			"kill switch didn't prevent scheduled processor creation")
+		return nil
+	})
 }
 
 func TestReplicaRangefeedErrors(t *testing.T) {
