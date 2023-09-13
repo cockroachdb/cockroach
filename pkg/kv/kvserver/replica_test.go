@@ -11082,7 +11082,7 @@ func TestReplicaNotifyLockTableOn1PC(t *testing.T) {
 	txn := newTransaction("test", key, 1, tc.Clock())
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: txn}
-	ba.Add(kvpb.NewScan(key, key.Next(), true /* forUpdate */))
+	ba.Add(kvpb.NewScan(key, key.Next(), kvpb.ForUpdate))
 	if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
@@ -11241,7 +11241,7 @@ func TestReplicaQueryLocks(t *testing.T) {
 			txn := newTransaction("test", keyA, 1, tc.Clock())
 			ba := &kvpb.BatchRequest{}
 			ba.Header = kvpb.Header{Txn: txn}
-			ba.Add(kvpb.NewScan(keyA, keyB.Next(), true /* forUpdate */))
+			ba.Add(kvpb.NewScan(keyA, keyB.Next(), kvpb.ForUpdate))
 			if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
 				t.Fatalf("unexpected error: %s", pErr)
 			}

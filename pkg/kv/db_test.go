@@ -120,6 +120,19 @@ func TestDB_GetForUpdate(t *testing.T) {
 	checkResult(t, []byte(""), result.ValueBytes())
 }
 
+func TestDB_GetForShare(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+
+	result, err := db.GetForShare(context.Background(), "aa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte(""), result.ValueBytes())
+}
+
 func TestDB_Put(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -372,6 +385,32 @@ func TestDB_ScanForUpdate(t *testing.T) {
 	checkLen(t, len(expected), len(rows))
 }
 
+func TestDB_ScanForShare(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+
+	b := &kv.Batch{}
+	b.Put("aa", "1")
+	b.Put("ab", "2")
+	b.Put("bb", "3")
+	if err := db.Run(context.Background(), b); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.ScanForShare(context.Background(), "a", "b", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string][]byte{
+		"aa": []byte("1"),
+		"ab": []byte("2"),
+	}
+
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
+}
+
 func TestDB_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -412,6 +451,32 @@ func TestDB_ReverseScanForUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows, err := db.ReverseScanForUpdate(context.Background(), "ab", "c", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string][]byte{
+		"bb": []byte("3"),
+		"ab": []byte("2"),
+	}
+
+	checkRows(t, expected, rows)
+	checkLen(t, len(expected), len(rows))
+}
+
+func TestDB_ReverseScanForShare(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+
+	b := &kv.Batch{}
+	b.Put("aa", "1")
+	b.Put("ab", "2")
+	b.Put("bb", "3")
+	if err := db.Run(context.Background(), b); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.ReverseScanForShare(context.Background(), "ab", "c", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
