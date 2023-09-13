@@ -684,18 +684,21 @@ func makeTempIndexSpec(src indexSpec) indexSpec {
 	}
 	newTempSpec := src.clone()
 	var srcIdx scpb.Index
+	var expr *scpb.Expression
 	isSecondary := false
 	if src.primary != nil {
 		srcIdx = newTempSpec.primary.Index
 	}
 	if src.secondary != nil {
 		srcIdx = newTempSpec.secondary.Index
+		expr = newTempSpec.secondary.EmbeddedExpr
 		isSecondary = true
 	}
 	tempID := srcIdx.TemporaryIndexID
 	newTempSpec.temporary = &scpb.TemporaryIndex{
 		Index:                    srcIdx,
 		IsUsingSecondaryEncoding: isSecondary,
+		Expr:                     expr,
 	}
 	newTempSpec.temporary.TemporaryIndexID = 0
 	newTempSpec.temporary.IndexID = tempID
