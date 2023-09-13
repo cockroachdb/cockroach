@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -38,6 +39,8 @@ import (
 func TestFirstUpgrade(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	upgrades.RunFirstUpgradePrecondition = true
 
 	var (
 		v0 = clusterversion.TestingBinaryMinSupportedVersion
@@ -112,6 +115,8 @@ func TestFirstUpgradeRepair(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	upgrades.RunFirstUpgradePrecondition = true
+
 	var (
 		v0 = clusterversion.TestingBinaryMinSupportedVersion
 		v1 = clusterversion.ByKey(clusterversion.BinaryVersionKey)
@@ -144,7 +149,7 @@ func TestFirstUpgradeRepair(t *testing.T) {
 	execStmts(t,
 		"CREATE DATABASE test",
 		"USE test",
-		"CREATE TABLE foo (i INT PRIMARY KEY, j INT, INDEX idx(j))",
+		"CREATE TABLE foo (i INT PRIMARY KEY, j INT, INDEX idx(j)) WITH (ttl_expire_after = '10m')",
 		"INSERT INTO foo VALUES (1, 2)",
 		"CREATE FUNCTION test.public.f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$",
 	)
