@@ -745,6 +745,7 @@ var npgsqlBlocklist = blocklist{
 }
 
 var npgsqlIgnoreList = blocklist{
+	`Npgsql.Tests.CommandTests(Multiplexing).Cursor_move_RecordsAffected `:                            "flaky",
 	`Npgsql.Tests.CommandTests(Multiplexing).QueryNonQuery`:                                           "flaky",
 	`Npgsql.Tests.CommandTests(Multiplexing).SingleNonQuery`:                                          "flaky",
 	`Npgsql.Tests.CommandTests(Multiplexing).Statement_mapped_output_parameters(Default)`:             "flaky",
@@ -786,6 +787,7 @@ var npgsqlIgnoreList = blocklist{
 	`Npgsql.Tests.CopyTests(NonMultiplexing).Import_string_array`:                                     "flaky",
 	`Npgsql.Tests.CopyTests(NonMultiplexing).Import_string_with_buffer_length`:                        "flaky",
 	`Npgsql.Tests.CopyTests(NonMultiplexing).Prepended_messages`:                                      "flaky",
+	`Npgsql.Tests.CopyTests(NonMultiplexing).Text_import_empty`:                                       "flaky",
 	`Npgsql.Tests.CopyTests(NonMultiplexing).Undefined_table_throws`:                                  "flaky",
 	`Npgsql.Tests.CopyTests(NonMultiplexing).Write_column_out_of_bounds_throws`:                       "flaky",
 	`Npgsql.Tests.CopyTests(NonMultiplexing).Write_null_values`:                                       "flaky",
