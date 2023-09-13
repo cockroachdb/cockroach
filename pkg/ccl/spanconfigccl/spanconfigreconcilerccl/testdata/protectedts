@@ -29,33 +29,33 @@ CREATE TABLE db.t2();
 
 mutations
 ----
-upsert /Table/10{6-7}                      range default
-upsert /Table/10{7-8}                      range default
+upsert /Table/1000{2-3}                    range default
+upsert /Table/1000{3-4}                    range default
 
 # Write a protected timestamp record on each table.
 protect record-id=3 ts=3
-descs 106,107
+descs 10002,10003
 ----
 
 mutations
 ----
-delete /Table/10{6-7}
-upsert /Table/10{6-7}                      protection_policies=[{ts: 3}]
-delete /Table/10{7-8}
-upsert /Table/10{7-8}                      protection_policies=[{ts: 3}]
+delete /Table/1000{2-3}
+upsert /Table/1000{2-3}                    protection_policies=[{ts: 3}]
+delete /Table/1000{3-4}
+upsert /Table/1000{3-4}                    protection_policies=[{ts: 3}]
 
 # Write a protected timestamp record on the database to ensure
 # it applies to the tables in the database.
 protect record-id=4 ts=4
-descs 104
+descs 10000
 ----
 
 mutations
 ----
-delete /Table/10{6-7}
-upsert /Table/10{6-7}                      protection_policies=[{ts: 3} {ts: 4}]
-delete /Table/10{7-8}
-upsert /Table/10{7-8}                      protection_policies=[{ts: 3} {ts: 4}]
+delete /Table/1000{2-3}
+upsert /Table/1000{2-3}                    protection_policies=[{ts: 3} {ts: 4}]
+delete /Table/1000{3-4}
+upsert /Table/1000{3-4}                    protection_policies=[{ts: 3} {ts: 4}]
 
 # Write a protected timestamp record on the entire keyspace.
 protect record-id=5 ts=5
@@ -92,8 +92,8 @@ state offset=51
 /Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{2-3}                              database system (host)
-/Table/10{6-7}                             protection_policies=[{ts: 3} {ts: 4}]
-/Table/10{7-8}                             protection_policies=[{ts: 3} {ts: 4}]
+/Table/1000{2-3}                           protection_policies=[{ts: 3} {ts: 4}]
+/Table/1000{3-4}                           protection_policies=[{ts: 3} {ts: 4}]
 
 # Release the cluster records.
 release record-id=5
@@ -146,8 +146,8 @@ state offset=57
 /Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{2-3}                              database system (host)
-/Table/10{6-7}                             protection_policies=[{ts: 3} {ts: 4}]
-/Table/10{7-8}                             protection_policies=[{ts: 3} {ts: 4}]
+/Table/1000{2-3}                           protection_policies=[{ts: 3} {ts: 4}]
+/Table/1000{3-4}                           protection_policies=[{ts: 3} {ts: 4}]
 
 # Release the schema object records.
 release record-id=3
@@ -166,5 +166,5 @@ state offset=57
 /Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{2-3}                              database system (host)
-/Table/10{6-7}                             range default
-/Table/10{7-8}                             range default
+/Table/1000{2-3}                           range default
+/Table/1000{3-4}                           range default

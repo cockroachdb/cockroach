@@ -954,7 +954,7 @@ query OOIIIIIB colnames
 EXECUTE pg_catalog_query
 ----
 seqrelid  seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-121       20        1         1             9223372036854775807  1       1         false
+10017     20        1         1             9223372036854775807  1       1         false
 
 statement ok
 USE test
@@ -1234,7 +1234,7 @@ PREPARE rcc(string) AS SELECT $1::REGCLASS::OID
 query O
 EXECUTE rcc('t')
 ----
-106
+10002
 
 user root
 

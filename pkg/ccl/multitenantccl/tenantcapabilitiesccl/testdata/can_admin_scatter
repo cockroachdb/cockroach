@@ -34,13 +34,13 @@ ok
 exec-privileged-op-tenant
 ALTER TABLE t SCATTER
 ----
-pq: ba: AdminScatter [/Tenant/10/Table/104/1,/Tenant/10/Table/104/2) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+pq: ba: AdminScatter [/Tenant/10/Table/10000/1,/Tenant/10/Table/10000/2) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
 
 # Check the index as well.
 exec-privileged-op-tenant
 ALTER INDEX t@idx SCATTER
 ----
-pq: ba: AdminScatter [/Tenant/10/Table/104/2,/Tenant/10/Table/104/3) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+pq: ba: AdminScatter [/Tenant/10/Table/10000/2,/Tenant/10/Table/10000/3) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
 
 # Grant the capability without providing an explicit value.
 update-capabilities
@@ -64,7 +64,7 @@ ok
 exec-privileged-op-tenant
 ALTER TABLE t SCATTER
 ----
-pq: ba: AdminScatter [/Tenant/10/Table/104/1,/Tenant/10/Table/104/2) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
+pq: ba: AdminScatter [/Tenant/10/Table/10000/1,/Tenant/10/Table/10000/2) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_scatter" (*kvpb.AdminScatterRequest)
 
 # Lastly, use the explicitly set to true syntax.
 update-capabilities

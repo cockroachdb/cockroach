@@ -11,14 +11,14 @@ checking for feature: CREATE SEQUENCE
 write *eventpb.CreateSequence to event log:
   sequenceName: defaultdb.public.sq1
   sql:
-    descriptorId: 104
+    descriptorId: 10000
     statement: CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32
     tag: CREATE SEQUENCE
     user: root
 ## StatementPhase stage 1 of 1 with 23 MutationType ops
-initializing sequence 104 with starting value of 31
-add object namespace entry {100 101 sq1} -> 104
-upsert descriptor #104
+initializing sequence 10000 with starting value of 31
+add object namespace entry {100 101 sq1} -> 10000
+upsert descriptor #10000
   -
   +table:
   +  checks: []
@@ -39,7 +39,7 @@ upsert descriptor #104
   +      width: 64
   +  createAsOfTime: {}
   +  formatVersion: 3
-  +  id: 104
+  +  id: 10000
   +  modificationTime: {}
   +  mutations: []
   +  name: sq1
@@ -93,9 +93,9 @@ upsert descriptor #104
 undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 24 MutationType ops
-initializing sequence 104 with starting value of 31
-add object namespace entry {100 101 sq1} -> 104
-upsert descriptor #104
+initializing sequence 10000 with starting value of 31
+add object namespace entry {100 101 sq1} -> 10000
+upsert descriptor #10000
   -
   +table:
   +  checks: []
@@ -116,7 +116,7 @@ upsert descriptor #104
   +      width: 64
   +  createAsOfTime: {}
   +  formatVersion: 3
-  +  id: 104
+  +  id: 10000
   +  modificationTime: {}
   +  mutations: []
   +  name: sq1
@@ -165,6 +165,6 @@ upsert descriptor #104
   +  unexposedParentSchemaId: 101
   +  version: "1"
 persist all catalog changes to storage
-adding table for stats refresh: 104
+adding table for stats refresh: 10000
 # end PreCommitPhase
 commit transaction #1

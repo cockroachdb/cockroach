@@ -162,16 +162,16 @@ SELECT id, strip_volatile(descriptor) FROM crdb_internal.kv_catalog_descriptor O
 101         {"schema": {"id": 101, "name": "public", "parentId": 100, "privileges": {"ownerProto": "admin", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "516", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "version": "1"}}
 102         {"database": {"defaultPrivileges": {}, "id": 102, "name": "postgres", "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "2048", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "schemas": {"public": {"id": 103}}, "version": "1"}}
 103         {"schema": {"id": 103, "name": "public", "parentId": 102, "privileges": {"ownerProto": "admin", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "516", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "version": "1"}}
-104         {"database": {"defaultPrivileges": {}, "id": 104, "name": "test", "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "2048", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "schemas": {"public": {"id": 105}}, "version": "1"}}
-105         {"schema": {"functions": {"strip_volatile": {"signatures": [{"argTypes": [{"family": "JsonFamily", "oid": 3802}], "id": 113, "returnType": {"family": "JsonFamily", "oid": 3802}}]}}, "id": 105, "name": "public", "parentId": 104, "privileges": {"ownerProto": "admin", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "516", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "version": "2"}}
-106         {"database": {"defaultPrivileges": {}, "id": 106, "name": "db", "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "2048", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "schemas": {"public": {"id": 107}, "sc": {"id": 108}}, "version": "2"}}
-107         {"schema": {"id": 107, "name": "public", "parentId": 106, "privileges": {"ownerProto": "admin", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "516", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "version": "1"}}
-108         {"schema": {"id": 108, "name": "sc", "parentId": 106, "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "version": "1"}}
-109         {"type": {"arrayTypeId": 110, "enumMembers": [{"logicalRepresentation": "hi", "physicalRepresentation": "QA=="}, {"logicalRepresentation": "hello", "physicalRepresentation": "gA=="}], "id": 109, "name": "greeting", "parentId": 106, "parentSchemaId": 108, "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "512", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "version": "1"}}
-110         {"type": {"alias": {"arrayContents": {"family": "EnumFamily", "oid": 100109, "udtMetadata": {"arrayTypeOid": 100110}}, "arrayElemType": "EnumFamily", "family": "ArrayFamily", "oid": 100110}, "id": 110, "kind": "ALIAS", "name": "_greeting", "parentId": 106, "parentSchemaId": 108, "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "512", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "version": "1"}}
-111         {"table": {"checks": [{"columnIds": [1], "constraintId": 2, "expr": "k > 0:::INT8", "name": "ck"}], "columns": [{"id": 1, "name": "k", "type": {"family": "IntFamily", "oid": 20, "width": 64}}, {"id": 2, "name": "v", "nullable": true, "type": {"family": "StringFamily", "oid": 25}}], "dependedOnBy": [{"columnIds": [1, 2], "id": 112}], "formatVersion": 3, "id": 111, "name": "kv", "nextColumnId": 3, "nextConstraintId": 3, "nextIndexId": 2, "nextMutationId": 1, "parentId": 106, "primaryIndex": {"constraintId": 1, "encodingType": 1, "foreignKey": {}, "geoConfig": {}, "id": 1, "interleave": {}, "keyColumnDirections": ["ASC"], "keyColumnIds": [1], "keyColumnNames": ["k"], "name": "kv_pkey", "partitioning": {}, "sharded": {}, "storeColumnIds": [2], "storeColumnNames": ["v"], "unique": true, "version": 4}, "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "replacementOf": {"time": {}}, "unexposedParentSchemaId": 107, "version": "4"}}
-112         {"table": {"columns": [{"id": 1, "name": "k", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}}, {"id": 2, "name": "v", "nullable": true, "type": {"family": "StringFamily", "oid": 25}}, {"defaultExpr": "unique_rowid()", "hidden": true, "id": 3, "name": "rowid", "type": {"family": "IntFamily", "oid": 20, "width": 64}}], "dependsOn": [111], "formatVersion": 3, "id": 112, "indexes": [{"createdExplicitly": true, "foreignKey": {}, "geoConfig": {}, "id": 2, "interleave": {}, "keyColumnDirections": ["ASC"], "keyColumnIds": [2], "keyColumnNames": ["v"], "keySuffixColumnIds": [3], "name": "idx", "partitioning": {}, "sharded": {}, "version": 4}], "isMaterializedView": true, "name": "mv", "nextColumnId": 4, "nextConstraintId": 2, "nextIndexId": 4, "nextMutationId": 1, "parentId": 106, "primaryIndex": {"constraintId": 1, "encodingType": 1, "foreignKey": {}, "geoConfig": {}, "id": 1, "interleave": {}, "keyColumnDirections": ["ASC"], "keyColumnIds": [3], "keyColumnNames": ["rowid"], "name": "mv_pkey", "partitioning": {}, "sharded": {}, "storeColumnIds": [1, 2], "storeColumnNames": ["k", "v"], "unique": true, "version": 4}, "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "replacementOf": {"time": {}}, "unexposedParentSchemaId": 107, "version": "8", "viewQuery": "SELECT k, v FROM db.public.kv"}}
-113         {"function": {"functionBody": "SELECT json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(d, ARRAY['table':::STRING, 'families':::STRING]:::STRING[]), ARRAY['table':::STRING, 'nextFamilyId':::STRING]:::STRING[]), ARRAY['table':::STRING, 'indexes':::STRING, '0':::STRING, 'createdAtNanos':::STRING]:::STRING[]), ARRAY['table':::STRING, 'indexes':::STRING, '1':::STRING, 'createdAtNanos':::STRING]:::STRING[]), ARRAY['table':::STRING, 'indexes':::STRING, '2':::STRING, 'createdAtNanos':::STRING]:::STRING[]), ARRAY['table':::STRING, 'primaryIndex':::STRING, 'createdAtNanos':::STRING]:::STRING[]), ARRAY['table':::STRING, 'createAsOfTime':::STRING]:::STRING[]), ARRAY['table':::STRING, 'modificationTime':::STRING]:::STRING[]), ARRAY['function':::STRING, 'modificationTime':::STRING]:::STRING[]), ARRAY['type':::STRING, 'modificationTime':::STRING]:::STRING[]), ARRAY['schema':::STRING, 'modificationTime':::STRING]:::STRING[]), ARRAY['database':::STRING, 'modificationTime':::STRING]:::STRING[]);", "id": 113, "lang": "SQL", "name": "strip_volatile", "nullInputBehavior": "CALLED_ON_NULL_INPUT", "params": [{"class": "IN", "name": "d", "type": {"family": "JsonFamily", "oid": 3802}}], "parentId": 104, "parentSchemaId": 105, "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "1048576", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "returnType": {"type": {"family": "JsonFamily", "oid": 3802}}, "version": "1", "volatility": "STABLE"}}
+10000       {"database": {"defaultPrivileges": {}, "id": 10000, "name": "test", "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "2048", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "schemas": {"public": {"id": 10001}}, "version": "1"}}
+10001       {"schema": {"functions": {"strip_volatile": {"signatures": [{"argTypes": [{"family": "JsonFamily", "oid": 3802}], "id": 10009, "returnType": {"family": "JsonFamily", "oid": 3802}}]}}, "id": 10001, "name": "public", "parentId": 10000, "privileges": {"ownerProto": "admin", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "516", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "version": "2"}}
+10002       {"database": {"defaultPrivileges": {}, "id": 10002, "name": "db", "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "2048", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "schemas": {"public": {"id": 10003}, "sc": {"id": 10004}}, "version": "2"}}
+10003       {"schema": {"id": 10003, "name": "public", "parentId": 10002, "privileges": {"ownerProto": "admin", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "516", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "version": "1"}}
+10004       {"schema": {"id": 10004, "name": "sc", "parentId": 10002, "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "version": "1"}}
+10005       {"type": {"arrayTypeId": 10006, "enumMembers": [{"logicalRepresentation": "hi", "physicalRepresentation": "QA=="}, {"logicalRepresentation": "hello", "physicalRepresentation": "gA=="}], "id": 10005, "name": "greeting", "parentId": 10002, "parentSchemaId": 10004, "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "512", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "version": "1"}}
+10006       {"type": {"alias": {"arrayContents": {"family": "EnumFamily", "oid": 110005, "udtMetadata": {"arrayTypeOid": 110006}}, "arrayElemType": "EnumFamily", "family": "ArrayFamily", "oid": 110006}, "id": 10006, "kind": "ALIAS", "name": "_greeting", "parentId": 10002, "parentSchemaId": 10004, "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "512", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "version": "1"}}
+10007       {"table": {"checks": [{"columnIds": [1], "constraintId": 2, "expr": "k > 0:::INT8", "name": "ck"}], "columns": [{"id": 1, "name": "k", "type": {"family": "IntFamily", "oid": 20, "width": 64}}, {"id": 2, "name": "v", "nullable": true, "type": {"family": "StringFamily", "oid": 25}}], "dependedOnBy": [{"columnIds": [1, 2], "id": 10008}], "formatVersion": 3, "id": 10007, "name": "kv", "nextColumnId": 3, "nextConstraintId": 3, "nextIndexId": 2, "nextMutationId": 1, "parentId": 10002, "primaryIndex": {"constraintId": 1, "encodingType": 1, "foreignKey": {}, "geoConfig": {}, "id": 1, "interleave": {}, "keyColumnDirections": ["ASC"], "keyColumnIds": [1], "keyColumnNames": ["k"], "name": "kv_pkey", "partitioning": {}, "sharded": {}, "storeColumnIds": [2], "storeColumnNames": ["v"], "unique": true, "version": 4}, "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "replacementOf": {"time": {}}, "unexposedParentSchemaId": 10003, "version": "4"}}
+10008       {"table": {"columns": [{"id": 1, "name": "k", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}}, {"id": 2, "name": "v", "nullable": true, "type": {"family": "StringFamily", "oid": 25}}, {"defaultExpr": "unique_rowid()", "hidden": true, "id": 3, "name": "rowid", "type": {"family": "IntFamily", "oid": 20, "width": 64}}], "dependsOn": [10007], "formatVersion": 3, "id": 10008, "indexes": [{"createdExplicitly": true, "foreignKey": {}, "geoConfig": {}, "id": 2, "interleave": {}, "keyColumnDirections": ["ASC"], "keyColumnIds": [2], "keyColumnNames": ["v"], "keySuffixColumnIds": [3], "name": "idx", "partitioning": {}, "sharded": {}, "version": 4}], "isMaterializedView": true, "name": "mv", "nextColumnId": 4, "nextConstraintId": 2, "nextIndexId": 4, "nextMutationId": 1, "parentId": 10002, "primaryIndex": {"constraintId": 1, "encodingType": 1, "foreignKey": {}, "geoConfig": {}, "id": 1, "interleave": {}, "keyColumnDirections": ["ASC"], "keyColumnIds": [3], "keyColumnNames": ["rowid"], "name": "mv_pkey", "partitioning": {}, "sharded": {}, "storeColumnIds": [1, 2], "storeColumnNames": ["k", "v"], "unique": true, "version": 4}, "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "replacementOf": {"time": {}}, "unexposedParentSchemaId": 10003, "version": "8", "viewQuery": "SELECT k, v FROM db.public.kv"}}
+10009       {"function": {"functionBody": "SELECT json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(json_remove_path(d, ARRAY['table':::STRING, 'families':::STRING]:::STRING[]), ARRAY['table':::STRING, 'nextFamilyId':::STRING]:::STRING[]), ARRAY['table':::STRING, 'indexes':::STRING, '0':::STRING, 'createdAtNanos':::STRING]:::STRING[]), ARRAY['table':::STRING, 'indexes':::STRING, '1':::STRING, 'createdAtNanos':::STRING]:::STRING[]), ARRAY['table':::STRING, 'indexes':::STRING, '2':::STRING, 'createdAtNanos':::STRING]:::STRING[]), ARRAY['table':::STRING, 'primaryIndex':::STRING, 'createdAtNanos':::STRING]:::STRING[]), ARRAY['table':::STRING, 'createAsOfTime':::STRING]:::STRING[]), ARRAY['table':::STRING, 'modificationTime':::STRING]:::STRING[]), ARRAY['function':::STRING, 'modificationTime':::STRING]:::STRING[]), ARRAY['type':::STRING, 'modificationTime':::STRING]:::STRING[]), ARRAY['schema':::STRING, 'modificationTime':::STRING]:::STRING[]), ARRAY['database':::STRING, 'modificationTime':::STRING]:::STRING[]);", "id": 10009, "lang": "SQL", "name": "strip_volatile", "nullInputBehavior": "CALLED_ON_NULL_INPUT", "params": [{"class": "IN", "name": "d", "type": {"family": "JsonFamily", "oid": 3802}}], "parentId": 10000, "parentSchemaId": 10001, "privileges": {"ownerProto": "root", "users": [{"privileges": "2", "userProto": "admin", "withGrantOption": "2"}, {"privileges": "1048576", "userProto": "public"}, {"privileges": "2", "userProto": "root", "withGrantOption": "2"}], "version": 2}, "returnType": {"type": {"family": "JsonFamily", "oid": 3802}}, "version": "1", "volatility": "STABLE"}}
 4294966977  {"table": {"columns": [{"id": 1, "name": "srid", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}}, {"id": 2, "name": "auth_name", "nullable": true, "type": {"family": "StringFamily", "oid": 1043, "visibleType": 7, "width": 256}}, {"id": 3, "name": "auth_srid", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}}, {"id": 4, "name": "srtext", "nullable": true, "type": {"family": "StringFamily", "oid": 1043, "visibleType": 7, "width": 2048}}, {"id": 5, "name": "proj4text", "nullable": true, "type": {"family": "StringFamily", "oid": 1043, "visibleType": 7, "width": 2048}}], "formatVersion": 3, "id": 4294966977, "name": "spatial_ref_sys", "nextColumnId": 6, "nextConstraintId": 2, "nextIndexId": 2, "nextMutationId": 1, "primaryIndex": {"constraintId": 1, "foreignKey": {}, "geoConfig": {}, "id": 1, "interleave": {}, "partitioning": {}, "sharded": {}}, "privileges": {"ownerProto": "node", "users": [{"privileges": "32", "userProto": "public"}], "version": 2}, "replacementOf": {"time": {}}, "unexposedParentSchemaId": 4294966980, "version": "1"}}
 4294966978  {"table": {"columns": [{"id": 1, "name": "f_table_catalog", "nullable": true, "type": {"family": 11, "oid": 19}}, {"id": 2, "name": "f_table_schema", "nullable": true, "type": {"family": 11, "oid": 19}}, {"id": 3, "name": "f_table_name", "nullable": true, "type": {"family": 11, "oid": 19}}, {"id": 4, "name": "f_geometry_column", "nullable": true, "type": {"family": 11, "oid": 19}}, {"id": 5, "name": "coord_dimension", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}}, {"id": 6, "name": "srid", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}}, {"id": 7, "name": "type", "nullable": true, "type": {"family": "StringFamily", "oid": 25}}], "formatVersion": 3, "id": 4294966978, "name": "geometry_columns", "nextColumnId": 8, "nextConstraintId": 2, "nextIndexId": 2, "nextMutationId": 1, "primaryIndex": {"constraintId": 1, "foreignKey": {}, "geoConfig": {}, "id": 1, "interleave": {}, "partitioning": {}, "sharded": {}}, "privileges": {"ownerProto": "node", "users": [{"privileges": "32", "userProto": "public"}], "version": 2}, "replacementOf": {"time": {}}, "unexposedParentSchemaId": 4294966980, "version": "1"}}
 4294966979  {"table": {"columns": [{"id": 1, "name": "f_table_catalog", "nullable": true, "type": {"family": 11, "oid": 19}}, {"id": 2, "name": "f_table_schema", "nullable": true, "type": {"family": 11, "oid": 19}}, {"id": 3, "name": "f_table_name", "nullable": true, "type": {"family": 11, "oid": 19}}, {"id": 4, "name": "f_geography_column", "nullable": true, "type": {"family": 11, "oid": 19}}, {"id": 5, "name": "coord_dimension", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}}, {"id": 6, "name": "srid", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}}, {"id": 7, "name": "type", "nullable": true, "type": {"family": "StringFamily", "oid": 25}}], "formatVersion": 3, "id": 4294966979, "name": "geography_columns", "nextColumnId": 8, "nextConstraintId": 2, "nextIndexId": 2, "nextMutationId": 1, "primaryIndex": {"constraintId": 1, "foreignKey": {}, "geoConfig": {}, "id": 1, "interleave": {}, "partitioning": {}, "sharded": {}}, "privileges": {"ownerProto": "node", "users": [{"privileges": "32", "userProto": "public"}], "version": 2}, "replacementOf": {"time": {}}, "unexposedParentSchemaId": 4294966980, "version": "1"}}
@@ -496,93 +496,93 @@ skipif config local-mixed-22.2-23.1
 query IITI rowsort
 SELECT * FROM "".crdb_internal.kv_catalog_namespace
 ----
-0    0    db                               106
-0    0    defaultdb                        100
-0    0    postgres                         102
-0    0    system                           1
-0    0    test                             104
-1    0    public                           29
-1    29   comments                         24
-1    29   database_role_settings           44
-1    29   descriptor                       3
-1    29   descriptor_id_seq                7
-1    29   eventlog                         12
-1    29   external_connections             52
-1    29   job_info                         53
-1    29   jobs                             15
-1    29   join_tokens                      41
-1    29   lease                            11
-1    29   locations                        21
-1    29   migrations                       40
-1    29   namespace                        30
-1    29   privileges                       51
-1    29   protected_ts_meta                31
-1    29   protected_ts_records             32
-1    29   rangelog                         13
-1    29   region_liveness                  9
-1    29   replication_constraint_stats     25
-1    29   replication_critical_localities  26
-1    29   replication_stats                27
-1    29   reports_meta                     28
-1    29   role_id_seq                      48
-1    29   role_members                     23
-1    29   role_options                     33
-1    29   scheduled_jobs                   37
-1    29   settings                         6
-1    29   span_configurations              47
-1    29   span_stats_buckets               55
-1    29   span_stats_samples               56
-1    29   span_stats_tenant_boundaries     57
-1    29   span_stats_unique_keys           54
-1    29   sql_instances                    46
-1    29   sqlliveness                      39
-1    29   statement_activity               60
-1    29   statement_bundle_chunks          34
-1    29   statement_diagnostics            36
-1    29   statement_diagnostics_requests   35
-1    29   statement_statistics             42
-1    29   table_statistics                 20
-1    29   task_payloads                    58
-1    29   tenant_id_seq                    62
-1    29   tenant_settings                  50
-1    29   tenant_tasks                     59
-1    29   tenant_usage                     45
-1    29   tenants                          8
-1    29   transaction_activity             61
-1    29   transaction_statistics           43
-1    29   ui                               14
-1    29   users                            4
-1    29   web_sessions                     19
-1    29   zones                            5
-100  0    public                           101
-102  0    public                           103
-104  0    public                           105
-106  0    public                           107
-106  0    sc                               108
-106  107  kv                               111
-106  107  mv                               112
-106  108  _greeting                        110
-106  108  greeting                         109
+0      0      db                               10002
+0      0      defaultdb                        100
+0      0      postgres                         102
+0      0      system                           1
+0      0      test                             10000
+1      0      public                           29
+1      29     comments                         24
+1      29     database_role_settings           44
+1      29     descriptor                       3
+1      29     descriptor_id_seq                7
+1      29     eventlog                         12
+1      29     external_connections             52
+1      29     job_info                         53
+1      29     jobs                             15
+1      29     join_tokens                      41
+1      29     lease                            11
+1      29     locations                        21
+1      29     migrations                       40
+1      29     namespace                        30
+1      29     privileges                       51
+1      29     protected_ts_meta                31
+1      29     protected_ts_records             32
+1      29     rangelog                         13
+1      29     region_liveness                  9
+1      29     replication_constraint_stats     25
+1      29     replication_critical_localities  26
+1      29     replication_stats                27
+1      29     reports_meta                     28
+1      29     role_id_seq                      48
+1      29     role_members                     23
+1      29     role_options                     33
+1      29     scheduled_jobs                   37
+1      29     settings                         6
+1      29     span_configurations              47
+1      29     span_stats_buckets               55
+1      29     span_stats_samples               56
+1      29     span_stats_tenant_boundaries     57
+1      29     span_stats_unique_keys           54
+1      29     sql_instances                    46
+1      29     sqlliveness                      39
+1      29     statement_activity               60
+1      29     statement_bundle_chunks          34
+1      29     statement_diagnostics            36
+1      29     statement_diagnostics_requests   35
+1      29     statement_statistics             42
+1      29     table_statistics                 20
+1      29     task_payloads                    58
+1      29     tenant_id_seq                    62
+1      29     tenant_settings                  50
+1      29     tenant_tasks                     59
+1      29     tenant_usage                     45
+1      29     tenants                          8
+1      29     transaction_activity             61
+1      29     transaction_statistics           43
+1      29     ui                               14
+1      29     users                            4
+1      29     web_sessions                     19
+1      29     zones                            5
+100    0      public                           101
+102    0      public                           103
+10000  0      public                           10001
+10002  0      public                           10003
+10002  0      sc                               10004
+10002  10003  kv                               10007
+10002  10003  mv                               10008
+10002  10004  _greeting                        10006
+10002  10004  greeting                         10005
 
 skipif config local-mixed-22.2-23.1
 query IT
 SELECT * FROM "".crdb_internal.kv_catalog_zones ORDER BY id
 ----
-0    {"gc": {"ttlSeconds": 14400}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 3, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
-1    {"gc": {"ttlSeconds": 14400}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
-16   {"gc": {"ttlSeconds": 3600}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
-17   {"gc": {"ttlSeconds": 14400}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
-22   {"gc": {"ttlSeconds": 600}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
-25   {"gc": {"ttlSeconds": 600}}
-27   {"gc": {"ttlSeconds": 600}}
-42   {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
-43   {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
-45   {"gc": {"ttlSeconds": 7200}}
-57   {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
-60   {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
-61   {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
-106  {"gc": {"ttlSeconds": 7200}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
-111  {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
+0      {"gc": {"ttlSeconds": 14400}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 3, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
+1      {"gc": {"ttlSeconds": 14400}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
+16     {"gc": {"ttlSeconds": 3600}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
+17     {"gc": {"ttlSeconds": 14400}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
+22     {"gc": {"ttlSeconds": 600}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
+25     {"gc": {"ttlSeconds": 600}}
+27     {"gc": {"ttlSeconds": 600}}
+42     {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
+43     {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
+45     {"gc": {"ttlSeconds": 7200}}
+57     {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
+60     {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
+61     {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
+10002  {"gc": {"ttlSeconds": 7200}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
+10007  {"gc": {"ttlSeconds": 3600}, "inheritedConstraints": true, "inheritedLeasePreferences": true}
 
 # crdb_internal.kv_catalog_comments does not include builtin function comments.
 query OOIT
@@ -594,13 +594,13 @@ SELECT
 FROM "".crdb_internal.kv_catalog_comments
 ORDER BY 1,2,3,4
 ----
-4294967069  107         0  "this is the public schema"
-4294967069  108         0  "this is a schema"
-4294967092  104         0  "this is the test database"
-4294967095  3328135398  0  "this is a primary key constraint"
-4294967095  3441531627  0  "this is a check constraint"
-4294967098  111         0  "this is a table"
-4294967098  5181039     0  "this is an index"
+4294967069  10003       0  "this is the public schema"
+4294967069  10004       0  "this is a schema"
+4294967092  10000       0  "this is the test database"
+4294967095  2953742103  0  "this is a primary key constraint"
+4294967095  4043553282  0  "this is a check constraint"
+4294967098  10007       0  "this is a table"
+4294967098  3423128978  0  "this is an index"
 4294967098  4294966977  0  "Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table."
 4294967098  4294966978  0  "Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality."
 4294967098  4294966979  0  "Shows all defined geography columns. Matches PostGIS' geography_columns functionality."
@@ -925,17 +925,17 @@ SELECT id, descriptor->'table'->>'state'
 FROM crdb_internal.kv_catalog_descriptor
 WHERE id = $kv_id
 ----
-111  NULL
+10007  NULL
 
 query IITI
 SELECT * FROM crdb_internal.kv_catalog_namespace WHERE id = $kv_id
 ----
-106  107  kv  111
+10002  10003  kv  10007
 
 query OOIT
 SELECT * FROM crdb_internal.kv_catalog_comments WHERE objoid = $kv_id ORDER BY 1,2,3,4
 ----
-4294967098  111  0  this is a table
+4294967098  10007  0  this is a table
 
 statement ok
 DROP TABLE db.kv CASCADE;
@@ -945,14 +945,14 @@ SELECT id, descriptor->'table'->>'state'
 FROM crdb_internal.kv_catalog_descriptor
 WHERE id = $kv_id
 ----
-111  DROP
+10007  DROP
 
 query IT
 SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->>'state'
 FROM system.descriptor
 WHERE id = $kv_id
 ----
-111  DROP
+10007  DROP
 
 query IITI
 SELECT * FROM crdb_internal.kv_catalog_namespace WHERE id = $kv_id
@@ -965,7 +965,7 @@ SELECT * FROM system.namespace WHERE id = $kv_id
 query OOIT
 SELECT * FROM crdb_internal.kv_catalog_comments WHERE objoid = $kv_id ORDER BY 1,2,3,4
 ----
-4294967098  111  0  this is a table
+4294967098  10007  0  this is a table
 
 query TIIT
 SELECT * FROM system.comments WHERE object_id = $kv_id

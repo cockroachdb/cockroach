@@ -25,20 +25,20 @@ skipif config local-mixed-22.2-23.1
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
-0    RANGE default
-1    DATABASE system
-16   RANGE meta
-17   RANGE system
-22   RANGE liveness
-25   TABLE system.public.replication_constraint_stats
-27   TABLE system.public.replication_stats
-42   TABLE system.public.statement_statistics
-43   TABLE system.public.transaction_statistics
-45   TABLE system.public.tenant_usage
-57   TABLE system.public.span_stats_tenant_boundaries
-60   TABLE system.public.statement_activity
-61   TABLE system.public.transaction_activity
-106  TABLE test.public.t
+0      RANGE default
+1      DATABASE system
+16     RANGE meta
+17     RANGE system
+22     RANGE liveness
+25     TABLE system.public.replication_constraint_stats
+27     TABLE system.public.replication_stats
+42     TABLE system.public.statement_statistics
+43     TABLE system.public.transaction_statistics
+45     TABLE system.public.tenant_usage
+57     TABLE system.public.span_stats_tenant_boundaries
+60     TABLE system.public.statement_activity
+61     TABLE system.public.transaction_activity
+10002  TABLE test.public.t
 
 # The tests below test semantics around named zone for the system tenant. The
 # system tenant is allowed to alter all named zones. All named zones bar
@@ -130,8 +130,8 @@ FROM system.span_configurations
 WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])
 ORDER BY start_key
 ----
-/Table/110  {"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "67108864", "rangeMinBytes": "1048576"}
-/Table/111  {"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "1073741824", "rangeMinBytes": "67108864"}
+/Table/10006  {"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "67108864", "rangeMinBytes": "1048576"}
+/Table/10007  {"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "1073741824", "rangeMinBytes": "67108864"}
 
 # Check that dropped relations can have their GC TTLs altered.
 subtest dropped_relation_gc_ttl
@@ -162,11 +162,10 @@ FROM system.span_configurations
 WHERE start_key >= (SELECT crdb_internal.table_span(100)[1])
 ORDER BY start_key
 ----
-/Table/106  14400
-/Table/107  14400
-/Table/110  90001
-/Table/111  90001
-/Table/112  14400
+/Table/10002  14400
+/Table/10003  14400
+/Table/10006  90001
+/Table/10007  90001
 
 query B
 SELECT crdb_internal.upsert_dropped_relation_gc_ttl(id, '1 second')
@@ -193,11 +192,10 @@ FROM system.span_configurations
 WHERE start_key >= (SELECT crdb_internal.table_span(100)[1])
 ORDER BY start_key
 ----
-/Table/106  14400
-/Table/107  14400
-/Table/110  90001
-/Table/111  1
-/Table/112  1
+/Table/10002  14400
+/Table/10003  14400
+/Table/10006  90001
+/Table/10007  90001
 
 subtest transactional_schemachanges
 

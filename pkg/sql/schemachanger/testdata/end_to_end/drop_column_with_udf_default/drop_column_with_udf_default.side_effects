@@ -3,7 +3,7 @@ CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE TABLE t (i INT PRIMARY KEY, b INT DEFAULT f());
 ----
 ...
-+object {100 101 t} -> 105
++object {100 101 t} -> 10001
 
 /* test */
 ALTER TABLE t DROP COLUMN b;
@@ -16,17 +16,17 @@ increment telemetry for sql.schema.alter_table.drop_column
 write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
-    descriptorId: 105
+    descriptorId: 10001
     statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹b›
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
 ## StatementPhase stage 1 of 1 with 6 MutationType ops
-upsert descriptor #105
+upsert descriptor #10001
   ...
          oid: 20
          width: 64
-  -  - defaultExpr: '[FUNCTION 100104]()'
+  -  - defaultExpr: '[FUNCTION 110000]()'
   -    id: 2
   -    name: b
   -    nullable: true
@@ -35,7 +35,7 @@ upsert descriptor #105
   -      oid: 20
   -      width: 64
   -    usesFunctionIds:
-  -    - 104
+  -    - 10000
      createAsOfTime:
        wallTime: "1640995200000000000"
   ...
@@ -46,11 +46,11 @@ upsert descriptor #105
        defaultColumnId: 2
        name: primary
   ...
-     id: 105
+     id: 10001
      modificationTime: {}
   +  mutations:
   +  - column:
-  +      defaultExpr: '[FUNCTION 100104]()'
+  +      defaultExpr: '[FUNCTION 110000]()'
   +      id: 2
   +      name: crdb_internal_column_2_name_placeholder
   +      nullable: true
@@ -59,7 +59,7 @@ upsert descriptor #105
   +        oid: 20
   +        width: 64
   +      usesFunctionIds:
-  +      - 104
+  +      - 10000
   +    direction: DROP
   +    mutationId: 1
   +    state: WRITE_ONLY
@@ -137,14 +137,14 @@ upsert descriptor #105
 undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 11 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
    function:
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
   +    jobId: "1"
   +    nameMapping:
-  +      id: 104
+  +      id: 10000
   +      name: f
   +    revertible: true
      dependedOnBy:
@@ -155,11 +155,11 @@ upsert descriptor #104
   -  version: "2"
   +  version: "3"
      volatility: VOLATILE
-upsert descriptor #105
+upsert descriptor #10001
   ...
          oid: 20
          width: 64
-  -  - defaultExpr: '[FUNCTION 100104]()'
+  -  - defaultExpr: '[FUNCTION 110000]()'
   -    id: 2
   -    name: b
   -    nullable: true
@@ -168,7 +168,7 @@ upsert descriptor #105
   -      oid: 20
   -      width: 64
   -    usesFunctionIds:
-  -    - 104
+  -    - 10000
      createAsOfTime:
        wallTime: "1640995200000000000"
   +  declarativeSchemaChangerState:
@@ -183,7 +183,7 @@ upsert descriptor #105
   +        "4294967295": crdb_internal_mvcc_timestamp
   +      families:
   +        "0": primary
-  +      id: 105
+  +      id: 10001
   +      indexes:
   +        "2": t_pkey
   +      name: t
@@ -205,11 +205,11 @@ upsert descriptor #105
        defaultColumnId: 2
        name: primary
   ...
-     id: 105
+     id: 10001
      modificationTime: {}
   +  mutations:
   +  - column:
-  +      defaultExpr: '[FUNCTION 100104]()'
+  +      defaultExpr: '[FUNCTION 110000]()'
   +      id: 2
   +      name: crdb_internal_column_2_name_placeholder
   +      nullable: true
@@ -218,7 +218,7 @@ upsert descriptor #105
   +        oid: 20
   +        width: 64
   +      usesFunctionIds:
-  +      - 104
+  +      - 10000
   +    direction: DROP
   +    mutationId: 1
   +    state: WRITE_ONLY
@@ -292,7 +292,7 @@ upsert descriptor #105
   +  version: "2"
 persist all catalog changes to storage
 create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t DROP COLUMN b"
-  descriptor IDs: [104 105]
+  descriptor IDs: [10000 10001]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -301,14 +301,14 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 4 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
          oid: 20
          width: 64
   -  version: "3"
   +  version: "4"
      volatility: VOLATILE
-upsert descriptor #105
+upsert descriptor #10001
   ...
          version: 4
        mutationId: 1
@@ -326,18 +326,18 @@ update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 Ba
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 7 with 1 BackfillType op
-backfill indexes [2] from index #1 in table #105
+backfill indexes [2] from index #1 in table #10001
 commit transaction #4
 begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 4 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
          oid: 20
          width: 64
   -  version: "4"
   +  version: "5"
      volatility: VOLATILE
-upsert descriptor #105
+upsert descriptor #10001
   ...
          version: 4
        mutationId: 1
@@ -355,14 +355,14 @@ update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 Mu
 commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 4 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
          oid: 20
          width: 64
   -  version: "5"
   +  version: "6"
      volatility: VOLATILE
-upsert descriptor #105
+upsert descriptor #10001
   ...
          version: 4
        mutationId: 1
@@ -380,18 +380,18 @@ update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 Ba
 commit transaction #6
 begin transaction #7
 ## PostCommitPhase stage 5 of 7 with 1 BackfillType op
-merge temporary indexes [3] into backfilled indexes [2] in table #105
+merge temporary indexes [3] into backfilled indexes [2] in table #10001
 commit transaction #7
 begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 5 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
          oid: 20
          width: 64
   -  version: "6"
   +  version: "7"
      volatility: VOLATILE
-upsert descriptor #105
+upsert descriptor #10001
   ...
          version: 4
        mutationId: 1
@@ -418,13 +418,13 @@ update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 1 Va
 commit transaction #8
 begin transaction #9
 ## PostCommitPhase stage 7 of 7 with 1 ValidationType op
-validate forward indexes [2] in table #105
+validate forward indexes [2] in table #10001
 commit transaction #9
 begin transaction #10
 ## PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
-         id: 104
+         id: 10000
          name: f
   -    revertible: true
      dependedOnBy:
@@ -435,7 +435,7 @@ upsert descriptor #104
   -  version: "7"
   +  version: "8"
      volatility: VOLATILE
-upsert descriptor #105
+upsert descriptor #10001
   ...
            statement: ALTER TABLE t DROP COLUMN b
            statementTag: ALTER TABLE
@@ -538,14 +538,14 @@ set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
 ## PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
          oid: 20
          width: 64
   -  version: "8"
   +  version: "9"
      volatility: VOLATILE
-upsert descriptor #105
+upsert descriptor #10001
   ...
          version: 4
        mutationId: 1
@@ -563,28 +563,28 @@ update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 o
 commit transaction #11
 begin transaction #12
 ## PostCommitNonRevertiblePhase stage 3 of 3 with 9 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
    function:
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
   -    jobId: "1"
   -    nameMapping:
-  -      id: 104
+  -      id: 10000
   -      name: f
   -  dependedOnBy:
   -  - columnIds:
   -    - 2
-  -    id: 105
+  -    id: 10001
      functionBody: SELECT 1;
-     id: 104
+     id: 10000
   ...
          oid: 20
          width: 64
   -  version: "9"
   +  version: "10"
      volatility: VOLATILE
-upsert descriptor #105
+upsert descriptor #10001
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -600,7 +600,7 @@ upsert descriptor #105
   -        "4294967295": crdb_internal_mvcc_timestamp
   -      families:
   -        "0": primary
-  -      id: 105
+  -      id: 10001
   -      indexes:
   -        "2": t_pkey
   -      name: t
@@ -621,11 +621,11 @@ upsert descriptor #105
        defaultColumnId: 2
        name: primary
   ...
-     id: 105
+     id: 10001
      modificationTime: {}
   -  mutations:
   -  - column:
-  -      defaultExpr: '[FUNCTION 100104]()'
+  -      defaultExpr: '[FUNCTION 110000]()'
   -      id: 2
   -      name: crdb_internal_column_2_name_placeholder
   -      nullable: true
@@ -634,7 +634,7 @@ upsert descriptor #105
   -        oid: 20
   -        width: 64
   -      usesFunctionIds:
-  -      - 104
+  -      - 10000
   -    direction: DROP
   -    mutationId: 1
   -    state: DELETE_ONLY
@@ -674,13 +674,13 @@ upsert descriptor #105
   +  version: "9"
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t DROP COLUMN b"
-  descriptor IDs: [105]
+  descriptor IDs: [10001]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
-    descriptorId: 105
+    descriptorId: 10001
 commit transaction #12
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

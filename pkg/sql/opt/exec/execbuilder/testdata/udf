@@ -45,20 +45,20 @@ $$
 query T kvtrace
 SELECT fetch_one_then_two()
 ----
-Scan /Table/106/1/1/0
-Scan /Table/106/1/2/0
+Scan /Table/10002/1/1/0
+Scan /Table/10002/1/2/0
 
 # This test shows that six point lookups are performed - two for each invocation
 # of the UDF.
 query T kvtrace
 SELECT i FROM (VALUES (1), (2), (3)) AS v(i) WHERE i = fetch_one_then_two()
 ----
-Scan /Table/106/1/1/0
-Scan /Table/106/1/2/0
-Scan /Table/106/1/1/0
-Scan /Table/106/1/2/0
-Scan /Table/106/1/1/0
-Scan /Table/106/1/2/0
+Scan /Table/10002/1/1/0
+Scan /Table/10002/1/2/0
+Scan /Table/10002/1/1/0
+Scan /Table/10002/1/2/0
+Scan /Table/10002/1/1/0
+Scan /Table/10002/1/2/0
 
 statement ok
 CREATE FUNCTION fetch_a_of_1(i INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$
@@ -82,7 +82,7 @@ $$
 query T kvtrace
 SELECT fetch_a_of_1(NULL::INT)
 ----
-Scan /Table/106/1/1/0
+Scan /Table/10002/1/1/0
 
 # When the function RETURNS NULL ON NULL INPUT or STRICT then it should not be
 # evaluated if any of its inputs are NULL. The empty traces prove that the
@@ -151,20 +151,20 @@ CREATE FUNCTION sub_fn_lt() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHER
 query T kvtrace
 SELECT sub_fn_lt()
 ----
-Scan /Table/112/{1-2}
-Scan /Table/113/{1-2}
+Scan /Table/10008/{1-2}
+Scan /Table/10009/{1-2}
 
 # The uncorrelated subquery in the UDF body is executed only once per row
 # produced by generate_series.
 query T kvtrace
 SELECT sub_fn_lt() FROM generate_series(1, 3)
 ----
-Scan /Table/112/{1-2}
-Scan /Table/113/{1-2}
-Scan /Table/112/{1-2}
-Scan /Table/113/{1-2}
-Scan /Table/112/{1-2}
-Scan /Table/113/{1-2}
+Scan /Table/10008/{1-2}
+Scan /Table/10009/{1-2}
+Scan /Table/10008/{1-2}
+Scan /Table/10009/{1-2}
+Scan /Table/10008/{1-2}
+Scan /Table/10009/{1-2}
 
 statement ok
 CREATE FUNCTION sub_fn2() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE a = (SELECT a FROM sub2 WHERE a = 30)'
@@ -174,12 +174,12 @@ CREATE FUNCTION sub_fn2() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE 
 query T kvtrace
 SELECT sub_fn2() FROM generate_series(1, 3)
 ----
-Scan /Table/113/1/30/0
-Scan /Table/112/1/30/0
-Scan /Table/113/1/30/0
-Scan /Table/112/1/30/0
-Scan /Table/113/1/30/0
-Scan /Table/112/1/30/0
+Scan /Table/10009/1/30/0
+Scan /Table/10008/1/30/0
+Scan /Table/10009/1/30/0
+Scan /Table/10008/1/30/0
+Scan /Table/10009/1/30/0
+Scan /Table/10008/1/30/0
 
 statement ok
 CREATE FUNCTION sub_fn3() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE EXISTS (SELECT a FROM sub2 WHERE a = 30)'

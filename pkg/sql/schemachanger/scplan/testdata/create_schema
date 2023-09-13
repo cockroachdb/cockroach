@@ -3,138 +3,138 @@ CREATE SCHEMA sc;
 ----
 StatementPhase stage 1 of 1 with 8 MutationType ops
   transitions:
-    [[Schema:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 104, Name: sc, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
-    [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
-    [[Owner:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 104, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 104, Name: root}, PUBLIC], ABSENT] -> PUBLIC
+    [[Schema:{DescID: 10000}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 10000, Name: sc, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
+    [[SchemaParent:{DescID: 10000, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 10000}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10000, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10000, Name: root}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateSchemaDescriptor
-      SchemaID: 104
+      SchemaID: 10000
     *scop.SetNameInDescriptor
-      DescriptorID: 104
+      DescriptorID: 10000
       Name: sc
     *scop.AddDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 104
+        DescriptorID: 10000
         Name: sc
     *scop.AddSchemaParent
       Parent:
         ParentDatabaseID: 100
-        SchemaID: 104
+        SchemaID: 10000
     *scop.UpdateOwner
       Owner:
-        DescriptorID: 104
+        DescriptorID: 10000
         Owner: root
     *scop.UpdateUserPrivileges
       Privileges:
-        DescriptorID: 104
+        DescriptorID: 10000
         Privileges: 2
         UserName: admin
         WithGrantOption: 2
     *scop.UpdateUserPrivileges
       Privileges:
-        DescriptorID: 104
+        DescriptorID: 10000
         Privileges: 2
         UserName: root
         WithGrantOption: 2
     *scop.MarkDescriptorAsPublic
-      DescriptorID: 104
+      DescriptorID: 10000
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Schema:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 104, Name: sc, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
-    [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 104, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 104, Name: root}, PUBLIC], PUBLIC] -> ABSENT
+    [[Schema:{DescID: 10000}, PUBLIC], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 10000, Name: sc, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
+    [[SchemaParent:{DescID: 10000, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 10000}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10000, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 10000, Name: root}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 8 MutationType ops
   transitions:
-    [[Schema:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 104, Name: sc, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
-    [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
-    [[Owner:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 104, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
-    [[UserPrivileges:{DescID: 104, Name: root}, PUBLIC], ABSENT] -> PUBLIC
+    [[Schema:{DescID: 10000}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 10000, Name: sc, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
+    [[SchemaParent:{DescID: 10000, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 10000}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10000, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 10000, Name: root}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.CreateSchemaDescriptor
-      SchemaID: 104
+      SchemaID: 10000
     *scop.SetNameInDescriptor
-      DescriptorID: 104
+      DescriptorID: 10000
       Name: sc
     *scop.AddDescriptorName
       Namespace:
         DatabaseID: 100
-        DescriptorID: 104
+        DescriptorID: 10000
         Name: sc
     *scop.AddSchemaParent
       Parent:
         ParentDatabaseID: 100
-        SchemaID: 104
+        SchemaID: 10000
     *scop.UpdateOwner
       Owner:
-        DescriptorID: 104
+        DescriptorID: 10000
         Owner: root
     *scop.UpdateUserPrivileges
       Privileges:
-        DescriptorID: 104
+        DescriptorID: 10000
         Privileges: 2
         UserName: admin
         WithGrantOption: 2
     *scop.UpdateUserPrivileges
       Privileges:
-        DescriptorID: 104
+        DescriptorID: 10000
         Privileges: 2
         UserName: root
         WithGrantOption: 2
     *scop.MarkDescriptorAsPublic
-      DescriptorID: 104
+      DescriptorID: 10000
 
 deps
 CREATE SCHEMA sc;
 ----
-- from: [Namespace:{DescID: 105, Name: sc, ReferencedDescID: 100}, PUBLIC]
-  to:   [Schema:{DescID: 105}, PUBLIC]
+- from: [Namespace:{DescID: 10001, Name: sc, ReferencedDescID: 100}, PUBLIC]
+  to:   [Schema:{DescID: 10001}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
-- from: [Owner:{DescID: 105}, PUBLIC]
-  to:   [Schema:{DescID: 105}, PUBLIC]
+- from: [Owner:{DescID: 10001}, PUBLIC]
+  to:   [Schema:{DescID: 10001}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
-- from: [Schema:{DescID: 105}, DESCRIPTOR_ADDED]
-  to:   [Namespace:{DescID: 105, Name: sc, ReferencedDescID: 100}, PUBLIC]
+- from: [Schema:{DescID: 10001}, DESCRIPTOR_ADDED]
+  to:   [Namespace:{DescID: 10001, Name: sc, ReferencedDescID: 100}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
-- from: [Schema:{DescID: 105}, DESCRIPTOR_ADDED]
-  to:   [Owner:{DescID: 105}, PUBLIC]
+- from: [Schema:{DescID: 10001}, DESCRIPTOR_ADDED]
+  to:   [Owner:{DescID: 10001}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
-- from: [Schema:{DescID: 105}, DESCRIPTOR_ADDED]
-  to:   [SchemaParent:{DescID: 105, ReferencedDescID: 100}, PUBLIC]
+- from: [Schema:{DescID: 10001}, DESCRIPTOR_ADDED]
+  to:   [SchemaParent:{DescID: 10001, ReferencedDescID: 100}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
-- from: [Schema:{DescID: 105}, DESCRIPTOR_ADDED]
-  to:   [UserPrivileges:{DescID: 105, Name: admin}, PUBLIC]
+- from: [Schema:{DescID: 10001}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 10001, Name: admin}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
-- from: [Schema:{DescID: 105}, DESCRIPTOR_ADDED]
-  to:   [UserPrivileges:{DescID: 105, Name: root}, PUBLIC]
+- from: [Schema:{DescID: 10001}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 10001, Name: root}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
-- from: [SchemaParent:{DescID: 105, ReferencedDescID: 100}, PUBLIC]
-  to:   [Schema:{DescID: 105}, PUBLIC]
+- from: [SchemaParent:{DescID: 10001, ReferencedDescID: 100}, PUBLIC]
+  to:   [Schema:{DescID: 10001}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
-- from: [UserPrivileges:{DescID: 105, Name: admin}, PUBLIC]
-  to:   [Schema:{DescID: 105}, PUBLIC]
+- from: [UserPrivileges:{DescID: 10001, Name: admin}, PUBLIC]
+  to:   [Schema:{DescID: 10001}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
-- from: [UserPrivileges:{DescID: 105, Name: root}, PUBLIC]
-  to:   [Schema:{DescID: 105}, PUBLIC]
+- from: [UserPrivileges:{DescID: 10001, Name: root}, PUBLIC]
+  to:   [Schema:{DescID: 10001}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public

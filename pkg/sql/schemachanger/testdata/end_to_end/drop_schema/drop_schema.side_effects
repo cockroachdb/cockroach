@@ -3,9 +3,9 @@ CREATE DATABASE db;
 CREATE SCHEMA db.sc;
 ----
 ...
-+database {0 0 db} -> 104
-+schema {104 0 public} -> 105
-+schema {104 0 sc} -> 106
++database {0 0 db} -> 10000
++schema {10000 0 public} -> 10001
++schema {10000 0 sc} -> 10002
 
 /* test */
 DROP SCHEMA db.sc;
@@ -15,25 +15,25 @@ begin transaction #1
 checking for feature: DROP SCHEMA
 increment telemetry for sql.schema.drop_schema
 increment telemetry for sql.uds.drop_schema
-getting all objects in schema: 106
+getting all objects in schema: 10002
 write *eventpb.DropSchema to event log:
   schemaName: db.sc
   sql:
-    descriptorId: 106
+    descriptorId: 10002
     statement: DROP SCHEMA ‹db›.‹sc›
     tag: DROP SCHEMA
     user: root
 ## StatementPhase stage 1 of 1 with 6 MutationType ops
-delete schema namespace entry {104 0 sc} -> 106
-upsert descriptor #104
+delete schema namespace entry {10000 0 sc} -> 10002
+upsert descriptor #10000
   ...
        public:
-         id: 105
+         id: 10001
   -    sc:
-  -      id: 106
+  -      id: 10002
   -  version: "2"
   +  version: "3"
-upsert descriptor #106
+upsert descriptor #10002
   ...
          withGrantOption: "2"
        version: 2
@@ -46,26 +46,26 @@ upsert descriptor #106
 undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 9 MutationType ops
-delete schema namespace entry {104 0 sc} -> 106
-upsert descriptor #104
+delete schema namespace entry {10000 0 sc} -> 10002
+upsert descriptor #10000
    database:
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
   +    jobId: "1"
   +    nameMapping:
-  +      id: 104
+  +      id: 10000
   +      name: db
      defaultPrivileges: {}
-     id: 104
+     id: 10000
   ...
        public:
-         id: 105
+         id: 10001
   -    sc:
-  -      id: 106
+  -      id: 10002
   -  version: "2"
   +  version: "3"
-upsert descriptor #106
+upsert descriptor #10002
    schema:
   +  declarativeSchemaChangerState:
   +    authorization:
@@ -73,7 +73,7 @@ upsert descriptor #106
   +    currentStatuses: <redacted>
   +    jobId: "1"
   +    nameMapping:
-  +      id: 106
+  +      id: 10002
   +      name: sc
   +    relevantStatements:
   +    - statement:
@@ -82,7 +82,7 @@ upsert descriptor #106
   +        statementTag: DROP SCHEMA
   +    targetRanks: <redacted>
   +    targets: <redacted>
-     id: 106
+     id: 10002
      modificationTime: {}
   ...
          withGrantOption: "2"
@@ -92,7 +92,7 @@ upsert descriptor #106
   +  version: "2"
 persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP SCHEMA db.sc"
-  descriptor IDs: [104 106]
+  descriptor IDs: [10000 10002]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -101,29 +101,29 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
    database:
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
   -    jobId: "1"
   -    nameMapping:
-  -      id: 104
+  -      id: 10000
   -      name: db
      defaultPrivileges: {}
-     id: 104
+     id: 10000
   ...
        public:
-         id: 105
+         id: 10001
   -  version: "3"
   +  version: "4"
-delete descriptor #106
+delete descriptor #10002
 persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
-    descriptorId: 106
+    descriptorId: 10002
 commit transaction #3
 # end PostCommitPhase

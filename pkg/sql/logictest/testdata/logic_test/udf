@@ -144,16 +144,16 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('proc_f', 'proc_f_2')
 ORDER BY 1
 ----
-100118  proc_f    105  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    f  SELECT 1;
-100119  proc_f    105  1546506610  14  true   true   false  i  2  25  25 20  {i,i}  {"",b}  f  SELECT 'hello';
-100121  proc_f_2  120  1546506610  14  false  false  false  v  1  25  25     {i}    NULL    f  SELECT 'hello';
+110014  proc_f    10001  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    f  SELECT 1;
+110015  proc_f    10001  1546506610  14  true   true   false  i  2  25  25 20  {i,i}  {"",b}  f  SELECT 'hello';
+110017  proc_f_2  10016  1546506610  14  false  false  false  v  1  25  25     {i}    NULL    f  SELECT 'hello';
 
 # Ensure that the pg_proc virtual index works properly.
 
 query TT
 SELECT oid, proname FROM pg_proc WHERE oid = 'sc.proc_f_2'::regproc
 ----
-100121  proc_f_2
+110017  proc_f_2
 
 statement ok
 USE defaultdb;
@@ -175,33 +175,33 @@ FROM crdb_internal.create_function_statements
 WHERE function_name IN ('proc_f', 'proc_f_2')
 ORDER BY function_name;
 ----
-CREATE FUNCTION public.proc_f(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
-$$  104  test  105  public  118  proc_f
-CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
-    RETURNS STRING
-    IMMUTABLE
-    LEAKPROOF
-    STRICT
-    LANGUAGE SQL
-    AS $$
-    SELECT 'hello';
-$$  104  test  105  public  119  proc_f
-CREATE FUNCTION sc.proc_f_2(IN STRING)
-    RETURNS STRING
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 'hello';
-$$  104  test  120  sc  121  proc_f_2
+CREATE FUNCTION public.proc_f(IN INT8)               10000  test  10001  public  10014  proc_f
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)  10000  test  10001  public  10015  proc_f
+  RETURNS STRING
+  IMMUTABLE
+  LEAKPROOF
+  STRICT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
+$$
+CREATE FUNCTION sc.proc_f_2(IN STRING)               10000  test  10016  sc      10017  proc_f_2
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
+$$
 
 statement ok
 CREATE DATABASE test_cross_db;
@@ -215,42 +215,43 @@ FROM "".crdb_internal.create_function_statements
 WHERE function_name IN ('proc_f', 'proc_f_2', 'f_cross_db')
 ORDER BY database_id, function_name;
 ----
-CREATE FUNCTION public.proc_f(IN INT8)
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
-$$  104  test  105  public  118  proc_f
-CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)
-    RETURNS STRING
-    IMMUTABLE
-    LEAKPROOF
-    STRICT
-    LANGUAGE SQL
-    AS $$
-    SELECT 'hello';
-$$  104  test  105  public  119  proc_f
-CREATE FUNCTION sc.proc_f_2(IN STRING)
-    RETURNS STRING
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 'hello';
-$$  104  test  120  sc  121  proc_f_2
-CREATE FUNCTION public.f_cross_db()
-    RETURNS INT8
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 1;
-$$  122  test_cross_db  123  public  124  f_cross_db
+CREATE FUNCTION public.proc_f(IN INT8)               10000  test           10001  public  10014  proc_f
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+CREATE FUNCTION public.proc_f(IN STRING, IN b INT8)  10000  test           10001  public  10015  proc_f
+  RETURNS STRING
+  IMMUTABLE
+  LEAKPROOF
+  STRICT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
+$$
+CREATE FUNCTION sc.proc_f_2(IN STRING)               10000  test           10016  sc      10017  proc_f_2
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'hello';
+$$
+CREATE FUNCTION public.f_cross_db()                  10018  test_cross_db  10019  public  10020  f_cross_db
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1;
+$$
+
 subtest end
 
 subtest show_create_function
@@ -328,7 +329,7 @@ proc_f_2
 query I
 SELECT 'sc.proc_f_2'::REGPROC::INT;
 ----
-100121
+110017
 
 statement error pgcode 42883 pq: unknown function: no_such_func()
 SELECT 'no_such_func'::REGPROC;

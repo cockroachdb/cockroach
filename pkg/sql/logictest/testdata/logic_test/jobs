@@ -27,7 +27,7 @@ SELECT job_type, description, user_name FROM [SHOW JOBS] WHERE user_name = 'root
 AND job_type LIKE 'SCHEMA CHANGE%' ORDER BY 1, 2, 3
 ----
 SCHEMA CHANGE     CREATE INDEX ON test.public.t (x)                  root
-SCHEMA CHANGE     updating privileges for database 104               root
+SCHEMA CHANGE     updating privileges for database 10000             root
 SCHEMA CHANGE     updating version for role options table            root
 SCHEMA CHANGE     updating version for users table                   root
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
@@ -37,7 +37,7 @@ SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE user_name 
 AND job_type LIKE 'SCHEMA CHANGE%' ORDER BY 1, 2, 3
 ----
 SCHEMA CHANGE     CREATE INDEX ON test.public.t (x)                  root
-SCHEMA CHANGE     updating privileges for database 104               root
+SCHEMA CHANGE     updating privileges for database 10000             root
 SCHEMA CHANGE     updating version for role options table            root
 SCHEMA CHANGE     updating version for users table                   root
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
@@ -91,7 +91,7 @@ AND job_type LIKE 'SCHEMA CHANGE%' ORDER BY 1, 2, 3
 ----
 SCHEMA CHANGE     CREATE INDEX ON test.public.t (x)                  root
 SCHEMA CHANGE     CREATE INDEX ON test.public.u (x)                  testuser
-SCHEMA CHANGE     updating privileges for database 104               root
+SCHEMA CHANGE     updating privileges for database 10000             root
 SCHEMA CHANGE     updating version for role options table            root
 SCHEMA CHANGE     updating version for users table                   root
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
@@ -104,7 +104,7 @@ AND (job_type LIKE 'AUTO SPAN%' OR job_type LIKE 'SCHEMA CHANGE%') ORDER BY 1, 2
 AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations                    node
 SCHEMA CHANGE                    CREATE INDEX ON test.public.t (x)                  root
 SCHEMA CHANGE                    CREATE INDEX ON test.public.u (x)                  testuser
-SCHEMA CHANGE                    updating privileges for database 104               root
+SCHEMA CHANGE                    updating privileges for database 10000             root
 SCHEMA CHANGE                    updating version for role options table            root
 SCHEMA CHANGE                    updating version for users table                   root
 SCHEMA CHANGE GC                 GC for temporary index used during index backfill  root

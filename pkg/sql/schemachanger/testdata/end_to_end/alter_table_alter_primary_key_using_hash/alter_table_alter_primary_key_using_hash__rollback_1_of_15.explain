@@ -9,33 +9,33 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 14 elements transitioning toward ABSENT
-           │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (t_pkey-)}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 4 (t_pkey-)}
-           │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 4 (t_pkey-)}
-           │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 5}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 5}
-           │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-)}
-           │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_3", ColumnID: 3 (crdb_internal_j_shard_3-)}
-           │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_3-)}
-           │    ├── WRITE_ONLY    → ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 4 (t_pkey-), ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
-           │    ├── PUBLIC        → ABSENT ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_j_shard_3", ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 4 (t_pkey-)}
-           │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 5}
+           │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 10000 (t), IndexID: 4 (t_pkey-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 10000 (t), ColumnID: 1 (i), IndexID: 4 (t_pkey-)}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 10000 (t), ColumnID: 2 (j), IndexID: 4 (t_pkey-)}
+           │    ├── PUBLIC        → ABSENT IndexData:{DescID: 10000 (t), IndexID: 4 (t_pkey-)}
+           │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 10000 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 10000 (t), ColumnID: 1 (i), IndexID: 5}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 10000 (t), ColumnID: 2 (j), IndexID: 5}
+           │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 10000 (t), ColumnID: 3 (crdb_internal_j_shard_3-)}
+           │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 10000 (t), Name: "crdb_internal_j_shard_3", ColumnID: 3 (crdb_internal_j_shard_3-)}
+           │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 10000 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_3-)}
+           │    ├── WRITE_ONLY    → ABSENT CheckConstraint:{DescID: 10000 (t), IndexID: 4 (t_pkey-), ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
+           │    ├── PUBLIC        → ABSENT ConstraintWithoutIndexName:{DescID: 10000 (t), Name: "check_crdb_internal_j_shard_3", ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 10000 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 4 (t_pkey-)}
+           │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 10000 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 5}
            └── 15 Mutation operations
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"Kind":2,"TableID":104}
-                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":4,"Ordinal":1,"TableID":104}
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":5,"Kind":2,"TableID":104}
-                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":5,"Ordinal":1,"TableID":104}
-                ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
-                ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
-                ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":4,"TableID":104}
-                ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":5,"TableID":104}
-                ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
-                ├── CreateGCJobForIndex {"IndexID":4,"TableID":104}
-                ├── MakeIndexAbsent {"IndexID":5,"TableID":104}
-                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}
-                ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
-                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":4,"Kind":2,"TableID":10000}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":4,"Ordinal":1,"TableID":10000}
+                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":5,"Kind":2,"TableID":10000}
+                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":5,"Ordinal":1,"TableID":10000}
+                ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":10000}
+                ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":10000}
+                ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":4,"TableID":10000}
+                ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":5,"TableID":10000}
+                ├── MakeIndexAbsent {"IndexID":4,"TableID":10000}
+                ├── CreateGCJobForIndex {"IndexID":4,"TableID":10000}
+                ├── MakeIndexAbsent {"IndexID":5,"TableID":10000}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":10000}
+                ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":10000}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":10000}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

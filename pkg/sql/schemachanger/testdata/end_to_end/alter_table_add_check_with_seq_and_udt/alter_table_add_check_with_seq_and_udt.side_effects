@@ -4,10 +4,10 @@ CREATE TYPE typ AS ENUM ('a', 'b');
 CREATE TABLE t (i INT PRIMARY KEY, j STRING);
 ----
 ...
-+object {100 101 s} -> 104
-+object {100 101 typ} -> 105
-+object {100 101 _typ} -> 106
-+object {100 101 t} -> 107
++object {100 101 s} -> 10000
++object {100 101 typ} -> 10001
++object {100 101 _typ} -> 10002
++object {100 101 t} -> 10003
 
 /* test */
 ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a');
@@ -20,19 +20,19 @@ increment telemetry for sql.schema.alter_table.add_constraint
 write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
-    descriptorId: 107
+    descriptorId: 10003
     statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› > nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›))
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
 ## StatementPhase stage 1 of 1 with 4 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
   +  dependedOnBy:
   +  - byId: true
-  +    id: 107
+  +    id: 10003
      families:
      - columnIds:
   ...
@@ -40,36 +40,36 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
-upsert descriptor #105
+upsert descriptor #10001
   ...
          withGrantOption: "2"
        version: 2
   -  version: "1"
   +  referencingDescriptorIds:
-  +  - 107
+  +  - 10003
   +  version: "2"
-upsert descriptor #106
+upsert descriptor #10002
   ...
          withGrantOption: "2"
        version: 2
   -  version: "1"
   +  referencingDescriptorIds:
-  +  - 107
+  +  - 10003
   +  version: "2"
-upsert descriptor #107
+upsert descriptor #10003
    table:
   +  checks:
   +  - columnIds:
   +    - 1
   +    - 2
   +    constraintId: 2
-  +    expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  +    expr: (i > nextval(10000:::REGCLASS)) OR (j::@110001 = b'@':::@110001)
   +    name: check_i_j
   +    validity: Validating
      columns:
      - id: 1
   ...
-     id: 107
+     id: 10003
      modificationTime: {}
   +  mutations:
   +  - constraint:
@@ -78,7 +78,7 @@ upsert descriptor #107
   +        - 1
   +        - 2
   +        constraintId: 2
-  +        expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  +        expr: (i > nextval(10000:::REGCLASS)) OR (j::@110001 = b'@':::@110001)
   +        name: crdb_internal_constraint_2_name_placeholder
   +        validity: Validating
   +      foreignKey: {}
@@ -104,7 +104,7 @@ upsert descriptor #107
 undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 9 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -113,12 +113,12 @@ upsert descriptor #104
   +      userName: root
   +    jobId: "1"
   +    nameMapping:
-  +      id: 104
+  +      id: 10000
   +      name: s
   +    revertible: true
   +  dependedOnBy:
   +  - byId: true
-  +    id: 107
+  +    id: 10003
      families:
      - columnIds:
   ...
@@ -126,15 +126,15 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
-upsert descriptor #105
+upsert descriptor #10001
    type:
-     arrayTypeId: 106
+     arrayTypeId: 10002
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
   +    jobId: "1"
   +    nameMapping:
-  +      id: 105
+  +      id: 10001
   +      name: typ
   +    revertible: true
      enumMembers:
@@ -144,37 +144,37 @@ upsert descriptor #105
        version: 2
   -  version: "1"
   +  referencingDescriptorIds:
-  +  - 107
+  +  - 10003
   +  version: "2"
-upsert descriptor #106
+upsert descriptor #10002
   ...
        family: ArrayFamily
-       oid: 100106
+       oid: 110002
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
   +    jobId: "1"
   +    nameMapping:
-  +      id: 106
+  +      id: 10002
   +      name: _typ
   +    revertible: true
-     id: 106
+     id: 10002
      kind: ALIAS
   ...
          withGrantOption: "2"
        version: 2
   -  version: "1"
   +  referencingDescriptorIds:
-  +  - 107
+  +  - 10003
   +  version: "2"
-upsert descriptor #107
+upsert descriptor #10003
    table:
   +  checks:
   +  - columnIds:
   +    - 1
   +    - 2
   +    constraintId: 2
-  +    expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  +    expr: (i > nextval(10000:::REGCLASS)) OR (j::@110001 = b'@':::@110001)
   +    name: check_i_j
   +    validity: Validating
      columns:
@@ -197,7 +197,7 @@ upsert descriptor #107
   +        "2": check_i_j
   +      families:
   +        "0": primary
-  +      id: 107
+  +      id: 10003
   +      indexes:
   +        "1": t_pkey
   +      name: t
@@ -212,7 +212,7 @@ upsert descriptor #107
      families:
      - columnIds:
   ...
-     id: 107
+     id: 10003
      modificationTime: {}
   +  mutations:
   +  - constraint:
@@ -221,7 +221,7 @@ upsert descriptor #107
   +        - 1
   +        - 2
   +        constraintId: 2
-  +        expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  +        expr: (i > nextval(10000:::REGCLASS)) OR (j::@110001 = b'@':::@110001)
   +        name: crdb_internal_constraint_2_name_placeholder
   +        validity: Validating
   +      foreignKey: {}
@@ -243,7 +243,7 @@ upsert descriptor #107
   +  version: "2"
 persist all catalog changes to storage
 create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t ADD CHECK ((i > nextval('s')) OR (j::typ = 'a'))"
-  descriptor IDs: [104 105 106 107]
+  descriptor IDs: [10000 10001 10002 10003]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -252,11 +252,11 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 2 with 1 ValidationType op
-validate CHECK constraint check_i_j in table #107
+validate CHECK constraint check_i_j in table #10003
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 2 with 6 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -265,7 +265,7 @@ upsert descriptor #104
   -      userName: root
   -    jobId: "1"
   -    nameMapping:
-  -      id: 104
+  -      id: 10000
   -      name: s
   -    revertible: true
      dependedOnBy:
@@ -275,46 +275,46 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
-upsert descriptor #105
+upsert descriptor #10001
    type:
-     arrayTypeId: 106
+     arrayTypeId: 10002
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
   -    jobId: "1"
   -    nameMapping:
-  -      id: 105
+  -      id: 10001
   -      name: typ
   -    revertible: true
      enumMembers:
      - logicalRepresentation: a
   ...
      referencingDescriptorIds:
-     - 107
+     - 10003
   -  version: "2"
   +  version: "3"
-upsert descriptor #106
+upsert descriptor #10002
   ...
        family: ArrayFamily
-       oid: 100106
+       oid: 110002
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
   -    jobId: "1"
   -    nameMapping:
-  -      id: 106
+  -      id: 10002
   -      name: _typ
   -    revertible: true
-     id: 106
+     id: 10002
      kind: ALIAS
   ...
      referencingDescriptorIds:
-     - 107
+     - 10003
   -  version: "2"
   +  version: "3"
-upsert descriptor #107
+upsert descriptor #10003
   ...
-       expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+       expr: (i > nextval(10000:::REGCLASS)) OR (j::@110001 = b'@':::@110001)
        name: check_i_j
   -    validity: Validating
      columns:
@@ -337,7 +337,7 @@ upsert descriptor #107
   -        "2": check_i_j
   -      families:
   -        "0": primary
-  -      id: 107
+  -      id: 10003
   -      indexes:
   -        "1": t_pkey
   -      name: t
@@ -352,7 +352,7 @@ upsert descriptor #107
      families:
      - columnIds:
   ...
-     id: 107
+     id: 10003
      modificationTime: {}
   -  mutations:
   -  - constraint:
@@ -361,7 +361,7 @@ upsert descriptor #107
   -        - 1
   -        - 2
   -        constraintId: 2
-  -        expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  -        expr: (i > nextval(10000:::REGCLASS)) OR (j::@110001 = b'@':::@110001)
   -        name: crdb_internal_constraint_2_name_placeholder
   -        validity: Validating
   -      foreignKey: {}
@@ -383,6 +383,6 @@ set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
-    descriptorId: 107
+    descriptorId: 10003
 commit transaction #4
 # end PostCommitPhase

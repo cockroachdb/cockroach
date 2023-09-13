@@ -25,15 +25,15 @@ f
 BackReferencedIDs:
 ElementState:
 - Function:
-    functionId: 110
+    functionId: 10006
     params:
     - class:
         class: IN
       name: a
       type:
         closedTypeIds:
-        - 108
-        - 109
+        - 10004
+        - 10005
         type:
           arrayContents: null
           arrayDimensions: []
@@ -42,13 +42,13 @@ ElementState:
           geoMetadata: null
           intervalDurationField: null
           locale: null
-          oid: 100108
+          oid: 110004
           precision: 0
           timePrecisionIsSet: false
           tupleContents: []
           tupleLabels: []
           udtMetadata:
-            arrayTypeOid: 100109
+            arrayTypeOid: 110005
           visibleType: 0
           width: 0
     returnSet: false
@@ -77,73 +77,73 @@ ElementState:
       SELECT b FROM defaultdb.public.t@t_idx_b;
       SELECT c FROM defaultdb.public.t@t_idx_c;
       SELECT a FROM defaultdb.public.v;
-      SELECT nextval(105:::REGCLASS);
-    functionId: 110
+      SELECT nextval(10001:::REGCLASS);
+    functionId: 10006
     lang:
       lang: SQL
     usesSequenceIds:
-    - 105
+    - 10001
     usesTables:
     - columnIds:
       - 1
       indexId: 0
-      tableId: 104
+      tableId: 10000
     - columnIds:
       - 2
       indexId: 2
-      tableId: 104
+      tableId: 10000
     - columnIds:
       - 3
       indexId: 3
-      tableId: 104
+      tableId: 10000
     usesTypeIds:
-    - 108
-    - 109
+    - 10004
+    - 10005
     usesViews:
     - columnIds:
       - 1
-      viewId: 107
+      viewId: 10003
   Status: PUBLIC
 - FunctionLeakProof:
-    functionId: 110
+    functionId: 10006
     leakProof: false
   Status: PUBLIC
 - FunctionName:
-    functionId: 110
+    functionId: 10006
     name: f
   Status: PUBLIC
 - FunctionNullInputBehavior:
-    functionId: 110
+    functionId: 10006
     nullInputBehavior:
       nullInputBehavior: CALLED_ON_NULL_INPUT
   Status: PUBLIC
 - FunctionVolatility:
-    functionId: 110
+    functionId: 10006
     volatility:
       volatility: VOLATILE
   Status: PUBLIC
 - Owner:
-    descriptorId: 110
+    descriptorId: 10006
     owner: root
   Status: PUBLIC
 - SchemaChild:
-    childObjectId: 110
+    childObjectId: 10006
     schemaId: 101
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 110
+    descriptorId: 10006
     privileges: "1048576"
     userName: public
     withGrantOption: "0"
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 110
+    descriptorId: 10006
     privileges: "2"
     userName: admin
     withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 110
+    descriptorId: 10006
     privileges: "2"
     userName: root
     withGrantOption: "2"

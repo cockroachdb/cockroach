@@ -34,12 +34,12 @@ query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
 ----
 descriptor_id  descriptor_name             index_id  index_name                       column_type  column_id  column_name               column_direction  implicit
-110            t_test_hsi_change_locality  1         t_test_hsi_change_locality_pkey  key          1          crdb_internal_a_shard_16  ASC               true
-110            t_test_hsi_change_locality  1         t_test_hsi_change_locality_pkey  key          2          a                         ASC               false
-110            t_test_hsi_change_locality  2         idx_b                            key          4          crdb_internal_b_shard_16  ASC               true
-110            t_test_hsi_change_locality  2         idx_b                            key          3          b                         ASC               false
-110            t_test_hsi_change_locality  2         idx_b                            extra        1          NULL                      NULL              false
-110            t_test_hsi_change_locality  2         idx_b                            extra        2          NULL                      NULL              false
+10006          t_test_hsi_change_locality  1         t_test_hsi_change_locality_pkey  key          1          crdb_internal_a_shard_16  ASC               true
+10006          t_test_hsi_change_locality  1         t_test_hsi_change_locality_pkey  key          2          a                         ASC               false
+10006          t_test_hsi_change_locality  2         idx_b                            key          4          crdb_internal_b_shard_16  ASC               true
+10006          t_test_hsi_change_locality  2         idx_b                            key          3          b                         ASC               false
+10006          t_test_hsi_change_locality  2         idx_b                            extra        1          NULL                      NULL              false
+10006          t_test_hsi_change_locality  2         idx_b                            extra        2          NULL                      NULL              false
 
 statement ok
 ALTER TABLE t_test_hsi_change_locality SET LOCALITY REGIONAL BY ROW
@@ -62,14 +62,14 @@ query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
 ----
 descriptor_id  descriptor_name             index_id  index_name                       column_type  column_id  column_name               column_direction  implicit
-110            t_test_hsi_change_locality  3         t_test_hsi_change_locality_pkey  key          5          crdb_region               ASC               true
-110            t_test_hsi_change_locality  3         t_test_hsi_change_locality_pkey  key          1          crdb_internal_a_shard_16  ASC               true
-110            t_test_hsi_change_locality  3         t_test_hsi_change_locality_pkey  key          2          a                         ASC               false
-110            t_test_hsi_change_locality  5         idx_b                            key          5          crdb_region               ASC               true
-110            t_test_hsi_change_locality  5         idx_b                            key          4          crdb_internal_b_shard_16  ASC               true
-110            t_test_hsi_change_locality  5         idx_b                            key          3          b                         ASC               false
-110            t_test_hsi_change_locality  5         idx_b                            extra        1          NULL                      NULL              false
-110            t_test_hsi_change_locality  5         idx_b                            extra        2          NULL                      NULL              false
+10006          t_test_hsi_change_locality  3         t_test_hsi_change_locality_pkey  key          5          crdb_region               ASC               true
+10006          t_test_hsi_change_locality  3         t_test_hsi_change_locality_pkey  key          1          crdb_internal_a_shard_16  ASC               true
+10006          t_test_hsi_change_locality  3         t_test_hsi_change_locality_pkey  key          2          a                         ASC               false
+10006          t_test_hsi_change_locality  5         idx_b                            key          5          crdb_region               ASC               true
+10006          t_test_hsi_change_locality  5         idx_b                            key          4          crdb_internal_b_shard_16  ASC               true
+10006          t_test_hsi_change_locality  5         idx_b                            key          3          b                         ASC               false
+10006          t_test_hsi_change_locality  5         idx_b                            extra        1          NULL                      NULL              false
+10006          t_test_hsi_change_locality  5         idx_b                            extra        2          NULL                      NULL              false
 
 query TIII
 SELECT crdb_region, crdb_internal_a_shard_16, a, b
@@ -104,12 +104,12 @@ query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
 ----
 descriptor_id  descriptor_name             index_id  index_name                       column_type  column_id  column_name               column_direction  implicit
-110            t_test_hsi_change_locality  7         t_test_hsi_change_locality_pkey  key          1          crdb_internal_a_shard_16  ASC               true
-110            t_test_hsi_change_locality  7         t_test_hsi_change_locality_pkey  key          2          a                         ASC               false
-110            t_test_hsi_change_locality  9         idx_b                            key          4          crdb_internal_b_shard_16  ASC               true
-110            t_test_hsi_change_locality  9         idx_b                            key          3          b                         ASC               false
-110            t_test_hsi_change_locality  9         idx_b                            extra        1          NULL                      NULL              false
-110            t_test_hsi_change_locality  9         idx_b                            extra        2          NULL                      NULL              false
+10006          t_test_hsi_change_locality  7         t_test_hsi_change_locality_pkey  key          1          crdb_internal_a_shard_16  ASC               true
+10006          t_test_hsi_change_locality  7         t_test_hsi_change_locality_pkey  key          2          a                         ASC               false
+10006          t_test_hsi_change_locality  9         idx_b                            key          4          crdb_internal_b_shard_16  ASC               true
+10006          t_test_hsi_change_locality  9         idx_b                            key          3          b                         ASC               false
+10006          t_test_hsi_change_locality  9         idx_b                            extra        1          NULL                      NULL              false
+10006          t_test_hsi_change_locality  9         idx_b                            extra        2          NULL                      NULL              false
 
 statement ok
 ALTER TABLE t_test_hsi_change_locality SET LOCALITY REGIONAL BY ROW
@@ -132,14 +132,14 @@ query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_test_hsi_change_locality'
 ----
 descriptor_id  descriptor_name             index_id  index_name                       column_type  column_id  column_name               column_direction  implicit
-110            t_test_hsi_change_locality  11        t_test_hsi_change_locality_pkey  key          5          crdb_region               ASC               true
-110            t_test_hsi_change_locality  11        t_test_hsi_change_locality_pkey  key          1          crdb_internal_a_shard_16  ASC               true
-110            t_test_hsi_change_locality  11        t_test_hsi_change_locality_pkey  key          2          a                         ASC               false
-110            t_test_hsi_change_locality  13        idx_b                            key          5          crdb_region               ASC               true
-110            t_test_hsi_change_locality  13        idx_b                            key          4          crdb_internal_b_shard_16  ASC               true
-110            t_test_hsi_change_locality  13        idx_b                            key          3          b                         ASC               false
-110            t_test_hsi_change_locality  13        idx_b                            extra        1          NULL                      NULL              false
-110            t_test_hsi_change_locality  13        idx_b                            extra        2          NULL                      NULL              false
+10006          t_test_hsi_change_locality  11        t_test_hsi_change_locality_pkey  key          5          crdb_region               ASC               true
+10006          t_test_hsi_change_locality  11        t_test_hsi_change_locality_pkey  key          1          crdb_internal_a_shard_16  ASC               true
+10006          t_test_hsi_change_locality  11        t_test_hsi_change_locality_pkey  key          2          a                         ASC               false
+10006          t_test_hsi_change_locality  13        idx_b                            key          5          crdb_region               ASC               true
+10006          t_test_hsi_change_locality  13        idx_b                            key          4          crdb_internal_b_shard_16  ASC               true
+10006          t_test_hsi_change_locality  13        idx_b                            key          3          b                         ASC               false
+10006          t_test_hsi_change_locality  13        idx_b                            extra        1          NULL                      NULL              false
+10006          t_test_hsi_change_locality  13        idx_b                            extra        2          NULL                      NULL              false
 
 subtest set_locality_with_fk
 
@@ -207,15 +207,15 @@ ca-central-1  13  3  4
 query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_parent'
 ----
-descriptor_id  descriptor_name  index_id  index_name     column_type  column_id  column_name                column_direction  implicit
-111            t_parent         4         t_parent_pkey  key          5          crdb_region                 ASC               true
-111            t_parent         4         t_parent_pkey  key          1          crdb_internal_id_shard_16   ASC               true
-111            t_parent         4         t_parent_pkey  key          2          id                          ASC               false
-111            t_parent         6         uniq_id2       key          5          crdb_region                 ASC               true
-111            t_parent         6         uniq_id2       key          4          crdb_internal_id2_shard_16  ASC               true
-111            t_parent         6         uniq_id2       key          3          id2                         ASC               false
-111            t_parent         6         uniq_id2       extra        1          NULL                        NULL              false
-111            t_parent         6         uniq_id2       extra        2          NULL                        NULL              false
+descriptor_id  descriptor_name  index_id  index_name     column_type  column_id  column_name                 column_direction  implicit
+10007          t_parent         4         t_parent_pkey  key          5          crdb_region                 ASC               true
+10007          t_parent         4         t_parent_pkey  key          1          crdb_internal_id_shard_16   ASC               true
+10007          t_parent         4         t_parent_pkey  key          2          id                          ASC               false
+10007          t_parent         6         uniq_id2       key          5          crdb_region                 ASC               true
+10007          t_parent         6         uniq_id2       key          4          crdb_internal_id2_shard_16  ASC               true
+10007          t_parent         6         uniq_id2       key          3          id2                         ASC               false
+10007          t_parent         6         uniq_id2       extra        1          NULL                        NULL              false
+10007          t_parent         6         uniq_id2       extra        2          NULL                        NULL              false
 
 # Make sure switching back and forward between different localities is ok.
 statement ok
@@ -239,12 +239,12 @@ query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_parent'
 ----
 descriptor_id  descriptor_name  index_id  index_name     column_type  column_id  column_name                 column_direction  implicit
-111            t_parent         8         t_parent_pkey  key          1          crdb_internal_id_shard_16   ASC               true
-111            t_parent         8         t_parent_pkey  key          2          id                          ASC               false
-111            t_parent         10        uniq_id2       key          4          crdb_internal_id2_shard_16  ASC               true
-111            t_parent         10        uniq_id2       key          3          id2                         ASC               false
-111            t_parent         10        uniq_id2       extra        1          NULL                        NULL              false
-111            t_parent         10        uniq_id2       extra        2          NULL                        NULL              false
+10007          t_parent         8         t_parent_pkey  key          1          crdb_internal_id_shard_16   ASC               true
+10007          t_parent         8         t_parent_pkey  key          2          id                          ASC               false
+10007          t_parent         10        uniq_id2       key          4          crdb_internal_id2_shard_16  ASC               true
+10007          t_parent         10        uniq_id2       key          3          id2                         ASC               false
+10007          t_parent         10        uniq_id2       extra        1          NULL                        NULL              false
+10007          t_parent         10        uniq_id2       extra        2          NULL                        NULL              false
 
 statement ok
 ALTER TABLE t_parent SET LOCALITY REGIONAL BY ROW
@@ -267,11 +267,11 @@ query ITITTITTB colnames,rowsort
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = 't_parent'
 ----
 descriptor_id  descriptor_name  index_id  index_name     column_type  column_id  column_name                 column_direction  implicit
-111            t_parent         12        t_parent_pkey  key          5          crdb_region                 ASC               true
-111            t_parent         12        t_parent_pkey  key          1          crdb_internal_id_shard_16   ASC               true
-111            t_parent         12        t_parent_pkey  key          2          id                          ASC               false
-111            t_parent         14        uniq_id2       key          5          crdb_region                 ASC               true
-111            t_parent         14        uniq_id2       key          4          crdb_internal_id2_shard_16  ASC               true
-111            t_parent         14        uniq_id2       key          3          id2                         ASC               false
-111            t_parent         14        uniq_id2       extra        1          NULL                        NULL              false
-111            t_parent         14        uniq_id2       extra        2          NULL                        NULL              false
+10007          t_parent         12        t_parent_pkey  key          5          crdb_region                 ASC               true
+10007          t_parent         12        t_parent_pkey  key          1          crdb_internal_id_shard_16   ASC               true
+10007          t_parent         12        t_parent_pkey  key          2          id                          ASC               false
+10007          t_parent         14        uniq_id2       key          5          crdb_region                 ASC               true
+10007          t_parent         14        uniq_id2       key          4          crdb_internal_id2_shard_16  ASC               true
+10007          t_parent         14        uniq_id2       key          3          id2                         ASC               false
+10007          t_parent         14        uniq_id2       extra        1          NULL                        NULL              false
+10007          t_parent         14        uniq_id2       extra        2          NULL                        NULL              false

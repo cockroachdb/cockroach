@@ -2,7 +2,7 @@
 CREATE TABLE t (i INT PRIMARY KEY, j INT, INDEX (j));
 ----
 ...
-+object {100 101 t} -> 104
++object {100 101 t} -> 10000
 
 /* test */
 ALTER TABLE t DROP COLUMN j;
@@ -15,13 +15,13 @@ increment telemetry for sql.schema.alter_table.drop_column
 write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
-    descriptorId: 104
+    descriptorId: 10000
     statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
 ## StatementPhase stage 1 of 1 with 7 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
          oid: 20
          width: 64
@@ -42,7 +42,7 @@ upsert descriptor #104
        defaultColumnId: 2
        name: primary
      formatVersion: 3
-     id: 104
+     id: 10000
   -  indexes:
   -  - createdAtNanos: "1640995200000000000"
   -    foreignKey: {}
@@ -170,7 +170,7 @@ upsert descriptor #104
 undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 11 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
          oid: 20
          width: 64
@@ -195,7 +195,7 @@ upsert descriptor #104
   +        "4294967295": crdb_internal_mvcc_timestamp
   +      families:
   +        "0": primary
-  +      id: 104
+  +      id: 10000
   +      indexes:
   +        "3": t_pkey
   +      name: t
@@ -217,7 +217,7 @@ upsert descriptor #104
        defaultColumnId: 2
        name: primary
      formatVersion: 3
-     id: 104
+     id: 10000
   -  indexes:
   -  - createdAtNanos: "1640995200000000000"
   -    foreignKey: {}
@@ -341,7 +341,7 @@ upsert descriptor #104
   +  version: "2"
 persist all catalog changes to storage
 create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t DROP COLUMN j"
-  descriptor IDs: [104]
+  descriptor IDs: [10000]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -350,7 +350,7 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 3 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
          version: 4
        mutationId: 1
@@ -368,11 +368,11 @@ update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 Ba
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 7 with 1 BackfillType op
-backfill indexes [3] from index #1 in table #104
+backfill indexes [3] from index #1 in table #10000
 commit transaction #4
 begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 3 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
          version: 4
        mutationId: 1
@@ -390,7 +390,7 @@ update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 Mu
 commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 3 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
          version: 4
        mutationId: 1
@@ -408,11 +408,11 @@ update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 Ba
 commit transaction #6
 begin transaction #7
 ## PostCommitPhase stage 5 of 7 with 1 BackfillType op
-merge temporary indexes [4] into backfilled indexes [3] in table #104
+merge temporary indexes [4] into backfilled indexes [3] in table #10000
 commit transaction #7
 begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 4 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
          version: 4
        mutationId: 1
@@ -439,11 +439,11 @@ update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 1 Va
 commit transaction #8
 begin transaction #9
 ## PostCommitPhase stage 7 of 7 with 1 ValidationType op
-validate forward indexes [3] in table #104
+validate forward indexes [3] in table #10000
 commit transaction #9
 begin transaction #10
 ## PostCommitNonRevertiblePhase stage 1 of 3 with 13 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
            statement: ALTER TABLE t DROP COLUMN j
            statementTag: ALTER TABLE
@@ -571,7 +571,7 @@ set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
 ## PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
      modificationTime: {}
      mutations:
@@ -615,7 +615,7 @@ update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 o
 commit transaction #11
 begin transaction #12
 ## PostCommitNonRevertiblePhase stage 3 of 3 with 7 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -631,7 +631,7 @@ upsert descriptor #104
   -        "4294967295": crdb_internal_mvcc_timestamp
   -      families:
   -        "0": primary
-  -      id: 104
+  -      id: 10000
   -      indexes:
   -        "3": t_pkey
   -      name: t
@@ -702,13 +702,13 @@ upsert descriptor #104
   +  version: "9"
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t DROP COLUMN j"
-  descriptor IDs: [104]
+  descriptor IDs: [10000]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
-    descriptorId: 104
+    descriptorId: 10000
 commit transaction #12
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

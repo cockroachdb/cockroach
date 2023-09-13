@@ -7,98 +7,98 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 13 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → PUBLIC Sequence:{DescID: 104 (sq1+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
- │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "START"}
- │         │    ├── ABSENT → PUBLIC Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
- │         │    ├── ABSENT → PUBLIC ColumnType:{DescID: 104 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
- │         │    ├── ABSENT → PUBLIC ColumnNotNull:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 0}
- │         │    ├── ABSENT → PUBLIC ColumnName:{DescID: 104 (sq1+), Name: "value", ColumnID: 1 (value+)}
- │         │    ├── ABSENT → PUBLIC PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
- │         │    ├── ABSENT → PUBLIC IndexName:{DescID: 104 (sq1+), Name: "primary", IndexID: 1 (primary+)}
- │         │    ├── ABSENT → PUBLIC IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
- │         │    ├── ABSENT → PUBLIC Owner:{DescID: 104 (sq1+)}
- │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "admin"}
- │         │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "root"}
+ │         │    ├── ABSENT → PUBLIC Sequence:{DescID: 10000 (sq1+)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 10000 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 10000 (sq1+), Name: "START"}
+ │         │    ├── ABSENT → PUBLIC Column:{DescID: 10000 (sq1+), ColumnID: 1 (value+)}
+ │         │    ├── ABSENT → PUBLIC ColumnType:{DescID: 10000 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
+ │         │    ├── ABSENT → PUBLIC ColumnNotNull:{DescID: 10000 (sq1+), ColumnID: 1 (value+), IndexID: 0}
+ │         │    ├── ABSENT → PUBLIC ColumnName:{DescID: 10000 (sq1+), Name: "value", ColumnID: 1 (value+)}
+ │         │    ├── ABSENT → PUBLIC PrimaryIndex:{DescID: 10000 (sq1+), IndexID: 1 (primary+)}
+ │         │    ├── ABSENT → PUBLIC IndexName:{DescID: 10000 (sq1+), Name: "primary", IndexID: 1 (primary+)}
+ │         │    ├── ABSENT → PUBLIC IndexColumn:{DescID: 10000 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+ │         │    ├── ABSENT → PUBLIC Owner:{DescID: 10000 (sq1+)}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 10000 (sq1+), Name: "admin"}
+ │         │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 10000 (sq1+), Name: "root"}
  │         └── 23 Mutation operations
- │              ├── CreateSequenceDescriptor {"SequenceID":104}
- │              ├── SetNameInDescriptor {"DescriptorID":104,"Name":"sq1"}
- │              ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sq1","SchemaID":101}}
- │              ├── SetSequenceOptions {"Key":"START","SequenceID":104,"Value":"32"}
- │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":104}}
- │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":1,"TableID":104}}
- │              ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":104}
- │              ├── MakeAbsentIndexBackfilling {"Index":{"IndexID":1,"IsUnique":true,"TableID":104}}
- │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":1,"TableID":104}
- │              ├── UpdateOwner {"Owner":{"DescriptorID":104,"Owner":"root"}}
- │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
- │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2,"UserName":"root","WithGrantOption":2}}
- │              ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":1,"TableID":104}
- │              ├── MakeAbsentColumnNotNullWriteOnly {"ColumnID":1,"TableID":104}
- │              ├── MakeBackfillingIndexDeleteOnly {"IndexID":1,"TableID":104}
- │              ├── MakeValidatedColumnNotNullPublic {"ColumnID":1,"TableID":104}
- │              ├── MakeBackfilledIndexMerging {"IndexID":1,"TableID":104}
- │              ├── MakeWriteOnlyColumnPublic {"ColumnID":1,"TableID":104}
- │              ├── MakeMergedIndexWriteOnly {"IndexID":1,"TableID":104}
- │              ├── SetIndexName {"IndexID":1,"Name":"primary","TableID":104}
- │              ├── MakeValidatedPrimaryIndexPublic {"IndexID":1,"TableID":104}
- │              ├── InitSequence {"SequenceID":104}
- │              └── MarkDescriptorAsPublic {"DescriptorID":104}
+ │              ├── CreateSequenceDescriptor {"SequenceID":10000}
+ │              ├── SetNameInDescriptor {"DescriptorID":10000,"Name":"sq1"}
+ │              ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":10000,"Name":"sq1","SchemaID":101}}
+ │              ├── SetSequenceOptions {"Key":"START","SequenceID":10000,"Value":"32"}
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":10000}}
+ │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":1,"TableID":10000}}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":10000}
+ │              ├── MakeAbsentIndexBackfilling {"Index":{"IndexID":1,"IsUnique":true,"TableID":10000}}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":1,"TableID":10000}
+ │              ├── UpdateOwner {"Owner":{"DescriptorID":10000,"Owner":"root"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":10000,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":10000,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+ │              ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":1,"TableID":10000}
+ │              ├── MakeAbsentColumnNotNullWriteOnly {"ColumnID":1,"TableID":10000}
+ │              ├── MakeBackfillingIndexDeleteOnly {"IndexID":1,"TableID":10000}
+ │              ├── MakeValidatedColumnNotNullPublic {"ColumnID":1,"TableID":10000}
+ │              ├── MakeBackfilledIndexMerging {"IndexID":1,"TableID":10000}
+ │              ├── MakeWriteOnlyColumnPublic {"ColumnID":1,"TableID":10000}
+ │              ├── MakeMergedIndexWriteOnly {"IndexID":1,"TableID":10000}
+ │              ├── SetIndexName {"IndexID":1,"Name":"primary","TableID":10000}
+ │              ├── MakeValidatedPrimaryIndexPublic {"IndexID":1,"TableID":10000}
+ │              ├── InitSequence {"SequenceID":10000}
+ │              └── MarkDescriptorAsPublic {"DescriptorID":10000}
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
       │    ├── 13 elements transitioning toward PUBLIC
-      │    │    ├── PUBLIC → ABSENT Sequence:{DescID: 104 (sq1+)}
-      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
-      │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 104 (sq1+), Name: "START"}
-      │    │    ├── PUBLIC → ABSENT Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
-      │    │    ├── PUBLIC → ABSENT ColumnType:{DescID: 104 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
-      │    │    ├── PUBLIC → ABSENT ColumnNotNull:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 0}
-      │    │    ├── PUBLIC → ABSENT ColumnName:{DescID: 104 (sq1+), Name: "value", ColumnID: 1 (value+)}
-      │    │    ├── PUBLIC → ABSENT PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
-      │    │    ├── PUBLIC → ABSENT IndexName:{DescID: 104 (sq1+), Name: "primary", IndexID: 1 (primary+)}
-      │    │    ├── PUBLIC → ABSENT IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
-      │    │    ├── PUBLIC → ABSENT Owner:{DescID: 104 (sq1+)}
-      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 104 (sq1+), Name: "admin"}
-      │    │    └── PUBLIC → ABSENT UserPrivileges:{DescID: 104 (sq1+), Name: "root"}
+      │    │    ├── PUBLIC → ABSENT Sequence:{DescID: 10000 (sq1+)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 10000 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+      │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 10000 (sq1+), Name: "START"}
+      │    │    ├── PUBLIC → ABSENT Column:{DescID: 10000 (sq1+), ColumnID: 1 (value+)}
+      │    │    ├── PUBLIC → ABSENT ColumnType:{DescID: 10000 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
+      │    │    ├── PUBLIC → ABSENT ColumnNotNull:{DescID: 10000 (sq1+), ColumnID: 1 (value+), IndexID: 0}
+      │    │    ├── PUBLIC → ABSENT ColumnName:{DescID: 10000 (sq1+), Name: "value", ColumnID: 1 (value+)}
+      │    │    ├── PUBLIC → ABSENT PrimaryIndex:{DescID: 10000 (sq1+), IndexID: 1 (primary+)}
+      │    │    ├── PUBLIC → ABSENT IndexName:{DescID: 10000 (sq1+), Name: "primary", IndexID: 1 (primary+)}
+      │    │    ├── PUBLIC → ABSENT IndexColumn:{DescID: 10000 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+      │    │    ├── PUBLIC → ABSENT Owner:{DescID: 10000 (sq1+)}
+      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 10000 (sq1+), Name: "admin"}
+      │    │    └── PUBLIC → ABSENT UserPrivileges:{DescID: 10000 (sq1+), Name: "root"}
       │    └── 1 Mutation operation
       │         └── UndoAllInTxnImmediateMutationOpSideEffects
       └── Stage 2 of 2 in PreCommitPhase
            ├── 13 elements transitioning toward PUBLIC
-           │    ├── ABSENT → PUBLIC Sequence:{DescID: 104 (sq1+)}
-           │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
-           │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "START"}
-           │    ├── ABSENT → PUBLIC Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
-           │    ├── ABSENT → PUBLIC ColumnType:{DescID: 104 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
-           │    ├── ABSENT → PUBLIC ColumnNotNull:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 0}
-           │    ├── ABSENT → PUBLIC ColumnName:{DescID: 104 (sq1+), Name: "value", ColumnID: 1 (value+)}
-           │    ├── ABSENT → PUBLIC PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
-           │    ├── ABSENT → PUBLIC IndexName:{DescID: 104 (sq1+), Name: "primary", IndexID: 1 (primary+)}
-           │    ├── ABSENT → PUBLIC IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
-           │    ├── ABSENT → PUBLIC Owner:{DescID: 104 (sq1+)}
-           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "admin"}
-           │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "root"}
+           │    ├── ABSENT → PUBLIC Sequence:{DescID: 10000 (sq1+)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 10000 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+           │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 10000 (sq1+), Name: "START"}
+           │    ├── ABSENT → PUBLIC Column:{DescID: 10000 (sq1+), ColumnID: 1 (value+)}
+           │    ├── ABSENT → PUBLIC ColumnType:{DescID: 10000 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
+           │    ├── ABSENT → PUBLIC ColumnNotNull:{DescID: 10000 (sq1+), ColumnID: 1 (value+), IndexID: 0}
+           │    ├── ABSENT → PUBLIC ColumnName:{DescID: 10000 (sq1+), Name: "value", ColumnID: 1 (value+)}
+           │    ├── ABSENT → PUBLIC PrimaryIndex:{DescID: 10000 (sq1+), IndexID: 1 (primary+)}
+           │    ├── ABSENT → PUBLIC IndexName:{DescID: 10000 (sq1+), Name: "primary", IndexID: 1 (primary+)}
+           │    ├── ABSENT → PUBLIC IndexColumn:{DescID: 10000 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+           │    ├── ABSENT → PUBLIC Owner:{DescID: 10000 (sq1+)}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 10000 (sq1+), Name: "admin"}
+           │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 10000 (sq1+), Name: "root"}
            └── 24 Mutation operations
-                ├── CreateSequenceDescriptor {"SequenceID":104}
-                ├── SetNameInDescriptor {"DescriptorID":104,"Name":"sq1"}
-                ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sq1","SchemaID":101}}
-                ├── SetSequenceOptions {"Key":"START","SequenceID":104,"Value":"32"}
-                ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":104}}
-                ├── SetAddedColumnType {"ColumnType":{"ColumnID":1,"TableID":104}}
-                ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":104}
-                ├── MakeAbsentIndexBackfilling {"Index":{"IndexID":1,"IsUnique":true,"TableID":104}}
-                ├── AddColumnToIndex {"ColumnID":1,"IndexID":1,"TableID":104}
-                ├── UpdateOwner {"Owner":{"DescriptorID":104,"Owner":"root"}}
-                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
-                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2,"UserName":"root","WithGrantOption":2}}
-                ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":1,"TableID":104}
-                ├── MakeAbsentColumnNotNullWriteOnly {"ColumnID":1,"TableID":104}
-                ├── MakeBackfillingIndexDeleteOnly {"IndexID":1,"TableID":104}
-                ├── MakeValidatedColumnNotNullPublic {"ColumnID":1,"TableID":104}
-                ├── MakeBackfilledIndexMerging {"IndexID":1,"TableID":104}
-                ├── MakeWriteOnlyColumnPublic {"ColumnID":1,"TableID":104}
-                ├── RefreshStats {"TableID":104}
-                ├── MakeMergedIndexWriteOnly {"IndexID":1,"TableID":104}
-                ├── SetIndexName {"IndexID":1,"Name":"primary","TableID":104}
-                ├── MakeValidatedPrimaryIndexPublic {"IndexID":1,"TableID":104}
-                ├── InitSequence {"SequenceID":104}
-                └── MarkDescriptorAsPublic {"DescriptorID":104}
+                ├── CreateSequenceDescriptor {"SequenceID":10000}
+                ├── SetNameInDescriptor {"DescriptorID":10000,"Name":"sq1"}
+                ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":10000,"Name":"sq1","SchemaID":101}}
+                ├── SetSequenceOptions {"Key":"START","SequenceID":10000,"Value":"32"}
+                ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":10000}}
+                ├── SetAddedColumnType {"ColumnType":{"ColumnID":1,"TableID":10000}}
+                ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":10000}
+                ├── MakeAbsentIndexBackfilling {"Index":{"IndexID":1,"IsUnique":true,"TableID":10000}}
+                ├── AddColumnToIndex {"ColumnID":1,"IndexID":1,"TableID":10000}
+                ├── UpdateOwner {"Owner":{"DescriptorID":10000,"Owner":"root"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":10000,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":10000,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+                ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":1,"TableID":10000}
+                ├── MakeAbsentColumnNotNullWriteOnly {"ColumnID":1,"TableID":10000}
+                ├── MakeBackfillingIndexDeleteOnly {"IndexID":1,"TableID":10000}
+                ├── MakeValidatedColumnNotNullPublic {"ColumnID":1,"TableID":10000}
+                ├── MakeBackfilledIndexMerging {"IndexID":1,"TableID":10000}
+                ├── MakeWriteOnlyColumnPublic {"ColumnID":1,"TableID":10000}
+                ├── RefreshStats {"TableID":10000}
+                ├── MakeMergedIndexWriteOnly {"IndexID":1,"TableID":10000}
+                ├── SetIndexName {"IndexID":1,"Name":"primary","TableID":10000}
+                ├── MakeValidatedPrimaryIndexPublic {"IndexID":1,"TableID":10000}
+                ├── InitSequence {"SequenceID":10000}
+                └── MarkDescriptorAsPublic {"DescriptorID":10000}

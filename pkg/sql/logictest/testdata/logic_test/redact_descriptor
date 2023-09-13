@@ -82,7 +82,7 @@ SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
             }
         ],
         "formatVersion": 3,
-        "id": 107,
+        "id": 10003,
         "indexes": [
             {
                 "createdAtNanos": "0",
@@ -116,7 +116,7 @@ SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
         "nextFamilyId": 1,
         "nextIndexId": 3,
         "nextMutationId": 1,
-        "parentId": 104,
+        "parentId": 10000,
         "primaryIndex": {
             "constraintId": 1,
             "createdAtNanos": "0",
@@ -165,7 +165,7 @@ SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
         "replacementOf": {
             "time": {}
         },
-        "unexposedParentSchemaId": 105,
+        "unexposedParentSchemaId": 10001,
         "version": "1"
     }
 }

@@ -11,8 +11,8 @@ ALTER TABLE db.t1 CONFIGURE ZONE USING gc.ttlseconds=1;
 
 translate database=db
 ----
-/Table/10{6-7}                             ttl_seconds=1
-/Table/10{7-8}                             range default
+/Table/1000{2-3}                           ttl_seconds=1
+/Table/1000{3-4}                           range default
 
 # Drop the table.
 exec-sql
@@ -22,17 +22,16 @@ DROP TABLE db.t1;
 # We should no longer see the dropped table's spans.
 translate database=db
 ----
-/Table/10{7-8}                             range default
+/Table/1000{3-4}                           range default
 
 # Same as above, except this time the translation starts from the table's ID.
 translate id=107
 ----
-/Table/10{7-8}                             range default
 
 # By now t1's descriptor should have been deleted.
 translate database=db
 ----
-/Table/10{7-8}                             range default
+/Table/1000{3-4}                           range default
 
 # This no longer exists, so no span configuration should be generated.
 translate id=106
@@ -51,7 +50,7 @@ mark-database-offline database=db
 
 translate database=db
 ----
-/Table/10{7-8}                             ttl_seconds=10
+/Table/1000{3-4}                           ttl_seconds=10
 
 # Delete the bespoke zone config on db. t2 should fallback to the RANGE DEFAULT
 # zone config even though all descriptors are offline.
@@ -61,11 +60,11 @@ DELETE FROM system.zones WHERE id = 104;
 
 translate database=db
 ----
-/Table/10{7-8}                             range default
+/Table/1000{3-4}                           ttl_seconds=10
 
 translate database=db table=t2
 ----
-/Table/10{7-8}                             range default
+/Table/1000{3-4}                           ttl_seconds=10
 
 mark-database-public database=db
 ----
@@ -83,11 +82,11 @@ mark-table-offline database=db table=t2
 # database.
 translate database=db table=t2
 ----
-/Table/10{7-8}                             ttl_seconds=11
+/Table/1000{3-4}                           ttl_seconds=11
 
 translate database=db
 ----
-/Table/10{7-8}                             ttl_seconds=11
+/Table/1000{3-4}                           ttl_seconds=11
 
 # Mark the table as public again.
 mark-table-public database=db table=t2
@@ -95,7 +94,7 @@ mark-table-public database=db table=t2
 
 translate database=db table=t2
 ----
-/Table/10{7-8}                             ttl_seconds=11
+/Table/1000{3-4}                           ttl_seconds=11
 
 subtest end
 

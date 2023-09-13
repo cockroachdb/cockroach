@@ -134,7 +134,7 @@ SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_tes
 query T
 SELECT ($t_id)::regclass
 ----
-108
+10004
 
 # reset state to default
 user root

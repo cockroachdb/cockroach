@@ -182,8 +182,8 @@ SELECT id FROM system.descriptor ORDER BY 1
 101
 102
 103
-104
-105
+10000
+10001
 
 onlyif config 3node-tenant-default-configs
 query I rowsort
@@ -240,8 +240,8 @@ SELECT id FROM system.descriptor ORDER BY 1
 101
 102
 103
-104
-105
+10000
+10001
 
 # Verify we can read ID on its own (see #58614).
 query I

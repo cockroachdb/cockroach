@@ -84,10 +84,10 @@ CREATE MATERIALIZED VIEW mv AS SELECT 1;
 
 mutations
 ----
-upsert /Table/10{6-7}                      range default
-upsert /Table/10{7-8}                      range default
-upsert /Table/11{2-3}                      range default
-upsert /Table/11{3-4}                      range default
+upsert /Table/1000{2-3}                    range default
+upsert /Table/1000{3-4}                    range default
+upsert /Table/1000{8-9}                    range default
+upsert /Table/100{09-10}                   range default
 
 exec-sql
 ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 7;
@@ -96,12 +96,12 @@ ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters = 5;
 
 mutations
 ----
-delete /Table/10{6-7}
-upsert /Table/10{6-7}                      num_replicas=7 num_voters=5
-delete /Table/10{7-8}
-upsert /Table/10{7-8}                      num_replicas=7
-delete /Table/11{2-3}
-upsert /Table/11{2-3}                      num_replicas=7
+delete /Table/1000{2-3}
+upsert /Table/1000{2-3}                    num_replicas=7 num_voters=5
+delete /Table/1000{3-4}
+upsert /Table/1000{3-4}                    num_replicas=7
+delete /Table/1000{8-9}
+upsert /Table/1000{8-9}                    num_replicas=7
 
 state offset=47
 ----
@@ -122,10 +122,10 @@ state offset=47
 /Table/6{0-1}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{1-2}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/6{2-3}                              database system (host)
-/Table/10{6-7}                             num_replicas=7 num_voters=5
-/Table/10{7-8}                             num_replicas=7
-/Table/11{2-3}                             num_replicas=7
-/Table/11{3-4}                             range default
+/Table/1000{2-3}                           num_replicas=7 num_voters=5
+/Table/1000{3-4}                           num_replicas=7
+/Table/1000{8-9}                           num_replicas=7
+/Table/100{09-10}                          range default
 
 exec-sql
 ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = 100;

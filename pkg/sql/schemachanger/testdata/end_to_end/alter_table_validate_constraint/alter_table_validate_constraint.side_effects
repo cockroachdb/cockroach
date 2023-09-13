@@ -3,7 +3,7 @@ CREATE TABLE t (i INT PRIMARY KEY);
 ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
 ----
 ...
-+object {100 101 t} -> 104
++object {100 101 t} -> 10000
 
 /* test */
 ALTER TABLE t VALIDATE CONSTRAINT check_i;
@@ -14,7 +14,7 @@ checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.validate_constraint
 ## StatementPhase stage 1 of 1 with 4 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
      - columnIds:
        - 1
@@ -27,7 +27,7 @@ upsert descriptor #104
      columns:
      - id: 1
   ...
-     id: 104
+     id: 10000
      modificationTime: {}
   +  mutations:
   +  - constraint:
@@ -61,7 +61,7 @@ upsert descriptor #104
 undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 6 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
      - columnIds:
        - 1
@@ -90,7 +90,7 @@ upsert descriptor #104
   +        "3": check_i
   +      families:
   +        "0": primary
-  +      id: 104
+  +      id: 10000
   +      indexes:
   +        "1": t_pkey
   +      name: t
@@ -105,7 +105,7 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     id: 104
+     id: 10000
      modificationTime: {}
   +  mutations:
   +  - constraint:
@@ -135,7 +135,7 @@ upsert descriptor #104
   +  version: "3"
 persist all catalog changes to storage
 create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t VALIDATE CONSTRAINT check_i"
-  descriptor IDs: [104]
+  descriptor IDs: [10000]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -144,11 +144,11 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 2 with 1 ValidationType op
-validate CHECK constraint check_i in table #104
+validate CHECK constraint check_i in table #10000
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 2 with 3 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
        expr: i > 0:::INT8
        name: check_i
@@ -172,7 +172,7 @@ upsert descriptor #104
   -        "3": check_i
   -      families:
   -        "0": primary
-  -      id: 104
+  -      id: 10000
   -      indexes:
   -        "1": t_pkey
   -      name: t
@@ -187,7 +187,7 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     id: 104
+     id: 10000
      modificationTime: {}
   -  mutations:
   -  - constraint:
@@ -217,6 +217,6 @@ set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
-    descriptorId: 104
+    descriptorId: 10000
 commit transaction #4
 # end PostCommitPhase

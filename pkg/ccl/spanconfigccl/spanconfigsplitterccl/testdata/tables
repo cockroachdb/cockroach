@@ -10,12 +10,12 @@ CREATE TABLE db.t2();
 query-sql
 SELECT id FROM system.namespace WHERE name='t1'
 ----
-106
+10002
 
 query-sql
 SELECT id FROM system.namespace WHERE name='t2'
 ----
-107
+10003
 
 splits database=db table=t1
 ----
@@ -36,6 +36,6 @@ DROP TABLE db.t2;
 ----
 
 # Dropped tables should not observe any splits.
-splits id=107
+splits id=10003
 ----
 = 0

@@ -3,8 +3,8 @@ CREATE TABLE t2 (i INT PRIMARY KEY);
 CREATE TABLE t1 (i INT PRIMARY KEY REFERENCES t2(i));
 ----
 ...
-+object {100 101 t2} -> 104
-+object {100 101 t1} -> 105
++object {100 101 t2} -> 10000
++object {100 101 t1} -> 10001
 
 /* test */
 ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
@@ -15,7 +15,7 @@ checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.drop_constraint
 ## StatementPhase stage 1 of 1 with 2 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
      inboundFks:
      - constraintId: 2
@@ -25,7 +25,7 @@ upsert descriptor #104
        - 1
   ...
        - 1
-       referencedTableId: 104
+       referencedTableId: 10000
   +    validity: Dropping
      modificationTime: {}
      name: t2
@@ -34,9 +34,9 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
-upsert descriptor #105
+upsert descriptor #10001
   ...
-     id: 105
+     id: 10001
      modificationTime: {}
   +  mutations:
   +  - constraint:
@@ -47,10 +47,10 @@ upsert descriptor #105
   +        name: crdb_internal_constraint_2_name_placeholder
   +        originColumnIds:
   +        - 1
-  +        originTableId: 105
+  +        originTableId: 10001
   +        referencedColumnIds:
   +        - 1
-  +        referencedTableId: 104
+  +        referencedTableId: 10000
   +        validity: Dropping
   +      name: t1_i_fkey
   +      uniqueWithoutIndexConstraint: {}
@@ -67,10 +67,10 @@ upsert descriptor #105
   -    name: t1_i_fkey
   -    originColumnIds:
   -    - 1
-  -    originTableId: 105
+  -    originTableId: 10001
   -    referencedColumnIds:
   -    - 1
-  -    referencedTableId: 104
+  -    referencedTableId: 10000
      parentId: 100
      primaryIndex:
   ...
@@ -84,7 +84,7 @@ upsert descriptor #105
 undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 5 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -99,7 +99,7 @@ upsert descriptor #104
   +        "4294967295": crdb_internal_mvcc_timestamp
   +      families:
   +        "0": primary
-  +      id: 104
+  +      id: 10000
   +      indexes:
   +        "1": t2_pkey
   +      name: t2
@@ -114,7 +114,7 @@ upsert descriptor #104
        - 1
   ...
        - 1
-       referencedTableId: 104
+       referencedTableId: 10000
   +    validity: Dropping
      modificationTime: {}
      name: t2
@@ -123,7 +123,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
-upsert descriptor #105
+upsert descriptor #10001
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -139,7 +139,7 @@ upsert descriptor #105
   +        "4294967295": crdb_internal_mvcc_timestamp
   +      families:
   +        "0": primary
-  +      id: 105
+  +      id: 10001
   +      indexes:
   +        "1": t1_pkey
   +      name: t1
@@ -153,7 +153,7 @@ upsert descriptor #105
      families:
      - columnIds:
   ...
-     id: 105
+     id: 10001
      modificationTime: {}
   +  mutations:
   +  - constraint:
@@ -164,10 +164,10 @@ upsert descriptor #105
   +        name: crdb_internal_constraint_2_name_placeholder
   +        originColumnIds:
   +        - 1
-  +        originTableId: 105
+  +        originTableId: 10001
   +        referencedColumnIds:
   +        - 1
-  +        referencedTableId: 104
+  +        referencedTableId: 10000
   +        validity: Dropping
   +      name: t1_i_fkey
   +      uniqueWithoutIndexConstraint: {}
@@ -184,10 +184,10 @@ upsert descriptor #105
   -    name: t1_i_fkey
   -    originColumnIds:
   -    - 1
-  -    originTableId: 105
+  -    originTableId: 10001
   -    referencedColumnIds:
   -    - 1
-  -    referencedTableId: 104
+  -    referencedTableId: 10000
      parentId: 100
      primaryIndex:
   ...
@@ -197,7 +197,7 @@ upsert descriptor #105
   +  version: "3"
 persist all catalog changes to storage
 create job #1 (non-cancelable: true): "ALTER TABLE defaultdb.public.t1 DROP CONSTRAINT t1_i_fkey"
-  descriptor IDs: [104 105]
+  descriptor IDs: [10000 10001]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -206,7 +206,7 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
-upsert descriptor #104
+upsert descriptor #10000
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -221,7 +221,7 @@ upsert descriptor #104
   -        "4294967295": crdb_internal_mvcc_timestamp
   -      families:
   -        "0": primary
-  -      id: 104
+  -      id: 10000
   -      indexes:
   -        "1": t2_pkey
   -      name: t2
@@ -229,16 +229,16 @@ upsert descriptor #104
      - columnIds:
   ...
      formatVersion: 3
-     id: 104
+     id: 10000
   -  inboundFks:
   -  - constraintId: 2
   -    name: crdb_internal_constraint_2_name_placeholder
   -    originColumnIds:
   -    - 1
-  -    originTableId: 105
+  -    originTableId: 10001
   -    referencedColumnIds:
   -    - 1
-  -    referencedTableId: 104
+  -    referencedTableId: 10000
   -    validity: Dropping
      modificationTime: {}
      name: t2
@@ -247,7 +247,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "3"
   +  version: "4"
-upsert descriptor #105
+upsert descriptor #10001
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -263,7 +263,7 @@ upsert descriptor #105
   -        "4294967295": crdb_internal_mvcc_timestamp
   -      families:
   -        "0": primary
-  -      id: 105
+  -      id: 10001
   -      indexes:
   -        "1": t1_pkey
   -      name: t1
@@ -277,7 +277,7 @@ upsert descriptor #105
      families:
      - columnIds:
   ...
-     id: 105
+     id: 10001
      modificationTime: {}
   -  mutations:
   -  - constraint:
@@ -288,10 +288,10 @@ upsert descriptor #105
   -        name: crdb_internal_constraint_2_name_placeholder
   -        originColumnIds:
   -        - 1
-  -        originTableId: 105
+  -        originTableId: 10001
   -        referencedColumnIds:
   -        - 1
-  -        referencedTableId: 104
+  -        referencedTableId: 10000
   -        validity: Dropping
   -      name: t1_i_fkey
   -      uniqueWithoutIndexConstraint: {}
@@ -311,6 +311,6 @@ set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
-    descriptorId: 105
+    descriptorId: 10001
 commit transaction #3
 # end PostCommitPhase

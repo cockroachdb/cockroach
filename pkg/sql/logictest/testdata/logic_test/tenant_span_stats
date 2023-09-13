@@ -30,24 +30,24 @@ SELECT DISTINCT(database_id) FROM crdb_internal.tenant_span_stats()
 ----
 database_id
 1
-106
+10002
 
-# SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(106):
+# SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(10002):
 # Assert that we are collecting span stats scoped to the provided database id.
 query II colnames,rowsort
-SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(106)
+SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(10002)
 ----
-database_id table_id
-106         108
-106         109
+database_id  table_id
+10002        10004
+10002        10005
 
-# SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(106, 108):
+# SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(10002, 10004):
 # Assert that we are collecting span stats scoped to the provided database/table id combo.
 query II colnames
-SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(106, 108)
+SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(10002, 10004)
 ----
-database_id table_id
-106         108
+database_id  table_id
+10002        10004
 
 # Assert that we cannot provide an invalid database id.
 query error pq: provided database id must be greater than or equal to 1
@@ -81,10 +81,10 @@ SELECT * FROM a.b;
 
 # Assert that we are collecting non-zero span stats scoped to the provided database/table id combo.
 query IIBBBB colnames
-SELECT database_id, table_id, range_count > 0 as range_count, live_bytes > 0 as live_bytes, total_bytes > 0 as total_bytes, live_percentage > 0 as live_percentage FROM crdb_internal.tenant_span_stats(106, 108)
+SELECT database_id, table_id, range_count > 0 as range_count, live_bytes > 0 as live_bytes, total_bytes > 0 as total_bytes, live_percentage > 0 as live_percentage FROM crdb_internal.tenant_span_stats(10002, 10004)
 ----
-database_id table_id range_count live_bytes total_bytes live_percentage
-106         108      true        true       true        true
+database_id  table_id  range_count  live_bytes  total_bytes  live_percentage
+10002        10004     true         true        true         true
 
 # Create a second user without VIEWACTIVITY permission.
 statement ok
