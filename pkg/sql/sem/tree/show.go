@@ -139,8 +139,9 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.InCollection)
 	}
 	if !node.Options.IsDefault() {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 
