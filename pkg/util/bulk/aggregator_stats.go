@@ -64,26 +64,26 @@ func ConstructTracingAggregatorProducerMeta(
 	return &execinfrapb.ProducerMetadata{AggregatorEvents: aggEvents}
 }
 
-// flushTracingStats persists the following files to the `system.job_info` table
-// for consumption by job observability tools:
+// FlushTracingAggregatorStats persists the following files to the
+// `system.job_info` table for consumption by job observability tools:
 //
 // - A file per node, for each aggregated TracingAggregatorEvent. These files
 // contain the machine-readable proto bytes of the TracingAggregatorEvent.
 //
 // - A text file that contains a cluster-wide and per-node summary of each
 // TracingAggregatorEvent in its human-readable format.
-func flushTracingStats(
+func FlushTracingAggregatorStats(
 	ctx context.Context,
 	jobID jobspb.JobID,
 	db isql.DB,
-	perNodeStats map[execinfrapb.ComponentID]map[string][]byte,
+	perNodeAggregatorStats map[execinfrapb.ComponentID]map[string][]byte,
 ) error {
 	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		clusterWideAggregatorStats := make(map[string]TracingAggregatorEvent)
 		asOf := timeutil.Now().Format("20060102_150405.00")
 
 		var clusterWideSummary bytes.Buffer
-		for component, nameToEvent := range perNodeStats {
+		for component, nameToEvent := range perNodeAggregatorStats {
 			clusterWideSummary.WriteString(fmt.Sprintf("## SQL Instance ID: %s; Flow ID: %s\n\n",
 				component.SQLInstanceID.String(), component.FlowID.String()))
 			for name, event := range nameToEvent {
@@ -175,7 +175,7 @@ func AggregateTracingStats(
 			flushTimer.Reset(flushTracingAggregatorFrequency.Get(&st.SV))
 			// Flush the per-node and cluster wide aggregator stats to the job_info
 			// table.
-			if err := flushTracingStats(ctx, jobID, db, perNodeAggregatorStats); err != nil {
+			if err := FlushTracingAggregatorStats(ctx, jobID, db, perNodeAggregatorStats); err != nil {
 				return err
 			}
 			flushOnClose = false
@@ -183,7 +183,7 @@ func AggregateTracingStats(
 		}
 	}
 	if flushOnClose {
-		if err := flushTracingStats(ctx, jobID, db, perNodeAggregatorStats); err != nil {
+		if err := FlushTracingAggregatorStats(ctx, jobID, db, perNodeAggregatorStats); err != nil {
 			return err
 		}
 	}
