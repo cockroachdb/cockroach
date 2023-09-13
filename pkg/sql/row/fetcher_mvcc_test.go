@@ -49,7 +49,7 @@ func slurpUserDataKVs(t testing.TB, e storage.Engine, codec keys.SQLCodec) []roa
 			t.Fatal(err)
 		}
 		defer it.Close()
-		for it.SeekGE(storage.MVCCKey{Key: bootstrap.TestingUserTableDataMinEx(codec)}); ; it.NextKey() {
+		for it.SeekGE(storage.MVCCKey{Key: bootstrap.TestingUserTableDataMin(codec)}); ; it.NextKey() {
 			ok, err := it.Valid()
 			if err != nil {
 				t.Fatal(err)

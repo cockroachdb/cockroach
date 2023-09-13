@@ -650,12 +650,6 @@ func TestingUserDescID(offset uint32) uint32 {
 
 // TestingUserTableDataMin is a convenience function which returns the first
 // user table data key in a simple unit test setting.
-func TestingUserTableDataMin() roachpb.Key {
-	return keys.SystemSQLCodec.TablePrefix(TestingMinUserDescID())
-}
-
-// TestingUserTableDataMinEx is the same as TestingUserTableDataMin but supports
-// secondary tenants.
-func TestingUserTableDataMinEx(codec keys.SQLCodec) roachpb.Key {
+func TestingUserTableDataMin(codec keys.SQLCodec) roachpb.Key {
 	return codec.TablePrefix(testingMinUserDescID(codec))
 }
