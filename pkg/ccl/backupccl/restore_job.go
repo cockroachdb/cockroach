@@ -1053,6 +1053,17 @@ func createImportingDescriptors(
 		typesByID[types[i].GetID()] = types[i]
 	}
 
+	if details.StripLocalities {
+		// Can't restore multi-region tables into non-multi-region database
+		for _, t := range tables {
+			t.TableDesc().LocalityConfig = nil
+		}
+
+		for _, d := range databases {
+			d.DatabaseDesc().RegionConfig = nil
+		}
+	}
+
 	// Collect all databases, for doing lookups of whether a database is new when
 	// updating schema references later on.
 	dbsByID := make(map[descpb.ID]catalog.DatabaseDescriptor)
@@ -1077,6 +1088,17 @@ func createImportingDescriptors(
 				if regionTypeDesc == nil {
 					continue
 				}
+
+				// When stripping localities, there is no longer a need for a region config. In addition,
+				// we need to make sure that multi-region databases no longer get tagged as such - meaning
+				// that we want to change the TypeDescriptor_MULTIREGION_ENUM to a normal enum. We `continue`
+				// to skip the multi-region work below.
+				if details.StripLocalities {
+					t.TypeDesc().Kind = descpb.TypeDescriptor_ENUM
+					t.TypeDesc().RegionConfig = nil
+					continue
+				}
+
 				// Check to see if we've found more than one multi-region enum on any
 				// given database.
 				if id, ok := mrEnumsFound[regionTypeDesc.GetParentID()]; ok {
@@ -1103,6 +1125,7 @@ func createImportingDescriptors(
 						var regionNames []catpb.RegionName
 						_ = regionTypeDesc.ForEachPublicRegion(func(name catpb.RegionName) error {
 							regionNames = append(regionNames, name)
+
 							return nil
 						})
 						regionConfig := multiregion.MakeRegionConfig(
