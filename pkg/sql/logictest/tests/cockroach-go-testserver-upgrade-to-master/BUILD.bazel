@@ -11,12 +11,10 @@ go_test(
     data = [
         "//c-deps:libgeos",  # keep
         "//pkg/cmd/cockroach-short",  # keep
+        "//pkg/sql/logictest:cockroach_predecessor_version",  # keep
         "//pkg/sql/logictest:testdata",  # keep
     ],
-    exec_properties = {
-        "dockerNetwork": "standard",
-        "Pool": "large",
-    },
+    exec_properties = {"Pool": "large"},
     shard_count = 11,
     tags = [
         "cpu:2",
