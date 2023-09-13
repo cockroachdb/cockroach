@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
@@ -117,6 +118,8 @@ func (t *testdir) addSqliteLogicTests(
 	return nil
 }
 
+var tmpRegexp = regexp.MustCompile(`/_(\w|\-)+$`)
+
 func (t *testdir) dump() error {
 	for configIdx := range logictestbase.LogicTestConfigs {
 		tplCfg := testFileTemplateConfig{
@@ -124,30 +127,39 @@ func (t *testdir) dump() error {
 			ForceProductionValues: strings.HasSuffix(t.dir, "pkg/sql/opt/exec/execbuilder/tests"),
 		}
 		var testCount int
+		nonTmpCount := func(paths []string) int {
+			n := 0
+			for i := range paths {
+				if !tmpRegexp.MatchString(paths[i]) {
+					n++
+				}
+			}
+			return n
+		}
 		for _, configPaths := range t.logicTestsConfigPaths {
 			paths := configPaths.configPaths[configIdx]
-			testCount += len(paths)
+			testCount += nonTmpCount(paths)
 			if len(paths) > 0 {
 				tplCfg.LogicTest = true
 			}
 		}
 		for _, configPaths := range t.cclLogicTestsConfigPaths {
 			paths := configPaths.configPaths[configIdx]
-			testCount += len(paths)
+			testCount += nonTmpCount(paths)
 			if len(paths) > 0 {
 				tplCfg.CclLogicTest = true
 			}
 		}
 		for _, configPaths := range t.execBuildLogicTestsConfigPaths {
 			paths := configPaths.configPaths[configIdx]
-			testCount += len(paths)
+			testCount += nonTmpCount(paths)
 			if len(paths) > 0 {
 				tplCfg.ExecBuildLogicTest = true
 			}
 		}
 		for _, configPaths := range t.sqliteLogicTestsConfigPaths {
 			paths := configPaths.configPaths[configIdx]
-			testCount += len(paths)
+			testCount += nonTmpCount(paths)
 			if len(paths) > 0 {
 				tplCfg.SqliteLogicTest = true
 			}
