@@ -44,20 +44,6 @@ type adminPrivilegeChecker struct {
 	makeAuthzAccessor func(opName string) (sql.AuthorizationAccessor, func())
 }
 
-// RequireAdminUser is part of the CheckerForRPCHandlers interface.
-func (c *adminPrivilegeChecker) RequireAdminUser(
-	ctx context.Context,
-) (userName username.SQLUsername, err error) {
-	userName, isAdmin, err := c.GetUserAndRole(ctx)
-	if err != nil {
-		return userName, srverrors.ServerError(ctx, err)
-	}
-	if !isAdmin {
-		return userName, ErrRequiresAdmin
-	}
-	return userName, nil
-}
-
 // RequireViewActivityPermission is part of the CheckerForRPCHandlers interface.
 func (c *adminPrivilegeChecker) RequireViewActivityPermission(ctx context.Context) (err error) {
 	userName, isAdmin, err := c.GetUserAndRole(ctx)
@@ -197,6 +183,29 @@ func (c *adminPrivilegeChecker) RequireViewClusterMetadataPermission(
 	return grpcstatus.Errorf(
 		codes.PermissionDenied, "this operation requires the %s system privilege",
 		privilege.VIEWCLUSTERMETADATA)
+}
+
+// RequireRepairClusterMetadataPermission requires the user have admin
+// or the VIEWCLUSTERMETADATA system privilege and returns an error if
+// the user does not have it.
+func (c *adminPrivilegeChecker) RequireRepairClusterMetadataPermission(
+	ctx context.Context,
+) (err error) {
+	userName, isAdmin, err := c.GetUserAndRole(ctx)
+	if err != nil {
+		return srverrors.ServerError(ctx, err)
+	}
+	if isAdmin {
+		return nil
+	}
+	if hasRepairClusterMetadata, err := c.HasGlobalPrivilege(ctx, userName, privilege.REPAIRCLUSTERMETADATA); err != nil {
+		return srverrors.ServerError(ctx, err)
+	} else if hasRepairClusterMetadata {
+		return nil
+	}
+	return grpcstatus.Errorf(
+		codes.PermissionDenied, "this operation requires the %s system privilege",
+		privilege.REPAIRCLUSTERMETADATA)
 }
 
 // RequireViewDebugPermission requires the user have admin or the
