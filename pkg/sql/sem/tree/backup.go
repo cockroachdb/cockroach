@@ -379,7 +379,7 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 func (o BackupOptions) IsDefault() bool {
 	options := BackupOptions{}
 	return o.CaptureRevisionHistory == options.CaptureRevisionHistory &&
-		o.Detached == options.Detached &&
+		(o.Detached == nil || o.Detached == DBoolFalse) &&
 		cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
