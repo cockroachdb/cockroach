@@ -501,8 +501,8 @@ func TestExportGCThreshold(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	ts := srv.ApplicationLayer()
 
-	startKey := append(ts.Codec().TenantPrefix(), bootstrap.TestingUserTableDataMin()...)
-	endKey := append(ts.Codec().TenantPrefix(), keys.MaxKey...)
+	startKey := bootstrap.TestingUserTableDataMin(ts.Codec())
+	endKey := ts.Codec().TenantEndKey()
 
 	req := &kvpb.ExportRequest{
 		RequestHeader: kvpb.RequestHeader{Key: startKey, EndKey: endKey},

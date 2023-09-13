@@ -1231,7 +1231,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			var activateSplitFilter int32
-			splitKey := roachpb.RKey(bootstrap.TestingUserTableDataMin())
+			splitKey := roachpb.RKey(bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec))
 			splitPending, blockSplits := make(chan struct{}), make(chan struct{})
 
 			// Set maxBytes to something small so we can exceed the maximum split
@@ -2453,13 +2453,13 @@ func TestStoreTxnWaitQueueEnabledOnSplit(t *testing.T) {
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
-	key := bootstrap.TestingUserTableDataMin()
+	key := bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec)
 	args := adminSplitArgs(key)
 	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 		t.Fatalf("%q: split unexpected error: %s", key, pErr)
 	}
 
-	rhsRepl := store.LookupReplica(roachpb.RKey(bootstrap.TestingUserTableDataMin()))
+	rhsRepl := store.LookupReplica(roachpb.RKey(bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec)))
 	if !rhsRepl.GetConcurrencyManager().TestingTxnWaitQueue().IsEnabled() {
 		t.Errorf("expected RHS replica's push txn queue to be enabled post-split")
 	}
