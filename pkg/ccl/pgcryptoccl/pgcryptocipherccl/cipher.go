@@ -17,6 +17,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var (
+	// ErrInvalidDataLength reports an attempt to either Encrypt or Decrypt data
+	// of invalid length.
+	ErrInvalidDataLength = pgerror.New(pgcode.InvalidParameterValue, "pgcryptocipherccl: invalid data length")
+)
+
 // Encrypt returns the ciphertext obtained by running the encryption
 // algorithm for the specified cipher type with the provided key and
 // initialization vector over the provided data.
@@ -105,13 +111,11 @@ func unpadData(method cipherMethod, data []byte) ([]byte, error) {
 }
 
 func validateDataLength(data []byte, blockSize int) error {
-	if len(data)%blockSize != 0 {
-		// TODO(yang): Not sure if this is the right pgcode since Postgres
-		// returns pgcode.ExternalRoutineException.
-		return pgerror.Newf(
-			pgcode.InvalidParameterValue,
+	if dataLength := len(data); dataLength%blockSize != 0 {
+		return errors.Wrapf(
+			ErrInvalidDataLength,
 			`data has length %d, which is not a multiple of block size %d`,
-			len(data), blockSize,
+			dataLength, blockSize,
 		)
 	}
 	return nil
