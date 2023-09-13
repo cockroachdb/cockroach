@@ -92,10 +92,16 @@ func TestApplier(t *testing.T) {
 			"get-for-update", step(getForUpdate(k1)),
 		},
 		{
+			"get-for-share", step(getForShare(k1)),
+		},
+		{
 			"get-skip-locked", step(getSkipLocked(k1)),
 		},
 		{
 			"scan-for-update", step(scanForUpdate(k1, k3)),
+		},
+		{
+			"scan-for-share", step(scanForShare(k1, k3)),
 		},
 		{
 			"scan-skip-locked", step(scanSkipLocked(k1, k3)),
@@ -108,6 +114,9 @@ func TestApplier(t *testing.T) {
 		},
 		{
 			"rscan-for-update", step(reverseScanForUpdate(k1, k2)),
+		},
+		{
+			"rscan-for-share", step(reverseScanForShare(k1, k2)),
 		},
 		{
 			"rscan-skip-locked", step(reverseScanSkipLocked(k1, k2)),
@@ -131,6 +140,9 @@ func TestApplier(t *testing.T) {
 			"get-for-update-err", step(getForUpdate(k1)),
 		},
 		{
+			"get-for-share-err", step(getForShare(k1)),
+		},
+		{
 			"get-skip-locked-err", step(getSkipLocked(k1)),
 		},
 		{
@@ -140,6 +152,9 @@ func TestApplier(t *testing.T) {
 			"scan-for-update-err", step(scanForUpdate(k1, k3)),
 		},
 		{
+			"scan-for-share-err", step(scanForShare(k1, k3)),
+		},
+		{
 			"scan-skip-locked-err", step(scanSkipLocked(k1, k3)),
 		},
 		{
@@ -147,6 +162,9 @@ func TestApplier(t *testing.T) {
 		},
 		{
 			"rscan-for-update-err", step(reverseScanForUpdate(k1, k3)),
+		},
+		{
+			"rscan-for-share-err", step(reverseScanForShare(k1, k3)),
 		},
 		{
 			"rscan-skip-locked-err", step(reverseScanSkipLocked(k1, k3)),

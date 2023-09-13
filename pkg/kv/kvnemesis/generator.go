@@ -103,26 +103,42 @@ type ClosureTxnConfig struct {
 type ClientOperationConfig struct {
 	// GetMissing is an operation that Gets a key that definitely doesn't exist.
 	GetMissing int
-	// GetMissingForUpdate is an operation that Gets a key that definitely
-	// doesn't exist using a locking read.
+	// GetMissingForUpdate is an operation that Gets a key that definitely doesn't
+	// exist using a locking read with strength lock.Exclusive.
 	GetMissingForUpdate int
+	// GetMissingForShare is an operation that Gets a key that definitely doesn't
+	// exist using a locking read with strength lock.Shared.
+	GetMissingForShare int
 	// GetMissingSkipLocked is an operation that Gets a key that definitely
 	// doesn't exist while skipping locked keys.
 	GetMissingSkipLocked int
 	// GetMissingForUpdateSkipLocked is an operation that Gets a key that
-	// definitely doesn't exist using a locking read while skipping locked keys.
+	// definitely doesn't exist using a locking read, with strength
+	// lock.Exclusive, while skipping locked keys.
 	GetMissingForUpdateSkipLocked int
+	// GetMissingForShareSkipLocked is an operation that Gets a key that
+	// definitely doesn't exist using a locking read, with strength lock.Shared,
+	// while skipping locked keys.
+	GetMissingForShareSkipLocked int
 	// GetExisting is an operation that Gets a key that likely exists.
 	GetExisting int
 	// GetExistingForUpdate is an operation that Gets a key that likely exists
-	// using a locking read.
+	// using a locking read with strength lock.Exclusive.
 	GetExistingForUpdate int
+	// GetExistingForShare is an operation that Gets a key that likely exists
+	// using a locking read with strength lock.Shared.
+	GetExistingForShare int
 	// GetExistingSkipLocked is an operation that Gets a key that likely exists
 	// while skipping locked keys.
 	GetExistingSkipLocked int
 	// GetExistingForUpdateSkipLocked is an operation that Gets a key that likely
-	// exists using a locking read while skipping locked keys.
+	// exists using a locking read, with strength lock.Exclusive, while skipping
+	// locked keys.
 	GetExistingForUpdateSkipLocked int
+	// GetExistingForShareSkipLocked is an operation that Gets a key that likely
+	// exists using a locking read, with strength lock.Shared, while skipping
+	// locked keys.
+	GetExistingForShareSkipLocked int
 	// PutMissing is an operation that Puts a key that definitely doesn't exist.
 	PutMissing int
 	// PutExisting is an operation that Puts a key that likely exists.
@@ -130,27 +146,44 @@ type ClientOperationConfig struct {
 	// Scan is an operation that Scans a key range that may contain values.
 	Scan int
 	// ScanForUpdate is an operation that Scans a key range that may contain
-	// values using a per-key locking scan.
+	// values using a per-key locking scan with strength lock.Exclusive.
 	ScanForUpdate int
+	// ScanForShare is an operation that Scans a key range that may contain values
+	// using a per-key locking scan with strength lock.Shared.
+	ScanForShare int
 	// ScanSkipLocked is an operation that Scans a key range that may contain
 	// values while skipping locked keys.
 	ScanSkipLocked int
 	// ScanForUpdateSkipLocked is an operation that Scans a key range that may
-	// contain values using a per-key locking scan while skipping locked keys.
+	// contain values using a per-key locking scan, with strength lock.Exclusive,
+	// while skipping locked keys.
 	ScanForUpdateSkipLocked int
+	// ScanForShareSkipLocked is an operation that Scans a key range that may
+	// contain values using a per-key locking scan, with strength lock.Shared,
+	// while skipping locked keys.
+	ScanForShareSkipLocked int
 	// ReverseScan is an operation that Scans a key range that may contain
 	// values in reverse key order.
 	ReverseScan int
 	// ReverseScanForUpdate is an operation that Scans a key range that may
-	// contain values using a per-key locking scan in reverse key order.
+	// contain values using a per-key locking scan with strength lock.Exclusive in
+	// reverse key order.
 	ReverseScanForUpdate int
+	// ReverseScanForUpdate is an operation that Scans a key range that may
+	// contain values using a per-key locking scan with strength lock.Shared in
+	// reverse key order.
+	ReverseScanForShare int
 	// ReverseScanSkipLocked is an operation that Scans a key range that may
 	// contain values in reverse key order while skipping locked keys.
 	ReverseScanSkipLocked int
 	// ReverseScanForUpdateSkipLocked is an operation that Scans a key range that
-	// may contain values using a per-key locking scan in reverse key order while
-	// skipping locked keys.
+	// may contain values using a per-key locking scan, with strength
+	// lock.Exclusive, in reverse key order while skipping locked keys.
 	ReverseScanForUpdateSkipLocked int
+	// ReverseScanForShareSkipLocked is an operation that Scans a key range that
+	// may contain values using a per-key locking scan, with strength lock.Share,
+	// in reverse key order while skipping locked keys.
+	ReverseScanForShareSkipLocked int
 	// DeleteMissing is an operation that Deletes a key that definitely doesn't exist.
 	DeleteMissing int
 	// DeleteExisting is an operation that Deletes a key that likely exists.
@@ -229,20 +262,27 @@ func newAllOperationsConfig() GeneratorConfig {
 	clientOpConfig := ClientOperationConfig{
 		GetMissing:                     1,
 		GetMissingForUpdate:            1,
+		GetMissingForShare:             1,
 		GetExisting:                    1,
 		GetExistingForUpdate:           1,
+		GetExistingForShare:            1,
 		GetExistingSkipLocked:          1,
 		GetExistingForUpdateSkipLocked: 1,
+		GetExistingForShareSkipLocked:  1,
 		PutMissing:                     1,
 		PutExisting:                    1,
 		Scan:                           1,
 		ScanForUpdate:                  1,
+		ScanForShare:                   1,
 		ScanSkipLocked:                 1,
 		ScanForUpdateSkipLocked:        1,
+		ScanForShareSkipLocked:         1,
 		ReverseScan:                    1,
 		ReverseScanForUpdate:           1,
+		ReverseScanForShare:            1,
 		ReverseScanSkipLocked:          1,
 		ReverseScanForUpdateSkipLocked: 1,
+		ReverseScanForShareSkipLocked:  1,
 		DeleteMissing:                  1,
 		DeleteExisting:                 1,
 		DeleteRange:                    1,
@@ -526,26 +566,34 @@ func (g *generator) selectOp(rng *rand.Rand, contextuallyValid []opGen) Operatio
 func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig) {
 	addOpGen(allowed, randGetMissing, c.GetMissing)
 	addOpGen(allowed, randGetMissingForUpdate, c.GetMissingForUpdate)
+	addOpGen(allowed, randGetMissingForShare, c.GetMissingForShare)
 	addOpGen(allowed, randGetMissingSkipLocked, c.GetMissingSkipLocked)
 	addOpGen(allowed, randGetMissingForUpdateSkipLocked, c.GetMissingForUpdateSkipLocked)
+	addOpGen(allowed, randGetMissingForShareSkipLocked, c.GetMissingForShareSkipLocked)
 	addOpGen(allowed, randPutMissing, c.PutMissing)
 	addOpGen(allowed, randDelMissing, c.DeleteMissing)
 	if len(g.keys) > 0 {
 		addOpGen(allowed, randGetExisting, c.GetExisting)
 		addOpGen(allowed, randGetExistingForUpdate, c.GetExistingForUpdate)
+		addOpGen(allowed, randGetExistingForShare, c.GetExistingForShare)
 		addOpGen(allowed, randGetExistingSkipLocked, c.GetExistingSkipLocked)
 		addOpGen(allowed, randGetExistingForUpdateSkipLocked, c.GetExistingForUpdateSkipLocked)
+		addOpGen(allowed, randGetExistingForShareSkipLocked, c.GetExistingForShareSkipLocked)
 		addOpGen(allowed, randPutExisting, c.PutExisting)
 		addOpGen(allowed, randDelExisting, c.DeleteExisting)
 	}
 	addOpGen(allowed, randScan, c.Scan)
 	addOpGen(allowed, randScanForUpdate, c.ScanForUpdate)
+	addOpGen(allowed, randScanForShare, c.ScanForShare)
 	addOpGen(allowed, randScanSkipLocked, c.ScanSkipLocked)
 	addOpGen(allowed, randScanForUpdateSkipLocked, c.ScanForUpdateSkipLocked)
+	addOpGen(allowed, randScanForShareSkipLocked, c.ScanForShareSkipLocked)
 	addOpGen(allowed, randReverseScan, c.ReverseScan)
 	addOpGen(allowed, randReverseScanForUpdate, c.ReverseScanForUpdate)
+	addOpGen(allowed, randReverseScanForShare, c.ReverseScanForShare)
 	addOpGen(allowed, randReverseScanSkipLocked, c.ReverseScanSkipLocked)
 	addOpGen(allowed, randReverseScanForUpdateSkipLocked, c.ReverseScanForUpdateSkipLocked)
+	addOpGen(allowed, randReverseScanForShareSkipLocked, c.ReverseScanForShareSkipLocked)
 	addOpGen(allowed, randDelRange, c.DeleteRange)
 	addOpGen(allowed, randDelRangeUsingTombstone, c.DeleteRangeUsingTombstone)
 	addOpGen(allowed, randAddSSTable, c.AddSSTable)
@@ -565,6 +613,12 @@ func randGetMissingForUpdate(g *generator, rng *rand.Rand) Operation {
 	return op
 }
 
+func randGetMissingForShare(g *generator, rng *rand.Rand) Operation {
+	op := randGetMissing(g, rng)
+	op.Get.ForShare = true
+	return op
+}
+
 func randGetMissingSkipLocked(g *generator, rng *rand.Rand) Operation {
 	op := randGetMissing(g, rng)
 	op.Get.SkipLocked = true
@@ -573,6 +627,12 @@ func randGetMissingSkipLocked(g *generator, rng *rand.Rand) Operation {
 
 func randGetMissingForUpdateSkipLocked(g *generator, rng *rand.Rand) Operation {
 	op := randGetMissingForUpdate(g, rng)
+	op.Get.SkipLocked = true
+	return op
+}
+
+func randGetMissingForShareSkipLocked(g *generator, rng *rand.Rand) Operation {
+	op := randGetMissingForShare(g, rng)
 	op.Get.SkipLocked = true
 	return op
 }
@@ -588,6 +648,12 @@ func randGetExistingForUpdate(g *generator, rng *rand.Rand) Operation {
 	return op
 }
 
+func randGetExistingForShare(g *generator, rng *rand.Rand) Operation {
+	op := randGetExisting(g, rng)
+	op.Get.ForShare = true
+	return op
+}
+
 func randGetExistingSkipLocked(g *generator, rng *rand.Rand) Operation {
 	op := randGetExisting(g, rng)
 	op.Get.SkipLocked = true
@@ -596,6 +662,12 @@ func randGetExistingSkipLocked(g *generator, rng *rand.Rand) Operation {
 
 func randGetExistingForUpdateSkipLocked(g *generator, rng *rand.Rand) Operation {
 	op := randGetExistingForUpdate(g, rng)
+	op.Get.SkipLocked = true
+	return op
+}
+
+func randGetExistingForShareSkipLocked(g *generator, rng *rand.Rand) Operation {
+	op := randGetExistingForShare(g, rng)
 	op.Get.SkipLocked = true
 	return op
 }
@@ -768,6 +840,12 @@ func randScanForUpdate(g *generator, rng *rand.Rand) Operation {
 	return op
 }
 
+func randScanForShare(g *generator, rng *rand.Rand) Operation {
+	op := randScan(g, rng)
+	op.Scan.ForShare = true
+	return op
+}
+
 func randScanSkipLocked(g *generator, rng *rand.Rand) Operation {
 	op := randScan(g, rng)
 	op.Scan.SkipLocked = true
@@ -776,6 +854,12 @@ func randScanSkipLocked(g *generator, rng *rand.Rand) Operation {
 
 func randScanForUpdateSkipLocked(g *generator, rng *rand.Rand) Operation {
 	op := randScanForUpdate(g, rng)
+	op.Scan.SkipLocked = true
+	return op
+}
+
+func randScanForShareSkipLocked(g *generator, rng *rand.Rand) Operation {
+	op := randScanForShare(g, rng)
 	op.Scan.SkipLocked = true
 	return op
 }
@@ -792,6 +876,12 @@ func randReverseScanForUpdate(g *generator, rng *rand.Rand) Operation {
 	return op
 }
 
+func randReverseScanForShare(g *generator, rng *rand.Rand) Operation {
+	op := randReverseScan(g, rng)
+	op.Scan.ForShare = true
+	return op
+}
+
 func randReverseScanSkipLocked(g *generator, rng *rand.Rand) Operation {
 	op := randReverseScan(g, rng)
 	op.Scan.SkipLocked = true
@@ -800,6 +890,12 @@ func randReverseScanSkipLocked(g *generator, rng *rand.Rand) Operation {
 
 func randReverseScanForUpdateSkipLocked(g *generator, rng *rand.Rand) Operation {
 	op := randReverseScanForUpdate(g, rng)
+	op.Scan.SkipLocked = true
+	return op
+}
+
+func randReverseScanForShareSkipLocked(g *generator, rng *rand.Rand) Operation {
+	op := randReverseScanForShare(g, rng)
 	op.Scan.SkipLocked = true
 	return op
 }
@@ -1191,6 +1287,10 @@ func getForUpdate(key string) Operation {
 	return Operation{Get: &GetOperation{Key: []byte(key), ForUpdate: true}}
 }
 
+func getForShare(key string) Operation {
+	return Operation{Get: &GetOperation{Key: []byte(key), ForShare: true}}
+}
+
 func getSkipLocked(key string) Operation {
 	return Operation{Get: &GetOperation{Key: []byte(key), SkipLocked: true}}
 }
@@ -1207,6 +1307,10 @@ func scanForUpdate(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), ForUpdate: true}}
 }
 
+func scanForShare(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), ForShare: true}}
+}
+
 func scanSkipLocked(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), SkipLocked: true}}
 }
@@ -1217,6 +1321,10 @@ func reverseScan(key, endKey string) Operation {
 
 func reverseScanForUpdate(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForUpdate: true}}
+}
+
+func reverseScanForShare(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForShare: true}}
 }
 
 func reverseScanSkipLocked(key, endKey string) Operation {

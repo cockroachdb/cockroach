@@ -2490,10 +2490,10 @@ func (kl *keyLocks) maybeDisallowLockPromotion(
 	held lock.Strength, reAcquisitionStr lock.Strength,
 ) error {
 	if held == lock.Shared && reAcquisitionStr > held {
-		return errors.UnimplementedErrorf(
+		return MarkLockPromotionError(errors.UnimplementedErrorf(
 			errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/110435"},
 			"lock promotion from %s to %s is not allowed", held, reAcquisitionStr,
-		)
+		))
 	}
 	return nil
 }
@@ -4256,4 +4256,22 @@ func assert(condition bool, msg string) {
 	if !condition {
 		panic(msg)
 	}
+}
+
+// LockPromotionError is used to mark lock promotion errors.
+// TODO(arul): Once we've implemented lock promotion generally, we can remove
+// this machinery.
+type LockPromotionError struct{}
+
+func (e *LockPromotionError) Error() string {
+	return "lock promotion error"
+}
+
+// MarkLockPromotionError wraps the given error, if non-nil, as a
+// LockPromotionError.
+func MarkLockPromotionError(cause error) error {
+	if cause == nil {
+		return nil
+	}
+	return errors.Mark(cause, &LockPromotionError{})
 }
