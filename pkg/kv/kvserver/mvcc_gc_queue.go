@@ -118,6 +118,19 @@ var mvccGCQueueHighPriInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// EnqueueInMvccGCQueueOnSpanConfigUpdateEnabled controls whether replicas
+// are enqueued into the mvcc queue, following a span config update which
+// affects the replica.
+// TODO(baptist): Enable this once we have better AC control and have verified
+// this doesn't cause any overload problems.
+var EnqueueInMvccGCQueueOnSpanConfigUpdateEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.enqueue_in_mvcc_gc_queue_on_span_config_update.enabled",
+	"controls whether replicas are enqueued into the mvcc gc queue for "+
+		"processing, when a span config update occurs which affects the replica",
+	false,
+)
+
 func largeAbortSpan(ms enginepb.MVCCStats) bool {
 	// Checks if the size of the abort span exceeds the given threshold.
 	// The abort span is not supposed to become that large, but it does

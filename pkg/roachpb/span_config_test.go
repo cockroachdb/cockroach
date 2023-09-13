@@ -1,0 +1,85 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package roachpb
+
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/stretchr/testify/require"
+)
+
+func TestSpanConfigHasConfigurationChange(t *testing.T) {
+	spanConfig1 := SpanConfig{
+		RangeMinBytes: 1,
+		RangeMaxBytes: 2,
+		GCPolicy: GCPolicy{
+			TTLSeconds: 10,
+			ProtectionPolicies: []ProtectionPolicy{{
+				ProtectedTimestamp: hlc.Timestamp{
+					WallTime:  1,
+					Logical:   1,
+					Synthetic: false,
+				},
+				IgnoreIfExcludedFromBackup: false,
+			}},
+			IgnoreStrictEnforcement: false,
+		},
+		GlobalReads: false,
+		NumReplicas: 3,
+		NumVoters:   4,
+		Constraints: []ConstraintsConjunction{{
+			NumReplicas: 1,
+			Constraints: []Constraint{{
+				Type:  Constraint_REQUIRED,
+				Key:   "a",
+				Value: "b",
+			}},
+		}},
+		VoterConstraints:      nil,
+		LeasePreferences:      nil,
+		RangefeedEnabled:      false,
+		ExcludeDataFromBackup: false,
+	}
+	spanConfig1Copy := spanConfig1
+	spanConfig2 := SpanConfig{
+		RangeMinBytes: 1,
+		RangeMaxBytes: 2,
+		GCPolicy: GCPolicy{
+			TTLSeconds: 10,
+			ProtectionPolicies: []ProtectionPolicy{{
+				ProtectedTimestamp: hlc.Timestamp{
+					WallTime:  2,
+					Logical:   2,
+					Synthetic: false,
+				},
+				IgnoreIfExcludedFromBackup: false,
+			}},
+			IgnoreStrictEnforcement: false,
+		},
+		GlobalReads:           false,
+		NumReplicas:           3,
+		NumVoters:             4,
+		Constraints:           nil,
+		VoterConstraints:      nil,
+		LeasePreferences:      nil,
+		RangefeedEnabled:      false,
+		ExcludeDataFromBackup: false,
+	}
+	require.NotEqual(t, spanConfig1, spanConfig2)
+	require.True(t, spanConfig1.HasConfigurationChange(spanConfig2))
+	// Now they are the same other than the PTS
+	spanConfig2.Constraints = spanConfig1.Constraints
+	require.False(t, spanConfig1.HasConfigurationChange(spanConfig2))
+	// Ensure that HasConfigurationChange didn't change the spanConfig.
+	require.Equal(t, spanConfig1, spanConfig1Copy)
+
+}

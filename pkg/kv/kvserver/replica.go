@@ -959,10 +959,14 @@ func (r *Replica) GetMaxBytes() int64 {
 	return r.mu.conf.RangeMaxBytes
 }
 
-// SetSpanConfig sets the replica's span config.
-func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) {
+// SetSpanConfig sets the replica's span config. It returns whether the change
+// to the span config was "significant". For significant changes, the caller
+// should queue up the span to all the relevant queues since they may not decide
+// to process this replica.
+func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	oldConf := r.mu.conf
 
 	if r.IsInitialized() && !r.mu.conf.IsEmpty() && !conf.IsEmpty() {
 		total := r.mu.state.Stats.Total()
@@ -984,11 +988,36 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) {
 			r.mu.largestPreviousMaxRangeSizeBytes = 0
 		}
 	}
-
 	if knobs := r.store.TestingKnobs(); knobs != nil && knobs.SetSpanConfigInterceptor != nil {
 		conf = knobs.SetSpanConfigInterceptor(r.descRLocked(), conf)
 	}
 	r.mu.conf, r.mu.spanConfigExplicitlySet = conf, true
+	return oldConf.HasConfigurationChange(conf)
+}
+
+// MaybeQueue attempts to check and queue against the subset of that are
+// impacted by changes to the SpanConfig. This should be called after any
+// changes to the span configs.
+func (r *Replica) MaybeQueue(ctx context.Context, now hlc.ClockTimestamp) {
+	r.store.splitQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		h.MaybeAdd(ctx, r, now)
+	})
+	r.store.mergeQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		h.MaybeAdd(ctx, r, now)
+	})
+	if EnqueueInMvccGCQueueOnSpanConfigUpdateEnabled.Get(&r.store.GetStoreConfig().Settings.SV) {
+		r.store.mvccGCQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			h.MaybeAdd(ctx, r, now)
+		})
+	}
+	// The replicate queue has a relatively more expensive queue check
+	// (shouldQueue), because it scales with the number of stores, and
+	// performs more checks.
+	if EnqueueInReplicateQueueOnSpanConfigUpdateEnabled.Get(&r.store.GetStoreConfig().Settings.SV) {
+		r.store.replicateQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			h.MaybeAdd(ctx, r, now)
+		})
+	}
 }
 
 // IsScratchRange returns true if this is range is a scratch range (i.e.
