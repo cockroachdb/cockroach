@@ -705,7 +705,7 @@ func (v *validator) processOp(op Operation) {
 		//
 		// So we ignore the results of failIfError, calling it only for its side
 		// effect of perhaps registering a failure with the validator.
-		v.failIfError(op, t.Result, exceptRollback, exceptAmbiguous)
+		v.failIfError(op, t.Result, exceptRollback, exceptAmbiguous, exceptSharedLockPromotionError)
 
 		ops := t.Ops
 		if t.CommitInBatch != nil {
@@ -1207,6 +1207,13 @@ func (v *validator) checkError(
 	sl := []func(error) bool{
 		exceptAmbiguous, exceptOmitted, exceptRetry,
 		exceptDelRangeUsingTombstoneStraddlesRangeBoundary,
+		exceptSharedLockPromotionError,
+		// TODO(arul): Once https://github.com/cockroachdb/cockroach/issues/110650
+		// is addressed, we would no longer expect unhandled retryable errors to
+		// bubble back up to the client for batches that acquire shared locks;
+		// they'll be server-side refreshed instead. We should be able to get rid of
+		// this at that point.
+		exceptUnhandledRetry,
 	}
 	sl = append(sl, extraExceptions...)
 	return v.failIfError(op, r, sl...)
