@@ -1366,7 +1366,7 @@ func TestSQLStatsIndexesUsed(t *testing.T) {
 		{
 			name:          "buildZigZag",
 			tableCreation: "CREATE TABLE t5 (a INT, b INT, INDEX a_idx(a), INDEX b_idx(b))",
-			statement:     "SELECT * FROM t5@{FORCE_ZIGZAG} WHERE a = 1 AND b = 1",
+			statement:     "SET enable_zigzag_join = true; SELECT * FROM t5@{FORCE_ZIGZAG} WHERE a = 1 AND b = 1; RESET enable_zigzag_join",
 			fingerprint:   "SELECT * FROM t5@{FORCE_ZIGZAG} WHERE (a = _) AND (b = _)",
 			indexes: []indexInfo{
 				{name: "a_idx", table: "t5"},
