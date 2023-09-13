@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -441,7 +442,7 @@ func (sr *schemaResolver) ResolveFunction(
 		return nil, pgerror.Newf(pgcode.InvalidName, "invalid function name: %s", name)
 	}
 
-	fn, err := name.ToFunctionName()
+	fn, err := name.ToRoutineName()
 	if err != nil {
 		return nil, err
 	}
@@ -455,14 +456,14 @@ func (sr *schemaResolver) ResolveFunction(
 	if err != nil {
 		return nil, err
 	}
-	udfDef, err := maybeLookUpUDF(ctx, sr, path, fn)
+	routine, err := maybeLookupRoutine(ctx, sr, path, fn)
 	if err != nil {
 		return nil, err
 	}
 
 	switch {
-	case builtinDef != nil && udfDef != nil:
-		return builtinDef.MergeWith(udfDef)
+	case builtinDef != nil && routine != nil:
+		return builtinDef.MergeWith(routine)
 	case builtinDef != nil:
 		props, _ := builtinsregistry.GetBuiltinProperties(builtinDef.Name)
 		if props.UnsupportedWithIssue != 0 {
@@ -478,8 +479,8 @@ func (sr *schemaResolver) ResolveFunction(
 			return nil, pgerror.Wrapf(unImplErr, pgcode.InvalidParameterValue, "%s()", builtinDef.Name)
 		}
 		return builtinDef, nil
-	case udfDef != nil:
-		return udfDef, nil
+	case routine != nil:
+		return routine, nil
 	default:
 		return nil, makeFunctionUndefinedError(ctx, name, path, fn, sr)
 	}
@@ -526,7 +527,7 @@ func makeFunctionUndefinedError(
 	))
 }
 
-func maybeLookUpUDF(
+func maybeLookupRoutine(
 	ctx context.Context, sr *schemaResolver, path tree.SearchPath, fn tree.RoutineName,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	if sr.txn == nil {
@@ -596,6 +597,47 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 		return nil, nil, err
 	}
 	return fnName, ret, nil
+}
+
+func (sr *schemaResolver) ResolveProcedure(
+	ctx context.Context, name *tree.UnresolvedObjectName, path tree.SearchPath,
+) (*tree.Overload, error) {
+	if name.NumParts > 3 || len(name.Parts[0]) == 0 {
+		return nil, pgerror.Newf(pgcode.InvalidName, "invalid function name: %s", name)
+	}
+	proc := name.ToRoutineName()
+	if proc.ExplicitCatalog && proc.Catalog() != sr.CurrentDatabase() {
+		return nil, pgerror.New(pgcode.FeatureNotSupported, "cross-database procedure references not allowed")
+	}
+
+	// Get procedures.
+	routine, err := maybeLookupRoutine(ctx, sr, path, proc)
+	if err != nil {
+		return nil, err
+	}
+
+	// Find the procedure overload.
+	var o *tree.Overload
+	for _, qo := range routine.Overloads {
+		if !qo.IsProcedure {
+			continue
+		}
+		// TODO(mgartner): Consider arguments to disambiguate multiple overloads
+		// with the same name.
+		o = qo.Overload
+		break
+	}
+
+	if o == nil {
+		return nil, sqlerrors.NewProcedureUndefinedError(name)
+	}
+
+	_, o, err = sr.ResolveFunctionByOID(ctx, o.Oid)
+	if err != nil {
+		return nil, err
+	}
+
+	return o, nil
 }
 
 // NewSkippingCacheSchemaResolver constructs a schemaResolver which always skip

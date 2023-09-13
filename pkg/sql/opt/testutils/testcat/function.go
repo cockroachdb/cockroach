@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -28,7 +29,7 @@ var _ tree.FunctionReferenceResolver = (*Catalog)(nil)
 func (tc *Catalog) ResolveFunction(
 	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	fn, err := name.ToFunctionName()
+	fn, err := name.ToRoutineName()
 	if err != nil {
 		return nil, err
 	}
@@ -55,8 +56,21 @@ func (tc *Catalog) ResolveFunctionByOID(
 	return nil, nil, errors.AssertionFailedf("ResolveFunctionByOID not supported in test catalog")
 }
 
-// CreateFunction handles the CREATE FUNCTION statement.
-func (tc *Catalog) CreateFunction(c *tree.CreateRoutine) {
+// ResolveProcedure is part of the tree.FunctionReferenceResolver interface.
+func (tc *Catalog) ResolveProcedure(
+	ctx context.Context, name *tree.UnresolvedObjectName, path tree.SearchPath,
+) (*tree.Overload, error) {
+	if def, ok := tc.udfs[name.String()]; ok {
+		o := def.Overloads[0]
+		if o.IsProcedure {
+			return o.Overload, nil
+		}
+	}
+	return nil, sqlerrors.NewProcedureUndefinedError(name)
+}
+
+// CreateRoutine handles the CREATE FUNCTION statement.
+func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	name := c.Name.String()
 	if _, ok := tree.FunDefs[name]; ok {
 		panic(fmt.Errorf("built-in function with name %q already exists", name))
@@ -106,6 +120,7 @@ func (tc *Catalog) CreateFunction(c *tree.CreateRoutine) {
 		Volatility:        v,
 		CalledOnNullInput: calledOnNullInput,
 		Language:          language,
+		IsProcedure:       c.IsProcedure,
 	}
 	if c.ReturnType.IsSet {
 		overload.Class = tree.GeneratorClass
