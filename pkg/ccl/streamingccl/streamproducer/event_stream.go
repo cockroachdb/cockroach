@@ -299,19 +299,21 @@ func (s *eventStream) Next(ctx context.Context) (bool, error) {
 			}
 			log.Infof(ctx, "goroutines for stream %d: %s", s.streamID, resp.Data)
 		case s.data = <-s.streamCh:
-			s.mu.Lock()
-			log.Infof(ctx, "send wait: %s; aggregate: %s", timeutil.Since(beforeEventSend).String(),
-				s.mu.eventStreamStats.EventSendWait.String())
-			eventSendWait := timeutil.Since(beforeEventSend)
-			if err := s.mu.sendEventWaitHist.RecordValue(eventSendWait.Nanoseconds()); err != nil {
-				log.Warningf(ctx, "error recording send wait to histogram: %v", err)
-			}
-			s.mu.eventStreamStats.EventSendWait += eventSendWait
-			s.mu.eventStreamStats.LastSendTime = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := s.mu.betweenNextWaitHist.RecordValue(timeSincePrevNext.Nanoseconds()); err != nil {
-				log.Warningf(ctx, "error recording between next to histogram: %v", err)
-			}
-			s.mu.Unlock()
+			func() {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				log.Infof(ctx, "send wait: %s; aggregate: %s", timeutil.Since(beforeEventSend).String(),
+					s.mu.eventStreamStats.EventSendWait.String())
+				eventSendWait := timeutil.Since(beforeEventSend)
+				if err := s.mu.sendEventWaitHist.RecordValue(eventSendWait.Nanoseconds()); err != nil {
+					log.Warningf(ctx, "error recording send wait to histogram: %v", err)
+				}
+				s.mu.eventStreamStats.EventSendWait += eventSendWait
+				s.mu.eventStreamStats.LastSendTime = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+				if err := s.mu.betweenNextWaitHist.RecordValue(timeSincePrevNext.Nanoseconds()); err != nil {
+					log.Warningf(ctx, "error recording between next to histogram: %v", err)
+				}
+			}()
 			return true, nil
 		}
 	}
@@ -364,10 +366,12 @@ func (s *eventStream) onInitialScanSpanCompleted(ctx context.Context, sp roachpb
 	case s.eventsCh <- kvcoord.RangeFeedMessage{
 		RangeFeedEvent: &kvpb.RangeFeedEvent{Checkpoint: &checkpoint},
 	}:
-		s.mu.Lock()
-		s.mu.eventStreamStats.LastSpanCompleteTime = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		s.mu.Unlock()
-		log.VInfof(ctx, 1, "onSpanCompleted: %s@%s", checkpoint.Span, checkpoint.ResolvedTS)
+		func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			s.mu.eventStreamStats.LastSpanCompleteTime = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			log.VInfof(ctx, 1, "onSpanCompleted: %s@%s", checkpoint.Span, checkpoint.ResolvedTS)
+		}()
 		return nil
 	}
 }
@@ -409,56 +413,62 @@ func makeCheckpoint(f *span.Frontier) (checkpoint streampb.StreamEvent_StreamChe
 func (s *eventStream) flushEvent(ctx context.Context, event *streampb.StreamEvent) error {
 	defer func() {
 		s.mu.Lock()
+		defer s.mu.Unlock()
 		if event.Batch != nil {
-			s.mu.lastBatchFlushTime = time.Now()
+			s.mu.lastBatchFlushTime = timeutil.Now()
 		} else {
-			s.mu.lastCheckpointFlushTime = time.Now()
+			s.mu.lastCheckpointFlushTime = timeutil.Now()
 		}
-		s.mu.Unlock()
 	}()
 
-	s.mu.Lock()
-	if event.Batch != nil && !s.mu.lastBatchFlushTime.IsZero() {
-		err := s.mu.betweenBatchFlushWait.RecordValue(timeutil.Since(s.mu.lastBatchFlushTime).Nanoseconds())
-		if err != nil {
-			log.Warningf(ctx, "error recording between batch flush wait to histogram: %v", err)
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if event.Batch != nil && !s.mu.lastBatchFlushTime.IsZero() {
+			err := s.mu.betweenBatchFlushWait.RecordValue(timeutil.Since(s.mu.lastBatchFlushTime).Nanoseconds())
+			if err != nil {
+				log.Warningf(ctx, "error recording between batch flush wait to histogram: %v", err)
+			}
+		} else if event.Checkpoint != nil && !s.mu.lastCheckpointFlushTime.IsZero() {
+			err := s.mu.betweenCheckpointFlushWait.RecordValue(timeutil.Since(s.mu.lastCheckpointFlushTime).Nanoseconds())
+			if err != nil {
+				log.Warningf(ctx, "error recording between checkpoint flush wait to histogram: %v", err)
+			}
 		}
-	} else if event.Checkpoint != nil && !s.mu.lastCheckpointFlushTime.IsZero() {
-		err := s.mu.betweenCheckpointFlushWait.RecordValue(timeutil.Since(s.mu.lastCheckpointFlushTime).Nanoseconds())
-		if err != nil {
-			log.Warningf(ctx, "error recording between checkpoint flush wait to histogram: %v", err)
-		}
-	}
-	s.mu.Unlock()
+	}()
 
 	data, err := protoutil.Marshal(event)
 	if err != nil {
 		return err
 	}
 
-	s.mu.Lock()
-	if event.Batch != nil {
-		s.mu.eventStreamStats.NumFlushedBatches++
-	} else {
-		s.mu.eventStreamStats.NumFlushedCheckpoints++
-	}
-	s.mu.Unlock()
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if event.Batch != nil {
+			s.mu.eventStreamStats.NumFlushedBatches++
+		} else {
+			s.mu.eventStreamStats.NumFlushedCheckpoints++
+		}
+	}()
 
 	beforeFlush := timeutil.Now()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case s.streamCh <- tree.Datums{tree.NewDBytes(tree.DBytes(data))}:
-		s.mu.Lock()
-		log.Infof(ctx, "flush wait: %s; aggregate: %s", timeutil.Since(beforeFlush).String(),
-			s.mu.eventStreamStats.FlushWait.String())
-		flushWait := timeutil.Since(beforeFlush)
-		if err := s.mu.flushWaitHist.RecordValue(flushWait.Nanoseconds()); err != nil {
-			log.Warningf(ctx, "error recording flush wait to histogram: %v", err)
-		}
-		s.mu.eventStreamStats.FlushWait += flushWait
-		s.mu.eventStreamStats.LastFlushTime = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		s.mu.Unlock()
+		func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			log.Infof(ctx, "flush wait: %s; aggregate: %s", timeutil.Since(beforeFlush).String(),
+				s.mu.eventStreamStats.FlushWait.String())
+			flushWait := timeutil.Since(beforeFlush)
+			if err := s.mu.flushWaitHist.RecordValue(flushWait.Nanoseconds()); err != nil {
+				log.Warningf(ctx, "error recording flush wait to histogram: %v", err)
+			}
+			s.mu.eventStreamStats.FlushWait += flushWait
+			s.mu.eventStreamStats.LastFlushTime = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		}()
 		return nil
 	case <-s.doneChan:
 		return nil
@@ -571,14 +581,16 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 		minLatency = time.Microsecond
 		maxLatency = 100 * time.Second
 	)
-	s.mu.Lock()
-	s.mu.rangefeedEventReceiveWaitHist = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
-	s.mu.flushWaitHist = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
-	s.mu.sendEventWaitHist = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
-	s.mu.betweenNextWaitHist = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
-	s.mu.betweenBatchFlushWait = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
-	s.mu.betweenCheckpointFlushWait = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
-	s.mu.Unlock()
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.mu.rangefeedEventReceiveWaitHist = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+		s.mu.flushWaitHist = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+		s.mu.sendEventWaitHist = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+		s.mu.betweenNextWaitHist = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+		s.mu.betweenBatchFlushWait = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+		s.mu.betweenCheckpointFlushWait = hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	}()
 
 	maybeFlushBatch := func(force bool) error {
 		if (force && seb.getSize() > 0) || seb.getSize() > int(s.spec.Config.BatchByteSize) {
@@ -605,17 +617,23 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 		case <-s.doneChan:
 			return nil
 		case ev := <-s.eventsCh:
-			s.mu.Lock()
-			waitTime := timeutil.Since(beforeEventReceived)
-			if err := s.mu.rangefeedEventReceiveWaitHist.RecordValue(waitTime.Nanoseconds()); err != nil {
-				log.Warningf(ctx, "failed to record event wait time to histogram: %v", err)
-			}
-			s.mu.eventStreamStats.EventReceiveWait += waitTime
-			s.mu.eventStreamStats.LastRecvTime = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			func() {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				waitTime := timeutil.Since(beforeEventReceived)
+				if err := s.mu.rangefeedEventReceiveWaitHist.RecordValue(waitTime.Nanoseconds()); err != nil {
+					log.Warningf(ctx, "failed to record event wait time to histogram: %v", err)
+				}
+				s.mu.eventStreamStats.EventReceiveWait += waitTime
+				s.mu.eventStreamStats.LastRecvTime = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			}()
 			switch {
 			case ev.Val != nil:
-				s.mu.eventStreamStats.KvEvents++
-				s.mu.Unlock()
+				func() {
+					s.mu.Lock()
+					defer s.mu.Unlock()
+					s.mu.eventStreamStats.KvEvents++
+				}()
 				seb.addKV(&roachpb.KeyValue{
 					Key:   ev.Val.Key,
 					Value: ev.Val.Value,
@@ -624,8 +642,11 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 					return err
 				}
 			case ev.Checkpoint != nil:
-				s.mu.eventStreamStats.CheckpointEvents++
-				s.mu.Unlock()
+				func() {
+					s.mu.Lock()
+					defer s.mu.Unlock()
+					s.mu.eventStreamStats.CheckpointEvents++
+				}()
 				advanced, err := frontier.Forward(ev.Checkpoint.Span, ev.Checkpoint.ResolvedTS)
 				if err != nil {
 					return err
@@ -641,8 +662,11 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 					}
 				}
 			case ev.SST != nil:
-				s.mu.eventStreamStats.SstEvents++
-				s.mu.Unlock()
+				func() {
+					s.mu.Lock()
+					defer s.mu.Unlock()
+					s.mu.eventStreamStats.SstEvents++
+				}()
 				err := s.addSST(ctx, ev.SST, ev.RegisteredSpan, seb)
 				if err != nil {
 					return err
@@ -651,8 +675,11 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 					return err
 				}
 			case ev.DeleteRange != nil:
-				s.mu.eventStreamStats.DeleteRangeEvents++
-				s.mu.Unlock()
+				func() {
+					s.mu.Lock()
+					defer s.mu.Unlock()
+					s.mu.eventStreamStats.DeleteRangeEvents++
+				}()
 				seb.addDelRange(ev.DeleteRange)
 				if err := maybeFlushBatch(flushIfNeeded); err != nil {
 					return err
@@ -679,98 +706,100 @@ func (s *eventStream) constructTracingAggregatorStats(ctx context.Context) error
 				return nil
 			}
 			if sp != nil {
-				s.mu.Lock()
-				s.mu.eventStreamStats.Name = fmt.Sprintf("%d", sp.SpanID())
-				s.mu.eventStreamStats.RangefeedEventWait = &HistogramData{
-					Min:   s.mu.rangefeedEventReceiveWaitHist.Min(),
-					P5:    s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(5),
-					P50:   s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(50),
-					P90:   s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(90),
-					P99:   s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(99),
-					P99_9: s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(99.9),
-					Max:   s.mu.rangefeedEventReceiveWaitHist.Max(),
-					Mean:  float32(s.mu.rangefeedEventReceiveWaitHist.Mean()),
-					Count: s.mu.rangefeedEventReceiveWaitHist.TotalCount(),
-				}
-				s.mu.eventStreamStats.FlushEventWait = &HistogramData{
-					Min:   s.mu.flushWaitHist.Min(),
-					P5:    s.mu.flushWaitHist.ValueAtQuantile(5),
-					P50:   s.mu.flushWaitHist.ValueAtQuantile(50),
-					P90:   s.mu.flushWaitHist.ValueAtQuantile(90),
-					P99:   s.mu.flushWaitHist.ValueAtQuantile(99),
-					P99_9: s.mu.flushWaitHist.ValueAtQuantile(99.9),
-					Max:   s.mu.flushWaitHist.Max(),
-					Mean:  float32(s.mu.flushWaitHist.Mean()),
-					Count: s.mu.flushWaitHist.TotalCount(),
-				}
-				s.mu.eventStreamStats.SendEventWait = &HistogramData{
-					Min:   s.mu.sendEventWaitHist.Min(),
-					P5:    s.mu.sendEventWaitHist.ValueAtQuantile(5),
-					P50:   s.mu.sendEventWaitHist.ValueAtQuantile(50),
-					P90:   s.mu.sendEventWaitHist.ValueAtQuantile(90),
-					P99:   s.mu.sendEventWaitHist.ValueAtQuantile(99),
-					P99_9: s.mu.sendEventWaitHist.ValueAtQuantile(99.9),
-					Max:   s.mu.sendEventWaitHist.Max(),
-					Mean:  float32(s.mu.sendEventWaitHist.Mean()),
-					Count: s.mu.sendEventWaitHist.TotalCount(),
-				}
-				s.mu.eventStreamStats.SinceNextWait = &HistogramData{
-					Min:   s.mu.betweenNextWaitHist.Min(),
-					P5:    s.mu.betweenNextWaitHist.ValueAtQuantile(5),
-					P50:   s.mu.betweenNextWaitHist.ValueAtQuantile(50),
-					P90:   s.mu.betweenNextWaitHist.ValueAtQuantile(90),
-					P99:   s.mu.betweenNextWaitHist.ValueAtQuantile(99),
-					P99_9: s.mu.betweenNextWaitHist.ValueAtQuantile(99.9),
-					Max:   s.mu.betweenNextWaitHist.Max(),
-					Mean:  float32(s.mu.betweenNextWaitHist.Mean()),
-					Count: s.mu.betweenNextWaitHist.TotalCount(),
-				}
-				s.mu.eventStreamStats.SinceLastBatchFlush = &HistogramData{
-					Min:   s.mu.betweenBatchFlushWait.Min(),
-					P5:    s.mu.betweenBatchFlushWait.ValueAtQuantile(5),
-					P50:   s.mu.betweenBatchFlushWait.ValueAtQuantile(50),
-					P90:   s.mu.betweenBatchFlushWait.ValueAtQuantile(90),
-					P99:   s.mu.betweenBatchFlushWait.ValueAtQuantile(99),
-					P99_9: s.mu.betweenBatchFlushWait.ValueAtQuantile(99.9),
-					Max:   s.mu.betweenBatchFlushWait.Max(),
-					Mean:  float32(s.mu.betweenBatchFlushWait.Mean()),
-					Count: s.mu.betweenBatchFlushWait.TotalCount(),
-				}
-				s.mu.eventStreamStats.SinceLastCheckpointFlush = &HistogramData{
-					Min:   s.mu.betweenCheckpointFlushWait.Min(),
-					P5:    s.mu.betweenCheckpointFlushWait.ValueAtQuantile(5),
-					P50:   s.mu.betweenCheckpointFlushWait.ValueAtQuantile(50),
-					P90:   s.mu.betweenCheckpointFlushWait.ValueAtQuantile(90),
-					P99:   s.mu.betweenCheckpointFlushWait.ValueAtQuantile(99),
-					P99_9: s.mu.betweenCheckpointFlushWait.ValueAtQuantile(99.9),
-					Max:   s.mu.betweenCheckpointFlushWait.Max(),
-					Mean:  float32(s.mu.betweenCheckpointFlushWait.Mean()),
-					Count: s.mu.betweenCheckpointFlushWait.TotalCount(),
-				}
-				for _, b := range s.mu.rangefeedEventReceiveWaitHist.Distribution() {
-					s.mu.eventStreamStats.RangefeedEventBars = append(s.mu.eventStreamStats.RangefeedEventBars, &Bar{
-						From:  b.From,
-						To:    b.To,
-						Count: b.Count,
-					})
-				}
-				for _, b := range s.mu.flushWaitHist.Distribution() {
-					s.mu.eventStreamStats.FlushEventBars = append(s.mu.eventStreamStats.FlushEventBars, &Bar{
-						From:  b.From,
-						To:    b.To,
-						Count: b.Count,
-					})
-				}
-				for _, b := range s.mu.sendEventWaitHist.Distribution() {
-					s.mu.eventStreamStats.SendEventBars = append(s.mu.eventStreamStats.SendEventBars, &Bar{
-						From:  b.From,
-						To:    b.To,
-						Count: b.Count,
-					})
-				}
-				sp.RecordStructured(s.mu.eventStreamStats)
-				s.mu.eventStreamStats = &EventStreamPerformanceStats{}
-				s.mu.Unlock()
+				func() {
+					s.mu.Lock()
+					defer s.mu.Unlock()
+					s.mu.eventStreamStats.Name = fmt.Sprintf("%d", sp.SpanID())
+					s.mu.eventStreamStats.RangefeedEventWait = &HistogramData{
+						Min:   s.mu.rangefeedEventReceiveWaitHist.Min(),
+						P5:    s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(5),
+						P50:   s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(50),
+						P90:   s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(90),
+						P99:   s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(99),
+						P99_9: s.mu.rangefeedEventReceiveWaitHist.ValueAtQuantile(99.9),
+						Max:   s.mu.rangefeedEventReceiveWaitHist.Max(),
+						Mean:  float32(s.mu.rangefeedEventReceiveWaitHist.Mean()),
+						Count: s.mu.rangefeedEventReceiveWaitHist.TotalCount(),
+					}
+					s.mu.eventStreamStats.FlushEventWait = &HistogramData{
+						Min:   s.mu.flushWaitHist.Min(),
+						P5:    s.mu.flushWaitHist.ValueAtQuantile(5),
+						P50:   s.mu.flushWaitHist.ValueAtQuantile(50),
+						P90:   s.mu.flushWaitHist.ValueAtQuantile(90),
+						P99:   s.mu.flushWaitHist.ValueAtQuantile(99),
+						P99_9: s.mu.flushWaitHist.ValueAtQuantile(99.9),
+						Max:   s.mu.flushWaitHist.Max(),
+						Mean:  float32(s.mu.flushWaitHist.Mean()),
+						Count: s.mu.flushWaitHist.TotalCount(),
+					}
+					s.mu.eventStreamStats.SendEventWait = &HistogramData{
+						Min:   s.mu.sendEventWaitHist.Min(),
+						P5:    s.mu.sendEventWaitHist.ValueAtQuantile(5),
+						P50:   s.mu.sendEventWaitHist.ValueAtQuantile(50),
+						P90:   s.mu.sendEventWaitHist.ValueAtQuantile(90),
+						P99:   s.mu.sendEventWaitHist.ValueAtQuantile(99),
+						P99_9: s.mu.sendEventWaitHist.ValueAtQuantile(99.9),
+						Max:   s.mu.sendEventWaitHist.Max(),
+						Mean:  float32(s.mu.sendEventWaitHist.Mean()),
+						Count: s.mu.sendEventWaitHist.TotalCount(),
+					}
+					s.mu.eventStreamStats.SinceNextWait = &HistogramData{
+						Min:   s.mu.betweenNextWaitHist.Min(),
+						P5:    s.mu.betweenNextWaitHist.ValueAtQuantile(5),
+						P50:   s.mu.betweenNextWaitHist.ValueAtQuantile(50),
+						P90:   s.mu.betweenNextWaitHist.ValueAtQuantile(90),
+						P99:   s.mu.betweenNextWaitHist.ValueAtQuantile(99),
+						P99_9: s.mu.betweenNextWaitHist.ValueAtQuantile(99.9),
+						Max:   s.mu.betweenNextWaitHist.Max(),
+						Mean:  float32(s.mu.betweenNextWaitHist.Mean()),
+						Count: s.mu.betweenNextWaitHist.TotalCount(),
+					}
+					s.mu.eventStreamStats.SinceLastBatchFlush = &HistogramData{
+						Min:   s.mu.betweenBatchFlushWait.Min(),
+						P5:    s.mu.betweenBatchFlushWait.ValueAtQuantile(5),
+						P50:   s.mu.betweenBatchFlushWait.ValueAtQuantile(50),
+						P90:   s.mu.betweenBatchFlushWait.ValueAtQuantile(90),
+						P99:   s.mu.betweenBatchFlushWait.ValueAtQuantile(99),
+						P99_9: s.mu.betweenBatchFlushWait.ValueAtQuantile(99.9),
+						Max:   s.mu.betweenBatchFlushWait.Max(),
+						Mean:  float32(s.mu.betweenBatchFlushWait.Mean()),
+						Count: s.mu.betweenBatchFlushWait.TotalCount(),
+					}
+					s.mu.eventStreamStats.SinceLastCheckpointFlush = &HistogramData{
+						Min:   s.mu.betweenCheckpointFlushWait.Min(),
+						P5:    s.mu.betweenCheckpointFlushWait.ValueAtQuantile(5),
+						P50:   s.mu.betweenCheckpointFlushWait.ValueAtQuantile(50),
+						P90:   s.mu.betweenCheckpointFlushWait.ValueAtQuantile(90),
+						P99:   s.mu.betweenCheckpointFlushWait.ValueAtQuantile(99),
+						P99_9: s.mu.betweenCheckpointFlushWait.ValueAtQuantile(99.9),
+						Max:   s.mu.betweenCheckpointFlushWait.Max(),
+						Mean:  float32(s.mu.betweenCheckpointFlushWait.Mean()),
+						Count: s.mu.betweenCheckpointFlushWait.TotalCount(),
+					}
+					for _, b := range s.mu.rangefeedEventReceiveWaitHist.Distribution() {
+						s.mu.eventStreamStats.RangefeedEventBars = append(s.mu.eventStreamStats.RangefeedEventBars, &Bar{
+							From:  b.From,
+							To:    b.To,
+							Count: b.Count,
+						})
+					}
+					for _, b := range s.mu.flushWaitHist.Distribution() {
+						s.mu.eventStreamStats.FlushEventBars = append(s.mu.eventStreamStats.FlushEventBars, &Bar{
+							From:  b.From,
+							To:    b.To,
+							Count: b.Count,
+						})
+					}
+					for _, b := range s.mu.sendEventWaitHist.Distribution() {
+						s.mu.eventStreamStats.SendEventBars = append(s.mu.eventStreamStats.SendEventBars, &Bar{
+							From:  b.From,
+							To:    b.To,
+							Count: b.Count,
+						})
+					}
+					sp.RecordStructured(s.mu.eventStreamStats)
+					s.mu.eventStreamStats = &EventStreamPerformanceStats{}
+				}()
 			}
 
 			log.Infof(ctx, "agg events being flushed by %s",
