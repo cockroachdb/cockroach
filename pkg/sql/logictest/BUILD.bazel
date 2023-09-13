@@ -87,6 +87,7 @@ go_test(
     args = ["-test.timeout=295s"],
     data = [":testdata"],
     embed = [":logictest"],
+    exec_properties = {"Pool": "medium"},
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",

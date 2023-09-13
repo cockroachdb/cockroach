@@ -425,7 +425,7 @@ func TestMVCCHistories(t *testing.T) {
 
 				// pos is the original <file>:<lineno> prefix computed by
 				// datadriven. It points to the top "run" command itself.
-				// We editing d.Pos in-place below by extending `pos` upon
+				// We are editing d.Pos in-place below by extending `pos` upon
 				// each new line of the script.
 				pos := d.Pos
 
