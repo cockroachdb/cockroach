@@ -185,10 +185,10 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	canContinue := make(chan struct{})
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 
-	replicationSpecs := make(map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec, 0)
+	replicationSpecs := make(map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec, 0)
 	frontier := &execinfrapb.StreamIngestionFrontierSpec{}
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		AfterReplicationFlowPlan: func(ingestionSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
+		AfterReplicationFlowPlan: func(ingestionSpecs map[base.SQLInstanceID][]*execinfrapb.StreamIngestionDataSpec,
 			frontierSpec *execinfrapb.StreamIngestionFrontierSpec) {
 			replicationSpecs = ingestionSpecs
 			frontier = frontierSpec
@@ -224,9 +224,11 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	startTime := replicationJobDetails.ReplicationStartTime
 	require.NotEmpty(t, startTime)
 
-	for _, r := range replicationSpecs {
-		require.Equal(t, startTime, r.InitialScanTimestamp)
-		require.Empty(t, r.PreviousReplicatedTimestamp)
+	for _, specs := range replicationSpecs {
+		for _, r := range specs {
+			require.Equal(t, startTime, r.InitialScanTimestamp)
+			require.Empty(t, r.PreviousReplicatedTimestamp)
+		}
 	}
 	require.Empty(t, frontier.ReplicatedTimeAtStart)
 
@@ -254,13 +256,15 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	// Assert that the previous highwater mark is greater than the replication
 	// start time.
 	var previousReplicatedTimestamp hlc.Timestamp
-	for _, r := range replicationSpecs {
-		require.Equal(t, startTime, r.InitialScanTimestamp)
-		require.True(t, r.InitialScanTimestamp.Less(r.PreviousReplicatedTimestamp))
-		if previousReplicatedTimestamp.IsEmpty() {
-			previousReplicatedTimestamp = r.PreviousReplicatedTimestamp
-		} else {
-			require.Equal(t, r.PreviousReplicatedTimestamp, previousReplicatedTimestamp)
+	for _, specs := range replicationSpecs {
+		for _, r := range specs {
+			require.Equal(t, startTime, r.InitialScanTimestamp)
+			require.True(t, r.InitialScanTimestamp.Less(r.PreviousReplicatedTimestamp))
+			if previousReplicatedTimestamp.IsEmpty() {
+				previousReplicatedTimestamp = r.PreviousReplicatedTimestamp
+			} else {
+				require.Equal(t, r.PreviousReplicatedTimestamp, previousReplicatedTimestamp)
+			}
 		}
 	}
 	require.Equal(t, frontier.ReplicatedTimeAtStart, previousReplicatedTimestamp)
