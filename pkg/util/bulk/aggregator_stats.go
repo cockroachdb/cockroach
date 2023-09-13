@@ -64,26 +64,46 @@ func ConstructTracingAggregatorProducerMeta(
 	return &execinfrapb.ProducerMetadata{AggregatorEvents: aggEvents}
 }
 
-// flushTracingStats persists the following files to the `system.job_info` table
-// for consumption by job observability tools:
+// ComponentAggregatorStats is a mapping from a component to all the Aggregator
+// Stats collected for that component.
+type ComponentAggregatorStats map[execinfrapb.ComponentID]map[string][]byte
+
+// DeepCopy takes a deep copy of the component aggregator stats map.
+func (c ComponentAggregatorStats) DeepCopy() ComponentAggregatorStats {
+	mapCopy := make(ComponentAggregatorStats, len(c))
+	for k, v := range c {
+		innerMap := make(map[string][]byte, len(v))
+		for k2, v2 := range v {
+			// Create a copy of the byte slice to avoid modifying the original data.
+			dataCopy := make([]byte, len(v2))
+			copy(dataCopy, v2)
+			innerMap[k2] = dataCopy
+		}
+		mapCopy[k] = innerMap
+	}
+	return mapCopy
+}
+
+// FlushTracingAggregatorStats persists the following files to the
+// `system.job_info` table for consumption by job observability tools:
 //
 // - A file per node, for each aggregated TracingAggregatorEvent. These files
 // contain the machine-readable proto bytes of the TracingAggregatorEvent.
 //
 // - A text file that contains a cluster-wide and per-node summary of each
 // TracingAggregatorEvent in its human-readable format.
-func flushTracingStats(
+func FlushTracingAggregatorStats(
 	ctx context.Context,
 	jobID jobspb.JobID,
 	db isql.DB,
-	perNodeStats map[execinfrapb.ComponentID]map[string][]byte,
+	perNodeAggregatorStats ComponentAggregatorStats,
 ) error {
 	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		clusterWideAggregatorStats := make(map[string]TracingAggregatorEvent)
 		asOf := timeutil.Now().Format("20060102_150405.00")
 
 		var clusterWideSummary bytes.Buffer
-		for component, nameToEvent := range perNodeStats {
+		for component, nameToEvent := range perNodeAggregatorStats {
 			clusterWideSummary.WriteString(fmt.Sprintf("## SQL Instance ID: %s; Flow ID: %s\n\n",
 				component.SQLInstanceID.String(), component.FlowID.String()))
 			for name, event := range nameToEvent {
@@ -175,7 +195,7 @@ func AggregateTracingStats(
 			flushTimer.Reset(flushTracingAggregatorFrequency.Get(&st.SV))
 			// Flush the per-node and cluster wide aggregator stats to the job_info
 			// table.
-			if err := flushTracingStats(ctx, jobID, db, perNodeAggregatorStats); err != nil {
+			if err := FlushTracingAggregatorStats(ctx, jobID, db, perNodeAggregatorStats); err != nil {
 				return err
 			}
 			flushOnClose = false
@@ -183,7 +203,7 @@ func AggregateTracingStats(
 		}
 	}
 	if flushOnClose {
-		if err := flushTracingStats(ctx, jobID, db, perNodeAggregatorStats); err != nil {
+		if err := FlushTracingAggregatorStats(ctx, jobID, db, perNodeAggregatorStats); err != nil {
 			return err
 		}
 	}
