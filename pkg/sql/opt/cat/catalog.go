@@ -182,10 +182,6 @@ type Catalog interface {
 	// returns true. Returns an error if query on the `system.users` table failed
 	HasAdminRole(ctx context.Context) (bool, error)
 
-	// RequireAdminRole checks that the current user has admin privileges. If not,
-	// returns an error.
-	RequireAdminRole(ctx context.Context, action string) error
-
 	// HasRoleOption converts the roleoption to its SQL column name and checks if
 	// the user belongs to a role where the option has value true. Requires a
 	// valid transaction to be open.

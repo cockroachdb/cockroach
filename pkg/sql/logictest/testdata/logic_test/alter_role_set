@@ -221,7 +221,7 @@ statement error only users with the admin role are allowed to ALTER ROLE ALL
 ALTER ROLE ALL IN DATABASE test_set_db RESET application_name
 
 # Verify that testuser can't edit an ADMIN, even after getting CREATEROLE.
-statement error only users with the admin role are allowed to ALTER ROLE admin
+statement error only users with the admin role are allowed to alter another admin
 ALTER ROLE other_admin SET application_name = 'abc'
 
 user root

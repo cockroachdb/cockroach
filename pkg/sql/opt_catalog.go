@@ -443,11 +443,6 @@ func (oc *optCatalog) HasAdminRole(ctx context.Context) (bool, error) {
 	return oc.planner.HasAdminRole(ctx)
 }
 
-// RequireAdminRole is part of the cat.Catalog interface.
-func (oc *optCatalog) RequireAdminRole(ctx context.Context, action string) error {
-	return oc.planner.RequireAdminRole(ctx, action)
-}
-
 // HasRoleOption is part of the cat.Catalog interface.
 func (oc *optCatalog) HasRoleOption(
 	ctx context.Context, roleOption roleoption.Option,

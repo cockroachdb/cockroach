@@ -43,7 +43,7 @@ type CheckerForRPCHandlers interface {
 	// Its error return is a gRPC error.
 	RequireAdminUser(ctx context.Context) (userName username.SQLUsername, err error)
 
-	// RequireAdminRole validates the current user has the VIEWACTIVITY
+	// RequireViewActivityPermission validates the current user has the VIEWACTIVITY
 	// privilege or role option.
 	// Its error return is a gRPC error.
 	RequireViewActivityPermission(ctx context.Context) error
