@@ -148,6 +148,7 @@ type RestoreOptions struct {
 	UnsafeRestoreIncompatibleVersion bool
 	ExecutionLocality                Expr
 	ExperimentalOnline               bool
+	StripLocalities                  bool
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -519,6 +520,11 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("experimental deferred copy")
 	}
+
+	if o.StripLocalities {
+		maybeAddSep()
+		ctx.WriteString("strip_localities")
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -673,6 +679,14 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.ExperimentalOnline = other.ExperimentalOnline
 	}
 
+	if o.StripLocalities {
+		if other.StripLocalities {
+			return errors.New("skip_regions specified multiple times")
+		}
+	} else {
+		o.StripLocalities = other.StripLocalities
+	}
+
 	return nil
 }
 
@@ -699,7 +713,8 @@ func (o RestoreOptions) IsDefault() bool {
 		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
 		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion &&
 		o.ExecutionLocality == options.ExecutionLocality &&
-		o.ExperimentalOnline == options.ExperimentalOnline
+		o.ExperimentalOnline == options.ExperimentalOnline &&
+		o.StripLocalities == options.StripLocalities
 }
 
 // BackupTargetList represents a list of targets.
