@@ -12,7 +12,6 @@ package cloudcheck
 
 import (
 	"context"
-	crypto_rand "crypto/rand"
 	"fmt"
 	"io"
 	"math/rand"
@@ -114,7 +113,10 @@ func checkStorage(
 	}
 
 	buf := make([]byte, chunkSize)
-	_, _ = crypto_rand.Read(buf)
+	// https://github.com/cockroachdb/cockroach/issues/110599 tracks this
+	// deprecated usage.
+	//lint:ignore SA1019 deprecated
+	_, _ = rand.Read(buf)
 
 	var res result
 
