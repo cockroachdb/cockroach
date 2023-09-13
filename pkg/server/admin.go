@@ -1547,7 +1547,7 @@ func (s *adminServer) Events(
 ) (_ *serverpb.EventsResponse, retErr error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	userName, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
@@ -1560,6 +1560,10 @@ func (s *adminServer) Events(
 		limit = apiconstants.DefaultAPIEventLimit
 	}
 
+	userName, err := authserver.UserFromIncomingRPCContext(ctx)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
 	r, err := s.eventsHelper(ctx, req, userName, int(limit), 0, redactEvents)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
@@ -3188,7 +3192,7 @@ func (s *systemAdminServer) EnqueueRange(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireRepairClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -3336,7 +3340,7 @@ func (s *systemAdminServer) SendKVBatch(
 	ctx = s.AnnotateCtx(ctx)
 	// Note: the root user will bypass SQL auth checks, which is useful in case of
 	// a cluster outage.
-	user, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireRepairClusterMetadataPermission(ctx)
 	if err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
@@ -3344,6 +3348,11 @@ func (s *systemAdminServer) SendKVBatch(
 	}
 	if ba == nil {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "BatchRequest cannot be nil")
+	}
+
+	user, err := authserver.UserFromIncomingRPCContext(ctx)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	// Emit a structured log event for the call.
@@ -3394,7 +3403,7 @@ func (s *systemAdminServer) RecoveryCollectReplicaInfo(
 ) error {
 	ctx := stream.Context()
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return err
 	}
@@ -3409,7 +3418,7 @@ func (s *systemAdminServer) RecoveryCollectLocalReplicaInfo(
 ) error {
 	ctx := stream.Context()
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return err
 	}
@@ -3422,7 +3431,7 @@ func (s *systemAdminServer) RecoveryStagePlan(
 	ctx context.Context, request *serverpb.RecoveryStagePlanRequest,
 ) (*serverpb.RecoveryStagePlanResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireRepairClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3435,7 +3444,7 @@ func (s *systemAdminServer) RecoveryNodeStatus(
 	ctx context.Context, request *serverpb.RecoveryNodeStatusRequest,
 ) (*serverpb.RecoveryNodeStatusResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3447,7 +3456,7 @@ func (s *systemAdminServer) RecoveryVerify(
 	ctx context.Context, request *serverpb.RecoveryVerifyRequest,
 ) (*serverpb.RecoveryVerifyResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}

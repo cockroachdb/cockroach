@@ -713,7 +713,7 @@ func (s *systemStatusServer) Gossip(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -741,7 +741,7 @@ func (s *systemStatusServer) EngineStats(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -880,7 +880,7 @@ func (s *systemStatusServer) CriticalNodes(
 	ctx context.Context, req *serverpb.CriticalNodesRequest,
 ) (*serverpb.CriticalNodesResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		return nil, err
 	}
 	conformance, err := s.node.SpanConfigConformance(
@@ -1013,7 +1013,7 @@ func (s *statusServer) Certificates(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -1134,7 +1134,7 @@ func (s *statusServer) Details(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -1175,7 +1175,7 @@ func (s *statusServer) GetFiles(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -1231,7 +1231,7 @@ func (s *statusServer) LogFilesList(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -1266,7 +1266,7 @@ func (s *statusServer) LogFile(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -1364,7 +1364,7 @@ func (s *statusServer) Logs(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -1452,7 +1452,7 @@ func (s *statusServer) Stacks(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -1680,7 +1680,7 @@ func (s *statusServer) Profile(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -1736,8 +1736,8 @@ func (s *statusServer) NodesList(
 	ctx = s.AnnotateCtx(ctx)
 
 	// The node status contains details about the command line, network
-	// addresses, env vars etc which are admin-only.
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	// addresses, env vars etc which are privileged information.
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -1920,8 +1920,8 @@ func (s *statusServer) Node(
 	ctx = s.AnnotateCtx(ctx)
 
 	// The node status contains details about the command line, network
-	// addresses, env vars etc which are admin-only.
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	// addresses, env vars etc which are privileged information..
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -2445,8 +2445,8 @@ func (t *statusServer) TenantRanges(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = t.AnnotateCtx(ctx)
 
-	// The tenant range report contains replica metadata which is admin-only.
-	if _, err := t.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	// The tenant range report contains replica metadata which is privileged.
+	if err := t.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2458,7 +2458,7 @@ func (s *systemStatusServer) TenantRanges(
 ) (*serverpb.TenantRangesResponse, error) {
 	authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2923,7 +2923,7 @@ func (s *statusServer) KeyVisSamples(
 	ctx context.Context, req *serverpb.KeyVisSamplesRequest,
 ) (*serverpb.KeyVisSamplesResponse, error) {
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -3628,7 +3628,7 @@ func (s *statusServer) SpanStats(
 	ctx context.Context, req *roachpb.SpanStatsRequest,
 ) (*roachpb.SpanStatsResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -3647,7 +3647,7 @@ func (s *systemStatusServer) SpanStats(
 ) (*roachpb.SpanStatsResponse, error) {
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -3818,7 +3818,7 @@ func (s *statusServer) JobRegistryStatus(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -3856,7 +3856,7 @@ func (s *statusServer) JobStatus(
 ) (*serverpb.JobStatusResponse, error) {
 	ctx = s.AnnotateCtx(authserver.ForwardSQLIdentityThroughRPCCalls(ctx))
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -3888,7 +3888,7 @@ func (s *statusServer) TxnIDResolution(
 	ctx context.Context, req *serverpb.TxnIDResolutionRequest,
 ) (*serverpb.TxnIDResolutionResponse, error) {
 	ctx = s.AnnotateCtx(authserver.ForwardSQLIdentityThroughRPCCalls(ctx))
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -3994,8 +3994,7 @@ func (s *statusServer) GetJobProfilerExecutionDetails(
 	ctx context.Context, req *serverpb.GetJobProfilerExecutionDetailRequest,
 ) (*serverpb.GetJobProfilerExecutionDetailResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	// TODO(adityamaru): Figure out the correct privileges required to get execution details.
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -4018,8 +4017,7 @@ func (s *statusServer) ListJobProfilerExecutionDetails(
 	ctx context.Context, req *serverpb.ListJobProfilerExecutionDetailsRequest,
 ) (*serverpb.ListJobProfilerExecutionDetailsResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	// TODO(adityamaru): Figure out the correct privileges required to get execution details.
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
