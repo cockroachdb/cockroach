@@ -662,7 +662,7 @@ func (c *SyncedCluster) Monitor(
 			defer wg.Done()
 
 			node := nodes[i]
-			port, err := c.NodePort(node)
+			port, err := c.NodePort(ctx, node)
 			if err != nil {
 				err := errors.Wrap(err, "failed to get node port")
 				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
@@ -2366,7 +2366,7 @@ func (c *SyncedCluster) pgurls(
 	}
 	m := make(map[Node]string, len(hosts))
 	for node, host := range hosts {
-		desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL, tenantInstance)
+		desc, err := c.DiscoverService(ctx, node, tenantName, ServiceTypeSQL, tenantInstance)
 		if err != nil {
 			return nil, err
 		}

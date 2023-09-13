@@ -75,6 +75,7 @@ func Init() error {
 			"(https://cloud.google.com/sdk/downloads)")
 		return errors.New("gcloud not found")
 	}
+	providerInstance.DNSProvider = NewDNSProvider()
 	initialized = true
 	vm.Providers[ProviderName] = providerInstance
 	return nil
@@ -230,8 +231,10 @@ func (jsonVM *jsonVM) toVM(
 		Labels:                 jsonVM.Labels,
 		PrivateIP:              privateIP,
 		Provider:               ProviderName,
+		DNSProvider:            ProviderName,
 		ProviderID:             jsonVM.Name,
 		PublicIP:               publicIP,
+		PublicDNS:              fmt.Sprintf("%s.%s", jsonVM.Name, Subdomain),
 		RemoteUser:             remoteUser,
 		VPC:                    vpc,
 		MachineType:            machineType,
@@ -299,6 +302,7 @@ type ProviderOpts struct {
 
 // Provider is the GCE implementation of the vm.Provider interface.
 type Provider struct {
+	vm.DNSProvider
 	Projects       []string
 	ServiceAccount string
 }

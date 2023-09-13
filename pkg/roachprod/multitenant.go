@@ -64,7 +64,7 @@ func StartTenant(
 	l.Printf("Starting tenant nodes")
 	var kvAddrs []string
 	for _, node := range hc.Nodes {
-		port, err := hc.NodePort(node)
+		port, err := hc.NodePort(ctx, node)
 		if err != nil {
 			return err
 		}

@@ -86,6 +86,7 @@ func TestBuildDataDriven(t *testing.T) {
 					fn(
 						sctestdeps.NewTestDependencies(
 							sctestdeps.WithDescriptors(descriptorCatalog),
+							sctestdeps.WithSystemDatabaseDescriptor(),
 							sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
 							sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
 							sctestdeps.WithSessionData(

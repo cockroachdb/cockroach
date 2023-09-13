@@ -128,7 +128,7 @@ func serviceNameComponents(name string) (string, ServiceType, error) {
 // the given parameters if instances of the same tenant and type are running on
 // any of the nodes.
 func (c *SyncedCluster) DiscoverServices(
-	tenantName string, serviceType ServiceType, predicates ...ServicePredicate,
+	ctx context.Context, tenantName string, serviceType ServiceType, predicates ...ServicePredicate,
 ) (ServiceDescriptors, error) {
 	// If no tenant name is specified, use the system tenant.
 	if tenantName == "" {
@@ -138,7 +138,7 @@ func (c *SyncedCluster) DiscoverServices(
 	records := make([]vm.DNSRecord, 0)
 	err := vm.FanOutDNS(c.VMs, func(dnsProvider vm.DNSProvider, _ vm.List) error {
 		service := fmt.Sprintf("%s-%s", tenantName, string(serviceType))
-		r, lookupErr := dnsProvider.LookupSRVRecords(service, "tcp", c.Name)
+		r, lookupErr := dnsProvider.LookupSRVRecords(ctx, service, "tcp", c.Name)
 		if lookupErr != nil {
 			return lookupErr
 		}
@@ -161,10 +161,10 @@ func (c *SyncedCluster) DiscoverServices(
 // no services are found, it returns a service descriptor with the default port
 // for the service type.
 func (c *SyncedCluster) DiscoverService(
-	node Node, tenantName string, serviceType ServiceType, tenantInstance int,
+	ctx context.Context, node Node, tenantName string, serviceType ServiceType, tenantInstance int,
 ) (ServiceDesc, error) {
 	services, err := c.DiscoverServices(
-		tenantName, serviceType, ServiceNodePredicate(node), ServiceInstancePredicate(tenantInstance),
+		ctx, tenantName, serviceType, ServiceNodePredicate(node), ServiceInstancePredicate(tenantInstance),
 	)
 	if err != nil {
 		return ServiceDesc{}, err
@@ -173,7 +173,7 @@ func (c *SyncedCluster) DiscoverService(
 	// service for the system tenant, and assume the service is shared.
 	if len(services) == 0 {
 		services, err = c.DiscoverServices(
-			SystemTenantName, serviceType, ServiceNodePredicate(node),
+			ctx, SystemTenantName, serviceType, ServiceNodePredicate(node),
 		)
 		if err != nil {
 			return ServiceDesc{}, err
@@ -207,14 +207,16 @@ func (c *SyncedCluster) DiscoverService(
 
 // MapServices discovers all service types for a given tenant and instance and
 // maps it by node and service type
-func (c *SyncedCluster) MapServices(tenantName string, instance int) (NodeServiceMap, error) {
+func (c *SyncedCluster) MapServices(
+	ctx context.Context, tenantName string, instance int,
+) (NodeServiceMap, error) {
 	nodeFilter := ServiceNodePredicate(c.Nodes...)
 	instanceFilter := ServiceInstancePredicate(instance)
-	sqlServices, err := c.DiscoverServices(tenantName, ServiceTypeSQL, nodeFilter, instanceFilter)
+	sqlServices, err := c.DiscoverServices(ctx, tenantName, ServiceTypeSQL, nodeFilter, instanceFilter)
 	if err != nil {
 		return nil, err
 	}
-	uiServices, err := c.DiscoverServices(tenantName, ServiceTypeUI, nodeFilter, instanceFilter)
+	uiServices, err := c.DiscoverServices(ctx, tenantName, ServiceTypeUI, nodeFilter, instanceFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +234,7 @@ func (c *SyncedCluster) MapServices(tenantName string, instance int) (NodeServic
 // RegisterServices registers services with the DNS provider. This function is
 // lenient and will not return an error if no DNS provider is available to
 // register the service.
-func (c *SyncedCluster) RegisterServices(services ServiceDescriptors) error {
+func (c *SyncedCluster) RegisterServices(ctx context.Context, services ServiceDescriptors) error {
 	servicesByDNSProvider := make(map[string]ServiceDescriptors)
 	for _, desc := range services {
 		dnsProvider := c.VMs[desc.Node-1].DNSProvider
@@ -258,7 +260,7 @@ func (c *SyncedCluster) RegisterServices(services ServiceDescriptors) error {
 				}
 				records = append(records, vm.CreateSRVRecord(name, srvData))
 			}
-			err := dnsProvider.CreateRecords(records...)
+			err := dnsProvider.CreateRecords(ctx, records...)
 			if err != nil {
 				return err
 			}
