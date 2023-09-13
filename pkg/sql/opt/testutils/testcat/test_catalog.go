@@ -306,11 +306,6 @@ func (tc *Catalog) HasAdminRole(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// RequireAdminRole is part of the cat.Catalog interface.
-func (tc *Catalog) RequireAdminRole(ctx context.Context, action string) error {
-	return nil
-}
-
 // HasRoleOption is part of the cat.Catalog interface.
 func (tc *Catalog) HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error) {
 	return true, nil

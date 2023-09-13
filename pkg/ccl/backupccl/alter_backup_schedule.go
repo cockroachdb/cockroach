@@ -299,8 +299,11 @@ func processScheduleOptions(
 			// NB: as of 20.2, schedule creation requires admin so this is duplicative
 			// but in the future we might relax so you can schedule anything that you
 			// can backup, but then this cluster-wide metric should be admin-only.
-			if err := p.RequireAdminRole(ctx, optUpdatesLastBackupMetric); err != nil {
-				return pgerror.Wrap(err, pgcode.InsufficientPrivilege, "")
+			if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
+				return err
+			} else if !hasAdmin {
+				return pgerror.Newf(pgcode.InsufficientPrivilege,
+					"only users with the admin role are allowed to change %s", optUpdatesLastBackupMetric)
 			}
 
 			updatesLastBackupMetric, err := strconv.ParseBool(v)

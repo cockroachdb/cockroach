@@ -23,8 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -151,7 +153,7 @@ func (p *planner) UpdateTenantResourceLimits(
 	asOfConsumedRequestUnits float64,
 ) error {
 	const op = "update-resource-limits"
-	if err := p.RequireAdminRole(ctx, "update tenant resource limits"); err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA); err != nil {
 		return err
 	}
 

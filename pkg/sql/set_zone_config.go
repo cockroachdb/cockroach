@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -303,11 +304,11 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 	// an admin. Otherwise we require CREATE privileges on the database or table
 	// in question.
 	if zs.NamedZone != "" {
-		return p.RequireAdminRole(ctx, "alter system ranges")
+		return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA)
 	}
 	if zs.Database != "" {
 		if zs.Database == "system" {
-			return p.RequireAdminRole(ctx, "alter the system database")
+			return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA)
 		}
 		dbDesc, err := p.Descriptors().ByNameWithLeased(p.txn).Get().Database(ctx, string(zs.Database))
 		if err != nil {
@@ -333,7 +334,7 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 		return err
 	}
 	if tableDesc.GetParentID() == keys.SystemDatabaseID {
-		return p.RequireAdminRole(ctx, "alter system tables")
+		return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA)
 	}
 
 	// Can set ZoneConfig if user has either CREATE privilege or ZONECONFIG privilege at the Table level
