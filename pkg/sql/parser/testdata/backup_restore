@@ -102,13 +102,14 @@ SHOW BACKUP ('bar') -- fully parenthesized
 SHOW BACKUP '_' -- literals removed
 SHOW BACKUP 'bar' -- identifiers removed
 
-parse
+error
 SHOW BACKUP 'bar' WITH foo = 'bar'
 ----
+at or near "foo": syntax error
+DETAIL: source SQL:
 SHOW BACKUP 'bar' WITH foo = 'bar'
-SHOW BACKUP ('bar') WITH foo = ('bar') -- fully parenthesized
-SHOW BACKUP '_' WITH foo = '_' -- literals removed
-SHOW BACKUP 'bar' WITH _ = 'bar' -- identifiers removed
+                       ^
+HINT: try \h SHOW BACKUP
 
 parse
 EXPLAIN SHOW BACKUP 'bar'
@@ -134,13 +135,14 @@ SHOW BACKUP FILES ('bar') -- fully parenthesized
 SHOW BACKUP FILES '_' -- literals removed
 SHOW BACKUP FILES 'bar' -- identifiers removed
 
-parse
+error
 SHOW BACKUP FILES 'bar' WITH foo = 'bar'
 ----
+at or near "foo": syntax error
+DETAIL: source SQL:
 SHOW BACKUP FILES 'bar' WITH foo = 'bar'
-SHOW BACKUP FILES ('bar') WITH foo = ('bar') -- fully parenthesized
-SHOW BACKUP FILES '_' WITH foo = '_' -- literals removed
-SHOW BACKUP FILES 'bar' WITH _ = 'bar' -- identifiers removed
+                             ^
+HINT: try \h SHOW BACKUP
 
 parse
 SHOW BACKUP CONNECTION 'bar'
@@ -150,21 +152,23 @@ SHOW BACKUP CONNECTION ('bar') -- fully parenthesized
 SHOW BACKUP CONNECTION '_' -- literals removed
 SHOW BACKUP CONNECTION 'bar' -- identifiers removed
 
-parse
+error
 SHOW BACKUP CONNECTION 'bar' WITH TRANSFER = '1KiB', TIME = '1h'
 ----
-SHOW BACKUP CONNECTION 'bar' WITH transfer = '1KiB', "time" = '1h' -- normalized!
-SHOW BACKUP CONNECTION ('bar') WITH transfer = ('1KiB'), "time" = ('1h') -- fully parenthesized
-SHOW BACKUP CONNECTION '_' WITH transfer = '_', "time" = '_' -- literals removed
-SHOW BACKUP CONNECTION 'bar' WITH _ = '1KiB', _ = '1h' -- identifiers removed
+at or near "transfer": syntax error
+DETAIL: source SQL:
+SHOW BACKUP CONNECTION 'bar' WITH TRANSFER = '1KiB', TIME = '1h'
+                                  ^
+HINT: try \h SHOW BACKUP
 
-parse
+error
 SHOW BACKUP CONNECTION 'bar' WITH TRANSFER = $1, TIME = $2
 ----
-SHOW BACKUP CONNECTION 'bar' WITH transfer = $1, "time" = $2 -- normalized!
-SHOW BACKUP CONNECTION ('bar') WITH transfer = ($1), "time" = ($2) -- fully parenthesized
-SHOW BACKUP CONNECTION '_' WITH transfer = $1, "time" = $1 -- literals removed
-SHOW BACKUP CONNECTION 'bar' WITH _ = $1, _ = $2 -- identifiers removed
+at or near "transfer": syntax error
+DETAIL: source SQL:
+SHOW BACKUP CONNECTION 'bar' WITH TRANSFER = $1, TIME = $2
+                                  ^
+HINT: try \h SHOW BACKUP
 
 parse
 SHOW BACKUPS IN 'bar'
@@ -190,13 +194,14 @@ SHOW BACKUP ('foo') IN ('bar') -- fully parenthesized
 SHOW BACKUP '_' IN '_' -- literals removed
 SHOW BACKUP 'foo' IN 'bar' -- identifiers removed
 
-parse
+error
 SHOW BACKUP FROM $1 IN $2 WITH foo = 'bar'
 ----
+at or near "foo": syntax error
+DETAIL: source SQL:
 SHOW BACKUP FROM $1 IN $2 WITH foo = 'bar'
-SHOW BACKUP FROM ($1) IN ($2) WITH foo = ('bar') -- fully parenthesized
-SHOW BACKUP FROM $1 IN $1 WITH foo = '_' -- literals removed
-SHOW BACKUP FROM $1 IN $2 WITH _ = 'bar' -- identifiers removed
+                               ^
+HINT: try \h SHOW BACKUP
 
 parse
 SHOW BACKUP FILES FROM 'foo' IN 'bar'
@@ -222,13 +227,14 @@ SHOW BACKUP SCHEMAS FROM ('foo') IN ('bar') -- fully parenthesized
 SHOW BACKUP SCHEMAS FROM '_' IN '_' -- literals removed
 SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar' -- identifiers removed
 
-parse
+error
 SHOW BACKUP $1 IN $2 WITH foo = 'bar'
 ----
+at or near "foo": syntax error
+DETAIL: source SQL:
 SHOW BACKUP $1 IN $2 WITH foo = 'bar'
-SHOW BACKUP ($1) IN ($2) WITH foo = ('bar') -- fully parenthesized
-SHOW BACKUP $1 IN $1 WITH foo = '_' -- literals removed
-SHOW BACKUP $1 IN $2 WITH _ = 'bar' -- identifiers removed
+                          ^
+HINT: try \h SHOW BACKUP
 
 parse
 BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'
@@ -951,3 +957,8 @@ DETAIL: source SQL:
 RESTORE ROLE foo, bar FROM 'baz'
              ^
 HINT: try \h RESTORE
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/110411.
+# BUCKET_COUNT is not a valid option for SHOW BACKUP.
+error
+----
