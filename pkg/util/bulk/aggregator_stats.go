@@ -14,27 +14,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
-)
-
-var flushTracingAggregatorFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
-	"jobs.aggregator_stats_flush_frequency",
-	"frequency at which the coordinator node processes and persists tracing aggregator stats to storage",
-	10*time.Minute,
 )
 
 // ConstructTracingAggregatorProducerMeta constructs a ProducerMetadata that
@@ -149,63 +137,4 @@ func FlushTracingAggregatorStats(
 		filename := fmt.Sprintf("aggregatorstats.%s.txt", asOf)
 		return jobs.WriteExecutionDetailFile(ctx, filename, clusterWideSummary.Bytes(), txn, jobID)
 	})
-}
-
-// AggregateTracingStats listens for AggregatorEvents on a channel and
-// periodically processes them to human and machine-readable file formats that
-// are persisted in the system.job_info table. These files can then be consumed
-// for improved observability into the job's execution.
-//
-// This method does not return until the passed in channel is closed or an error
-// is encountered.
-func AggregateTracingStats(
-	ctx context.Context,
-	jobID jobspb.JobID,
-	st *cluster.Settings,
-	db isql.DB,
-	tracingAgg chan *execinfrapb.TracingAggregatorEvents,
-) error {
-	if !st.Version.IsActive(ctx, clusterversion.V23_2Start) {
-		return errors.Newf("aggregator stats are supported when the cluster version >= %s",
-			clusterversion.V23_2Start.String())
-	}
-	perNodeAggregatorStats := make(map[execinfrapb.ComponentID]map[string][]byte)
-
-	// AggregatorEvents are periodically received from each node in the DistSQL
-	// flow.
-	flushTimer := timeutil.NewTimer()
-	defer flushTimer.Stop()
-	flushTimer.Reset(flushTracingAggregatorFrequency.Get(&st.SV))
-
-	var flushOnClose bool
-	for agg := range tracingAgg {
-		flushOnClose = true
-		componentID := execinfrapb.ComponentID{
-			FlowID:        agg.FlowID,
-			SQLInstanceID: agg.SQLInstanceID,
-		}
-
-		// Update the running aggregate of the component with the latest received
-		// aggregate.
-		perNodeAggregatorStats[componentID] = agg.Events
-
-		select {
-		case <-flushTimer.C:
-			flushTimer.Read = true
-			flushTimer.Reset(flushTracingAggregatorFrequency.Get(&st.SV))
-			// Flush the per-node and cluster wide aggregator stats to the job_info
-			// table.
-			if err := FlushTracingAggregatorStats(ctx, jobID, db, perNodeAggregatorStats); err != nil {
-				return err
-			}
-			flushOnClose = false
-		default:
-		}
-	}
-	if flushOnClose {
-		if err := FlushTracingAggregatorStats(ctx, jobID, db, perNodeAggregatorStats); err != nil {
-			return err
-		}
-	}
-	return nil
 }
