@@ -1755,6 +1755,9 @@ func TestSetSessionArguments(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
+	_, err := s.SQLConn(t, "defaultdb").Exec(`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true`)
+	require.NoError(t, err)
+
 	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, s.AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 	)
