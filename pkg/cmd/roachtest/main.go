@@ -101,6 +101,7 @@ func main() {
 	var debugAlways bool
 	var runSkipped bool
 	var skipInit bool
+	var goCoverEnabled bool
 	var clusterID string
 	var count = 1
 	var versionsBinaryOverride map[string]string
@@ -294,6 +295,7 @@ Examples:
 			runSkipped:             runSkipped,
 			debugMode:              debugModeFromOpts(),
 			skipInit:               skipInit,
+			goCoverEnabled:         goCoverEnabled,
 			httpPort:               httpPort,
 			promPort:               promPort,
 			parallelism:            parallelism,
@@ -373,6 +375,8 @@ the cluster nodes on start.
 			&runSkipped, "run-skipped", runSkipped, "run skipped tests")
 		cmd.Flags().BoolVar(
 			&skipInit, "skip-init", false, "skip initialization step (imports, table creation, etc.) for tests that support it, useful when re-using clusters with --wipe=false")
+		cmd.Flags().BoolVar(
+			&goCoverEnabled, "go-cover", false, "enable collection of go coverage profiles (requires instrumented cockroach binary)")
 		cmd.Flags().IntVarP(
 			&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 		cmd.Flags().StringVar(
@@ -444,6 +448,7 @@ type cliCfg struct {
 	debugMode              debugMode
 	runSkipped             bool
 	skipInit               bool
+	goCoverEnabled         bool
 	httpPort               int
 	promPort               int
 	parallelism            int
@@ -551,6 +556,7 @@ func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) erro
 		testOpts{
 			versionsBinaryOverride: cfg.versionsBinaryOverride,
 			skipInit:               cfg.skipInit,
+			goCoverEnabled:         cfg.goCoverEnabled,
 		},
 		lopt, nil /* clusterAllocator */)
 
