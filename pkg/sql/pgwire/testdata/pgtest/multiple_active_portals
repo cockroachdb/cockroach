@@ -1306,3 +1306,102 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 subtest end
+
+subtest incomplete_processor_cleanup
+
+send
+Query {"String": "DEALLOCATE ALL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DEALLOCATE ALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE t110486_1 (k1 PRIMARY KEY) AS VALUES (1), (2), (3);"}
+Query {"String": "CREATE TABLE t110486_2 (k2 PRIMARY KEY) AS VALUES (1), (2), (3);"}
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE AS"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE AS"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Run the query that uses a row-by-row processor (the join reader) which
+# previously wasn't cleaned up properly. This first execution doesn't trigger
+# #110846 bug because it is effectively run in EXPLAIN ANALYZE flavor due to txn
+# stats sampling (we prefer to run it explicitly rather than disable the txn
+# stats sampling).
+send
+Parse {"Name": "q1", "Query": "SELECT * FROM t110486_1 INNER LOOKUP JOIN t110486_2 ON k1 = k2;"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Now run the query again (not in EXPLAIN ANALYZE flavor)
+send
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q1"}
+Execute {"Portal": "p2", "MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Do the same again using the row-based engine directly.
+send crdb_only
+Query {"String": "SET vectorize = off;"}
+----
+
+until crdb_only ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Bind {"DestinationPortal": "p3", "PreparedStatement": "q1"}
+Execute {"Portal": "p3", "MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "RESET vectorize;"}
+----
+
+until crdb_only ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"RESET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
