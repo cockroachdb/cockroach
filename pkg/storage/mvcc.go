@@ -1479,17 +1479,25 @@ func (b *putBuffer) putInlineMeta(
 
 var trueValue = true
 
-// putIntentMeta puts an intent at the given key with the provided value.
-func (b *putBuffer) putIntentMeta(
-	writer Writer, key MVCCKey, meta *enginepb.MVCCMetadata, alreadyExists bool,
+// putLockMeta puts a lock at the given key with the provided strength and
+// value.
+func (b *putBuffer) putLockMeta(
+	writer Writer, key MVCCKey, str lock.Strength, meta *enginepb.MVCCMetadata, alreadyExists bool,
 ) (keyBytes, valBytes int64, err error) {
-	if meta.Txn != nil && meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
-		// The timestamps are supposed to be in sync. If they weren't, it wouldn't
-		// be clear for readers which one to use for what.
-		return 0, 0, errors.AssertionFailedf(
-			"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
+	if str == lock.Intent {
+		if meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
+			// The timestamps are supposed to be in sync. If they weren't, it wouldn't
+			// be clear for readers which one to use for what.
+			return 0, 0, errors.AssertionFailedf(
+				"meta.Timestamp != meta.Txn.WriteTimestamp: %s != %s", meta.Timestamp, meta.Txn.WriteTimestamp)
+		}
+	} else {
+		if !meta.Timestamp.ToTimestamp().IsEmpty() {
+			return 0, 0, errors.AssertionFailedf(
+				"meta.Timestamp not zero for lock with strength %s", str.String())
+		}
 	}
-	lockTableKey := b.lockTableKey(key.Key, lock.Intent, meta.Txn.ID)
+	lockTableKey := b.lockTableKey(key.Key, str, meta.Txn.ID)
 	if alreadyExists {
 		// Absence represents false.
 		meta.TxnDidNotUpdateMeta = nil
@@ -1506,19 +1514,26 @@ func (b *putBuffer) putIntentMeta(
 	return int64(key.EncodedSize()), int64(len(bytes)), nil
 }
 
-// clearIntentMeta clears an intent at the given key. txnDidNotUpdateMeta allows
-// for performance optimization when set to true, and has semantics defined in
-// MVCCMetadata.TxnDidNotUpdateMeta (it can be conservatively set to false).
+// clearLockMeta clears a lock at the given key and strength.
+//
+// txnDidNotUpdateMeta allows for performance optimization when set to true, and
+// has semantics defined in MVCCMetadata.TxnDidNotUpdateMeta (it can be
+// conservatively set to false).
 //
 // TODO(sumeer): after the full transition to separated locks, measure the cost
-// of a putIntentMeta implementation, where there is an existing intent, that
-// does a <single-clear, put> pair. If there isn't a performance decrease, we
-// can stop tracking txnDidNotUpdateMeta and still optimize clearIntentMeta by
-// always doing single-clear.
-func (b *putBuffer) clearIntentMeta(
-	writer Writer, key MVCCKey, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts ClearOptions,
+// of a putLockMeta implementation, where there is an existing intent, that does
+// a <single-clear, put> pair. If there isn't a performance decrease, we can
+// stop tracking txnDidNotUpdateMeta and still optimize clearLockMeta by always
+// doing single-clear.
+func (b *putBuffer) clearLockMeta(
+	writer Writer,
+	key MVCCKey,
+	str lock.Strength,
+	txnDidNotUpdateMeta bool,
+	txnUUID uuid.UUID,
+	opts ClearOptions,
 ) (keyBytes, valBytes int64, err error) {
-	lockTableKey := b.lockTableKey(key.Key, lock.Intent, txnUUID)
+	lockTableKey := b.lockTableKey(key.Key, str, txnUUID)
 	if txnDidNotUpdateMeta {
 		err = writer.SingleClearEngineKey(lockTableKey)
 	} else {
@@ -2251,8 +2266,8 @@ func mvccPutInternal(
 		// represents a non-manufactured meta, i.e., there is an intent.
 		alreadyExists := ok && buf.meta.Txn != nil
 		// Write the intent metadata key.
-		metaKeySize, metaValSize, err = buf.putIntentMeta(
-			writer, metaKey, newMeta, alreadyExists)
+		metaKeySize, metaValSize, err = buf.putLockMeta(
+			writer, metaKey, lock.Intent, newMeta, alreadyExists)
 		if err != nil {
 			return false, err
 		}
@@ -4959,11 +4974,11 @@ func mvccResolveWriteIntent(
 			// overwriting a newer epoch (see comments above). The pusher's job isn't
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
-			metaKeySize, metaValSize, err = buf.putIntentMeta(
-				writer, metaKey, newMeta, true /* alreadyExists */)
+			metaKeySize, metaValSize, err = buf.putLockMeta(
+				writer, metaKey, lock.Intent, newMeta, true /* alreadyExists */)
 		} else {
-			metaKeySize, metaValSize, err = buf.clearIntentMeta(
-				writer, metaKey, canSingleDelHelper.onCommitIntent(), meta.Txn.ID, ClearOptions{
+			metaKeySize, metaValSize, err = buf.clearLockMeta(
+				writer, metaKey, lock.Intent, canSingleDelHelper.onCommitIntent(), meta.Txn.ID, ClearOptions{
 					ValueSizeKnown: true,
 					ValueSize:      uint32(origMetaValSize),
 				})
@@ -5074,8 +5089,8 @@ func mvccResolveWriteIntent(
 
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
-		_, _, err := buf.clearIntentMeta(
-			writer, metaKey, canSingleDelHelper.onAbortIntent(), meta.Txn.ID, ClearOptions{
+		_, _, err := buf.clearLockMeta(
+			writer, metaKey, lock.Intent, canSingleDelHelper.onAbortIntent(), meta.Txn.ID, ClearOptions{
 				ValueSizeKnown: true,
 				ValueSize:      uint32(origMetaValSize),
 			})
@@ -5096,8 +5111,8 @@ func mvccResolveWriteIntent(
 		KeyBytes: MVCCVersionTimestampSize,
 		ValBytes: int64(nextValueLen),
 	}
-	metaKeySize, metaValSize, err := buf.clearIntentMeta(
-		writer, metaKey, canSingleDelHelper.onAbortIntent(), meta.Txn.ID, ClearOptions{
+	metaKeySize, metaValSize, err := buf.clearLockMeta(
+		writer, metaKey, lock.Intent, canSingleDelHelper.onAbortIntent(), meta.Txn.ID, ClearOptions{
 			ValueSizeKnown: true,
 			ValueSize:      uint32(origMetaValSize),
 		})
@@ -5289,6 +5304,164 @@ func MVCCResolveWriteIntentRange(
 		sepIter.nextEngineKey()
 	}
 	return numKeys, numBytes, nil, 0, nil
+}
+
+// MVCCCheckForAcquireLock scans the replicated lock table to determine whether
+// a lock acquisition at the specified key and strength by the specified
+// transaction would succeed. If the lock table scan finds one or more existing
+// locks on the key that conflict with the acquisition then a LockConflictError
+// is returned. Otherwise, nil is returned. Unlike MVCCAcquireLock, this method
+// does not actually acquire the lock (i.e. write to the lock table).
+func MVCCCheckForAcquireLock(
+	ctx context.Context,
+	reader Reader,
+	txn *roachpb.Transaction,
+	str lock.Strength,
+	key roachpb.Key,
+	maxConflicts int64,
+) error {
+	if err := validateLockAcquisition(txn, str); err != nil {
+		return err
+	}
+	ltScanner, err := newLockTableKeyScanner(reader, txn, str, maxConflicts)
+	if err != nil {
+		return err
+	}
+	defer ltScanner.close()
+	return ltScanner.scan(key)
+}
+
+// MVCCAcquireLock attempts to acquire a lock at the specified key and strength
+// by the specified transaction. It first scans the replicated lock table to
+// determine whether any conflicting locks are held by other transactions. If
+// so, a LockConflictError is returned. Otherwise, the lock is written to the
+// lock table and nil is returned.
+func MVCCAcquireLock(
+	ctx context.Context,
+	rw ReadWriter,
+	txn *roachpb.Transaction,
+	str lock.Strength,
+	key roachpb.Key,
+	ms *enginepb.MVCCStats,
+	maxConflicts int64,
+) error {
+	if err := validateLockAcquisition(txn, str); err != nil {
+		return err
+	}
+	ltScanner, err := newLockTableKeyScanner(rw, txn, str, maxConflicts)
+	if err != nil {
+		return err
+	}
+	defer ltScanner.close()
+	err = ltScanner.scan(key)
+	if err != nil {
+		return err
+	}
+
+	// Iterate over the replicated lock strengths, from strongest to weakest,
+	// stopping at the lock strength that we'd like to acquire. If the loop
+	// terminates, rolledBack will reference the desired lock strength.
+	var rolledBack bool
+	for _, iterStr := range strongerOrEqualStrengths(str) {
+		rolledBack = false
+		foundLock := ltScanner.foundOwn(iterStr)
+		if foundLock == nil {
+			// Proceed to check weaker strengths...
+			continue
+		}
+
+		if foundLock.Txn.Epoch > txn.Epoch {
+			// Acquiring at old epoch.
+			return errors.Errorf(
+				"locking request with epoch %d came after lock "+
+					"had already been acquired at epoch %d in txn %s",
+				txn.Epoch, foundLock.Txn.Epoch, txn.ID)
+		} else if foundLock.Txn.Epoch < txn.Epoch {
+			// Acquiring at new epoch.
+			rolledBack = true
+		} else if foundLock.Txn.Sequence > txn.Sequence {
+			// Acquiring at same epoch and old sequence number.
+			return errors.Errorf(
+				"cannot acquire lock with strength %s at seq number %d, "+
+					"already held at higher seq number %d",
+				str.String(), txn.Sequence, foundLock.Txn.Sequence)
+		} else if enginepb.TxnSeqIsIgnored(foundLock.Txn.Sequence, txn.IgnoredSeqNums) {
+			// Acquiring at same epoch and new sequence number after
+			// previous sequence number was rolled back.
+			//
+			// TODO(nvanbenschoten): If this is a stronger strength than
+			// we're trying to acquire, then it would be an option to
+			// release this lock/intent at the same time as we acquire the
+			// new, weaker lock at higher, non-rolled back sequence number.
+			// This is what we do for unreplicated locks in the lock table.
+			//
+			// We don't currently do this for replicated locks because lock
+			// acquisition may be holding weaker latches than are needed to
+			// release locks at the stronger strength. This could lead to a race
+			// where concurrent work that conflicts with the existing lock but
+			// not the latches held by this acquisition discovers the lock and
+			// reports it to the lock table. The in-memory lock table could then
+			// get out of sync with the replicated lock table.
+			if iterStr != lock.Intent {
+				rolledBack = true
+			} else {
+				// If the existing lock is an intent, additionally check the
+				// intent history to verify that all of the intent writes in
+				// the intent history are also rolled back. If not, then we
+				// can still avoid reacquisition.
+				inHistoryNotRolledBack := false
+				for _, e := range foundLock.IntentHistory {
+					if !enginepb.TxnSeqIsIgnored(e.Sequence, txn.IgnoredSeqNums) {
+						inHistoryNotRolledBack = true
+						break
+					}
+				}
+				rolledBack = !inHistoryNotRolledBack
+			}
+		}
+
+		if !rolledBack {
+			// Lock held at desired or stronger strength. No need to reacquire.
+			// This is both a performance optimization and a necessary check for
+			// correctness. If we were to reacquire the lock at a newer sequence
+			// number and clobber the existing lock with its older sequence
+			// number, our newer sequence number could then be rolled back and
+			// we would forget that the lock held at the older sequence number
+			// had been and still should be held.
+			log.VEventf(ctx, 3, "skipping lock acquisition for txn %s on key %s "+
+				"with strength %s; found existing lock with strength %s and sequence %d",
+				txn, key.String(), str.String(), iterStr.String(), foundLock.Txn.Sequence)
+			return nil
+		}
+
+		// Proceed to check weaker strengths...
+	}
+
+	// Write the lock.
+	buf := newPutBuffer()
+	defer buf.release()
+
+	newMeta := &buf.newMeta
+	newMeta.Txn = &txn.TxnMeta
+	keyBytes, valBytes, err := buf.putLockMeta(rw, MakeMVCCMetadataKey(key), str, newMeta, rolledBack)
+	if err != nil {
+		return err
+	}
+
+	// TODO(nvanbenschoten): handle MVCCStats update after addressing #109645.
+	_, _, _ = ms, keyBytes, valBytes
+
+	return nil
+}
+
+func validateLockAcquisition(txn *roachpb.Transaction, str lock.Strength) error {
+	if txn == nil {
+		return errors.Errorf("txn must be non-nil to acquire lock")
+	}
+	if !(str == lock.Shared || str == lock.Exclusive) {
+		return errors.Errorf("invalid lock strength to acquire lock: %s", str.String())
+	}
+	return nil
 }
 
 // MVCCGarbageCollect creates an iterator on the ReadWriter. In parallel
