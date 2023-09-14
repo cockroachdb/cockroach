@@ -624,11 +624,15 @@ func addSystemTenantEntry(target *MetadataSchema) {
 	target.otherKV = append(target.otherKV, kvs...)
 }
 
+func testingMinUserDescID(codec keys.SQLCodec) uint32 {
+	ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	return uint32(ms.FirstNonSystemDescriptorID())
+}
+
 // TestingMinUserDescID returns the smallest user-created descriptor ID in a
 // bootstrapped cluster.
 func TestingMinUserDescID() uint32 {
-	ms := MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
-	return uint32(ms.FirstNonSystemDescriptorID())
+	return testingMinUserDescID(keys.SystemSQLCodec)
 }
 
 // TestingMinNonDefaultUserDescID returns the smallest user-creatable descriptor
@@ -646,6 +650,6 @@ func TestingUserDescID(offset uint32) uint32 {
 
 // TestingUserTableDataMin is a convenience function which returns the first
 // user table data key in a simple unit test setting.
-func TestingUserTableDataMin() roachpb.Key {
-	return keys.SystemSQLCodec.TablePrefix(TestingUserDescID(0))
+func TestingUserTableDataMin(codec keys.SQLCodec) roachpb.Key {
+	return codec.TablePrefix(testingMinUserDescID(codec))
 }

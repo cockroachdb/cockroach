@@ -5036,9 +5036,6 @@ func (it *seekLTTrackingIterator) SeekLT(k MVCCKey) {
 	it.MVCCIterator.SeekLT(k)
 }
 
-// Injected via `external_helpers_test.go`.
-var TestingUserTableDataMin func() roachpb.Key
-
 // TestMVCCGarbageCollectUsesSeekLTAppropriately ensures that the garbage
 // collection only utilizes SeekLT if there are enough undeleted versions.
 func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
