@@ -123,21 +123,24 @@ func DeleteRange(
 			if !args.UpdateRangeDeleteGCHint {
 				return nil
 			}
-			// If GCHint was provided, then we need to check if this request meets
-			// range gc criteria of removing all data. This is not an error as range
-			// might have merged since request was sent and we don't want to fail
-			// deletion.
-			if !args.Key.Equal(desc.StartKey.AsRawKey()) || !args.EndKey.Equal(desc.EndKey.AsRawKey()) {
-				return nil
-			}
 			sl := MakeStateLoader(cArgs.EvalCtx)
 			hint, err := sl.LoadGCHint(ctx, readWriter)
 			if err != nil {
 				return err
 			}
-			if !hint.ForwardLatestRangeDeleteTimestamp(h.Timestamp) {
+
+			// Add the timestamp to GCHint to guarantee that GC eventually clears it.
+			updated := hint.ScheduleGCFor(h.Timestamp)
+			// If the range tombstone covers the whole Range key span, update the
+			// corresponding timestamp in GCHint to enable ClearRange optimization.
+			if args.Key.Equal(desc.StartKey.AsRawKey()) && args.EndKey.Equal(desc.EndKey.AsRawKey()) {
+				// NB: don't swap the order, we want to call the method unconditionally.
+				updated = hint.ForwardLatestRangeDeleteTimestamp(h.Timestamp) || updated
+			}
+			if !updated {
 				return nil
 			}
+
 			if updated, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil || !updated {
 				return err
 			}
