@@ -175,7 +175,7 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 	_ = betweenSizeHist.RecordValue(otherStats.BetweenSizeFlushes.Nanoseconds())
 	// Store the snapshot of this new merged histogram.
 	cumulativeBetweenSizeSnapshot := betweenSizeHist.Export()
-	s.SstSizeHist = &HistogramData{
+	s.BetweenSizeFlushHist = &HistogramData{
 		Name:                  "between_size_hist",
 		LowestTrackableValue:  cumulativeBetweenSizeSnapshot.LowestTrackableValue,
 		HighestTrackableValue: cumulativeBetweenSizeSnapshot.HighestTrackableValue,
@@ -198,7 +198,7 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 	_ = betweenRangeHist.RecordValue(otherStats.BetweenRangeFlushes.Nanoseconds())
 	// Store the snapshot of this new merged histogram.
 	cumulativeBetweenRangeSnapshot := betweenRangeHist.Export()
-	s.SstSizeHist = &HistogramData{
+	s.BetweenRangeFlushHist = &HistogramData{
 		Name:                  "between_range_hist",
 		LowestTrackableValue:  cumulativeBetweenRangeSnapshot.LowestTrackableValue,
 		HighestTrackableValue: cumulativeBetweenRangeSnapshot.HighestTrackableValue,
@@ -283,6 +283,9 @@ func (s *IngestionPerformanceStats) String() string {
 	timeString(&b, "split_wait", s.SplitWait)
 	timeString(&b, "scatter_wait", s.ScatterWait)
 	timeString(&b, "commit_wait", s.CommitWait)
+
+	b.WriteString(fmt.Sprintf("between_size_flush_hist:\n%s\n", s.BetweenSizeFlushHist.String()))
+	b.WriteString(fmt.Sprintf("between_range_flush_hist:\n%s\n", s.BetweenRangeFlushHist.String()))
 
 	b.WriteString(fmt.Sprintf("splits: %d\n", s.Splits))
 	b.WriteString(fmt.Sprintf("scatters: %d\n", s.Scatters))
