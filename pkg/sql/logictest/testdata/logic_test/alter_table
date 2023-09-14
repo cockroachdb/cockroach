@@ -3488,3 +3488,11 @@ statement error pgcode 2BP01 pq: cannot drop index "t_108974_v_pkey" because vie
 ALTER TABLE t_108974_v DROP COLUMN k;
 
 subtest end
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/110629.
+# Subqueries are not allowed in storage parameters.
+statement ok
+CREATE TABLE t_110629 (a INT PRIMARY KEY);
+
+statement error subqueries are not allowed in table storage parameters
+ALTER TABLE t SET ( 'string' = EXISTS ( TABLE error ) );

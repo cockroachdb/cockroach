@@ -65,6 +65,9 @@ func Set(
 		// Cast these as strings.
 		expr := paramparse.UnresolvedNameToStrVal(sp.Value)
 
+		defer semaCtx.Properties.Restore(semaCtx.Properties)
+		semaCtx.Properties.Require("table storage parameters", tree.RejectSubqueries)
+
 		// Convert the expressions to a datum.
 		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.Any)
 		if err != nil {
