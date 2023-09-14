@@ -402,20 +402,25 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-ISOLATION
 	`default_transaction_isolation`: {
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			allowReadCommitted := allowReadCommittedIsolation.Get(&m.settings.SV)
 			allowSnapshot := allowSnapshotIsolation.Get(&m.settings.SV)
-			var allowedValues []string
+			var allowedValues = []string{"serializable"}
 			if allowSnapshot {
-				allowedValues = []string{"serializable", "snapshot", "read committed"}
-			} else {
-				allowedValues = []string{"serializable", "read committed"}
+				allowedValues = append(allowedValues, "snapshot")
+			}
+			if allowReadCommitted {
+				allowedValues = append(allowedValues, "read committed")
 			}
 			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
 			if !ok {
 				return newVarValueError(`default_transaction_isolation`, s, allowedValues...)
 			}
 			switch level {
-			case tree.ReadUncommittedIsolation:
-				level = tree.ReadCommittedIsolation
+			case tree.ReadUncommittedIsolation, tree.ReadCommittedIsolation:
+				level = tree.SerializableIsolation
+				if allowReadCommitted {
+					level = tree.ReadCommittedIsolation
+				}
 			case tree.RepeatableReadIsolation, tree.SnapshotIsolation:
 				level = tree.SerializableIsolation
 				if allowSnapshot {
@@ -1521,11 +1526,12 @@ var varGen = map[string]sessionVar{
 		RuntimeSet: func(ctx context.Context, evalCtx *extendedEvalContext, local bool, s string) error {
 			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
 			if !ok {
-				var allowedValues []string
+				var allowedValues = []string{"serializable"}
 				if allowSnapshotIsolation.Get(&evalCtx.ExecCfg.Settings.SV) {
-					allowedValues = []string{"serializable", "snapshot", "read committed"}
-				} else {
-					allowedValues = []string{"serializable", "read committed"}
+					allowedValues = append(allowedValues, "snapshot")
+				}
+				if allowReadCommittedIsolation.Get(&evalCtx.ExecCfg.Settings.SV) {
+					allowedValues = append(allowedValues, "read committed")
 				}
 				return newVarValueError(`transaction_isolation`, s, allowedValues...)
 			}

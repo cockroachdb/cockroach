@@ -3410,11 +3410,20 @@ func (ex *connExecutor) setTransactionModes(
 
 var allowSnapshotIsolation = settings.RegisterBoolSetting(
 	settings.TenantWritable,
-	"sql.txn.snapshot_isolation.enabled",
+	"sql.txn.snapshot_isolation_syntax.enabled",
 	"set to true to allow transactions to use the SNAPSHOT isolation level. At "+
 		"the time of writing, this setting is intended only for usage by "+
 		"CockroachDB developers.",
 	false,
+)
+
+var allowReadCommittedIsolation = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.txn.read_committed_syntax.enabled",
+	"set to true to allow transactions to use the READ COMMITTED isolation "+
+		"level if specified by BEGIN/SET commands",
+	false,
+	settings.WithPublic,
 )
 
 func (ex *connExecutor) txnIsolationLevelToKV(
@@ -3432,7 +3441,14 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 			// this: https://www.postgresql.org/docs/current/transaction-iso.html.
 			fallthrough
 		case tree.ReadCommittedIsolation:
-			ret = isolation.ReadCommitted
+			// READ COMMITTED is only allowed if the cluster setting is enabled.
+			// Otherwise  it is mapped to SERIALIZABLE.
+			allowReadCommitted := allowReadCommittedIsolation.Get(&ex.server.cfg.Settings.SV)
+			if allowReadCommitted {
+				ret = isolation.ReadCommitted
+			} else {
+				ret = isolation.Serializable
+			}
 		case tree.RepeatableReadIsolation:
 			// REPEATABLE READ is mapped to SNAPSHOT.
 			fallthrough

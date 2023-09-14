@@ -63,8 +63,9 @@ func alterZoneConfigAndClusterSettings(
 		// Test with SCRAM password authentication.
 		`SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256';`,
 
-		// Enable experimental features.
+		// Enable experimental/preview features.
 		`SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled = 'true';`,
+		`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = 'true';`,
 	} {
 		if _, err := db.ExecContext(ctx, cmd); err != nil {
 			return err

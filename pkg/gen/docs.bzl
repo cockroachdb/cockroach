@@ -11,6 +11,7 @@ DOCS_SRCS = [
     "//docs/generated/http:nodes-other.md",
     "//docs/generated/http:nodes-request.md",
     "//docs/generated/http:nodes-response.md",
+    "//docs/generated/metrics:metrics.html",
     "//docs/generated/settings:settings-for-tenants.txt",
     "//docs/generated/settings:settings.html",
     "//docs/generated/sql/bnf:abort_stmt.bnf",
