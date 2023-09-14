@@ -75,6 +75,7 @@ go_test(
     ],
     args = ["-test.timeout=895s"],
     embed = [":lease"],
+    exec_properties = {"Pool": "medium"},
     deps = [
         "//pkg/base",
         "//pkg/jobs",
