@@ -358,9 +358,15 @@ regions: <hidden>
 │   │ into: child(c, p)
 │   │
 │   └── • buffer
+│       │ nodes: <hidden>
+│       │ regions: <hidden>
+│       │ actual row count: 1
 │       │ label: buffer 1
 │       │
 │       └── • values
+│             nodes: <hidden>
+│             regions: <hidden>
+│             actual row count: 1
 │             size: 2 columns, 1 row
 │
 ├── • subquery
@@ -424,5 +430,5 @@ regions: <hidden>
                       label: buffer 1
 ·
 Diagram 1 (subquery): https://cockroachdb.github.io/distsqlplan/decode.html#eJysU9Fq2zAUfd9XXO5TAiqxUwbDT-1CBqGpU5I0MEYoqnxxRW3Jk67XZCWftR_Ylw1b9VZTmm1sT7bOvUe65-joEf3nAhOcpavpcg2zdL0AdaeLDDbn8-vpCgaxgMFqOp9O1lBqM6iG8GG5uIRKOjI8HKJAYzNKZUkek08Yo8C3uBVYOavIe-sa-LFtmmU7TCKB2lQ1N_BWoLKOMHlE1lwQJpjaE1uNxigwI5a6aDelHamatTXAuqQEou_fPAq8lazuyIOtuao5gQgFOvvwC4hxexAYVk_neZY5YXJ6EM9mio_PtJa3BS1JZuRGUX-yYMNZ-NxU97RHgRNb1KXxCVQocFXJ5vcEBc51qRkahy42fSUXG1DWMJmXIi820GpyJLOkI9_umTroHbwPYL68moCSReFD3-VmMgHPVIGytWEY0I5H2vAwgajVERqI7l9rKOUOSiqt24MsCqskU5ZA1B74D-bHf2P-eZ47yiVbN4r73p-nH2_SxfomvZ7PB2dxE8X_H5Rxb9bfhHdJvrLGU2_O13aODluBlOUUHoi3tVN05axqjwnLRctrgYw8h-ppWMxMKDUDPifHR8nj4-TxUXLUJ7dSWlVoiB-su4dCMhm1_-l8hz9Izf07yciT07LQX-XLC-toT8lXpL_QU_q7UvcEulp4Bl21JO9l3muI_jQI28ObHwEAAP__GAys-A==
-Diagram 2 (main-query): https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj89K80AUxfffU1zOqoWBL9nOTiRCoLbSVjeSRZxc2oF0bpy5wULJY_kCPpk0I4gLweX53Tl_5oL02sOiXu-q7Z7q9X5D7uj7jp5uVo_VjhalocWuWlW3ezr5sBiWdLfd3NPQRg66XMIgSMfr9sQJ9hklGoMhiuOUJF7RZX5Qd2fYwsCHYdQrbgycRIa9QL32DIteXNuTkzEoFf8LGHSsre_nYD6zG9VLIPUntlR8vCcYvLTqjpxIRh1GtXR1RXn7BiWaySCrr96k7YFhy8n8fduW0yAh8Y9RvyUXU2PA3YHz_5OM0fFDFDfXZLmZfTPoOGm-llnUIZ-mZvr3GQAA__9Sm4hi
+Diagram 2 (main-query): https://cockroachdb.github.io/distsqlplan/decode.html#eJy0kk1q8zAQhvffKYZZJSCI5ey0-yguGNKkJGk3xQtFniQCRXL10waCj9UL9GTFdqE_0EAWWb7v6Jl5FjpheDYosJyviuUayvl6AWqvTQ2P_2cPxQpGnMFoVcyKmzUctB01Y7hdLu6gkZ5sHI-RoXU1zeWBAoon5FgxbLxTFILzXXXqH5T1EUXGUNsmxa6uGCrnCcUJo46GUKBxShp4kSZRgGySIcOaotSm30xHUilqZyHqAwnI3t8CMtzIqPYUwKXYpCigo7x7_So4Vi3DIX0eDlHuCAVv2aVym7Tdkgc-4deWyy-XUy7ZCPkkv7bb9BK3JYXG2UA_pP7anLUVQ6p3NPyc4JJXdO-d6s8McdFzfVFTiMOUD6G0w6gT_A7zs3B-Hs7PwtNfcNX--wgAAP__fnca4A==
 Diagram 3 (postquery): https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lNFu2jAUhu_3FEfnCiRLJNCLyVftEJXS0lBBys2EJtc5bb06dmY7GqjisfYCe7IpMdXGKtiYtCt0fp__-LN_kxf0XzRyzPLFZF5AlhczkE9Kl7C8mN5NFtBLGfQWk-lkXEClTK_uw-V8dgO1cGRCv48MjS0pFxV55B8xxRXD2llJ3lvXSi9dQ1aukScMlamb0MorhtI6Qv6CQQVNyFFbKTR4KQzcNw8P5CAZJMiwpCCU7sbPmsDhfIgMaU2yCcoaCKoiDsn3bx4Z3osgn8iDbULd9rZ-Z7_-FFJcbRnGasfhg3gk5OmW_T3rpdKBHLlBug8YdQ7nKWQLyGcF5HfT6X_hHZ7Ce2WVmZMoyQ2G-8TFpiYO08llARd5kcHVLMuRYQz4PP58qp9pgwyn1j43NXy2yoA17SmR4djqpjKeQ407BmhP0KK_1j4IrfcPfr18U0trApm3d3S97AaCI1HGqddLuN8EepXew4coPs5vxyCF1rvdb5bjMfhANUjbmAA9WoeBMqHPd08rNhA9H2o4EFsl1lBRZd0GhG7fbaCSQ9Jx_DHS5GCko1MijX8Xcs46UA_xitLBaD_df312hxnPTmGck6-t8bQHdWhysl0xpPKR4mfD28ZJunVWdtvEctb5OqEkH-JqGovMxKUW8FdzetQ8PG4eHjWPjptHR81nv5lX23c_AgAA__-iNtJQ
