@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -778,6 +779,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 	}
 }
 
+// IsPQErrWithCode returns true if `err` is a pq error whose code is in `codes`.
 func isPQErrWithCode(err error, codes ...pgcode.Code) bool {
 	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
 		for _, code := range codes {
@@ -787,4 +789,84 @@ func isPQErrWithCode(err error, codes ...pgcode.Code) bool {
 		}
 	}
 	return false
+}
+
+var _ sctest.StmtLineReader = (*staticSQLStmtLineProvider)(nil)
+
+type staticSQLStmtLineProvider struct {
+	stmts []string
+	next  int
+}
+
+func (ss *staticSQLStmtLineProvider) HasNextLine() bool {
+	return ss.next != len(ss.stmts)
+}
+
+func (ss *staticSQLStmtLineProvider) NextLine() string {
+	ss.next++
+	return ss.stmts[ss.next-1]
+}
+
+// TestCompareLegacyAndDeclarative tests that when processing a sequence of
+// DDL statements, legacy and declarative schema change should transition the
+// descriptors into the same final state.
+func TestCompareLegacyAndDeclarative(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ss := &staticSQLStmtLineProvider{
+		stmts: []string{
+			// Statements expected to succeed.
+			"SET sql_safe_updates = false;",
+			"CREATE TABLE t2 (i INT PRIMARY KEY, j INT NOT NULL);",
+			"CREATE TABLE t1 (i INT PRIMARY KEY, j INT REFERENCES t2(i));",
+			"INSERT INTO t2 SELECT k, k+1 FROM generate_series(1,1000) AS tmp(k);",
+			"INSERT INTO t1 SELECT k-1, k FROM generate_series(1,1000) AS tmp(k);",
+			"CREATE INDEX t1_idx_1 ON t1(j);",
+			"CREATE INDEX t2_idx_1 ON t2(j);",
+			"ALTER TABLE t1 ADD COLUMN k INT DEFAULT 34;",
+			"ALTER TABLE t2 ADD COLUMN p INT DEFAULT 50;",
+			"ALTER TABLE t2 DROP COLUMN p;",
+			"ALTER TABLE t2 ALTER PRIMARY KEY USING COLUMNS (j);",
+
+			// Statements expected to fail.
+			"CREATE TABLE t1 (); -- expect a DuplicateRelation error",
+			"ALTER TABLE t1 DROP COLUMN xyz; -- expect a rejected (sql_safe_updates = true) warning",
+			"ALTER TABLE t1 DROP COLUMN xyz; -- expect a UndefinedColumn error",
+			"ALTER TABLE txyz ADD COLUMN i INT DEFAULT 30; -- expect a UndefinedTable error",
+
+			// statements with TCL commands or empty content.
+			"",
+			"BEGIN;",
+			"INSERT INTO t2 VALUES (1001, 1002); INSERT INTO t1 VALUES (1000, 1001);",
+			"COMMIT;",
+			"CREATE TABLE t3 (i INT NOT NULL); INSERT INTO t3 SELECT generate_series(1,1000);",
+			"BEGIN; ALTER TABLE t3 ALTER PRIMARY KEY USING COLUMNS (i); INSERT INTO t3 VALUES (1001); COMMIT;",
+			"DROP TABLE IF EXISTS t3; CREATE TABLE t3 (i INT NOT NULL); BEGIN;",
+			"ALTER TABLE t3 ADD PRIMARY KEY (i);",
+			"COMMIT;",
+			"BEGIN;",
+			"SELECT 1/0;",
+			"INSERT INTO t2 VALUES (1002, 1003); INSERT INTO t1 VALUES (1001, 1002); -- expect to be skipped",
+			"ROLLBACK;",
+
+			// statements that will be altered due to known behavioral differences in LSC vs DSC.
+			"ALTER TABLE t1 ADD COLUMN xyz INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i; -- unimplemented in legacy schema changer; expect to skip this line",
+			"CREATE SEQUENCE s;",
+			`CREATE TABLE t4 (i INT CHECK (i > nextval('s')) CHECK (i > 0), CONSTRAINT "ck_i" CHECK (i > nextval('s'::REGCLASS)), CONSTRAINT "ck_i2" CHECK (i > 0)); -- expect to rewrite expressions that reference sequences to just (True)`,
+			"ALTER TABLE t4 ADD CHECK (i > nextval('s')); -- ditto",
+			"ALTER TABLE t4 ADD COLUMN j INT CHECK (j > 0) CHECK (i+j > nextval('s'));  -- ditto",
+			"CREATE TABLE t5 (i INT NOT NULL);",
+			"ALTER TABLE t5 ALTER PRIMARY KEY USING COLUMNS (i);",
+			"SET use_DEClarative_sChema_changer = off; -- expect to skip this line",
+			`SET CLUSTER SETTING sql.scHEma.fOrce_declarative_statements="-CREATE SCHEMA, +CREATE SEQUENCE"  -- expect to skip this line`,
+			"CREATE TABLE t6 (i INT PRIMARY KEY, j INT NOT NULL, k INT NOT NULL);",
+			"ALTER TABLE t6 DROP COLUMN i; -- unimplemented in legacy schema changer; expect to skip this line",
+			"ALTER TABLE t6 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i; -- ditto",
+			"ALTER TABLE t6 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k; -- ditto",
+			"ALTER TABLE t6 ADD COLUMN p INT DEFAULT 30, DROP COLUMN p; -- ditto",
+		},
+	}
+
+	sctest.CompareLegacyAndDeclarative(t, ss)
 }
