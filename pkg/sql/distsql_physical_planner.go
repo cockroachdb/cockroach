@@ -3617,9 +3617,15 @@ func (dsp *DistSQLPlanner) wrapPlan(
 			}
 			var err error
 			// Continue walking until we find a node that has a DistSQL
-			// representation - that's when we'll quit the wrapping process and hand
-			// control of planning back to the DistSQL physical planner.
-			if !dsp.mustWrapNode(planCtx, plan) {
+			// representation - that's when we'll quit the wrapping process and
+			// hand control of planning back to the DistSQL physical planner.
+			//
+			// However, if we're collecting execution stats, then we'll surround
+			// each planNode with a pair of planNodeToRowSource and
+			// rowSourceToPlanNode adapters so that the execution statistics
+			// were collected for each planNode independently. This should have
+			// low enough overhead.
+			if !dsp.mustWrapNode(planCtx, plan) || planCtx.collectExecStats {
 				firstNotWrapped = plan
 				p, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, plan)
 				if err != nil {
