@@ -399,6 +399,61 @@ func (b *baseStatusServer) localExecutionInsights(
 	return &response, nil
 }
 
+// localExecutionInsightsExt returns extended information comparing to localExecutionInsights
+// that includes contention events information.
+func (b *baseStatusServer) localExecutionInsightsExt(
+	ctx context.Context,
+) (*serverpb.ListExecutionInsightsResponse, error) {
+	resp, err := b.localExecutionInsights(ctx)
+	if err != nil {
+		return nil, err
+	}
+	contentionEventsResp, err := b.localTransactionContentionEvents(ctx)
+	if err != nil {
+		return nil, err
+	}
+	stmtIdToContentionMap := make(map[clusterunique.ID]contentionpb.ExtendedContentionEvent)
+	txnIdToContentionMap := make(map[uuid.UUID]contentionpb.ExtendedContentionEvent)
+	for _, event := range contentionEventsResp.Events {
+		// users with VIEWACTIVITYREDACTED role have no access to range keys so
+		// it will be empty.
+		if event.BlockingEvent.Key.Equal(roachpb.Key{}) {
+			continue
+		}
+		stmtIdToContentionMap[event.WaitingStmtID] = event
+		txnIdToContentionMap[event.WaitingTxnID] = event
+	}
+	for _, insight := range resp.Insights {
+		for idx, s := range insight.Statements {
+			if s.Contention == nil {
+				continue
+			}
+			event, ok := stmtIdToContentionMap[s.ID]
+			if !ok {
+				continue
+			}
+			ci, err := b.getContentionEventDetails(&event)
+			if err != nil {
+				return nil, err
+			}
+			insight.Statements[idx].ContentionInfo = ci
+		}
+		if insight.Transaction.Contention == nil {
+			continue
+		}
+		event, ok := txnIdToContentionMap[insight.Transaction.ID]
+		if !ok {
+			continue
+		}
+		ci, err := b.getContentionEventDetails(&event)
+		if err != nil {
+			return nil, err
+		}
+		insight.Transaction.ContentionInfo = ci
+	}
+	return resp, nil
+}
+
 func (b *baseStatusServer) localTxnIDResolution(
 	req *serverpb.TxnIDResolutionRequest,
 ) *serverpb.TxnIDResolutionResponse {
@@ -433,8 +488,22 @@ func (b *baseStatusServer) localTxnIDResolution(
 }
 
 func (b *baseStatusServer) localTransactionContentionEvents(
-	shouldRedactContendingKey bool,
-) *serverpb.TransactionContentionEventsResponse {
+	ctx context.Context,
+) (*serverpb.TransactionContentionEventsResponse, error) {
+	user, isAdmin, err := b.privilegeChecker.GetUserAndRole(ctx)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+	shouldRedactContendingKey := false
+
+	if !isAdmin {
+		shouldRedactContendingKey, err =
+			b.privilegeChecker.HasRoleOption(ctx, user, roleoption.VIEWACTIVITYREDACTED)
+		if err != nil {
+			return nil, srverrors.ServerError(ctx, err)
+		}
+	}
+
 	registry := b.sqlServer.execCfg.ContentionRegistry
 
 	resp := &serverpb.TransactionContentionEventsResponse{
@@ -450,7 +519,66 @@ func (b *baseStatusServer) localTransactionContentionEvents(
 		return nil
 	})
 
-	return resp
+	return resp, nil
+}
+
+func (b *baseStatusServer) getContentionEventDetails(
+	event *contentionpb.ExtendedContentionEvent,
+) (*insights.ContentionInfo, error) {
+	var tableName, indexName, dbName, schemaName string
+	err := b.sqlServer.internalDB.Txn(b.rpcCtx.MasterCtx, func(ctx context.Context, txn isql.Txn) error {
+		_, tableID, err := b.sqlServer.execCfg.Codec.DecodeTablePrefix(event.BlockingEvent.Key)
+		if err != nil {
+			return err
+		}
+		_, _, indexID, err := b.sqlServer.execCfg.Codec.DecodeIndexPrefix(event.BlockingEvent.Key)
+		if err != nil {
+			return err
+		}
+		desc := descs.FromTxn(txn)
+		var tableDesc catalog.TableDescriptor
+		tableDesc, err = desc.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
+		if err != nil {
+			return nil //nolint:returnerrcheck
+		}
+		tableName = tableDesc.GetName()
+
+		idxDesc, err := catalog.MustFindIndexByID(tableDesc, descpb.IndexID(indexID))
+		if err != nil {
+			indexName = fmt.Sprintf("[dropped index id: %d]", indexID)
+		}
+		if idxDesc != nil {
+			indexName = idxDesc.GetName()
+		}
+
+		dbDesc, err := desc.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
+		if err != nil {
+			dbName = "[dropped database]"
+		}
+		if dbDesc != nil {
+			dbName = dbDesc.GetName()
+		}
+
+		schemaDesc, err := desc.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
+		if err != nil {
+			schemaName = "[dropped schema]"
+		}
+		if schemaDesc != nil {
+			schemaName = schemaDesc.GetName()
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &insights.ContentionInfo{
+		Event:        event,
+		DatabaseName: dbName,
+		SchemaName:   schemaName,
+		IndexName:    indexName,
+		TableName:    tableName,
+	}, nil
 }
 
 // A statusServer provides a RESTful status API.
@@ -3573,7 +3701,10 @@ func (s *statusServer) ListExecutionInsights(
 		return nil, err
 	}
 
-	localRequest := serverpb.ListExecutionInsightsRequest{NodeID: "local"}
+	localRequest := serverpb.ListExecutionInsightsRequest{
+		NodeID:             "local",
+		WithContentionInfo: req.WithContentionInfo,
+	}
 
 	if len(req.NodeID) > 0 {
 		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
@@ -3581,6 +3712,9 @@ func (s *statusServer) ListExecutionInsights(
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
 		if local {
+			if req.WithContentionInfo {
+				return s.localExecutionInsightsExt(ctx)
+			}
 			return s.localExecutionInsights(ctx)
 		}
 		statusClient, err := s.dialNode(ctx, requestedNodeID)
@@ -3917,20 +4051,6 @@ func (s *statusServer) TransactionContentionEvents(
 		return nil, err
 	}
 
-	user, isAdmin, err := s.privilegeChecker.GetUserAndRole(ctx)
-	if err != nil {
-		return nil, srverrors.ServerError(ctx, err)
-	}
-
-	shouldRedactContendingKey := false
-	if !isAdmin {
-		shouldRedactContendingKey, err =
-			s.privilegeChecker.HasRoleOption(ctx, user, roleoption.VIEWACTIVITYREDACTED)
-		if err != nil {
-			return nil, srverrors.ServerError(ctx, err)
-		}
-	}
-
 	if roachpb.NodeID(s.serverIterator.getID()) == 0 {
 		return nil, status.Errorf(codes.Unavailable, "nodeID not set")
 	}
@@ -3941,7 +4061,7 @@ func (s *statusServer) TransactionContentionEvents(
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			return s.localTransactionContentionEvents(shouldRedactContendingKey), nil
+			return s.localTransactionContentionEvents(ctx)
 		}
 
 		statusClient, err := s.dialNode(ctx, requestedNodeID)

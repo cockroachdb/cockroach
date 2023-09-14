@@ -15,6 +15,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
+import "sql/contentionpb/contention.proto";
 
 enum Problem {
   // This statement execution was not itself problematic, but it happened in
@@ -92,6 +93,7 @@ message Transaction {
   // The error code of the last failed statement in the transaction.
   string last_error_code = 18; 
   Status status = 19;
+  ContentionInfo contention_info = 20 [(gogoproto.nullable) = true];
 }
 
 message Statement {
@@ -128,6 +130,7 @@ message Statement {
   repeated Cause causes = 22;
   int64 cpu_sql_nanos = 23 [(gogoproto.customname) = "CPUSQLNanos"];
   string error_code = 24;
+  ContentionInfo contention_info = 25 [(gogoproto.nullable) = true];
 }
 
 
@@ -145,4 +148,12 @@ message Insight {
 
   reserved  4; // Previously problem.
   reserved 5; // Previously causes.
+}
+
+message ContentionInfo {
+  contentionpb.ExtendedContentionEvent event = 1;
+  string database_name = 2;
+  string schema_name = 3;
+  string index_name = 4;
+  string table_name = 5;
 }

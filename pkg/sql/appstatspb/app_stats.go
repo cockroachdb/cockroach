@@ -14,10 +14,28 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // StmtFingerprintID is the type of a Statement's fingerprint ID.
 type StmtFingerprintID uint64
+
+// Encode encodes StmtFingerprintID value and returns encoded bytes.
+func (s *StmtFingerprintID) Encode() []byte {
+	var b = make([]byte, 0, 8)
+	return encoding.EncodeVarintAscending(b, int64(*s))
+}
+
+// DecodeFingerprintID decodes StmtFingerprintID or TransactionFingerprintID from
+// provided value that were encoded by Encode func.
+func DecodeFingerprintID[T StmtFingerprintID | TransactionFingerprintID](data []byte) (*T, error) {
+	_, v, err := encoding.DecodeVarintAscending(data)
+	if err != nil {
+		return nil, err
+	}
+	id := T(v)
+	return &id, nil
+}
 
 // ConstructStatementFingerprintID constructs an ID by hashing query with
 // constants redacted, its database and failure status, and if it was part of an
@@ -56,6 +74,12 @@ const InvalidTransactionFingerprintID = TransactionFingerprintID(0)
 // Size returns the size of the TransactionFingerprintID.
 func (t TransactionFingerprintID) Size() int64 {
 	return 8
+}
+
+// Encode encodes TransactionFingerprintID value and returns encoded bytes.
+func (s *TransactionFingerprintID) Encode() []byte {
+	var b = make([]byte, 0, 8)
+	return encoding.EncodeVarintAscending(b, int64(*s))
 }
 
 // GetVariance retrieves the variance of the values.

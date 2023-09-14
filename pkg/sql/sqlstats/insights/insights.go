@@ -12,6 +12,7 @@ package insights
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -198,4 +199,12 @@ func New(st *cluster.Settings, metrics Metrics) Provider {
 		),
 		anomalyDetector: anomalyDetector,
 	}
+}
+
+func (i *ContentionInfo) ToJSON() (string, error) {
+	b, err := json.Marshal(i)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }

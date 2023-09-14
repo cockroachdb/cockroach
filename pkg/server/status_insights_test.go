@@ -1,0 +1,274 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package server_test
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
+)
+
+// TestStatusServer_StatementExecutionInsights tests that StatementExecutionInsights endpoint
+// returns list of statement insights that also include contention information
+// for contended queries.
+func TestStatusServer_StatementExecutionInsights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // speeds up test
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Enable contention detection by setting a latencyThreshold > 0.
+	insights.LatencyThreshold.Override(ctx, &settings.SV, 30*time.Millisecond)
+	// Enable contention events collection by setting resolution duration > 0.
+	contention.TxnIDResolutionInterval.Override(ctx, &settings.SV, 20*time.Millisecond)
+
+	// Generate insight with contention event
+	sqlConn := tc.ServerConn(0)
+	rng, _ := randutil.NewTestRand()
+	tableName := fmt.Sprintf("t%s", randutil.RandString(rng, 128, "abcdefghijklmnopqrstuvwxyz"))
+	_, err := sqlConn.ExecContext(ctx, fmt.Sprintf("CREATE TABLE %s (k INT, i INT, f FLOAT, s STRING)", tableName))
+	require.NoError(t, err)
+	// Open transaction to insert values into table
+	tx, err := sqlConn.BeginTx(ctx, nil)
+	require.NoError(t, err)
+
+	// Insert statement within transaction will block access to table.
+	_, err = tx.Exec(fmt.Sprintf("INSERT INTO %s VALUES (1, 2, 3.0, '4')", tableName))
+	require.NoError(t, err)
+
+	// Make SELECT query to wait for some period of time to simulate contention.
+	go func() {
+		<-time.After(100 * time.Millisecond)
+		err = tx.Commit()
+		require.NoError(t, err)
+	}()
+
+	// Query the table while above transaction is still open
+	_, err = sqlConn.ExecContext(ctx, fmt.Sprintf("SELECT * FROM %s", tableName))
+	require.NoError(t, err)
+
+	srv := tc.ApplicationLayer(0)
+	sc := srv.StatusServer().(serverpb.StatusServer)
+
+	succeedWithDuration := 5 * time.Second
+	if skip.Stress() {
+		succeedWithDuration = 30 * time.Second
+	}
+	var resp *serverpb.StatementExecutionInsightsResponse
+	var stmtInsight *insights.Statement
+	testutils.SucceedsWithin(t, func() error {
+		resp, err = sc.StatementExecutionInsights(ctx, &serverpb.StatementExecutionInsightsRequest{})
+		require.NoError(t, err)
+		if len(resp.StatementInsights) == 0 {
+			return fmt.Errorf("waiting for response with statement insights")
+		}
+		hasInsightWithContentionInfo := false
+		for _, insight := range resp.StatementInsights {
+			if insight.ContentionInfo != nil && insight.ContentionInfo.TableName == tableName {
+				hasInsightWithContentionInfo = true
+				stmtInsight = insight
+				return nil
+			}
+		}
+		if !hasInsightWithContentionInfo {
+			return fmt.Errorf("waiting for insight with contention info")
+		}
+		return nil
+	}, succeedWithDuration)
+
+	t.Run("request_with_filter", func(t *testing.T) {
+		log.Info(context.Background(), "222222 request_with_filter")
+		// Test that StatementExecutionInsights endpoint returns results that satisfy
+		// provided filters in request payload.
+		testCases := []struct {
+			name string
+			// tReq is a request that should return response with statement insight
+			tReq serverpb.StatementExecutionInsightsRequest
+			// fReq is a request that doesn't return any statement results
+			fReq serverpb.StatementExecutionInsightsRequest
+		}{
+			{
+				name: "statement_id",
+				tReq: serverpb.StatementExecutionInsightsRequest{StatementID: &stmtInsight.ID},
+				fReq: serverpb.StatementExecutionInsightsRequest{StatementID: &clusterunique.ID{Uint128: uint128.FromInts(1, 1)}},
+			},
+			{
+				name: "statement_fingerprint_id",
+				tReq: serverpb.StatementExecutionInsightsRequest{StmtFingerprintID: stmtInsight.FingerprintID},
+				fReq: serverpb.StatementExecutionInsightsRequest{StmtFingerprintID: appstatspb.StmtFingerprintID(123)},
+			},
+			// TODO (koorosh): add test case with req by time range.
+			// TODO (koorosh): add test where start time is specified but end time isn't.
+		}
+
+		for _, testCase := range testCases {
+			t.Run(testCase.name, func(t *testing.T) {
+				resp, err = sc.StatementExecutionInsights(ctx, &testCase.tReq)
+				require.NoError(t, err)
+				require.Equal(t, 1, len(resp.StatementInsights))
+
+				resp, err = sc.StatementExecutionInsights(ctx, &testCase.fReq)
+				require.NoError(t, err)
+				require.Equal(t, 0, len(resp.StatementInsights))
+			})
+		}
+	})
+
+	t.Run("permissions", func(t *testing.T) {
+		roles := []string{"VIEWACTIVITY", "VIEWACTIVITYREDACTED"}
+		req := serverpb.StatementExecutionInsightsRequest{}
+		var resp serverpb.StatementExecutionInsightsResponse
+
+		err = srvtestutils.PostStatusJSONProtoWithAdminOption(srv, "insights/statements", &req, &resp, false)
+		require.True(t, testutils.IsError(err, "status: 403"))
+		require.Nil(t, resp.StatementInsights)
+
+		for _, role := range roles {
+			t.Run(role, func(t *testing.T) {
+				// Clean up all roles that allow users to request insights to
+				// ensure that only specified permission is assigned to user
+				// below.
+				for _, r := range roles {
+					_, err = sqlConn.Exec(fmt.Sprintf("ALTER USER %s NO%s", apiconstants.TestingUserNameNoAdmin().Normalized(), r))
+					require.NoError(t, err)
+				}
+
+				// Assign user's role
+				_, err = sqlConn.Exec(fmt.Sprintf("ALTER USER %s %s", apiconstants.TestingUserNameNoAdmin().Normalized(), role))
+				require.NoError(t, err)
+
+				req := serverpb.StatementExecutionInsightsRequest{}
+				var resp serverpb.StatementExecutionInsightsResponse
+				err = srvtestutils.PostStatusJSONProtoWithAdminOption(srv, "insights/statements", &req, &resp, false)
+				require.NoError(t, err)
+				require.GreaterOrEqual(t, len(resp.StatementInsights), 1)
+			})
+		}
+	})
+}
+
+func TestStatusServer_QueryPersistedStatementInsights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // speeds up test
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	srv := tc.ApplicationLayer(0)
+
+	startTime := timeutil.FromUnixNanos(1693561818000000)
+	endTime := timeutil.FromUnixNanos(1693562118000000)
+	contentionDuration := 15 * time.Second
+	s := insights.Statement{
+		ID:                   clusterunique.IDFromBytes([]byte{1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8}),
+		FingerprintID:        appstatspb.StmtFingerprintID(1),
+		LatencyInSeconds:     4,
+		Query:                "SELECT * FROM users",
+		Status:               insights.Statement_Completed,
+		StartTime:            startTime,
+		EndTime:              endTime,
+		FullScan:             false,
+		Database:             "movr",
+		PlanGist:             "plan_gist",
+		RowsRead:             42,
+		RowsWritten:          15,
+		Retries:              3,
+		AutoRetryReason:      "auto_retry_reason",
+		Nodes:                []int64{1, 2, 3},
+		Contention:           &contentionDuration,
+		IndexRecommendations: []string{"idx_recommendation_1", "idx_recommendation_2"},
+		Problem:              insights.Problem_SlowExecution,
+		Causes:               []insights.Cause{insights.Cause_HighContention, insights.Cause_PlanRegression},
+		CPUSQLNanos:          500000,
+		ErrorCode:            "error_code",
+		ContentionInfo: &insights.ContentionInfo{
+			Event: &contentionpb.ExtendedContentionEvent{
+				BlockingEvent: kvpb.ContentionEvent{
+					Key: roachpb.Key("a"),
+					TxnMeta: enginepb.TxnMeta{
+						ID:                uuid.FastMakeV4(),
+						Key:               []byte{1, 2, 3, 4, 5, 6, 7, 8},
+						IsoLevel:          isolation.Serializable,
+						Epoch:             14,
+						WriteTimestamp:    hlc.Timestamp{WallTime: 10},
+						MinTimestamp:      hlc.Timestamp{WallTime: 20},
+						Priority:          2,
+						Sequence:          4,
+						CoordinatorNodeID: 3,
+					},
+					Duration: 3 * time.Second,
+				},
+				BlockingTxnFingerprintID: appstatspb.TransactionFingerprintID(33),
+				WaitingTxnID:             uuid.FastMakeV4(),
+				WaitingTxnFingerprintID:  appstatspb.TransactionFingerprintID(55),
+				CollectionTs:             time.Now().UTC(),
+				WaitingStmtFingerprintID: appstatspb.StmtFingerprintID(88),
+				WaitingStmtID:            clusterunique.IDFromBytes([]byte{1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8}),
+			},
+			DatabaseName: "movr",
+			SchemaName:   "demo",
+			IndexName:    "users_idx",
+			TableName:    "users",
+		},
+	}
+
+	_, err := server.PersistStmtInsight(ctx, srv.InternalExecutor().(*sql.InternalExecutor), &s)
+	require.NoError(t, err)
+
+	ss := srv.StatusServer().(serverpb.StatusServer)
+	resp, err := ss.QueryPersistedStatementInsights(ctx, &serverpb.StatementExecutionInsightsRequest{})
+	require.NoError(t, err)
+	require.Equal(t, 1, len(resp.StatementInsights))
+	require.Equal(t, &s, resp.StatementInsights[0])
+}
