@@ -141,6 +141,7 @@ func (p *planner) generateSerialInColumnDef(
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+	seqTyp := defType
 
 	// Find the integer type that corresponds to the specification.
 	switch serialNormalizationMode {
@@ -170,6 +171,7 @@ func (p *planner) generateSerialInColumnDef(
 			)
 		}
 		newSpec.Type = upgradeType
+		seqTyp = upgradeType
 
 	case sessiondatapb.SerialUsesSQLSequences, sessiondatapb.SerialUsesCachedSQLSequences:
 		// With real sequences we can use the requested type as-is.
@@ -211,6 +213,23 @@ func (p *planner) generateSerialInColumnDef(
 			tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &value},
 		}
 	}
+
+	// Setup the type of the sequence based on the type observed within
+	// the column.
+	switch seqTyp {
+	case types.Int2:
+	case types.Int4:
+
+	case types.Int:
+		fallthrough
+	default:
+		// Types is not an integer so nothing to set.
+		seqTyp = nil
+	}
+	if seqTyp != nil {
+		seqOpts = append(seqOpts, tree.SequenceOption{Name: tree.SeqOptAs, AsIntegerType: seqTyp})
+	}
+
 	log.VEventf(ctx, 2, "new column %q of %q will have %s sequence name %q and default %q",
 		d, tableName, seqType, seqName, defaultExpr)
 
@@ -298,9 +317,7 @@ func (p *planner) processSerialLikeInColumnDef(
 
 	} else if d.GeneratedIdentity.IsGeneratedAsIdentity {
 		newSpecPtr, catalogPrefixPtr, seqName, seqOpts, err = p.processGeneratedAsIdentityColumnDef(ctx, d, tableName)
-		if d.GeneratedIdentity.SeqOptions != nil {
-			seqOpts = d.GeneratedIdentity.SeqOptions
-		}
+		seqOpts = append(seqOpts, d.GeneratedIdentity.SeqOptions...)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
