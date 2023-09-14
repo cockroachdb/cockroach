@@ -39,7 +39,7 @@ func registerDisaggRebalance(r registry.Registry) {
 				t.Skip("disagg-rebalance is only configured to run on AWS")
 			}
 			c.Put(ctx, t.Cockroach(), "./cockroach")
-			s3dir := fmt.Sprintf("s3://%s/disagg-rebalance/%s?AUTH=implicit", testutils.BackupTestingBucket(), c.Name())
+			s3dir := fmt.Sprintf("s3://%s/disagg-rebalance/%s?AUTH=implicit", testutils.BackupTestingBucketLongTTL(), c.Name())
 			startOpts := option.DefaultStartOptsNoBackups()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--experimental-shared-storage=%s", s3dir))
 			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, 3))

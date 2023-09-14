@@ -386,10 +386,10 @@ BACKUP TABLE _ TO 'bar' WITH OPTIONS (revision_history = true, detached, kms = (
 parse
 BACKUP foo TO 'bar' WITH OPTIONS (detached = false)
 ----
-BACKUP TABLE foo TO 'bar' WITH OPTIONS (detached = FALSE) -- normalized!
-BACKUP TABLE (foo) TO ('bar') WITH OPTIONS (detached = FALSE) -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH OPTIONS (detached = FALSE) -- literals removed
-BACKUP TABLE _ TO 'bar' WITH OPTIONS (detached = FALSE) -- identifiers removed
+BACKUP TABLE foo TO 'bar' -- normalized!
+BACKUP TABLE (foo) TO ('bar') -- fully parenthesized
+BACKUP TABLE foo TO '_' -- literals removed
+BACKUP TABLE _ TO 'bar' -- identifiers removed
 
 parse
 BACKUP VIRTUAL CLUSTER 36 TO 'bar'
@@ -1024,7 +1024,7 @@ HINT: try \h RESTORE
 parse
 BACKUP INTO LATEST IN UNLOGGED WITH OPTIONS ( DETACHED = FALSE )
 ----
-BACKUP INTO LATEST IN 'unlogged' WITH OPTIONS (detached = FALSE) -- normalized!
-BACKUP INTO LATEST IN ('unlogged') WITH OPTIONS (detached = FALSE) -- fully parenthesized
-BACKUP INTO LATEST IN '_' WITH OPTIONS (detached = FALSE) -- literals removed
-BACKUP INTO LATEST IN 'unlogged' WITH OPTIONS (detached = FALSE) -- identifiers removed
+BACKUP INTO LATEST IN 'unlogged' -- normalized!
+BACKUP INTO LATEST IN ('unlogged') -- fully parenthesized
+BACKUP INTO LATEST IN '_' -- literals removed
+BACKUP INTO LATEST IN 'unlogged' -- identifiers removed

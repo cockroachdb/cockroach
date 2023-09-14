@@ -622,7 +622,10 @@ export class DatabaseDetailsPage extends React.Component<
             checkInfoAvailable(
               table.requestError,
               null,
-              table.details.nodesByRegionString || "None",
+              table.details.nodesByRegionString &&
+                table.details.nodesByRegionString.length > 0
+                ? table.details.nodesByRegionString
+                : null,
             ),
           sort: table => table.details.nodesByRegionString,
           className: cx("database-table__col--regions"),
@@ -669,13 +672,16 @@ export class DatabaseDetailsPage extends React.Component<
               Table Stats Last Updated <Timezone />
             </Tooltip>
           ),
-          cell: table => (
-            <Timestamp
-              time={table.details.statsLastUpdated?.stats_last_created_at}
-              format={DATE_FORMAT}
-              fallback={"No table statistics found"}
-            />
-          ),
+          cell: table =>
+            checkInfoAvailable(
+              table.requestError,
+              table.details.statsLastUpdated?.error,
+              <Timestamp
+                time={table.details.statsLastUpdated?.stats_last_created_at}
+                format={DATE_FORMAT}
+                fallback={"No table statistics found"}
+              />,
+            ),
           sort: table => table.details.statsLastUpdated,
           className: cx("database-table__col--table-stats"),
           name: "tableStatsUpdated",

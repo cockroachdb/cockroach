@@ -947,11 +947,7 @@ func (bc *backupCollection) uri() string {
 	// global namespace represented by the BACKUP_TESTING_BUCKET
 	// bucket. The nonce allows multiple people (or TeamCity builds) to
 	// be running this test without interfering with one another.
-	gcsBackupTestingBucket := os.Getenv("BACKUP_TESTING_BUCKET")
-	if gcsBackupTestingBucket == "" {
-		gcsBackupTestingBucket = "cockroachdb-backup-testing"
-	}
-	return fmt.Sprintf("gs://"+gcsBackupTestingBucket+"/mixed-version/%s_%s?AUTH=implicit", bc.name, bc.nonce)
+	return fmt.Sprintf("gs://%s/mixed-version/%s_%s?AUTH=implicit", testutils.BackupTestingBucketLongTTL(), bc.name, bc.nonce)
 }
 
 func (bc *backupCollection) encryptionOption() *encryptionPassphrase {
@@ -2157,7 +2153,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		RequiresLicense:   true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
-				t.Skip("uses gs://cockroachdb-backup-testing; see https://github.com/cockroachdb/cockroach/issues/105968")
+				t.Skip("uses gs://cockroachdb-backup-testing-long-ttl; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
 
 			roachNodes := c.Range(1, c.Spec().NodeCount-1)
