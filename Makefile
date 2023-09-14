@@ -101,6 +101,20 @@ ifneq "$(TYPE)" ""
 $(error Make no longer understands TYPE. Use 'build/builder.sh mkrelease $(subst release-,,$(TYPE))' instead)
 endif
 
+# The default toolchain in the builder image creates crashy binaries, so
+# disallow using it unless an msan build is explicitly requested. (#16071)
+#
+# NOTE(benesch): it would be slightly safer to have the builder set an env var
+# like COCKROACH_BUILDER_IMAGE that we could check here, but it seems unlikely
+# enough that any real user would use the name "roach".
+ifeq "$(shell whoami)" "roach"
+ifeq "$(TARGET_TRIPLE)" ""
+ifeq "$(findstring msan,$(GOFLAGS))" ""
+$(error The builder only supports making release binaries. Try 'build/builder.sh mkrelease' instead)
+endif
+endif
+endif
+
 # dep-build is set to non-empty if the .d files should be included.
 # This definition makes it empty when only the targets "help" and/or "clean"
 # are specified.
