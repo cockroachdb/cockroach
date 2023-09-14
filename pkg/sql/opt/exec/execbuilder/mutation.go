@@ -725,6 +725,8 @@ func (b *Builder) buildUniqueChecks(checks memo.UniqueChecksExpr) error {
 			return err
 		}
 		// Wrap the query in an error node.
+		tabMeta := md.TableMeta(c.Table)
+		uc := tabMeta.Table.Unique(c.CheckOrdinal)
 		mkErr := func(row tree.Datums) error {
 			keyVals := make(tree.Datums, len(c.KeyCols))
 			for i, col := range c.KeyCols {
@@ -734,7 +736,7 @@ func (b *Builder) buildUniqueChecks(checks memo.UniqueChecksExpr) error {
 				}
 				keyVals[i] = row[ord]
 			}
-			return mkUniqueCheckErr(md, c, keyVals)
+			return mkUniqueCheckErr(tabMeta, uc, keyVals)
 		}
 		node, err := b.factory.ConstructErrorIfRows(query.root, mkErr)
 		if err != nil {
@@ -778,9 +780,7 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 // mkUniqueCheckErr generates a user-friendly error describing a uniqueness
 // violation. The keyVals are the values that correspond to the
 // cat.UniqueConstraint columns.
-func mkUniqueCheckErr(md *opt.Metadata, c *memo.UniqueChecksItem, keyVals tree.Datums) error {
-	tabMeta := md.TableMeta(c.Table)
-	uc := tabMeta.Table.Unique(c.CheckOrdinal)
+func mkUniqueCheckErr(tabMeta *opt.TableMeta, uc cat.UniqueConstraint, keyVals tree.Datums) error {
 	constraintName := uc.Name()
 	var msg, details bytes.Buffer
 
