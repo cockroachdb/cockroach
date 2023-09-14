@@ -802,13 +802,13 @@ func TestOverride(t *testing.T) {
 	require.Equal(t, 42.0, overrideFloat.Get(sv))
 }
 
-func TestSystemOnlyDisallowedOnTenant(t *testing.T) {
+func TestSystemOnlyDisallowedOnVirtualCluster(t *testing.T) {
 	skip.UnderNonTestBuild(t)
 
 	ctx := context.Background()
 	sv := &settings.Values{}
 	sv.Init(ctx, settings.TestOpaque)
-	sv.SetNonSystemTenant()
+	sv.SpecializeForVirtualCluster()
 
 	// Check that we can still read non-SystemOnly settings.
 	if expected, actual := "", strFooA.Get(sv); expected != actual {
