@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -192,7 +193,7 @@ func TestConstructDocsIssues(t *testing.T) {
 								},
 							},
 						},
-						DocType: jiraFieldId{Id: "10781"},
+						DocType: jiraFieldId{Id: "10779"},
 						FixVersions: []jiraFieldId{
 							{
 								Id: "10186",
@@ -332,7 +333,7 @@ func TestConstructDocsIssues(t *testing.T) {
 								},
 							},
 						},
-						DocType: jiraFieldId{Id: "10781"},
+						DocType: jiraFieldId{Id: "10779"},
 						FixVersions: []jiraFieldId{
 							{
 								Id: "10185",
@@ -427,7 +428,7 @@ func TestConstructDocsIssues(t *testing.T) {
 							},
 						},
 
-						DocType: jiraFieldId{Id: "10781"},
+						DocType: jiraFieldId{Id: "10779"},
 						FixVersions: []jiraFieldId{
 							{
 								Id: "10186",
@@ -521,7 +522,7 @@ func TestConstructDocsIssues(t *testing.T) {
 								},
 							},
 						},
-						DocType: jiraFieldId{Id: "10781"},
+						DocType: jiraFieldId{Id: "10779"},
 						FixVersions: []jiraFieldId{
 							{
 								Id: "10186",
@@ -625,7 +626,7 @@ func TestConstructDocsIssues(t *testing.T) {
 								},
 							},
 						},
-						DocType: jiraFieldId{Id: "10781"},
+						DocType: jiraFieldId{Id: "10779"},
 						FixVersions: []jiraFieldId{
 							{
 								Id: "10365",
@@ -739,7 +740,7 @@ func TestConstructDocsIssues(t *testing.T) {
 								},
 							},
 						},
-						DocType: jiraFieldId{Id: "10781"},
+						DocType: jiraFieldId{Id: "10779"},
 						FixVersions: []jiraFieldId{
 							{
 								Id: "10365",
@@ -843,15 +844,11 @@ func TestConstructDocsIssues(t *testing.T) {
 										Custom   string "json:\"custom\""
 										CustomId int    "json:\"customId\""
 									} "json:\"schema\""
-									Name            string   "json:\"name\""
-									Key             string   "json:\"key\""
-									HasDefaultValue bool     "json:\"hasDefaultValue\""
-									Operations      []string "json:\"operations\""
-									AllowedValues   []struct {
-										Self  string "json:\"self\""
-										Value string "json:\"value\""
-										Id    string "json:\"id\""
-									} "json:\"allowedValues\""
+									Name            string                                   "json:\"name\""
+									Key             string                                   "json:\"key\""
+									HasDefaultValue bool                                     "json:\"hasDefaultValue\""
+									Operations      []string                                 "json:\"operations\""
+									AllowedValues   []jiraCreateIssueMetaDocTypeAllowedValue "json:\"allowedValues\""
 								} "json:\"customfield_10175\""
 								FixVersions struct {
 									Required bool "json:\"required\""
@@ -1001,15 +998,11 @@ func TestConstructDocsIssues(t *testing.T) {
 											Custom   string "json:\"custom\""
 											CustomId int    "json:\"customId\""
 										} "json:\"schema\""
-										Name            string   "json:\"name\""
-										Key             string   "json:\"key\""
-										HasDefaultValue bool     "json:\"hasDefaultValue\""
-										Operations      []string "json:\"operations\""
-										AllowedValues   []struct {
-											Self  string "json:\"self\""
-											Value string "json:\"value\""
-											Id    string "json:\"id\""
-										} "json:\"allowedValues\""
+										Name            string                                   "json:\"name\""
+										Key             string                                   "json:\"key\""
+										HasDefaultValue bool                                     "json:\"hasDefaultValue\""
+										Operations      []string                                 "json:\"operations\""
+										AllowedValues   []jiraCreateIssueMetaDocTypeAllowedValue "json:\"allowedValues\""
 									} "json:\"customfield_10175\""
 									FixVersions struct {
 										Required bool "json:\"required\""
@@ -1157,15 +1150,11 @@ func TestConstructDocsIssues(t *testing.T) {
 												Custom   string "json:\"custom\""
 												CustomId int    "json:\"customId\""
 											} "json:\"schema\""
-											Name            string   "json:\"name\""
-											Key             string   "json:\"key\""
-											HasDefaultValue bool     "json:\"hasDefaultValue\""
-											Operations      []string "json:\"operations\""
-											AllowedValues   []struct {
-												Self  string "json:\"self\""
-												Value string "json:\"value\""
-												Id    string "json:\"id\""
-											} "json:\"allowedValues\""
+											Name            string                                   "json:\"name\""
+											Key             string                                   "json:\"key\""
+											HasDefaultValue bool                                     "json:\"hasDefaultValue\""
+											Operations      []string                                 "json:\"operations\""
+											AllowedValues   []jiraCreateIssueMetaDocTypeAllowedValue "json:\"allowedValues\""
 										} "json:\"customfield_10175\""
 										FixVersions struct {
 											Required bool "json:\"required\""
@@ -1421,15 +1410,11 @@ func TestConstructDocsIssues(t *testing.T) {
 												Custom   string "json:\"custom\""
 												CustomId int    "json:\"customId\""
 											} "json:\"schema\""
-											Name            string   "json:\"name\""
-											Key             string   "json:\"key\""
-											HasDefaultValue bool     "json:\"hasDefaultValue\""
-											Operations      []string "json:\"operations\""
-											AllowedValues   []struct {
-												Self  string "json:\"self\""
-												Value string "json:\"value\""
-												Id    string "json:\"id\""
-											} "json:\"allowedValues\""
+											Name            string                                   "json:\"name\""
+											Key             string                                   "json:\"key\""
+											HasDefaultValue bool                                     "json:\"hasDefaultValue\""
+											Operations      []string                                 "json:\"operations\""
+											AllowedValues   []jiraCreateIssueMetaDocTypeAllowedValue "json:\"allowedValues\""
 										}{
 											Required: false,
 											Schema: struct {
@@ -1445,15 +1430,11 @@ func TestConstructDocsIssues(t *testing.T) {
 											Key:             "customfield_10175",
 											HasDefaultValue: false,
 											Operations:      []string{"set"},
-											AllowedValues: []struct {
-												Self  string "json:\"self\""
-												Value string "json:\"value\""
-												Id    string "json:\"id\""
-											}{
+											AllowedValues: []jiraCreateIssueMetaDocTypeAllowedValue{
 												{
-													Self:  "https://cockroachlabs.atlassian.net/rest/api/3/customFieldOption/10781",
+													Self:  "https://cockroachlabs.atlassian.net/rest/api/3/customFieldOption/10779",
 													Value: "Doc Bug",
-													Id:    "10781",
+													Id:    "10779",
 												},
 												{
 													Self:  "https://cockroachlabs.atlassian.net/rest/api/3/customFieldOption/10780",
@@ -3062,6 +3043,7 @@ Release note (sql change): Import now checks readability...`,
 	}
 
 	for _, tc := range testCases {
+		skip.WithIssue(t, 110682, "Flakes")
 		defer testutils.TestingHook(&getValidEpicRef, func(issueKey string) (bool, string, error) {
 			var epicMap = map[string]struct {
 				IsEpic  bool
