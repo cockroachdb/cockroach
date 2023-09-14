@@ -2017,6 +2017,12 @@ func (s *adminServer) Settings(
 		}
 	}
 
+	showSystem := s.sqlServer.execCfg.Codec.ForSystemTenant()
+	target := settings.ForVirtualCluster
+	if showSystem {
+		target = settings.ForSystemTenant
+	}
+
 	// settingsKeys is the list of setting keys to retrieve.
 	settingsKeys := make([]settings.InternalKey, 0, len(req.Keys))
 	for _, desiredSetting := range req.Keys {
@@ -2030,7 +2036,7 @@ func (s *adminServer) Settings(
 	}
 	if !consoleSettingsOnly {
 		if len(settingsKeys) == 0 {
-			settingsKeys = settings.Keys(settings.ForSystemTenant)
+			settingsKeys = settings.Keys(target)
 		}
 	} else {
 		if len(settingsKeys) == 0 {
@@ -2076,13 +2082,14 @@ func (s *adminServer) Settings(
 		var v settings.Setting
 		var ok bool
 		if redactValues {
-			v, ok = settings.LookupForReportingByKey(k, settings.ForSystemTenant)
+			v, ok = settings.LookupForReportingByKey(k, target)
 		} else {
-			v, ok = settings.LookupForLocalAccessByKey(k, settings.ForSystemTenant)
+			v, ok = settings.LookupForLocalAccessByKey(k, target)
 		}
 		if !ok {
 			continue
 		}
+
 		var altered *time.Time
 		if val, ok := alteredSettings[k]; ok {
 			altered = val

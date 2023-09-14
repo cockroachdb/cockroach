@@ -353,7 +353,7 @@ var overrideMultiRegionZoneConfigClusterMode = settings.RegisterBoolSetting(
 	settings.WithPublic)
 
 var maxHashShardedIndexRangePreSplit = settings.RegisterIntSetting(
-	settings.SystemOnly,
+	settings.TenantWritable,
 	"sql.hash_sharded_range_pre_split.max",
 	"max pre-split ranges to have when adding hash sharded index to an existing table",
 	16,
