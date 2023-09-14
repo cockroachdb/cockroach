@@ -229,3 +229,17 @@ func getJiraIssueFromRef(ref string) (string, error) {
 		return "", fmt.Errorf("error: Malformed epic/issue ref (%s)", ref)
 	}
 }
+
+func extractProductChangeDocTypeId(
+	allowedValues []jiraCreateIssueMetaDocTypeAllowedValue,
+) (string, error) {
+	for _, v := range allowedValues {
+		if v.Value == "Product Change" {
+			return v.Id, nil
+		}
+	}
+	return "", fmt.Errorf(
+		"unable to locate a doc type of 'Product Change' in the %s project",
+		jiraDocsProjectCode,
+	)
+}

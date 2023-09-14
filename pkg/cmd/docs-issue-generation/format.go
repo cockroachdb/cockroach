@@ -40,6 +40,10 @@ func constructDocsIssues(prs []cockroachPR) ([]docsIssue, error) {
 	if err != nil {
 		return []docsIssue{}, err
 	}
+	docTypeId, err := extractProductChangeDocTypeId(jiraIssueMeta.Projects[0].Issuetypes[0].Fields.DocType.AllowedValues)
+	if err != nil {
+		return []docsIssue{}, err
+	}
 	var result []docsIssue
 	for _, pr := range prs {
 		for _, commit := range pr.Commits {
@@ -69,7 +73,7 @@ func constructDocsIssues(prs []cockroachPR) ([]docsIssue, error) {
 						Description: rn,
 						EpicLink:    epicRef,
 						DocType: jiraFieldId{
-							Id: jiraIssueMeta.Projects[0].Issuetypes[0].Fields.DocType.AllowedValues[0].Id,
+							Id: docTypeId,
 						},
 						ProductChangeCommitSHA: commit.Sha,
 						ProductChangePrNumber:  strconv.Itoa(pr.Number),

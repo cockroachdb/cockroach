@@ -234,15 +234,11 @@ type jiraIssueCreateMeta struct {
 						Custom   string `json:"custom"`
 						CustomId int    `json:"customId"`
 					} `json:"schema"`
-					Name            string   `json:"name"`
-					Key             string   `json:"key"`
-					HasDefaultValue bool     `json:"hasDefaultValue"`
-					Operations      []string `json:"operations"`
-					AllowedValues   []struct {
-						Self  string `json:"self"`
-						Value string `json:"value"`
-						Id    string `json:"id"`
-					} `json:"allowedValues"`
+					Name            string                                   `json:"name"`
+					Key             string                                   `json:"key"`
+					HasDefaultValue bool                                     `json:"hasDefaultValue"`
+					Operations      []string                                 `json:"operations"`
+					AllowedValues   []jiraCreateIssueMetaDocTypeAllowedValue `json:"allowedValues"`
 				} `json:"customfield_10175"`
 				FixVersions struct {
 					Required bool `json:"required"`
@@ -319,6 +315,12 @@ type jiraIssueCreateMeta struct {
 			} `json:"fields"`
 		} `json:"issuetypes"`
 	} `json:"projects"`
+}
+
+type jiraCreateIssueMetaDocTypeAllowedValue struct {
+	Self  string `json:"self"`
+	Value string `json:"value"`
+	Id    string `json:"id"`
 }
 
 type jiraIssue struct {
