@@ -395,6 +395,10 @@ func LookupForReportingByKey(key InternalKey, forSystemTenant bool) (Setting, bo
 // tenant.
 const ForSystemTenant = true
 
+// ForVirtualCluster can be passed to Lookup for code that runs on
+// virtual clusters.
+const ForVirtualCluster = false
+
 // ReadableTypes maps our short type identifiers to friendlier names.
 var ReadableTypes = map[string]string{
 	"s": "string",

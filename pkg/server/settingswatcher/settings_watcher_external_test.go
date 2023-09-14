@@ -152,7 +152,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	copySettingsFromSystemToFakeTenant()
 
 	tenantSettings := cluster.MakeTestingClusterSettings()
-	tenantSettings.SV.SetNonSystemTenant()
+	tenantSettings.SV.SpecializeForVirtualCluster()
 
 	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
 	// Remove in v23.2.

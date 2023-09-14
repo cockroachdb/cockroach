@@ -122,9 +122,12 @@ func TestRangeFeedIntegration(t *testing.T) {
 
 		// Enable rangefeeds, otherwise the thing will retry until they are enabled.
 		for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
+			// Whether rangefeeds are enabled is a property of both the
+			// storage layer and the application layer.
 			kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
-			kvserver.RangeFeedUseScheduler.Override(ctx, &l.ClusterSettings().SV, s.useScheduler)
 		}
+		// Scheduler use is a property of the storage layer.
+		kvserver.RangeFeedUseScheduler.Override(ctx, &srv.SystemLayer().ClusterSettings().SV, s.useScheduler)
 
 		f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
 		require.NoError(t, err)
@@ -211,10 +214,11 @@ func TestWithOnFrontierAdvance(t *testing.T) {
 		for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
 			// Enable rangefeeds, otherwise the thing will retry until they are enabled.
 			kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
-			kvserver.RangeFeedUseScheduler.Override(ctx, &l.ClusterSettings().SV, s.useScheduler)
 			// Lower the closed timestamp target duration to speed up the test.
 			closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
 		}
+		// Scheduler use is a property of the storage layer.
+		kvserver.RangeFeedUseScheduler.Override(ctx, &srv.SystemLayer().ClusterSettings().SV, s.useScheduler)
 
 		// Split the range into two so we know the frontier has more than one span to
 		// track for certain. We later write to both these ranges.
@@ -333,10 +337,11 @@ func TestWithOnCheckpoint(t *testing.T) {
 		for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
 			// Enable rangefeeds, otherwise the thing will retry until they are enabled.
 			kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
-			kvserver.RangeFeedUseScheduler.Override(ctx, &l.ClusterSettings().SV, s.useScheduler)
 			// Lower the closed timestamp target duration to speed up the test.
 			closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
 		}
+		// Scheduler use is a property of the storage layer.
+		kvserver.RangeFeedUseScheduler.Override(ctx, &srv.SystemLayer().ClusterSettings().SV, s.useScheduler)
 
 		f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
 		require.NoError(t, err)
@@ -434,10 +439,11 @@ func TestRangefeedValueTimestamps(t *testing.T) {
 		for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
 			// Enable rangefeeds, otherwise the thing will retry until they are enabled.
 			kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
-			kvserver.RangeFeedUseScheduler.Override(ctx, &l.ClusterSettings().SV, s.useScheduler)
 			// Lower the closed timestamp target duration to speed up the test.
 			closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
 		}
+		// Scheduler use is a property of the storage layer.
+		kvserver.RangeFeedUseScheduler.Override(ctx, &srv.SystemLayer().ClusterSettings().SV, s.useScheduler)
 
 		f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
 		require.NoError(t, err)
@@ -542,8 +548,10 @@ func TestWithOnSSTable(t *testing.T) {
 		for _, l := range []serverutils.ApplicationLayerInterface{tsrv, srv.SystemLayer()} {
 			// Enable rangefeeds, otherwise the thing will retry until they are enabled.
 			kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
-			kvserver.RangeFeedUseScheduler.Override(ctx, &l.ClusterSettings().SV, s.useScheduler)
 		}
+		// Scheduler use is a property of the storage layer.
+		kvserver.RangeFeedUseScheduler.Override(ctx, &srv.SystemLayer().ClusterSettings().SV, s.useScheduler)
+
 		f, err := rangefeed.NewFactory(tsrv.AppStopper(), db, tsrv.ClusterSettings(), nil)
 		require.NoError(t, err)
 
@@ -648,11 +656,12 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, tc.WaitForFullReplication())
 
-		for _, l := range []serverutils.ApplicationLayerInterface{tsrv, tsrv.SystemLayer()} {
+		for _, l := range []serverutils.ApplicationLayerInterface{srv, tsrv.SystemLayer()} {
 			// Enable rangefeeds, otherwise the thing will retry until they are enabled.
 			kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
-			kvserver.RangeFeedUseScheduler.Override(ctx, &l.ClusterSettings().SV, s.useScheduler)
 		}
+		// Scheduler use is a property of the storage layer.
+		kvserver.RangeFeedUseScheduler.Override(ctx, &tsrv.SystemLayer().ClusterSettings().SV, s.useScheduler)
 
 		f, err := rangefeed.NewFactory(srv.AppStopper(), db, srv.ClusterSettings(), nil)
 		require.NoError(t, err)
@@ -755,11 +764,12 @@ func TestWithOnDeleteRange(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, tc.WaitForFullReplication())
 
-		for _, l := range []serverutils.ApplicationLayerInterface{tsrv, tsrv.SystemLayer()} {
+		for _, l := range []serverutils.ApplicationLayerInterface{srv, tsrv.SystemLayer()} {
 			// Enable rangefeeds, otherwise the thing will retry until they are enabled.
 			kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
-			kvserver.RangeFeedUseScheduler.Override(ctx, &l.ClusterSettings().SV, s.useScheduler)
 		}
+		// Scheduler use is a property of the storage layer.
+		kvserver.RangeFeedUseScheduler.Override(ctx, &tsrv.SystemLayer().ClusterSettings().SV, s.useScheduler)
 
 		f, err := rangefeed.NewFactory(srv.AppStopper(), db, srv.ClusterSettings(), nil)
 		require.NoError(t, err)
@@ -944,10 +954,11 @@ func TestUnrecoverableErrors(t *testing.T) {
 		for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
 			// Enable rangefeeds, otherwise the thing will retry until they are enabled.
 			kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
-			kvserver.RangeFeedUseScheduler.Override(ctx, &l.ClusterSettings().SV, s.useScheduler)
 			// Lower the closed timestamp target duration to speed up the test.
 			closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
 		}
+		// Scheduler use is a property of the storage layer.
+		kvserver.RangeFeedUseScheduler.Override(ctx, &srv.SystemLayer().ClusterSettings().SV, s.useScheduler)
 
 		store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 		require.NoError(t, err)
@@ -1033,10 +1044,11 @@ func TestMVCCHistoryMutationError(t *testing.T) {
 		for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
 			// Enable rangefeeds, otherwise the thing will retry until they are enabled.
 			kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
-			kvserver.RangeFeedUseScheduler.Override(ctx, &l.ClusterSettings().SV, s.useScheduler)
 			// Lower the closed timestamp target duration to speed up the test.
 			closedts.TargetDuration.Override(ctx, &l.ClusterSettings().SV, 100*time.Millisecond)
 		}
+		// Scheduler use is a property of the storage layer.
+		kvserver.RangeFeedUseScheduler.Override(ctx, &srv.SystemLayer().ClusterSettings().SV, s.useScheduler)
 
 		// Set up a rangefeed.
 		f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
@@ -1131,8 +1143,9 @@ func TestRangefeedWithLabelsOption(t *testing.T) {
 		for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
 			// Enable rangefeeds, otherwise the thing will retry until they are enabled.
 			kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
-			kvserver.RangeFeedUseScheduler.Override(ctx, &l.ClusterSettings().SV, s.useScheduler)
 		}
+		// Scheduler use is a property of the storage layer.
+		kvserver.RangeFeedUseScheduler.Override(ctx, &srv.SystemLayer().ClusterSettings().SV, s.useScheduler)
 
 		const rangefeedName = "test-feed"
 		type label struct {
@@ -1239,8 +1252,9 @@ func TestRangeFeedStartTimeExclusive(t *testing.T) {
 		for _, l := range []serverutils.ApplicationLayerInterface{ts, srv.SystemLayer()} {
 			// Enable rangefeeds, otherwise the thing will retry until they are enabled.
 			kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
-			kvserver.RangeFeedUseScheduler.Override(ctx, &l.ClusterSettings().SV, s.useScheduler)
 		}
+		// Scheduler use is a property of the storage layer.
+		kvserver.RangeFeedUseScheduler.Override(ctx, &srv.SystemLayer().ClusterSettings().SV, s.useScheduler)
 
 		f, err := rangefeed.NewFactory(ts.AppStopper(), db, ts.ClusterSettings(), nil)
 		require.NoError(t, err)
