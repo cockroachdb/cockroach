@@ -69,6 +69,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvclient/rangefeed",
+        "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
