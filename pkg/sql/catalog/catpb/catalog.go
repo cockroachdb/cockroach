@@ -122,7 +122,7 @@ func (m *RowLevelTTL) DeletionCronOrDefault() string {
 	if override := m.DeletionCron; override != "" {
 		return override
 	}
-	return "@hourly"
+	return "@daily"
 }
 
 func (rowLevelTTL *RowLevelTTL) GetTTLExpr() Expression {
