@@ -43,11 +43,7 @@ func TestInsightsWorkload(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		UseDatabase: `test`,
-
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109458),
-	})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
 	defer srv.Stopper().Stop(ctx)
 
 	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE test`)
