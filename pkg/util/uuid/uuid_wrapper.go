@@ -125,11 +125,11 @@ var fastGen = NewGenWithReader(defaultRandReader{})
 
 // NewPopulatedUUID returns a populated UUID.
 func NewPopulatedUUID(r interface {
-	Int63() int64
+	Uint64() uint64
 }) *UUID {
 	var u UUID
-	binary.LittleEndian.PutUint64(u[:8], uint64(r.Int63()))
-	binary.LittleEndian.PutUint64(u[8:], uint64(r.Int63()))
+	binary.LittleEndian.PutUint64(u[:8], r.Uint64())
+	binary.LittleEndian.PutUint64(u[8:], r.Uint64())
 	return &u
 }
 
