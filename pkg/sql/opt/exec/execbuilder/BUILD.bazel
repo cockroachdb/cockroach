@@ -26,6 +26,7 @@ go_library(
         "//pkg/sql/opt/distribution",
         "//pkg/sql/opt/exec",
         "//pkg/sql/opt/exec/explain",
+        "//pkg/sql/opt/lookupjoin",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/ordering",

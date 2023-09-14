@@ -475,6 +475,7 @@ define InsertFastPath {
     ReturnCols exec.TableColumnOrdinalSet
     CheckCols exec.CheckOrdinalSet
     FkChecks []exec.InsertFastPathFKCheck
+    UniqChecks []exec.InsertFastPathFKCheck
 
     # If set, the operator will commit the transaction as part of its execution.
     # This is false when executing inside an explicit transaction.

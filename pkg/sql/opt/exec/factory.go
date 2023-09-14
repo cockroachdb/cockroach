@@ -256,9 +256,17 @@ type InsertFastPathFKCheck struct {
 	ReferencedTable cat.Table
 	ReferencedIndex cat.Index
 
+	// These are constant values for the prefix of the lookup with which the
+	// spans are generated from. The suffix values come from values in
+	// InsertCols.
+	// TODO(mgartner): Document this better.
+	PrefixValues []tree.Datums
+
 	// InsertCols contains the FK columns from the origin table, in the order of
 	// the ReferencedIndex columns. For each, the value in the array indicates the
 	// index of the column in the input table.
+	// TODO(mgartner): Should this be as long as the index key columns, or
+	// should it be len(keyCols)-len(PrefixValues)?
 	InsertCols []TableColumnOrdinal
 
 	MatchMethod tree.CompositeKeyMatchMethod

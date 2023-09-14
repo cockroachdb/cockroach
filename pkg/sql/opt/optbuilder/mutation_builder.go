@@ -227,6 +227,15 @@ func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias 
 
 	// Add the table and its columns (including mutation columns) to metadata.
 	mb.tabID = mb.md.AddTable(tab, &mb.alias)
+	tabMeta := mb.md.TableMeta(mb.tabID)
+
+	// We must add check constraints to the table metadata in order to generate
+	// unique checks for fast path inserts.
+	// TODO(mgartner): Do we need to add computed column expressions too? I'm
+	// not sure.
+	// TODO(mgartner): We should avoid unnecessary computation by only doing
+	// this when there are UNIQUE WITHOUT INDEX constraints on the table.
+	mb.b.addCheckConstraintsForTable(tabMeta)
 }
 
 // setFetchColIDs sets the list of columns that are fetched in order to provide

@@ -1,0 +1,54 @@
+statement ok
+SET experimental_enable_unique_without_index_constraints = true;
+
+statement ok
+CREATE TABLE t (
+  r STRING,
+  k INT,
+  a INT,
+  b STRING,
+  c STRING,
+  PRIMARY KEY (r, k),
+  CHECK (r IN ('east', 'west')),
+  UNIQUE (r, a),
+  UNIQUE WITHOUT INDEX (a),
+  UNIQUE (r, b, c),
+  UNIQUE WITHOUT INDEX (b, c),
+  FAMILY (r, k, a, b, c)
+)
+
+query T
+EXPLAIN
+INSERT INTO t VALUES ('east', 1, 10, 'b', 'c')
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  into: t(r, k, a, b, c)
+  auto commit
+  size: 6 columns, 1 row
+
+
+query T kvtrace
+INSERT INTO t VALUES ('east', 1, 10, 'b', 'c')
+----
+CPut /Table/106/1/"east"/1/0 -> /TUPLE/3:3:Int/10/1:4:Bytes/b/1:5:Bytes/c
+InitPut /Table/106/2/"east"/10/0 -> /BYTES/0x89
+InitPut /Table/106/3/"east"/"b"/"c"/0 -> /BYTES/0x89
+Scan /Table/106/2/"east"/10/{0-1}
+Scan /Table/106/2/"west"/10/{0-1}
+Scan /Table/106/3/"east"/"b"/"c"/{0-1}
+Scan /Table/106/3/"west"/"b"/"c"/{0-1}
+
+statement error duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(10\) already exists\.
+INSERT INTO t VALUES ('west', 2, 10, 'c', 'd')
+
+statement ok
+INSERT INTO t VALUES ('west', 2, 20, 'bb', 'cc')
+
+statement error duplicate key value violates unique constraint "unique_b_c"\nDETAIL: Key \(b, c\)=\('b', 'c'\) already exists\.
+INSERT INTO t VALUES ('west', 3, 30, 'b', 'c')
+
+statement error duplicate key value violates unique constraint "unique_b_c"\nDETAIL: Key \(b, c\)=\('b', 'c'\) already exists\.
+INSERT INTO t VALUES ('east', 4, 40, 'b', 'c')

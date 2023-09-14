@@ -1002,6 +1002,13 @@ func TestLogic_insert(
 	runLogicTest(t, "insert")
 }
 
+func TestLogic_insert_fast_path_unique_checks(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "insert_fast_path_unique_checks")
+}
+
 func TestLogic_int_size(
 	t *testing.T,
 ) {

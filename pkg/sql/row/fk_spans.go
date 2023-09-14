@@ -32,3 +32,51 @@ func FKCheckSpan(
 	}
 	return splitter.ExistenceCheckSpan(span, numCols, containsNull), nil
 }
+
+// UniqueAndFKCheckSpan returns a span that can be scanned to ascertain existence of a
+// specific row in a given index.
+// TODO(mgartner): This should probably live somewhere else, since it is used
+// for unique and FK checks.
+func UniqueAndFKCheckSpans(
+	builder *span.Builder,
+	splitter span.Splitter,
+	values []tree.Datum,
+	colMap catalog.TableColMap,
+	numCols int,
+	prefixValues []tree.Datums,
+) (roachpb.Spans, error) {
+	// If there are prefix values...
+	// TODO(mgartner): Explain this.
+	if len(prefixValues) > 0 {
+		spans := make(roachpb.Spans, len(prefixValues)*len(prefixValues[0]))
+		// Create a slice of scratch values that contains the same elements as
+		// values but that we can replace prefix values with.
+		scratchValues := make([]tree.Datum, len(values))
+		copy(scratchValues, values)
+		for i := range prefixValues {
+			for j := range prefixValues[i] {
+				var containsNull bool
+				var err error
+				spanIdx := i*j + j
+				// TODO(mgartner): I think this is broken if prefix values are
+				// not the first columns in the table. We need to map them
+				// correctly.
+				scratchValues[i] = prefixValues[i][j]
+				spans[spanIdx], containsNull, err = builder.SpanFromDatumRow(scratchValues, numCols, colMap)
+				if err != nil {
+					return nil, err
+				}
+				spans[spanIdx] = splitter.ExistenceCheckSpan(spans[spanIdx], numCols, containsNull)
+			}
+		}
+		return spans, nil
+	}
+
+	// Otherwise...
+	// TODO(mgartner): Explain this.
+	span, containsNull, err := builder.SpanFromDatumRow(values, numCols, colMap)
+	if err != nil {
+		return nil, err
+	}
+	return roachpb.Spans{splitter.ExistenceCheckSpan(span, numCols, containsNull)}, nil
+}

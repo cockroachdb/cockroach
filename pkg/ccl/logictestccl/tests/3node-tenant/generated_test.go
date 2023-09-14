@@ -1017,6 +1017,13 @@ func TestTenantLogic_insert(
 	runLogicTest(t, "insert")
 }
 
+func TestTenantLogic_insert_fast_path_unique_checks(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "insert_fast_path_unique_checks")
+}
+
 func TestTenantLogic_int_size(
 	t *testing.T,
 ) {

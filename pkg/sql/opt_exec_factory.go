@@ -1408,6 +1408,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
 	fkChecks []exec.InsertFastPathFKCheck,
+	uniqChecks []exec.InsertFastPathFKCheck,
 	autoCommit bool,
 ) (exec.Node, error) {
 	// Derive insert table and column descriptors.
@@ -1451,6 +1452,13 @@ func (ef *execFactory) ConstructInsertFastPath(
 		ins.run.fkChecks = make([]insertFastPathFKCheck, len(fkChecks))
 		for i := range fkChecks {
 			ins.run.fkChecks[i].InsertFastPathFKCheck = fkChecks[i]
+		}
+	}
+
+	if len(uniqChecks) > 0 {
+		ins.run.uniqChecks = make([]insertFastPathFKCheck, len(uniqChecks))
+		for i := range uniqChecks {
+			ins.run.uniqChecks[i].InsertFastPathFKCheck = uniqChecks[i]
 		}
 	}
 

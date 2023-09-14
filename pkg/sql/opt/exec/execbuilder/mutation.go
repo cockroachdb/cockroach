@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/lookupjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -157,14 +158,52 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		return execPlan{}, false, nil
 	}
 
-	// We cannot use the fast path if any uniqueness checks are needed.
-	// TODO(rytaft): try to relax this restriction (see #58047).
-	if len(ins.UniqueChecks) > 0 {
-		return execPlan{}, false, nil
-	}
-
 	md := b.mem.Metadata()
 	tab := md.Table(ins.Table)
+	tabMeta := md.TableMeta(ins.Table)
+
+	// TODO(mgartner): Use a special struct for unique checks, or combine unqiue
+	// and FK checks into one.
+	// TODO(mgartner): Is this length always long enough, or might some unique
+	// checks be pruned before getting here?
+	uniqChecks := make([]exec.InsertFastPathFKCheck, len(ins.UniqueChecks))
+	if len(ins.UniqueChecks) > 0 {
+		for i, n := 0, tab.UniqueCount(); i < n; i++ {
+			uc := tab.Unique(i)
+
+			// Skip unique constraints with indexes.
+			if !uc.WithoutIndex() {
+				continue
+			}
+
+			// Find an index that we can use to lookup duplicates.
+			prefixValues, insertCols, index, ok := b.findLookupIndexForUniqCheck(ins.Table, uc)
+			if !ok {
+				// An index could not be found so we cannot perform the
+				// fast-path.
+				return execPlan{}, false, nil
+			}
+
+			// Create the uniqueness check.
+			out := &uniqChecks[i]
+			out.PrefixValues = prefixValues
+			out.InsertCols = insertCols
+			out.ReferencedTable = tab
+			out.ReferencedIndex = index
+			// TODO(mgartner): What match should be used?
+			out.MatchMethod = tree.MatchSimple
+			// TODO(mgartner): What locking should be used?
+			out.Locking = opt.Locking{}
+			prefixColCount := len(prefixValues)
+			out.MkErr = func(row tree.Datums) error {
+				keyVals := make(tree.Datums, len(row)-prefixColCount)
+				for i := range keyVals {
+					keyVals[i] = row[i+prefixColCount]
+				}
+				return mkUniqueCheckErr(tabMeta, uc, keyVals)
+			}
+		}
+	}
 
 	//  - there are no self-referencing foreign keys;
 	//  - all FK checks can be performed using direct lookups into unique indexes.
@@ -275,6 +314,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		returnOrds,
 		checkOrds,
 		fkChecks,
+		uniqChecks,
 		b.allowAutoCommit,
 	)
 	if err != nil {
@@ -286,6 +326,108 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		ep.outputCols = mutationOutputColMap(ins)
 	}
 	return ep, true, nil
+}
+
+// findLookupIndexForUniqCheck looks for an index that can be used for looking
+// up uniqueness conflicts.
+//
+// It searches for an index that:
+//
+//  1. Has a suffix of columns that are the same as the unique constraint's
+//     columns.
+//  2. And has a prefix of columns that can be constrained to a set of
+//     constant values.
+//
+// For example, if the table contains:
+//
+//	UNIQUE (region, company_id, employee_id)
+//	UNIQUE WITHOUT INDEX (company_id, employee_id)
+//	CHECK (region IN ('east', 'west'))
+//
+// It will find the three-column unique index and the possible values for region
+// so that lookups can be planned on the unique index to verify the uniqueness
+// of the UNIQUE WITHOUT INDEX constraint.
+func (b *Builder) findLookupIndexForUniqCheck(
+	tabID opt.TableID, uc cat.UniqueConstraint,
+) (prefixValues []tree.Datums, insertCols []exec.TableColumnOrdinal, index cat.Index, ok bool) {
+	md := b.mem.Metadata()
+	tab := md.Table(tabID)
+	tabMeta := md.TableMeta(tabID)
+
+	numUniqCols := uc.ColumnCount()
+	for i, n := 0, tab.IndexCount(); i < n; i++ {
+		// Look for matching suffix columns first.
+		index := tab.Index(i)
+		if !index.IsUnique() {
+			continue
+		}
+
+		// If the index has fewer columns than the constraint, it won't be
+		// useful.
+		numIndexCols := index.ExplicitColumnCount()
+		if numIndexCols < numUniqCols {
+			continue
+		}
+
+		matchingSuffix := true
+		// TODO(mgartner): Only allocate insertCols if necessary; reuse between
+		// loops.
+		insertCols = make([]exec.TableColumnOrdinal, numIndexCols)
+		for j := 0; j < numUniqCols; j++ {
+			// Scan the constraint and index columns from back to front.
+			uniqOrd := numUniqCols - j - 1
+			indexOrd := numIndexCols - j - 1
+			ucTableOrd := uc.ColumnOrdinal(tab, uniqOrd)
+			if ucTableOrd != index.Column(indexOrd).Ordinal() {
+				matchingSuffix = false
+				break
+			}
+			insertCols[numIndexCols-j-1] = exec.TableColumnOrdinal(ucTableOrd)
+		}
+		if !matchingSuffix {
+			// Move on to the next index if the suffixes do not match.
+			continue
+		}
+
+		// If we have found all the columns we need, then we do not need to find
+		// prefix values.
+		if numIndexCols == numUniqCols {
+			// TODO(mgarnter): Return the insert columns here.
+		}
+
+		// If there are remaining columns, see if they can be constrained to a
+		// set of values by a check constraint.
+		if tabMeta.Constraints == nil {
+			// Without constraints, there is nothing we can do.
+			continue
+		}
+
+		checks := *tabMeta.Constraints.(*memo.FiltersExpr)
+		canConstrainPrefix := true
+		prefixColCount := numIndexCols - numUniqCols
+		// TODO(mgartner): Only allocate prefixValues if necessary; reuse
+		// between loops.
+		prefixValues = make([]tree.Datums, prefixColCount)
+		for ord := 0; ord < prefixColCount; ord++ {
+			col := tab.Column(ord)
+			colID := tabID.ColumnID(col.Ordinal())
+			// TODO(mgartner): Consider moving this function out of the
+			// lookupjoin package.
+			values, _, ok := lookupjoin.FindJoinFilterConstants(checks, colID, b.evalCtx)
+			if !ok {
+				canConstrainPrefix = false
+				break
+			}
+			prefixValues[ord] = values
+		}
+
+		if !canConstrainPrefix {
+			continue
+		}
+
+		return prefixValues, insertCols, index, true
+	}
+	return nil, nil, nil, false
 }
 
 // rearrangeColumns rearranges the columns in a matrix of TypedExpr values.
