@@ -195,7 +195,7 @@ type splitAndScatterProcessor struct {
 
 	scatterer splitAndScatterer
 	// cancelScatterAndWaitForWorker cancels the scatter goroutine and waits for
-	// it to finish.
+	// it to finish. It can be called multiples times.
 	cancelScatterAndWaitForWorker func()
 
 	doneScatterCh chan entryNode
