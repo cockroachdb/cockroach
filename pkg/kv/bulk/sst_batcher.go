@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -635,9 +636,9 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 
 	// Take a copy of the fields that can be captured by the call to addSSTable
 	// below, that could occur asynchronously.
-	//stats := b.ms
+	stats := b.ms
 	data := b.sstFile.Data()
-	//batchTS := b.batchTS
+	batchTS := b.batchTS
 	currentBatchSummary := b.batchRowCounter.BulkOpSummary
 	res, err := b.limiter.Begin(ctx)
 	if err != nil {
@@ -680,9 +681,9 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	fn := func(ctx context.Context) error {
 		defer res.Release()
 		defer b.mem.Shrink(ctx, reserved)
-		//if err := b.addSSTable(ctx, batchTS, start, end, data, stats, !flushAsync, currentBatchStatsCopy); err != nil {
-		//	return err
-		//}
+		if err := b.addSSTable(ctx, batchTS, start, end, data, stats, !flushAsync, currentBatchStatsCopy); err != nil {
+			return err
+		}
 
 		// Now that we have completed ingesting the SSTables we take a lock and
 		// update the statistics on the SSTBatcher.
@@ -844,7 +845,20 @@ func (b *SSTBatcher) addSSTable(
 				}
 				ba.Add(req)
 				beforeSend := timeutil.Now()
-				br, pErr := b.db.NonTransactionalSender().Send(ctx, ba)
+
+				sp := tracing.SpanFromContext(ctx)
+				opts := make([]tracing.SpanOption, 0)
+				opts = append(opts, tracing.WithParent(sp), tracing.WithRecording(tracingpb.RecordingVerbose))
+				addSSTCtx, addSSTSpan := sp.Tracer().StartSpanCtx(ctx, "backupccl.AddSSTableRequest", opts...)
+
+				br, pErr := b.db.NonTransactionalSender().Send(addSSTCtx, ba)
+				recording := addSSTSpan.FinishAndGetConfiguredRecording()
+				if timeutil.Since(beforeSend) > 4*time.Second {
+					if recording != nil {
+						log.Errorf(ctx, "long addsst: sending %s AddSSTable [%s,%s)\n\ntrace:\n%s",
+							sz(len(item.sstBytes)), item.start, item.end, recording)
+					}
+				}
 				sendTime := timeutil.Since(beforeSend)
 
 				ingestionPerformanceStats.SendWait += sendTime
