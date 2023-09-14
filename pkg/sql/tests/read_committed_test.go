@@ -86,9 +86,12 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	codec = s.ApplicationLayer().Codec()
 
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true`)
+	require.NoError(t, err)
+
 	// Create a table with three rows. Note that k is not the primary key,
 	// so locking won't be pushed into the initial scan of the UPDATEs below.
-	_, err := sqlDB.Exec(`CREATE TABLE kv (k TEXT, v INT);`)
+	_, err = sqlDB.Exec(`CREATE TABLE kv (k TEXT, v INT);`)
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`INSERT INTO kv VALUES ('a', 1);`)
 	require.NoError(t, err)
