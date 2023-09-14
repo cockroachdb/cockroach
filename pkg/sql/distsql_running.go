@@ -2004,9 +2004,11 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		log.VEventf(ctx, 1, "encountered an error when running the distributed plan, re-running it as local: %v", distributedErr)
 		recv.resetForLocalRerun(subqueriesStats)
 		telemetry.Inc(sqltelemetry.DistributedErrorLocalRetryAttempt)
+		dsp.distSQLSrv.ServerConfig.Metrics.DistErrorLocalRetryAttempts.Inc(1)
 		defer func() {
-			if recv.getError() == nil {
-				telemetry.Inc(sqltelemetry.DistributedErrorLocalRetrySuccess)
+			if recv.getError() != nil {
+				telemetry.Inc(sqltelemetry.DistributedErrorLocalRetryFailure)
+				dsp.distSQLSrv.ServerConfig.Metrics.DistErrorLocalRetryFailures.Inc(1)
 			}
 		}()
 		// Note that since we're going to execute the query locally now, there
