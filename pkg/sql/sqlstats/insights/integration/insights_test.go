@@ -569,8 +569,8 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		rows, err := conn.DB.QueryContext(ctx, `SELECT
 		query,
-		insight.contention::FLOAT,
-		sum(txn_contention.contention_duration)::FLOAT AS durationMs,
+		COALESCE(insight.contention, 0::INTERVAL)::FLOAT,
+		COALESCE(sum(txn_contention.contention_duration), 0::INTERVAL)::FLOAT AS durationMs,
 		txn_contention.schema_name,
 		txn_contention.database_name,
 		txn_contention.table_name,
