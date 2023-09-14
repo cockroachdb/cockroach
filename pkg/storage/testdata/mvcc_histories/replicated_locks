@@ -1,0 +1,318 @@
+run ok
+txn_begin t=A ts=10,0
+txn_begin t=B ts=11,0
+----
+>> at end:
+txn: "B" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+
+run ok
+with t=A
+  check_for_acquire_lock k=k1 str=shared
+  check_for_acquire_lock k=k2 str=shared
+  check_for_acquire_lock k=k3 str=exclusive
+  acquire_lock k=k1 str=shared
+  acquire_lock k=k2 str=shared
+  acquire_lock k=k3 str=exclusive
+----
+>> at end:
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+
+# Reacquire with weaker, equal, and stronger strengths. All should succeed, but
+# only the stronger strength should actually write a new lock key.
+
+run ok
+with t=A
+  acquire_lock k=k2 str=shared
+  acquire_lock k=k2 str=exclusive
+  acquire_lock k=k3 str=shared
+  acquire_lock k=k3 str=exclusive
+----
+>> at end:
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+
+# Reacquire with weaker, equal, and stronger strengths in new epoch. All should
+# succeed, but only the stronger strength acquisitions (in the new epoch) should
+# actually (re)write lock keys.
+
+run ok
+with t=A
+  txn_restart
+  acquire_lock k=k1 str=shared
+  acquire_lock k=k2 str=shared
+  acquire_lock k=k2 str=exclusive
+  acquire_lock k=k3 str=exclusive
+  acquire_lock k=k3 str=shared
+----
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+
+# Reacquisition of the same locks in the same epoch with later sequences should
+# be no-ops.
+
+run ok
+with t=A
+  txn_step
+  acquire_lock k=k1 str=shared
+  acquire_lock k=k2 str=shared
+  acquire_lock k=k2 str=exclusive
+  acquire_lock k=k3 str=exclusive
+  acquire_lock k=k3 str=shared
+----
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+
+# Reacquisition of the same locks in the same epoch with later sequences after
+# the earlier sequence has been rolled back should rewrite the locks with the
+# newer sequence.
+
+run ok
+with t=A
+  txn_ignore_seqs seqs=0-0
+  acquire_lock k=k1 str=shared
+  acquire_lock k=k2 str=shared
+  acquire_lock k=k2 str=exclusive
+  acquire_lock k=k3 str=exclusive
+  acquire_lock k=k3 str=shared
+----
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+
+# Txn B can only acquire a shared lock on k1.
+
+run ok
+with t=B
+  check_for_acquire_lock k=k1 str=shared
+  acquire_lock k=k1 str=shared
+----
+>> at end:
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+
+run error
+check_for_acquire_lock t=B k=k1 str=exclusive
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k1"
+
+run error
+acquire_lock t=B k=k1 str=exclusive
+----
+>> at end:
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*kvpb.LockConflictError:) conflicting locks on "k1"
+
+run error
+check_for_acquire_lock t=B k=k2 str=shared
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k2"
+
+run error
+acquire_lock t=B k=k2 str=shared
+----
+>> at end:
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*kvpb.LockConflictError:) conflicting locks on "k2"
+
+run error
+check_for_acquire_lock t=B k=k2 str=exclusive
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k2", "k2"
+
+run error
+acquire_lock t=B k=k2 str=exclusive
+----
+>> at end:
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*kvpb.LockConflictError:) conflicting locks on "k2", "k2"
+
+run error
+check_for_acquire_lock t=B k=k3 str=shared
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k3"
+
+run error
+acquire_lock t=B k=k3 str=shared
+----
+>> at end:
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*kvpb.LockConflictError:) conflicting locks on "k3"
+
+run error
+check_for_acquire_lock t=B k=k3 str=exclusive
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k3"
+
+run error
+acquire_lock t=B k=k3 str=exclusive
+----
+>> at end:
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*kvpb.LockConflictError:) conflicting locks on "k3"
+
+# Now that there are two shared locks on key k1, txn A can no longer upgrade its lock.
+
+run error
+check_for_acquire_lock t=A k=k1 str=exclusive
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k1"
+
+run error
+acquire_lock t=A k=k1 str=exclusive
+----
+>> at end:
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*kvpb.LockConflictError:) conflicting locks on "k1"
+
+# Intents are treated similarly to Exclusive locks.
+
+run ok
+put t=A k=k4 v=v4
+----
+>> at end:
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k4"/10.000000000,0 -> /BYTES/v4
+
+run ok
+with t=A
+  check_for_acquire_lock k=k4 str=shared
+  check_for_acquire_lock k=k4 str=exclusive
+  acquire_lock k=k4 str=shared
+  acquire_lock k=k4 str=exclusive
+----
+>> at end:
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k4"/Intent -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+
+run error
+check_for_acquire_lock t=B k=k4 str=shared
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k4"
+
+run error
+acquire_lock t=B k=k4 str=shared
+----
+>> at end:
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k4"/Intent -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=10.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+error: (*kvpb.LockConflictError:) conflicting locks on "k4"
+
+# The intent history is considered when determining whether a reacquisition is
+# needed on the same key as a previous intent write.
+
+run ok
+with t=A
+  txn_step
+  put k=k4 v=v4_prime
+----
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+meta: "k4"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k4"/10.000000000,0 -> /BYTES/v4_prime
+
+run ok
+with t=A
+  txn_step
+  acquire_lock k=k4 str=shared
+----
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k4"/Intent -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+
+run
+with t=A
+  txn_ignore_seqs seqs=2-2
+  acquire_lock k=k4 str=shared
+----
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k4"/Intent -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+
+run
+with t=A
+  txn_ignore_seqs seqs=1-2
+  acquire_lock k=k4 str=shared
+----
+>> at end:
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0 isn=1
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k2"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k3"/Exclusive -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=1} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k4"/Intent -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=2} ts=10.000000000,0 del=false klen=12 vlen=13 ih={{1 /BYTES/v4}} mergeTs=<nil> txnDidNotUpdateMeta=false
+lock (Replicated): "k4"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=10.000000000,0 min=0,0 seq=3} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+
+# Replicated locks are ignored by non-locking scans by any transaction. Note
+# that we terminate scans at key "k4" to ignore the intent that we just wrote,
+# which is not ignored by non-locking scans.
+
+run ok
+with k=k1 end=k4
+  scan t=A
+  scan t=B
+  scan notxn
+----
+scan: "k1"-"k4" -> <no data>
+scan: "k1"-"k4" -> <no data>
+scan: "k1"-"k4" -> <no data>

@@ -28,7 +28,7 @@ put k=k2 v=v3 ts=13,0 t=B
 put k=k3 v=v4 ts=14,0 t=C
 put k=k4 v=v5 ts=15,0
 put k=k5 v=v6 ts=17,0
-add_lock k=k4 t=E
+add_unreplicated_lock k=k4 t=E
 ----
 >> at end:
 data: "k1"/11.000000000,0 -> /BYTES/v1
@@ -39,7 +39,9 @@ meta: "k3"/0,0 -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=
 data: "k3"/14.000000000,0 -> /BYTES/v4
 data: "k4"/15.000000000,0 -> /BYTES/v5
 data: "k5"/17.000000000,0 -> /BYTES/v6
-lock-table: {k4:00000005-0000-0000-0000-000000000000}
+lock (Replicated): "k2"/Intent -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0} ts=13.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k3"/Intent -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=14.000000000,0 min=0,0 seq=0} ts=14.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Unreplicated): k4/Exclusive -> id=00000005 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=16.000000000,0 min=0,0 seq=0
 
 # Test cases:
 #

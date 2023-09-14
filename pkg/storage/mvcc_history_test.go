@@ -75,17 +75,19 @@ var (
 //
 // txn_begin      t=<name> [ts=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
 // txn_remove     t=<name>
-// txn_restart    t=<name>
+// txn_restart    t=<name> [epoch=<int>]
 // txn_update     t=<name> t2=<name>
-// txn_step       t=<name> [n=<int>]
+// txn_step       t=<name> [n=<int>] [seq=<int>]
 // txn_advance    t=<name> ts=<int>[,<int>]
 // txn_status     t=<name> status=<txnstatus>
 // txn_ignore_seqs t=<name> seqs=[<int>-<int>[,<int>-<int>...]]
 //
-// resolve_intent t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]] [targetBytes=<int>]
-// resolve_intent_range t=<name> k=<key> end=<key> [status=<txnstatus>] [maxKeys=<int>] [targetBytes=<int>]
-// check_intent   k=<key> [none]
-// add_lock       t=<name> k=<key>
+// resolve_intent         t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]] [targetBytes=<int>]
+// resolve_intent_range   t=<name> k=<key> end=<key> [status=<txnstatus>] [maxKeys=<int>] [targetBytes=<int>]
+// check_intent           k=<key> [none]
+// add_unreplicated_lock  t=<name> k=<key>
+// check_for_acquire_lock t=<name> k=<key> str=<strength>
+// acquire_lock           t=<name> k=<key> str=<strength>
 //
 // cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] k=<key> v=<string> [raw] [cond=<string>]
 // del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] k=<key>
@@ -349,7 +351,60 @@ func TestMVCCHistories(t *testing.T) {
 					}
 				}
 			}
+			return nil
+		}
 
+		// reportLockTable outputs the contents of the lock table.
+		reportLockTable := func(e *evalCtx, buf *redact.StringBuilder) error {
+			// Replicated locks.
+			ltStart := keys.LocalRangeLockTablePrefix
+			ltEnd := keys.LocalRangeLockTablePrefix.PrefixEnd()
+			iter, err := engine.NewEngineIterator(storage.IterOptions{UpperBound: ltEnd})
+			if err != nil {
+				return err
+			}
+			defer iter.Close()
+
+			var meta enginepb.MVCCMetadata
+			for valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: ltStart}); ; valid, err = iter.NextEngineKey() {
+				if err != nil {
+					return err
+				} else if !valid {
+					break
+				}
+				eKey, err := iter.EngineKey()
+				if err != nil {
+					return err
+				}
+				ltKey, err := eKey.ToLockTableKey()
+				if err != nil {
+					return errors.Wrapf(err, "decoding LockTable key: %v", eKey)
+				}
+				// Unmarshal.
+				v, err := iter.UnsafeValue()
+				if err != nil {
+					return err
+				}
+				if err := protoutil.Unmarshal(v, &meta); err != nil {
+					return errors.Wrapf(err, "unmarshaling mvcc meta: %v", ltKey)
+				}
+				buf.Printf("lock (%s): %v/%s -> %+v\n",
+					lock.Replicated, ltKey.Key, ltKey.Strength, &meta)
+			}
+
+			// Unreplicated locks.
+			if len(e.unreplLocks) > 0 {
+				var ks []string
+				for k := range e.unreplLocks {
+					ks = append(ks, k)
+				}
+				sort.Strings(ks)
+				for _, k := range ks {
+					txn := e.unreplLocks[k]
+					buf.Printf("lock (%s): %v/%s -> %+v\n",
+						lock.Unreplicated, k, lock.Exclusive, txn)
+				}
+			}
 			return nil
 		}
 
@@ -470,19 +525,15 @@ func TestMVCCHistories(t *testing.T) {
 						}
 					}
 					if printLocks {
-						var ks []string
-						for k := range e.locks {
-							ks = append(ks, k)
-						}
-						sort.Strings(ks)
-						buf.Printf("lock-table: {")
-						for i, k := range ks {
-							if i > 0 {
-								buf.Printf(", ")
+						err = reportLockTable(e, &buf)
+						if err != nil {
+							if foundErr == nil {
+								// Handle the error below.
+								foundErr = err
+							} else {
+								buf.Printf("error reading locks: (%T:) %v\n", err, err)
 							}
-							buf.Printf("%s:%s", k, e.locks[k].ID)
 						}
-						buf.Printf("}\n")
 					}
 				}
 
@@ -720,10 +771,12 @@ var commands = map[string]cmd{
 	"txn_step":        {typTxnUpdate, cmdTxnStep},
 	"txn_update":      {typTxnUpdate, cmdTxnUpdate},
 
-	"resolve_intent":       {typDataUpdate, cmdResolveIntent},
-	"resolve_intent_range": {typDataUpdate, cmdResolveIntentRange},
-	"check_intent":         {typReadOnly, cmdCheckIntent},
-	"add_lock":             {typLocksUpdate, cmdAddLock},
+	"resolve_intent":         {typDataUpdate, cmdResolveIntent},
+	"resolve_intent_range":   {typDataUpdate, cmdResolveIntentRange},
+	"check_intent":           {typReadOnly, cmdCheckIntent},
+	"add_unreplicated_lock":  {typLocksUpdate, cmdAddUnreplicatedLock},
+	"check_for_acquire_lock": {typReadOnly, cmdCheckForAcquireLock},
+	"acquire_lock":           {typLocksUpdate, cmdAcquireLock},
 
 	"clear":                 {typDataUpdate, cmdClear},
 	"clear_range":           {typDataUpdate, cmdClearRange},
@@ -834,6 +887,11 @@ func cmdTxnRestart(e *evalCtx) error {
 	up := roachpb.NormalUserPriority
 	tp := enginepb.MinTxnPriority
 	txn.Restart(up, tp, ts)
+	if e.hasArg("epoch") {
+		var epoch int
+		e.scanArg("epoch", &epoch)
+		txn.Epoch = enginepb.TxnEpoch(epoch)
+	}
 	e.results.txn = txn
 	return nil
 }
@@ -994,11 +1052,29 @@ func cmdCheckIntent(e *evalCtx) error {
 	})
 }
 
-func cmdAddLock(e *evalCtx) error {
+func cmdAddUnreplicatedLock(e *evalCtx) error {
 	txn := e.getTxn(mandatory)
 	key := e.getKey()
-	e.locks[string(key)] = txn
+	e.unreplLocks[string(key)] = &txn.TxnMeta
 	return nil
+}
+
+func cmdCheckForAcquireLock(e *evalCtx) error {
+	return e.withReader(func(r storage.Reader) error {
+		txn := e.getTxn(optional)
+		key := e.getKey()
+		str := e.getStrength()
+		return storage.MVCCCheckForAcquireLock(e.ctx, r, txn, str, key, 0)
+	})
+}
+
+func cmdAcquireLock(e *evalCtx) error {
+	return e.withWriter("acquire_lock", func(rw storage.ReadWriter) error {
+		txn := e.getTxn(optional)
+		key := e.getKey()
+		str := e.getStrength()
+		return storage.MVCCAcquireLock(e.ctx, rw, txn, str, key, e.ms, 0)
+	})
 }
 
 func cmdClear(e *evalCtx) error {
@@ -2218,7 +2294,7 @@ type evalCtx struct {
 	td                *datadriven.TestData
 	txns              map[string]*roachpb.Transaction
 	txnCounter        uint32
-	locks             map[string]*roachpb.Transaction
+	unreplLocks       map[string]*enginepb.TxnMeta
 	ms                *enginepb.MVCCStats
 	sstWriter         *storage.SSTWriter
 	sstFile           *storage.MemObject
@@ -2227,11 +2303,11 @@ type evalCtx struct {
 
 func newEvalCtx(ctx context.Context, engine storage.Engine) *evalCtx {
 	return &evalCtx{
-		ctx:    ctx,
-		st:     cluster.MakeTestingClusterSettings(),
-		engine: engine,
-		txns:   make(map[string]*roachpb.Transaction),
-		locks:  make(map[string]*roachpb.Transaction),
+		ctx:         ctx,
+		st:          cluster.MakeTestingClusterSettings(),
+		engine:      engine,
+		txns:        make(map[string]*roachpb.Transaction),
+		unreplLocks: make(map[string]*enginepb.TxnMeta),
 	}
 }
 
@@ -2445,6 +2521,25 @@ func (e *evalCtx) getKeyRange() (sk, ek roachpb.Key) {
 	return sk, ek
 }
 
+func (e *evalCtx) getStrength() lock.Strength {
+	e.t.Helper()
+	var strS string
+	e.scanArg("str", &strS)
+	switch strS {
+	case "none":
+		return lock.None
+	case "shared":
+		return lock.Shared
+	case "exclusive":
+		return lock.Exclusive
+	case "intent":
+		return lock.Intent
+	default:
+		e.Fatalf("unknown lock strength: %s", strS)
+		return 0
+	}
+}
+
 func (e *evalCtx) getTenantCodec() keys.SQLCodec {
 	if e.hasArg("tenant-prefix") {
 		var tenantID int
@@ -2526,20 +2621,20 @@ func (e *evalCtx) lookupTxn(txnName string) (*roachpb.Transaction, error) {
 func (e *evalCtx) newLockTableView(
 	txn *roachpb.Transaction, ts hlc.Timestamp,
 ) storage.LockTableView {
-	return &mockLockTableView{locks: e.locks, txn: txn, ts: ts}
+	return &mockLockTableView{unreplLocks: e.unreplLocks, txn: txn, ts: ts}
 }
 
 // mockLockTableView is a mock implementation of LockTableView.
 type mockLockTableView struct {
-	locks map[string]*roachpb.Transaction
-	txn   *roachpb.Transaction
-	ts    hlc.Timestamp
+	unreplLocks map[string]*enginepb.TxnMeta
+	txn         *roachpb.Transaction
+	ts          hlc.Timestamp
 }
 
 func (lt *mockLockTableView) IsKeyLockedByConflictingTxn(
 	k roachpb.Key, s lock.Strength,
 ) (bool, *enginepb.TxnMeta, error) {
-	holder, ok := lt.locks[string(k)]
+	holder, ok := lt.unreplLocks[string(k)]
 	if !ok {
 		return false, nil, nil
 	}
@@ -2549,7 +2644,7 @@ func (lt *mockLockTableView) IsKeyLockedByConflictingTxn(
 	if s == lock.None && lt.ts.Less(holder.WriteTimestamp) {
 		return false, nil, nil
 	}
-	return true, &holder.TxnMeta, nil
+	return true, holder, nil
 }
 
 func (e *evalCtx) visitWrappedIters(fn func(it storage.SimpleMVCCIterator) (done bool)) {
