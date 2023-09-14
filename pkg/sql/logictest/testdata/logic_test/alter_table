@@ -3276,3 +3276,13 @@ set sql_safe_updates=false
 
 statement error pgcode 42P10 column "n" is referenced by.*
 alter table t_drop_cascade_with_key drop column n cascade;
+
+subtest end
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/110629.
+# Subqueries are not allowed in storage parameters.
+statement ok
+CREATE TABLE t_110629 (a INT PRIMARY KEY);
+
+statement error subqueries are not allowed in table storage parameters
+ALTER TABLE t SET ( 'string' = EXISTS ( TABLE error ) );
