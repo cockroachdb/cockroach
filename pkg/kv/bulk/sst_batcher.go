@@ -205,6 +205,8 @@ type SSTBatcher struct {
 		// onFlush is the callback called after the current batch has been
 		// successfully ingested.
 		onFlush func(summary kvpb.BulkOpSummary)
+
+		lastDoFlush time.Time
 	}
 }
 
@@ -501,6 +503,24 @@ func (b *SSTBatcher) Flush(ctx context.Context) error {
 }
 
 func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
+	defer func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		b.mu.lastDoFlush = timeutil.Now()
+	}()
+
+	func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		if !b.mu.lastDoFlush.IsZero() {
+			if reason == sizeFlush {
+				b.currentStats.BetweenSizeFlushes += timeutil.Since(b.mu.lastDoFlush)
+			} else {
+				b.currentStats.BetweenRangeFlushes += timeutil.Since(b.mu.lastDoFlush)
+			}
+		}
+	}()
+
 	if b.sstWriter.DataSize == 0 {
 		return nil
 	}
@@ -615,9 +635,9 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 
 	// Take a copy of the fields that can be captured by the call to addSSTable
 	// below, that could occur asynchronously.
-	stats := b.ms
+	//stats := b.ms
 	data := b.sstFile.Data()
-	batchTS := b.batchTS
+	//batchTS := b.batchTS
 	currentBatchSummary := b.batchRowCounter.BulkOpSummary
 	res, err := b.limiter.Begin(ctx)
 	if err != nil {
@@ -660,9 +680,9 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 	fn := func(ctx context.Context) error {
 		defer res.Release()
 		defer b.mem.Shrink(ctx, reserved)
-		if err := b.addSSTable(ctx, batchTS, start, end, data, stats, !flushAsync, currentBatchStatsCopy); err != nil {
-			return err
-		}
+		//if err := b.addSSTable(ctx, batchTS, start, end, data, stats, !flushAsync, currentBatchStatsCopy); err != nil {
+		//	return err
+		//}
 
 		// Now that we have completed ingesting the SSTables we take a lock and
 		// update the statistics on the SSTBatcher.

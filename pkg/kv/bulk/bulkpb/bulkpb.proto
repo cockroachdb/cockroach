@@ -108,4 +108,10 @@ message IngestionPerformanceStats {
   int64 as_writes = 25;
 
   HistogramData sst_size_hist = 26;
+
+  int64 between_size_flushes = 29 [(gogoproto.casttype) = "time.Duration"];;
+  HistogramData between_size_flush_hist = 27;
+
+  int64 between_range_flushes = 30 [(gogoproto.casttype) = "time.Duration"];;
+  HistogramData between_range_flush_hist = 28;
 }

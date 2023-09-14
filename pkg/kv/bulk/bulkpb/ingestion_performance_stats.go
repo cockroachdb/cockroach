@@ -39,7 +39,7 @@ func (h *HistogramData) String() string {
 		SignificantFigures:    h.SignificantFigures,
 		Counts:                h.Counts,
 	})
-	if h.Name == "batch_wait_hist" {
+	if h.Name == "batch_wait_hist" || h.Name == "between_size_hist" || h.Name == "between_range_hist" {
 		b.WriteString(fmt.Sprintf("min: %.6f\n", float64(hist.Min())/float64(time.Second)))
 		b.WriteString(fmt.Sprintf("max: %.6f\n", float64(hist.Max())/float64(time.Second)))
 		b.WriteString(fmt.Sprintf("p5: %.6f\n", float64(hist.ValueAtQuantile(5))/float64(time.Second)))
@@ -110,6 +110,8 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 	s.ScatterWait += otherStats.ScatterWait
 	s.CommitWait += otherStats.CommitWait
 	s.AsWrites += otherStats.AsWrites
+	s.BetweenSizeFlushes += otherStats.BetweenSizeFlushes
+	s.BetweenRangeFlushes += otherStats.BetweenRangeFlushes
 
 	// Import the current stats into a new histogram.
 	var batchWaitHist *hdrhistogram.Histogram
@@ -156,6 +158,52 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 		HighestTrackableValue: cumulativeSSTSizeSnapshot.HighestTrackableValue,
 		SignificantFigures:    cumulativeSSTSizeSnapshot.SignificantFigures,
 		Counts:                cumulativeSSTSizeSnapshot.Counts,
+	}
+
+	// Import the current stats into a new histogram.
+	var betweenSizeHist *hdrhistogram.Histogram
+	if s.BetweenSizeFlushHist != nil {
+		betweenSizeHist = hdrhistogram.Import(&hdrhistogram.Snapshot{
+			LowestTrackableValue:  s.BetweenSizeFlushHist.LowestTrackableValue,
+			HighestTrackableValue: s.BetweenSizeFlushHist.HighestTrackableValue,
+			SignificantFigures:    s.BetweenSizeFlushHist.SignificantFigures,
+			Counts:                s.BetweenSizeFlushHist.Counts,
+		})
+	} else {
+		betweenSizeHist = hdrhistogram.New(minBytes, maxBytes, sigFigs)
+	}
+	_ = betweenSizeHist.RecordValue(otherStats.BetweenSizeFlushes.Nanoseconds())
+	// Store the snapshot of this new merged histogram.
+	cumulativeBetweenSizeSnapshot := betweenSizeHist.Export()
+	s.SstSizeHist = &HistogramData{
+		Name:                  "between_size_hist",
+		LowestTrackableValue:  cumulativeBetweenSizeSnapshot.LowestTrackableValue,
+		HighestTrackableValue: cumulativeBetweenSizeSnapshot.HighestTrackableValue,
+		SignificantFigures:    cumulativeBetweenSizeSnapshot.SignificantFigures,
+		Counts:                cumulativeBetweenSizeSnapshot.Counts,
+	}
+
+	// Import the current stats into a new histogram.
+	var betweenRangeHist *hdrhistogram.Histogram
+	if s.BetweenRangeFlushHist != nil {
+		betweenRangeHist = hdrhistogram.Import(&hdrhistogram.Snapshot{
+			LowestTrackableValue:  s.BetweenRangeFlushHist.LowestTrackableValue,
+			HighestTrackableValue: s.BetweenRangeFlushHist.HighestTrackableValue,
+			SignificantFigures:    s.BetweenRangeFlushHist.SignificantFigures,
+			Counts:                s.BetweenRangeFlushHist.Counts,
+		})
+	} else {
+		betweenRangeHist = hdrhistogram.New(minBytes, maxBytes, sigFigs)
+	}
+	_ = betweenRangeHist.RecordValue(otherStats.BetweenRangeFlushes.Nanoseconds())
+	// Store the snapshot of this new merged histogram.
+	cumulativeBetweenRangeSnapshot := betweenRangeHist.Export()
+	s.SstSizeHist = &HistogramData{
+		Name:                  "between_range_hist",
+		LowestTrackableValue:  cumulativeBetweenRangeSnapshot.LowestTrackableValue,
+		HighestTrackableValue: cumulativeBetweenRangeSnapshot.HighestTrackableValue,
+		SignificantFigures:    cumulativeBetweenRangeSnapshot.SignificantFigures,
+		Counts:                cumulativeBetweenRangeSnapshot.Counts,
 	}
 
 	// Duration should not be used in throughput calculations as adding durations
