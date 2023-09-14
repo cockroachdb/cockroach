@@ -89,6 +89,11 @@ var RangeFeedUseScheduler = settings.RegisterBoolSetting(
 	false,
 )
 
+// RangefeedSchedulerDisabled is a kill switch for scheduler based rangefeed
+// processors. To be removed in 24.1 after new processor becomes default.
+var RangefeedSchedulerDisabled = envutil.EnvOrDefaultBool("COCKROACH_RANGEFEED_DISABLE_SCHEDULER",
+	false)
+
 func init() {
 	// Inject into kvserverbase to allow usage from kvcoord.
 	kvserverbase.RangeFeedRefreshInterval = RangeFeedRefreshInterval
@@ -407,7 +412,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(r.startKey)
 
 	var sched *rangefeed.Scheduler
-	if RangeFeedUseScheduler.Get(&r.ClusterSettings().SV) {
+	if shouldUseRangefeedScheduler(&r.ClusterSettings().SV) {
 		sched = r.store.getRangefeedScheduler()
 	}
 
@@ -842,4 +847,15 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *kvpb.Error 
 		}
 	}
 	return nil
+}
+
+func shouldUseRangefeedScheduler(sv *settings.Values) bool {
+	return RangeFeedUseScheduler.Get(sv) && !RangefeedSchedulerDisabled
+}
+
+// TestGetReplicaRangefeedProcessor exposes rangefeed processor for test
+// introspection. Note that while retrieving processor is threadsafe, invoking
+// processor methods should be done with caution to not break any invariants.
+func TestGetReplicaRangefeedProcessor(r *Replica) rangefeed.Processor {
+	return r.getRangefeedProcessor()
 }

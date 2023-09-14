@@ -281,6 +281,10 @@ func (f *vectorizedFlow) Setup(
 // Resume is part of the Flow interface.
 func (f *vectorizedFlow) Resume(recv execinfra.RowReceiver) {
 	if f.batchFlowCoordinator != nil {
+		// Resume is expected to be called only for pausable portals, for which
+		// we must be using limitedCommandResult which currently doesn't
+		// implement the execinfra.BatchReceiver interface, so we shouldn't have
+		// a batch flow coordinator here.
 		recv.Push(
 			nil, /* row */
 			&execinfrapb.ProducerMetadata{
@@ -383,6 +387,9 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory and disk monitoring of the vectorized flow
 	// as well as closes all the closers.
 	f.creator.cleanup(ctx)
+
+	// Ensure that the "head" processor is always closed.
+	f.ConsumerClosedOnHeadProc()
 
 	f.tempStorage.Lock()
 	created := f.tempStorage.path != ""
