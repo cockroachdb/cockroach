@@ -248,7 +248,7 @@ func alterTenantJobCutover(
 	// that embeds a priviledge check which is already completed.
 	//
 	// Check that the timestamp is above our retained timestamp.
-	stats, err := replicationutils.GetStreamIngestionStatsNoHeartbeat(ctx, details, progress)
+	stats, err := replicationutils.GetStreamIngestionStats(ctx, details, progress)
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}

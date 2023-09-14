@@ -139,7 +139,7 @@ func getReplicationStatsAndStatus(
 		return nil, jobspb.ReplicationError.String(), err
 	}
 
-	stats, err := replicationutils.GetStreamIngestionStatsNoHeartbeat(ctx, details, job.Progress())
+	stats, err := replicationutils.GetStreamIngestionStats(ctx, details, job.Progress())
 	if err != nil {
 		return nil, jobspb.ReplicationError.String(), err
 	}
