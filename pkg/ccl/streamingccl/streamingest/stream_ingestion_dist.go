@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -205,12 +206,179 @@ func startDistIngestion(
 		return rw.Err()
 	}
 
-	updateRunningStatus(ctx, ingestionJob, jobspb.Replicating, "physical replication running")
+	if streamProgress.InitialSplitComplete {
+		if err := createInitialSplits(ctx, execCtx, planner.initialTopology, details.DestinationTenantID); err != nil {
+			return err
+		}
+	} else {
+		log.Infof(ctx, "initial splits already complete")
+	}
+
+	// TODO(ssd): This assumes that on resumption, we can't do that much
+	// better than our original splits. There are a lot of cases where this
+	// probably isn't too true. For instance, if we started with a
+	// relatively empty cluster, then got a big import of data and the
+	// replanner restarted us to account for all the new ranges that we
+	// found.
+	if err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		md.Progress.GetStreamIngest().ReplicationStatus = jobspb.Replicating
+		md.Progress.GetStreamIngest().InitialSplitComplete = true
+		md.Progress.RunningStatus = "physical replication running"
+		ju.UpdateProgress(md.Progress)
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	err = ctxgroup.GoAndWait(ctx, execInitialPlan, replanner, tracingAggLoop, streamSpanConfigs)
 	if errors.Is(err, sql.ErrPlanChanged) {
 		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
 	}
 	return err
+}
+
+// createInitialSplits creates splits based on the given toplogy from the
+// source.
+//
+// The idea here is to use the information from the source cluster about
+// the distribution of the data to produce split points to help prevent
+// ingestion processors from pushing data into the same ranges during
+// the initial scan.
+//
+// This does increase throughput a bit.
+//
+// For example on tpcc w=500 with split:
+//
+// 23:45:39 cluster_to_cluster.go:185: InitialScan Perf:
+// 23:45:39 cluster_to_cluster.go:187:     Duration Minutes : 5.77
+// 23:45:39 cluster_to_cluster.go:187:     Size_LogicalMegabytes : 37384.69
+// 23:45:39 cluster_to_cluster.go:187:     Size_PhysicalMegabytes : 10248.68
+// 23:45:39 cluster_to_cluster.go:187:     Size_PhysicalReplicatedMegabytes : 31611.90
+// 23:45:39 cluster_to_cluster.go:187:     Throughput_LogicalMegabytes_MB/S/Node : 26.97
+// 23:45:39 cluster_to_cluster.go:187:     Throughput_PhysicalMegabytes_MB/S/Node : 7.39
+// 23:45:39 cluster_to_cluster.go:187:     Throughput_PhysicalReplicatedMegabytes_MB/S/Node : 22.81
+//
+// As compared to what the nightly sees on the same test:
+//
+// 10:23:55 cluster_to_cluster.go:181: InitialScan Perf:
+// 10:23:55 cluster_to_cluster.go:183: 	Duration Minutes : 8.62
+// 10:23:55 cluster_to_cluster.go:183: 	Size_LogicalMegabytes : 37343.38
+// 10:23:55 cluster_to_cluster.go:183: 	Size_PhysicalMegabytes : 10231.08
+// 10:23:55 cluster_to_cluster.go:183: 	Size_PhysicalReplicatedMegabytes : 31448.77
+// 10:23:55 cluster_to_cluster.go:183: 	Throughput_LogicalMegabytes_MB/S/Node : 18.05
+// 10:23:55 cluster_to_cluster.go:183: 	Throughput_PhysicalMegabytes_MB/S/Node : 4.95
+// 10:23:55 cluster_to_cluster.go:183: 	Throughput_PhysicalReplicatedMegabytes_MB/S/Node : 15.20
+//
+// I also tested this with an added scatter and also with the additional workers
+// patch, but those results honestly didn't show much improvement.
+//
+// I have left TODOs in the function about things I noted, but I think the next
+// step is to probably run this on to of the new instrumentation.
+func createInitialSplits(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	topology streamclient.Topology,
+	destTenantID roachpb.TenantID,
+) error {
+	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(execCtx.ExtendedEvalContext().Codec,
+		nil /* tableRekeys */, []execinfrapb.TenantRekey{
+			{
+				OldID: topology.SourceTenantID,
+				NewID: destTenantID,
+			}},
+		true /* restoreTenantFromStream */)
+	if err != nil {
+		return err
+	}
+
+	for _, partition := range topology.Partitions {
+		for _, span := range partition.Spans {
+			startKey := span.Key.Clone()
+			splitKey, _, err := rekeyer.RewriteKey(startKey, 0 /* walltimeForImportElision */)
+			if err != nil {
+				return err
+			}
+			// TODO(ssd): EnsureSafeSplitKey called on an arbitrary
+			// key unfortunately results in many of our split keys
+			// mapping to the same key for workloads like TPCC where
+			// the schema of the table includes integers that get
+			// chopped off the key under the assumption they are
+			// they column family.
+			//
+			// On the one hand, the keys in the plan come from the
+			// range boundaries in the original cluster, so they
+			// should be safe split keys.
+			//
+			// On the other hand, I'm loathe to add a Split call
+			// without an EnsureSafeSplitKey.
+			//
+			// if newSplitKey, err := keys.EnsureSafeSplitKey(splitKey); err != nil {
+			// 	// Ignore the error since keys such as
+			// 	// /Tenant/2/Table/13 is an OK start key but
+			// 	// returns an error.
+			// } else if len(newSplitKey) != 0 {
+			// 	splitKey = newSplitKey
+			// }
+			//
+			// Additionally, even without ensure safe split key, I
+			// see a small number of duplicate split points. For
+			// instance, during a run of c2c/tpcc/warehouses=500/duration=10/cutover=0:
+			//
+			// $ grep 'presplitting' logs/cockroach.log | awk '{ print $NF }' | sort | uniq -c | sort -rn | head -7
+			// 3 ‹/Tenant/2/Table/114/1/255/PrefixEnd›
+			// 2 ‹/Tenant/2›
+			// 2 ‹/Tenant/2/Table/113/1›
+			// 2 ‹/Tenant/2/Table/113/1/109/PrefixEnd›
+			// 2 ‹/Tenant/2/Table/109/PrefixEnd›
+			// 1 ‹/Tenant/2/Table/114/1›
+			// 1 ‹/Tenant/2/Table/114/1/76/5/-2221/12›
+			//
+			// This is a bit surprising to me, but perhaps I've
+			// misunderstood how partition spans works.
+			log.Infof(ctx, "presplitting at %s", roachpb.Key(splitKey).String())
+
+			db := execCtx.ExecCfg().DB
+			expirationTime := db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+			// TODO(ssd): Any use sending these in paralllel if we
+			// have a large number of them?
+			if err := db.AdminSplit(ctx, splitKey, expirationTime); err != nil {
+				return errors.Wrapf(err, "splitting key %s", splitKey)
+			}
+			// TODO(ssd): In RESTORE we scatter our newly split
+			// range, find the node it landed on, and then allocate
+			// the work for that range to that node. Here, we have
+			// the addded concern that we want to locality match
+			// source and destination pairs. One option would be to
+			// use the AdminRelocateLease function to try to move
+			// the lease to the node we are assigning the work to.
+			//
+			// Evidence from the test run suggests that there is
+			// likely some more gains by doing _something_ to get
+			// the ranges onto local nodes. Namely, we see a very
+			// even distribution of AddSSTable's sent but an uneven
+			// distribution of AddSSTable's being receieved.
+			//
+			// I've tried scattering alone and the results were
+			// mixed.
+			//
+			// scatterKey := roachpb.Key(splitKey)
+			// _, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(), &kvpb.AdminScatterRequest{
+			// 	RequestHeader: kvpb.RequestHeaderFromSpan(roachpb.Span{
+			// 		Key:    scatterKey,
+			// 		EndKey: scatterKey.Next(),
+			// 	}),
+			// 	RandomizeLeases: true,
+			// 	MaxSize:         1, // don't scatter non-empty ranges on resume.
+			// })
+			// if pErr != nil {
+			// 	if !strings.Contains(pErr.String(), "existing range size") {
+			// 		log.Warningf(ctx, "failed to scatter span starting at %s: %+v",
+			// 			scatterKey, pErr.GoError())
+			// 	}
+			// }
+		}
+	}
+	return nil
 }
 
 // makeReplicationFlowPlanner creates a replicationFlowPlanner and the initial physical plan.
@@ -248,6 +416,7 @@ type replicationFlowPlanner struct {
 	initialPlanCtx *sql.PlanningCtx
 
 	initialStreamAddresses []string
+	initialTopology        streamclient.Topology
 
 	srcTenantID roachpb.TenantID
 }
@@ -281,6 +450,7 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 			return nil, nil, err
 		}
 		if !p.containsInitialStreamAddresses() {
+			p.initialTopology = topology
 			p.initialStreamAddresses = topology.StreamAddresses()
 		}
 
