@@ -123,7 +123,7 @@ var UseEFOS = settings.RegisterBoolSetting(
 //
 // This cluster setting will be removed in a subsequent release.
 var IngestAsFlushable = settings.RegisterBoolSetting(
-	settings.SystemOnly,
+	settings.TenantWritable, // used to init temp storage in virtual cluster servers.
 	"storage.ingest_as_flushable.enabled",
 	"set to true to enable lazy ingestion of sstables",
 	util.ConstantWithMetamorphicTestBool(

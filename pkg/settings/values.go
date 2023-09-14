@@ -30,7 +30,7 @@ const MaxSettings = 1023
 type Values struct {
 	container valuesContainer
 
-	nonSystemTenant bool
+	classCheck classCheck
 
 	defaultOverridesMu struct {
 		syncutil.Mutex
@@ -50,6 +50,22 @@ type Values struct {
 	// accessible from certain callbacks (like state machine transformers).
 	opaque interface{}
 }
+
+type classCheck int8
+
+const (
+	// classCheckUndefined is used when the settings.Values hasn't been
+	// specialized yet.
+	classCheckUndefined classCheck = iota
+	// classCheckSystemInterface is used when the settings.Values is
+	// specialized for the system interface and SystemOnly settings can
+	// be used.
+	classCheckSystemInterface
+	// classCheckVirtualCluster is used when the settings.Values is
+	// specialized for a virtual cluster and SystemOnly settings cannot
+	// be used.
+	classCheckVirtualCluster
+)
 
 const numSlots = MaxSettings + 1
 
@@ -119,10 +135,23 @@ func (sv *Values) Init(ctx context.Context, opaque interface{}) {
 	}
 }
 
-// SetNonSystemTenant marks this container as pertaining to a non-system tenant,
-// after which use of SystemOnly values is disallowed.
-func (sv *Values) SetNonSystemTenant() {
-	sv.nonSystemTenant = true
+// SpecializeForSystemInterface marks the values container as
+// pertaining to the system interface.
+func (sv *Values) SpecializeForSystemInterface() {
+	if sv.classCheck != classCheckUndefined && sv.classCheck != classCheckSystemInterface {
+		panic(errors.AssertionFailedf("setting value container is already specialized"))
+	}
+	sv.classCheck = classCheckSystemInterface
+}
+
+// SpecializeForVirtualCluster marks this container as pertaining to
+// a virtual cluster, after which use of SystemOnly values is
+// disallowed.
+func (sv *Values) SpecializeForVirtualCluster() {
+	if sv.classCheck != classCheckUndefined && sv.classCheck != classCheckVirtualCluster {
+		panic(errors.AssertionFailedf("setting value container is already specialized"))
+	}
+	sv.classCheck = classCheckVirtualCluster
 	for slot, setting := range slotTable {
 		if setting != nil && setting.Class() == SystemOnly {
 			sv.container.forbidden[slot] = true
@@ -130,10 +159,10 @@ func (sv *Values) SetNonSystemTenant() {
 	}
 }
 
-// NonSystemTenant returns true if this container is for a non-system tenant
-// (i.e. SetNonSystemTenant() was called).
-func (sv *Values) NonSystemTenant() bool {
-	return sv.nonSystemTenant
+// SpecializedToVirtualCluster returns true if this container is for a
+// virtual cluster (i.e. SpecializeToVirtualCluster() was called).
+func (sv *Values) SpecializedToVirtualCluster() bool {
+	return sv.classCheck == classCheckVirtualCluster
 }
 
 // Opaque returns the argument passed to Init.
