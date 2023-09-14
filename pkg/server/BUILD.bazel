@@ -526,6 +526,7 @@ go_test(
         "//pkg/sql/roleoption",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlstats",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
