@@ -64,6 +64,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver",
         "//pkg/multitenant",
         "//pkg/multitenant/multitenantio",
         "//pkg/multitenant/tenantcostmodel",

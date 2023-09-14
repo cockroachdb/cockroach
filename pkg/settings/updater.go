@@ -175,7 +175,7 @@ func (u updater) ResetRemaining(ctx context.Context) {
 			u.sv.setValueOrigin(ctx, v.getSlot(), OriginDefault)
 		}
 
-		if u.sv.NonSystemTenant() && v.Class() == SystemOnly {
+		if u.sv.SpecializedToVirtualCluster() && v.Class() == SystemOnly {
 			// Don't try to reset system settings on a non-system tenant.
 			continue
 		}

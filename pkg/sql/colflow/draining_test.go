@@ -56,6 +56,7 @@ func TestDrainingAfterRemoteError(t *testing.T) {
 	tempStorageConfig := base.TempStorageConfig{InMemory: true, Mon: diskMonitor, Settings: st}
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			Settings:          st,
 			TempStorageConfig: tempStorageConfig,
 		},
 		ReplicationMode: base.ReplicationManual,

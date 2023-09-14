@@ -42,21 +42,21 @@ func TestAdminAPISettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails
-		// with it enabled. Tracked with #81590.
-		// DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 
 	// Any bool that defaults to true will work here.
 	const settingKey = "sql.metrics.statement_details.enabled"
 	st := s.ClusterSettings()
-	allKeys := settings.Keys(settings.ForSystemTenant)
+	target := settings.ForSystemTenant
+	if srv.TenantController().StartedDefaultTestTenant() {
+		target = settings.ForVirtualCluster
+	}
+	allKeys := settings.Keys(target)
 
 	checkSetting := func(t *testing.T, k settings.InternalKey, v serverpb.SettingsResponse_Value) {
-		ref, ok := settings.LookupForReportingByKey(k, settings.ForSystemTenant)
+		ref, ok := settings.LookupForReportingByKey(k, target)
 		if !ok {
 			t.Fatalf("%s: not found after initial lookup", k)
 		}
@@ -105,7 +105,7 @@ func TestAdminAPISettings(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Check that all expected keys were returned
+		// Check that all expected keys were returned.
 		if len(allKeys) != len(resp.KeyValues) {
 			t.Fatalf("expected %d keys, got %d", len(allKeys), len(resp.KeyValues))
 		}
@@ -161,7 +161,13 @@ func TestAdminAPISettings(t *testing.T) {
 	t.Run("different-permissions", func(t *testing.T) {
 		var resp serverpb.SettingsResponse
 		nonAdminUser := apiconstants.TestingUserNameNoAdmin().Normalized()
-		consoleKeys := append([]settings.InternalKey(nil), settings.ConsoleKeys()...)
+		var consoleKeys []settings.InternalKey
+		for _, k := range settings.ConsoleKeys() {
+			if _, ok := settings.LookupForLocalAccessByKey(k, target); !ok {
+				continue
+			}
+			consoleKeys = append(consoleKeys, k)
+		}
 		sort.Slice(consoleKeys, func(i, j int) bool { return consoleKeys[i] < consoleKeys[j] })
 
 		// Admin should return all cluster settings.

@@ -667,11 +667,12 @@ func TestInsightsIndexRecommendationIntegration(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 
+	ts := tc.ApplicationLayer(0)
+	sqlConn := tc.ServerConn(0)
+
 	// Enable detection by setting a latencyThreshold > 0.
 	latencyThreshold := 30 * time.Millisecond
-	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
-
-	sqlConn := tc.ServerConn(0)
+	insights.LatencyThreshold.Override(ctx, &ts.ClusterSettings().SV, latencyThreshold)
 
 	_, err := sqlConn.ExecContext(ctx, "CREATE TABLE t1 (k INT, i INT, f FLOAT, s STRING)")
 	require.NoError(t, err)

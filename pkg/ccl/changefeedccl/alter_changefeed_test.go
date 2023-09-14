@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -664,19 +665,22 @@ func TestAlterChangefeedPersistSinkURI(t *testing.T) {
 
 	const unredactedSinkURI = "null://blah?AWS_ACCESS_KEY_ID=the_secret"
 
-	s, rawSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
-	registry := s.ApplicationLayer().JobRegistry().(*jobs.Registry)
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	srv, rawSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	for _, l := range []serverutils.ApplicationLayerInterface{s, srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
 
 	query := `CREATE TABLE foo (a string)`
 	sqlDB.Exec(t, query)
 
 	query = `CREATE TABLE bar (b string)`
-	sqlDB.Exec(t, query)
-
-	query = `SET CLUSTER SETTING kv.rangefeed.enabled = true`
 	sqlDB.Exec(t, query)
 
 	var changefeedID jobspb.JobID
