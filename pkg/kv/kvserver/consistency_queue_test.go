@@ -337,6 +337,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	// Write some arbitrary data only to store on n2. Inconsistent key "e"!
 	s2 := tc.GetFirstStoreFromServer(t, 1)
+	s2AuxDir := s2.TODOEngine().GetAuxiliaryDir()
 	var val roachpb.Value
 	val.SetInt(42)
 	// Put an inconsistent key "e" to s2, and have s1 and s3 still agree.
@@ -412,8 +413,8 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	assert.NotEqual(t, hashes[0], hashes[1]) // s2 diverged
 
 	// A death rattle should have been written on s2.
-	eng := s2.TODOEngine()
-	f, err := eng.Open(base.PreventedStartupFile(eng.GetAuxiliaryDir()))
+	fs := stickyVFSRegistry.Get(strconv.FormatInt(int64(1), 10))
+	f, err := fs.Open(base.PreventedStartupFile(s2AuxDir))
 	require.NoError(t, err)
 	b, err := io.ReadAll(f)
 	require.NoError(t, err)
