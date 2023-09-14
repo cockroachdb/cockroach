@@ -1,5 +1,8 @@
 # LogicTest: !local-mixed-22.2-23.1
 
+statement ok
+SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true
+
 subtest select_for_update
 
 # SELECT FOR UPDATE is prohibited under weaker isolation levels until we improve
