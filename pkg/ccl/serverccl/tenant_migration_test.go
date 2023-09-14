@@ -77,15 +77,18 @@ func TestValidateTargetTenantClusterVersion(t *testing.T) {
 		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
 			defer log.Scope(t).Close(t)
 
-			st := cluster.MakeTestingClusterSettingsWithVersions(
-				test.binaryVersion,
-				test.binaryMinSupportedVersion,
-				false, /* initializeVersion */
-			)
+			makeSettings := func() *cluster.Settings {
+				st := cluster.MakeTestingClusterSettingsWithVersions(
+					test.binaryVersion,
+					test.binaryMinSupportedVersion,
+					false, /* initializeVersion */
+				)
+				return st
+			}
 
 			s := serverutils.StartServerOnly(t, base.TestServerArgs{
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,
-				Settings:          st,
+				Settings:          makeSettings(),
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						BinaryVersionOverride: test.binaryVersion,
@@ -100,7 +103,7 @@ func TestValidateTargetTenantClusterVersion(t *testing.T) {
 			ctx := context.Background()
 			upgradePod, err := s.StartTenant(ctx,
 				base.TestTenantArgs{
-					Settings: st,
+					Settings: makeSettings(),
 					TenantID: serverutils.TestTenantID(),
 					TestingKnobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
@@ -187,15 +190,18 @@ func TestBumpTenantClusterVersion(t *testing.T) {
 		t.Run(fmt.Sprintf("config=%d", i), func(t *testing.T) {
 			defer log.Scope(t).Close(t)
 
-			st := cluster.MakeTestingClusterSettingsWithVersions(
-				test.binaryVersion.Version,
-				test.minSupportedVersion.Version,
-				false, /* initializeVersion */
-			)
+			makeSettings := func() *cluster.Settings {
+				st := cluster.MakeTestingClusterSettingsWithVersions(
+					test.binaryVersion.Version,
+					test.minSupportedVersion.Version,
+					false, /* initializeVersion */
+				)
+				return st
+			}
 
 			s := serverutils.StartServerOnly(t, base.TestServerArgs{
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,
-				Settings:          st,
+				Settings:          makeSettings(),
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						// This test wants to bootstrap at the previously active
@@ -210,9 +216,9 @@ func TestBumpTenantClusterVersion(t *testing.T) {
 			})
 			defer s.Stopper().Stop(context.Background())
 
-			tenant, err := s.StartTenant(ctx,
+			tenant, err := s.TenantController().StartTenant(ctx,
 				base.TestTenantArgs{
-					Settings: st,
+					Settings: makeSettings(),
 					TenantID: serverutils.TestTenantID(),
 					TestingKnobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{

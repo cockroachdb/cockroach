@@ -240,6 +240,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	st := cfg.Settings
 
+	// Ensure that we don't mistakenly reuse the same Values container
+	// across servers (e.g. misuse of TestServer API).
+	st.SV.SpecializeForSystemInterface()
+
 	if cfg.AmbientCtx.Tracer == nil {
 		panic(errors.New("no tracer set in AmbientCtx"))
 	}

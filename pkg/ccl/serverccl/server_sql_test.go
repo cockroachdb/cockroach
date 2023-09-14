@@ -383,18 +383,24 @@ func TestTenantInstanceIDReclaimLoop(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	clusterSettings := cluster.MakeTestingClusterSettings()
+	clusterSettings := func() *cluster.Settings {
+		cs := cluster.MakeTestingClusterSettings()
+		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 250*time.Millisecond)
+		instancestorage.PreallocatedCount.Override(ctx, &cs.SV, 5)
+		return cs
+	}
+
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		Settings:          clusterSettings,
+		Settings:          clusterSettings(),
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(ctx)
 
-	instancestorage.ReclaimLoopInterval.Override(ctx, &clusterSettings.SV, 250*time.Millisecond)
-	instancestorage.PreallocatedCount.Override(ctx, &clusterSettings.SV, 5)
-
 	_, db := serverutils.StartTenant(
-		t, s, base.TestTenantArgs{TenantID: serverutils.TestTenantID(), Settings: clusterSettings},
+		t, s, base.TestTenantArgs{
+			TenantID: serverutils.TestTenantID(),
+			Settings: clusterSettings(),
+		},
 	)
 	defer db.Close()
 	sqlDB := sqlutils.MakeSQLRunner(db)
