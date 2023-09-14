@@ -594,10 +594,10 @@ func (desc *wrapper) validateInboundFK(
 	}
 
 	colsByID := catalog.ColumnsByIDs(originTable)
-	for _, colID := range backref.ReferencedColumnIDs {
+	for _, colID := range backref.OriginColumnIDs {
 		if _, ok := colsByID[colID]; !ok {
 			return errors.AssertionFailedf(
-				"invalid foreign key backreference to table %q (%d): missing origin column=%d",
+				"invalid foreign key backreference from table %q (%d): missing origin column=%d",
 				originTable.GetName(),
 				originTable.GetID(),
 				colID,

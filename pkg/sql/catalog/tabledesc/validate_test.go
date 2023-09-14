@@ -3088,7 +3088,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			},
 		},
 		{ // 5
-			err: `invalid foreign key backreference to table "baz" (52): missing origin column=1`,
+			err: `invalid foreign key backreference from table "baz" (52): missing origin column=2`,
 			desc: descpb.TableDescriptor{
 				ID:                      51,
 				Name:                    "foo",
