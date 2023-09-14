@@ -43,5 +43,5 @@ var HashAggregationDiskSpillingDisabled = telemetry.GetCounterOnce("sql.exec.has
 var DistributedErrorLocalRetryAttempt = telemetry.GetCounterOnce("sql.exec.dist-query-rerun-locally-attempt")
 
 // DistributedErrorLocalRetrySuccess is to be incremented whenever the local
-// rerun - of a distributed query that hit SQL retryable error - succeeded.
-var DistributedErrorLocalRetrySuccess = telemetry.GetCounterOnce("sql.exec.dist-query-rerun-locally-success")
+// rerun - of a distributed query that hit SQL retryable error - failed itself.
+var DistributedErrorLocalRetryFailure = telemetry.GetCounterOnce("sql.exec.dist-query-rerun-locally-failure")
