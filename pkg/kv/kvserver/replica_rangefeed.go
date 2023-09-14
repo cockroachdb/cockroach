@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -79,14 +80,13 @@ var RangeFeedSmearInterval = settings.RegisterDurationSetting(
 
 // RangeFeedUseScheduler controls type of rangefeed processor is used to process
 // raft updates and sends updates to clients.
-// TODO(oleg): add metamorphic variable for processor type selection.
 var RangeFeedUseScheduler = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.rangefeed.scheduler.enabled",
 	"use shared fixed pool of workers for all range feeds instead of a "+
 		"worker per range (worker pool size is determined by "+
 		"COCKROACH_RANGEFEED_SCHEDULER_WORKERS env variable)",
-	false,
+	util.ConstantWithMetamorphicTestBool("kv_rangefeed_scheduler_enabled", false),
 )
 
 func init() {
