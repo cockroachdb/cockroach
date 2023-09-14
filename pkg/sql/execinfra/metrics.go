@@ -19,19 +19,21 @@ import (
 // DistSQLMetrics contains pointers to the metrics for monitoring DistSQL
 // processing.
 type DistSQLMetrics struct {
-	QueriesActive         *metric.Gauge
-	QueriesTotal          *metric.Counter
-	ContendedQueriesCount *metric.Counter
-	FlowsActive           *metric.Gauge
-	FlowsTotal            *metric.Counter
-	MaxBytesHist          metric.IHistogram
-	CurBytesCount         *metric.Gauge
-	VecOpenFDs            *metric.Gauge
-	CurDiskBytesCount     *metric.Gauge
-	MaxDiskBytesHist      metric.IHistogram
-	QueriesSpilled        *metric.Counter
-	SpilledBytesWritten   *metric.Counter
-	SpilledBytesRead      *metric.Counter
+	QueriesActive               *metric.Gauge
+	QueriesTotal                *metric.Counter
+	ContendedQueriesCount       *metric.Counter
+	FlowsActive                 *metric.Gauge
+	FlowsTotal                  *metric.Counter
+	MaxBytesHist                metric.IHistogram
+	CurBytesCount               *metric.Gauge
+	VecOpenFDs                  *metric.Gauge
+	CurDiskBytesCount           *metric.Gauge
+	MaxDiskBytesHist            metric.IHistogram
+	QueriesSpilled              *metric.Counter
+	SpilledBytesWritten         *metric.Counter
+	SpilledBytesRead            *metric.Counter
+	DistErrorLocalRetryAttempts *metric.Counter
+	DistErrorLocalRetryFailures *metric.Counter
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -118,6 +120,18 @@ var (
 		Measurement: "Disk",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaDistErrorLocalRetryAttempts = metric.Metadata{
+		Name:        "sql.distsql.dist_query_rerun_locally.count",
+		Help:        "Total number of cases when distributed query error resulted in a local rerun",
+		Measurement: "Queries",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDistErrorLocalRetryFailures = metric.Metadata{
+		Name:        "sql.distsql.dist_query_rerun_locally.failure_count",
+		Help:        "Total number of cases when the local rerun of a distributed query resulted in an error",
+		Measurement: "Queries",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // See pkg/sql/mem_metrics.go
@@ -148,9 +162,11 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 			MaxVal:       log10int64times1000,
 			SigFigs:      3,
 			BucketConfig: metric.MemoryUsage64MBBuckets}),
-		QueriesSpilled:      metric.NewCounter(metaQueriesSpilled),
-		SpilledBytesWritten: metric.NewCounter(metaSpilledBytesWritten),
-		SpilledBytesRead:    metric.NewCounter(metaSpilledBytesRead),
+		QueriesSpilled:              metric.NewCounter(metaQueriesSpilled),
+		SpilledBytesWritten:         metric.NewCounter(metaSpilledBytesWritten),
+		SpilledBytesRead:            metric.NewCounter(metaSpilledBytesRead),
+		DistErrorLocalRetryAttempts: metric.NewCounter(metaDistErrorLocalRetryAttempts),
+		DistErrorLocalRetryFailures: metric.NewCounter(metaDistErrorLocalRetryFailures),
 	}
 }
 
