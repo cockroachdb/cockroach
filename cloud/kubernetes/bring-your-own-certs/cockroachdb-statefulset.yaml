@@ -1,4 +1,4 @@
-# Generated file, DO NOT EDIT. Source: cockroachdb_cockroach_master/cloud/kubernetes/templates/bring-your-own-certs/cockroachdb-statefulset.yaml
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/bring-your-own-certs/cockroachdb-statefulset.yaml
 # This config file defines a CockroachDB StatefulSet that uses certificates
 # created outside of Kubernetes. You may want to use it if you want to use a
 # different certificate authority from the one being used by Kubernetes or if
@@ -153,7 +153,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v23.1.9
+        image: cockroachdb/cockroach:v23.1.10
         imagePullPolicy: IfNotPresent
         # TODO: Change these to appropriate values for the hardware that you're running. You can see
         # the resources that can be allocated on each of your Kubernetes nodes by running:
