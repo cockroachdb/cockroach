@@ -44,12 +44,14 @@ feature.restore.enabled	boolean	true	set to true to enable restore, false to dis
 feature.schema_change.enabled	boolean	true	set to true to enable schema changes, false to disable; default is true	tenant-rw
 feature.stats.enabled	boolean	true	set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true	tenant-rw
 jobs.retention_time	duration	336h0m0s	the amount of time for which records for completed jobs are retained	tenant-rw
+kv.bulk_sst.target_size	byte size	16 MiB	target size for SSTs emitted from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory	tenant-ro
+kv.closed_timestamp.follower_reads.enabled	boolean	true	allow (all) replicas to serve consistent historical reads based on closed timestamp information	tenant-ro
 kv.closed_timestamp.lead_for_global_reads_override	duration	0s	if nonzero, overrides the lead time that global_read ranges use to publish closed timestamps	tenant-ro
 kv.closed_timestamp.side_transport_interval	duration	200ms	the interval at which the closed timestamp side-transport attempts to advance each range's closed timestamp; set to 0 to disable the side-transport	tenant-ro
 kv.closed_timestamp.target_duration	duration	3s	if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration	tenant-ro
 kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records	tenant-ro
 kv.rangefeed.closed_timestamp_refresh_interval	duration	3s	the interval at which closed-timestamp updatesare delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval	tenant-ro
-kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled	tenant-rw
+kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled	tenant-ro
 kv.rangefeed.range_stuck_threshold	duration	1m0s	restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.rangefeed.closed_timestamp_refresh_interval takes precedence)	tenant-rw
 kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions	tenant-rw
 kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes used to track refresh spans in serializable transactions	tenant-rw
@@ -238,6 +240,7 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in bytes a processor can use before falling back to temp storage	tenant-rw
 sql.guardrails.max_row_size_err	byte size	512 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an error is returned; use 0 to disable	tenant-rw
 sql.guardrails.max_row_size_log	byte size	64 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use 0 to disable	tenant-rw
+sql.hash_sharded_range_pre_split.max	integer	16	max pre-split ranges to have when adding hash sharded index to an existing table	tenant-rw
 sql.insights.anomaly_detection.enabled	boolean	true	enable per-fingerprint latency recording and anomaly detection	tenant-rw
 sql.insights.anomaly_detection.latency_threshold	duration	50ms	statements must surpass this threshold to trigger anomaly detection and identification	tenant-rw
 sql.insights.anomaly_detection.memory_limit	byte size	1.0 MiB	the maximum amount of memory allowed for tracking statement latencies	tenant-rw
@@ -304,7 +307,8 @@ sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled	tenant-rw
 sql.txn.read_committed_syntax.enabled	boolean	false	set to true to allow transactions to use the READ COMMITTED isolation level if specified by BEGIN/SET commands	tenant-rw
 sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored	tenant-rw
 storage.max_sync_duration	duration	20s	maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash	tenant-ro
-storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	tenant-ro
+storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	tenant-rw
+storage.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in sstables	tenant-rw
 timeseries.storage.enabled	boolean	true	if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere	tenant-rw
 timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.	tenant-rw
 timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.	tenant-rw
@@ -314,4 +318,5 @@ trace.opentelemetry.collector	string		address of an OpenTelemetry trace collecto
 trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace snapshots are captured	tenant-rw
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez	tenant-rw
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	tenant-rw
+ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui [etc/utc = 0, america/new_york = 1]	tenant-rw
 version	version	1000023.1-26	set the active cluster version in the format '<major>.<minor>'	tenant-rw
