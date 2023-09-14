@@ -17,5 +17,4 @@ import (
 
 func init() {
 	storage.TestingUserDescID = bootstrap.TestingUserDescID
-	storage.TestingUserTableDataMin = bootstrap.TestingUserTableDataMin
 }

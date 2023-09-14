@@ -159,7 +159,7 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 	var (
 		ctx      = context.Background()
 		userSpan = roachpb.Span{
-			Key:    bootstrap.TestingUserTableDataMin(),
+			Key:    bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec),
 			EndKey: keys.TableDataMax,
 		}
 		done               = make(chan struct{})
