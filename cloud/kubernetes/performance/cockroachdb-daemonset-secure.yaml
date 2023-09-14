@@ -1,4 +1,4 @@
-# Generated file, DO NOT EDIT. Source: cockroachdb_cockroach_master/cloud/kubernetes/templates/performance/cockroachdb-daemonset-secure.yaml
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/performance/cockroachdb-daemonset-secure.yaml
 # This configuration file sets up a secure DaemonSet running CockroachDB.
 # For more information on why you might want to use a DaemonSet instead
 # of a StatefulSet, see our docs:
@@ -198,7 +198,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v23.1.9
+        image: cockroachdb/cockroach:v23.1.10
         imagePullPolicy: IfNotPresent
         # TODO: If you configured taints to give CockroachDB exclusive access to nodes, feel free
         # to remove the requests and limits sections. If you didn't, you'll need to change these to
