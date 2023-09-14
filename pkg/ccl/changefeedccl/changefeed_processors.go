@@ -434,7 +434,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 			initialHighWater, &ca.metrics.SchemaFeedMetrics, config.Opts.GetCanHandle())
 	}
 
-	monitoringCfg, err := makeKVFeedMonitoringCfg(ca.sliMetrics, opts)
+	monitoringCfg, err := makeKVFeedMonitoringCfg(ctx, ca.sliMetrics, opts, ca.flowCtx.Cfg.Settings)
 	if err != nil {
 		return kvfeed.Config{}, err
 	}
@@ -465,13 +465,15 @@ func (ca *changeAggregator) makeKVFeedCfg(
 }
 
 func makeKVFeedMonitoringCfg(
-	sliMetrics *sliMetrics, opts changefeedbase.StatementOptions,
+	ctx context.Context,
+	sliMetrics *sliMetrics,
+	opts changefeedbase.StatementOptions,
+	settings *cluster.Settings,
 ) (kvfeed.MonitoringConfig, error) {
-	laggingRangesThreshold, laggingRangesInterval, err := opts.GetLaggingRangesConfig()
+	laggingRangesThreshold, laggingRangesInterval, err := opts.GetLaggingRangesConfig(ctx, settings)
 	if err != nil {
 		return kvfeed.MonitoringConfig{}, err
 	}
-
 	return kvfeed.MonitoringConfig{
 		LaggingRangesCallback:        sliMetrics.getLaggingRangesCallback(),
 		LaggingRangesThreshold:       laggingRangesThreshold,
