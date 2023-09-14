@@ -18,12 +18,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -259,4 +261,42 @@ func TestActivityTablesReset(t *testing.T) {
 
 	sqlDB.QueryRow(t, "SELECT count(*) FROM system.transaction_activity").Scan(&count)
 	require.Equal(t, 0 /* expected */, count)
+}
+
+func TestStmtStatsEnable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
+	tc := testcluster.StartTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
+
+	serverutils.SetClusterSetting(t, tc, "sql.metrics.statement_details.enabled", "false")
+
+	sqlConn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	sqlConn.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+
+	appName := "TestStmtStatsEnable"
+	sqlConn.Exec(t, "SET application_name = $1", appName)
+
+	sqlConn.Exec(t, "SELECT count_rows() FROM crdb_internal.statement_statistics")
+	sqlConn.Exec(t, "SELECT count_rows() FROM crdb_internal.transaction_statistics")
+	sqlConn.Exec(t, "SELECT count_rows() FROM crdb_internal.statement_statistics WHERE app_name = $1", appName)
+	sqlConn.Exec(t, "SELECT count_rows() FROM crdb_internal.transaction_statistics WHERE app_name = $1", appName)
+
+	sqlConn.Exec(t, "SET application_name = $1", "ObserverTestStmtStatsEnable")
+	var count int
+	sqlConn.QueryRow(t,
+		"SELECT count(*) FROM crdb_internal.statement_statistics WHERE app_name = $1", appName).
+		Scan(&count)
+	require.Equal(t, 0 /* expected */, count)
+
+	sqlConn.QueryRow(t,
+		"SELECT count(*) FROM crdb_internal.transaction_statistics WHERE app_name = $1 AND (statistics->'execution_statistics'->>'cnt')::int > 0 ", appName).
+		Scan(&count)
+	require.Less(t, count, 4, "statement execution stats collection is disabled there should be less than 4 rows. Actual: %d", count)
 }

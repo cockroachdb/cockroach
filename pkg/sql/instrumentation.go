@@ -448,7 +448,9 @@ func (ih *instrumentationHelper) Setup(
 
 	ih.collectExecStats = collectTxnExecStats
 
-	if !collectTxnExecStats && !previouslySampled {
+	// Don't collect it if Stats Collection is disabled. If it is disabled the
+	// stats are not stored, so it always returns false for previouslySampled.
+	if !collectTxnExecStats && (!previouslySampled && sqlstats.StmtStatsEnable.Get(&cfg.Settings.SV)) {
 		// We don't collect the execution stats for statements in this txn, but
 		// this is the first time we see this statement ever, so we'll collect
 		// its execution stats anyway (unless the user disabled txn stats
