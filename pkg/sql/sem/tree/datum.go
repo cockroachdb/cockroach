@@ -2960,6 +2960,10 @@ func (d *DTimestamp) Size() uintptr {
 
 // DTimestampTZ is the timestamp Datum that is rendered with session offset.
 type DTimestampTZ struct {
+	// Functions that evaluate or render the TimestampTZ typically take the
+	// session time zone as an argument and ignore the Time's set location, but we
+	// do sometimes set the Time's location (e.g. when it comes from
+	// ParseDTimestampTZ).
 	time.Time
 }
 
@@ -3148,12 +3152,27 @@ func (d *DTimestampTZ) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
-// EvalAtTimeZone evaluates this TimestampTZ as if it were in the supplied
-// location, returning a timestamp without a timezone.
-func (d *DTimestampTZ) EvalAtTimeZone(loc *time.Location) (*DTimestamp, error) {
+// EvalAtAndRemoveTimeZone evaluates this TimestampTZ as if it were in the
+// supplied location, and then removes the timezone, returning a timestamp
+// without a timezone. This is identical to pgdate.stripTimezone but uses the
+// provided location instead of the DTimestampTZ's location. It is the inverse
+// of AddTimeZone.
+func (d *DTimestampTZ) EvalAtAndRemoveTimeZone(
+	loc *time.Location, precision time.Duration,
+) (*DTimestamp, error) {
 	_, locOffset := d.Time.In(loc).Zone()
-	t := d.Time.UTC().Add(time.Duration(locOffset) * time.Second).UTC()
-	return MakeDTimestamp(t, time.Microsecond)
+	t := d.Time.Add(time.Duration(locOffset) * time.Second)
+	return MakeDTimestamp(t.UTC(), precision)
+}
+
+// AddTimeZone uses the supplied location to convert this Timestamp to a
+// timestamp with a timezone. It is the inverse of EvalAtAndRemoveTimeZone.
+func (d *DTimestamp) AddTimeZone(
+	loc *time.Location, precision time.Duration,
+) (*DTimestampTZ, error) {
+	_, locOffset := d.Time.In(loc).Zone()
+	t := d.Time.Add(time.Duration(-locOffset) * time.Second)
+	return MakeDTimestampTZ(t.UTC(), precision)
 }
 
 // DInterval is the interval Datum.

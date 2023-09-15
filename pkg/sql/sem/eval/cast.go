@@ -737,7 +737,7 @@ func performCastWithoutPrecisionTruncation(
 			return tree.MakeDTime(timeofday.FromTime(d.Time).Round(roundTo)), nil
 		case *tree.DTimestampTZ:
 			// Strip time zone. Times don't carry their location.
-			stripped, err := d.EvalAtTimeZone(evalCtx.GetLocation())
+			stripped, err := d.EvalAtAndRemoveTimeZone(evalCtx.GetLocation(), time.Microsecond)
 			if err != nil {
 				return nil, err
 			}
@@ -785,11 +785,7 @@ func performCastWithoutPrecisionTruncation(
 			return d.Round(roundTo)
 		case *tree.DTimestampTZ:
 			// Strip time zone. Timestamps don't carry their location.
-			stripped, err := d.EvalAtTimeZone(evalCtx.GetLocation())
-			if err != nil {
-				return nil, err
-			}
-			return stripped.Round(roundTo)
+			return d.EvalAtAndRemoveTimeZone(evalCtx.GetLocation(), roundTo)
 		}
 
 	case types.TimestampTZFamily:
@@ -811,9 +807,7 @@ func performCastWithoutPrecisionTruncation(
 			_, after := t.In(evalCtx.GetLocation()).Zone()
 			return tree.MakeDTimestampTZ(t.Add(time.Duration(before-after)*time.Second), roundTo)
 		case *tree.DTimestamp:
-			_, before := d.Time.Zone()
-			_, after := d.Time.In(evalCtx.GetLocation()).Zone()
-			return tree.MakeDTimestampTZ(d.Time.Add(time.Duration(before-after)*time.Second), roundTo)
+			return d.AddTimeZone(evalCtx.GetLocation(), roundTo)
 		case *tree.DInt:
 			return tree.MakeDTimestampTZ(timeutil.Unix(int64(*d), 0), roundTo)
 		case *tree.DTimestampTZ:
