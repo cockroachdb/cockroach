@@ -16,7 +16,6 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/util/timeutil",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_cobra//:cobra",
     ],
 )
@@ -36,6 +35,7 @@ go_test(
     embed = [":docs-issue-generation_lib"],
     deps = [
         "//pkg/testutils",
+        "//pkg/testutils/skip",
         "@com_github_stretchr_testify//assert",
     ],
 )
