@@ -974,7 +974,7 @@ func (e *evaluator) EvalMinusTimestampTZTimestampOp(
 	// These two quantities aren't directly comparable. Convert the
 	// TimestampTZ to a timestamp first.
 	stripped, err := left.(*tree.DTimestampTZ).
-		EvalAtTimeZone(e.ctx().GetLocation())
+		EvalAtAndRemoveTimeZone(e.ctx().GetLocation(), time.Microsecond)
 	if err != nil {
 		return nil, err
 	}
@@ -990,7 +990,7 @@ func (e *evaluator) EvalMinusTimestampTimestampTZOp(
 	// These two quantities aren't directly comparable. Convert the
 	// TimestampTZ to a timestamp first.
 	stripped, err := right.(*tree.DTimestampTZ).
-		EvalAtTimeZone(e.ctx().GetLocation())
+		EvalAtAndRemoveTimeZone(e.ctx().GetLocation(), time.Microsecond)
 	if err != nil {
 		return nil, err
 	}
