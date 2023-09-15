@@ -8,9 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package systemconfigwatchertest exists to exercise systemconfigwatcher
-// in both ccl and non-ccl configurations.
-package systemconfigwatchertest
+package systemconfigwatcher_test
 
 import (
 	"context"
@@ -39,9 +37,8 @@ import (
 )
 
 // TestSystemConfigWatcher is a test which exercises the end-to-end integration
-// of the systemconfigwatcher. It exists in this subpackage so that it can be
-// run to exercise secondary tenants, which are ccl-only.
-func TestSystemConfigWatcher(t *testing.T, skipSecondary bool) {
+// of the systemconfigwatcher
+func TestSystemConfigWatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -62,22 +59,20 @@ func TestSystemConfigWatcher(t *testing.T, skipSecondary bool) {
 	t.Run("system", func(t *testing.T) {
 		runTest(t, s, sqlDB, nil)
 	})
-	if !skipSecondary {
-		t.Run("secondary", func(t *testing.T) {
-			tenant, tenantDB := serverutils.StartTenant(t, s, base.TestTenantArgs{
-				TenantID: serverutils.TestTenantID(),
-			})
-			// We expect the secondary tenant to see the host tenant's view of a few
-			// keys. We need to plumb that expectation into the test.
-			runTest(t, tenant, tenantDB, func(t *testing.T) []roachpb.KeyValue {
-				return kvtenant.GossipSubscriptionSystemConfigMask.Apply(
-					config.SystemConfigEntries{
-						Values: getSystemDescriptorAndZonesSpans(ctx, t, keys.SystemSQLCodec, kvDB),
-					},
-				).Values
-			})
+	t.Run("secondary", func(t *testing.T) {
+		tenant, tenantDB := serverutils.StartTenant(t, s, base.TestTenantArgs{
+			TenantID: serverutils.TestTenantID(),
 		})
-	}
+		// We expect the secondary tenant to see the host tenant's view of a few
+		// keys. We need to plumb that expectation into the test.
+		runTest(t, tenant, tenantDB, func(t *testing.T) []roachpb.KeyValue {
+			return kvtenant.GossipSubscriptionSystemConfigMask.Apply(
+				config.SystemConfigEntries{
+					Values: getSystemDescriptorAndZonesSpans(ctx, t, keys.SystemSQLCodec, kvDB),
+				},
+			).Values
+		})
+	})
 }
 
 func runTest(

@@ -1584,7 +1584,6 @@ GO_TARGETS = [
     "//pkg/server/storage_api:storage_api_test",
     "//pkg/server/structlogging:structlogging",
     "//pkg/server/structlogging:structlogging_test",
-    "//pkg/server/systemconfigwatcher/systemconfigwatchertest:systemconfigwatchertest",
     "//pkg/server/systemconfigwatcher:systemconfigwatcher",
     "//pkg/server/systemconfigwatcher:systemconfigwatcher_test",
     "//pkg/server/telemetry:telemetry",
