@@ -1381,6 +1381,13 @@ func TestTenantLogic_pgoidtype(
 	runLogicTest(t, "pgoidtype")
 }
 
+func TestTenantLogic_plpgsql_cursor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "plpgsql_cursor")
+}
+
 func TestTenantLogic_poison_after_push(
 	t *testing.T,
 ) {
