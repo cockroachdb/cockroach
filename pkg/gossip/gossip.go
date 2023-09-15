@@ -58,7 +58,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -242,15 +241,6 @@ type Gossip struct {
 	bootstrapInterval time.Duration
 	cullInterval      time.Duration
 
-	// The system config is treated unlike other info objects.
-	// It is used so often that we keep an unmarshaled version of it
-	// here and its own set of callbacks.
-	// We do not use the infostore to avoid unmarshalling under the
-	// main gossip lock.
-	systemConfig         *config.SystemConfig
-	systemConfigMu       syncutil.RWMutex
-	systemConfigChannels []chan<- struct{}
-
 	// addresses is a list of bootstrap host addresses for
 	// connecting to the gossip network.
 	addressIdx     int
@@ -307,8 +297,6 @@ func New(
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	// Add ourselves as a SystemConfig watcher.
-	g.mu.is.registerCallback(KeyDeprecatedSystemConfig, g.updateSystemConfig)
 	// Add ourselves as a node descriptor watcher.
 	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeDescPrefix), g.updateNodeAddress)
 	g.mu.is.registerCallback(MakePrefixPattern(KeyStoreDescPrefix), g.updateStoreMap)
@@ -1083,31 +1071,6 @@ func (g *Gossip) RegisterCallback(pattern string, method Callback, opts ...Callb
 		g.mu.Lock()
 		defer g.mu.Unlock()
 		unregister()
-	}
-}
-
-// updateSystemConfig is the raw gossip info callback. Unmarshal the
-// system config, and if successful, send on each system config
-// channel.
-func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
-	ctx := g.AnnotateCtx(context.TODO())
-	if key != KeyDeprecatedSystemConfig {
-		log.Fatalf(ctx, "wrong key received on SystemConfig callback: %s", key)
-	}
-	cfg := config.NewSystemConfig(g.defaultZoneConfig)
-	if err := content.GetProto(&cfg.SystemConfigEntries); err != nil {
-		log.Errorf(ctx, "could not unmarshal system config on callback: %s", err)
-		return
-	}
-
-	g.systemConfigMu.Lock()
-	defer g.systemConfigMu.Unlock()
-	g.systemConfig = cfg
-	for _, c := range g.systemConfigChannels {
-		select {
-		case c <- struct{}{}:
-		default:
-		}
 	}
 }
 
