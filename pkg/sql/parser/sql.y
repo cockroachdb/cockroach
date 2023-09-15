@@ -1347,7 +1347,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
-%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list show_backup_connection_options show_backup_connection_options_list
+%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list show_backup_connection_options opt_with_show_backup_connection_options_list show_backup_connection_options_list
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -7611,19 +7611,12 @@ show_backup_stmt:
   			Options: *$5.showBackupOptions(),
   		}
   	}
-| SHOW BACKUP CONNECTION string_or_placeholder
+| SHOW BACKUP CONNECTION string_or_placeholder opt_with_show_backup_connection_options_list
   	{
   		$$.val = &tree.ShowBackup{
   		  Details:  tree.BackupConnectionTest,
   			Path:    $4.expr(),
-  		}
-  	}
-| SHOW BACKUP CONNECTION string_or_placeholder WITH show_backup_connection_options_list
-  	{
-  		$$.val = &tree.ShowBackup{
-  		  Details:  tree.BackupConnectionTest,
-  			Path:    $4.expr(),
-        Options: *$6.showBackupOptions(),
+  			Options: *$5.showBackupOptions(),
   		}
   	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
@@ -7723,6 +7716,20 @@ show_backup_options:
  {
  $$.val = &tree.ShowBackupOptions{DebugMetadataSST: true}
  }
+
+opt_with_show_backup_connection_options_list:
+  WITH show_backup_connection_options_list
+  {
+    $$.val = $2.showBackupOptions()
+  }
+| WITH OPTIONS '(' show_backup_connection_options_list ')'
+  {
+    $$.val = $4.showBackupOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.ShowBackupOptions{}
+  }
 
 show_backup_connection_options_list:
   // Require at least one option

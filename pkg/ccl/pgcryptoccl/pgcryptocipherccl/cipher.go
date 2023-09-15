@@ -74,13 +74,17 @@ func Decrypt(data []byte, key []byte, iv []byte, cipherType string) ([]byte, err
 func newCipher(method cipherMethod, key []byte) (cipher.Block, error) {
 	switch a := method.algorithm; a {
 	case aesCipher:
+		var err error
 		switch l := len(key); {
 		case l >= 32:
-			key = zeroPadOrTruncate(key, 32)
+			key, err = zeroPadOrTruncate(key, 32)
 		case l >= 24:
-			key = zeroPadOrTruncate(key, 24)
+			key, err = zeroPadOrTruncate(key, 24)
 		default:
-			key = zeroPadOrTruncate(key, 16)
+			key, err = zeroPadOrTruncate(key, 16)
+		}
+		if err != nil {
+			return nil, err
 		}
 		return aes.NewCipher(key)
 	default:
@@ -124,8 +128,12 @@ func validateDataLength(data []byte, blockSize int) error {
 func encrypt(method cipherMethod, block cipher.Block, iv []byte, data []byte) ([]byte, error) {
 	switch m := method.mode; m {
 	case cbcMode:
+		var err error
 		ret := make([]byte, len(data))
-		iv = zeroPadOrTruncate(iv, block.BlockSize())
+		iv, err = zeroPadOrTruncate(iv, block.BlockSize())
+		if err != nil {
+			return nil, err
+		}
 		mode := cipher.NewCBCEncrypter(block, iv)
 		mode.CryptBlocks(ret, data)
 		return ret, nil
@@ -137,21 +145,16 @@ func encrypt(method cipherMethod, block cipher.Block, iv []byte, data []byte) ([
 func decrypt(method cipherMethod, block cipher.Block, iv []byte, data []byte) ([]byte, error) {
 	switch m := method.mode; m {
 	case cbcMode:
+		var err error
 		ret := make([]byte, len(data))
-		iv = zeroPadOrTruncate(iv, block.BlockSize())
+		iv, err = zeroPadOrTruncate(iv, block.BlockSize())
+		if err != nil {
+			return nil, err
+		}
 		mode := cipher.NewCBCDecrypter(block, iv)
 		mode.CryptBlocks(ret, data)
 		return ret, nil
 	default:
 		return nil, errors.Newf("cannot encrypt for unknown mode: %d", m)
 	}
-}
-
-func zeroPadOrTruncate(data []byte, size int) []byte {
-	if len(data) >= size {
-		return data[:size]
-	}
-	paddedData := make([]byte, size)
-	copy(paddedData, data)
-	return paddedData
 }
