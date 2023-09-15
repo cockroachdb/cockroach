@@ -1336,6 +1336,9 @@ func (p *planner) maybeUpdateSystemDBSurvivalGoal(ctx context.Context) error {
 		if !db.IsMultiRegion() {
 			return
 		}
+		if db.Dropped() {
+			return
+		}
 		curGoal := db.GetRegionConfig().SurvivalGoal
 		if curGoal > maxSurvivalGoal {
 			maxSurvivalGoal = curGoal
