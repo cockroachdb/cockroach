@@ -303,19 +303,30 @@ func getSourceStatsInfo(
 	whereClauseOldestDate := buffer.String()
 
 	getRuntime := func(table string) (float32, error) {
-		it, err := ie.QueryIteratorEx(
-			ctx,
-			fmt.Sprintf(`console-combined-stmts-%s-total-runtime`, table),
-			nil,
-			sessiondata.NodeUserSessionDataOverride,
-			fmt.Sprintf(`
+		var queryToGetClusterTotalRunTime string
+		if activityTableHasAllData {
+			queryToGetClusterTotalRunTime = fmt.Sprintf(`
+SELECT COALESCE(
+         execution_total_cluster_seconds,
+       0)
+FROM %s %s LIMIT 1`, table, whereClause)
+		} else {
+			queryToGetClusterTotalRunTime = fmt.Sprintf(`
 SELECT COALESCE(
           sum(
              (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
              (statistics -> 'statistics' ->> 'cnt')::FLOAT
           ),
        0)
-FROM %s %s`, table, whereClause), args...)
+FROM %s %s`, table, whereClause)
+		}
+
+		it, err := ie.QueryIteratorEx(
+			ctx,
+			fmt.Sprintf(`console-combined-stmts-%s-total-runtime`, table),
+			nil,
+			sessiondata.NodeUserSessionDataOverride,
+			queryToGetClusterTotalRunTime, args...)
 
 		defer func() {
 			err = closeIterator(it, err)
