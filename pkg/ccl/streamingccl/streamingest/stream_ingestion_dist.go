@@ -24,12 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -206,10 +208,42 @@ func startDistIngestion(
 		return rw.Err()
 	}
 
-	if streamProgress.InitialSplitComplete {
+	if !streamProgress.InitialSplitComplete {
+		log.Infof(ctx, "splits starting")
 		if err := createInitialSplits(ctx, execCtx, planner.initialTopology, details.DestinationTenantID); err != nil {
 			return err
 		}
+		log.Infof(ctx, "splits complete, show ranges:")
+		execCfg := execCtx.ExecCfg()
+		err = execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			_, _ = execCfg.InternalDB.Executor().Exec(ctx, "cs", txn, `SET CLUSTER SETTING show_ranges_deprecated_behavior = false`)
+			it, err := execCfg.InternalDB.Executor().QueryIteratorEx(ctx, "show ranges", txn,
+				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+				`SELECT start_key, end_key, range_id, range_size_mb, lease_holder FROM [SHOW CLUSTER RANGES WITH DETAILS]`)
+			defer func() {
+				_ = it.Close()
+			}()
+			for {
+				ok, err := it.Next(ctx)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					break
+				}
+
+				start := tree.MustBeDString(it.Cur()[0])
+				end := tree.MustBeDString(it.Cur()[1])
+				rangeID := tree.MustBeDInt(it.Cur()[2])
+				decimal := tree.MustBeDDecimal(it.Cur()[3])
+				rangeSize, _ := decimal.Float64()
+				leaseholder := tree.MustBeDInt(it.Cur()[4])
+
+				log.Infof(ctx, "range %d: %s-%s, size: %f, leaseholder: %d", rangeID, start, end, rangeSize, leaseholder)
+			}
+			return err
+		})
+		log.Infof(ctx, "err from show ranges: %v", err)
 	} else {
 		log.Infof(ctx, "initial splits already complete")
 	}

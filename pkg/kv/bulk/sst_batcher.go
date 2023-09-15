@@ -868,9 +868,13 @@ func (b *SSTBatcher) addSSTable(
 					// involved stores; if it is small this edge case is immaterial, and
 					// if it is large, it's probably one big one but we don't know which
 					// so just blame them all (averaging it out could hide one big delay).
+					log.Infof(ctx, "request to AddSST [%s, %s) went to\n\n", item.start, item.end)
 					for i := range br.BatchResponse_Header.RangeInfos {
+						log.Infof(ctx, "- %s", br.BatchResponse_Header.RangeInfos[i].String())
 						ingestionPerformanceStats.SendWaitByStore[br.BatchResponse_Header.RangeInfos[i].Lease.Replica.StoreID] += sendTime
 					}
+				} else {
+					log.Info(ctx, "range infos is unexpectedly empty")
 				}
 
 				if pErr == nil {
