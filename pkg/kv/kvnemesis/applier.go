@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -108,6 +109,10 @@ func exceptAmbiguous(err error) bool { // true if ambiguous result
 
 func exceptDelRangeUsingTombstoneStraddlesRangeBoundary(err error) bool {
 	return errors.Is(err, errDelRangeUsingTombstoneStraddlesRangeBoundary)
+}
+
+func exceptSharedLockPromotionError(err error) bool { // true if lock promotion error
+	return errors.Is(err, &concurrency.LockPromotionError{})
 }
 
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
@@ -233,11 +238,14 @@ type clientI interface {
 	dbRunI
 	Get(context.Context, interface{}) (kv.KeyValue, error)
 	GetForUpdate(context.Context, interface{}) (kv.KeyValue, error)
+	GetForShare(context.Context, interface{}) (kv.KeyValue, error)
 	Put(context.Context, interface{}, interface{}) error
 	Scan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
+	ScanForShare(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ReverseScan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ReverseScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
+	ReverseScanForShare(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	Del(context.Context, ...interface{}) ([]roachpb.Key, error)
 	DelRange(context.Context, interface{}, interface{}, bool) ([]roachpb.Key, error)
 }
@@ -276,6 +284,9 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 		if o.ForUpdate {
 			fn = (*kv.Batch).GetForUpdate
 		}
+		if o.ForShare {
+			fn = (*kv.Batch).GetForShare
+		}
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
 			if o.SkipLocked {
 				b.Header.WaitPolicy = lock.WaitPolicy_SkipLocked
@@ -306,12 +317,22 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 		o.Result.OptionalTimestamp = ts
 	case *ScanOperation:
 		fn := (*kv.Batch).Scan
-		if o.Reverse && o.ForUpdate {
-			fn = (*kv.Batch).ReverseScanForUpdate
-		} else if o.Reverse {
-			fn = (*kv.Batch).ReverseScan
-		} else if o.ForUpdate {
-			fn = (*kv.Batch).ScanForUpdate
+		if o.Reverse {
+			if o.ForUpdate {
+				fn = (*kv.Batch).ReverseScanForUpdate
+			} else if o.ForShare {
+				fn = (*kv.Batch).ReverseScanForShare
+			} else {
+				fn = (*kv.Batch).ReverseScan
+			}
+		} else {
+			if o.ForUpdate {
+				fn = (*kv.Batch).ScanForUpdate
+			} else if o.ForShare {
+				fn = (*kv.Batch).ScanForShare
+			} else {
+				fn = (*kv.Batch).Scan
+			}
 		}
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
 			if o.SkipLocked {

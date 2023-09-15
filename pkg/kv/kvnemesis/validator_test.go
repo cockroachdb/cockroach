@@ -684,6 +684,22 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(kv(k1, t2, s1)),
 		},
 		{
+			name: "one for update read before write",
+			steps: []Step{
+				step(withReadResultTS(getForUpdate(k1), ``, t1)),
+				step(withResultTS(put(k1, s1), t2)),
+			},
+			kvs: kvs(kv(k1, t2, s1)),
+		},
+		{
+			name: "one for share read before write",
+			steps: []Step{
+				step(withReadResultTS(getForShare(k1), ``, t1)),
+				step(withResultTS(put(k2, s1), t2)),
+			},
+			kvs: kvs(kv(k2, t2, s1)),
+		},
+		{
 			name: "one read before delete",
 			steps: []Step{
 				step(withReadResultTS(get(k1), ``, t1)),
@@ -695,6 +711,15 @@ func TestValidate(t *testing.T) {
 			name: "one read before write and delete",
 			steps: []Step{
 				step(withReadResultTS(get(k1), ``, t1)),
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(del(k1, s2), t2)),
+			},
+			kvs: kvs(kv(k1, t1, s1), tombstone(k1, t2, s2)),
+		},
+		{
+			name: "one for update read before write and delete",
+			steps: []Step{
+				step(withReadResultTS(getForUpdate(k1), ``, t1)),
 				step(withResultTS(put(k1, s1), t1)),
 				step(withResultTS(del(k1, s2), t2)),
 			},
@@ -713,6 +738,22 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResultTS(put(k1, s1), t1)),
 				step(withReadResultTS(get(k1), v1, t2)),
+			},
+			kvs: kvs(kv(k1, t1, s1)),
+		},
+		{
+			name: "one for update read after write",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withReadResultTS(getForUpdate(k1), v1, t2)),
+			},
+			kvs: kvs(kv(k1, t1, s1)),
+		},
+		{
+			name: "one for share read after write",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withReadResultTS(getForShare(k1), v1, t2)),
 			},
 			kvs: kvs(kv(k1, t1, s1)),
 		},
@@ -767,8 +808,8 @@ func TestValidate(t *testing.T) {
 				step(withResultTS(put(k2, s2), t2)),
 				step(withResultTS(batch(
 					withReadResult(get(k1), v1),
-					withReadResult(get(k2), v2),
-					withReadResult(get(k3), ``),
+					withReadResult(getForUpdate(k2), v2),
+					withReadResult(getForShare(k3), ``),
 				), t3)),
 			},
 			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
