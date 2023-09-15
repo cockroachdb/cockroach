@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -250,6 +251,7 @@ func MakeStreamSSTBatcher(
 	onFlush func(summary kvpb.BulkOpSummary),
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
+		name:      "stream",
 		db:        db,
 		rc:        rc,
 		settings:  settings,
@@ -845,20 +847,24 @@ func (b *SSTBatcher) addSSTable(
 				ba.Add(req)
 				beforeSend := timeutil.Now()
 
-				//sp := tracing.SpanFromContext(ctx)
-				//opts := make([]tracing.SpanOption, 0)
-				//opts = append(opts, tracing.WithParent(sp), tracing.WithRecording(tracingpb.RecordingVerbose))
-				//addSSTCtx, addSSTSpan := sp.Tracer().StartSpanCtx(ctx, "backupccl.AddSSTableRequest", opts...)
-				//
-				br, pErr := b.db.NonTransactionalSender().Send(ctx, ba)
-				//recording := addSSTSpan.FinishAndGetConfiguredRecording()
+				addSSTCtx := ctx
+				var addSSTSpan *tracing.Span
+				if b.name == "stream" {
+					sp := tracing.SpanFromContext(ctx)
+					opts := make([]tracing.SpanOption, 0)
+					opts = append(opts, tracing.WithParent(sp), tracing.WithRecording(tracingpb.RecordingVerbose))
+					addSSTCtx, addSSTSpan = sp.Tracer().StartSpanCtx(ctx, "backupccl.AddSSTableRequest", opts...)
+				}
+				br, pErr := b.db.NonTransactionalSender().Send(addSSTCtx, ba)
+				var recording tracingpb.Recording
+				if addSSTSpan != nil {
+					recording = addSSTSpan.FinishAndGetConfiguredRecording()
+				}
 				if timeutil.Since(beforeSend) > 4*time.Second {
-					log.Errorf(ctx, "long addsst: sending %s AddSSTable [%s,%s)\n",
-						sz(len(item.sstBytes)), item.start, item.end)
-					//if recording != nil {
-					//	log.Errorf(ctx, "long addsst: sending %s AddSSTable [%s,%s)\n\ntrace:\n%s",
-					//		sz(len(item.sstBytes)), item.start, item.end, recording)
-					//}
+					if recording != nil {
+						log.Errorf(ctx, "long addsst: sending %s AddSSTable [%s,%s)\n\ntrace:\n%s",
+							sz(len(item.sstBytes)), item.start, item.end, recording)
+					}
 				}
 				sendTime := timeutil.Since(beforeSend)
 
