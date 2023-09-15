@@ -23,8 +23,10 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -36,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	goparquet "github.com/fraugster/parquet-go"
 	"github.com/fraugster/parquet-go/parquet"
@@ -415,4 +418,43 @@ INDEX (y))`)
 		err := validateParquetFile(t, ctx, ie, test)
 		require.NoError(t, err, "failed to validate parquet file")
 	}
+}
+
+func TestMemoryMonitor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Arrange for a small memory budget.
+	budget := int64(4096)
+	mm := mon.NewMonitorWithLimit(
+		"test-mm", mon.MemoryResource, budget,
+		nil, nil,
+		128 /* small allocation increment */, 100,
+		cluster.MakeTestingClusterSettings())
+	ctx := context.Background()
+	mm.Start(ctx, nil, mon.NewStandaloneBudget(budget))
+	defer mm.Stop(ctx)
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				Export: &importer.ExportTestingKnobs{
+					MemoryMonitor: mm,
+				},
+			},
+		},
+	})
+	cleanup := func() {
+		s.Stopper().Stop(ctx)
+	}
+	defer cleanup()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE foo(key INT PRIMARY KEY DEFAULT unique_rowid(), val INT)`)
+	sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(1, 100)`)
+	sqlDB.ExpectErr(t, "memory budget exceeded", `EXPORT INTO PARQUET 'nodelocal://1/foo' FROM SELECT * FROM foo`)
 }
