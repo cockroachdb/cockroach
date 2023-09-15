@@ -8,13 +8,13 @@
   - 22.1.19
   predecessor: "21.2"
 "22.2":
-  latest: 22.2.13
+  latest: 22.2.14
   withdrawn:
   - 22.2.4
   - 22.2.8
   predecessor: "22.1"
 "23.1":
-  latest: 23.1.9
+  latest: 23.1.10
   withdrawn:
   - 23.1.0
   predecessor: "22.2"

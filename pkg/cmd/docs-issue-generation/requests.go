@@ -16,8 +16,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-
-	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -110,9 +108,9 @@ func httpRequest(
 		return err
 	}
 	defer res.Body.Close()
+	var respErr error
 	if res.StatusCode != http.StatusOK && res.StatusCode != 201 {
-		err = fmt.Errorf("error: Request failed with status: %s", res.Status)
-		return err
+		respErr = fmt.Errorf("request failed with status: %s", res.Status)
 	}
 	bs, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -122,12 +120,14 @@ func httpRequest(
 	var tmp interface{}
 	err = json.Unmarshal(bs, &tmp)
 	if err != nil {
-		return errors.CombineErrors(err, fmt.Errorf("byte slice: %s", string(bs[:])))
+		return fmt.Errorf("%w\nByte slice: %s", err, string(bs[:]))
+	}
+	if respErr != nil {
+		return fmt.Errorf("%w\n%+v", respErr, tmp)
 	}
 	err = json.Unmarshal(bs, out)
 	if err != nil {
-		//return fmt.Errorf("%s\nResponse from server: %+v\n", err, tmp)
-		return errors.CombineErrors(err, fmt.Errorf("response from server: %+v", tmp))
+		return fmt.Errorf("could not umarshall interface:\n%w\nActual response from server: %+v", err, tmp)
 	}
 	return nil
 }
