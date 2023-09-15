@@ -186,6 +186,9 @@ func TestLockTableIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Disable the metamorphic value for deterministic iteration stats.
+	DisableMetamorphicLockTableItersBeforeSeek(t)
+
 	var eng Engine
 	defer func() {
 		if eng != nil {
@@ -638,4 +641,43 @@ func TestLockTableIteratorEquivalence(t *testing.T) {
 	}
 
 	require.NoError(t, quick.CheckEqual(lockTableIter, preFilterIter, nil))
+}
+
+func TestLockTableItersBeforeSeekHelper(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Disable the metamorphic value.
+	DisableMetamorphicLockTableItersBeforeSeek(t)
+
+	// Check that the value is 5.
+	require.Equal(t, 5, lockTableItersBeforeSeek)
+
+	var h lockTableItersBeforeSeekHelper
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+
+	// Seek to keyA. Should start stepping.
+	require.False(t, h.shouldSeek(keyA))
+	// Step. Same key. Should step again.
+	require.False(t, h.shouldSeek(keyA))
+	// Step. Same key. Should step again.
+	require.False(t, h.shouldSeek(keyA))
+	// Step. Same key. Should step again.
+	require.False(t, h.shouldSeek(keyA))
+	// Step. Same key. Should step again.
+	require.False(t, h.shouldSeek(keyA))
+	// Step. Same key. Should start seeking.
+	require.True(t, h.shouldSeek(keyA))
+	// Seek. Same key. Should keep seeking if not new key prefix.
+	require.True(t, h.shouldSeek(keyA))
+	// Seek. New key. Should start stepping again.
+	require.False(t, h.shouldSeek(keyB))
+
+	// Test that the key is copied and not referenced.
+	for i := 0; i < lockTableItersBeforeSeek; i++ {
+		keyUnstable := roachpb.Key("unstable")
+		require.False(t, h.shouldSeek(keyUnstable))
+		keyUnstable[0] = 'a'
+	}
+	require.True(t, h.shouldSeek(roachpb.Key("unstable")))
 }

@@ -72,7 +72,7 @@ next: output: value k=b ts=30.000000000,0 v=b30
 next: output: meta k=c
 next: output: value k=d ts=25.000000000,0 v=d25
 next: output: .
-stats: (interface (dir, seek, step): (fwd, 2, 19), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 15), (rev, 0, 0))
+stats: (interface (dir, seek, step): (fwd, 3, 18), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 3, 14), (rev, 0, 0))
 prev: output: value k=d ts=25.000000000,0 v=d25
 prev: output: meta k=c
 prev: output: value k=b ts=30.000000000,0 v=b30
@@ -81,16 +81,16 @@ prev: output: value k=a ts=10.000000000,0 v=a10
 prev: output: value k=a ts=20.000000000,0 v=a20
 prev: output: meta k=a ts=20.000000000,0 txn=1
 prev: output: .
-stats: (interface (dir, seek, step): (fwd, 2, 19), (rev, 0, 19)), (internal (dir, seek, step): (fwd, 2, 15), (rev, 2, 15))
+stats: (interface (dir, seek, step): (fwd, 3, 18), (rev, 1, 18)), (internal (dir, seek, step): (fwd, 3, 14), (rev, 3, 15))
 seek-ge "b"/0,0: output: meta k=b ts=30.000000000,0 txn=2
-stats: (interface (dir, seek, step): (fwd, 4, 19), (rev, 0, 19)), (internal (dir, seek, step): (fwd, 4, 15), (rev, 2, 15))
+stats: (interface (dir, seek, step): (fwd, 5, 18), (rev, 1, 18)), (internal (dir, seek, step): (fwd, 5, 14), (rev, 3, 15))
 next: output: value k=b ts=30.000000000,0 v=b30
 next: output: meta k=c
 prev: output: value k=b ts=30.000000000,0 v=b30
 prev: output: meta k=b ts=30.000000000,0 txn=2
 prev: output: value k=a ts=10.000000000,0 v=a10
 seek-lt "b"/0,0: output: value k=a ts=10.000000000,0 v=a10
-stats: (interface (dir, seek, step): (fwd, 4, 23), (rev, 2, 27)), (internal (dir, seek, step): (fwd, 4, 18), (rev, 4, 26))
+stats: (interface (dir, seek, step): (fwd, 5, 22), (rev, 3, 26)), (internal (dir, seek, step): (fwd, 5, 17), (rev, 5, 26))
 next: output: meta k=b ts=30.000000000,0 txn=2
 prev: output: value k=a ts=10.000000000,0 v=a10
 prev: output: value k=a ts=20.000000000,0 v=a20

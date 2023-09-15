@@ -212,6 +212,9 @@ func checkAndOutputIter(iter MVCCIterator, b *strings.Builder) {
 func TestIntentInterleavingIter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Disable the metamorphic value for deterministic iteration stats.
+	DisableMetamorphicLockTableItersBeforeSeek(t)
+
 	var eng Engine
 	defer func() {
 		if eng != nil {
