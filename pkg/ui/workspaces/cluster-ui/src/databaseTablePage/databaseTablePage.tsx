@@ -53,11 +53,22 @@ import {
   ActionCell,
   DbTablesBreadcrumbs,
   FormatMVCCInfo,
+  getCreateStmt,
   IndexRecCell,
   LastReset,
   LastUsed,
   NameCell,
 } from "./helperComponents";
+import {
+  SqlApiQueryResponse,
+  SqlExecutionErrorMessage,
+  TableCreateStatementRow,
+  TableHeuristicDetailsRow,
+  TableReplicaData,
+  TableSchemaDetailsRow,
+  TableSpanStatsRow,
+} from "../api";
+import { checkInfoAvailable } from "../databases";
 
 const cx = classNames.bind(styles);
 const booleanSettingCx = classnames.bind(booleanSettingStyles);
@@ -122,17 +133,16 @@ export interface DatabaseTablePageData {
 export interface DatabaseTablePageDataDetails {
   loading: boolean;
   loaded: boolean;
-  lastError: Error;
-  createStatement: string;
-  replicaCount: number;
-  indexNames: string[];
-  grants: Grant[];
-  statsLastUpdated?: Moment;
-  totalBytes: number;
-  liveBytes: number;
-  livePercentage: number;
-  sizeInBytes: number;
-  rangeCount: number;
+  // Request error getting table details
+  requestError: Error;
+  // Query error getting table details
+  queryError: SqlExecutionErrorMessage;
+  createStatement: SqlApiQueryResponse<TableCreateStatementRow>;
+  replicaData: SqlApiQueryResponse<TableReplicaData>;
+  spanStats: SqlApiQueryResponse<TableSpanStatsRow>;
+  indexData: SqlApiQueryResponse<TableSchemaDetailsRow>;
+  grants: SqlApiQueryResponse<AllGrants>;
+  statsLastUpdated?: SqlApiQueryResponse<TableHeuristicDetailsRow>;
   nodesByRegionString?: string;
 }
 
@@ -155,6 +165,10 @@ export interface IndexStat {
 interface IndexRecommendation {
   type: RecommendationType;
   reason: string;
+}
+
+interface AllGrants {
+  all: Grant[];
 }
 
 interface Grant {
@@ -274,7 +288,7 @@ export class DatabaseTablePage extends React.Component<
     if (
       !this.props.details.loaded &&
       !this.props.details.loading &&
-      this.props.details.lastError === undefined
+      this.props.details.requestError === undefined
     ) {
       return this.props.refreshTableDetails(
         this.props.databaseName,
@@ -412,6 +426,7 @@ export class DatabaseTablePage extends React.Component<
 
   render(): React.ReactElement {
     const { hasAdminRole } = this.props;
+    const details: DatabaseTablePageDataDetails = this.props.details;
     return (
       <div className="root table-area">
         <section className={baseHeadingClasses.wrapper}>
@@ -442,47 +457,70 @@ export class DatabaseTablePage extends React.Component<
               className={cx("tab-pane")}
             >
               <Loading
-                loading={this.props.details.loading}
+                loading={details.loading}
                 page={"table_details"}
-                error={this.props.details.lastError}
+                error={details.requestError}
                 render={() => (
                   <>
                     <Row gutter={18}>
                       <Col className="gutter-row" span={18}>
-                        <SqlBox value={this.props.details.createStatement} />
+                        <SqlBox value={getCreateStmt(details)} />
                       </Col>
                     </Row>
-
                     <Row gutter={18}>
                       <Col className="gutter-row" span={8}>
                         <SummaryCard className={cx("summary-card")}>
                           <SummaryCardItem
                             label="Size"
-                            value={format.Bytes(this.props.details.sizeInBytes)}
+                            value={checkInfoAvailable(
+                              details.requestError,
+                              details.spanStats?.error,
+                              details.spanStats?.approximate_disk_bytes
+                                ? format.Bytes(
+                                    details.spanStats?.approximate_disk_bytes,
+                                  )
+                                : null,
+                            )}
                           />
                           <SummaryCardItem
                             label="Replicas"
-                            value={this.props.details.replicaCount}
+                            value={checkInfoAvailable(
+                              details.requestError,
+                              details.replicaData?.error,
+                              details.replicaData?.replicaCount,
+                            )}
                           />
                           <SummaryCardItem
                             label="Ranges"
-                            value={this.props.details.rangeCount}
+                            value={checkInfoAvailable(
+                              details.requestError,
+                              details.spanStats?.error,
+                              details.spanStats?.range_count,
+                            )}
                           />
                           <SummaryCardItem
                             label="% of Live Data"
-                            value={
-                              <FormatMVCCInfo details={this.props.details} />
-                            }
+                            value={checkInfoAvailable(
+                              details.requestError,
+                              details.spanStats?.error,
+                              <FormatMVCCInfo details={details} />,
+                            )}
                           />
-                          {this.props.details.statsLastUpdated && (
+                          {details.statsLastUpdated && (
                             <SummaryCardItem
                               label="Table Stats Last Updated"
-                              value={
+                              value={checkInfoAvailable(
+                                details.requestError,
+                                details.statsLastUpdated?.error,
                                 <Timestamp
-                                  time={this.props.details.statsLastUpdated}
+                                  time={
+                                    details.statsLastUpdated
+                                      ?.stats_last_created_at
+                                  }
                                   format={DATE_FORMAT_24_TZ}
-                                />
-                              }
+                                  fallback={"No table statistics found"}
+                                />,
+                              )}
                             />
                           )}
                           {this.props.automaticStatsCollectionEnabled !=
@@ -517,7 +555,14 @@ export class DatabaseTablePage extends React.Component<
                           {this.props.showNodeRegionsSection && (
                             <SummaryCardItem
                               label="Regions/Nodes"
-                              value={this.props.details.nodesByRegionString}
+                              value={checkInfoAvailable(
+                                details.requestError,
+                                null,
+                                details.nodesByRegionString &&
+                                  details.nodesByRegionString?.length
+                                  ? details.nodesByRegionString
+                                  : null,
+                              )}
                             />
                           )}
                           <SummaryCardItem
@@ -526,7 +571,11 @@ export class DatabaseTablePage extends React.Component<
                           />
                           <SummaryCardItem
                             label="Indexes"
-                            value={this.props.details.indexNames.join(", ")}
+                            value={checkInfoAvailable(
+                              details.requestError,
+                              details.indexData?.error,
+                              details.indexData?.indexes?.join(", "),
+                            )}
                             className={cx(
                               "database-table-page__indexes--value",
                             )}
@@ -599,30 +648,30 @@ export class DatabaseTablePage extends React.Component<
                 renderError={() =>
                   LoadingError({
                     statsType: "databases",
-                    error: this.props.details.lastError,
+                    error: details.requestError,
                   })
                 }
               />
             </TabPane>
             <TabPane tab="Grants" key={grantsTabKey} className={cx("tab-pane")}>
               <Loading
-                loading={this.props.details.loading}
+                loading={details.loading}
                 page={"table_details_grants"}
-                error={this.props.details.lastError}
+                error={details.requestError}
                 render={() => (
                   <DatabaseTableGrantsTable
-                    data={this.props.details.grants}
+                    data={details.grants?.all}
                     columns={this.grantsColumns}
                     sortSetting={this.state.grantSortSetting}
                     onChangeSortSetting={this.changeGrantSortSetting.bind(this)}
-                    loading={this.props.details.loading}
+                    loading={details.loading}
                     tableWrapperClassName={cx("sorted-table")}
                   />
                 )}
                 renderError={() =>
                   LoadingError({
                     statsType: "databases",
-                    error: this.props.details.lastError,
+                    error: details.requestError,
                   })
                 }
               />
