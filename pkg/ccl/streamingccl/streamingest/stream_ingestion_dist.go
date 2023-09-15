@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -395,21 +396,19 @@ func createInitialSplits(
 			// I've tried scattering alone and the results were
 			// mixed.
 			//
-			// scatterKey := roachpb.Key(splitKey)
-			// _, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(), &kvpb.AdminScatterRequest{
-			// 	RequestHeader: kvpb.RequestHeaderFromSpan(roachpb.Span{
-			// 		Key:    scatterKey,
-			// 		EndKey: scatterKey.Next(),
-			// 	}),
-			// 	RandomizeLeases: true,
-			// 	MaxSize:         1, // don't scatter non-empty ranges on resume.
-			// })
-			// if pErr != nil {
-			// 	if !strings.Contains(pErr.String(), "existing range size") {
-			// 		log.Warningf(ctx, "failed to scatter span starting at %s: %+v",
-			// 			scatterKey, pErr.GoError())
-			// 	}
-			// }
+			scatterKey := roachpb.Key(splitKey)
+			_, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(), &kvpb.AdminScatterRequest{
+				RequestHeader: kvpb.RequestHeaderFromSpan(roachpb.Span{
+					Key:    scatterKey,
+					EndKey: scatterKey.Next(),
+				}),
+				RandomizeLeases: true,
+				MaxSize:         1, // don't scatter non-empty ranges on resume.
+			})
+			if pErr != nil {
+				log.Warningf(ctx, "failed to scatter span starting at %s: %+v",
+					scatterKey, pErr.GoError())
+			}
 		}
 	}
 	return nil
