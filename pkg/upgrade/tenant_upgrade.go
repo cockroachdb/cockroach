@@ -50,7 +50,7 @@ type TenantDeps struct {
 
 	TestingKnobs              *TestingKnobs
 	SchemaResolverConstructor func( // A constructor that returns a schema resolver for `descriptors` in `currDb`.
-		txn *kv.Txn, descriptors *descs.Collection, currDb string,
+		txn *kv.Txn, descriptors *descs.Collection, currDb string, schemaName string,
 	) (resolver.SchemaResolver, func(), error)
 }
 
