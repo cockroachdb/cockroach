@@ -898,6 +898,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.metrics.initalScanStart = newMetricSnapshot(metricSnapper, timeutil.Now())
 	ingestionJobID := rd.startReplicationStream(ctx)
 	removeTenantRateLimiters(rd.t, rd.setup.dst.sysSQL, rd.setup.dst.name)
+	rd.debugCrdbInternalJobs(ctx, ingestionJobID)
 
 	// latency verifier queries may error during a node shutdown event; therefore
 	// tolerate errors if we anticipate node deaths.
