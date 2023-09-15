@@ -1231,6 +1231,33 @@ func (h *hasher) IsUDFDefinitionEqual(l, r *UDFDefinition) bool {
 			return false
 		}
 	}
+	if l.ExceptionBlock != nil {
+		if r.ExceptionBlock == nil || len(l.ExceptionBlock.Actions) != len(r.ExceptionBlock.Actions) {
+			return false
+		}
+		for i := range l.ExceptionBlock.Actions {
+			if !h.IsUDFDefinitionEqual(l.ExceptionBlock.Actions[i], r.ExceptionBlock.Actions[i]) {
+				return false
+			}
+			if l.ExceptionBlock.Codes[i] != r.ExceptionBlock.Codes[i] {
+				return false
+			}
+		}
+	} else if r.ExceptionBlock != nil {
+		return false
+	}
+	if l.CursorDeclaration != nil {
+		if r.CursorDeclaration == nil {
+			return false
+		}
+		if l.CursorDeclaration.NameArgIdx != r.CursorDeclaration.NameArgIdx ||
+			l.CursorDeclaration.Scroll != r.CursorDeclaration.Scroll ||
+			l.CursorDeclaration.CursorSQL != r.CursorDeclaration.CursorSQL {
+			return false
+		}
+	} else if r.CursorDeclaration != nil {
+		return false
+	}
 	return h.IsColListEqual(l.Params, r.Params) && l.IsRecursive == r.IsRecursive
 }
 

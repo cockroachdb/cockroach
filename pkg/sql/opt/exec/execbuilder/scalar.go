@@ -703,6 +703,7 @@ func (b *Builder) buildExistsSubquery(
 				false, /* tailCall */
 				false, /* procedure */
 				nil,   /* exceptionHandler */
+				nil,   /* cursorDeclaration */
 			),
 			tree.DBoolFalse,
 		}, types.Bool), nil
@@ -821,6 +822,7 @@ func (b *Builder) buildSubquery(
 			false, /* tailCall */
 			false, /* procedure */
 			nil,   /* exceptionHandler */
+			nil,   /* cursorDeclaration */
 		), nil
 	}
 
@@ -878,6 +880,7 @@ func (b *Builder) buildSubquery(
 			false, /* tailCall */
 			false, /* procedure */
 			nil,   /* exceptionHandler */
+			nil,   /* cursorDeclaration */
 		), nil
 	}
 
@@ -994,6 +997,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 				false, /* tailCall */
 				false, /* procedure */
 				nil,   /* exceptionHandler */
+				nil,   /* cursorDeclaration */
 			)
 		}
 	}
@@ -1010,6 +1014,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.TailCall,
 		false, /* procedure */
 		exceptionHandler,
+		udf.Def.CursorDeclaration,
 	), nil
 }
 

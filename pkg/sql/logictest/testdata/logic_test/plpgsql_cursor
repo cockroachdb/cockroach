@@ -1,0 +1,400 @@
+statement ok
+CREATE TABLE xy (x INT, y INT);
+INSERT INTO xy VALUES (1, 2), (3, 4);
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+INSERT INTO kv VALUES (1, 2), (3, 4);
+
+# Testing OPEN statements.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+1
+
+statement ok
+ABORT;
+
+statement error pgcode 34000 pq: cursor \"foo\" does not exist
+FETCH FORWARD 3 FROM foo;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    x INT := 10;
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT x;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+10
+
+# TODO(drewk): postgres returns an ambiguous column error here by default,
+# although it can be configured to prefer either the variable or the column.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    x INT := 10;
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy WHERE xy.x = x;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query II rowsort
+FETCH FORWARD 10 FROM foo;
+----
+1  2
+3  4
+
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 3;
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy WHERE x = i;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query II
+FETCH FORWARD 3 FROM foo;
+----
+3  4
+
+# It should be possible to fetch from the cursor incrementally.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs NO SCROLL FOR SELECT * FROM (VALUES (1, 2), (3, 4), (5, 6), (7, 8)) v(a, b);
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query II rowsort
+FETCH FORWARD 1 FROM foo;
+----
+1  2
+
+query II rowsort
+FETCH FORWARD 2 FROM foo;
+----
+3  4
+5  6
+
+query II rowsort
+FETCH FORWARD 3 FROM foo;
+----
+7  8
+
+# Cursor with NO SCROLL option.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs NO SCROLL FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+1
+
+# Cursor with empty-string name.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := '';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query I
+FETCH FORWARD 3 FROM "";
+----
+1
+
+# Multiple cursors.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+    curs2 STRING := 'bar';
+    curs3 STRING := 'baz';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    OPEN curs2 FOR SELECT 2;
+    OPEN curs3 FOR SELECT 3;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query I
+FETCH FORWARD 3 FROM foo;
+----
+1
+
+query I
+FETCH FORWARD 3 FROM bar;
+----
+2
+
+query I
+FETCH FORWARD 3 FROM baz;
+----
+3
+
+# The cursor should reflect changes to the database state that occur before
+# it is opened, but not those that happen after it is opened.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+    curs2 STRING := 'bar';
+    curs3 STRING := 'baz';
+  BEGIN
+    OPEN curs FOR SELECT * FROM xy WHERE x = 99;
+    INSERT INTO xy VALUES (99, 99);
+    OPEN curs2 FOR SELECT * FROM xy WHERE x = 99;
+    UPDATE xy SET y = 100 WHERE x = 99;
+    OPEN curs3 FOR SELECT * FROM xy WHERE x = 99;
+    DELETE FROM xy WHERE x = 99;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
+
+query II
+FETCH FORWARD 3 FROM foo;
+----
+
+query II
+FETCH FORWARD 3 FROM bar;
+----
+99  99
+
+query II
+FETCH FORWARD 3 FROM baz;
+----
+99  100
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+statement ok
+ABORT;
+
+# It is possible to use the OPEN statement in an implicit transaction, but the
+# cursor is closed at the end of the transaction when the statement execution
+# finishes. So, until FETCH is implemented, we can't actually read from the
+# cursor.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+SELECT f();
+
+statement error pgcode 34000 pq: cursor \"foo\" does not exist
+FETCH FORWARD 5 FROM foo;
+
+statement error pgcode 0A000 pq: unimplemented: DECLARE SCROLL CURSOR
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs SCROLL FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: bound cursor declarations are not yet supported.
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs CURSOR FOR SELECT 1;
+  BEGIN
+    OPEN curs;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P11 pq: cannot open INSERT query as cursor
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR INSERT INTO xy VALUES (1, 1);
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: CTE usage inside a function definition
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 3;
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR WITH foo AS (SELECT * FROM xy WHERE x = i) SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# TODO(drewk): once CTEs in routines are supported, the error should be:
+# pgcode 0A000 pq: DECLARE CURSOR must not contain data-modifying statements in WITH
+statement error pgcode 0A000 pq: unimplemented: CTE usage inside a function definition
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 3;
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR WITH foo AS (INSERT INTO xy VALUES (1, 1) RETURNING x) SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42601 pq: \"curs\" is not a known variable
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 3;
+  BEGIN
+    OPEN curs FOR WITH foo AS (SELECT * FROM xy WHERE x = i) SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING;
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement error pgcode 0A000 pq: unimplemented: opening an unnamed cursor is not yet supported
+SELECT f();
+
+statement ok
+ABORT;
+
+statement error pgcode 0A000 pq: unimplemented: opening a cursor in a routine with an exception block is not yet supported
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING;
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1 // 0;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement error pgcode 22012 pq: division by zero
+SELECT f();
+
+# Conflict with an existing cursor.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement ok
+DECLARE foo CURSOR FOR SELECT 100;
+
+statement error pgcode 42P03 pq: cursor \"foo\" already exists
+SELECT f();
+
+# Conflict between OPEN statements within the same routine.
+statement ok
+ABORT;
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    curs STRING := 'foo';
+    curs2 STRING := 'foo';
+  BEGIN
+    OPEN curs FOR SELECT 1;
+    OPEN curs2 FOR SELECT 2;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+BEGIN;
+
+statement error pgcode 42P03 pq: cursor \"foo\" already exists
+SELECT f();

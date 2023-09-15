@@ -1214,13 +1214,16 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		txnEvType = txnRollback
 	}
 
-	// Close all portals, otherwise there will be leftover bytes.
+	// Close all portals and cursors, otherwise there will be leftover bytes.
 	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(
 		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
 		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
+	if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
+		log.Warningf(ctx, "error closing cursors: %v", err)
+	}
 
 	var payloadErr error
 	if closeType == normalClose {
@@ -1271,7 +1274,8 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	}
 
 	if closeType != panicClose {
-		// Close all statements, prepared portals, and cursors.
+		// Close all statements and prepared portals. The cursors have already been
+		// closed.
 		ex.extraTxnState.prepStmtsNamespace.resetToEmpty(
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
@@ -1279,9 +1283,6 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
 		ex.extraTxnState.prepStmtsNamespaceMemAcc.Close(ctx)
-		if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
-			log.Warningf(ctx, "error closing cursors: %v", err)
-		}
 	}
 
 	if ex.sessionTracing.Enabled() {
