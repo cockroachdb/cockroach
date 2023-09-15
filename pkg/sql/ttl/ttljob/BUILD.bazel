@@ -64,6 +64,7 @@ go_test(
         "ttljob_test.go",
     ],
     args = ["-test.timeout=295s"],
+    exec_properties = {"Pool": "medium"},
     deps = [
         ":ttljob",
         "//pkg/base",
