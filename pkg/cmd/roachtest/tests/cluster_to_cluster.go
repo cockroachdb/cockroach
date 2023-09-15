@@ -657,7 +657,40 @@ func DecimalTimeToHLC(t test.Test, s string) hlc.Timestamp {
 	require.NoError(t, err)
 	return ts
 }
+func (rd *replicationDriver) debugCrdbInternalJobs(ctx context.Context, ingestionJob int) {
+	rd.t.L().Printf("crdb_internal returned no rows :(. Dump some results")
 
+	rd.t.L().Printf("run the same query again")
+	sameQueryRes := rd.setup.dst.sysSQL.DB.QueryRowContext(ctx, `SELECT status, payload FROM crdb_internal.system_jobs WHERE id = $1`, ingestionJob)
+	if sameQueryRes.Err() != nil {
+		rd.t.L().Printf("same query failed")
+	}
+	var status string
+	var payloadBytes []byte
+	if err := sameQueryRes.Scan(&status, &payloadBytes); err != nil {
+		rd.t.L().Printf("same query returned zero bytes: %s", err.Error())
+	} else {
+		rd.t.L().Printf("query did not fail! the job status is %s", status)
+	}
+
+	jobIDQuery := func(ctx context.Context, label string, query string) {
+		rd.t.L().Printf("try just querying %s", label)
+		jobsRes := rd.setup.dst.sysSQL.DB.QueryRowContext(ctx, query, ingestionJob)
+		if jobsRes.Err() != nil {
+			rd.t.L().Printf("job query failed")
+		}
+		var id int
+		if err := jobsRes.Scan(&id); err != nil {
+			rd.t.L().Printf("query returned zero bytes: %s", err.Error())
+		} else {
+			rd.t.L().Printf("query did not fail! the job id is %d", id)
+		}
+	}
+
+	jobIDQuery(ctx, "system.jobs", `SELECT id system.jobs WHERE id = $1`)
+	jobIDQuery(ctx, "system.job_info", `SELECT job_id system.job_info where job_id=$1 LIMIT 1`)
+
+}
 func (rd *replicationDriver) stopReplicationStream(
 	ctx context.Context, ingestionJob int, cutoverTime time.Time,
 ) (actualCutoverTime hlc.Timestamp) {
@@ -680,7 +713,14 @@ func (rd *replicationDriver) stopReplicationStream(
 			// therefore, tolerate errors.
 			return res.Err()
 		}
-		require.NoError(rd.t, res.Scan(&status, &payloadBytes))
+		if err := res.Scan(&status, &payloadBytes); err != nil {
+			rd.t.L().Printf("uh oh: %s", err.Error())
+			for i := 0; i < 5; i++ {
+				// Run the debug query a few times since the shut down node may cause any of these queries to fail
+				rd.debugCrdbInternalJobs(ctx, ingestionJob)
+			}
+			rd.t.Fatalf("crdb_internal.jobs returned incorrect results")
+		}
 		if jobs.Status(status) == jobs.StatusFailed {
 			payload := &jobspb.Payload{}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
