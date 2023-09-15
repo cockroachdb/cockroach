@@ -957,6 +957,12 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			}
 			n = tp.Child("body")
 			for i := range udf.Def.Body {
+				if i == 0 && udf.Def.CursorDeclaration != nil {
+					// The first statement is opening a cursor.
+					cur := n.Child("open-cursor")
+					f.formatExpr(udf.Def.Body[i], cur)
+					continue
+				}
 				f.formatExpr(udf.Def.Body[i], n)
 			}
 			delete(f.seenUDFs, udf.Def)

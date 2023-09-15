@@ -126,6 +126,10 @@ type RoutineExpr struct {
 	// ExceptionHandler holds the information needed to handle errors if an
 	// exception block was defined.
 	ExceptionHandler *RoutineExceptionHandler
+
+	// CursorDeclaration contains the information needed to open a SQL cursor with
+	// the result of the *first* body statement. It may be unset.
+	CursorDeclaration *RoutineOpenCursor
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
@@ -141,6 +145,7 @@ func NewTypedRoutineExpr(
 	tailCall bool,
 	procedure bool,
 	exceptionHandler *RoutineExceptionHandler,
+	cursorDeclaration *RoutineOpenCursor,
 ) *RoutineExpr {
 	return &RoutineExpr{
 		Args:              args,
@@ -154,6 +159,7 @@ func NewTypedRoutineExpr(
 		TailCall:          tailCall,
 		Procedure:         procedure,
 		ExceptionHandler:  exceptionHandler,
+		CursorDeclaration: cursorDeclaration,
 	}
 }
 
@@ -190,4 +196,20 @@ type RoutineExceptionHandler struct {
 
 	// Actions contains a routine to handle each error code.
 	Actions []*RoutineExpr
+}
+
+// RoutineOpenCursor stores the information needed to correctly open a cursor
+// with the output of a routine.
+type RoutineOpenCursor struct {
+	// NameArgIdx is the index of the routine argument that contains the name of
+	// the cursor that will be created.
+	NameArgIdx int
+
+	// Scroll is the scroll option for the cursor, if one was specified. The other
+	// cursor options are not valid in PLpgSQL.
+	Scroll CursorScrollOption
+
+	// CursorSQL is a formatted string used to associate the original SQL
+	// statement with the cursor.
+	CursorSQL string
 }
