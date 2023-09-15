@@ -165,6 +165,8 @@ func registerTPCCOverload(r registry.Registry) {
 			Name:              name,
 			Owner:             registry.OwnerAdmissionControl,
 			Benchmark:         true,
+			CompatibleClouds:  registry.AllExceptAWS,
+			Suites:            registry.Suites(registry.Weekly),
 			Tags:              registry.Tags(`weekly`),
 			Cluster:           r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
 			Run:               s.run,
@@ -188,8 +190,10 @@ func registerTPCCSevereOverload(r registry.Registry) {
 		Benchmark: true,
 		// TODO(abaptist): This test will require a lot of admission control work
 		// to pass. Just putting it here to make easy to run at any time.
-		Skip:    "#89142",
-		Cluster: r.MakeClusterSpec(7, spec.CPU(8)),
+		Skip:             "#89142",
+		Cluster:          r.MakeClusterSpec(7, spec.CPU(8)),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			roachNodes := c.Range(1, c.Spec().NodeCount-1)
 			workloadNode := c.Spec().NodeCount

@@ -307,13 +307,15 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			clusterSpec = r.MakeClusterSpec(numNodes)
 		}
 		r.Add(registry.TestSpec{
-			Name:            fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
-			Owner:           registry.OwnerSQLQueries,
-			Cluster:         clusterSpec,
-			Leases:          registry.MetamorphicLeases,
-			NativeLibs:      registry.LibGEOS,
-			Timeout:         time.Minute * 20,
-			RequiresLicense: true,
+			Name:             fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
+			Owner:            registry.OwnerSQLQueries,
+			Cluster:          clusterSpec,
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
+			NativeLibs:       registry.LibGEOS,
+			Timeout:          time.Minute * 20,
+			RequiresLicense:  true,
 			// NB: sqlsmith failures should never block a release.
 			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

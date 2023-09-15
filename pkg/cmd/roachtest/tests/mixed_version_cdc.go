@@ -76,9 +76,11 @@ func registerCDCMixedVersions(r registry.Registry) {
 		Name:  "cdc/mixed-versions",
 		Owner: registry.OwnerCDC,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(5, spec.Zones(zones), spec.Arch(vm.ArchAMD64)),
-		Timeout:         60 * time.Minute,
-		RequiresLicense: true,
+		Cluster:          r.MakeClusterSpec(5, spec.Zones(zones), spec.Arch(vm.ArchAMD64)),
+		Timeout:          60 * time.Minute,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCMixedVersions(ctx, t, c)
 		},

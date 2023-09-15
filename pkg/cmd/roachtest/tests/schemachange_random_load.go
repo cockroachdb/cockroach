@@ -44,8 +44,10 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 			spec.Geo(),
 			spec.Zones(geoZonesStr),
 		),
-		Leases:     registry.MetamorphicLeases,
-		NativeLibs: registry.LibGEOS,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		NativeLibs:       registry.LibGEOS,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 5000
 			concurrency := 20
