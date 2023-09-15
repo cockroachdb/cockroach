@@ -417,7 +417,7 @@ func TestToJSONAsChangefeed(t *testing.T) {
 			[][]string{{`{"__crdb__": {"updated": "0.0000000000"}, "a": 1, "b": "hello"}`}},
 		)
 
-		sqlDB.ExpectErr(t, `unknown envelope: lobster`,
+		sqlDB.ExpectErrSucceedsSoon(t, `unknown envelope: lobster`,
 			`SELECT crdb_internal.to_json_as_changefeed_with_flags(foo.*, 'updated', 'envelope=lobster') from foo`)
 	}
 
@@ -1804,7 +1804,7 @@ func TestChangefeedExternalIODisabled(t *testing.T) {
 		sqlDB.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
 		sqlDB.Exec(t, "CREATE TABLE target_table (pk INT PRIMARY KEY)")
 		for _, proto := range disallowedSinkProtos {
-			sqlDB.ExpectErr(t, "Outbound IO is disabled by configuration, cannot create changefeed",
+			sqlDB.ExpectErrSucceedsSoon(t, "Outbound IO is disabled by configuration, cannot create changefeed",
 				"CREATE CHANGEFEED FOR target_table INTO $1",
 				fmt.Sprintf("%s://does-not-matter", proto),
 			)
@@ -2745,7 +2745,7 @@ func TestChangefeedEachColumnFamily(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog', 'cat')`)
 
 		// Must specify WITH split_column_families
-		sqlDB.ExpectErr(t, `multiple column families`, `CREATE CHANGEFEED FOR foo`)
+		sqlDB.ExpectErrSucceedsSoon(t, `multiple column families`, `CREATE CHANGEFEED FOR foo`)
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH split_column_families`)
 		defer closeFeed(t, foo)
@@ -2815,7 +2815,7 @@ func TestChangefeedSingleColumnFamily(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo(a,b,c) values (0, 'dog', 'cat')`)
 		sqlDB.Exec(t, `INSERT INTO foo(a,b,c) values (1, 'dollar', 'cent')`)
 
-		sqlDB.ExpectErr(t, `nosuchfamily`, `CREATE CHANGEFEED FOR foo FAMILY nosuchfamily`)
+		sqlDB.ExpectErrSucceedsSoon(t, `nosuchfamily`, `CREATE CHANGEFEED FOR foo FAMILY nosuchfamily`)
 
 		fooMost := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY most`)
 		defer closeFeed(t, fooMost)
@@ -3485,7 +3485,7 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 		// Start an import job which will immediately pause after ingestion
 		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';")
 		go func() {
-			sqlDB.ExpectErr(t, `pause point`, `IMPORT INTO for_import CSV DATA ($1);`, dataSrv.URL)
+			sqlDB.ExpectErrSucceedsSoon(t, `pause point`, `IMPORT INTO for_import CSV DATA ($1);`, dataSrv.URL)
 		}()
 		sqlDB.CheckQueryResultsRetry(
 			t,
@@ -4726,6 +4726,8 @@ func TestChangefeedErrors(t *testing.T) {
 
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.SucceedsSoonDuration = 5 * time.Second
+
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 
@@ -4733,7 +4735,7 @@ func TestChangefeedErrors(t *testing.T) {
 	// Verify that this produces a useful error.
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = false`)
 	sqlDB.Exec(t, `CREATE TABLE rangefeed_off (a INT PRIMARY KEY)`)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `rangefeeds require the kv.rangefeed.enabled setting`,
 		`EXPERIMENTAL CHANGEFEED FOR rangefeed_off`,
 	)
@@ -4742,52 +4744,52 @@ func TestChangefeedErrors(t *testing.T) {
 	// Feature flag for changefeeds is off — test that CREATE CHANGEFEED and
 	// EXPERIMENTAL CHANGEFEED FOR surface error.
 	featureChangefeedEnabled.Override(ctx, &s.ClusterSettings().SV, false)
-	sqlDB.ExpectErr(t, `feature CHANGEFEED was disabled by the database administrator`,
+	sqlDB.ExpectErrSucceedsSoon(t, `feature CHANGEFEED was disabled by the database administrator`,
 		`CREATE CHANGEFEED FOR foo`)
-	sqlDB.ExpectErr(t, `feature CHANGEFEED was disabled by the database administrator`,
+	sqlDB.ExpectErrSucceedsSoon(t, `feature CHANGEFEED was disabled by the database administrator`,
 		`EXPERIMENTAL CHANGEFEED FOR foo`)
 	featureChangefeedEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `unknown format: nope`,
 		`EXPERIMENTAL CHANGEFEED FOR foo WITH format=nope`,
 	)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `unknown envelope: nope`,
 		`EXPERIMENTAL CHANGEFEED FOR foo WITH envelope=nope`,
 	)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `time: invalid duration "bar"`,
 		`EXPERIMENTAL CHANGEFEED FOR foo WITH resolved='bar'`,
 	)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `negative durations are not accepted: resolved='-1s'`,
 		`EXPERIMENTAL CHANGEFEED FOR foo WITH resolved='-1s'`,
 	)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify timestamp in the future`,
 		`EXPERIMENTAL CHANGEFEED FOR foo WITH cursor=$1`, timeutil.Now().Add(time.Hour),
 	)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `omit the SINK clause`,
 		`CREATE CHANGEFEED FOR foo INTO ''`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `omit the SINK clause`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, ``,
 	)
 
 	enableEnterprise := utilccl.TestingDisableEnterprise()
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `CHANGEFEED requires an enterprise license`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `use of AS SELECT requires an enterprise license`,
 		`CREATE CHANGEFEED AS SELECT * FROM foo`,
 	)
@@ -4795,42 +4797,42 @@ func TestChangefeedErrors(t *testing.T) {
 
 	// Watching system.jobs would create a cycle, since the resolved timestamp
 	// high-water mark is saved in it.
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `not supported on system tables`,
 		`EXPERIMENTAL CHANGEFEED FOR system.jobs`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `table "bar" does not exist`,
 		`EXPERIMENTAL CHANGEFEED FOR bar`,
 	)
 	sqlDB.Exec(t, `CREATE SEQUENCE seq`)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `CHANGEFEED cannot target sequences: seq`,
 		`EXPERIMENTAL CHANGEFEED FOR seq`,
 	)
 	sqlDB.Exec(t, `CREATE VIEW vw AS SELECT a, b FROM foo`)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `CHANGEFEED cannot target views: vw`,
 		`EXPERIMENTAL CHANGEFEED FOR vw`,
 	)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `CHANGEFEED targets TABLE foo and TABLE foo are duplicates`,
 		`EXPERIMENTAL CHANGEFEED FOR foo, foo`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `CHANGEFEED targets TABLE foo and TABLE defaultdb.foo are duplicates`,
 		`EXPERIMENTAL CHANGEFEED FOR foo, defaultdb.foo`,
 	)
 	sqlDB.Exec(t,
 		`CREATE TABLE threefams (a int, b int, c int, family f_a(a), family f_b(b), family f_c(c))`)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `CHANGEFEED targets TABLE foo FAMILY f_a and TABLE foo FAMILY f_a are duplicates`,
 		`EXPERIMENTAL CHANGEFEED FOR foo family f_a, foo FAMILY f_b, foo FAMILY f_a`,
 	)
 
 	// Backup has the same bad error message #28170.
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `"information_schema.tables" does not exist`,
 		`EXPERIMENTAL CHANGEFEED FOR information_schema.tables`,
 	)
@@ -4839,14 +4841,14 @@ func TestChangefeedErrors(t *testing.T) {
 	// to pass.
 	sqlDB.Exec(t, `CREATE TABLE dec (a DECIMAL PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO dec VALUES (1.0)`)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `.*column a: decimal with no precision`,
 		`EXPERIMENTAL CHANGEFEED FOR dec WITH format=$1, confluent_schema_registry=$2`,
 		changefeedbase.OptFormatAvro, schemaReg.URL(),
 	)
 	sqlDB.Exec(t, `CREATE TABLE "oid" (a OID PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO "oid" VALUES (3::OID)`)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `.*column a: type OID not yet supported with avro`,
 		`EXPERIMENTAL CHANGEFEED FOR "oid" WITH format=$1, confluent_schema_registry=$2`,
 		changefeedbase.OptFormatAvro, schemaReg.URL(),
@@ -4857,289 +4859,289 @@ func TestChangefeedErrors(t *testing.T) {
 	}
 
 	// Check that sink URLs have valid scheme
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `no scheme found for sink URL`,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka%3A%2F%2Fnope%0A'`,
 	)
 
 	// Check that confluent_schema_registry is only accepted if format is avro.
 	// TODO: This should be testing it as a WITH option and check avro_schema_prefix too
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, unknownParams("SQL", "confluent_schema_registry", "weird"),
 		`CREATE CHANGEFEED FOR foo INTO $1`, `experimental-sql://d/?confluent_schema_registry=foo&weird=bar`,
 	)
 
 	// Check unavailable kafka.
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `client has run out of available brokers`,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope'`,
 	)
 
 	// Test that a well-formed URI gets as far as unavailable kafka error.
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `client has run out of available brokers`,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/?tls_enabled=true&insecure_tls_skip_verify=true&topic_name=foo'`,
 	)
 
 	// kafka_topic_prefix was referenced by an old version of the RFC, it's
 	// "topic_prefix" now.
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, unknownParams(`kafka`, `kafka_topic_prefix`),
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?kafka_topic_prefix=foo`,
 	)
 
 	// topic_name is only honored for kafka sinks
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, unknownParams("SQL", "topic_name"),
 		`CREATE CHANGEFEED FOR foo INTO $1`, `experimental-sql://d/?topic_name=foo`,
 	)
 
 	// schema_topic will be implemented but isn't yet.
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `schema_topic is not yet supported`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?schema_topic=foo`,
 	)
 
 	// Sanity check kafka tls parameters.
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `param tls_enabled must be a bool`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=foo`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `param insecure_tls_skip_verify must be a bool`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=true&insecure_tls_skip_verify=foo`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `param ca_cert must be base 64 encoded`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?ca_cert=!`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `ca_cert requires tls_enabled=true`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?&ca_cert=Zm9v`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `param client_cert must be base 64 encoded`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?client_cert=!`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `param client_key must be base 64 encoded`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?client_key=!`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `client_cert requires tls_enabled=true`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?client_cert=Zm9v`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `client_cert requires client_key to be set`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=true&client_cert=Zm9v`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `client_key requires client_cert to be set`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=true&client_key=Zm9v`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `invalid client certificate`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=true&client_cert=Zm9v&client_key=Zm9v`,
 	)
 
 	// Sanity check kafka sasl parameters.
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `param sasl_enabled must be a bool`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=maybe`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `param sasl_handshake must be a bool`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_handshake=maybe`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `sasl_enabled must be enabled to configure SASL handshake behavior`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_handshake=false`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `sasl_user must be provided when SASL is enabled`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `sasl_password must be provided when SASL is enabled`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_user=a`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `sasl_user must be provided when SASL is enabled using mechanism SCRAM-SHA-256`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=SCRAM-SHA-256`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `sasl_client_id must be provided when SASL is enabled using mechanism OAUTHBEARER`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=OAUTHBEARER`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `sasl_enabled must be enabled if sasl_user is provided`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_user=a`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `sasl_enabled must be enabled if sasl_password is provided`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_password=a`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `sasl_client_id is only a valid parameter for sasl_mechanism=OAUTHBEARER`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_client_id=a`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `sasl_enabled must be enabled to configure SASL mechanism`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_mechanism=SCRAM-SHA-256`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or PLAIN`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `client has run out of available brokers`,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `this sink is incompatible with option webhook_client_timeout`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout='1s'`,
 		`kafka://nope/`,
 	)
 	// The avro format doesn't support key_in_value or topic_in_value yet.
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `key_in_value is not supported with format=avro`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH key_in_value, format='experimental_avro'`,
 		`kafka://nope`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `topic_in_value is not supported with format=avro`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH topic_in_value, format='experimental_avro'`,
 		`kafka://nope`,
 	)
 
 	// Unordered flag required for some options, disallowed for others.
-	sqlDB.ExpectErr(t, `resolved timestamps cannot be guaranteed to be correct in unordered mode`, `CREATE CHANGEFEED FOR foo WITH resolved, unordered`)
-	sqlDB.ExpectErr(t, `Use of gcpubsub without specifying a region requires the WITH unordered option.`, `CREATE CHANGEFEED FOR foo INTO "gcpubsub://foo"`)
-	sqlDB.ExpectErr(t, `key_column requires the unordered option`, `CREATE CHANGEFEED FOR foo WITH key_column='b'`)
+	sqlDB.ExpectErrSucceedsSoon(t, `resolved timestamps cannot be guaranteed to be correct in unordered mode`, `CREATE CHANGEFEED FOR foo WITH resolved, unordered`)
+	sqlDB.ExpectErrSucceedsSoon(t, `Use of gcpubsub without specifying a region requires the WITH unordered option.`, `CREATE CHANGEFEED FOR foo INTO "gcpubsub://foo"`)
+	sqlDB.ExpectErrSucceedsSoon(t, `key_column requires the unordered option`, `CREATE CHANGEFEED FOR foo WITH key_column='b'`)
 
 	// The topics option should not be exposed to users since it is used
 	// internally to display topics in the show changefeed jobs query
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `invalid option "topics"`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH topics='foo,bar'`,
 		`kafka://nope`,
 	)
 
 	// The cloudStorageSink is particular about the options it will work with.
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `this sink is incompatible with option confluent_schema_registry`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', confluent_schema_registry=$2`,
 		`experimental-nodelocal://1/bar`, schemaReg.URL(),
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `this sink is incompatible with envelope=key_only`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH envelope='key_only'`,
 		`experimental-nodelocal://1/bar`,
 	)
 
 	// WITH key_in_value requires envelope=wrapped
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `key_in_value is only usable with envelope=wrapped`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH key_in_value, envelope='key_only'`, `kafka://nope`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `key_in_value is only usable with envelope=wrapped`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH key_in_value, envelope='row'`, `kafka://nope`,
 	)
 
 	// WITH topic_in_value requires envelope=wrapped
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `topic_in_value is only usable with envelope=wrapped`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH topic_in_value, envelope='key_only'`, `kafka://nope`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `topic_in_value is only usable with envelope=wrapped`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH topic_in_value, envelope='row'`, `kafka://nope`,
 	)
 
 	// WITH initial_scan and no_initial_scan disallowed
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan and no_initial_scan`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan, no_initial_scan`, `kafka://nope`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan and no_initial_scan`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH no_initial_scan, initial_scan`, `kafka://nope`,
 	)
 
 	// WITH only_initial_scan and no_initial_scan disallowed
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan='only' and no_initial_scan`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan_only, no_initial_scan`, `kafka://nope`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan='only' and no_initial_scan`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH no_initial_scan, initial_scan_only`, `kafka://nope`,
 	)
 
 	// WITH initial_scan_only and initial_scan disallowed
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan and initial_scan_only`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan_only, initial_scan`, `kafka://nope`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan and initial_scan_only`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan, initial_scan_only`, `kafka://nope`,
 	)
 
 	// WITH only_initial_scan and end_time disallowed
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan='only' and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan_only, end_time = '1'`, `kafka://nope`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan='only' and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH end_time = '1', initial_scan_only`, `kafka://nope`,
 	)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan='only' and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH end_time = '1', initial_scan = 'only'`, `kafka://nope`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan='only' and end_time`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'only', end_time = '1'`, `kafka://nope`,
 	)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan='only' and resolved`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH resolved, initial_scan = 'only'`, `kafka://nope`,
 	)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan='only' and diff`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH diff, initial_scan = 'only'`, `kafka://nope`,
 	)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan='only' and mvcc_timestamp`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH mvcc_timestamp, initial_scan = 'only'`, `kafka://nope`,
 	)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan='only' and updated`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, initial_scan = 'only'`, `kafka://nope`,
 	)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `unknown initial_scan: foo`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'foo'`, `kafka://nope`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan and no_initial_scan`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'yes', no_initial_scan`, `kafka://nope`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `cannot specify both initial_scan and initial_scan_only`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH initial_scan = 'no', initial_scan_only`, `kafka://nope`,
 	)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `format=csv is only usable with initial_scan_only`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format = csv`, `kafka://nope`,
 	)
@@ -5147,139 +5149,139 @@ func TestChangefeedErrors(t *testing.T) {
 	var tsCurrent string
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsCurrent)
 
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t,
 		fmt.Sprintf(`specified end time 1.0000000000 cannot be less than statement time %s`, tsCurrent),
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH cursor = $2, end_time = '1.0000000000'`, `kafka://nope`, tsCurrent,
 	)
 
 	// Sanity check schema registry tls parameters.
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `param ca_cert must be base 64 encoded`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
 		`kafka://nope`, `https://schemareg-nope/?ca_cert=!`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `failed to parse certificate data`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
 		`kafka://nope`, `https://schemareg-nope/?ca_cert=Zm9v`,
 	)
 
 	// Sanity check webhook sink options.
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `param insecure_tls_skip_verify must be a bool`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-https://fake-host?insecure_tls_skip_verify=foo`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `param ca_cert must be base 64 encoded`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-https://fake-host?ca_cert=?`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `failed to parse certificate data`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-https://fake-host?ca_cert=Zm9v`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `sink requires https`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `webhook-http://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `this sink is incompatible with option confluent_schema_registry`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='avro', confluent_schema_registry=$2`,
 		`webhook-https://fake-host`, schemaReg.URL(),
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `problem parsing option webhook_client_timeout: time: invalid duration "not_an_integer"`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout='not_an_integer'`, `webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `option webhook_client_timeout must be a duration greater than 0`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout='0s'`, `webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `negative durations are not accepted: webhook_client_timeout='-500s'`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout='-500s'`, `webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `problem parsing option webhook_client_timeout: time: missing unit in duration`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_client_timeout='0.5'`, `webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `this sink is incompatible with envelope=key_only`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH envelope='key_only'`,
 		`webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `this sink is incompatible with envelope=row`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH envelope='row'`,
 		`webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `invalid sink config, all values must be non-negative`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Flush": {"Messages": -100, "Frequency": "1s"}}'`,
 		`webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `invalid sink config, all values must be non-negative`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Flush": {"Messages": 100, "Frequency": "-1s"}}'`,
 		`webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `invalid sink config, Flush.Frequency is not set, messages may never be sent`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Flush": {"Messages": 100}}'`,
 		`webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `error unmarshalling json: time: invalid duration "Zm9v"`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Flush": {"Frequency": "Zm9v"}}'`,
 		`webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `error unmarshalling json: invalid character`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='not json'`,
 		`webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `this sink is incompatible with option compression`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH compression='gzip'`,
 		`webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `Retry.Max must be either a positive int or 'inf' for infinite retries.`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Retry": {"Max": "not valid"}}'`,
 		`webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `Retry.Max must be a positive integer. use 'inf' for infinite retries.`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Retry": {"Max": 0}}'`,
 		`webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `Retry.Max must be a positive integer. use 'inf' for infinite retries.`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH webhook_sink_config='{"Retry": {"Max": -1}}'`,
 		`webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, ``,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, webhook_sink_config='{"Retry":{"Max":"inf"}}'`,
 		`webhook-https://fake-host`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `client_cert requires client_key to be set`,
 		`CREATE CHANGEFEED FOR foo INTO $1`,
 		`webhook-https://fake-host?client_cert=Zm9v`,
 	)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `client_key requires client_cert to be set`,
 		`CREATE CHANGEFEED FOR foo INTO $1`,
 		`webhook-https://fake-host?client_key=Zm9v`,
 	)
 
 	// Sanity check on_error option
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `option "on_error" requires a value`,
 		`CREATE CHANGEFEED FOR foo into $1 WITH on_error`,
 		`kafka://nope`)
-	sqlDB.ExpectErr(
+	sqlDB.ExpectErrSucceedsSoon(
 		t, `unknown on_error: not_valid, valid values are 'pause' and 'fail'`,
 		`CREATE CHANGEFEED FOR foo into $1 WITH on_error='not_valid'`,
 		`kafka://nope`)
@@ -5369,7 +5371,7 @@ func TestChangefeedPanicRecovery(t *testing.T) {
 		prep(t, sqlDB)
 		// Check that disallowed expressions have a good error message.
 		// Also regression test for https://github.com/cockroachdb/cockroach/issues/90416
-		sqlDB.ExpectErr(t, "sub-query expressions not supported by CDC",
+		sqlDB.ExpectErrSucceedsSoon(t, "sub-query expressions not supported by CDC",
 			`CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT 1 FROM foo WHERE EXISTS (SELECT true)`)
 	})
 
@@ -7680,7 +7682,7 @@ CREATE TABLE foo (
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			sqlDB.ExpectErr(t, tc.err, tc.create)
+			sqlDB.ExpectErrSucceedsSoon(t, tc.err, tc.create)
 		})
 	}
 }
@@ -8701,7 +8703,7 @@ func TestPubsubValidationErrors(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			sqlDB.ExpectErr(t, tc.expectedError, fmt.Sprintf("CREATE CHANGEFEED FOR foo INTO '%s'", tc.uri))
+			sqlDB.ExpectErrSucceedsSoon(t, tc.expectedError, fmt.Sprintf("CREATE CHANGEFEED FOR foo INTO '%s'", tc.uri))
 		})
 	}
 }
