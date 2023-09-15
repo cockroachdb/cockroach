@@ -176,6 +176,7 @@ func (cm *CertificateManager) RegisterSignalHandler(
 				} else {
 					log.StructuredEvent(ctx, &eventpb.CertsReload{Success: true})
 				}
+				cm.clientCertExpirationCache.Clear()
 			}
 		}
 	})
