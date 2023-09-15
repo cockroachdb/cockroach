@@ -5,8 +5,8 @@ db0.Put(ctx, tk(2), sv(2)) // @0.000000002,0 <nil>
 {
   b := &kv.Batch{}
   b.Get(tk(1)) // (v1, <nil>)
-  b.Get(tk(2)) // (v2, <nil>)
-  b.Get(tk(3)) // (<nil>, <nil>)
+  b.GetForUpdate(tk(2)) // (v2, <nil>)
+  b.GetForShare(tk(3)) // (<nil>, <nil>)
   db0.Run(ctx, b) // @0.000000003,0 <nil>
 }
 /Table/100/"0000000000000001"/0.000000001,0 @ s1 v1

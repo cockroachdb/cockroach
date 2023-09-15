@@ -29,7 +29,7 @@ import (
 // first %s is the released version. Second is an optional message
 // about the next released version for releases that include the
 // version.txt file.
-const commitTemplate = `release: released CockroachDB version %s%s
+const commitTemplate = `%s: released CockroachDB version %s%s
 
 Release note: None
 Epic: None
@@ -403,14 +403,26 @@ func generateRepoList(
 			log.Printf("skipping version bump on the %s branch, because %s does not exist on that branch", branch, versionFile)
 			continue
 		}
+		curVersion, err := fileContent(branch, versionFile)
+		if err != nil {
+			return []prRepo{}, fmt.Errorf("reading git file content: %w", err)
+		}
+		if strings.TrimSpace(curVersion) == nextVersion.Original() {
+			log.Printf("skipping version bump on the %s branch, because the versions are the same", branch)
+			continue
+		}
 		prBranch := fmt.Sprintf("update-versions-%s-%s-%s", branch, releasedVersion.Original(), randomString(4))
+		commitMessagePrefix := "release"
+		if branch != "master" {
+			commitMessagePrefix = branch
+		}
 		repo := prRepo{
 			owner:          owner,
 			repo:           prefix + "cockroach",
 			branch:         branch,
 			prBranch:       prBranch,
 			githubUsername: "cockroach-teamcity",
-			commitMessage:  generateCommitMessage(releasedVersion, nextVersion),
+			commitMessage:  generateCommitMessage(commitMessagePrefix, releasedVersion, nextVersion),
 			fn: func(gitDir string) error {
 				return updateVersionFile(path.Join(gitDir, versionFile), nextVersion.Original())
 			},
@@ -426,7 +438,7 @@ func generateRepoList(
 			branch:         "master",
 			githubUsername: "cockroach-teamcity",
 			prBranch:       fmt.Sprintf("update-versions-%s-%s", releasedVersion.Original(), randomString(4)),
-			commitMessage:  generateCommitMessage(releasedVersion, nextVersion),
+			commitMessage:  fmt.Sprintf("release: advance to %s", releasedVersion.Original()),
 			fn: func(gitDir string) error {
 				if dryRun {
 					log.Printf("brew fetches and verifies the binaries, so it's likely it'll fail in dry-run mode. Skipping..")
@@ -444,7 +456,7 @@ func generateRepoList(
 			branch:         "master",
 			githubUsername: "cockroach-teamcity",
 			prBranch:       fmt.Sprintf("update-versions-%s-%s", releasedVersion.Original(), randomString(4)),
-			commitMessage:  generateCommitMessage(releasedVersion, nextVersion),
+			commitMessage:  fmt.Sprintf("release: advance to %s", releasedVersion.Original()),
 			fn: func(gitDir string) error {
 				return updateHelm(gitDir, releasedVersion.Original())
 			},
@@ -458,7 +470,7 @@ func generateRepoList(
 			branch:         "master",
 			githubUsername: "cockroach-teamcity",
 			prBranch:       fmt.Sprintf("update-orchestration-versions-%s-%s", releasedVersion.Original(), randomString(4)),
-			commitMessage:  generateCommitMessage(releasedVersion, nextVersion),
+			commitMessage:  generateCommitMessage("release", releasedVersion, nextVersion),
 			fn: func(gitDir string) error {
 				return updateOrchestration(gitDir, releasedVersion.Original())
 			},
@@ -501,12 +513,12 @@ func hasVersionTxt(version *semver.Version) bool {
 	return version.Major() >= 23
 }
 
-func generateCommitMessage(released, next *semver.Version) string {
+func generateCommitMessage(prefix string, released, next *semver.Version) string {
 	var nextVersionMsg string
 	if hasVersionTxt(released) {
 		nextVersionMsg = ". Next version: " + next.String()
 	}
-	return fmt.Sprintf(commitTemplate, released, nextVersionMsg)
+	return fmt.Sprintf(commitTemplate, prefix, released, nextVersionMsg)
 }
 
 // nextReleaseSeries parses the version and returns the next release series assuming we have 2 releases yearly
