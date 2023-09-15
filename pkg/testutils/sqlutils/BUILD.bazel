@@ -30,6 +30,7 @@ go_library(
         "//pkg/testutils",
         "//pkg/util/fileutil",
         "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgx_v4//:pgx",
