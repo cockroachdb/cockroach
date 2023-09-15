@@ -383,9 +383,15 @@ quality of service: regular
 │   │ into: child(c, p)
 │   │
 │   └── • buffer
+│       │ nodes: <hidden>
+│       │ regions: <hidden>
+│       │ actual row count: 1
 │       │ label: buffer 1
 │       │
 │       └── • values
+│             nodes: <hidden>
+│             regions: <hidden>
+│             actual row count: 1
 │             size: 2 columns, 1 row
 │
 ├── • subquery
@@ -451,5 +457,5 @@ quality of service: regular
                       label: buffer 1
 ·
 Diagram 1 (subquery): https://cockroachdb.github.io/distsqlplan/decode.html#eJysU9FuGjsQfb9fYc0TSEbsEl2p8lNSQiUUAhEQpKpCyPFONhZee2vPFmjEZ_UH-mXV7mZTSJq0UesHWM-Mj4_PmbmH8NmAgOF4NpjO2XA8nzB1p03CFmej68GMtWLOWrPBaNCfs0zbVt5mH6aTS5ZLj5babeBgXYJjmWEA8Qli4PA_LDnk3ikMwfkyfF8VDZMtiIiDtnlBZXjJQTmPIO6BNBkEAWPXcXm3BxwSJKlNBYpbVAVpZxnpDAWLvn8LwOFGkrrDwFxBeUGCRcDBu83PQAzLPYd693BfIJkiiJMDgsNzEL09P-AYv85xLm8MTlEm6LvRMdNaltP6b5WvcQcc-s4UmQ2C5cBhlsvyswMcRjrTxErFLhbHL7tYMOUsoX3-6IsFq96YoHIJJqI5f7MjDMyjTAR7x97XwXR61WdKGhMe63KpfVNXyny56PdZIMyZcoUl1sItdbWltmBR9bq6AHH9UkEmtyzDzPkdk8Y4JamkFVUc_sKi-IlF0VssOktTj6kk57vxsUNn44-r8WS-Gl-PRq3TuGzgf99evSfc4yPuvxmBKYbc2YBHvF-6KXpyUyfeLzlgkmI9d8EVXuGVd6qqrbeTCqgKJBiozp7Um6FtUoE8yuxR-kOk-FWk3huQeq8iRc-RZCUAWKSN82tmJKFVu0fTmvhGajq2M8GAXkujv8rnXjfHKn89KtRfmtlqUs2ANbl6yJpshiHI9Kgg-sMeOtSncu_WuM1KJyAgelidX_w0C8oDMg1lC83u3KYSa77Lywa4lSYgh0u5xnMk9Jm2OpBWIMgXuN__9yMAAP__S7X0ow==
-Diagram 2 (main-query): https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUM3K2zAQvPcpxJwS0Eftq26lnwuG_JTY7aWYosqbRFSWXGlNUoIfqy_QJyu2E_pDC92DYGZ3Z0Z7Q_rioFDuquJQi3JX74U5W9eK968274pKrHIpVlWxKV7XorN-1a_Fm8N-K3odyfN6DQkfWtrpjhLUB-RoJPoYDKUU4kTd5oGyvUJlEtb3A090I2FCJKgb2LIjKLhgtBMmDJ5F9jKDREusrZuF6UpmYBu8YNuREtn3bwkSnzSbMyURBu4HVmLaiuHyk8jRjBILuvsm1ieCyn8JWj5DZaP8_6wHSn3wiX4L-S-n7A-np3xsJKg90XKgFIZo6G0MZp5d4H4WmomWEi_dfAGlf7QSR9LdEr-ROLpw-WhbKGT3evrL8yhMC_qUpo9V53CZZeuv_RTrqF0iia3-TM_EFDvrbWJroDgONI4vfgQAAP__Kmm20Q==
+Diagram 2 (main-query): https://cockroachdb.github.io/distsqlplan/decode.html#eJy0ksGK2zAQhu99CjGnBLTE8t50K90UDLtJSdJeiilaeZyIypIrjZotwY_VF-iTFdu77dZ0AzmsDoL5JX3zIeYE8ZsFCcVqu9zsWLHarZk-GFuxT29vPy63bCY4m22Xt8t3O9YYN2vn7P1mfcdaFdDRfA4cnK9wpRqMID-DgJJDG7zGGH3oo9NwoageQGYcjGsT9XHJQfuAIE9AhiyCBOu1suy7sgkjyxYZcKiQlLEDGR9QJzLeMTINSpb9-hmBw70ifcDIfKI2kWT9q-CPfwMBZcdhrB4bR1J7BCmemRY3ILOOXyp7n-oaAxML8dqy-URWXC6rfXLE8kX-2q7XE9f8EtcNxta7iP9IvtQpm3S6El3JAas9jqMXfQoaPwSvh7tjuR5AQ1BhpPFUjEXhno4iBVTNn7l4ThJnSfnLJDEl5WdJ1-ecSg619ccvpgIJ2eO6-s_2tKB_oPax_-ztwR8H7O5H239VrWxEDnfqK94gYWiMM5GMBkkhYde9-R0AAP__XNhbxw==
 Diagram 3 (postquery): https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lNFu4joQhu_PU4zmCiRXJNCLI1-1h1IpLYUKKDdHqHKdgfrg2Dm2o4IqHmtfYJ9slQS6hS7sdqXNBWgmv39_45n4Ff3_Gjkmg3FvNIFkMBmCfFY6hell_6E3hkbMoDHu9XvdCWTKNPImXI-Gd5ALRyY0m8jQ2JQGIiOP_F-MccYwd1aS99aVqddKkKQr5BFDZfIilOkZQ2kdIX_FoIIm5KitFBq8FAaeivmcHEStCBmmFITSlf2wCBwu2siQViSLoKyBoDLiEH394pHhkwjymTzYIuSltlzv7Mv3RIyzDcM62nL4IBaEPH4Hnlwhjzbs19mvlQ7kyLXifeA6z-EihmQMg-EEBg_9_h_hbx_wx5_hv7HKjEik5Frt_Qom65w49HvXE7gcTBK4GSYDZFgPwEX995gvaY0M-9Yuixz-s8qANWXVyLBrdZEZzyHHLQOUFZWl7GIfhNb7B3E7_RBLawKZj2d2O60MISVpU0pr49spPK0DeXAkUg5_wz91cjG674IUWvs3XS6U2-nK4u-m3S74QDlIW5gADVqFljKhybcDWQuIlscER5qbiRVklFm3BqHLaQ8lbVSh_bTx0dHGdw4a3_5M4-uPjpyzDtS8Psi41dmfgd8d1uPM5wfMnc8wj8jn1njagzy2U3Sw01m8mTGkdEH17eRt4STdOysrbR0OK6MqkZIP9du4DhKze-WDI5G93RXvneKTTu3jTvGhU_ukU-e4U_vQqXPS6fxUdTOGc21fHlWKHKPtc_aDn92D5QKx8GXbxs_2pbItrxKPfC60J4Z3YklXFMhlyigflEQeXEGbzV_fAgAA___v5iNJ

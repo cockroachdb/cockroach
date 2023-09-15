@@ -465,6 +465,14 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	return false
 }
 
+func shouldWrapPlanNodeForExecStats(planCtx *PlanningCtx, node planNode) bool {
+	if !planCtx.collectExecStats {
+		return false
+	}
+	_, ok := node.(batchedPlanNode)
+	return !ok
+}
+
 // mustWrapValuesNode returns whether a valuesNode must be wrapped into the
 // physical plan which indicates that we cannot create a values processor. This
 // method can be used before actually creating the valuesNode to decide whether
@@ -478,9 +486,14 @@ func mustWrapValuesNode(planCtx *PlanningCtx, specifiedInQuery bool) bool {
 	// If the plan is local, we also wrap the valuesNode to avoid pointless
 	// serialization of the values, and also to avoid situations in which
 	// expressions within the valuesNode were not distributable in the first
-	// place. Unless the plan is a vector insert where we are inserting a preformed
-	// coldata.Batch.
-	return !specifiedInQuery || (planCtx.isLocal && !planCtx.isVectorInsert)
+	// place. Unless the plan is a vector insert where we are inserting a
+	// preformed coldata.Batch.
+	//
+	// However, if we're collecting execution stats, then we'll surround each
+	// planNode with a pair of planNodeToRowSource and rowSourceToPlanNode
+	// adapters so that the execution statistics were collected for each
+	// planNode independently. This should have low enough overhead.
+	return !specifiedInQuery || (planCtx.isLocal && !planCtx.isVectorInsert) || planCtx.collectExecStats
 }
 
 // checkSupportForPlanNode returns a distRecommendation (as described above) or
@@ -3625,7 +3638,7 @@ func (dsp *DistSQLPlanner) wrapPlan(
 			// rowSourceToPlanNode adapters so that the execution statistics
 			// were collected for each planNode independently. This should have
 			// low enough overhead.
-			if !dsp.mustWrapNode(planCtx, plan) || planCtx.collectExecStats {
+			if !dsp.mustWrapNode(planCtx, plan) || shouldWrapPlanNodeForExecStats(planCtx, plan) {
 				firstNotWrapped = plan
 				p, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, plan)
 				if err != nil {
