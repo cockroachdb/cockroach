@@ -88,7 +88,7 @@ func newCipher(method cipherMethod, key []byte) (cipher.Block, error) {
 		}
 		return aes.NewCipher(key)
 	default:
-		return nil, errors.Newf("cannot create new cipher for unknown algorithm: %d", a)
+		return nil, errors.AssertionFailedf("cannot create new cipher for unknown algorithm: %d", a)
 	}
 }
 
@@ -99,7 +99,7 @@ func padData(method cipherMethod, data []byte, blockSize int) ([]byte, error) {
 	case noPadding:
 		return data, nil
 	default:
-		return nil, errors.Newf("cannot pad for unknown padding: %d", p)
+		return nil, errors.AssertionFailedf("cannot pad for unknown padding: %d", p)
 	}
 }
 
@@ -110,7 +110,7 @@ func unpadData(method cipherMethod, data []byte) ([]byte, error) {
 	case noPadding:
 		return data, nil
 	default:
-		return nil, errors.Newf("cannot unpad for unknown padding: %d", p)
+		return nil, errors.AssertionFailedf("cannot unpad for unknown padding: %d", p)
 	}
 }
 
@@ -138,7 +138,7 @@ func encrypt(method cipherMethod, block cipher.Block, iv []byte, data []byte) ([
 		mode.CryptBlocks(ret, data)
 		return ret, nil
 	default:
-		return nil, errors.Newf("cannot encrypt for unknown mode: %d", m)
+		return nil, errors.AssertionFailedf("cannot encrypt for unknown mode: %d", m)
 	}
 }
 
@@ -155,6 +155,6 @@ func decrypt(method cipherMethod, block cipher.Block, iv []byte, data []byte) ([
 		mode.CryptBlocks(ret, data)
 		return ret, nil
 	default:
-		return nil, errors.Newf("cannot encrypt for unknown mode: %d", m)
+		return nil, errors.AssertionFailedf("cannot decrypt for unknown mode: %d", m)
 	}
 }
