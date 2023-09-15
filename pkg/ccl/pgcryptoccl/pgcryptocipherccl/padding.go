@@ -20,7 +20,7 @@ import (
 // https://datatracker.ietf.org/doc/html/rfc5652#section-6.3.
 func pkcsPad(data []byte, blockSize int) ([]byte, error) {
 	if blockSize <= 0 || blockSize > math.MaxUint8 {
-		return nil, errors.Newf("invalid block size for PKCS padding: %d", blockSize)
+		return nil, errors.AssertionFailedf("invalid block size for PKCS padding: %d", blockSize)
 	}
 
 	paddedData := make([]byte, len(data))
