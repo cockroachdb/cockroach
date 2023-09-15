@@ -97,6 +97,8 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		ignoreCache = true
 	}
 
+	changes, _ := d.exec.CommandContextSilent(ctx, "git", "status")
+	modifiedTestPrefix := "modified:   pkg/"
 	validChoices := []string{"base", "ccl", "opt", "sqlite", "sqliteccl"}
 	if len(choices) == 0 {
 		// Default to all targets if --bigtest, else all non-sqlite targets.
@@ -105,7 +107,10 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		} else {
 			for _, choice := range validChoices {
 				if !strings.HasPrefix(choice, "sqlite") {
-					choices = append(choices, choice)
+					// Only append if the non-sqlite tests are modified
+					if strings.Contains(string(changes), modifiedTestPrefix+choice) {
+						choices = append(choices, choice)
+					}
 				}
 			}
 		}
