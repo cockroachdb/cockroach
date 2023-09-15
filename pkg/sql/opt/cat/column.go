@@ -41,6 +41,7 @@ type Column struct {
 	invertedSourceColumnOrdinal       int
 	generatedAsIdentityType           GeneratedAsIdentityType
 	generatedAsIdentitySequenceOption string
+	expressionIndexColumn             bool
 }
 
 // Ordinal returns the position of the column in its table. The following always
@@ -149,6 +150,11 @@ func (c *Column) ComputedExprStr() string {
 // IsVirtualComputed returns true if this is a virtual computed column.
 func (c *Column) IsVirtualComputed() bool {
 	return c.virtualComputed
+}
+
+// IsExpressionIndexColumn returns true if this is an exoression index column.
+func (c *Column) IsExpressionIndexColumn() bool {
+	return c.expressionIndexColumn
 }
 
 // InvertedSourceColumnOrdinal is used for inverted columns that are part of
@@ -352,6 +358,7 @@ func (c *Column) InitVirtualComputed(
 	nullable bool,
 	visibility ColumnVisibility,
 	computedExpr string,
+	expressionIndexColumn bool,
 ) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
@@ -366,6 +373,7 @@ func (c *Column) InitVirtualComputed(
 		computedExpr:                computedExpr,
 		virtualComputed:             true,
 		invertedSourceColumnOrdinal: -1,
+		expressionIndexColumn:       expressionIndexColumn,
 	}
 }
 

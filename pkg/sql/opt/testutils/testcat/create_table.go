@@ -819,7 +819,9 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 			nullable,
 			visibility,
 			*computedExpr,
+			false, /* expressionIndexColumn */
 		)
+		// TODO(msirek): add expression index support to the test catalog.
 	} else {
 		col.Init(
 			ordinal,
@@ -1265,6 +1267,7 @@ func columnForIndexElemExpr(tt *Table, expr tree.Expr) cat.Column {
 		true, /* nullable */
 		cat.Inaccessible,
 		exprStr,
+		false, /* expressionIndexColumn */
 	)
 	tt.Columns = append(tt.Columns, col)
 	return col

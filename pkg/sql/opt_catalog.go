@@ -856,6 +856,7 @@ func newOptTable(
 				col.IsNullable(),
 				visibility,
 				col.GetComputeExpr(),
+				col.IsExpressionIndexColumn(),
 			)
 		}
 	}
