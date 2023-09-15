@@ -86,6 +86,11 @@ func (s *spanConfigEventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		return errors.Wrapf(err, "failed to allocated %d bytes from monitor", defaultBatchSize)
 	}
 
+	var rangefeedCacheKnobs *rangefeedcache.TestingKnobs
+	if s.execCfg.StreamingTestingKnobs != nil && s.execCfg.StreamingTestingKnobs.SpanConfigRangefeedCacheKnobs != nil {
+		rangefeedCacheKnobs = s.execCfg.StreamingTestingKnobs.SpanConfigRangefeedCacheKnobs
+	}
+
 	s.rfc = rangefeedcache.NewWatcher(
 		"spanconfig-subscriber",
 		s.execCfg.Clock, s.execCfg.RangeFeedFactory,
@@ -94,7 +99,7 @@ func (s *spanConfigEventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		true, // withPrevValue
 		spanconfigkvsubscriber.NewSpanConfigDecoder().TranslateEvent,
 		s.handleUpdate,
-		nil,
+		rangefeedCacheKnobs,
 	)
 
 	// NB: statements below should not return errors (otherwise, we may fail to release
@@ -138,14 +143,9 @@ func (s *spanConfigEventStream) startStreamProcessor(ctx context.Context) {
 		return s.streamLoop(ctx)
 	}))
 
-	// TODO(msbutler): consider using rangefeedcache.Start() which calls rfc.Run()
-	// with retry logic. The pro of that refactor is that all c2c machinery would
-	// not need to restart over so some retryable rangefeed error. The con is that
-	// the ingestion side initial scan logic could no longer assume that an
-	// initial scan flush will only ever be the first rangefeed cache flush. In
-	// other words, with this change, an initial scan flush could occur after some
-	// incremental updates.
-	s.streamGroup.GoCtx(withErrCapture(s.rfc.Run))
+	s.streamGroup.GoCtx(withErrCapture(func(ctx context.Context) error {
+		return rangefeedcache.Start(ctx, s.execCfg.DistSQLSrv.Stopper, s.rfc, nil)
+	}))
 }
 
 // Next implements tree.ValueGenerator interface.
@@ -183,7 +183,7 @@ func (s *spanConfigEventStream) handleUpdate(ctx context.Context, update rangefe
 		log.Warningf(ctx, "rangefeedcache context cancelled with error %s", ctx.Err())
 	case s.updateCh <- update:
 		if update.Type == rangefeedcache.CompleteUpdate {
-			log.VInfof(ctx, 1, "completed initial scan")
+			log.VInfof(ctx, 1, "observed complete scan")
 		}
 	}
 }
@@ -224,6 +224,13 @@ func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
 		case <-s.doneChan:
 			return nil
 		case update := <-s.updateCh:
+			fromFullScan := update.Type == rangefeedcache.CompleteUpdate
+			if fromFullScan {
+				// If we're about to send over a full scan, reset the
+				// spanConfigFrontier, since the full scan will likely contain span
+				// config updates that have timestamps that are older than the frontier.
+				batcher.spanConfigFrontier = hlc.MinTimestamp
+			}
 			for _, ev := range update.Events {
 				spcfgEvent := ev.(*spanconfigkvsubscriber.BufferEvent)
 				target := spcfgEvent.Update.GetTarget()
@@ -253,13 +260,14 @@ func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
 						Target: target.ToProto(),
 						Config: spcfgEvent.Update.GetConfig(),
 					},
-					Timestamp: spcfgEvent.Timestamp(),
+					Timestamp:    spcfgEvent.Timestamp(),
+					FromFullScan: fromFullScan,
 				}
 				bufferedEvents = append(bufferedEvents, streamedSpanCfgEntry)
 			}
 			batcher.addSpanConfigs(bufferedEvents, update.Timestamp)
 			bufferedEvents = bufferedEvents[:0]
-			if pacer.shouldCheckpoint(update.Timestamp, true) || update.Type == rangefeedcache.CompleteUpdate {
+			if pacer.shouldCheckpoint(update.Timestamp, true) || fromFullScan {
 				if batcher.getSize() > 0 {
 					if err := s.flushEvent(ctx, &streampb.StreamEvent{Batch: &batcher.batch}); err != nil {
 						return err

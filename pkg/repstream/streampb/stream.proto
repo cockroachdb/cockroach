@@ -115,6 +115,7 @@ message ReplicationStreamSpec {
 message StreamedSpanConfigEntry {
   roachpb.SpanConfigEntry span_config = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  bool from_full_scan = 3;
 }
 
 // StreamEvent describes a replication stream event
