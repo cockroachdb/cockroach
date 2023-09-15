@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "tests",
+    testonly = 1,
     srcs = [
         "acceptance.go",
         "activerecord.go",
@@ -192,6 +193,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/testutils",
+        "//pkg/testutils/floatcmp",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/ts/tspb",
@@ -248,6 +250,7 @@ go_test(
     srcs = [
         "blocklist_test.go",
         "drt_test.go",
+        "query_comparison_util_test.go",
         "tpcc_test.go",
         "util_load_group_test.go",
         ":mocks_drt",  # keep
@@ -260,6 +263,7 @@ go_test(
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",
         "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
         "//pkg/util/version",
         "@com_github_golang_mock//gomock",
         "@com_github_google_go_github//github",
