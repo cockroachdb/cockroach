@@ -122,7 +122,6 @@ func registerExportParquet(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:            "export/parquet/tpcc-100",
 		Owner:           registry.OwnerCDC,
-		Tags:            registry.Tags("daily"),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(8)),
 		RequiresLicense: false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
