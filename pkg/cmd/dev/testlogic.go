@@ -11,6 +11,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -29,6 +30,7 @@ const (
 	configsFlag   = "config"
 	showSQLFlag   = "show-sql"
 	noGenFlag     = "no-gen"
+	forceGenFlag  = "force-gen"
 	flexTypesFlag = "flex-types"
 	workmemFlag   = "default-workmem"
 )
@@ -58,6 +60,7 @@ func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra
 	testLogicCmd.Flags().Bool(showSQLFlag, false, "show SQL statements/queries immediately before they are tested")
 	testLogicCmd.Flags().Bool(rewriteFlag, false, "rewrite test files using results from test run")
 	testLogicCmd.Flags().Bool(noGenFlag, false, "skip generating logic test files before running logic tests")
+	testLogicCmd.Flags().Bool(forceGenFlag, false, "force generating logic test files before running logic tests")
 	testLogicCmd.Flags().Bool(streamOutputFlag, false, "stream test output during run")
 	testLogicCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testLogicCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
@@ -85,6 +88,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		timeout        = mustGetFlagDuration(cmd, timeoutFlag)
 		verbose        = mustGetFlagBool(cmd, vFlag)
 		noGen          = mustGetFlagBool(cmd, noGenFlag)
+		forceGen       = mustGetFlagBool(cmd, forceGenFlag)
 		showSQL        = mustGetFlagBool(cmd, showSQLFlag)
 		count          = mustGetFlagInt(cmd, countFlag)
 		stress         = mustGetFlagBool(cmd, stressFlag)
@@ -127,10 +131,17 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		return err
 	}
 
-	if !noGen {
+	if forceGen {
 		err := d.generateLogicTest(cmd)
 		if err != nil {
 			return err
+		}
+	} else if !noGen {
+		if d.shouldGenerateLogicTests(ctx) {
+			err := d.generateLogicTest(cmd)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -295,6 +306,42 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		return err
 	}
 	return nil
+}
+
+// This function determines if any test_logic or execbuilder/testdata files were
+// modified in the current branch, and if so, determines if we should re-generate logic tests.
+func (d *dev) shouldGenerateLogicTests(ctx context.Context) bool {
+	base, _ := d.getMergeBaseHash(ctx)
+	// Generate logic tests if the merge base hash isn't found
+	if base == "" {
+		return true
+	}
+	changedFiles, _ := d.exec.CommandContextSilent(ctx, "git", "diff", "--no-ext-diff", "--name-only", base, "--", "**/logic_test/**", "**/execbuilder/testdata/**")
+	return strings.TrimSpace(string(changedFiles)) != ""
+}
+
+// This function retrieves the merge-base hash between the current branch and master
+func (d *dev) getMergeBaseHash(ctx context.Context) (string, error) {
+	// List files changed against `master`.
+	remotes, err := d.exec.CommandContextSilent(ctx, "git", "remote", "-v")
+	if err != nil {
+		return "", err
+	}
+	var upstream string
+	for _, remote := range strings.Split(strings.TrimSpace(string(remotes)), "\n") {
+		if (strings.Contains(remote, "github.com/cockroachdb/cockroach") || strings.Contains(remote, "github.com:cockroachdb/cockroach")) && strings.HasSuffix(remote, "(fetch)") {
+			upstream = strings.Fields(remote)[0]
+			break
+		}
+	}
+	if upstream == "" {
+		return "", fmt.Errorf("could not find git upstream, run `git remote add upstream git@github.com:cockroachdb/cockroach.git`")
+	}
+	baseBytes, err := d.exec.CommandContextSilent(ctx, "git", "merge-base", fmt.Sprintf("%s/master", upstream), "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(baseBytes)), nil
 }
 
 // We know that the regular expressions for files should not contain whitespace
