@@ -715,7 +715,7 @@ func getDestNodeLocalities(
 
 // maxProcessorsPerSQLInstance controls how many ingestion processors
 // we allow to be assigned to a given SQL instance.
-const maxProcessorsPerSQLInstance = 1
+const maxProcessorsPerSQLInstance = 3
 
 func constructStreamIngestionPlanSpecs(
 	ctx context.Context,
