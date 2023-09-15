@@ -1551,9 +1551,8 @@ var (
 	// true or the underlying query does not satisfy the restriction.
 	ErrLimitedResultNotSupported = unimplemented.NewWithIssue(
 		40195,
-		"multiple active portals not supported, "+
-			"please set session variable multiple_active_portals_enabled to true. "+
-			"Note: this feature is in preview",
+		"multiple active portals is in preview, "+
+			"please set session variable multiple_active_portals_enabled to true to enable them",
 	)
 	// ErrStmtNotSupportedForPausablePortal is returned when the user have set
 	// session variable multiple_active_portals_enabled to true but set an unsupported
