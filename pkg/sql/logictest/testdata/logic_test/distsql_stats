@@ -2422,3 +2422,42 @@ SHOW HISTOGRAM $hist_id_1
 upper_bound  range_rows  distinct_range_rows  equal_rows
 'hello'      0           0                    2
 'hi'         0           0                    1
+
+# Test that SHOW STATISTICS displays created_at in the session timezone.
+
+statement ok
+CREATE TABLE t107651 (i INT PRIMARY KEY)
+
+statement ok
+SET TIME ZONE -7
+
+statement ok
+ALTER TABLE t107651 INJECT STATISTICS '[
+    {
+        "avg_size": 0,
+        "columns": [
+            "i"
+        ],
+        "created_at": "2023-09-15 21:00:00.000000",
+        "distinct_count": 0,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 0
+    }
+]'
+
+query TT
+SELECT statistics_name, created FROM
+[SHOW STATISTICS FOR TABLE t107651]
+----
+__auto__  2023-09-15 14:00:00 -0700 -0700
+
+statement ok
+SET TIME ZONE -4
+
+query TT
+SELECT statistics_name, created FROM
+[SHOW STATISTICS FOR TABLE t107651]
+----
+__auto__  2023-09-15 17:00:00 -0400 -0400
