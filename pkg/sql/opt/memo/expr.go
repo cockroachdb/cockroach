@@ -725,6 +725,10 @@ type UDFDefinition struct {
 	// ExceptionBlock contains information needed for exception-handling when the
 	// body of this routine returns an error. It can be unset.
 	ExceptionBlock *ExceptionBlock
+
+	// CursorDeclaration contains the information needed to open a SQL cursor with
+	// the result of the *first* body statement. It may be unset.
+	CursorDeclaration *tree.RoutineOpenCursor
 }
 
 // ExceptionBlock contains the information needed to match and handle errors in

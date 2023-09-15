@@ -1221,6 +1221,11 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 	)
 
+	// Close all cursors.
+	if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
+		log.Warningf(ctx, "error closing cursors: %v", err)
+	}
+
 	if closeType == normalClose {
 		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
 		// This event is guaranteed to be accepted in every state.
@@ -1277,9 +1282,6 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
 		ex.extraTxnState.prepStmtsNamespaceMemAcc.Close(ctx)
-		if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
-			log.Warningf(ctx, "error closing cursors: %v", err)
-		}
 	}
 
 	if ex.sessionTracing.Enabled() {
@@ -3864,6 +3866,10 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.closeAllPortals(
 			ex.Ctx(), &ex.extraTxnState.prepStmtsNamespaceMemAcc,
 		)
+		// Close all cursors.
+		if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
+			log.Warningf(ex.Ctx(), "error closing cursors: %v", err)
+		}
 		ex.resetPlanner(ex.Ctx(), &ex.planner, nil, ex.server.cfg.Clock.PhysicalTime())
 	case txnRestart:
 		// In addition to resetting the extraTxnState, the restart event may

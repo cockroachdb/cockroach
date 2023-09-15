@@ -3150,6 +3150,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (execPlan, error) {
 		udf.TailCall,
 		true, /* procedure */
 		nil,  /* exceptionHandler */
+		nil,  /* cursorDeclaration */
 	)
 
 	var ep execPlan
