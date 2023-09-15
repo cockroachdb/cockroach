@@ -8,6 +8,7 @@ go_library(
         "github.go",
         "main.go",
         "monitor.go",
+        "run.go",
         "slack.go",
         "test_impl.go",
         "test_registry.go",
