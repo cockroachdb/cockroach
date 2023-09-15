@@ -56,6 +56,9 @@ type CertificateManager struct {
 	// own locking.
 	certMetrics Metrics
 
+	// Client cert expiration cache.
+	clientCertExpirationCache *ClientCertExpirationCache
+
 	// mu protects all remaining fields.
 	mu syncutil.RWMutex
 
@@ -176,6 +179,27 @@ func (cm *CertificateManager) RegisterSignalHandler(
 			}
 		}
 	})
+}
+
+// RegisterExpirationCache registers a cache for client certificate expiration.
+// It is called during server startup.
+func (cm *CertificateManager) RegisterExpirationCache(cache *ClientCertExpirationCache) {
+	cm.clientCertExpirationCache = cache
+}
+
+// MaybeUpsertClientExpiration updates the updates or inserts the expiration
+// time for the given client certificate. An update is contingent on whether the
+// old expiration is after the new expiration.
+func (cm *CertificateManager) MaybeUpsertClientExpiration(
+	ctx context.Context, identity username.SQLUsername, expiration int64,
+) {
+	if cache := cm.clientCertExpirationCache; cache != nil {
+		cache.MaybeUpsert(ctx,
+			identity.Normalized(),
+			expiration,
+			cm.certMetrics.ClientExpiration,
+		)
+	}
 }
 
 // CACert returns the CA cert. May be nil.
