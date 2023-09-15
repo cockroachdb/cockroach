@@ -51,6 +51,7 @@ go_library(
         "//pkg/sql/catalog/seqexpr",
         "//pkg/sql/colmem",
         "//pkg/sql/isql",
+        "//pkg/sql/opt/exec",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/rowenc",

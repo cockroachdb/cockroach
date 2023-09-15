@@ -13,6 +13,7 @@ package row
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 )
@@ -44,30 +45,23 @@ func UniqueAndFKCheckSpans(
 	colMap catalog.TableColMap,
 	numCols int,
 	prefixValues []tree.Datums,
+	insertCols []exec.TableColumnOrdinal,
 ) (roachpb.Spans, error) {
 	// If there are prefix values...
 	// TODO(mgartner): Explain this.
 	if len(prefixValues) > 0 {
-		spans := make(roachpb.Spans, len(prefixValues)*len(prefixValues[0]))
+		numValues := 1
+		for i := range prefixValues {
+			numValues *= len(prefixValues[i])
+		}
+		spans := make(roachpb.Spans, numValues)
 		// Create a slice of scratch values that contains the same elements as
 		// values but that we can replace prefix values with.
 		scratchValues := make([]tree.Datum, len(values))
 		copy(scratchValues, values)
-		for i := range prefixValues {
-			for j := range prefixValues[i] {
-				var containsNull bool
-				var err error
-				spanIdx := i*j + j
-				// TODO(mgartner): I think this is broken if prefix values are
-				// not the first columns in the table. We need to map them
-				// correctly.
-				scratchValues[i] = prefixValues[i][j]
-				spans[spanIdx], containsNull, err = builder.SpanFromDatumRow(scratchValues, numCols, colMap)
-				if err != nil {
-					return nil, err
-				}
-				spans[spanIdx] = splitter.ExistenceCheckSpan(spans[spanIdx], numCols, containsNull)
-			}
+		if err := generateSpansHelper(builder, splitter, colMap, &scratchValues, &prefixValues, insertCols, numCols, 0, /* level */
+			1 /* multiplier */, 0 /* offset */, &spans); err != nil {
+			return nil, err
 		}
 		return spans, nil
 	}
@@ -79,4 +73,38 @@ func UniqueAndFKCheckSpans(
 		return nil, err
 	}
 	return roachpb.Spans{splitter.ExistenceCheckSpan(span, numCols, containsNull)}, nil
+}
+
+func generateSpansHelper(
+	builder *span.Builder,
+	splitter span.Splitter,
+	colMap catalog.TableColMap,
+	scratchValues *[]tree.Datum,
+	prefixValues *[]tree.Datums,
+	insertCols []exec.TableColumnOrdinal,
+	numCols, level, multiplier, offset int,
+	spans *roachpb.Spans,
+) error {
+	for j := range (*prefixValues)[level] {
+		var containsNull bool
+		var err error
+		(*scratchValues)[insertCols[level]] = (*prefixValues)[level][j]
+		if level == len(*prefixValues)-1 {
+			spanIdx := offset + multiplier*j
+			(*spans)[spanIdx], containsNull, err = builder.SpanFromDatumRow(*scratchValues, numCols, colMap)
+			if err != nil {
+				return err
+			}
+			(*spans)[spanIdx] = splitter.ExistenceCheckSpan((*spans)[spanIdx], numCols, containsNull)
+		} else {
+			if err = generateSpansHelper(builder, splitter, colMap, scratchValues, prefixValues, insertCols, numCols, level+1,
+				multiplier*len((*prefixValues)[level]), /* multiplier */
+				offset+multiplier*j,                    /* offset */
+				spans,
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

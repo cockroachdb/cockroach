@@ -157,19 +157,19 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		values.Relational().HasUDF {
 		return execPlan{}, false, nil
 	}
-
+	//return execPlan{}, false, nil // msirek-temp
 	md := b.mem.Metadata()
 	tab := md.Table(ins.Table)
 	tabMeta := md.TableMeta(ins.Table)
 
-	// TODO(mgartner): Use a special struct for unique checks, or combine unqiue
+	// TODO(mgartner): Use a special struct for unique checks, or combine unique
 	// and FK checks into one.
 	// TODO(mgartner): Is this length always long enough, or might some unique
 	// checks be pruned before getting here?
 	uniqChecks := make([]exec.InsertFastPathFKCheck, len(ins.UniqueChecks))
 	if len(ins.UniqueChecks) > 0 {
-		for i, n := 0, tab.UniqueCount(); i < n; i++ {
-			uc := tab.Unique(i)
+		for i, check := range ins.UniqueChecks {
+			uc := tab.Unique(check.CheckOrdinal)
 
 			// Skip unique constraints with indexes.
 			if !uc.WithoutIndex() {
@@ -190,17 +190,12 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 			out.InsertCols = insertCols
 			out.ReferencedTable = tab
 			out.ReferencedIndex = index
-			// TODO(mgartner): What match should be used?
+			// Use MatchSimple because nulls are treated as distinct.
 			out.MatchMethod = tree.MatchSimple
 			// TODO(mgartner): What locking should be used?
 			out.Locking = opt.Locking{}
-			prefixColCount := len(prefixValues)
 			out.MkErr = func(row tree.Datums) error {
-				keyVals := make(tree.Datums, len(row)-prefixColCount)
-				for i := range keyVals {
-					keyVals[i] = row[i+prefixColCount]
-				}
-				return mkUniqueCheckErr(tabMeta, uc, keyVals)
+				return mkFastPathUniqueCheckErr(tabMeta, uc, row, out.ReferencedIndex)
 			}
 		}
 	}
@@ -358,7 +353,12 @@ func (b *Builder) findLookupIndexForUniqCheck(
 	for i, n := 0, tab.IndexCount(); i < n; i++ {
 		// Look for matching suffix columns first.
 		index := tab.Index(i)
+		// msirek-temp: the index does not need to be unique.
 		if !index.IsUnique() {
+			continue
+		}
+		// Use of partial index for fast path not allowed.
+		if _, ok = index.Predicate(); ok {
 			continue
 		}
 
@@ -408,7 +408,8 @@ func (b *Builder) findLookupIndexForUniqCheck(
 		// TODO(mgartner): Only allocate prefixValues if necessary; reuse
 		// between loops.
 		prefixValues = make([]tree.Datums, prefixColCount)
-		for ord := 0; ord < prefixColCount; ord++ {
+		for k := 0; k < prefixColCount; k++ {
+			ord := index.Column(k).Ordinal()
 			col := tab.Column(ord)
 			colID := tabID.ColumnID(col.Ordinal())
 			// TODO(mgartner): Consider moving this function out of the
@@ -418,7 +419,8 @@ func (b *Builder) findLookupIndexForUniqCheck(
 				canConstrainPrefix = false
 				break
 			}
-			prefixValues[ord] = values
+			prefixValues[k] = values
+			insertCols[k] = exec.TableColumnOrdinal(ord)
 		}
 
 		if !canConstrainPrefix {
@@ -938,7 +940,13 @@ func mkUniqueCheckErr(tabMeta *opt.TableMeta, uc cat.UniqueConstraint, keyVals t
 			details.WriteString(", ")
 		}
 		col := tabMeta.Table.Column(uc.ColumnOrdinal(tabMeta.Table, i))
-		details.WriteString(string(col.ColName()))
+		var colName string
+		if col.IsExpressionIndexColumn() {
+			colName = col.ComputedExprStr()
+		} else {
+			colName = string(col.ColName())
+		}
+		details.WriteString(colName)
 	}
 	details.WriteString(")=(")
 	for i, d := range keyVals {
@@ -957,6 +965,37 @@ func mkUniqueCheckErr(tabMeta *opt.TableMeta, uc cat.UniqueConstraint, keyVals t
 		),
 		details.String(),
 	)
+}
+
+// mkFastPathUniqueCheckErr is a wrapper for mkUniqueCheckErr in the insert fast
+// path flow, which reorders the keyVals row according to the ordering of the
+// key columns in index `idx`. This is needed because mkUniqueCheckErr assumes
+// the ordering of columns in `keyVals` matches the ordering of columns in
+// `cat.UniqueConstraint.ColumnOrdinal(tabMeta.Table, i)`.
+func mkFastPathUniqueCheckErr(
+	tabMeta *opt.TableMeta, uc cat.UniqueConstraint, keyVals tree.Datums, idx cat.Index,
+) error {
+
+	newKeyVals := make(tree.Datums, 0, uc.ColumnCount())
+
+	for i := 0; i < uc.ColumnCount(); i++ {
+		ord := uc.ColumnOrdinal(tabMeta.Table, i)
+		found := false
+		for j := 0; j < idx.ColumnCount(); j++ {
+			keyCol := idx.Column(j)
+			keyColOrd := keyCol.Column.Ordinal()
+			if ord == keyColOrd {
+				newKeyVals = append(newKeyVals, keyVals[j])
+				found = true
+				break
+			}
+		}
+		if !found {
+			panic(errors.AssertionFailedf(
+				"insert fast path failed uniqueness check, but could not find unique columns for row, %v", keyVals))
+		}
+	}
+	return mkUniqueCheckErr(tabMeta, uc, newKeyVals)
 }
 
 // mkFKCheckErr generates a user-friendly error describing a foreign key

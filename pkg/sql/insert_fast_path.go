@@ -145,7 +145,7 @@ func (c *insertFastPathFKCheck) generateSpan(inputRow tree.Datums) (roachpb.Span
 func (c *insertFastPathFKCheck) generateSpans(inputRow tree.Datums) (roachpb.Spans, error) {
 	// TODO(mgartner): The value of numCols should be len(c.InsertCols) +
 	// len(c.PrefixValues).
-	return row.UniqueAndFKCheckSpans(&c.spanBuilder, c.spanSplitter, inputRow, c.colMap, len(c.InsertCols), c.PrefixValues)
+	return row.UniqueAndFKCheckSpans(&c.spanBuilder, c.spanSplitter, inputRow, c.colMap, len(c.InsertCols), c.PrefixValues, c.InsertCols)
 }
 
 // errorForRow returns an error indicating failure of this FK check for the
@@ -448,13 +448,6 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 		}
 	}
 
-	// Perform the FK checks.
-	// TODO(radu): we could run the FK batch in parallel with the main batch (if
-	// we aren't auto-committing).
-	if err := n.runFKChecks(params); err != nil {
-		return false, err
-	}
-
 	// Perform the unique checks.
 	// TODO(radu): we could run the unique batch in parallel with the main batch (if
 	// we aren't auto-committing).
@@ -462,6 +455,12 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 		return false, err
 	}
 
+	// Perform the FK checks.
+	// TODO(radu): we could run the FK batch in parallel with the main batch (if
+	// we aren't auto-committing).
+	if err := n.runFKChecks(params); err != nil {
+		return false, err
+	}
 	n.run.ti.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 	if err := n.run.ti.finalize(params.ctx); err != nil {
 		return false, err

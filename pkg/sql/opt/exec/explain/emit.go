@@ -780,12 +780,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 
 	case invertedFilterOp:
 		a := n.args.(*invertedFilterArgs)
-		if a.InvColumn != 0 {
-			ob.Attr("inverted column", a.Input.Columns()[a.InvColumn].Name)
-		}
-		if a.InvFilter != nil && len(a.InvFilter.SpansToRead) > 0 {
-			ob.Attr("num spans", len(a.InvFilter.SpansToRead))
-		}
+		ob.Attr("inverted column", a.Input.Columns()[a.InvColumn].Name)
+		ob.Attr("num spans", len(a.InvFilter.SpansToRead))
 
 	case invertedJoinOp:
 		a := n.args.(*invertedJoinArgs)
@@ -870,6 +866,11 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 				"FK check", fmt.Sprintf("%s@%s", fk.ReferencedTable.Name(), fk.ReferencedIndex.Name()),
 			)
 			e.emitLockingPolicyWithPrefix("FK check ", fk.Locking)
+		}
+		for _, uniq := range a.UniqChecks {
+			ob.Attr(
+				"uniqueness check", fmt.Sprintf("%s@%s", uniq.ReferencedTable.Name(), uniq.ReferencedIndex.Name()),
+			)
 		}
 		if len(a.Rows) > 0 {
 			e.emitTuples(tree.RawRows(a.Rows), len(a.Rows[0]))
