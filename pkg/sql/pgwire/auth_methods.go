@@ -442,7 +442,6 @@ func authCert(
 			&tlsState,
 			execCfg.RPCContext.TenantID,
 			cm,
-			execCfg.ClientCertExpirationCache,
 		)
 		if err != nil {
 			return err
