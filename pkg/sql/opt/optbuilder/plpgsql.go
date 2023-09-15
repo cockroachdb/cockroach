@@ -429,6 +429,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// The synchronous notice sending behavior is implemented in the
 			// crdb_internal.plpgsql_raise builtin function.
 			con := b.makeContinuation("_stmt_raise")
+			con.def.Volatility = volatility.Volatile
 			b.appendBodyStmt(&con, b.buildPLpgSQLRaise(con.s, b.getRaiseArgs(con.s, t)))
 			b.appendPlpgSQLStmts(&con, stmts[i+1:])
 			return b.callContinuation(&con, s)
@@ -506,6 +507,57 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			b.appendBodyStmt(&execCon, intoScope)
 			return b.callContinuation(&execCon, s)
 
+		case *ast.Open:
+			// OPEN statements are used to create a CURSOR for the current session.
+			// This is handled by calling the plpgsql_open_cursor internal builtin
+			// function in a separate body statement that returns no results, similar
+			// to the RAISE implementation.
+			if b.exceptionBlock != nil {
+				panic(unimplemented.New("open with exception block",
+					"opening a cursor in a routine with an exception block is not yet supported",
+				))
+			}
+			if t.Scroll == tree.Scroll {
+				panic(unimplemented.NewWithIssue(77102, "DECLARE SCROLL CURSOR"))
+			}
+			if t.Query == nil {
+				panic(unimplemented.New("bound cursor", "opening a bound cursor is not yet supported"))
+			}
+			if _, ok := t.Query.(*tree.Select); !ok {
+				panic(pgerror.Newf(
+					pgcode.InvalidCursorDefinition, "cannot open %s query as cursor",
+					t.Query.StatementTag(),
+				))
+			}
+			openCon := b.makeContinuation("_stmt_open")
+			openCon.def.Volatility = volatility.Volatile
+			fmtCtx := b.ob.evalCtx.FmtCtx(tree.FmtSimple)
+			fmtCtx.FormatNode(t.Query)
+			_, source, _, err := openCon.s.FindSourceProvidingColumn(b.ob.ctx, t.CurVar)
+			if err != nil {
+				if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+					panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", t.CurVar))
+				}
+				panic(err)
+			}
+			// Initialize the routine with the information needed to pipe the first
+			// body statement into a cursor.
+			openCon.def.CursorDeclaration = &tree.RoutineOpenCursor{
+				NameArgIdx: source.(*scopeColumn).getParamOrd(),
+				Scroll:     t.Scroll,
+				CursorSQL:  fmtCtx.CloseAndGetString(),
+			}
+			openScope := b.ob.buildStmtAtRootWithScope(t.Query, nil /* desiredTypes */, openCon.s)
+			if openScope.expr.Relational().CanMutate {
+				// Cursors with mutations are invalid.
+				panic(pgerror.Newf(pgcode.FeatureNotSupported,
+					"DECLARE CURSOR must not contain data-modifying statements in WITH",
+				))
+			}
+			b.appendBodyStmt(&openCon, openScope)
+			b.appendPlpgSQLStmts(&openCon, stmts[i+1:])
+			return b.callContinuation(&openCon, s)
+
 		default:
 			panic(unimplemented.New(
 				"unimplemented PL/pgSQL statement",
@@ -562,6 +614,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLRaise(inScope *scope, args memo.ScalarListE
 	)
 	raiseColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_raise"))
 	raiseScope := inScope.push()
+	b.ensureScopeHasExpr(raiseScope)
 	b.ob.synthesizeColumn(raiseScope, raiseColName, types.Int, nil /* expr */, raiseCall)
 	b.ob.constructProjectForScope(inScope, raiseScope)
 	return raiseScope
@@ -829,6 +882,7 @@ func (b *plpgsqlBuilder) buildEndOfFunctionRaise(inScope *scope) *scope {
 		makeConstStr(pgcode.RoutineExceptionFunctionExecutedNoReturnStatement.String()), /* code */
 	}
 	con := b.makeContinuation("_end_of_function")
+	con.def.Volatility = volatility.Volatile
 	b.appendBodyStmt(&con, b.buildPLpgSQLRaise(con.s, args))
 	// Build a dummy statement that returns NULL. It won't be executed, but
 	// ensures that the continuation routine's return type is correct.
@@ -919,11 +973,7 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 		if err != nil {
 			panic(err)
 		}
-		if source != nil {
-			args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
-		} else {
-			args = append(args, b.ob.factory.ConstructNull(typ))
-		}
+		args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
 	}
 	for _, dec := range b.decls {
 		addArg(dec.Var, b.varTypes[dec.Var])

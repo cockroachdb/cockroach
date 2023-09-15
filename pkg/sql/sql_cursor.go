@@ -59,12 +59,8 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				sd.StmtTimeout = 0
 			}
 			ie := p.ExecCfg().InternalDB.NewInternalExecutor(sd)
-			if cursor := p.sqlCursors.getCursor(s.Name); cursor != nil {
-				return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", s.Name)
-			}
-
-			if p.extendedEvalCtx.PreparedStatementState.HasPortal(string(s.Name)) {
-				return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists as portal", s.Name)
+			if err := p.checkIfCursorExists(s.Name); err != nil {
+				return nil, err
 			}
 
 			// Try to plan the cursor query to make sure that it's valid.
@@ -120,6 +116,18 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 			return newZeroNode(nil /* columns */), nil
 		},
 	}, nil
+}
+
+// checkIfCursorExists checks whether a cursor or portal with the given name
+// already exists, and returns an error if one does.
+func (p *planner) checkIfCursorExists(name tree.Name) error {
+	if cursor := p.sqlCursors.getCursor(name); cursor != nil {
+		return pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", name)
+	}
+	if p.extendedEvalCtx.PreparedStatementState.HasPortal(string(name)) {
+		return pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists as portal", name)
+	}
+	return nil
 }
 
 var errBackwardScan = pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cursor can only scan forward")
