@@ -13,6 +13,8 @@ package floatcmp
 import (
 	"math"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 // EqualApprox takes an interface, allowing it to compare equality of both
@@ -154,5 +156,44 @@ func TestEqualClose(t *testing.T) {
 				t.Errorf("Close(%.v, %.v) = %v, want %v", tt.args.expected, tt.args.actual, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestFloatsMatch is a unit test for floatsMatch() and floatsMatchApprox()
+// functions.
+func TestFloatsMatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for _, tc := range []struct {
+		f1, f2 string
+		match  bool
+	}{
+		{f1: "NaN", f2: "+Inf", match: false},
+		{f1: "+Inf", f2: "+Inf", match: true},
+		{f1: "NaN", f2: "NaN", match: true},
+		{f1: "+Inf", f2: "-Inf", match: false},
+		{f1: "-0.0", f2: "0.0", match: true},
+		{f1: "0.0", f2: "NaN", match: false},
+		{f1: "123.45", f2: "12.345", match: false},
+		{f1: "0.1234567890123456", f2: "0.1234567890123455", match: true},
+		{f1: "0.1234567890123456", f2: "0.1234567890123457", match: true},
+		{f1: "-0.1234567890123456", f2: "0.1234567890123456", match: false},
+		{f1: "-0.1234567890123456", f2: "-0.1234567890123455", match: true},
+		{f1: "0.142857142857143", f2: "0.14285714285714285", match: true},
+	} {
+		match, err := FloatsMatch(tc.f1, tc.f2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if match != tc.match {
+			t.Fatalf("floatsMatch: wrong result on %v", tc)
+		}
+
+		match, err = FloatsMatchApprox(tc.f1, tc.f2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if match != tc.match {
+			t.Fatalf("floatsMatchApprox: wrong result on %v", tc)
+		}
 	}
 }
