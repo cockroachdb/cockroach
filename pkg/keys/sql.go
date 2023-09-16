@@ -52,7 +52,11 @@ func DecodeTenantPrefix(key roachpb.Key) ([]byte, roachpb.TenantID, error) {
 	if err != nil {
 		return nil, roachpb.TenantID{}, err
 	}
-	return rem, roachpb.MustMakeTenantID(tenID), nil
+	id, err := roachpb.MakeTenantID(tenID)
+	if err != nil {
+		return nil, roachpb.TenantID{}, err
+	}
+	return rem, id, nil
 }
 
 // DecodeTenantPrefixE determines the tenant ID from the key prefix, returning
