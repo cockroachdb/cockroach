@@ -170,6 +170,9 @@ func (cm *CertificateManager) RegisterSignalHandler(
 				return
 			case sig := <-ch:
 				log.Ops.Infof(ctx, "received signal %q, triggering certificate reload", sig)
+				if cache := cm.clientCertExpirationCache; cache != nil {
+					cache.Clear()
+				}
 				if err := cm.LoadCertificates(); err != nil {
 					log.Ops.Warningf(ctx, "could not reload certificates: %v", err)
 					log.StructuredEvent(ctx, &eventpb.CertsReload{Success: false, ErrorMessage: err.Error()})
