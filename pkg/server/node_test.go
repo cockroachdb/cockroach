@@ -713,7 +713,7 @@ func TestNodeBatchRequestPProfLabels(t *testing.T) {
 		return labels
 	}()
 
-	gr := kvpb.NewGet(roachpb.Key("a"), kvpb.NonLocking)
+	gr := kvpb.NewGet(roachpb.Key("a"))
 	pr := kvpb.NewPut(gr.Header().Key, roachpb.Value{})
 	ba.Add(gr, pr)
 
@@ -748,7 +748,7 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 	ba.RangeID = 1
 	ba.Replica.StoreID = 1
 
-	gr := kvpb.NewGet(roachpb.Key("a"), kvpb.NonLocking)
+	gr := kvpb.NewGet(roachpb.Key("a"))
 	pr := kvpb.NewPut(gr.Header().Key, roachpb.Value{})
 	ba.Add(gr, pr)
 

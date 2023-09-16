@@ -640,7 +640,7 @@ func (r *Replica) AdminMerge(
 		// shortly.
 		var rightDesc roachpb.RangeDescriptor
 		rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
-		dbRightDescKV, err := txn.GetForUpdate(ctx, rightDescKey)
+		dbRightDescKV, err := txn.GetForUpdate(ctx, rightDescKey, kvpb.BestEffort)
 		if err != nil {
 			return err
 		}
@@ -3290,12 +3290,13 @@ func conditionalGetDescValueFromDB(
 	forUpdate bool,
 	check func(*roachpb.RangeDescriptor) (matched, skip bool),
 ) (kvDesc *roachpb.RangeDescriptor, kvDescBytes []byte, skip bool, err error) {
-	get := txn.Get
-	if forUpdate {
-		get = txn.GetForUpdate
-	}
 	descKey := keys.RangeDescriptorKey(startKey)
-	existingDescKV, err := get(ctx, descKey)
+	var existingDescKV kv.KeyValue
+	if forUpdate {
+		existingDescKV, err = txn.GetForUpdate(ctx, descKey, kvpb.BestEffort)
+	} else {
+		existingDescKV, err = txn.Get(ctx, descKey)
+	}
 	if err != nil {
 		return nil, nil, false /* skip */, errors.Wrap(err, "fetching current range descriptor value")
 	}

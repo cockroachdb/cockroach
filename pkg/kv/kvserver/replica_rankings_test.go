@@ -199,7 +199,7 @@ func TestAddSSTQPSStat(t *testing.T) {
 
 // genVariableRead returns a batch request containing, start-end sequential key reads.
 func genVariableRead(ctx context.Context, start, end roachpb.Key) *kvpb.BatchRequest {
-	scan := kvpb.NewScan(start, end, kvpb.NonLocking)
+	scan := kvpb.NewScan(start, end)
 	readBa := &kvpb.BatchRequest{}
 	readBa.Add(scan)
 	return readBa
