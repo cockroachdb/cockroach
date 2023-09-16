@@ -13,12 +13,12 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings",
-        "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
