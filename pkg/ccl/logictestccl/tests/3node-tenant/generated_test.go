@@ -2312,6 +2312,13 @@ func TestTenantLogic_unique(
 	runLogicTest(t, "unique")
 }
 
+func TestTenantLogic_unique_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "unique_read_committed")
+}
+
 func TestTenantLogic_update(
 	t *testing.T,
 ) {
