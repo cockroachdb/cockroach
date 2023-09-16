@@ -11085,7 +11085,7 @@ func TestReplicaNotifyLockTableOn1PC(t *testing.T) {
 	txn := newTransaction("test", key, 1, tc.Clock())
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: txn}
-	ba.Add(kvpb.NewScan(key, key.Next(), kvpb.ForUpdate))
+	ba.Add(kvpb.NewLockingScan(key, key.Next(), kvpb.ForUpdate, kvpb.BestEffort))
 	if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
@@ -11182,9 +11182,9 @@ func TestReplicaAsyncIntentResolutionOn1PC(t *testing.T) {
 		// Perform one or more "for update" gets. This should acquire unreplicated,
 		// exclusive locks on the keys.
 		b := txn.NewBatch()
-		b.GetForUpdate(keyA)
+		b.GetForUpdate(keyA, kvpb.BestEffort)
 		if external {
-			b.GetForUpdate(keyB)
+			b.GetForUpdate(keyB, kvpb.BestEffort)
 		}
 		err = txn.Run(ctx, b)
 		require.NoError(t, err)
@@ -11244,7 +11244,7 @@ func TestReplicaQueryLocks(t *testing.T) {
 			txn := newTransaction("test", keyA, 1, tc.Clock())
 			ba := &kvpb.BatchRequest{}
 			ba.Header = kvpb.Header{Txn: txn}
-			ba.Add(kvpb.NewScan(keyA, keyB.Next(), kvpb.ForUpdate))
+			ba.Add(kvpb.NewLockingScan(keyA, keyB.Next(), kvpb.ForUpdate, kvpb.BestEffort))
 			if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
 				t.Fatalf("unexpected error: %s", pErr)
 			}
