@@ -13,6 +13,7 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -277,8 +278,32 @@ func (mb *mutationBuilder) inferArbitersFromConflictOrds(
 //   - pred is the partial index or constraint predicate. If the arbiter is
 //     not a partial index or constraint, pred is nil.
 func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
-	inScope *scope, conflictOrds intsets.Fast, pred tree.Expr,
+	inScope *scope, conflictOrds intsets.Fast, pred tree.Expr, uniqueWithoutIndex bool,
 ) {
+	locking := noRowLocking
+	// If we're using a weaker isolation level, we must lock the right side of the
+	// anti-join to prevent concurrent inserts from other transactions from
+	// violating the unique constraint. This is only necessary when there is no
+	// index directly enforcing the unique constraint. (With an index, concurrent
+	// transactions will always conflict on the same KV key.)
+	if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable && uniqueWithoutIndex {
+		locking = lockingSpec{
+			&tree.LockingItem{
+				// TODO(michae2): Change this to ForKeyShare when it is supported.
+				// Actually, for INSERT ON CONFLICT DO NOTHING, I think this could be
+				// ForNone if we supported predicate locking at that strength. I'm
+				// pretty sure we don't need to lock existing rows at *any* locking
+				// strength, only need to prevent insertion of new rows.
+				Strength:   tree.ForShare,
+				Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(mb.tab.Name())},
+				WaitPolicy: tree.LockWaitBlock,
+				// Unique arbiters must ensure the non-existence of certain rows, so we
+				// use predicate locks instead of record locks to prevent insertion of
+				// new rows into the locked span(s) by other concurrent transactions.
+				Form: tree.LockPredicate,
+			},
+		}
+	}
 	// Build the right side of the anti-join. Use a new metadata instance
 	// of the mutation table so that a different set of column IDs are used for
 	// the two tables in the self-join.
@@ -290,7 +315,7 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 			includeInverted:  false,
 		}),
 		nil, /* indexFlags */
-		noRowLocking,
+		locking,
 		inScope,
 		true, /* disableNotVisibleIndex */
 	)
@@ -337,12 +362,22 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 		on = append(on, mb.b.factory.ConstructFiltersItem(predScalar))
 	}
 
+	joinPrivate := memo.EmptyJoinPrivate
+	// If we're using a weaker isolation level, the anti-joined scan needs to
+	// obtain predicate locks. We must use a lookup anti-join for predicate locks
+	// to work.
+	if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable && uniqueWithoutIndex {
+		joinPrivate = &memo.JoinPrivate{
+			Flags: memo.PreferLookupJoinIntoRight,
+		}
+	}
+
 	// Construct the anti-join.
 	mb.outScope.expr = mb.b.factory.ConstructAntiJoin(
 		mb.outScope.expr,
 		fetchScope.expr,
 		on,
-		memo.EmptyJoinPrivate,
+		joinPrivate,
 	)
 }
 
@@ -358,9 +393,31 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 //   - partialIndexDistinctCol is a column that allows the UpsertDistinctOn to
 //     only de-duplicate insert rows that satisfy the partial index predicate.
 //     If the arbiter is not a partial index, partialIndexDistinctCol is nil.
+//   - uniqueWithoutIndex is true if the arbiter is a unique constraint without
+//     an enforcing index.
 func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
-	inScope *scope, conflictOrds intsets.Fast, pred tree.Expr,
+	inScope *scope, conflictOrds intsets.Fast, pred tree.Expr, uniqueWithoutIndex bool,
 ) {
+	locking := noRowLocking
+	// If we're using a weaker isolation level, we must lock the right side of the
+	// left join to prevent concurrent inserts from other transactions from
+	// violating the unique constraint. This is only necessary when there is no
+	// index directly enforcing the unique constraint. (With an index, concurrent
+	// transactions will always conflict on the same KV key.)
+	if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable && uniqueWithoutIndex {
+		locking = lockingSpec{
+			&tree.LockingItem{
+				// We're about to update the row, so take an exclusive lock.
+				Strength:   tree.ForUpdate,
+				Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(mb.tab.Name())},
+				WaitPolicy: tree.LockWaitBlock,
+				// Unique arbiters must ensure the non-existence of certain rows, so we
+				// use predicate locks instead of record locks to prevent insertion of
+				// new rows into the locked span(s) by other concurrent transactions.
+				Form: tree.LockPredicate,
+			},
+		}
+	}
 	// Build the right side of the left outer join. Use a different instance of
 	// table metadata so that col IDs do not overlap.
 	//
@@ -375,7 +432,7 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 			includeInverted:  false,
 		}),
 		nil, /* indexFlags */
-		noRowLocking,
+		locking,
 		inScope,
 		true, /* disableNotVisibleIndex */
 	)
@@ -427,12 +484,22 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 	// mutationBuilder, and which are no longer needed for any other purpose.
 	mb.outScope.appendColumnsFromScope(mb.fetchScope)
 
+	joinPrivate := memo.EmptyJoinPrivate
+	// If we're using a weaker isolation level, the left-joined scan needs to
+	// obtain predicate locks. We must use a lookup left-join for predicate locks
+	// to work.
+	if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable && uniqueWithoutIndex {
+		joinPrivate = &memo.JoinPrivate{
+			Flags: memo.PreferLookupJoinIntoRight,
+		}
+	}
+
 	// Construct the left join.
 	mb.outScope.expr = mb.b.factory.ConstructLeftJoin(
 		mb.outScope.expr,
 		mb.fetchScope.expr,
 		on,
-		memo.EmptyJoinPrivate,
+		joinPrivate,
 	)
 }
 
