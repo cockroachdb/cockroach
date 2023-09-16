@@ -4970,6 +4970,67 @@ func setupDBAndWriteAAndB(t *testing.T) (serverutils.TestServerInterface, *kv.DB
 	return s, db
 }
 
+// TestSharedLocksBasic tests basic shared lock semantics. In particular, it
+// tests multiple shared locks are compatible with each other, but exclusive
+// locks aren't.
+func TestSharedLocksBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db := setupDBAndWriteAAndB(t)
+	defer s.Stopper().Stop(ctx)
+
+	testutils.RunTrueAndFalse(t, "guaranteed-durability", func(t *testing.T, guaranteedDurability bool) {
+		txn1 := db.NewTxn(ctx, "txn1")
+		txn2 := db.NewTxn(ctx, "txn2")
+
+		dur := kvpb.BestEffort
+		if guaranteedDurability {
+			dur = kvpb.GuaranteedDurability
+		}
+
+		res, err := txn1.ScanForShare(ctx, "a", "c", 0, dur)
+		require.NoError(t, err)
+		require.Equal(t, 2, len(res))
+
+		_, err = txn2.ReverseScanForShare(ctx, "a", "c", 0, dur)
+		require.NoError(t, err)
+		require.Equal(t, 2, len(res))
+
+		ch := make(chan struct{}, 1) // we won't pull off the channel
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			txn3 := db.NewTxn(ctx, "txn3")
+			res, err := txn3.GetForUpdate(ctx, "a", dur)
+			require.NoError(t, err)
+			ch <- struct{}{}
+			require.NotNil(t, res.Value)
+			require.NoError(t, txn3.Commit(ctx))
+		}()
+
+		ensureGetForUpdateIsBlocked := func() {
+			select {
+			case <-ch:
+				t.Fatal("expected GetForUpdate request to block")
+			case <-time.After(10 * time.Millisecond):
+				// sleep for a bit to allow the GetForUpdate to block.
+			}
+		}
+		ensureGetForUpdateIsBlocked()
+		require.NoError(t, txn1.Commit(ctx))
+		// Finalizing just one of the shared locking transactions shouldn't unblock
+		// the GetForUpdate.
+		ensureGetForUpdateIsBlocked()
+		require.NoError(t, txn2.Rollback(ctx))
+
+		wg.Wait()
+	})
+}
+
 // TestOptimisticEvalRetry tests the case where an optimistically evaluated
 // scan encounters contention from a concurrent txn holding unreplicated
 // exclusive locks, and therefore re-evaluates pessimistically, and eventually
