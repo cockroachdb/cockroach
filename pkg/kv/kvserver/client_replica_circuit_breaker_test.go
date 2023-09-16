@@ -1069,14 +1069,14 @@ func (cbt *circuitBreakerTest) Write(idx int) error {
 func (cbt *circuitBreakerTest) Read(idx int) error {
 	cbt.t.Helper()
 	repl := cbt.repls[idx]
-	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey(), kvpb.NonLocking)
+	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey())
 	return cbt.Send(idx, get)
 }
 
 func (cbt *circuitBreakerTest) FollowerRead(idx int) error {
 	cbt.t.Helper()
 	repl := cbt.repls[idx]
-	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey(), kvpb.NonLocking)
+	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey())
 	ctx := context.Background()
 	ts := repl.GetCurrentClosedTimestamp(ctx)
 	return cbt.SendCtxTS(ctx, idx, get, ts)
