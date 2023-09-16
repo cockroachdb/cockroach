@@ -287,7 +287,7 @@ func pollInFlightTrace(
 	return trace, err
 }
 
-func (c inFlightTraceCollector) finish() {
+func (c *inFlightTraceCollector) finish() {
 	if c.cancel == nil {
 		// The in-flight trace collector goroutine wasn't started.
 		return
