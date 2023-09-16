@@ -280,18 +280,18 @@ func batchRun(
 func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation:
-		fn := (*kv.Batch).Get
-		if o.ForUpdate {
-			fn = (*kv.Batch).GetForUpdate
-		}
-		if o.ForShare {
-			fn = (*kv.Batch).GetForShare
-		}
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
 			if o.SkipLocked {
 				b.Header.WaitPolicy = lock.WaitPolicy_SkipLocked
 			}
-			fn(b, o.Key)
+			dur := kvpb.BestEffort
+			if o.ForUpdate {
+				(*kv.Batch).GetForUpdate(b, o.Key, dur)
+			} else if o.ForShare {
+				(*kv.Batch).GetForShare(b, o.Key, dur)
+			} else {
+				(*kv.Batch).Get(b, o.Key)
+			}
 		})
 		o.Result = resultInit(ctx, err)
 		if err != nil {
@@ -316,29 +316,28 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 		}
 		o.Result.OptionalTimestamp = ts
 	case *ScanOperation:
-		fn := (*kv.Batch).Scan
-		if o.Reverse {
-			if o.ForUpdate {
-				fn = (*kv.Batch).ReverseScanForUpdate
-			} else if o.ForShare {
-				fn = (*kv.Batch).ReverseScanForShare
-			} else {
-				fn = (*kv.Batch).ReverseScan
-			}
-		} else {
-			if o.ForUpdate {
-				fn = (*kv.Batch).ScanForUpdate
-			} else if o.ForShare {
-				fn = (*kv.Batch).ScanForShare
-			} else {
-				fn = (*kv.Batch).Scan
-			}
-		}
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
 			if o.SkipLocked {
 				b.Header.WaitPolicy = lock.WaitPolicy_SkipLocked
 			}
-			fn(b, o.Key, o.EndKey)
+			dur := kvpb.BestEffort
+			if o.Reverse {
+				if o.ForUpdate {
+					(*kv.Batch).ReverseScanForUpdate(b, o.Key, o.EndKey, dur)
+				} else if o.ForShare {
+					(*kv.Batch).ReverseScanForShare(b, o.Key, o.EndKey, dur)
+				} else {
+					(*kv.Batch).ReverseScan(b, o.Key, o.EndKey)
+				}
+			} else {
+				if o.ForUpdate {
+					(*kv.Batch).ScanForUpdate(b, o.Key, o.EndKey, dur)
+				} else if o.ForShare {
+					(*kv.Batch).ScanForShare(b, o.Key, o.EndKey, dur)
+				} else {
+					(*kv.Batch).Scan(b, o.Key, o.EndKey)
+				}
+			}
 		})
 		o.Result = resultInit(ctx, err)
 		if err != nil {
@@ -443,8 +442,10 @@ func applyBatchOp(
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
 		case *GetOperation:
+			// TODO(arul): Looks like I forgot to add shared locks here.
+			dur := kvpb.BestEffort
 			if subO.ForUpdate {
-				b.GetForUpdate(subO.Key)
+				b.GetForUpdate(subO.Key, dur)
 			} else {
 				b.Get(subO.Key)
 			}
@@ -452,12 +453,13 @@ func applyBatchOp(
 			b.Put(subO.Key, subO.Value())
 			setLastReqSeq(b, subO.Seq)
 		case *ScanOperation:
+			dur := kvpb.BestEffort
 			if subO.Reverse && subO.ForUpdate {
-				b.ReverseScanForUpdate(subO.Key, subO.EndKey)
+				b.ReverseScanForUpdate(subO.Key, subO.EndKey, dur)
 			} else if subO.Reverse {
 				b.ReverseScan(subO.Key, subO.EndKey)
 			} else if subO.ForUpdate {
-				b.ScanForUpdate(subO.Key, subO.EndKey)
+				b.ScanForUpdate(subO.Key, subO.EndKey, dur)
 			} else {
 				b.Scan(subO.Key, subO.EndKey)
 			}
