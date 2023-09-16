@@ -170,6 +170,9 @@ func (cm *CertificateManager) RegisterSignalHandler(
 				return
 			case sig := <-ch:
 				log.Ops.Infof(ctx, "received signal %q, triggering certificate reload", sig)
+				if cache := cm.clientCertExpirationCache; cache != nil {
+					cache.Clear()
+				}
 				if err := cm.LoadCertificates(); err != nil {
 					log.Ops.Warningf(ctx, "could not reload certificates: %v", err)
 					log.StructuredEvent(ctx, &eventpb.CertsReload{Success: false, ErrorMessage: err.Error()})
@@ -187,9 +190,9 @@ func (cm *CertificateManager) RegisterExpirationCache(cache *ClientCertExpiratio
 	cm.clientCertExpirationCache = cache
 }
 
-// MaybeUpsertClientExpiration updates the updates or inserts the expiration
-// time for the given client certificate. An update is contingent on whether the
-// old expiration is after the new expiration.
+// MaybeUpsertClientExpiration updates or inserts the expiration time for the
+// given client certificate. An update is contingent on whether the old
+// expiration is after the new expiration.
 func (cm *CertificateManager) MaybeUpsertClientExpiration(
 	ctx context.Context, identity username.SQLUsername, expiration int64,
 ) {

@@ -264,7 +264,7 @@ func TestGenerateNodeCerts(t *testing.T) {
 // client.root.crt: client certificate for the root user.
 // client-tenant.10.crt: tenant client certificate for tenant 10.
 // tenant-signing.10.crt: tenant signing certificate for tenant 10.
-func generateBaseCerts(certsDir string) error {
+func generateBaseCerts(certsDir string, clientCertLifetime time.Duration) error {
 	{
 		caKey := filepath.Join(certsDir, certnames.EmbeddedCAKey)
 
@@ -286,7 +286,7 @@ func generateBaseCerts(certsDir string) error {
 			certsDir,
 			caKey,
 			testKeySize,
-			time.Hour*48,
+			clientCertLifetime,
 			true,
 			username.RootUserName(),
 			[]roachpb.TenantID{roachpb.SystemTenantID},
@@ -329,7 +329,7 @@ func generateBaseCerts(certsDir string) error {
 // client.node.crt: node client cert: signed by ca-client.crt
 // client.root.crt: root client cert: signed by ca-client.crt
 func generateSplitCACerts(certsDir string) error {
-	if err := generateBaseCerts(certsDir); err != nil {
+	if err := generateBaseCerts(certsDir, 48*time.Hour); err != nil {
 		return err
 	}
 
@@ -384,7 +384,7 @@ func TestUseCerts(t *testing.T) {
 	defer ResetTest()
 	certsDir := t.TempDir()
 
-	if err := generateBaseCerts(certsDir); err != nil {
+	if err := generateBaseCerts(certsDir, 48*time.Hour); err != nil {
 		t.Fatal(err)
 	}
 
