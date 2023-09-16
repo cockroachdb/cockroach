@@ -88,6 +88,7 @@ func NewClientCertExpirationCache(
 		},
 		OnEvictedEntry: func(entry *cache.Entry) {
 			gauge := entry.Value.(*aggmetric.Gauge)
+			gauge.Update(0)
 			gauge.Unlink()
 			c.mu.acc.Shrink(ctx, int64(unsafe.Sizeof(*gauge)))
 		},
