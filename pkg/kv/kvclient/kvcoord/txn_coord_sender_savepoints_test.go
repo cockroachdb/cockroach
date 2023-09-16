@@ -174,7 +174,7 @@ func TestSavepoints(t *testing.T) {
 			case "get":
 				b := txn.NewBatch()
 				if td.HasArg("locking") {
-					b.GetForUpdate(td.CmdArgs[0].Key)
+					b.GetForUpdate(td.CmdArgs[0].Key, kvpb.BestEffort)
 				} else {
 					b.Get(td.CmdArgs[0].Key)
 				}

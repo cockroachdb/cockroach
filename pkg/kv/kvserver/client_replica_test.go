@@ -4983,7 +4983,7 @@ func TestOptimisticEvalRetry(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	txn1 := db.NewTxn(ctx, "locking txn")
-	_, err := txn1.ScanForUpdate(ctx, "a", "c", 0)
+	_, err := txn1.ScanForUpdate(ctx, "a", "c", 0, kvpb.BestEffort)
 	require.NoError(t, err)
 
 	readDone := make(chan error)
@@ -5038,7 +5038,7 @@ func TestOptimisticEvalNoContention(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	txn1 := db.NewTxn(ctx, "locking txn")
-	_, err := txn1.ScanForUpdate(ctx, "b", "c", 0)
+	_, err := txn1.ScanForUpdate(ctx, "b", "c", 0, kvpb.BestEffort)
 	require.NoError(t, err)
 
 	readDone := make(chan error)
@@ -5165,7 +5165,7 @@ func BenchmarkOptimisticEvalForLocks(b *testing.B) {
 					go func() {
 						for {
 							txn := db.NewTxn(ctx, "locking txn")
-							_, err = txn.ScanForUpdate(ctx, lockStart, "c", 0)
+							_, err = txn.ScanForUpdate(ctx, lockStart, "c", 0, kvpb.BestEffort)
 							require.NoError(b, err)
 							time.Sleep(5 * time.Millisecond)
 							// Normally, it would do a write here, but we don't bother.
