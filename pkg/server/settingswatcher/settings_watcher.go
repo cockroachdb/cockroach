@@ -62,6 +62,12 @@ type SettingsWatcher struct {
 		storageClusterVersion clusterversion.ClusterVersion
 	}
 
+	// notifyTenantReadOnlyChange is called when a TenantReadOnly setting
+	// changes. It is only set when the SettingsWatcher is created with
+	// NewWithNotifier. It is used by the tenant setting override watcher
+	// to pick up defaults set via system.settings in the system tenant.
+	notifyTenantReadOnlyChange func(kvpb.TenantSetting)
+
 	// testingWatcherKnobs allows the client to inject testing knobs into
 	// the underlying rangefeedcache.Watcher.
 	testingWatcherKnobs *rangefeedcache.TestingKnobs
@@ -90,6 +96,41 @@ func New(
 		dec:      MakeRowDecoder(codec),
 		storage:  storage,
 	}
+}
+
+// NewWithNotifier constructs a new SettingsWatcher which notifies
+// an observer about changes to TenantReadOnly settings.
+func NewWithNotifier(
+	clock *hlc.Clock,
+	codec keys.SQLCodec,
+	settingsToUpdate *cluster.Settings,
+	f *rangefeed.Factory,
+	stopper *stop.Stopper,
+	notify func(kvpb.TenantSetting),
+	storage Storage, // optional
+) *SettingsWatcher {
+	w := New(clock, codec, settingsToUpdate, f, stopper, storage)
+
+	// When there is no explicit value in system.settings for a TenantReadOnly
+	// setting, we still want to propagate the system tenant's idea
+	// of the default value as an override to secondary tenants.
+	//
+	// This is because the secondary tenant may be using another version
+	// of the executable, where there is another default value for the
+	// setting. We want to make sure that the secondary tenant's idea of
+	// the default value is the same as the system tenant's.
+
+	w.notifyTenantReadOnlyChange = notify
+	tenantReadOnlyKeys := settings.TenantReadOnlyKeys()
+	for _, key := range tenantReadOnlyKeys {
+		knownSetting, payload := getTenantReadOnlyGlobalDefault(key)
+		if !knownSetting {
+			panic(errors.AssertionFailedf("programming error: unknown setting %s", key))
+		}
+		notify(payload)
+	}
+
+	return w
 }
 
 // NewWithOverrides constructs a new SettingsWatcher which allows external
@@ -259,15 +300,19 @@ func (s *SettingsWatcher) handleKV(
 	}
 	settingKey := settings.InternalKey(settingKeyS)
 
+	setting, ok := settings.LookupForLocalAccessByKey(settingKey, s.codec.ForSystemTenant())
+	if !ok {
+		log.Warningf(ctx, "unknown setting %s, skipping update", settingKey)
+		return nil
+	}
 	if !s.codec.ForSystemTenant() {
-		setting, ok := settings.LookupForLocalAccessByKey(settingKey, s.codec.ForSystemTenant())
-		if !ok {
-			log.Warningf(ctx, "unknown setting %s, skipping update", settingKey)
-			return nil
-		}
 		if setting.Class() != settings.TenantWritable {
 			log.Warningf(ctx, "ignoring read-only setting %s", settingKey)
 			return nil
+		}
+	} else {
+		if setting.Class() == settings.TenantReadOnly {
+			s.setTenantReadOnlyDefault(ctx, settingKey, val)
 		}
 	}
 
@@ -510,4 +555,48 @@ func (s *SettingsWatcher) GetClusterVersionFromStorage(
 
 func (s *SettingsWatcher) GetTenantClusterVersion() clusterversion.Handle {
 	return s.settings.Version
+}
+
+// setTenantReadOnlyDefault is called by the watcher above for any
+// changes to system.settings made on a setting with class
+// TenantReadOnly.
+func (s *SettingsWatcher) setTenantReadOnlyDefault(
+	ctx context.Context, key settings.InternalKey, val settings.EncodedValue,
+) {
+	if s.notifyTenantReadOnlyChange == nil {
+		return
+	}
+	payload := kvpb.TenantSetting{InternalKey: key, Value: val}
+	if val == (settings.EncodedValue{}) {
+		// We do not have an explicit value in system.settings any more.
+		// However we still want to propagate the settings' global
+		// registered default as a pseudo-override to secondary tenants,
+		// to ensure they use a consistent default (they might run a
+		// different executable version where the default was different
+		// from ours).
+		var knownSetting bool
+		knownSetting, payload = getTenantReadOnlyGlobalDefault(key)
+		if !knownSetting {
+			// We are processing a KV deletion for a setting override
+			// corresponding to a setting that is not registered any more.
+			// This is possible when the override was set in a previous
+			// version, then the setting was removed in a newer version.
+			return
+		}
+	}
+	s.notifyTenantReadOnlyChange(payload)
+}
+
+func getTenantReadOnlyGlobalDefault(key settings.InternalKey) (bool, kvpb.TenantSetting) {
+	setting, ok := settings.LookupForLocalAccessByKey(key, settings.ForSystemTenant)
+	if !ok {
+		return false, kvpb.TenantSetting{}
+	}
+	return true, kvpb.TenantSetting{
+		InternalKey: key,
+		Value: settings.EncodedValue{
+			Value: setting.EncodedDefault(),
+			Type:  setting.Typ(),
+		},
+	}
 }

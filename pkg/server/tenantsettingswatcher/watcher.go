@@ -39,13 +39,13 @@ import (
 //	if err := w.Start(ctx); err != nil { ... }
 //
 //	// Get overrides and keep them up to date.
-//	all, allCh := w.AllTenantOverrides()
-//	tenant, tenantCh := w.TenantOverrides(tenantID)
+//	all, allCh := w.GetAllTenantOverrides()
+//	tenant, tenantCh := w.GetTenantOverrides(tenantID)
 //	select {
 //	case <-allCh:
-//	  all, allCh = w.AllTenantOverrides()
+//	  all, allCh = w.GetAllTenantOverrides()
 //	case <-tenantCh:
-//	  tenant, tenantCh = w.TenantOverrides(tenantID)
+//	  tenant, tenantCh = w.GetTenantOverrides(tenantID)
 //	case <-ctx.Done():
 //	  ...
 //	}
@@ -236,4 +236,13 @@ func (w *Watcher) GetAllTenantOverrides() (
 	changeCh <-chan struct{},
 ) {
 	return w.GetTenantOverrides(allTenantOverridesID)
+}
+
+// SetTenantReadOnlyDefault is called by the systemm tenant's setting
+// watcher when a TenantReadOnly setting is updated in system.settings
+// (as well as during initialization, to pick up all global defauls).
+// These defaults are used by the override store as override when
+// there is no specific override in system.tenant_settings.
+func (w *Watcher) SetTenantReadOnlyDefault(payload kvpb.TenantSetting) {
+	w.store.setTenantReadOnlyDefault(payload)
 }

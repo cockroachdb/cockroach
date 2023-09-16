@@ -40,6 +40,11 @@ type overridesStore struct {
 		// this ever becomes a problem, we can periodically purge entries with no
 		// overrides.
 		tenants map[roachpb.TenantID]*tenantOverrides
+
+		// readOnlyDefaults contains the values of the TenantReadOnly settings
+		// set in the system tenant's system.settings. This is used
+		// as default value when there is no override in tenant_settings.
+		readOnlyDefaults map[settings.InternalKey]settings.EncodedValue
 	}
 }
 
@@ -145,6 +150,17 @@ func (s *overridesStore) SetTenantOverride(tenantID roachpb.TenantID, setting kv
 	// 2. Add the after setting, unless we are removing it.
 	if setting.Value != (settings.EncodedValue{}) {
 		after = append(after, setting)
+	} else {
+		// The override is being removed. If we have a global
+		// default, use it instead.
+		if tenantID == allTenantOverridesID {
+			if defaultVal, ok := s.mu.readOnlyDefaults[setting.InternalKey]; ok {
+				after = append(after, kvpb.TenantSetting{
+					InternalKey: setting.InternalKey,
+					Value:       defaultVal,
+				})
+			}
+		}
 	}
 	// Skip any existing setting for this setting key.
 	if len(before) > 0 && before[0].InternalKey == setting.InternalKey {
@@ -153,4 +169,55 @@ func (s *overridesStore) SetTenantOverride(tenantID roachpb.TenantID, setting kv
 	// 3. Append all settings after setting.InternalKey.
 	after = append(after, before...)
 	s.mu.tenants[tenantID] = newTenantOverrides(after)
+}
+
+// setTenantReadOnlyDefault is called when a change is made to a
+// TenantReadOnly setting in the system tenant's system.settings
+// table. Values set this way must serve as default value
+// if there is no override in system.tenant_settings.
+func (s *overridesStore) setTenantReadOnlyDefault(readOnlyDefault kvpb.TenantSetting) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	readOnlyDefaults := s.mu.readOnlyDefaults
+	if readOnlyDefaults == nil {
+		readOnlyDefaults = make(map[settings.InternalKey]settings.EncodedValue)
+	}
+	readOnlyDefaults[readOnlyDefault.InternalKey] = readOnlyDefault.Value
+	s.mu.readOnlyDefaults = readOnlyDefaults
+
+	// Inject the new read-only default into the all-tenants
+	// override map.
+	var overrides []kvpb.TenantSetting
+	if existing, ok := s.mu.tenants[allTenantOverridesID]; ok {
+		overrides = existing.overrides
+		close(existing.changeCh)
+	}
+
+	alreadyPresentInOverrides := make(map[settings.InternalKey]struct{}, len(overrides))
+	for _, setting := range overrides {
+		alreadyPresentInOverrides[setting.InternalKey] = struct{}{}
+	}
+	if _, present := alreadyPresentInOverrides[readOnlyDefault.InternalKey]; !present {
+		// There is a custom value for a TenantReadOnly setting from the
+		// system tenant's system.settings table, but it is not present in
+		// the all-tenants override map in tenant_settings.
+		//
+		// So we inject the default value into the all-tenants overrides.
+
+		before := overrides
+		after := make([]kvpb.TenantSetting, 0, len(overrides)+1)
+		// 1. Add all settings up to the newly added default.
+		for len(before) > 0 && before[0].InternalKey < readOnlyDefault.InternalKey {
+			after = append(after, before[0])
+			before = before[1:]
+		}
+		// 2. Add the default.
+		after = append(after, readOnlyDefault)
+		// 3. Append all settings after the default.
+		after = append(after, before...)
+
+		overrides = after
+	}
+	s.mu.tenants[allTenantOverridesID] = newTenantOverrides(overrides)
 }
