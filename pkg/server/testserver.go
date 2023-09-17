@@ -1335,6 +1335,10 @@ func (ts *testServer) waitForTenantReadinessImpl(
 	// waiting out the closed timestamp interval required to see new updates.
 	ts.node.tenantInfoWatcher.TestingRestart()
 
+	// Ditto for cluster settings and setting overrides.
+	ts.sqlServer.settingsWatcher.TestingRestart()
+	ts.node.tenantSettingsWatcher.TestingRestart()
+
 	log.Infof(ctx, "waiting for rangefeed to catch up with record for tenant %v", tenantID)
 
 	// Wait for the watcher to handle the complete update from the initial scan
