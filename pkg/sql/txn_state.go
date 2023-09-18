@@ -71,6 +71,9 @@ type txnState struct {
 		// auto-retry we're currently in. It's 0 whenever the transaction state is not
 		// stateOpen.
 		autoRetryCounter int32
+
+		// TODO xin
+		nonRetryableErr error
 	}
 
 	// connCtx is the connection's context. This is the parent of Ctx.
