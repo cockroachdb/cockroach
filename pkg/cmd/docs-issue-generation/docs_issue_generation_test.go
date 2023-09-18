@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -3021,10 +3020,11 @@ Release note (sql change): Something something something...`,
 }
 
 func TestExtractEpicIDs(t *testing.T) {
-	skip.WithIssue(t, 110682, "Flakes when run under stressful conditions")
+	//skip.WithIssue(t, 110682, "Flakes when run under stressful conditions")
 	testCases := []struct {
 		message  string
 		expected map[string]int
+		testName string
 	}{
 		{
 			message: `logictestccl: skip flaky TestCCLLogic/fakedist-metadata/partitioning_enum
@@ -3033,6 +3033,7 @@ Epic CRDB-491
 Fix:  #73834
 Release note (bug fix): Fixin the bug`,
 			expected: map[string]int{"CRDB-491": 1},
+			testName: "working test",
 		},
 		{
 			message: `lots of variations
@@ -3040,6 +3041,7 @@ epic: CRDB-9234.
 epic CRDB-235, DOC-6883;   DEVINF-392	https://cockroachlabs.atlassian.net/browse/CRDB-28708
 Release note (sql change): Import now checks readability...`,
 			expected: map[string]int{"CRDB-18955": 1, "CRDB-235": 1, "DOC-6883": 1},
+			testName: "broken test",
 		},
 	}
 
@@ -3076,10 +3078,14 @@ Release note (sql change): Import now checks readability...`,
 			}
 			return epicMap[issueKey].IsEpic, epicMap[issueKey].EpicKey, nil
 		})()
-		t.Run(tc.message, func(t *testing.T) {
+		fmt.Printf("test name: %s\n", tc.testName)
+		x := t.Run(tc.message, func(t *testing.T) {
 			result := extractEpicIDs(tc.message)
 			assert.Equal(t, tc.expected, result)
 		})
+		if !x {
+			fmt.Println("Test failed!")
+		}
 	}
 }
 

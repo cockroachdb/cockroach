@@ -90,9 +90,12 @@ func extractInformIssueIDs(message string) map[string]int {
 
 func extractEpicIDs(message string) map[string]int {
 	result := extractStringsFromMessage(message, epicRefRE, jiraIssueRefRE)
+	//fmt.Printf("%+v\n", result)
 	for issueKey, count := range result {
 		var isEpic bool
 		epicKey, ok := invalidEpicRefs[issueKey]
+		//fmt.Printf("issueKey: %s\n", issueKey)
+		//fmt.Printf("invalidEpicRefs: %+v\n", invalidEpicRefs)
 		if ok {
 			isEpic = epicKey == issueKey
 		} else {
@@ -110,6 +113,9 @@ func extractEpicIDs(message string) map[string]int {
 				invalidEpicRefs[issueKey] = epicKey
 			}
 		}
+		//fmt.Printf("epicKey: %s\n", epicKey)
+		//fmt.Printf("isEpic: %v\n", isEpic)
+		//fmt.Println("---")
 		if isEpic {
 			continue
 		} else if issueKey != epicKey {
