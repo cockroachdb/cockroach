@@ -1022,8 +1022,25 @@ func (opts *MVCCGetOptions) validate() error {
 	if opts.Inconsistent && opts.FailOnMoreRecent {
 		return errors.Errorf("cannot allow inconsistent reads with fail on more recent option")
 	}
+	if opts.FailOnMoreRecent && opts.Strength == lock.None {
+		return errors.Errorf("cannot use strength %s with FailOnMoreRecent option", opts.Strength)
+	}
 	if opts.DontInterleaveIntents && opts.SkipLocked {
 		return errors.Errorf("cannot disable interleaved intents with skip locked option")
+	}
+	switch opts.Strength {
+	case lock.None:
+		if opts.FailOnMoreRecent {
+			return errors.Errorf("cannot use strength %s with FailOnMoreRecent option", opts.Strength)
+		}
+	case lock.Shared, lock.Exclusive:
+		if !opts.FailOnMoreRecent {
+			return errors.Errorf("cannot use strength %s when FailOnMoreRecent is not set", opts.Strength)
+		}
+	case lock.Intent:
+		return errors.Errorf("invalid lock strength %s", opts.Strength)
+	default:
+		return errors.Errorf("unknown lock strength %s", opts.Strength)
 	}
 	return nil
 }
@@ -3127,9 +3144,11 @@ func MVCCDeleteRange(
 	// more recent than MaxTimestamp), but it provides added protection against
 	// the scan returning a WriteTooOld error.
 	scanTs := timestamp
+	str := lock.Exclusive
 	failOnMoreRecent := true
 	if timestamp.IsEmpty() /* inline */ {
 		scanTs = hlc.MaxTimestamp
+		str = lock.None
 		failOnMoreRecent = false
 	}
 	// In order for this operation to be idempotent when run transactionally, we
@@ -3142,7 +3161,7 @@ func MVCCDeleteRange(
 		scanTxn = prevSeqTxn
 	}
 	res, err := MVCCScan(ctx, rw, key, endKey, scanTs, MVCCScanOptions{
-		FailOnMoreRecent: failOnMoreRecent, Txn: scanTxn, MaxKeys: max,
+		FailOnMoreRecent: failOnMoreRecent, Strength: str, Txn: scanTxn, MaxKeys: max,
 	})
 	if err != nil {
 		return nil, nil, 0, err
@@ -4094,6 +4113,20 @@ func (opts *MVCCScanOptions) validate() error {
 	}
 	if opts.DontInterleaveIntents && opts.SkipLocked {
 		return errors.Errorf("cannot disable interleaved intents with skip locked option")
+	}
+	switch opts.Strength {
+	case lock.None:
+		if opts.FailOnMoreRecent {
+			return errors.Errorf("cannot use strength %s with FailOnMoreRecent option", opts.Strength)
+		}
+	case lock.Shared, lock.Exclusive:
+		if !opts.FailOnMoreRecent {
+			return errors.Errorf("cannot use strength %s when FailOnMoreRecent is not set", opts.Strength)
+		}
+	case lock.Intent:
+		return errors.Errorf("invalid lock strength %s", opts.Strength)
+	default:
+		return errors.Errorf("unknown lock strength %s", opts.Strength)
 	}
 	return nil
 }

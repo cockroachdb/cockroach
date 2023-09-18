@@ -1377,9 +1377,18 @@ func cmdGet(e *evalCtx) error {
 	if e.hasArg("failOnMoreRecent") {
 		opts.FailOnMoreRecent = true
 	}
-	str := lock.None
+	// If no str argument is provided, infer it from the failOnMoreRecent option
+	// to be lock.Exclusive. This is how things behaved prior to the introduction
+	// of Shared locks.
+	var str lock.Strength
 	if e.hasArg("str") {
 		str = e.getStrength()
+	} else {
+		if opts.FailOnMoreRecent {
+			str = lock.Exclusive
+		} else {
+			str = lock.None
+		}
 	}
 	opts.Strength = str
 	opts.Uncertainty = uncertainty.Interval{
@@ -1682,9 +1691,18 @@ func cmdScan(e *evalCtx) error {
 	if e.hasArg("failOnMoreRecent") {
 		opts.FailOnMoreRecent = true
 	}
-	str := lock.None
+	// If no str argument is provided, infer it from the failOnMoreRecent option
+	// to be lock.Exclusive. This is how things behaved prior to the introduction
+	// of Shared locks.
+	var str lock.Strength
 	if e.hasArg("str") {
 		str = e.getStrength()
+	} else {
+		if opts.FailOnMoreRecent {
+			str = lock.Exclusive
+		} else {
+			str = lock.None
+		}
 	}
 	opts.Strength = str
 	opts.Uncertainty = uncertainty.Interval{
