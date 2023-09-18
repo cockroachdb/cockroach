@@ -416,7 +416,9 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				var str lock.Strength
 				if d.HasArg("str") {
-					str = concurrency.ScanLockStrength(t, d)
+					var strS string
+					d.ScanArgs(t, "str", &strS)
+					str = concurrency.GetStrength(t, d, strS)
 				} else {
 					// If no lock strength is provided in the test, infer it from the
 					// durability.
