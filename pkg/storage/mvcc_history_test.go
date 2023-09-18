@@ -85,7 +85,7 @@ var (
 // resolve_intent         t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]] [targetBytes=<int>]
 // resolve_intent_range   t=<name> k=<key> end=<key> [status=<txnstatus>] [maxKeys=<int>] [targetBytes=<int>]
 // check_intent           k=<key> [none]
-// add_unreplicated_lock  t=<name> k=<key>
+// add_unreplicated_lock  t=<name> k=<key> [str=<strength>]
 // check_for_acquire_lock t=<name> k=<key> str=<strength>
 // acquire_lock           t=<name> k=<key> str=<strength>
 //
@@ -99,8 +99,8 @@ var (
 // put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
 // put_blind_inline	k=<key> v=<string> [prev=<string>]
-// get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [maxKeys=<int>] [targetBytes=<int>] [allowEmpty]
-// scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [wholeRows[=<int>]] [allowEmpty]
+// get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [str=<strength>] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [maxKeys=<int>] [targetBytes=<int>] [allowEmpty]
+// scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [str=<strength>] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [wholeRows[=<int>]] [allowEmpty]
 // export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxIntents=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
 //
 // iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]]
@@ -400,9 +400,9 @@ func TestMVCCHistories(t *testing.T) {
 				}
 				sort.Strings(ks)
 				for _, k := range ks {
-					txn := e.unreplLocks[k]
+					info := e.unreplLocks[k]
 					buf.Printf("lock (%s): %v/%s -> %+v\n",
-						lock.Unreplicated, k, lock.Exclusive, txn)
+						lock.Unreplicated, k, info.str, info.txn)
 				}
 			}
 			return nil
@@ -1055,7 +1055,14 @@ func cmdCheckIntent(e *evalCtx) error {
 func cmdAddUnreplicatedLock(e *evalCtx) error {
 	txn := e.getTxn(mandatory)
 	key := e.getKey()
-	e.unreplLocks[string(key)] = &txn.TxnMeta
+	str := lock.Exclusive
+	if e.hasArg("str") {
+		str = e.getStrength()
+	}
+	e.unreplLocks[string(key)] = unreplicatedLockInfo{
+		txn: &txn.TxnMeta,
+		str: str,
+	}
 	return nil
 }
 
@@ -1370,6 +1377,11 @@ func cmdGet(e *evalCtx) error {
 	if e.hasArg("failOnMoreRecent") {
 		opts.FailOnMoreRecent = true
 	}
+	str := lock.None
+	if e.hasArg("str") {
+		str = e.getStrength()
+	}
+	opts.Strength = str
 	opts.Uncertainty = uncertainty.Interval{
 		GlobalLimit: e.getTsWithName("globalUncertaintyLimit"),
 		LocalLimit:  hlc.ClockTimestamp(e.getTsWithName("localUncertaintyLimit")),
@@ -1670,6 +1682,11 @@ func cmdScan(e *evalCtx) error {
 	if e.hasArg("failOnMoreRecent") {
 		opts.FailOnMoreRecent = true
 	}
+	str := lock.None
+	if e.hasArg("str") {
+		str = e.getStrength()
+	}
+	opts.Strength = str
 	opts.Uncertainty = uncertainty.Interval{
 		GlobalLimit: e.getTsWithName("globalUncertaintyLimit"),
 		LocalLimit:  hlc.ClockTimestamp(e.getTsWithName("localUncertaintyLimit")),
@@ -2294,7 +2311,7 @@ type evalCtx struct {
 	td                *datadriven.TestData
 	txns              map[string]*roachpb.Transaction
 	txnCounter        uint32
-	unreplLocks       map[string]*enginepb.TxnMeta
+	unreplLocks       map[string]unreplicatedLockInfo
 	ms                *enginepb.MVCCStats
 	sstWriter         *storage.SSTWriter
 	sstFile           *storage.MemObject
@@ -2307,7 +2324,7 @@ func newEvalCtx(ctx context.Context, engine storage.Engine) *evalCtx {
 		st:          cluster.MakeTestingClusterSettings(),
 		engine:      engine,
 		txns:        make(map[string]*roachpb.Transaction),
-		unreplLocks: make(map[string]*enginepb.TxnMeta),
+		unreplLocks: make(map[string]unreplicatedLockInfo),
 	}
 }
 
@@ -2626,7 +2643,7 @@ func (e *evalCtx) newLockTableView(
 
 // mockLockTableView is a mock implementation of LockTableView.
 type mockLockTableView struct {
-	unreplLocks map[string]*enginepb.TxnMeta
+	unreplLocks map[string]unreplicatedLockInfo
 	txn         *roachpb.Transaction
 	ts          hlc.Timestamp
 }
@@ -2638,13 +2655,40 @@ func (lt *mockLockTableView) IsKeyLockedByConflictingTxn(
 	if !ok {
 		return false, nil, nil
 	}
-	if lt.txn != nil && lt.txn.ID == holder.ID {
+	if lt.txn != nil && lt.txn.ID == holder.txn.ID {
 		return false, nil, nil
 	}
-	if s == lock.None && lt.ts.Less(holder.WriteTimestamp) {
-		return false, nil, nil
+
+	// We should only be dealing with s == lock.{None || Shared || Exclusive}.
+	// Moreover, holder.str == lock.{Shared || Exclusive}.
+	switch s {
+	case lock.None:
+		switch holder.str {
+		case lock.Shared:
+			return false, nil, nil
+		case lock.Exclusive:
+			if holder.txn.WriteTimestamp.LessEq(lt.ts) {
+				return true, holder.txn, nil
+			}
+			return false, nil, nil
+		default:
+			panic(fmt.Sprintf("unexpected lock strength %s", holder.str))
+		}
+	case lock.Shared:
+		switch holder.str {
+		case lock.Shared:
+			return false, nil, nil
+		case lock.Exclusive:
+			return true, holder.txn, nil
+		default:
+			panic(fmt.Sprintf("unexpected lock strength %s", holder.str))
+		}
+	case lock.Exclusive:
+		// We've handled the case where we ourselves are the lockholder above.
+		return true, holder.txn, nil
+	default:
+		panic(fmt.Sprintf("unexpected lock strength %s", s))
 	}
-	return true, holder, nil
 }
 
 func (e *evalCtx) visitWrappedIters(fn func(it storage.SimpleMVCCIterator) (done bool)) {
@@ -2835,3 +2879,10 @@ type noopCloseReader struct {
 }
 
 func (noopCloseReader) Close() {}
+
+// unreplicatedLockInfo captures information about an unreplicated lock. It
+// represents an unreplicated lock when associated with a key.
+type unreplicatedLockInfo struct {
+	txn *enginepb.TxnMeta
+	str lock.Strength
+}

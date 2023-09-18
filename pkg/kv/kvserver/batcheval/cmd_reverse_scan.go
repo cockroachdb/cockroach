@@ -51,6 +51,7 @@ func ReverseScan(
 		AllowEmpty:            h.AllowEmpty,
 		WholeRowsOfSize:       h.WholeRowsOfSize,
 		FailOnMoreRecent:      args.KeyLockingStrength != lock.None,
+		Strength:              args.KeyLockingStrength,
 		Reverse:               true,
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
 		LockTable:             cArgs.Concurrency,

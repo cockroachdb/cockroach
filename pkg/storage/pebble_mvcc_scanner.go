@@ -435,6 +435,7 @@ type pebbleMVCCScanner struct {
 	skipLocked       bool
 	tombstones       bool
 	failOnMoreRecent bool
+	strength         lock.Strength
 	keyBuf           []byte
 	savedBuf         []byte
 	lazyFetcherBuf   pebble.LazyFetcher
@@ -1805,11 +1806,7 @@ func (p *pebbleMVCCScanner) isKeyLockedByConflictingTxn(
 		p.err = err
 		return false, false
 	}
-	strength := lock.None
-	if p.failOnMoreRecent {
-		strength = lock.Exclusive
-	}
-	ok, txn, err := p.lockTable.IsKeyLockedByConflictingTxn(key, strength)
+	ok, txn, err := p.lockTable.IsKeyLockedByConflictingTxn(key, p.strength)
 	if err != nil {
 		p.err = err
 		return false, false

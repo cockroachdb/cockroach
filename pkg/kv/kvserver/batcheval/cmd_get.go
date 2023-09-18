@@ -38,6 +38,7 @@ func Get(
 		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:                   h.Txn,
 		FailOnMoreRecent:      args.KeyLockingStrength != lock.None,
+		Strength:              args.KeyLockingStrength,
 		ScanStats:             cArgs.ScanStats,
 		Uncertainty:           cArgs.Uncertainty,
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),

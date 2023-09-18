@@ -51,6 +51,7 @@ func Scan(
 		AllowEmpty:            h.AllowEmpty,
 		WholeRowsOfSize:       h.WholeRowsOfSize,
 		FailOnMoreRecent:      args.KeyLockingStrength != lock.None,
+		Strength:              args.KeyLockingStrength,
 		Reverse:               false,
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
 		LockTable:             cArgs.Concurrency,

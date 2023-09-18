@@ -960,6 +960,7 @@ type MVCCGetOptions struct {
 	SkipLocked       bool
 	Tombstones       bool
 	FailOnMoreRecent bool
+	Strength         lock.Strength
 	Txn              *roachpb.Transaction
 	ScanStats        *kvpb.ScanStats
 	Uncertainty      uncertainty.Interval
@@ -1222,6 +1223,7 @@ func mvccGetWithValueHeader(
 		skipLocked:       opts.SkipLocked,
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
+		strength:         opts.Strength,
 		keyBuf:           mvccScanner.keyBuf,
 	}
 
@@ -3863,6 +3865,7 @@ func mvccScanInit(
 		skipLocked:       opts.SkipLocked,
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
+		strength:         opts.Strength,
 		keyBuf:           mvccScanner.keyBuf,
 		// NB: If the `results` argument passed to this function is a pointer to
 		// mvccScanner.alloc.pebbleResults, we don't want to overwrite any
@@ -4026,6 +4029,7 @@ type MVCCScanOptions struct {
 	Tombstones       bool
 	Reverse          bool
 	FailOnMoreRecent bool
+	Strength         lock.Strength
 	Txn              *roachpb.Transaction
 	ScanStats        *kvpb.ScanStats
 	Uncertainty      uncertainty.Interval
