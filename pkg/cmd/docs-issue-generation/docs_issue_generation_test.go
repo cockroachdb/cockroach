@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -3021,7 +3020,6 @@ Release note (sql change): Something something something...`,
 }
 
 func TestExtractEpicIDs(t *testing.T) {
-	skip.WithIssue(t, 110682, "Flakes when run under stressful conditions")
 	testCases := []struct {
 		message  string
 		expected map[string]int
@@ -3071,6 +3069,10 @@ Release note (sql change): Import now checks readability...`,
 				},
 				"https://cockroachlabs.atlassian.net/browse/CRDB-28708": {
 					IsEpic:  false,
+					EpicKey: "CRDB-18955",
+				},
+				"CRDB-18955": {
+					IsEpic:  true,
 					EpicKey: "CRDB-18955",
 				},
 			}
