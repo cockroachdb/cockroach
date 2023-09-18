@@ -94,6 +94,10 @@ type ApplicationStats interface {
 		other ApplicationStats,
 	) uint64
 
+	// MaybeLogDiscardMessage is used to possibly log a message when statistics
+	// are being discarded because of memory limits.
+	MaybeLogDiscardMessage(ctx context.Context)
+
 	// NewApplicationStatsWithInheritedOptions returns a new ApplicationStats
 	// interface that inherits all memory limits of the existing
 	NewApplicationStatsWithInheritedOptions() ApplicationStats
