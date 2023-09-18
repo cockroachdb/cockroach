@@ -179,11 +179,20 @@ var logStoreTelemetryTicks = envutil.EnvOrDefaultInt(
 	6*60,
 )
 
-// defaultRangefeedSchedulerConcurency specifies how many workers rangefeed
+// defaultRangefeedSchedulerConcurrency specifies how many workers rangefeed
 // scheduler will use to perform rangefeed work. This number will be divided
 // between stores of the node.
-var defaultRangefeedSchedulerConcurency = envutil.EnvOrDefaultInt(
+var defaultRangefeedSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_RANGEFEED_SCHEDULER_WORKERS", min(4*runtime.GOMAXPROCS(0), 64))
+
+// defaultRangefeedSchedulerShardSize specifies the default maximum number of
+// scheduler worker goroutines per mutex shard. By default, we spin up 4 workers
+// per CPU core, capped at 64, so 8 is equivalent to 2 CPUs per shard, or a
+// maximum of 8 shards. Since rangefeed processing is generally cheap, this
+// significantly relieves contention, while also avoiding starvation by
+// excessive sharding.
+var defaultRangefeedSchedulerShardSize = envutil.EnvOrDefaultInt(
+	"COCKROACH_RANGEFEED_SCHEDULER_SHARD_SIZE", 8)
 
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
@@ -1236,6 +1245,10 @@ type StoreConfig struct {
 	// RangeFeedSchedulerConcurrency specifies number of rangefeed scheduler
 	// workers for the store.
 	RangeFeedSchedulerConcurrency int
+
+	// RangeFeedSchedulerShardSize specifies the maximum number of workers per
+	// scheduler shard.
+	RangeFeedSchedulerShardSize int
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events
@@ -1270,7 +1283,7 @@ func (sc *StoreConfig) Valid() bool {
 		sc.RaftElectionTimeoutTicks > 0 && sc.RaftReproposalTimeoutTicks > 0 &&
 		sc.RaftSchedulerConcurrency > 0 && sc.RaftSchedulerConcurrencyPriority > 0 &&
 		sc.RaftSchedulerShardSize > 0 && sc.ScanInterval >= 0 && sc.AmbientCtx.Tracer != nil &&
-		sc.RangeFeedSchedulerConcurrency > 0
+		sc.RangeFeedSchedulerConcurrency > 0 && sc.RangeFeedSchedulerShardSize > 0
 }
 
 // SetDefaults initializes unset fields in StoreConfig to values
@@ -1311,13 +1324,16 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 		sc.TestingKnobs.DisableQuiescence = true
 	}
 	if sc.RangeFeedSchedulerConcurrency == 0 {
-		sc.RangeFeedSchedulerConcurrency = defaultRangefeedSchedulerConcurency
+		sc.RangeFeedSchedulerConcurrency = defaultRangefeedSchedulerConcurrency
 		if numStores > 1 && sc.RangeFeedSchedulerConcurrency > 1 {
 			// We want at least two workers per store to avoid any blocking.
 			sc.RangeFeedSchedulerConcurrency = min(
 				(sc.RangeFeedSchedulerConcurrency-1)/numStores+1, // ceil division
 				2)
 		}
+	}
+	if sc.RangeFeedSchedulerShardSize == 0 {
+		sc.RangeFeedSchedulerShardSize = defaultRangefeedSchedulerShardSize
 	}
 }
 
@@ -1978,7 +1994,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	rfs := rangefeed.NewScheduler(rangefeed.SchedulerConfig{
-		Workers: s.cfg.RangeFeedSchedulerConcurrency,
+		Workers:   s.cfg.RangeFeedSchedulerConcurrency,
+		ShardSize: s.cfg.RangeFeedSchedulerShardSize,
 	})
 	if err = rfs.Start(ctx, s.stopper); err != nil {
 		return err
@@ -2400,26 +2417,26 @@ func (s *Store) startRangefeedTxnPushNotifier(ctx context.Context) {
 		ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		var schedulerIDs []int64
-		updateSchedulerIDs := func() []int64 {
-			schedulerIDs = schedulerIDs[:0]
+		makeSchedulerBatch := func() *rangefeed.SchedulerBatch {
+			batch := s.rangefeedScheduler.NewEnqueueBatch()
 			s.rangefeedReplicas.Lock()
 			for _, id := range s.rangefeedReplicas.m {
 				if id != 0 {
 					// Only process ranges that use scheduler.
-					schedulerIDs = append(schedulerIDs, id)
+					batch.Add(id)
 				}
 			}
 			s.rangefeedReplicas.Unlock()
-			return schedulerIDs
+			return batch
 		}
 
 		ticker := time.NewTicker(rangefeed.DefaultPushTxnsInterval)
 		for {
 			select {
 			case <-ticker.C:
-				activeIDs := updateSchedulerIDs()
-				s.rangefeedScheduler.EnqueueAll(activeIDs, rangefeed.PushTxnQueued)
+				batch := makeSchedulerBatch()
+				s.rangefeedScheduler.EnqueueBatch(batch, rangefeed.PushTxnQueued)
+				batch.Close()
 			case <-ctx.Done():
 				ticker.Stop()
 				return
