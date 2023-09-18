@@ -69,7 +69,7 @@ func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
 	cfg.AmbientContext.AddLogTag("rangefeed", nil)
 	p := &ScheduledProcessor{
 		Config:     cfg,
-		scheduler:  NewClientScheduler(cfg.Scheduler),
+		scheduler:  cfg.Scheduler.NewClientScheduler(),
 		reg:        makeRegistry(cfg.Metrics),
 		rts:        makeResolvedTimestamp(),
 		processCtx: cfg.AmbientContext.AnnotateCtx(context.Background()),
