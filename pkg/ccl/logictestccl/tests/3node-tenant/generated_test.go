@@ -1423,6 +1423,13 @@ func TestTenantLogic_procedure(
 	runLogicTest(t, "procedure")
 }
 
+func TestTenantLogic_procedure_plpgsql(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_plpgsql")
+}
+
 func TestTenantLogic_propagate_input_ordering(
 	t *testing.T,
 ) {
