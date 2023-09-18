@@ -2993,7 +2993,7 @@ func payloadHasError(payload fsm.EventPayload) bool {
 	return hasErr
 }
 
-func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
+func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr error) {
 	if ex.extraTxnState.shouldExecuteOnTxnFinish {
 		ex.extraTxnState.shouldExecuteOnTxnFinish = false
 		txnStart := ex.extraTxnState.txnFinishClosure.txnStartTime
@@ -3022,7 +3022,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 			)
 		}
 
-		err = ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart)
+		err = ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart, txnErr)
 		if err != nil {
 			if log.V(1) {
 				log.Warningf(ctx, "failed to record transaction stats: %s", err)
@@ -3109,6 +3109,7 @@ func (ex *connExecutor) recordTransactionFinish(
 	ev txnEvent,
 	implicit bool,
 	txnStart time.Time,
+	txnErr error,
 ) error {
 	recordingStart := timeutil.Now()
 	defer func() {
@@ -3175,6 +3176,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		// TODO(107318): add asoftime or ishistorical
 		// TODO(107318): add readonly
 		SessionData: ex.sessionData(),
+		TxnErr:      txnErr,
 	}
 
 	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {

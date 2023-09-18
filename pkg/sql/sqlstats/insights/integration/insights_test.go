@@ -193,6 +193,7 @@ func TestFailedInsights(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const appName = "TestFailedInsights"
+	re := regexp.MustCompile(",?SlowExecution,?")
 
 	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
 	ctx := context.Background()
@@ -275,12 +276,7 @@ FROM crdb_internal.node_execution_insights
 WHERE query = $1 AND app_name = $2 `,
 					tc.fingerprint, appName)
 
-				err = row.Scan(&query, &status, &problem, &errorCode, &errorMsg)
-				if err != nil {
-					return err
-				}
-
-				return nil
+				return row.Scan(&query, &status, &problem, &errorCode, &errorMsg)
 			}, 1*time.Second)
 
 			require.Equal(t, tc.status, status)
@@ -329,7 +325,7 @@ WHERE query = $1 AND app_name = $2 `,
 				// Multi-statement txn with a slow stmt and then a failed execution.
 				stmts:            "BEGIN; SELECT (pg_sleep(0.1)); CREATE TABLE exists(); CREATE TABLE exists();",
 				fingerprint:      "SELECT (pg_sleep(_)) ; CREATE TABLE \"exists\" () ; CREATE TABLE \"exists\" ()",
-				problems:         "{SlowExecution,FailedExecution}",
+				problems:         "{FailedExecution,SlowExecution}",
 				errorCode:        "42P07",
 				errorMsg:         `relation ‹"defaultdb.public.\"exists\""› already exists`,
 				errorMsgRedacted: `relation ‹×› already exists`,
@@ -366,12 +362,7 @@ SELECT query,
 FROM crdb_internal.node_txn_execution_insights 
 WHERE query = $1 AND app_name = $2`, tc.fingerprint, appName)
 
-				err = row.Scan(&query, &problems, &status, &errorCode, &errorMsg)
-
-				if err != nil {
-					return err
-				}
-				return nil
+				return row.Scan(&query, &problems, &status, &errorCode, &errorMsg)
 			}, 1*time.Second)
 
 			require.Equal(t, tc.txnStatus, status)
@@ -386,7 +377,6 @@ WHERE query = $1 AND app_name = $2`, tc.fingerprint, appName)
 			if problems != tc.problems {
 				// During tests some transactions can stay open for longer, adding an extra
 				// `SlowExecution` to the problems list. This checks for that possibility.
-				re := regexp.MustCompile(",?SlowExecution,?")
 				replacedSlowProblems = re.ReplaceAllString(replacedSlowProblems, "")
 			}
 			// Print the original problems if we did any replacements, for debugging.
@@ -395,6 +385,77 @@ WHERE query = $1 AND app_name = $2`, tc.fingerprint, appName)
 		}
 
 	})
+}
+
+// TestTransactionInsightsFailOnCommit specifically tests for the scenario where a transaction
+// fails on COMMIT. COMMIT is executed specially and does not get stats recorded, skipping
+// the insights recording step. We should ensure txns failing on COMMIT are also captured.
+func TestTransactionInsightsFailOnCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const appName = "TestTransactionInsightsFailOnCommit"
+	re := regexp.MustCompile(",?SlowExecution,?")
+
+	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	conn1 := sqlutils.MakeSQLRunner(db)
+	conn2 := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t, ""))
+
+	// Set up myUsers table with 2 users.
+	conn1.Exec(t, "CREATE TABLE myUsers (name STRING, city STRING)")
+	conn1.Exec(t, "INSERT INTO myUsers VALUES ('WENDY', 'NYC'), ('NOVI', 'TORONTO')")
+
+	conn1.Exec(t, "SET SESSION application_name=$1", appName)
+	conn2.Exec(t, "SET SESSION application_name=$1", appName)
+
+	// We will simulate a 40001 transaction retry error due to conflicting locks.
+	// Transaction 1 will fail on COMMIT.
+	tx1 := conn1.Begin(t)
+	_, err := tx1.Exec("SELECT * FROM myUsers WHERE city = 'TORONTO'")
+	require.NoError(t, err)
+
+	tx2 := conn2.Begin(t)
+	_, err = tx2.Exec("UPDATE myUsers SET name = 'NOVI' WHERE city = 'TORONTO'")
+	require.NoError(t, err)
+
+	_, err = tx1.Exec("UPDATE myUsers SET name = 'WENDY' WHERE city = 'NYC'")
+	require.NoError(t, err)
+	require.Error(t, tx1.Commit())
+
+	require.NoError(t, tx2.Commit())
+
+	var query, problems, status, errorCode, errorMsg string
+	testutils.SucceedsSoon(t, func() error {
+		// Query the node txn execution insights table.
+		row := conn1.DB.QueryRowContext(ctx, `
+SELECT query,
+       problems,
+       status,
+       COALESCE(last_error_code, '') last_error_code,
+       COALESCE(last_error_redactable, '') last_error
+FROM crdb_internal.node_txn_execution_insights 
+WHERE app_name = $1`, appName)
+
+		return row.Scan(&query, &problems, &status, &errorCode, &errorMsg)
+	})
+
+	require.Equal(t, "SELECT * FROM myusers WHERE city = '_' ; UPDATE myusers SET name = '_' WHERE city = '_'", query)
+	expectedProblem := "{FailedExecution}"
+	replacedSlowProblems := problems
+	if problems != expectedProblem {
+		// During tests some transactions can stay open for longer, adding an extra
+		// `SlowExecution` to the problems list. This checks for that possibility.
+		replacedSlowProblems = re.ReplaceAllString(replacedSlowProblems, "")
+	}
+	// Print the original problems if we did any replacements, for debugging.
+	require.Equal(t, expectedProblem, replacedSlowProblems, "received: %s, used to compare: %s", problems, replacedSlowProblems)
+	require.Equal(t, "Failed", status)
+	require.Equal(t, "40001", errorCode)
+	require.Contains(t, errorMsg, "TransactionRetryWithProtoRefreshError")
 }
 
 func TestInsightsPriorityIntegration(t *testing.T) {

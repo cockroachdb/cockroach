@@ -114,8 +114,9 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 		highContention = transaction.Contention.Seconds() >= LatencyThreshold.Get(&r.causes.st.SV).Seconds()
 	}
 
-	if slowOrFailedStatements.Empty() && !highContention {
-		// We only record an insight if we have slow or failed statements or high txn contention.
+	txnFailed := transaction.Status == Transaction_Failed
+	if slowOrFailedStatements.Empty() && !highContention && !txnFailed {
+		// We only record an insight if we have slow statements, high txn contention, or failed executions.
 		return
 	}
 
@@ -128,12 +129,15 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 		insight.Transaction.Causes = addCause(insight.Transaction.Causes, Cause_HighContention)
 	}
 
-	var lastErrorCode string
-	var lastErrorMessage redact.RedactableString
+	if txnFailed {
+		insight.Transaction.Problems = addProblem(insight.Transaction.Problems, Problem_FailedExecution)
+	}
+
 	// The transaction status will reflect the status of its statements; it will
 	// default to completed unless a failed statement status is found. Note that
 	// this does not take into account the "Cancelled" transaction status.
-	var lastStatus = Transaction_Completed
+	var lastStmtErr redact.RedactableString
+	var lastStmtErrCode string
 	for i, s := range *statements {
 		if slowOrFailedStatements.Contains(i) {
 			switch s.Status {
@@ -141,10 +145,11 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 				s.Problem = Problem_SlowExecution
 				s.Causes = r.causes.examine(s.Causes, s)
 			case Statement_Failed:
-				lastErrorCode = s.ErrorCode
-				lastErrorMessage = s.ErrorMsg
-				lastStatus = Transaction_Status(s.Status)
 				s.Problem = Problem_FailedExecution
+				if transaction.LastErrorCode == "" {
+					lastStmtErr = s.ErrorMsg
+					lastStmtErrCode = s.ErrorCode
+				}
 			}
 
 			// Bubble up stmt problems and causes.
@@ -158,9 +163,14 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 		insight.Statements = append(insight.Statements, s)
 	}
 
-	insight.Transaction.LastErrorCode = lastErrorCode
-	insight.Transaction.LastErrorMsg = lastErrorMessage
-	insight.Transaction.Status = lastStatus
+	if transaction.LastErrorCode == "" && lastStmtErrCode != "" {
+		// Stmt failure equates to transaction failure. Sometimes we
+		// can't propagate the error up to the transaction level so
+		// we manually set the transaction's failure info here.
+		transaction.LastErrorMsg = lastStmtErr
+		transaction.LastErrorCode = lastStmtErrCode
+	}
+
 	r.sink.AddInsight(insight)
 }
 
