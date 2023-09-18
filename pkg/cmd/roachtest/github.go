@@ -24,6 +24,7 @@ import (
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 )
 
 type githubIssues struct {
@@ -154,6 +155,11 @@ func (g *githubIssues) createPostRequest(
 	case failureContainsError(firstFailure, rperrors.ErrSSH255):
 		issueOwner = registry.OwnerTestEng
 		issueName = "ssh_problem"
+		messagePrefix = fmt.Sprintf("test %s failed due to ", testName)
+		infraFlake = true
+	case failureContainsError(firstFailure, gce.ErrDNSOperation):
+		issueOwner = registry.OwnerTestEng
+		issueName = "dns_problem"
 		messagePrefix = fmt.Sprintf("test %s failed due to ", testName)
 		infraFlake = true
 	case failureContainsError(firstFailure, errDuringPostAssertions):
