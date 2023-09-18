@@ -9,6 +9,7 @@ go_library(
         "github.go",
         "jira.go",
         "main.go",
+        "mock.go",
         "requests.go",
         "structs.go",
     ],
@@ -35,7 +36,6 @@ go_test(
     embed = [":docs-issue-generation_lib"],
     deps = [
         "//pkg/testutils",
-        "//pkg/testutils/skip",
         "@com_github_stretchr_testify//assert",
     ],
 )

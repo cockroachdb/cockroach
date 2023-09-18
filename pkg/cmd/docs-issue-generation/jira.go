@@ -109,7 +109,7 @@ var getJiraIssueCreateMeta = func() (jiraIssueCreateMeta, error) {
 
 // getValidEpicRef takes an issue key (PROJCODE-####) and outputs a bool if the issue key is an epic, a new epic key
 // if the issue is part of another epic, and an error.
-var getValidEpicRef = func(issueKey string) (bool, string, error) {
+func (*productionJiraGitHubClient) getValidEpicRef(issueKey string) (bool, string, error) {
 	apiEndpoint := fmt.Sprintf("issue/%s?fields=issuetype,customfield_10014", issueKey)
 	method := "GET"
 	headers := map[string]string{

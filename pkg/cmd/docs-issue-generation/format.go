@@ -31,7 +31,7 @@ var (
 
 // constructDocsIssues takes a list of commits from GitHub as well as the PR number associated with those commits and
 // outputs a formatted list of docs issues with valid release notes
-func constructDocsIssues(prs []cockroachPR) ([]docsIssue, error) {
+func constructDocsIssues(jgc jiraGitHubClient, prs []cockroachPR) ([]docsIssue, error) {
 	jiraIssueMeta, err := getJiraIssueCreateMeta()
 	if err != nil {
 		return []docsIssue{}, err
@@ -47,11 +47,11 @@ func constructDocsIssues(prs []cockroachPR) ([]docsIssue, error) {
 	var result []docsIssue
 	for _, pr := range prs {
 		for _, commit := range pr.Commits {
-			rns, err := formatReleaseNotes(commit.MessageBody, pr.Number, pr.Body, commit.Sha)
+			rns, err := formatReleaseNotes(jgc, commit.MessageBody, pr.Number, pr.Body, commit.Sha)
 			if err != nil {
 				return []docsIssue{}, err
 			}
-			epicRefs := extractEpicIDs(commit.MessageBody + "\n" + pr.Body)
+			epicRefs := extractEpicIDs(jgc, commit.MessageBody+"\n"+pr.Body)
 			var epicRef string
 			for k := range epicRefs {
 				epicRef = k
@@ -141,13 +141,13 @@ func formatTitle(title string, prNumber int, index int, totalLength int) string 
 
 // formatReleaseNotes generates a list of docsIssue bodies for the docs repo based on a given CRDB sha
 func formatReleaseNotes(
-	commitMessage string, prNumber int, prBody, crdbSha string,
+	jgc jiraGitHubClient, commitMessage string, prNumber int, prBody, crdbSha string,
 ) ([]adfRoot, error) {
 	rnBodySlice := []adfRoot{}
 	if releaseNoteNoneRE.MatchString(commitMessage) {
 		return rnBodySlice, nil
 	}
-	epicIssueRefs, err := extractIssueEpicRefs(prBody, commitMessage)
+	epicIssueRefs, err := extractIssueEpicRefs(jgc, prBody, commitMessage)
 	if err != nil {
 		return []adfRoot{}, err
 	}

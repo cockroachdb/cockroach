@@ -88,7 +88,7 @@ func extractInformIssueIDs(message string) map[string]int {
 	return extractStringsFromMessage(message, informIssueRefRE, githubJiraIssueRefRE)
 }
 
-func extractEpicIDs(message string) map[string]int {
+func extractEpicIDs(jgc jiraGitHubClient, message string) map[string]int {
 	result := extractStringsFromMessage(message, epicRefRE, jiraIssueRefRE)
 	for issueKey, count := range result {
 		var isEpic bool
@@ -97,7 +97,7 @@ func extractEpicIDs(message string) map[string]int {
 			isEpic = epicKey == issueKey
 		} else {
 			var err error
-			isEpic, epicKey, err = getValidEpicRef(issueKey)
+			isEpic, epicKey, err = jgc.getValidEpicRef(issueKey)
 			if err != nil {
 				// if the supplied issueKey is bad or there's a problem with the Jira REST API, simply print out
 				// the error message, but don't return it. Instead, remove the epic from the list, since we were
@@ -126,8 +126,8 @@ func containsEpicNone(message string) bool {
 	return epicNoneRE.MatchString(message)
 }
 
-func extractIssueEpicRefs(prBody, commitBody string) ([]adfNode, error) {
-	epicRefs := extractEpicIDs(commitBody + "\n" + prBody)
+func extractIssueEpicRefs(jgc jiraGitHubClient, prBody, commitBody string) ([]adfNode, error) {
+	epicRefs := extractEpicIDs(jgc, commitBody+"\n"+prBody)
 	refInfo := epicIssueRefInfo{
 		epicRefs:        epicRefs,
 		epicNone:        containsEpicNone(commitBody + "\n" + prBody),
@@ -242,4 +242,8 @@ func extractProductChangeDocTypeId(
 		"unable to locate a doc type of 'Product Change' in the %s project",
 		jiraDocsProjectCode,
 	)
+}
+
+func splitBySlashOrHash(r rune) bool {
+	return r == '/' || r == '#'
 }

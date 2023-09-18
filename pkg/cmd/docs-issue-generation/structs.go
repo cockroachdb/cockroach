@@ -387,3 +387,17 @@ type adfMark struct {
 }
 
 type httpReqSource int
+
+type jiraGitHubClient interface {
+	getValidEpicRef(issueKey string) (bool, string, error)
+}
+
+type productionJiraGitHubClient struct{}
+
+type testingJiraGitHubClient struct {
+	GetValidEpicRefMap map[string]struct {
+		IsEpic  bool
+		EpicKey string
+		Err     error
+	}
+}

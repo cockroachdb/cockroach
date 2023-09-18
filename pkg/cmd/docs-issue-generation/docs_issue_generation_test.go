@@ -16,9 +16,49 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/assert"
 )
+
+var mockJiraGitHubClient = &testingJiraGitHubClient{
+	GetValidEpicRefMap: map[string]struct {
+		IsEpic  bool
+		EpicKey string
+		Err     error
+	}{
+		"CRDB-491": {
+			IsEpic:  true,
+			EpicKey: "CRDB-491",
+		},
+		"CRDB-9234": {
+			IsEpic:  false,
+			EpicKey: "",
+		},
+		"CRDB-235": {
+			IsEpic:  true,
+			EpicKey: "CRDB-235",
+		},
+		"DOC-6883": {
+			IsEpic:  true,
+			EpicKey: "DOC-6883",
+		},
+		"DEVINF-392": {
+			IsEpic:  false,
+			EpicKey: "",
+		},
+		"https://cockroachlabs.atlassian.net/browse/CRDB-28708": {
+			IsEpic:  false,
+			EpicKey: "CRDB-18955",
+		},
+		"CRDB-31495": {
+			IsEpic:  true,
+			EpicKey: "CRDB-31495",
+		},
+		"CRDB-18955": {
+			IsEpic:  true,
+			EpicKey: "CRDB-18955",
+		},
+	},
+}
 
 func TestExtractPRNumberCommitFromDocsIssueBody(t *testing.T) {
 	testCases := []struct {
@@ -2073,18 +2113,7 @@ func TestConstructDocsIssues(t *testing.T) {
 				}
 				return result, nil
 			})()
-			defer testutils.TestingHook(&getValidEpicRef, func(issueKey string) (bool, string, error) {
-				var epicMap = make(map[string]struct {
-					IsEpic  bool
-					EpicKey string
-				})
-				epicMap["CRDB-31495"] = struct {
-					IsEpic  bool
-					EpicKey string
-				}{IsEpic: true, EpicKey: "CRDB-31495"}
-				return epicMap[issueKey].IsEpic, epicMap[issueKey].EpicKey, nil
-			})()
-			result, _ := constructDocsIssues(tc.cockroachPRs)
+			result, _ := constructDocsIssues(mockJiraGitHubClient, tc.cockroachPRs)
 			assert.Equal(t, tc.docsIssues, result)
 		})
 	}
@@ -2755,7 +2784,7 @@ must be used instead.`,
 				return ghJiraIssueMap[org][repo][issue], nil
 			})()
 			prNumInt, _ := strconv.Atoi(tc.prNum)
-			result, _ := formatReleaseNotes(tc.commitMessage, prNumInt, tc.prBody, tc.sha)
+			result, _ := formatReleaseNotes(mockJiraGitHubClient, tc.commitMessage, prNumInt, tc.prBody, tc.sha)
 			assert.Equal(t, tc.rns, result)
 		})
 	}
@@ -3021,7 +3050,6 @@ Release note (sql change): Something something something...`,
 }
 
 func TestExtractEpicIDs(t *testing.T) {
-	skip.WithIssue(t, 110682, "Flakes when run under stressful conditions")
 	testCases := []struct {
 		message  string
 		expected map[string]int
@@ -3044,40 +3072,9 @@ Release note (sql change): Import now checks readability...`,
 	}
 
 	for _, tc := range testCases {
-		defer testutils.TestingHook(&getValidEpicRef, func(issueKey string) (bool, string, error) {
-			var epicMap = map[string]struct {
-				IsEpic  bool
-				EpicKey string
-			}{
-				"CRDB-491": {
-					IsEpic:  true,
-					EpicKey: "CRDB-491",
-				},
-				"CRDB-9234": {
-					IsEpic:  false,
-					EpicKey: "",
-				},
-				"CRDB-235": {
-					IsEpic:  true,
-					EpicKey: "CRDB-235",
-				},
-				"DOC-6883": {
-					IsEpic:  true,
-					EpicKey: "DOC-6883",
-				},
-				"DEVINF-392": {
-					IsEpic:  false,
-					EpicKey: "",
-				},
-				"https://cockroachlabs.atlassian.net/browse/CRDB-28708": {
-					IsEpic:  false,
-					EpicKey: "CRDB-18955",
-				},
-			}
-			return epicMap[issueKey].IsEpic, epicMap[issueKey].EpicKey, nil
-		})()
+
 		t.Run(tc.message, func(t *testing.T) {
-			result := extractEpicIDs(tc.message)
+			result := extractEpicIDs(mockJiraGitHubClient, tc.message)
 			assert.Equal(t, tc.expected, result)
 		})
 	}
