@@ -185,7 +185,10 @@ func createTestStoreWithoutStart(
 	rpcOpts.ToleratedOffset = cfg.Clock.ToleratedOffset()
 	rpcOpts.Stopper = stopper
 	rpcOpts.Settings = cfg.Settings
-	rpcOpts.TenantRPCAuthorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
+	rpcOpts.TenantRPCAuthorizer = cfg.TestingKnobs.TenantRateKnobs.Authorizer
+	if rpcOpts.TenantRPCAuthorizer == nil {
+		rpcOpts.TenantRPCAuthorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
+	}
 	rpcContext := rpc.NewContext(ctx, rpcOpts)
 	stopper.SetTracer(cfg.AmbientCtx.Tracer)
 	server, err := rpc.NewServer(ctx, rpcContext) // never started
