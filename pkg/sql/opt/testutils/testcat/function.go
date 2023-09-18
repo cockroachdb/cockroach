@@ -113,7 +113,7 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		Language:          language,
 		Type:              routineType,
 	}
-	if c.ReturnType.IsSet {
+	if c.ReturnType.SetOf {
 		overload.Class = tree.GeneratorClass
 	}
 	prefixedOverload := tree.MakeQualifiedOverload("public", overload)

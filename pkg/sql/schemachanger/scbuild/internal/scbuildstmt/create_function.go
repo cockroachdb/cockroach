@@ -62,7 +62,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	fnID := b.GenerateUniqueDescID()
 	fn := scpb.Function{
 		FunctionID:  fnID,
-		ReturnSet:   n.ReturnType.IsSet,
+		ReturnSet:   n.ReturnType.SetOf,
 		ReturnType:  b.ResolveTypeRef(n.ReturnType.Type),
 		IsProcedure: n.IsProcedure,
 	}

@@ -181,7 +181,7 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 	}
 	isSameUDT := types.IsOIDUserDefinedType(retType.Oid()) && retType.Oid() ==
 		udfDesc.ReturnType.Type.Oid()
-	if n.cf.ReturnType.IsSet != udfDesc.ReturnType.ReturnSet || (!retType.Equal(udfDesc.ReturnType.Type) && !isSameUDT) {
+	if n.cf.ReturnType.SetOf != udfDesc.ReturnType.ReturnSet || (!retType.Equal(udfDesc.ReturnType.Type) && !isSameUDT) {
 		return pgerror.Newf(pgcode.InvalidFunctionDefinition, "cannot change return type of existing function")
 	}
 	if isSameUDT {
@@ -303,7 +303,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 		string(n.cf.Name.ObjectName),
 		pbParams,
 		returnType,
-		n.cf.ReturnType.IsSet,
+		n.cf.ReturnType.SetOf,
 		n.cf.IsProcedure,
 		privileges,
 	)
