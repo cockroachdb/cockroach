@@ -22,13 +22,13 @@ ALTER PARTITION pd OF INDEX db.tbl@tbl_pkey CONFIGURE ZONE USING constraints = '
 
 translate database=db table=tbl
 ----
-[/Table/<table-id>, /Table/<table-id>/1)               range default
-[/Table/<table-id>/1, /Table/<table-id>/1/3/4)         constraints=[+n2]
-[/Table/<table-id>/1/3/4, /Table/<table-id>/1/3/5)     constraints=[+n1]
-[/Table/<table-id>/1/3/5, /Table/<table-id>/1/5)       constraints=[+n2]
-[/Table/<table-id>/1/5, /Table/<table-id>/1/5/7)       constraints=[+n1]
-[/Table/<table-id>/1/5/7, /Table/<table-id>/1/5/8)     constraints=[+n2]
-[/Table/<table-id>/1/5/8, /Table/<table-id>/1/5/9)     constraints=[+n3]
-[/Table/<table-id>/1/5/9, /Table/<table-id>/1/6)       constraints=[+n1]
-[/Table/<table-id>/1/6, /Table/<table-id>/2)           constraints=[+n2]
-[/Table/<table-id>/2, /Table/<table-id+1>)             range default
+/Table/106{-/1}                            range default
+/Table/106/1{-/3/4}                        constraints=[+n2]
+/Table/106/1/3/{4-5}                       constraints=[+n1]
+/Table/106/1/{3/5-5}                       constraints=[+n2]
+/Table/106/1/5{-/7}                        constraints=[+n1]
+/Table/106/1/5/{7-8}                       constraints=[+n2]
+/Table/106/1/5/{8-9}                       constraints=[+n3]
+/Table/106/1/{5/9-6}                       constraints=[+n1]
+/Table/106/{1/6-2}                         constraints=[+n2]
+/Table/10{6/2-7}                           range default
