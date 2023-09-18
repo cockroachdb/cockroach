@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1971,7 +1972,9 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 // latches early. If found, conflicting intents are added to the supplied
 // `intents` slice, which indicates to the caller that evaluation should not
 // proceed until the intents are resolved. Intents that don't conflict with the
-// transaction referenced by txnID[1] at the supplied `ts` are ignored.
+// transaction referenced by txnID[1] at the supplied `ts` are ignored; so are
+// {Shared,Exclusive} replicated locks, as they do not conflict with non-locking
+// reads.
 //
 // The `needsIntentHistory` return value indicates whether the caller needs to
 // consult intent history when performing a scan over the MVCC keyspace to
@@ -1998,14 +2001,24 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		return true, errors.AssertionFailedf("start key must be less than end key")
 	}
 	ltStart, _ := keys.LockTableSingleKey(start, nil)
-	opts := IterOptions{LowerBound: ltStart}
+	opts := LockTableIteratorOptions{
+		LowerBound: ltStart,
+		// Ignore Exclusive and Shared locks; we only drop latches early for
+		// non-locking reads, which do not conflict with Shared or
+		// Exclusive[1] locks.
+		//
+		// [1] Specifically replicated Exclusive locks. Interaction with
+		// unreplicated locks is governed by the ExclusiveLocksBlockNonLockingReads
+		// cluster setting.
+		MatchMinStr: lock.Intent,
+	}
 	if upperBoundUnset {
 		opts.Prefix = true
 	} else {
 		ltEnd, _ := keys.LockTableSingleKey(end, nil)
 		opts.UpperBound = ltEnd
 	}
-	iter, err := reader.NewEngineIterator(opts)
+	iter, err := NewLockTableIterator(reader, opts)
 	if err != nil {
 		return false, err
 	}
@@ -2019,11 +2032,8 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 			// not needing intent history.
 			return true /* needsIntentHistory */, nil
 		}
-		v, err := iter.UnsafeValue()
+		err := iter.ValueProto(&meta)
 		if err != nil {
-			return false, err
-		}
-		if err = protoutil.Unmarshal(v, &meta); err != nil {
 			return false, err
 		}
 		if meta.Txn == nil {
@@ -2070,11 +2080,14 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		if err != nil {
 			return false, err
 		}
-		lockedKey, err := keys.DecodeLockTableSingleKey(key.Key)
+		ltKey, err := key.ToLockTableKey()
 		if err != nil {
 			return false, err
 		}
-		*intents = append(*intents, roachpb.MakeIntent(meta.Txn, lockedKey))
+		if ltKey.Strength != lock.Intent {
+			return false, errors.AssertionFailedf("unexpected strength for LockTableKey %s", ltKey.Strength)
+		}
+		*intents = append(*intents, roachpb.MakeIntent(meta.Txn, ltKey.Key))
 	}
 	if err != nil {
 		return false, err
