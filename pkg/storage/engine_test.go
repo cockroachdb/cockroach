@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -2086,6 +2087,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
 	keyC := roachpb.Key("c")
+	keyD := roachpb.Key("d")
 	val := roachpb.Value{RawBytes: []byte{'v'}}
 
 	testCases := []struct {
@@ -2120,7 +2122,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 		},
 		{
 			name: "conflicting txn intent at lower timestamp",
-			setup: func(t *testing.T, rw ReadWriter, txn *roachpb.Transaction) {
+			setup: func(t *testing.T, rw ReadWriter, _ *roachpb.Transaction) {
 				conflictingTxn := newTxn(belowTxnTS) // test txn should see this intent
 				err := MVCCPut(
 					ctx, rw, keyA, conflictingTxn.WriteTimestamp, val, MVCCWriteOptions{Txn: conflictingTxn},
@@ -2134,7 +2136,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 		},
 		{
 			name: "conflicting txn intent at higher timestamp",
-			setup: func(t *testing.T, rw ReadWriter, txn *roachpb.Transaction) {
+			setup: func(t *testing.T, rw ReadWriter, _ *roachpb.Transaction) {
 				conflictingTxn := newTxn(aboveTxnTS) // test txn shouldn't see this intent
 				err := MVCCPut(
 					ctx, rw, keyA, conflictingTxn.WriteTimestamp, val, MVCCWriteOptions{Txn: conflictingTxn},
@@ -2155,6 +2157,79 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 			start:                 keyB,
 			end:                   keyC,
 			expNeedsIntentHistory: false,
+			expNumFoundIntents:    0,
+		},
+		{
+			name: "shared and exclusive locks should be ignored",
+			setup: func(t *testing.T, rw ReadWriter, _ *roachpb.Transaction) {
+				txnA := newTxn(belowTxnTS)
+				txnB := newTxn(belowTxnTS)
+				err := MVCCAcquireLock(ctx, rw, txnA, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				require.NoError(t, err)
+				err = MVCCAcquireLock(ctx, rw, txnB, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				require.NoError(t, err)
+				err = MVCCAcquireLock(ctx, rw, txnA, lock.Exclusive, keyB, nil /*ms*/, 0 /*maxConflicts*/)
+				require.NoError(t, err)
+			},
+			start:                 keyA,
+			end:                   keyC,
+			expNeedsIntentHistory: false,
+			expNumFoundIntents:    0,
+		},
+		{
+			// Same thing as above, but no end key this time. This ends up using a
+			// prefix iterator.
+			name: "shared and exclusive locks should be ignored no end key",
+			setup: func(t *testing.T, rw ReadWriter, _ *roachpb.Transaction) {
+				txnA := newTxn(belowTxnTS)
+				err := MVCCAcquireLock(ctx, rw, txnA, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				require.NoError(t, err)
+				err = MVCCAcquireLock(ctx, rw, txnA, lock.Exclusive, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				require.NoError(t, err)
+			},
+			start:                 keyA,
+			end:                   nil,
+			expNeedsIntentHistory: false,
+			expNumFoundIntents:    0,
+		},
+		{
+			name: "{exclusive, shared} locks and intents",
+			setup: func(t *testing.T, rw ReadWriter, _ *roachpb.Transaction) {
+				txnA := newTxn(belowTxnTS)
+				txnB := newTxn(belowTxnTS)
+				err := MVCCAcquireLock(ctx, rw, txnA, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				require.NoError(t, err)
+				err = MVCCAcquireLock(ctx, rw, txnB, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				require.NoError(t, err)
+				err = MVCCAcquireLock(ctx, rw, txnA, lock.Exclusive, keyB, nil /*ms*/, 0 /*maxConflicts*/)
+				require.NoError(t, err)
+				require.NoError(t, err)
+				err = MVCCPut(ctx, rw, keyC, txnA.WriteTimestamp, val, MVCCWriteOptions{Txn: txnA})
+				require.NoError(t, err)
+			},
+			start:                 keyA,
+			end:                   keyD,
+			expNeedsIntentHistory: false,
+			expNumFoundIntents:    1,
+		},
+		{
+			name: "{exclusive, shared} locks and own intents",
+			setup: func(t *testing.T, rw ReadWriter, txn *roachpb.Transaction) {
+				txnA := newTxn(belowTxnTS)
+				txnB := newTxn(belowTxnTS)
+				err := MVCCAcquireLock(ctx, rw, txnA, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				require.NoError(t, err)
+				err = MVCCAcquireLock(ctx, rw, txnB, lock.Shared, keyA, nil /*ms*/, 0 /*maxConflicts*/)
+				require.NoError(t, err)
+				err = MVCCAcquireLock(ctx, rw, txnA, lock.Exclusive, keyB, nil /*ms*/, 0 /*maxConflicts*/)
+				require.NoError(t, err)
+				require.NoError(t, err)
+				err = MVCCPut(ctx, rw, keyC, txn.WriteTimestamp, val, MVCCWriteOptions{Txn: txn})
+				require.NoError(t, err)
+			},
+			start:                 keyA,
+			end:                   keyD,
+			expNeedsIntentHistory: true,
 			expNumFoundIntents:    0,
 		},
 	}
