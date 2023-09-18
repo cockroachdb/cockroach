@@ -400,7 +400,7 @@ func TestStatementTree(t *testing.T) {
 					typ = simpleInsert
 				}
 
-				res := mt.CanMutateTable(tabID, typ)
+				res := mt.CanMutateTable(tabID, typ, false /* isPostStmt */)
 
 				expected := c&fail != fail
 				if res != expected {

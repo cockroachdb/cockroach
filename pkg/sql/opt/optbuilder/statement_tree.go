@@ -136,11 +136,21 @@ func (st *statementTree) Pop() {
 //	statement1: UPDATE t1
 //	├── statement2: UPDATE t2
 //	└── statement3: UPDATE t1
-func (st *statementTree) CanMutateTable(tabID cat.StableID, typ mutationType) bool {
+//
+// isPostStmt indicates that this mutation will be evaluated at the end of the
+// statement (e.g., as part of a foreign key constraint).
+func (st *statementTree) CanMutateTable(tabID cat.StableID, typ mutationType, isPostStmt bool) bool {
 	if len(st.stmts) == 0 {
 		panic(errors.AssertionFailedf("unexpected empty tree"))
 	}
-	curr := &st.stmts[len(st.stmts)-1]
+	if isPostStmt && len(st.stmts) == 1 {
+		return true
+	}
+	offset := 1
+	if isPostStmt {
+		offset = 2
+	}
+	curr := &st.stmts[len(st.stmts)-offset]
 	// Check the children of the current statement for a conflict.
 	if curr.childrenConflictWithMutation(tabID, typ) {
 		return false
