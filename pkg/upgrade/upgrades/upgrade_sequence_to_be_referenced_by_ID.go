@@ -177,8 +177,13 @@ func upgradeSetUpForTableOrView(
 		return nil, nil, nil, err
 	}
 
+	schemaDesc, err := descriptors.GetImmutableSchemaByID(ctx, txn, tableDesc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
 	// Construct an internal planner
-	sc, cleanup, err := d.SchemaResolverConstructor(txn, descriptors, dbDesc.GetName())
+	sc, cleanup, err := d.SchemaResolverConstructor(txn, descriptors, dbDesc.GetName(), schemaDesc.GetName())
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -330,7 +335,16 @@ func maybeUpdateBackRefsAndBuildMap(
 	for _, seqIdentifier := range seqIdentifiers {
 		seqDesc, err := sql.GetSequenceDescFromIdentifier(ctx, sc, seqIdentifier)
 		if err != nil {
-			return nil, err
+			// The reference here is not fully qualified, so we weren't able to
+			// resolve it. There is no nice answer here, since the reference was
+			// is probably valid within their search_path.
+			return nil, errors.WithHintf(errors.Wrapf(err,
+				"ambiguous sequence identifier for relation: %s (%d)",
+				t.GetName(),
+				t.GetID()),
+				"alter the DEFAULT or ON UPDATE expression in this relation to "+
+					"use a fully qualified name to this sequence.",
+			)
 		}
 
 		// Get all the indexes of all references to the sequence by this table.

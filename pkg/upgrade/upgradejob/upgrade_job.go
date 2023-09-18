@@ -14,6 +14,7 @@ package upgradejob
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -104,7 +106,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 		tenantDeps.SpanConfig.Default = execCtx.ExecCfg().DefaultZoneConfig.AsSpanConfig()
 
 		tenantDeps.SchemaResolverConstructor = func(
-			txn *kv.Txn, descriptors *descs.Collection, currDb string,
+			txn *kv.Txn, descriptors *descs.Collection, currDb string, schemaName string,
 		) (resolver.SchemaResolver, func(), error) {
 			internalPlanner, cleanup := sql.NewInternalPlanner("internal planner for upgrades",
 				txn,
@@ -114,10 +116,27 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 				sessiondatapb.SessionData{Database: currDb},
 				sql.WithDescCollection(descriptors),
 			)
+			sa, ok := internalPlanner.(eval.SessionAccessor)
+			if !ok {
+				cleanup()
+				return nil, nil, errors.New("expected SessionAccessor")
+			}
 			sr, ok := internalPlanner.(resolver.SchemaResolver)
 			if !ok {
 				cleanup()
 				return nil, nil, errors.New("expected SchemaResolver")
+			}
+			// Add the schema name into the search path, if the sequence
+			// doesn't exist under user, public (our old behaviour).
+			_, val, err := sa.GetSessionVar(ctx, "search_path", false)
+			if err != nil {
+				cleanup()
+				return nil, nil, errors.New("expected search path")
+			}
+			err = sa.SetSessionVar(ctx, "search_path", fmt.Sprintf("%s,%s", val, schemaName), false)
+			if err != nil {
+				cleanup()
+				return nil, nil, errors.New("expected search path")
 			}
 			return sr, cleanup, nil
 		}
