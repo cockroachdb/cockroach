@@ -70,7 +70,7 @@ func createAndRegisterConsumerOrFail(t *testing.T, scheduler *Scheduler) *schedu
 		reschedule: make(chan processorEventType, 1),
 		sched:      scheduler,
 	}
-	id, err := c.sched.Register(c.process)
+	id, err := c.sched.Register(c.process, false)
 	require.NoError(t, err, "failed to register processor")
 	c.id = id
 	return c
@@ -314,9 +314,9 @@ func TestClientScheduler(t *testing.T) {
 		sched:      s,
 		id:         1,
 	}
-	require.NoError(t, cs.Register(c.process), "failed to register consumer")
+	require.NoError(t, cs.Register(c.process, false), "failed to register consumer")
 	require.Error(t,
-		cs.Register(func(event processorEventType) (remaining processorEventType) { return 0 }),
+		cs.Register(func(event processorEventType) (remaining processorEventType) { return 0 }, false),
 		"reregistration must fail")
 	c.pause()
 	cs.Enqueue(te2)
@@ -468,49 +468,61 @@ func TestQueueReadEmpty(t *testing.T) {
 func TestNewSchedulerShards(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	pri := 2 // priority workers
+
 	testcases := []struct {
-		workers      int
-		shardSize    int
-		expectShards []int
+		priorityWorkers int
+		workers         int
+		shardSize       int
+		expectShards    []int
 	}{
+		// We always assign at least 1 priority worker to the priority shard.
+		{-1, 1, 1, []int{1, 1}},
+		{0, 1, 1, []int{1, 1}},
+		{2, 1, 1, []int{2, 1}},
+
 		// We balance workers across shards instead of filling up shards. We assume
 		// ranges are evenly distributed across shards, and want ranges to have
 		// about the same number of workers available on average.
-		{-1, -1, []int{1}},
-		{0, 0, []int{1}},
-		{1, -1, []int{1}},
-		{1, 0, []int{1}},
-		{1, 1, []int{1}},
-		{1, 2, []int{1}},
-		{2, 2, []int{2}},
-		{3, 2, []int{2, 1}},
-		{1, 3, []int{1}},
-		{2, 3, []int{2}},
-		{3, 3, []int{3}},
-		{4, 3, []int{2, 2}},
-		{5, 3, []int{3, 2}},
-		{6, 3, []int{3, 3}},
-		{7, 3, []int{3, 2, 2}},
-		{8, 3, []int{3, 3, 2}},
-		{9, 3, []int{3, 3, 3}},
-		{10, 3, []int{3, 3, 2, 2}},
-		{11, 3, []int{3, 3, 3, 2}},
-		{12, 3, []int{3, 3, 3, 3}},
+		{pri, -1, -1, []int{pri, 1}},
+		{pri, 0, 0, []int{pri, 1}},
+		{pri, 1, -1, []int{pri, 1}},
+		{pri, 1, 0, []int{pri, 1}},
+		{pri, 1, 1, []int{pri, 1}},
+		{pri, 1, 2, []int{pri, 1}},
+		{pri, 2, 2, []int{pri, 2}},
+		{pri, 3, 2, []int{pri, 2, 1}},
+		{pri, 1, 3, []int{pri, 1}},
+		{pri, 2, 3, []int{pri, 2}},
+		{pri, 3, 3, []int{pri, 3}},
+		{pri, 4, 3, []int{pri, 2, 2}},
+		{pri, 5, 3, []int{pri, 3, 2}},
+		{pri, 6, 3, []int{pri, 3, 3}},
+		{pri, 7, 3, []int{pri, 3, 2, 2}},
+		{pri, 8, 3, []int{pri, 3, 3, 2}},
+		{pri, 9, 3, []int{pri, 3, 3, 3}},
+		{pri, 10, 3, []int{pri, 3, 3, 2, 2}},
+		{pri, 11, 3, []int{pri, 3, 3, 3, 2}},
+		{pri, 12, 3, []int{pri, 3, 3, 3, 3}},
 
 		// Typical examples, using 4 workers per CPU core and 8 workers per shard.
 		// Note that we cap workers at 64 by default.
-		{1 * 4, 8, []int{4}},
-		{2 * 4, 8, []int{8}},
-		{3 * 4, 8, []int{6, 6}},
-		{4 * 4, 8, []int{8, 8}},
-		{6 * 4, 8, []int{8, 8, 8}},
-		{8 * 4, 8, []int{8, 8, 8, 8}},
-		{12 * 4, 8, []int{8, 8, 8, 8, 8, 8}},
-		{16 * 4, 8, []int{8, 8, 8, 8, 8, 8, 8, 8}}, // 64 workers
+		{pri, 1 * 4, 8, []int{pri, 4}},
+		{pri, 2 * 4, 8, []int{pri, 8}},
+		{pri, 3 * 4, 8, []int{pri, 6, 6}},
+		{pri, 4 * 4, 8, []int{pri, 8, 8}},
+		{pri, 6 * 4, 8, []int{pri, 8, 8, 8}},
+		{pri, 8 * 4, 8, []int{pri, 8, 8, 8, 8}},
+		{pri, 12 * 4, 8, []int{pri, 8, 8, 8, 8, 8, 8}},
+		{pri, 16 * 4, 8, []int{pri, 8, 8, 8, 8, 8, 8, 8, 8}}, // 64 workers
 	}
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("workers=%d/shardSize=%d", tc.workers, tc.shardSize), func(t *testing.T) {
-			s := NewScheduler(SchedulerConfig{Workers: tc.workers, ShardSize: tc.shardSize})
+			s := NewScheduler(SchedulerConfig{
+				Workers:         tc.workers,
+				PriorityWorkers: tc.priorityWorkers,
+				ShardSize:       tc.shardSize,
+			})
 
 			var shardWorkers []int
 			for _, shard := range s.shards {
@@ -519,4 +531,87 @@ func TestNewSchedulerShards(t *testing.T) {
 			require.Equal(t, tc.expectShards, shardWorkers)
 		})
 	}
+}
+
+// TestSchedulerPriority tests that the scheduler correctly registers
+// and enqueues events for priority processors.
+func TestSchedulerPriority(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	s := NewScheduler(SchedulerConfig{Workers: 1, PriorityWorkers: 1, ShardSize: 1, BulkChunkSize: 1})
+	require.NoError(t, s.Start(ctx, stopper))
+	defer s.Stop()
+
+	// Register a regular and priority processor, which post events on a channel.
+	procC := make(chan processorEventType, 1)
+	proc := func(e processorEventType) processorEventType {
+		if e&Stopped != 0 {
+			return 0
+		}
+		procC <- e
+		return 0
+	}
+	id, err := s.Register(proc, false)
+	require.NoError(t, err)
+
+	priC := make(chan processorEventType, 1)
+	priProc := func(e processorEventType) processorEventType {
+		if e&Stopped != 0 {
+			return 0
+		}
+		priC <- e
+		return 0
+	}
+	priID, err := s.Register(priProc, true)
+	require.NoError(t, err)
+
+	// Make sure the priority processor was registered properly.
+	_, isPri := s.priorityIDs.Load(id)
+	require.False(t, isPri)
+	_, isPri = s.priorityIDs.Load(priID)
+	require.True(t, isPri)
+
+	// Enqueueing events for both processors should work.
+	event := processorEventType(1 << 24)
+	assertEvent := func(ch <-chan processorEventType, expect processorEventType) {
+		t.Helper()
+		select {
+		case e := <-ch:
+			require.Equal(t, expect, e)
+		case <-time.After(3 * time.Second):
+			t.Fatalf("did not receive expected event")
+		}
+	}
+
+	s.Enqueue(id, event)
+	assertEvent(procC, event)
+	s.Enqueue(priID, event)
+	assertEvent(priC, event)
+
+	// Blocking the regular processor should still allow the priority processor to
+	// make progress.
+	procC <- event
+	require.Equal(t, len(procC), cap(procC))
+
+	s.Enqueue(id, event)
+	for i := 0; i < 10; i++ {
+		s.Enqueue(priID, event)
+		assertEvent(priC, event)
+	}
+	require.Equal(t, len(procC), cap(procC)) // still blocked
+
+	// This should also be true when using a batch.
+	batch := s.NewEnqueueBatch()
+	defer batch.Close()
+	batch.Add(id)
+	batch.Add(priID)
+	s.EnqueueBatch(batch, event)
+	assertEvent(priC, event)
+
+	// Drain the regular processor before shutting down.
+	assertEvent(procC, event)
+	assertEvent(procC, event)
 }
