@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -189,6 +190,24 @@ func (sr *SQLRunner) ExpectErrSucceedsSoon(
 	helperOrNoop(t)()
 	sr.succeedsWithin(t, func() error {
 		_, err := sr.DB.ExecContext(context.Background(), query, args...)
+		if !testutils.IsError(err, errRE) {
+			return errors.Newf("expected error '%s', got: %s", errRE, pgerror.FullError(err))
+		}
+		return nil
+	})
+}
+
+// ExpectErrWithTimeout wraps ExpectErr with a timeout..
+func (sr *SQLRunner) ExpectErrWithTimeout(
+	t Fataler, errRE string, query string, args ...interface{},
+) {
+	helperOrNoop(t)()
+	d := sr.SucceedsSoonDuration
+	if d == 0 {
+		d = testutils.DefaultSucceedsSoonDuration
+	}
+	_ = contextutil.RunWithTimeout(context.Background(), "expect-err", d, func(ctx context.Context) error {
+		_, err := sr.DB.ExecContext(ctx, query, args...)
 		if !testutils.IsError(err, errRE) {
 			return errors.Newf("expected error '%s', got: %s", errRE, pgerror.FullError(err))
 		}
