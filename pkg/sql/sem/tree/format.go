@@ -460,8 +460,14 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			return
 		}
 	}
+
+	callFuncExpr := func(e Expr) bool {
+		f, ok := e.(*FuncExpr)
+		return ok && f.InCall
+	}
+
 	if f.HasFlags(FmtAlwaysGroupExprs) {
-		if _, ok := n.(Expr); ok {
+		if e, ok := n.(Expr); ok && !callFuncExpr(e) {
 			ctx.WriteByte('(')
 		}
 	}
@@ -473,7 +479,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 	}
 
 	if f.HasFlags(FmtAlwaysGroupExprs) {
-		if _, ok := n.(Expr); ok {
+		if e, ok := n.(Expr); ok && !callFuncExpr(e) {
 			ctx.WriteByte(')')
 		}
 	}

@@ -12,19 +12,14 @@ package tree
 
 // Call represents a CALL statement to invoke a procedure.
 type Call struct {
-	// Name is the name of the procedure.
-	Name *UnresolvedObjectName
-	// Exprs contains the arguments to pass to the procedure.
-	Exprs Exprs
+	// Proc contains the procedure reference and the arguments of the procedure.
+	Proc *FuncExpr
 }
 
 // Format implements the NodeFormatter interface.
 func (node *Call) Format(ctx *FmtCtx) {
 	ctx.WriteString("CALL ")
-	ctx.FormatNode(node.Name)
-	ctx.WriteByte('(')
-	ctx.FormatNode(&node.Exprs)
-	ctx.WriteByte(')')
+	ctx.FormatNode(node.Proc)
 }
 
 var _ Statement = &Call{}
