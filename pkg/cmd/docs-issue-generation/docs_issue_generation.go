@@ -17,11 +17,12 @@ import (
 
 // the heart of the script to fetch and manipulate all data and create the individual docs issues
 func docsIssueGeneration(params queryParameters) error {
+	jgc := newProductionJiraGitHubClient()
 	prs, err := searchCockroachPRs(params.StartTime, params.EndTime)
 	if err != nil {
 		return err
 	}
-	docsIssues, err := constructDocsIssues(prs)
+	docsIssues, err := constructDocsIssues(jgc, prs)
 	if err != nil {
 		return err
 	}
@@ -54,6 +55,6 @@ func docsIssueGeneration(params queryParameters) error {
 	return nil
 }
 
-func splitBySlashOrHash(r rune) bool {
-	return r == '/' || r == '#'
+func newProductionJiraGitHubClient() *productionJiraGitHubClient {
+	return &productionJiraGitHubClient{}
 }
