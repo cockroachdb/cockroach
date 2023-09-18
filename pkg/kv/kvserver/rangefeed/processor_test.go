@@ -297,9 +297,18 @@ func newTestProcessor(
 		o(&cfg)
 	}
 	if cfg.useScheduler {
-		sch := NewScheduler(SchedulerConfig{Workers: 1})
-		_ = sch.Start(context.Background(), stopper)
+		sch := NewScheduler(SchedulerConfig{Workers: 1, PriorityWorkers: 1})
+		require.NoError(t, sch.Start(context.Background(), stopper))
 		cfg.Scheduler = sch
+		// Also create a dummy priority processor to populate priorityIDs for
+		// BenchmarkRangefeed. It should never be called.
+		noop := func(e processorEventType) processorEventType {
+			if e != Stopped {
+				t.Errorf("unexpected event %s for noop priority processor", e)
+			}
+			return 0
+		}
+		require.NoError(t, sch.register(9, noop, true /* priority */))
 	}
 	s := NewProcessor(cfg.Config)
 	h := processorTestHelper{}
