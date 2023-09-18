@@ -13,6 +13,7 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -90,33 +91,40 @@ func extractInformIssueIDs(message string) map[string]int {
 
 func extractEpicIDs(message string) map[string]int {
 	result := extractStringsFromMessage(message, epicRefRE, jiraIssueRefRE)
-	for issueKey, count := range result {
+	keys := make([]string, 0, len(result))
+	for key := range result {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		count := result[key]
 		var isEpic bool
-		epicKey, ok := invalidEpicRefs[issueKey]
+		epicKey, ok := invalidEpicRefs[key]
 		if ok {
-			isEpic = epicKey == issueKey
+			isEpic = epicKey == key
 		} else {
 			var err error
-			isEpic, epicKey, err = getValidEpicRef(issueKey)
+			isEpic, epicKey, err = getValidEpicRef(key)
 			if err != nil {
 				// if the supplied issueKey is bad or there's a problem with the Jira REST API, simply print out
 				// the error message, but don't return it. Instead, remove the epic from the list, since we were
 				// unable to validate whether it was an epic, and we strictly need a valid epic key.
-				fmt.Printf("error: Unable to determine whether %s is a valid epic. Caused by:\n%s\n", issueKey, err)
-				delete(result, issueKey)
+				fmt.Printf("error: Unable to determine whether %s is a valid epic. Caused by:\n%s\n", key, err)
+				delete(result, key)
 				continue
 			}
 			if epicKey != "" {
-				invalidEpicRefs[issueKey] = epicKey
+				invalidEpicRefs[key] = epicKey
+				invalidEpicRefs[epicKey] = epicKey
 			}
 		}
 		if isEpic {
 			continue
-		} else if issueKey != epicKey {
+		} else if key != epicKey {
 			if epicKey != "" {
 				result[epicKey] = count
 			}
-			delete(result, issueKey)
+			delete(result, key)
 		}
 	}
 	return result
