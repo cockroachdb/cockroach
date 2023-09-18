@@ -119,7 +119,8 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		var outCol *scopeColumn
 		startCols := len(outScope.cols)
 
-		isRecordReturningUDF := def != nil && funcExpr.ResolvedOverload().IsUDF && texpr.ResolvedType().Family() == types.TupleFamily && b.insideDataSource
+		isRecordReturningUDF := def != nil && funcExpr.ResolvedOverload().Type == tree.UDFRoutine &&
+			texpr.ResolvedType().Family() == types.TupleFamily && b.insideDataSource
 		var scalar opt.ScalarExpr
 		_, isScopedColumn := texpr.(*scopeColumn)
 

@@ -690,15 +690,18 @@ func (desc *immutable) GetLanguage() catpb.Function_Language {
 }
 
 func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
+	routineType := tree.UDFRoutine
+	if desc.IsProcedure {
+		routineType = tree.ProcedureRoutine
+	}
 	ret = &tree.Overload{
-		Oid:         catid.FuncIDToOID(desc.ID),
-		ReturnType:  tree.FixedReturnType(desc.ReturnType.Type),
-		ReturnSet:   desc.ReturnType.ReturnSet,
-		Body:        desc.FunctionBody,
-		IsUDF:       true,
-		IsProcedure: desc.IsProcedure,
-		Version:     uint64(desc.Version),
-		Language:    desc.getCreateExprLang(),
+		Oid:        catid.FuncIDToOID(desc.ID),
+		ReturnType: tree.FixedReturnType(desc.ReturnType.Type),
+		ReturnSet:  desc.ReturnType.ReturnSet,
+		Body:       desc.FunctionBody,
+		Type:       routineType,
+		Version:    uint64(desc.Version),
+		Language:   desc.getCreateExprLang(),
 	}
 
 	argTypes := make(tree.ParamTypes, 0, len(desc.Params))

@@ -1150,7 +1150,7 @@ func (expr *FuncExpr) TypeCheck(
 			notCalledOnNullInputFns.Add(int(idx))
 		}
 		// TODO(harding): Check if this is a record-returning UDF instead.
-		if def.Overloads[idx].IsUDF {
+		if def.Overloads[idx].Type == UDFRoutine {
 			hasUDFOverload = true
 		}
 	}
@@ -3302,7 +3302,7 @@ func getMostSignificantOverload(
 	seenSchema := ""
 	for _, idx := range filter {
 		o := qualifiedOverloads[idx]
-		if o.IsUDF {
+		if o.Type == UDFRoutine {
 			// This check is only concerned with user-defined functions, not with
 			// builtin functions defined with a SQL string body. For this reason we
 			// check o.IsUDF instead of o.HasSQLBody().

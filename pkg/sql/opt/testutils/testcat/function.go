@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -54,19 +53,6 @@ func (tc *Catalog) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
 ) (*tree.RoutineName, *tree.Overload, error) {
 	return nil, nil, errors.AssertionFailedf("ResolveFunctionByOID not supported in test catalog")
-}
-
-// ResolveProcedure is part of the tree.FunctionReferenceResolver interface.
-func (tc *Catalog) ResolveProcedure(
-	ctx context.Context, name *tree.UnresolvedObjectName, path tree.SearchPath,
-) (*tree.Overload, error) {
-	if def, ok := tc.udfs[name.String()]; ok {
-		o := def.Overloads[0]
-		if o.IsProcedure {
-			return o.Overload, nil
-		}
-	}
-	return nil, sqlerrors.NewProcedureUndefinedError(name)
 }
 
 // CreateRoutine handles the CREATE FUNCTION statement.
@@ -112,15 +98,18 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		tc.udfs = make(map[string]*tree.ResolvedFunctionDefinition)
 	}
 
+	routineType := tree.UDFRoutine
+	if c.IsProcedure {
+		routineType = tree.ProcedureRoutine
+	}
 	overload := &tree.Overload{
 		Types:             paramTypes,
 		ReturnType:        tree.FixedReturnType(retType),
-		IsUDF:             true,
 		Body:              body,
 		Volatility:        v,
 		CalledOnNullInput: calledOnNullInput,
 		Language:          language,
-		IsProcedure:       c.IsProcedure,
+		Type:              routineType,
 	}
 	if c.ReturnType.IsSet {
 		overload.Class = tree.GeneratorClass

@@ -130,6 +130,18 @@ func (c FunctionClass) String() string {
 	}
 }
 
+// RoutineType specifies the type of routine represented by an overload.
+type RoutineType uint8
+
+const (
+	// BuiltinRoutine is a builtin function.
+	BuiltinRoutine RoutineType = iota
+	// UDFRoutine is a user-defined function.
+	UDFRoutine
+	// ProcedureRoutine is a user-defined procedure.
+	ProcedureRoutine
+)
+
 // Overload is one of the overloads of a built-in function.
 // Each FunctionDefinition may contain one or more overloads.
 type Overload struct {
@@ -226,12 +238,9 @@ type Overload struct {
 	// FunctionProperties are the properties of this overload.
 	FunctionProperties
 
-	// IsUDF is set to true when this is a user-defined function overload built
-	// using CREATE FUNCTION. Note: Body can be empty even if IsUDF is true.
-	IsUDF bool
-	// IsProcedure is set to true when this is a user-defined procedure built
-	// using CREATE PROCEDURE.
-	IsProcedure bool
+	// Type indicates if the overload represents a built-in function, a
+	// user-defined function, or a user-define procedure.
+	Type RoutineType
 	// Body is the SQL string body of a function. It can be set even if IsUDF is
 	// false if a builtin function is defined using a SQL string.
 	Body string
@@ -301,7 +310,7 @@ func (b Overload) IsGenerator() bool {
 // HasSQLBody returns true if the function was defined using a SQL string body.
 // This is the case for user-defined functions and some builtins.
 func (b Overload) HasSQLBody() bool {
-	return b.IsUDF || b.Body != ""
+	return b.Type == UDFRoutine || b.Type == ProcedureRoutine || b.Body != ""
 }
 
 // Signature returns a human-readable signature.

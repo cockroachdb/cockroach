@@ -47,7 +47,7 @@ AND function_name = %[2]s
 
 	var udfSchema string
 	for _, o := range fn.Overloads {
-		if o.IsUDF {
+		if o.Type == tree.UDFRoutine {
 			udfSchema = o.Schema
 			break
 		}
