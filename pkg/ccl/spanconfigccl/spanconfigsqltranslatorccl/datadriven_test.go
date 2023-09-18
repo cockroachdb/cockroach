@@ -111,11 +111,15 @@ func TestDataDriven(t *testing.T) {
 			// test cluster).
 			ManagerDisableJobCreation: true,
 		}
+		sqlExecutorKnobs := &sql.ExecutorTestingKnobs{
+			UseTransactionalDescIDGenerator: true,
+		}
 		tsArgs := func(attr string) base.TestServerArgs {
 			return base.TestServerArgs{
 				Knobs: base.TestingKnobs{
-					GCJob:      gcTestingKnobs,
-					SpanConfig: scKnobs,
+					GCJob:       gcTestingKnobs,
+					SpanConfig:  scKnobs,
+					SQLExecutor: sqlExecutorKnobs,
 				},
 				StoreSpecs: []base.StoreSpec{
 					{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
