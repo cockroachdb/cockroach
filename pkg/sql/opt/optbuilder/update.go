@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -86,7 +87,8 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	b.checkPrivilege(depName, tab, privilege.SELECT)
 
 	// Check if this table has already been mutated in another subquery.
-	b.checkMultipleMutations(tab, generalMutation)
+	var visited intsets.Fast
+	b.checkMultipleMutations(tab, generalMutation, visited)
 
 	var mb mutationBuilder
 	mb.init(b, "update", tab, alias)

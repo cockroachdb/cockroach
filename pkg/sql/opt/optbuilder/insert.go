@@ -218,7 +218,8 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	if ins.OnConflict == nil {
 		mutType = simpleInsert
 	}
-	b.checkMultipleMutations(tab, mutType)
+	var visited intsets.Fast
+	b.checkMultipleMutations(tab, mutType, visited)
 
 	var mb mutationBuilder
 	if ins.OnConflict != nil && ins.OnConflict.IsUpsertAlias() {
