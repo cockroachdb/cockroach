@@ -1914,3 +1914,27 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
     RETURN i;
   END
 $$ LANGUAGE PLpgSQL;
+
+# Functions with VOID return types do not need explicit RETURN statements
+# for all possible control flows.
+statement ok
+DROP FUNCTION f(INT);
+CREATE OR REPLACE FUNCTION f(i INT) RETURNS VOID AS $$
+  BEGIN
+    IF i > 0 THEN
+      RAISE NOTICE 'inside IF';
+    END IF;
+    RAISE NOTICE 'outside IF';
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f(1)
+----
+NOTICE: inside IF
+NOTICE: outside IF
+
+query T noticetrace
+SELECT f(-1)
+----
+NOTICE: outside IF
