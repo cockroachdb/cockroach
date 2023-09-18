@@ -858,6 +858,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Replace all UDF names with OIDs in check constraints and update back
+	// references in functions used.
+	for _, ck := range n.tableDesc.CheckConstraints() {
+		if err := params.p.updateFunctionReferencesForCheck(params.ctx, n.tableDesc, ck.CheckDesc()); err != nil {
+			return err
+		}
+	}
+
 	// Record this table alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
