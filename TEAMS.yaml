@@ -66,6 +66,9 @@ cockroachdb/storage:
 cockroachdb/test-eng:
   triage_column_id: 14041337
   label: T-testeng
+cockroachdb/test-eng-prs:
+  triage_column_id: 14041337
+  label: T-testeng
 cockroachdb/security:
   label: T-cross-product-security
 cockroachdb/prodsec:
