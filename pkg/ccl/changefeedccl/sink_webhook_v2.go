@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -195,9 +196,17 @@ func (sc *webhookSinkClient) makePayloadForBytes(body []byte) (SinkPayload, erro
 	return req, nil
 }
 
-// MakeResolvedPayload implements the SinkClient interface
-func (sc *webhookSinkClient) MakeResolvedPayload(body []byte, topic string) (SinkPayload, error) {
-	return sc.makePayloadForBytes(body)
+// FlushResolvedPayload implements the SinkClient interface
+func (sc *webhookSinkClient) FlushResolvedPayload(
+	ctx context.Context, body []byte, _ func(func(topic string) error) error, retryOpts retry.Options,
+) error {
+	pl, err := sc.makePayloadForBytes(body)
+	if err != nil {
+		return err
+	}
+	return retry.WithMaxAttempts(ctx, retryOpts, retryOpts.MaxRetries+1, func() error {
+		return sc.Flush(ctx, pl)
+	})
 }
 
 // Flush implements the SinkClient interface

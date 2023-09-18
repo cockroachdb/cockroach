@@ -28,9 +28,11 @@ import (
 // SinkClient is an interface to an external sink, where messages are written
 // into batches as they arrive and once ready are flushed out.
 type SinkClient interface {
-	MakeResolvedPayload(body []byte, topic string) (SinkPayload, error)
-	// Batches can only hold messages for one unique topic
 	MakeBatchBuffer(topic string) BatchBuffer
+	// FlushResolvedPayload flushes the resolved payload to the sink. It takes
+	// an iterator over the set of topics in case the client chooses to emit
+	// the payload to multiple topics.
+	FlushResolvedPayload(context.Context, []byte, func(func(topic string) error) error, retry.Options) error
 	Flush(context.Context, SinkPayload) error
 	Close() error
 }
@@ -199,17 +201,12 @@ func (s *batchingSink) EmitResolvedTimestamp(
 	if err != nil {
 		return err
 	}
-	payload, err := s.client.MakeResolvedPayload(data, "")
-	if err != nil {
-		return err
-	}
-
+	// Flush the buffered rows.
 	if err = s.Flush(ctx); err != nil {
 		return err
 	}
-	return retry.WithMaxAttempts(ctx, s.retryOpts, s.retryOpts.MaxRetries+1, func() error {
-		return s.client.Flush(ctx, payload)
-	})
+
+	return s.client.FlushResolvedPayload(ctx, data, s.topicNamer.Each, s.retryOpts)
 }
 
 // Close implements the Sink interface.
