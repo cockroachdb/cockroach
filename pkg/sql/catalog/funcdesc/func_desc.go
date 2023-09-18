@@ -768,7 +768,7 @@ func (desc *immutable) ToCreateExpr() (ret *tree.CreateRoutine, err error) {
 		Name: tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
 		ReturnType: tree.RoutineReturnType{
 			Type:  desc.ReturnType.Type,
-			IsSet: desc.ReturnType.ReturnSet,
+			SetOf: desc.ReturnType.ReturnSet,
 		},
 	}
 	ret.Params = make(tree.RoutineParams, len(desc.Params))
