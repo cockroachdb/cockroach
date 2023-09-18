@@ -23,6 +23,7 @@ func TestStatementTree(t *testing.T) {
 		pop
 		mut
 		simple
+		post
 		t1
 		t2
 		fail
@@ -374,6 +375,55 @@ func TestStatementTree(t *testing.T) {
 				mut | t1 | fail,
 			},
 		},
+		// 21.
+		// Push
+		//     CanMutateTable(t1, simpleInsert)
+		//     Push
+		//         CanMutateTable(t2, default)
+		//         CanMutateTable(t1, default, post) FAIL
+		{
+			cmds: []cmd{
+				push,
+				mut | t1 | simple,
+				push,
+				mut | t2,
+				mut | t1 | post | fail,
+			},
+		},
+		// 22.
+		// Push
+		//     Push
+		//         CanMutateTable(t1, default)
+		//         CanMutateTable(t2, default, post)
+		//     Pop
+		//     CanMutateTable(t2, simpleInsert) FAIL
+		{
+			cmds: []cmd{
+				push,
+				push,
+				mut | t1,
+				mut | t2 | post,
+				pop,
+				mut | t1 | simple | fail,
+			},
+		},
+		// 23.
+		// Push
+		//     Push
+		//         CanMutateTable(t1, default)
+		//         CanMutateTable(t2, default, post)
+		//     Pop
+		// Pop
+		{
+			cmds: []cmd{
+				push,
+				push,
+				mut | t1,
+				mut | t2 | post,
+				pop,
+				pop,
+			},
+		},
 	}
 
 	for i, tc := range testCases {
@@ -400,7 +450,12 @@ func TestStatementTree(t *testing.T) {
 					typ = simpleInsert
 				}
 
-				res := mt.CanMutateTable(tabID, typ)
+				isPost := false
+				if c&post == post {
+					isPost = true
+				}
+
+				res := mt.CanMutateTable(tabID, typ, isPost)
 
 				expected := c&fail != fail
 				if res != expected {

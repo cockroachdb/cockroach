@@ -3749,6 +3749,9 @@ INSERT INTO nonunique_idx_child VALUES (0, 1, 10)
 # involved a mixed situation would error out.
 
 statement ok
+SET enable_multiple_modifications_of_table = true
+
+statement ok
 CREATE TABLE x (
     k INT PRIMARY KEY
 )
@@ -3768,6 +3771,8 @@ SELECT
 FROM
     a
 
+statement ok
+RESET enable_multiple_modifications_of_table
 
 # Test that reversing a constraint addition after adding a self foreign key
 # works correctly.
