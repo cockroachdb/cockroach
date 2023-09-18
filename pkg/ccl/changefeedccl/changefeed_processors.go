@@ -1093,7 +1093,6 @@ func newChangeFrontierProcessor(
 	} else {
 		cf.freqEmitResolved = emitNoResolved
 	}
-
 	encodingOpts, err := opts.GetEncodingOptions()
 	if err != nil {
 		return nil, err
