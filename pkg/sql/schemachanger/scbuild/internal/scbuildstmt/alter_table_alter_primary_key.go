@@ -490,6 +490,19 @@ func mustRetrieveColumnElem(
 	return column
 }
 
+func retrieveIndexColumnElemAndStatus(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID, columnID catid.ColumnID,
+) (current scpb.Status, target scpb.TargetStatus, indexColumn *scpb.IndexColumn) {
+	b.QueryByID(tableID).FilterIndexColumn().ForEach(func(
+		c scpb.Status, t scpb.TargetStatus, e *scpb.IndexColumn,
+	) {
+		if e.IndexID == indexID && e.ColumnID == columnID {
+			current, target, indexColumn = c, t, e
+		}
+	})
+	return current, target, indexColumn
+}
+
 func mustRetrieveColumnNameElem(
 	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
 ) (columnName *scpb.ColumnName) {

@@ -217,7 +217,8 @@ func dropColumn(
 			}
 			dropColumn(b, tn, tbl, n, e, elts, behavior)
 		case *scpb.PrimaryIndex:
-			// Nothing needs to be done.
+			// Nothing needs to be done. Primary index related drops (bc of column
+			// drop) are handled below in `handleDropColumnPrimaryIndexes`.
 		case *scpb.SecondaryIndex:
 			indexElts := b.QueryByID(e.TableID).Filter(hasIndexIDAttrFilter(e.IndexID))
 			_, indexTargetStatus, indexName := scpb.FindIndexName(indexElts)
@@ -330,10 +331,12 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 	var indexesToDrop catid.IndexSet
 	var columnsToDrop catalog.TableColSet
 	tblElts := b.QueryByID(col.TableID).Filter(orFilter(publicTargetFilter, transientTargetFilter))
+
 	// Panic if `col` is referenced in a predicate of an index or
 	// unique without index constraint.
 	// TODO (xiang): Remove this restriction when #96924 is fixed.
 	panicIfColReferencedInPredicate(b, col, tblElts)
+
 	tblElts.
 		Filter(referencesColumnIDFilter(col.ColumnID)).
 		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
@@ -378,6 +381,7 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 				panic(errors.AssertionFailedf("unknown column-dependent element type %T", elt))
 			}
 		})
+
 	tblElts.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch elt := e.(type) {
 		case *scpb.Column:
@@ -480,6 +484,21 @@ func handleDropColumnPrimaryIndexes(
 ) {
 	inflatedChain := getInflatedPrimaryIndexChain(b, tbl.TableID)
 	dropStoredColumnFromPrimaryIndex(b, tbl.TableID, inflatedChain.finalSpec.primary, col)
+
+	// If `col` already exists in `old`, then we can return now (after dropping
+	// from `final`). Otherwise (if `col` is just added in the same transaction),
+	// we need to remove `col` from `inter2`, `inter1`, and possibly `old` as
+	// well.
+	current, _, e := retrieveIndexColumnElemAndStatus(b, tbl.TableID, inflatedChain.oldSpec.primary.IndexID, col.ColumnID)
+	if e != nil && current == scpb.Status_PUBLIC {
+		return
+	}
+	for _, idxSpec := range []*indexSpec{&inflatedChain.oldSpec, &inflatedChain.inter1Spec, &inflatedChain.inter2Spec} {
+		_, _, e = retrieveIndexColumnElemAndStatus(b, tbl.TableID, idxSpec.primary.IndexID, col.ColumnID)
+		if e != nil {
+			dropStoredColumnFromPrimaryIndex(b, tbl.TableID, idxSpec.primary, col)
+		}
+	}
 }
 
 // dropStoredColumnFromPrimaryIndex removes `col` from a primary index `from` and
@@ -500,6 +519,10 @@ func dropIndexColumnFromInternal(
 	columnID catid.ColumnID,
 	kind scpb.IndexColumn_Kind,
 ) {
+	if fromID == 0 {
+		return
+	}
+
 	found := false
 	for _, storedCol := range getIndexColumns(b.QueryByID(tableID), fromID, kind) {
 		if found {
@@ -515,7 +538,7 @@ func dropIndexColumnFromInternal(
 	}
 	if !found {
 		panic(errors.AssertionFailedf("programming error: didn't find column %v from "+
-			"primary index %v storing columns in table %v", columnID, fromID, tableID))
+			"primary index %v's storing columns in table %v", columnID, fromID, tableID))
 	}
 }
 
