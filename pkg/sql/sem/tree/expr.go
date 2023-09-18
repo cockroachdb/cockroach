@@ -1275,6 +1275,9 @@ type FuncExpr struct {
 	// is used for any type of aggregation.
 	OrderBy OrderBy
 
+	// InCall is true when the FuncExpr is part of a CALL statement.
+	InCall bool
+
 	typeAnnotation
 	fnProps *FunctionProperties
 	fn      *Overload
