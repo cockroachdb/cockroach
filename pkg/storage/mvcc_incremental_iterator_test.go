@@ -1463,6 +1463,10 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 	}
 	defer eng.Close()
 
+	// TODO(jackson): This test is tightly coupled with the prng seed constant
+	// in loadTestData. Some of the assertions below assume there exist keys
+	// within narrow bounds (eg, [19,20)). This is the case today for the
+	// current prng seed, but it's a bit too brittle.
 	for _, testCase := range []struct {
 		start hlc.Timestamp
 		end   hlc.Timestamp
