@@ -326,6 +326,7 @@ go_test(
         "replica_range_lease_test.go",
         "replica_rangefeed_test.go",
         "replica_rankings_test.go",
+        "replica_rate_limit_test.go",
         "replica_sideload_test.go",
         "replica_split_load_test.go",
         "replica_sst_snapshot_storage_test.go",

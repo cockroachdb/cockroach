@@ -63,7 +63,7 @@ type Config struct {
 // whereas the tenant cost model is about pricing and takes into consideration
 // more costs (like network transfers, IOs).
 var (
-	// kvcuRateLimit was initially set to an absolute value in KV Compute Units/s,
+	// KVCURateLimit was initially set to an absolute value in KV Compute Units/s,
 	// with the intention of throttling free tier tenants.
 	//
 	// We now use it to disallow a single tenant from harnessing a large fraction
@@ -72,7 +72,7 @@ var (
 	// In this mode, a value of -200 means that we allow 200 KV Compute Units/s
 	// per CPU, or roughly 20% of the machine (by design 1 RU roughly maps to 1
 	// CPU-millisecond).
-	kvcuRateLimit = settings.RegisterFloatSetting(
+	KVCURateLimit = settings.RegisterFloatSetting(
 		settings.SystemOnly,
 		"kv.tenant_rate_limiter.rate_limit",
 		"per-tenant rate limit in KV Compute Units per second if positive, "+
@@ -139,7 +139,7 @@ var (
 
 	// List of config settings, used to set up "on change" notifiers.
 	configSettings = [...]settings.NonMaskedSetting{
-		kvcuRateLimit,
+		KVCURateLimit,
 		kvcuBurstLimitSeconds,
 		readBatchCost,
 		readRequestCost,
@@ -163,7 +163,7 @@ func absoluteRateFromConfigValue(value float64) float64 {
 
 // ConfigFromSettings constructs a Config using the cluster setting values.
 func ConfigFromSettings(sv *settings.Values) Config {
-	rate := absoluteRateFromConfigValue(kvcuRateLimit.Get(sv))
+	rate := absoluteRateFromConfigValue(KVCURateLimit.Get(sv))
 	return Config{
 		Rate:              rate,
 		Burst:             rate * kvcuBurstLimitSeconds.Get(sv),
@@ -179,7 +179,7 @@ func ConfigFromSettings(sv *settings.Values) Config {
 // DefaultConfig returns the configuration that corresponds to the default
 // setting values.
 func DefaultConfig() Config {
-	rate := absoluteRateFromConfigValue(kvcuRateLimit.Default())
+	rate := absoluteRateFromConfigValue(KVCURateLimit.Default())
 	return Config{
 		Rate:              rate,
 		Burst:             rate * kvcuBurstLimitSeconds.Default(),
