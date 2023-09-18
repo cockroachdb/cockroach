@@ -9,6 +9,7 @@ filegroup(
 go_library(
     name = "importer",
     srcs = [
+        "export_base.go",
         "exportcsv.go",
         "exportparquet.go",
         "import_job.go",
@@ -110,6 +111,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logutil",
+        "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
@@ -239,6 +241,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
+        "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/retry",
