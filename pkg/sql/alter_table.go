@@ -1831,7 +1831,7 @@ func dropColumnImpl(
 		}
 	}
 	if !found {
-		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 			"column %q in the middle of being added, try again later", t.Column)
 	}
 
