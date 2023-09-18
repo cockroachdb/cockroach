@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/api/option"
@@ -234,6 +235,8 @@ func (p *deprecatedPubsubSink) EmitRow(
 func (p *deprecatedPubsubSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
+	log.Errorf(context.Background(), "AAAAA PUBSUB OLD EMIT RESOLVED")
+
 	payload, err := encoder.EncodeResolvedTimestamp(ctx, "", resolved)
 	if err != nil {
 		return errors.Wrap(err, "encoding resolved timestamp")

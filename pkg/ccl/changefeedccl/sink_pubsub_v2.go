@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -130,6 +131,8 @@ func makePubsubSinkClient(
 
 // MakeResolvedPayload implements the SinkClient interface
 func (sc *pubsubSinkClient) MakeResolvedPayload(body []byte, topic string) (SinkPayload, error) {
+	log.Errorf(context.Background(), "AAAAA pubsub v2 topic %s", sc.gcPubsubTopic(topic))
+
 	return &pb.PublishRequest{
 		Topic: sc.gcPubsubTopic(topic),
 		Messages: []*pb.PubsubMessage{{

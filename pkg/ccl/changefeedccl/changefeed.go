@@ -91,6 +91,8 @@ const (
 func emitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, sink ResolvedTimestampSink, resolved hlc.Timestamp,
 ) error {
+	log.Errorf(context.Background(), "AAAAA emitresolved timestamp")
+
 	// TODO(dan): Emit more fine-grained (table level) resolved
 	// timestamps.
 	if err := sink.EmitResolvedTimestamp(ctx, encoder, resolved); err != nil {

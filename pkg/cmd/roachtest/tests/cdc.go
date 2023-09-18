@@ -598,6 +598,8 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	// behind, which is well above the 60s targetSteadyLatency we have in some tests.
 	settings.ClusterSettings["changefeed.slow_span_log_threshold"] = "30s"
 	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
+	settings.ClusterSettings["changefeed.new_pubsub_sink.enabled"] = "true"
+	t.L().Printf("changefeed.new_pubsub_sink.enabled=true blah")
 
 	settings.Env = append(settings.Env, envVars...)
 
@@ -1237,10 +1239,11 @@ func registerCDC(r registry.Registry) {
 				targets:  allTpccTargets,
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
-				initialScanLatency: 30 * time.Minute,
+				initialScanLatency: 15 * time.Minute,
 				steadyLatency:      time.Minute,
 			})
 			ct.waitForWorkload()
+			t.Fatal("deliberately ending test")
 		},
 	})
 
