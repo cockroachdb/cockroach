@@ -1,0 +1,194 @@
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  i INT,
+  s STRING
+)
+----
+
+exec-ddl
+CREATE PROCEDURE my_upsert(arg_k INT, new_i INT, new_s STRING) AS $$
+  DECLARE
+    c INT;
+  BEGIN
+    SELECT count(*) INTO c FROM t WHERE k = arg_k;
+    IF c > 0 THEN
+      UPDATE t SET i = new_i, s = new_s WHERE k = arg_k;
+    ELSE
+      INSERT INTO t VALUES (arg_k, new_i, new_s);
+    END IF;
+  END
+$$ LANGUAGE PLpgSQL
+----
+
+build format=show-scalars
+CALL my_upsert(1, 10, 'foo')
+----
+call
+ └── udf: my_upsert
+      ├── args
+      │    ├── const: 1
+      │    ├── const: 10
+      │    └── const: 'foo'
+      ├── params: arg_k:1 new_i:2 new_s:3
+      └── body
+           └── limit
+                ├── columns: "_stmt_exec_1":59
+                ├── project
+                │    ├── columns: "_stmt_exec_1":59
+                │    ├── project
+                │    │    ├── columns: c:4
+                │    │    ├── values
+                │    │    │    └── tuple
+                │    │    └── projections
+                │    │         └── cast: INT8 [as=c:4]
+                │    │              └── null
+                │    └── projections
+                │         └── udf: _stmt_exec_1 [as="_stmt_exec_1":59]
+                │              ├── args
+                │              │    ├── variable: c:4
+                │              │    ├── variable: arg_k:1
+                │              │    ├── variable: new_i:2
+                │              │    └── variable: new_s:3
+                │              ├── params: c:5 arg_k:6 new_i:7 new_s:8
+                │              └── body
+                │                   └── project
+                │                        ├── columns: "_stmt_exec_ret_2":58
+                │                        ├── project
+                │                        │    ├── columns: c:57!null
+                │                        │    ├── limit
+                │                        │    │    ├── columns: count_rows:14!null
+                │                        │    │    ├── scalar-group-by
+                │                        │    │    │    ├── columns: count_rows:14!null
+                │                        │    │    │    ├── project
+                │                        │    │    │    │    └── select
+                │                        │    │    │    │         ├── columns: k:9!null i:10 s:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+                │                        │    │    │    │         ├── scan t
+                │                        │    │    │    │         │    └── columns: k:9!null i:10 s:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+                │                        │    │    │    │         └── filters
+                │                        │    │    │    │              └── eq
+                │                        │    │    │    │                   ├── variable: k:9
+                │                        │    │    │    │                   └── variable: arg_k:6
+                │                        │    │    │    └── aggregations
+                │                        │    │    │         └── count-rows [as=count_rows:14]
+                │                        │    │    └── const: 1
+                │                        │    └── projections
+                │                        │         └── variable: count_rows:14 [as=c:57]
+                │                        └── projections
+                │                             └── udf: _stmt_exec_ret_2 [as="_stmt_exec_ret_2":58]
+                │                                  ├── args
+                │                                  │    ├── variable: c:57
+                │                                  │    ├── variable: arg_k:6
+                │                                  │    ├── variable: new_i:7
+                │                                  │    └── variable: new_s:8
+                │                                  ├── params: c:15 arg_k:16 new_i:17 new_s:18
+                │                                  └── body
+                │                                       └── project
+                │                                            ├── columns: stmt_if_7:56
+                │                                            ├── values
+                │                                            │    └── tuple
+                │                                            └── projections
+                │                                                 └── case [as=stmt_if_7:56]
+                │                                                      ├── true
+                │                                                      ├── when
+                │                                                      │    ├── gt
+                │                                                      │    │    ├── variable: c:15
+                │                                                      │    │    └── const: 0
+                │                                                      │    └── subquery
+                │                                                      │         └── project
+                │                                                      │              ├── columns: "_stmt_exec_5":41
+                │                                                      │              ├── values
+                │                                                      │              │    └── tuple
+                │                                                      │              └── projections
+                │                                                      │                   └── udf: _stmt_exec_5 [as="_stmt_exec_5":41]
+                │                                                      │                        ├── args
+                │                                                      │                        │    ├── variable: c:15
+                │                                                      │                        │    ├── variable: arg_k:16
+                │                                                      │                        │    ├── variable: new_i:17
+                │                                                      │                        │    └── variable: new_s:18
+                │                                                      │                        ├── params: c:24 arg_k:25 new_i:26 new_s:27
+                │                                                      │                        └── body
+                │                                                      │                             ├── update t
+                │                                                      │                             │    ├── columns: <none>
+                │                                                      │                             │    ├── fetch columns: k:33 i:34 s:35
+                │                                                      │                             │    ├── update-mapping:
+                │                                                      │                             │    │    ├── i_new:38 => i:29
+                │                                                      │                             │    │    └── s_new:39 => s:30
+                │                                                      │                             │    └── project
+                │                                                      │                             │         ├── columns: i_new:38 s_new:39 k:33!null i:34 s:35 crdb_internal_mvcc_timestamp:36 tableoid:37
+                │                                                      │                             │         ├── select
+                │                                                      │                             │         │    ├── columns: k:33!null i:34 s:35 crdb_internal_mvcc_timestamp:36 tableoid:37
+                │                                                      │                             │         │    ├── scan t
+                │                                                      │                             │         │    │    └── columns: k:33!null i:34 s:35 crdb_internal_mvcc_timestamp:36 tableoid:37
+                │                                                      │                             │         │    └── filters
+                │                                                      │                             │         │         └── eq
+                │                                                      │                             │         │              ├── variable: k:33
+                │                                                      │                             │         │              └── variable: arg_k:25
+                │                                                      │                             │         └── projections
+                │                                                      │                             │              ├── variable: new_i:26 [as=i_new:38]
+                │                                                      │                             │              └── variable: new_s:27 [as=s_new:39]
+                │                                                      │                             └── project
+                │                                                      │                                  ├── columns: stmt_if_3:40
+                │                                                      │                                  ├── values
+                │                                                      │                                  │    └── tuple
+                │                                                      │                                  └── projections
+                │                                                      │                                       └── udf: stmt_if_3 [as=stmt_if_3:40]
+                │                                                      │                                            ├── args
+                │                                                      │                                            │    ├── variable: c:24
+                │                                                      │                                            │    ├── variable: arg_k:25
+                │                                                      │                                            │    ├── variable: new_i:26
+                │                                                      │                                            │    └── variable: new_s:27
+                │                                                      │                                            ├── params: c:19 arg_k:20 new_i:21 new_s:22
+                │                                                      │                                            └── body
+                │                                                      │                                                 └── project
+                │                                                      │                                                      ├── columns: stmt_return_4:23
+                │                                                      │                                                      ├── values
+                │                                                      │                                                      │    └── tuple
+                │                                                      │                                                      └── projections
+                │                                                      │                                                           └── null [as=stmt_return_4:23]
+                │                                                      └── subquery
+                │                                                           └── project
+                │                                                                ├── columns: "_stmt_exec_6":55
+                │                                                                ├── values
+                │                                                                │    └── tuple
+                │                                                                └── projections
+                │                                                                     └── udf: _stmt_exec_6 [as="_stmt_exec_6":55]
+                │                                                                          ├── args
+                │                                                                          │    ├── variable: c:15
+                │                                                                          │    ├── variable: arg_k:16
+                │                                                                          │    ├── variable: new_i:17
+                │                                                                          │    └── variable: new_s:18
+                │                                                                          ├── params: c:42 arg_k:43 new_i:44 new_s:45
+                │                                                                          └── body
+                │                                                                               ├── insert t
+                │                                                                               │    ├── columns: <none>
+                │                                                                               │    ├── insert-mapping:
+                │                                                                               │    │    ├── column1:51 => k:46
+                │                                                                               │    │    ├── column2:52 => i:47
+                │                                                                               │    │    └── column3:53 => s:48
+                │                                                                               │    └── values
+                │                                                                               │         ├── columns: column1:51 column2:52 column3:53
+                │                                                                               │         └── tuple
+                │                                                                               │              ├── variable: arg_k:43
+                │                                                                               │              ├── variable: new_i:44
+                │                                                                               │              └── variable: new_s:45
+                │                                                                               └── project
+                │                                                                                    ├── columns: stmt_if_3:54
+                │                                                                                    ├── values
+                │                                                                                    │    └── tuple
+                │                                                                                    └── projections
+                │                                                                                         └── udf: stmt_if_3 [as=stmt_if_3:54]
+                │                                                                                              ├── args
+                │                                                                                              │    ├── variable: c:42
+                │                                                                                              │    ├── variable: arg_k:43
+                │                                                                                              │    ├── variable: new_i:44
+                │                                                                                              │    └── variable: new_s:45
+                │                                                                                              ├── params: c:19 arg_k:20 new_i:21 new_s:22
+                │                                                                                              └── body
+                │                                                                                                   └── project
+                │                                                                                                        ├── columns: stmt_return_4:23
+                │                                                                                                        ├── values
+                │                                                                                                        │    └── tuple
+                │                                                                                                        └── projections
+                │                                                                                                             └── null [as=stmt_return_4:23]
+                └── const: 1

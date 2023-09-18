@@ -904,8 +904,6 @@ func (b *plpgsqlBuilder) appendPlpgSQLStmts(con *continuation, stmts []ast.State
 // given continuation function.
 func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 	if con == nil {
-		// There is no continuation. If the control flow reaches this point, we need
-		// to throw a runtime error.
 		return b.buildEndOfFunctionRaise(s)
 	}
 	args := make(memo.ScalarListExpr, 0, len(b.decls)+len(b.params))
