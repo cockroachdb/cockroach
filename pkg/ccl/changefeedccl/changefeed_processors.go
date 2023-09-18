@@ -542,7 +542,8 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 // (*changeAggregator) Start() may encounter an error and move the processor to
 // draining before one of the fields below (ex. ca.drainDone) is set.
 func (ca *changeAggregator) close() {
-	if ca.Closed {
+	if ca.Closed || ca.cancel == nil {
+		// cancel is nil if Start() was never called.
 		return
 	}
 	ca.cancel()
