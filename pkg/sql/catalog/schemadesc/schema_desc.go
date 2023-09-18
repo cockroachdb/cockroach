@@ -506,14 +506,17 @@ func (desc *immutable) GetResolvedFuncDefinition(
 	for i := range funcDescPb.Signatures {
 		sig := &funcDescPb.Signatures[i]
 		retType := sig.ReturnType
+		routineType := tree.UDFRoutine
+		if sig.IsProcedure {
+			routineType = tree.ProcedureRoutine
+		}
 		overload := &tree.Overload{
 			Oid: catid.FuncIDToOID(sig.ID),
 			ReturnType: func(args []tree.TypedExpr) *types.T {
 				return retType
 			},
-			IsUDF:                    true,
+			Type:                     routineType,
 			UDFContainsOnlySignature: true,
-			IsProcedure:              sig.IsProcedure,
 		}
 		if funcDescPb.Signatures[i].ReturnSet {
 			overload.Class = tree.GeneratorClass

@@ -420,7 +420,7 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 		return nil, false
 	}
 	fn := fns[s.rnd.Intn(len(fns))]
-	if s.disableUDFs && fn.overload.IsUDF {
+	if s.disableUDFs && fn.overload.Type == tree.UDFRoutine {
 		return nil, false
 	}
 	if s.disableNondeterministicFns && fn.overload.Volatility > volatility.Immutable {

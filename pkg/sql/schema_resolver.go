@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -597,47 +596,6 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 		return nil, nil, err
 	}
 	return fnName, ret, nil
-}
-
-func (sr *schemaResolver) ResolveProcedure(
-	ctx context.Context, name *tree.UnresolvedObjectName, path tree.SearchPath,
-) (*tree.Overload, error) {
-	if name.NumParts > 3 || len(name.Parts[0]) == 0 {
-		return nil, pgerror.Newf(pgcode.InvalidName, "invalid function name: %s", name)
-	}
-	proc := name.ToRoutineName()
-	if proc.ExplicitCatalog && proc.Catalog() != sr.CurrentDatabase() {
-		return nil, pgerror.New(pgcode.FeatureNotSupported, "cross-database procedure references not allowed")
-	}
-
-	// Get procedures.
-	routine, err := maybeLookupRoutine(ctx, sr, path, proc)
-	if err != nil {
-		return nil, err
-	}
-
-	// Find the procedure overload.
-	var o *tree.Overload
-	for _, qo := range routine.Overloads {
-		if !qo.IsProcedure {
-			continue
-		}
-		// TODO(mgartner): Consider arguments to disambiguate multiple overloads
-		// with the same name.
-		o = qo.Overload
-		break
-	}
-
-	if o == nil {
-		return nil, sqlerrors.NewProcedureUndefinedError(name)
-	}
-
-	_, o, err = sr.ResolveFunctionByOID(ctx, o.Oid)
-	if err != nil {
-		return nil, err
-	}
-
-	return o, nil
 }
 
 // NewSkippingCacheSchemaResolver constructs a schemaResolver which always skip

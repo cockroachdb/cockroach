@@ -10,10 +10,11 @@ CREATE TABLE abc (
 # Procedure without arguments.
 # --------------------------------------------------
 
+# TODO(mgartner): Fix the error message here.
 build
 CALL p()
 ----
-error (42883): procedure p does not exist
+error (42883): unknown function: p: function undefined
 
 exec-ddl
 CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS 'INSERT INTO abc VALUES (1, 2, 3)'

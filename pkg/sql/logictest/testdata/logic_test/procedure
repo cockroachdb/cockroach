@@ -40,6 +40,17 @@ SELECT currval('s')
 ----
 1
 
+# A procedure can only be used with CALL, unlike a UDF.
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT p()
+
+statement ok
+CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS ''
+
+# Same test as above, but with an empty procedure.
+statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT p()
+
 statement ok
 CREATE OR REPLACE PROCEDURE p_arg(i INT) LANGUAGE SQL AS $$
   SELECT i;

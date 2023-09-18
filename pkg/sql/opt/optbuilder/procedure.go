@@ -15,6 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -33,14 +35,24 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 	b.DisableMemoReuse = true
 	outScope := inScope.push()
 
-	// Resolve the procedure.
-	o, err := b.catalog.ResolveProcedure(b.ctx, c.Name, &b.evalCtx.SessionData().SearchPath)
+	// Type-check the procedure.
+	typedExpr, err := tree.TypeCheck(b.ctx, c.Proc, b.semaCtx, types.Any)
+	if err != nil {
+		panic(err)
+	}
+	f, ok := typedExpr.(*tree.FuncExpr)
+	if !ok {
+		panic(errors.AssertionFailedf("expected FuncExpr"))
+	}
+
+	// Resolve the procedure reference.
+	def, err := f.Func.Resolve(b.ctx, b.semaCtx.SearchPath, b.semaCtx.FunctionResolver)
 	if err != nil {
 		panic(err)
 	}
 
 	// Build the routine.
-	routine := b.buildProcUDF(c, o, inScope)
+	routine := b.buildProcUDF(c, c.Proc, def, inScope)
 
 	// Build a call expression.
 	outScope.expr = b.factory.ConstructCall(routine)
@@ -48,11 +60,23 @@ func (b *Builder) buildProcedure(c *tree.Call, inScope *scope) *scope {
 }
 
 func (b *Builder) buildProcUDF(
-	c *tree.Call, o *tree.Overload, inScope *scope,
+	c *tree.Call, f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition, inScope *scope,
 ) (out opt.ScalarExpr) {
+	o := f.ResolvedOverload()
+
+	if o.Type != tree.ProcedureRoutine {
+		panic(errors.WithHint(
+			pgerror.Newf(
+				pgcode.WrongObjectType,
+				"%s(%s) is not a procedure", def.Name, o.Types.String(),
+			),
+			"To call a function, use SELECT.",
+		))
+	}
+
 	// TODO(mgartner): Build argument expressions.
 	var args memo.ScalarListExpr
-	if len(c.Exprs) > 0 {
+	if len(f.Exprs) > 0 {
 		panic(unimplemented.New("CALL", "procedures with arguments not supported"))
 	}
 
@@ -94,7 +118,7 @@ func (b *Builder) buildProcUDF(
 		}
 	case tree.RoutineLangPLpgSQL:
 		// TODO(mgartner): Add support for PLpgSQL procedures.
-		if o.IsProcedure {
+		if o.Type == tree.ProcedureRoutine {
 			panic(unimplemented.New("CALL", "PLpgSQL procedures not supported"))
 		}
 	default:
@@ -109,7 +133,7 @@ func (b *Builder) buildProcUDF(
 		args,
 		&memo.UDFCallPrivate{
 			Def: &memo.UDFDefinition{
-				Name:               c.Name.String(),
+				Name:               def.Name,
 				Typ:                types.Void,
 				Volatility:         o.Volatility,
 				SetReturning:       isSetReturning,
