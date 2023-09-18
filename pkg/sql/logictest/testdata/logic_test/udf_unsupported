@@ -183,3 +183,21 @@ statement error pgcode 0A000 unimplemented: cannot create UDFs under a temporary
 CREATE FUNCTION $temp_schema_102964.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
 
 subtest end
+
+subtest call
+
+statement ok
+CREATE FUNCTION f_call() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+# A function cannot be used with CALL.
+statement error pgcode 42809 f_call\(\) is not a procedure\nHINT: To call a function, use SELECT.
+CALL f_call()
+
+statement ok
+CREATE OR REPLACE FUNCTION f_call() RETURNS INT LANGUAGE SQL AS ''
+
+# Same test as above, but with an empty function.
+statement error pgcode 42809 f_call\(\) is not a procedure\nHINT: To call a function, use SELECT.
+CALL f_call()
+
+subtest end

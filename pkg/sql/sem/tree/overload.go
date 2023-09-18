@@ -310,7 +310,7 @@ func (b Overload) IsGenerator() bool {
 // HasSQLBody returns true if the function was defined using a SQL string body.
 // This is the case for user-defined functions and some builtins.
 func (b Overload) HasSQLBody() bool {
-	return b.Type == UDFRoutine || b.Body != ""
+	return b.Type == UDFRoutine || b.Type == ProcedureRoutine || b.Body != ""
 }
 
 // Signature returns a human-readable signature.
