@@ -619,7 +619,7 @@ func (sr *schemaResolver) ResolveProcedure(
 	// Find the procedure overload.
 	var o *tree.Overload
 	for _, qo := range routine.Overloads {
-		if !qo.IsProcedure {
+		if qo.Type != tree.ProcedureRoutine {
 			continue
 		}
 		// TODO(mgartner): Consider arguments to disambiguate multiple overloads

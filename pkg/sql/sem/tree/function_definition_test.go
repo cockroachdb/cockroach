@@ -97,23 +97,23 @@ func TestMatchOverload(t *testing.T) {
 		Overloads: []tree.QualifiedOverload{
 			{
 				Schema:   "pg_catalog",
-				Overload: &tree.Overload{Oid: 1, IsUDF: false, Types: tree.ParamTypes{tree.ParamType{Typ: types.Int}}},
+				Overload: &tree.Overload{Oid: 1, Type: tree.UDFRoutine, Types: tree.ParamTypes{tree.ParamType{Typ: types.Int}}},
 			},
 			{
 				Schema:   "sc1",
-				Overload: &tree.Overload{Oid: 2, IsUDF: true, Types: tree.ParamTypes{tree.ParamType{Typ: types.Int}}},
+				Overload: &tree.Overload{Oid: 2, Type: tree.UDFRoutine, Types: tree.ParamTypes{tree.ParamType{Typ: types.Int}}},
 			},
 			{
 				Schema:   "sc1",
-				Overload: &tree.Overload{Oid: 3, IsUDF: true, Types: tree.ParamTypes{}},
+				Overload: &tree.Overload{Oid: 3, Type: tree.UDFRoutine, Types: tree.ParamTypes{}},
 			},
 			{
 				Schema:   "sc2",
-				Overload: &tree.Overload{Oid: 4, IsUDF: true, Types: tree.ParamTypes{tree.ParamType{Typ: types.Int}}},
+				Overload: &tree.Overload{Oid: 4, Type: tree.UDFRoutine, Types: tree.ParamTypes{tree.ParamType{Typ: types.Int}}},
 			},
 			{
 				Schema: "sc3",
-				Overload: &tree.Overload{Oid: 5, IsUDF: true,
+				Overload: &tree.Overload{Oid: 5, Type: tree.UDFRoutine,
 					Types: tree.ParamTypes{
 						tree.ParamType{Typ: types.Int2}, tree.ParamType{Typ: types.Int4},
 					},

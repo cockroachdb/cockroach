@@ -62,7 +62,7 @@ func (tc *Catalog) ResolveProcedure(
 ) (*tree.Overload, error) {
 	if def, ok := tc.udfs[name.String()]; ok {
 		o := def.Overloads[0]
-		if o.IsProcedure {
+		if o.Type == tree.ProcedureRoutine {
 			return o.Overload, nil
 		}
 	}
@@ -112,15 +112,18 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		tc.udfs = make(map[string]*tree.ResolvedFunctionDefinition)
 	}
 
+	routineType := tree.UDFRoutine
+	if c.IsProcedure {
+		routineType = tree.ProcedureRoutine
+	}
 	overload := &tree.Overload{
 		Types:             paramTypes,
 		ReturnType:        tree.FixedReturnType(retType),
-		IsUDF:             true,
 		Body:              body,
 		Volatility:        v,
 		CalledOnNullInput: calledOnNullInput,
 		Language:          language,
-		IsProcedure:       c.IsProcedure,
+		Type:              routineType,
 	}
 	if c.ReturnType.IsSet {
 		overload.Class = tree.GeneratorClass

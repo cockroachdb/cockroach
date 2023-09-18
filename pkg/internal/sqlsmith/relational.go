@@ -1096,7 +1096,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 		Volatility: vol,
 		Types:      paramTypes,
 		Class:      class,
-		IsUDF:      true,
+		Type:       tree.UDFRoutine,
 	}
 
 	functions.Lock()

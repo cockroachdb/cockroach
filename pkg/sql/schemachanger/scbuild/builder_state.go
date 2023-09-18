@@ -1242,7 +1242,7 @@ func (b *builderState) ResolveUDF(
 
 	// ResolveUDF is not concerned with builtin functions that are defined using
 	// a SQL string, so we don't check ol.HasSQLBody() here.
-	if !ol.IsUDF {
+	if ol.Type != tree.UDFRoutine {
 		panic(
 			errors.Errorf(
 				"cannot perform schema change on function %s%s because it is required by the database system",
