@@ -1077,6 +1077,10 @@ func populateSystemJobsTableRows(
 	for {
 		hasNext, err := it.Next(ctx)
 		if !hasNext || err != nil {
+			log.Infof(ctx, "query: %s, \n %v", query, params)
+			if !matched {
+				log.Infof(ctx, "system scan returning hasNext: %t, matched %t, err %s, ctx %s", hasNext, matched, err, ctx.Err())
+			}
 			return matched, jobs.MaybeGenerateForcedRetryableError(ctx, p.Txn(), err)
 		}
 
@@ -1094,6 +1098,7 @@ func populateSystemJobsTableRows(
 		if err := jobsauth.Authorize(ctx, p, jobspb.JobID(jobID), payload, jobsauth.ViewAccess); err != nil {
 			// Filter out jobs which the user is not allowed to see.
 			if IsInsufficientPrivilegeError(err) {
+				log.Infof(ctx, "insufficient privs!")
 				continue
 			}
 			return matched, err

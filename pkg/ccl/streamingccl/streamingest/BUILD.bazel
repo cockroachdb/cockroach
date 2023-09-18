@@ -95,6 +95,11 @@ go_test(
     args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]),
     embed = [":streamingest"],
+    shard_count = 16,
+    tags = [
+        "ccl_test",
+        "no-remote-exec",
+    ],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
@@ -148,6 +153,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
