@@ -2181,6 +2181,8 @@ func (f *webhookFeed) Close() error {
 
 type mockPubsubMessage struct {
 	data string
+	// NB: the topic may be empty.
+	topic string
 }
 
 type deprecatedMockPubsubMessageBuffer struct {
@@ -2285,7 +2287,7 @@ func (ps *fakePubsubServer) React(req interface{}) (handled bool, ret interface{
 		ps.mu.Lock()
 		defer ps.mu.Unlock()
 		for _, msg := range publishReq.Messages {
-			ps.mu.buffer = append(ps.mu.buffer, mockPubsubMessage{data: string(msg.Data)})
+			ps.mu.buffer = append(ps.mu.buffer, mockPubsubMessage{data: string(msg.Data), topic: publishReq.Topic})
 		}
 		if ps.mu.notify != nil {
 			notifyCh := ps.mu.notify
@@ -2462,8 +2464,10 @@ func extractJSONMessagePubsub(wrapped []byte) (value []byte, key []byte, topic s
 // Next implements TestFeed
 func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
+		deprecatedMessage := false
 		msg := p.mockServer.Pop()
 		if msg == nil {
+			deprecatedMessage = true
 			msg = p.deprecatedClient.buffer.pop()
 		}
 		if msg != nil {
@@ -2482,6 +2486,9 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 				msgBytes := []byte(msg.data)
 				if resolved {
 					m.Resolved = msgBytes
+					if !deprecatedMessage {
+						m.Topic = msg.topic
+					}
 				} else {
 					m.Value, m.Key, m.Topic, err = extractJSONMessagePubsub(msgBytes)
 					if err != nil {
