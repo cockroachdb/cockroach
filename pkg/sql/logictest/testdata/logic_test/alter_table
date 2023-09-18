@@ -3210,6 +3210,27 @@ CREATE TABLE public.t_99035 (
   CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
 )
 
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement ok
+ALTER TABLE t_99035 ADD COLUMN j INT DEFAULT unique_rowid(), DROP COLUMN j; -- noop
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement ok
+ALTER TABLE t_99035 ADD COLUMN j INT, DROP COLUMN j;  -- noop
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  i INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
+)
+
 statement ok
 DROP TABLE IF EXISTS t_99035;
 CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
