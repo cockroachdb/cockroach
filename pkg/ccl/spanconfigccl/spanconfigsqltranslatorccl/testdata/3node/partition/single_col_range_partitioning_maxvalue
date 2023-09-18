@@ -14,8 +14,8 @@ ALTER PARTITION px OF INDEX db.tbl@tbl_pkey CONFIGURE ZONE USING constraints = '
 
 translate database=db table=tbl
 ----
-[/Table/<table-id>, /Table/<table-id>/1)               range default
-[/Table/<table-id>/1, /Table/<table-id>/1/4)           constraints=[+n1]
-[/Table/<table-id>/1/4, /Table/<table-id>/1/5)         constraints=[+n2]
-[/Table/<table-id>/1/5, /Table/<table-id>/2)           constraints=[+n3]
-[/Table/<table-id>/2, /Table/<table-id+1>)             range default
+/Table/106{-/1}                            range default
+/Table/106/1{-/4}                          constraints=[+n1]
+/Table/106/1/{4-5}                         constraints=[+n2]
+/Table/106/{1/5-2}                         constraints=[+n3]
+/Table/10{6/2-7}                           range default
