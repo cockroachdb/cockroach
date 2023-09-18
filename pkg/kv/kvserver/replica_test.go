@@ -14004,7 +14004,7 @@ func TestReplicaRateLimit(t *testing.T) {
 		return pErr.GoError()
 	})
 	err := put(5 * time.Second)
-	require.True(t, testutils.IsError(err, "123 pool closed: released"), err)
+	require.True(t, errors.Is(err, &kvpb.RangeNotFoundError{RangeID: 2, StoreID: 1}), err)
 
 	require.NoError(t, g.Wait())
 }
