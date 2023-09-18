@@ -10,7 +10,9 @@ package streamingest
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,10 +36,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -1245,4 +1251,151 @@ WHERE
 	var locality string
 	sysSQL.QueryRow(t, distinctQuery).Scan(&locality)
 	require.Contains(t, locality, region)
+}
+
+// TestReproIncorrectJobQuery reproduces a bug in which a crdb_internal.jobs
+// query incorrectly returns 0 rows. To reproduce, conducts the following:shuts down the node coordinating the c2c
+//
+// 1. Spin up a single multinode, multitenant test cluster: the cluster will
+// have a system tenant, a "source" tenant, and a "destination" tenant.
+//
+// 2. Start a c2c job.
+//
+// 3. Shut down the node coordinating the "consumer side" job, called the stream
+// ingestion job, running on the system tenant.
+//
+// 4. Issue a cutover command, which eventually complete the replication job.
+//
+// 5. While the job is running, poll crdb_internal.jobs and check that the
+// stream_ingestion job exists.
+func TestReproIncorrectJobQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	rng, _ := randutil.NewPseudoRand()
+	numNodes := 4
+
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.MultitenantSingleClusterNumNodes = numNodes
+
+	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
+	defer cleanup()
+
+	serverutils.SetClusterSetting(t, c.DestCluster, "server.shutdown.jobs_wait", "0ms")
+	serverutils.SetClusterSetting(t, c.DestCluster, "server.shutdown.query_wait", "10ms")
+	serverutils.SetClusterSetting(t, c.DestCluster, "server.shutdown.lease_transfer_wait", "10ms")
+
+	replicationtestutils.CreateScatteredTable(t, c, 4)
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
+
+	var coordinatorNodeIndexByOne int
+	c.SrcSysSQL.QueryRow(t, `SELECT coordinator_id FROM crdb_internal.jobs WHERE job_id = $1`, ingestionJobID).Scan(&coordinatorNodeIndexByOne)
+	coordinatorNode := coordinatorNodeIndexByOne - 1
+
+	// Find a different node to run queries on once the coordinator node has shut
+	// down.
+	findAnotherNode := func(notThisNode int) int {
+		for {
+			anotherNode := rng.Intn(numNodes)
+			if notThisNode != anotherNode {
+				return anotherNode
+			}
+		}
+	}
+	watcherNode := findAnotherNode(coordinatorNode)
+	db := c.DestCluster.Conns[watcherNode]
+
+	group := ctxgroup.WithContext(ctx)
+	defer func() {
+		require.NoError(t, group.Wait())
+	}()
+
+	group.GoCtx(func(ctx context.Context) error {
+		// Continuously poll crdb_internal.system_jobs and check the ingestion job
+		// is still there.
+		return retry.ForDuration(time.Second*100, func() error {
+			var status string
+			var payloadBytes []byte
+			res := db.QueryRowContext(ctx, `SELECT status, payload FROM crdb_internal.system_jobs WHERE id = $1`, ingestionJobID)
+			if res.Err() != nil {
+				// This query can fail if a node shuts down during the query execution;
+				// therefore, tolerate errors.
+				return res.Err()
+			}
+			if err := res.Scan(&status, &payloadBytes); err != nil && strings.Contains(err.Error(), "sql: no rows in result set") {
+				debugCrdbInternalJobs(ctx, t, ingestionJobID, db)
+				t.Fatalf("incorrect results %s", err.Error())
+
+			} else if err != nil {
+				return err
+			}
+
+			if jobs.Status(status) == jobs.StatusFailed {
+				payload := &jobspb.Payload{}
+				if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
+					t.Fatalf("job failed: %s", payload.Error)
+				}
+				t.Fatalf("job failed")
+			}
+
+			// Cutover has complete, so we can end the test.
+			if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
+				return errors.Errorf("expected job status %s, but got %s", e, a)
+			}
+			return nil
+		})
+	})
+
+	group.GoCtx(func(ctx context.Context) error {
+		sleepBeforeShutdown := time.Duration(rng.Intn(3))
+		time.Sleep(sleepBeforeShutdown * time.Second)
+		var emptyCutoverTime time.Time
+		c.Cutover(producerJobID, ingestionJobID, emptyCutoverTime, true)
+		c.DestCluster.Server(coordinatorNode).Stop(ctx)
+		return nil
+	})
+}
+
+// debugCrdbInternalJobs checks for the existence of the ingestionJob via a
+// variety of queries.
+func debugCrdbInternalJobs(ctx context.Context, t *testing.T, ingestionJob int, db *gosql.DB) {
+	t.Logf("sadness")
+	sameQueryRes := db.QueryRowContext(ctx, `SELECT status, payload FROM crdb_internal.system_jobs WHERE id = $1`, ingestionJob)
+	if sameQueryRes.Err() != nil {
+		t.Logf("same query failed: %s", sameQueryRes.Err())
+	} else {
+		var status string
+		var payloadBytes []byte
+		if err := sameQueryRes.Scan(&status, &payloadBytes); err != nil {
+			t.Logf("same query returned zero bytes: %s", err.Error())
+		} else {
+			t.Logf("query did not fail! the job status is %s", status)
+		}
+	}
+
+	jobIDQuery := func(ctx context.Context, label string, query string) {
+		t.Logf("try just querying %s", label)
+		jobsRes := db.QueryRowContext(ctx, query, ingestionJob)
+		if jobsRes.Err() != nil {
+			t.Logf("job query failed,%s", jobsRes.Err())
+			return
+		}
+		var id int
+		if err := jobsRes.Scan(&id); err != nil {
+			t.Logf("query returned zero bytes: %s", err.Error())
+		} else {
+			t.Logf("query did not fail! the job id is %d", id)
+		}
+	}
+
+	jobIDQuery(ctx, "system.jobs", `SELECT id FROM system.jobs WHERE id = $1`)
+	jobIDQuery(ctx, "system.job_info", `SELECT job_id FROM system.job_info where job_id=$1 LIMIT 1`)
+
 }
