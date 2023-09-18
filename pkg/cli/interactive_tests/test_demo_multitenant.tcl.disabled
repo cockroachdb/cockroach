@@ -2,7 +2,7 @@
 
 # This test is skipped -- its filename lets it hide from the selector in
 # TestDockerCLI. Unskip it by renaming after fixing
-# https://github.com/cockroachdb/cockroach/issues/96239.
+# https://github.com/cockroachdb/cockroach/issues/110748.
 
 source [file join [file dirname $argv0] common.tcl]
 
