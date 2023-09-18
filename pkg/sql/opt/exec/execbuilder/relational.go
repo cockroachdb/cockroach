@@ -3121,6 +3121,20 @@ func (b *Builder) buildCall(c *memo.CallExpr) (execPlan, error) {
 		return execPlan{}, errors.AssertionFailedf("expected non-nil UDF definition")
 	}
 
+	// Build the argument expressions.
+	var err error
+	var args tree.TypedExprs
+	ctx := buildScalarCtx{}
+	if len(udf.Args) > 0 {
+		args = make(tree.TypedExprs, len(udf.Args))
+		for i := range udf.Args {
+			args[i], err = b.buildScalar(&ctx, udf.Args[i])
+			if err != nil {
+				return execPlan{}, err
+			}
+		}
+	}
+
 	for _, s := range udf.Def.Body {
 		if s.Relational().CanMutate {
 			b.ContainsMutation = true
@@ -3137,7 +3151,6 @@ func (b *Builder) buildCall(c *memo.CallExpr) (execPlan, error) {
 		nil,   /* wrapRootExpr */
 	)
 
-	var args tree.TypedExprs
 	r := tree.NewTypedRoutineExpr(
 		udf.Def.Name,
 		args,
@@ -3153,7 +3166,6 @@ func (b *Builder) buildCall(c *memo.CallExpr) (execPlan, error) {
 	)
 
 	var ep execPlan
-	var err error
 	ep.root, err = b.factory.ConstructCall(r)
 	if err != nil {
 		return execPlan{}, err
