@@ -28,10 +28,11 @@ import (
 )
 
 const (
-	dnsManagedZone = "roachprod-managed"
-	dnsDomain      = "roachprod-managed.crdb.io"
-	dnsServer      = "ns-cloud-a1.googledomains.com"
-	dnsMaxResults  = 1000
+	dnsManagedZone    = "roachprod-managed"
+	dnsDomain         = "roachprod-managed.crdb.io"
+	dnsServer         = "ns-cloud-a1.googledomains.com"
+	dnsMaxResults     = 1000
+	dnsLookupAttempts = 10
 )
 
 var _ vm.DNSProvider = &dnsProvider{}
@@ -65,7 +66,7 @@ func (n dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord)
 		// No need to break the name down into components as the lookup command
 		// accepts a fully qualified name as the last parameter if the service and
 		// proto parameters are empty strings.
-		existingRecords, err := n.lookupSRVRecords(ctx, "", "", name)
+		existingRecords, err := n.lookupSRVRecords(ctx, "", "", name, dnsLookupAttempts)
 		if err != nil {
 			return err
 		}
@@ -112,7 +113,7 @@ func (n dnsProvider) LookupSRVRecords(
 	ctx context.Context, service, proto, subdomain string,
 ) ([]vm.DNSRecord, error) {
 	name := fmt.Sprintf(`%s.%s`, subdomain, n.Domain())
-	return n.lookupSRVRecords(ctx, service, proto, name)
+	return n.lookupSRVRecords(ctx, service, proto, name, dnsLookupAttempts)
 }
 
 // DeleteRecordsBySubdomain implements the vm.DNSProvider interface.
@@ -151,22 +152,33 @@ func (n dnsProvider) Domain() string {
 	return dnsDomain
 }
 
-// lookupSRVRecords uses standard net tools to perform a DNS lookup. For
-// lookups, we prefer this to using the gcloud command as it is faster, and
-// preferable when service information is being queried regularly.
+// lookupSRVRecords uses standard net tools to perform a DNS lookup. To avoid
+// failure on intermittent network issues the number of attempts can be passed,
+// it should at least be 1 or more. For lookups, we prefer this to using the
+// gcloud command as it is faster, and preferable when service information is
+// being queried regularly.
 func (n dnsProvider) lookupSRVRecords(
-	ctx context.Context, service, proto, name string,
+	ctx context.Context, service, proto, name string, attempts int,
 ) ([]vm.DNSRecord, error) {
-	cName, srvRecords, err := n.resolver.LookupSRV(ctx, service, proto, name)
-	if dnsError := (*net.DNSError)(nil); errors.As(err, &dnsError) {
-		// We ignore some errors here as they are likely due to the record name not
-		// existing. The net.LookupSRV function tends to return "server misbehaving"
-		// and "no such host" errors when no record entries are found. Hence, making
-		// the errors ambiguous and not useful. The errors are not exported, so we
-		// have to check the error message.
-		if dnsError.Err != "server misbehaving" && dnsError.Err != "no such host" && !dnsError.IsNotFound {
-			return nil, err
+	var err error
+	var cName string
+	var srvRecords []*net.SRV
+	err = retry.WithMaxAttempts(ctx, retry.Options{}, attempts, func() error {
+		cName, srvRecords, err = n.resolver.LookupSRV(ctx, service, proto, name)
+		if dnsError := (*net.DNSError)(nil); errors.As(err, &dnsError) {
+			// We ignore some errors here as they are likely due to the record name not
+			// existing. The net.LookupSRV function tends to return "server misbehaving"
+			// and "no such host" errors when no record entries are found. Hence, making
+			// the errors ambiguous and not useful. The errors are not exported, so we
+			// have to check the error message.
+			if dnsError.Err != "server misbehaving" && dnsError.Err != "no such host" && !dnsError.IsNotFound {
+				return dnsError
+			}
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	records := make([]vm.DNSRecord, len(srvRecords))
 	for i, srvRecord := range srvRecords {
@@ -242,7 +254,8 @@ func (n dnsProvider) waitForRecordsAvailable(ctx context.Context, records ...vm.
 		Multiplier:     1,
 	}, 20, func() error {
 		for key := range notAvailable {
-			foundRecords, err := n.lookupSRVRecords(ctx, "", "", key.name)
+			// The number of lookup attempts is set to 1 here since this is already a retry loop.
+			foundRecords, err := n.lookupSRVRecords(ctx, "", "", key.name, 1)
 			if err != nil {
 				return err
 			}
