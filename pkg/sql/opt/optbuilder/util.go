@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"context"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -512,16 +514,33 @@ func (b *Builder) resolveSchemaForCreate(
 	return sch, resName
 }
 
-func (b *Builder) checkMultipleMutations(tab cat.Table, typ mutationType) {
-	if !b.stmtTree.CanMutateTable(tab.ID(), typ) &&
-		!multipleModificationsOfTableEnabled.Get(&b.evalCtx.Settings.SV) &&
-		!b.evalCtx.SessionData().MultipleModificationsOfTable {
+func (b *Builder) checkMultipleMutations(tab cat.Table, typ mutationType, visited intsets.Fast) {
+	if multipleModificationsOfTableEnabled.Get(&b.evalCtx.Settings.SV) ||
+		b.evalCtx.SessionData().MultipleModificationsOfTable {
+		return
+	}
+	if visited.Contains(int(tab.ID())) {
+		return
+	}
+	if !b.stmtTree.CanMutateTable(tab.ID(), typ) {
 		panic(pgerror.Newf(
 			pgcode.FeatureNotSupported,
 			"multiple mutations of the same table %q are not supported unless they all "+
 				"use INSERT without ON CONFLICT; this is to prevent data corruption, see "+
 				"documentation of sql.multiple_modifications_of_table.enabled", tab.Name(),
 		))
+	}
+	visited.Add(int(tab.ID()))
+
+	// If this table references foreign keys that will also be mutated, then add
+	// them to the statement tree via a recursive call.
+	for i := 0; i < tab.InboundForeignKeyCount(); i++ {
+		fk := tab.InboundForeignKey(i)
+		if fk.DeleteReferenceAction() != tree.NoAction ||
+			fk.UpdateReferenceAction() != tree.NoAction {
+			fkTab := resolveTable(context.Background(), b.catalog, fk.OriginTableID())
+			b.checkMultipleMutations(fkTab, typ, visited)
+		}
 	}
 }
 
