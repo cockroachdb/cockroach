@@ -4015,12 +4015,11 @@ opt_with_options:
 // %Text: CALL <name> ( [ <expr> [, ...] ] )
 // %SeeAlso: CREATE PROCEDURE
 call_stmt:
-  CALL proc_name '(' opt_expr_list ')'
+  CALL func_application
   {
-    $$.val = &tree.Call{
-      Name: $2.unresolvedObjectName(),
-      Exprs: $4.exprs(),
-    }
+    p := $2.expr().(*tree.FuncExpr)
+    p.InCall = true
+    $$.val = &tree.Call{Proc: p}
   }
 
 // The COPY grammar in postgres has 3 different versions, all of which are supported by postgres:

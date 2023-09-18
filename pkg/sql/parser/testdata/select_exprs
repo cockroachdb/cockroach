@@ -2038,3 +2038,11 @@ SELECT ('a' !~ ANY (ARRAY['x']:::STRING[]))
 SELECT (((('a') !~ ANY ((((ARRAY[('x')]):::STRING[])))))) -- fully parenthesized
 SELECT ('_' !~ ANY (ARRAY['_']:::STRING[])) -- literals removed
 SELECT ('a' !~ ANY (ARRAY['x']:::STRING[])) -- identifiers removed
+
+parse
+SELECT my_func('a', 1, true)
+----
+SELECT my_func('a', 1, true)
+SELECT (my_func(('a'), (1), (true))) -- fully parenthesized
+SELECT my_func('_', _, _) -- literals removed
+SELECT my_func('a', 1, true) -- identifiers removed
