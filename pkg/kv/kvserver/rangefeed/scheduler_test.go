@@ -70,7 +70,7 @@ func createAndRegisterConsumerOrFail(t *testing.T, scheduler *Scheduler) *schedu
 		reschedule: make(chan processorEventType, 1),
 		sched:      scheduler,
 	}
-	id, err := c.sched.Register(c.process)
+	id, err := c.sched.Register(c.process, false)
 	require.NoError(t, err, "failed to register processor")
 	c.id = id
 	return c
@@ -314,9 +314,9 @@ func TestClientScheduler(t *testing.T) {
 		sched:      s,
 		id:         1,
 	}
-	require.NoError(t, cs.Register(c.process), "failed to register consumer")
+	require.NoError(t, cs.Register(c.process, false), "failed to register consumer")
 	require.Error(t,
-		cs.Register(func(event processorEventType) (remaining processorEventType) { return 0 }),
+		cs.Register(func(event processorEventType) (remaining processorEventType) { return 0 }, false),
 		"reregistration must fail")
 	c.pause()
 	cs.Enqueue(te2)

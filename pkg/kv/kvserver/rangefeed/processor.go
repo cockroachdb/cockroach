@@ -86,6 +86,11 @@ type Config struct {
 	// Rangefeed scheduler to use for processor. If set, SchedulerProcessor would
 	// be instantiated.
 	Scheduler *Scheduler
+
+	// Priority marks this rangefeed as a priority rangefeed, which will run in a
+	// separate scheduler shard with a dedicated worker pool. Should only be used
+	// for low-volume system ranges.
+	Priority bool
 }
 
 // SetDefaults initializes unset fields in Config to values
