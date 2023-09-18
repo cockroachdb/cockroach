@@ -51,16 +51,86 @@ CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS ''
 statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
 SELECT p()
 
-statement ok
-CREATE OR REPLACE PROCEDURE p_arg(i INT) LANGUAGE SQL AS $$
-  SELECT i;
-$$
+# TODO(mgartner): This should be pgcode 42723 with the message: 'function "p"
+# already exists with the same argument types'.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement error pgcode XXUUU cannot perform schema change on function
+CREATE FUNCTION p() RETURNS VOID LANGUAGE SQL AS ''
 
-statement error pgcode 0A000 unimplemented: procedures with arguments not supported
-CALL p_arg(1)
+onlyif config local-legacy-schema-changer
+onlyif config local-mixed-22.2-23.1
+statement error pgcode XXUUU function "p" already exists with same argument types
+CREATE FUNCTION p() RETURNS VOID LANGUAGE SQL AS ''
 
 # TODO(mgartner): The error should state "procedure definition" too.
 statement error pgcode 0A000 unimplemented: CALL usage inside a function definition
 CREATE OR REPLACE PROCEDURE p2() LANGUAGE SQL AS $$
   CALL p();
 $$
+
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  v INT
+);
+INSERT INTO t VALUES (1, 10);
+
+statement ok
+CREATE OR REPLACE PROCEDURE t_update(k_arg INT, v_arg INT) LANGUAGE SQL AS $$
+  UPDATE t SET v = v_arg WHERE k = k_arg;
+$$
+
+statement ok
+CALL t_update(1, 11)
+
+statement ok
+CALL t_update(2, 22)
+
+query II
+SELECT * FROM t
+----
+1  11
+
+statement ok
+CREATE FUNCTION t_update() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+# The procedure t_update and the function t_update can be disambiguated via the
+# number of arguments.
+query I
+SELECT t_update()
+----
+1
+
+# The procedure t_update and the function t_update can be disambiguated via the
+# number of arguments.
+statement ok
+CALL t_update(1, 110+1)
+
+query II
+SELECT * FROM t
+----
+1  111
+
+statement ok
+CREATE FUNCTION t_update(a STRING, b STRING) RETURNS VOID LANGUAGE SQL AS ''
+
+# The procedure t_update and the function t_update can be disambiguated via the
+# argument types.
+statement ok
+CALL t_update(1, 1111)
+
+query II
+SELECT * FROM t
+----
+1  1111
+
+statement ok
+DROP FUNCTION t_update(STRING, STRING);
+CREATE FUNCTION t_update(a STRING, b STRING) RETURNS SETOF INT LANGUAGE SQL AS 'SELECT 1'
+
+# TODO(mgartner): This should not be an error. It is due to a limitation in
+# several places that require the function class to be known before the function
+# has been resolved to a specific overload.
+statement error ambiguous function class on t_update
+CALL t_update(1, 0)
