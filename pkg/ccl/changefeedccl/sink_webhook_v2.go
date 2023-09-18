@@ -195,9 +195,15 @@ func (sc *webhookSinkClient) makePayloadForBytes(body []byte) (SinkPayload, erro
 	return req, nil
 }
 
-// MakeResolvedPayload implements the SinkClient interface
-func (sc *webhookSinkClient) MakeResolvedPayload(body []byte, topic string) (SinkPayload, error) {
-	return sc.makePayloadForBytes(body)
+// FlushResolvedPayload implements the SinkClient interface
+func (sc *webhookSinkClient) FlushResolvedPayload(
+	ctx context.Context, body []byte, _ func(func(topic string) error) error,
+) error {
+	pl, err := sc.makePayloadForBytes(body)
+	if err != nil {
+		return err
+	}
+	return sc.Flush(ctx, pl)
 }
 
 // Flush implements the SinkClient interface
