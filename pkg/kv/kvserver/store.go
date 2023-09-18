@@ -194,6 +194,14 @@ var defaultRangefeedSchedulerConcurrency = envutil.EnvOrDefaultInt(
 var defaultRangefeedSchedulerShardSize = envutil.EnvOrDefaultInt(
 	"COCKROACH_RANGEFEED_SCHEDULER_SHARD_SIZE", 8)
 
+// defaultRangefeedSchedulerPriorityShardSize specifies the default size of the
+// rangefeed scheduler priority shard, used for certain system ranges. This
+// shard is always fully populated with workers that don't count towards the
+// concurrency limit, and is thus effectively the number of priority workers per
+// store.
+var defaultRangefeedSchedulerPriorityShardSize = envutil.EnvOrDefaultInt(
+	"COCKROACH_RANGEFEED_SCHEDULER_PRIORITY_SHARD_SIZE", 2)
+
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
@@ -1248,6 +1256,11 @@ type StoreConfig struct {
 	// workers for the store.
 	RangeFeedSchedulerConcurrency int
 
+	// RangeFeedSchedulerConcurrentPriority specifies the number of rangefeed
+	// scheduler workers for this store's dedicated priority shard. Values < 1
+	// imply 1.
+	RangeFeedSchedulerConcurrencyPriority int
+
 	// RangeFeedSchedulerShardSize specifies the maximum number of workers per
 	// scheduler shard.
 	RangeFeedSchedulerShardSize int
@@ -1336,6 +1349,9 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 	}
 	if sc.RangeFeedSchedulerShardSize == 0 {
 		sc.RangeFeedSchedulerShardSize = defaultRangefeedSchedulerShardSize
+	}
+	if sc.RangeFeedSchedulerConcurrencyPriority == 0 {
+		sc.RangeFeedSchedulerConcurrencyPriority = defaultRangefeedSchedulerPriorityShardSize
 	}
 }
 
@@ -1997,8 +2013,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	rfs := rangefeed.NewScheduler(rangefeed.SchedulerConfig{
-		Workers:   s.cfg.RangeFeedSchedulerConcurrency,
-		ShardSize: s.cfg.RangeFeedSchedulerShardSize,
+		Workers:         s.cfg.RangeFeedSchedulerConcurrency,
+		PriorityWorkers: s.cfg.RangeFeedSchedulerConcurrencyPriority,
+		ShardSize:       s.cfg.RangeFeedSchedulerShardSize,
 	})
 	if err = rfs.Start(ctx, s.stopper); err != nil {
 		return err
