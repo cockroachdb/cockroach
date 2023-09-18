@@ -15,6 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -61,6 +63,16 @@ func (b *Builder) buildProcUDF(
 	c *tree.Call, f *tree.FuncExpr, def *tree.ResolvedFunctionDefinition, inScope *scope,
 ) (out opt.ScalarExpr) {
 	o := f.ResolvedOverload()
+
+	if o.Type != tree.ProcedureRoutine {
+		panic(errors.WithHint(
+			pgerror.Newf(
+				pgcode.WrongObjectType,
+				"%s(%s) is not a procedure", def.Name, o.Types.String(),
+			),
+			"To call a function, use SELECT.",
+		))
+	}
 
 	// TODO(mgartner): Build argument expressions.
 	var args memo.ScalarListExpr

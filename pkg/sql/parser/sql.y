@@ -1414,7 +1414,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
 %type <str> db_object_name_component
 %type <*tree.UnresolvedObjectName> table_name db_name standalone_index_name sequence_name type_name
- %type <*tree.UnresolvedObjectName> view_name db_object_name simple_db_object_name complex_db_object_name proc_name
+%type <*tree.UnresolvedObjectName> view_name db_object_name simple_db_object_name complex_db_object_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
 %type <str> schema_name opt_in_schema
 %type <tree.ObjectNamePrefix>  qualifiable_schema_name opt_schema_name wildcard_pattern
@@ -16360,8 +16360,6 @@ table_name:            db_object_name
 db_name:               db_object_name
 
 standalone_index_name: db_object_name
-
-proc_name:             db_object_name
 
 explain_option_name:   non_reserved_word
 

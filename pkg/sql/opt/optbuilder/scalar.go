@@ -626,6 +626,16 @@ func (b *Builder) buildUDF(
 	o := f.ResolvedOverload()
 	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
 
+	if o.Type == tree.ProcedureRoutine {
+		panic(errors.WithHint(
+			pgerror.Newf(
+				pgcode.WrongObjectType,
+				"%s(%s) is a procedure", def.Name, o.Types.String(),
+			),
+			"To call a procedure, use CALL.",
+		))
+	}
+
 	// Validate that the return types match the original return types defined in
 	// the function. Return types like user defined return types may change since
 	// the function was first created.
