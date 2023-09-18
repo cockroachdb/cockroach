@@ -602,7 +602,7 @@ func MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(
 			return false, nil, errors.AssertionFailedf("function expression has not been type checked")
 		}
 		// We only want to replace with OID reference when it's a UDF.
-		if !funcExpr.ResolvedOverload().IsUDF {
+		if funcExpr.ResolvedOverload().Type != tree.UDFRoutine {
 			return true, ex, nil
 		}
 		newFuncExpr := *funcExpr

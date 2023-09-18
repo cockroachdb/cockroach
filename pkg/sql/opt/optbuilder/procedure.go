@@ -94,7 +94,7 @@ func (b *Builder) buildProcUDF(
 		}
 	case tree.RoutineLangPLpgSQL:
 		// TODO(mgartner): Add support for PLpgSQL procedures.
-		if o.IsProcedure {
+		if o.Type == tree.ProcedureRoutine {
 			panic(unimplemented.New("CALL", "PLpgSQL procedures not supported"))
 		}
 	default:

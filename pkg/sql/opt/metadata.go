@@ -452,7 +452,7 @@ func (md *Metadata) CheckDependencies(
 			return false, maybeSwallowMetadataResolveErr(err)
 		}
 		for i := range definition.Overloads {
-			if definition.Overloads[i].IsUDF {
+			if definition.Overloads[i].Type == tree.UDFRoutine {
 				return false, nil
 			}
 		}
@@ -550,7 +550,7 @@ func (md *Metadata) HasUserDefinedFunctions() bool {
 func (md *Metadata) AddUserDefinedFunction(
 	overload *tree.Overload, name *tree.UnresolvedObjectName,
 ) {
-	if !overload.IsUDF {
+	if overload.Type != tree.UDFRoutine {
 		return
 	}
 	id := cat.StableID(catid.UserDefinedOIDToID(overload.Oid))
