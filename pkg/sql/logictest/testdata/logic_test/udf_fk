@@ -595,3 +595,122 @@ SELECT * FROM selfref;
 2 2
 
 subtest end
+
+
+subtest corruption_check
+
+statement ok
+DROP TABLE IF EXISTS parent CASCADE;
+
+statement ok
+DROP TABLE IF EXISTS child CASCADE;
+
+statement ok
+DROP TABLE IF EXISTS grandchild CASCADE;
+
+statement ok
+CREATE TABLE parent (j INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE child (i INT PRIMARY KEY, j INT REFERENCES parent (j) ON UPDATE CASCADE ON DELETE CASCADE, INDEX (j));
+
+statement ok
+INSERT INTO parent VALUES (0), (2), (4);
+
+statement ok
+INSERT INTO child VALUES (0, 0);
+
+statement ok
+CREATE OR REPLACE FUNCTION f(k INT) RETURNS INT AS $$
+  UPDATE parent SET j = j + 1 WHERE j = k RETURNING j
+$$ LANGUAGE SQL;
+
+# Check 1 level of cascades.
+statement error pgcode 0A000 pq: multiple mutations of the same table "child" are not supported unless they all use INSERT without ON CONFLICT; this is to prevent data corruption, see documentation of sql.multiple_modifications_of_table.enabled
+WITH x AS (SELECT f(0) AS j), y AS (UPDATE child SET j = 2 WHERE i = 0 RETURNING j) SELECT * FROM x;
+
+query II rowsort
+SELECT i, j FROM child@primary;
+----
+0  0
+
+query II rowsort
+SELECT i, j FROM child@child_j_idx;
+----
+0  0
+
+statement ok
+CREATE FUNCTION f2(old INT, new INT) RETURNS INT AS $$
+  UPDATE child SET j = new WHERE i = old RETURNING i
+$$ LANGUAGE SQL;
+
+# Test that we allow mutations in cases were the cascade happens after the
+# function call.
+#  this should not cause corruption, and should be allowed
+#  (the cascade to cookie will always be strictly after the function call)
+statement ok
+UPDATE parent SET j = j + 1 WHERE j = f2(0, 2);
+
+query II rowsort
+SELECT i, j FROM child@primary;
+----
+0  2
+
+query II rowsort
+SELECT i, j FROM child@child_j_idx;
+----
+0  2
+
+statement ok
+DROP TABLE IF EXISTS child CASCADE;
+
+statement ok
+TRUNCATE TABLE parent;
+
+statement ok
+CREATE TABLE child (i INT PRIMARY KEY, j INT UNIQUE REFERENCES parent (j) ON UPDATE CASCADE ON DELETE CASCADE, INDEX (j));
+
+statement ok
+CREATE TABLE grandchild (i INT PRIMARY KEY, j INT REFERENCES child (j) ON UPDATE CASCADE ON DELETE CASCADE, INDEX (j));
+
+statement ok
+INSERT INTO parent VALUES (0), (2), (4);
+
+statement ok
+INSERT INTO child VALUES (0, 0);
+
+statement ok
+INSERT INTO grandchild VALUES (0,0)
+
+# Check 2 levels of cascades.
+statement error pgcode 0A000 pq: multiple mutations of the same table "grandchild" are not supported unless they all use INSERT without ON CONFLICT; this is to prevent data corruption, see documentation of sql.multiple_modifications_of_table.enabled
+WITH x AS (SELECT f(0) AS j), y AS (UPDATE grandchild SET j = 2 WHERE i = 0 RETURNING j) SELECT * FROM x;
+
+statement ok
+DROP TABLE IF EXISTS child CASCADE;
+
+statement ok
+DROP TABLE IF EXISTS grandchild CASCADE;
+
+statement ok
+CREATE TABLE child (i INT PRIMARY KEY, j INT UNIQUE REFERENCES parent (j), k INT UNIQUE REFERENCES parent (j) ON UPDATE RESTRICT, INDEX (j));
+
+statement ok
+INSERT INTO child VALUES (0,4)
+
+# Check that we can mutate if there are no actions.
+statement ok
+WITH x AS (SELECT f(0) AS j), y AS (UPDATE child SET j = 2, k = 2 WHERE i = 0 RETURNING j) SELECT * FROM x;
+
+query II rowsort
+SELECT i, j FROM child@primary;
+----
+0  2
+
+query II rowsort
+SELECT i, j FROM child@child_j_idx;
+----
+0  2
+
+
+subtest end
