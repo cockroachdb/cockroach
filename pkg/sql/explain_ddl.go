@@ -88,6 +88,7 @@ func (n *explainDDLNode) setExplainValues(
 		ActiveVersion:              settings.Version.ActiveVersion(ctx),
 		ExecutionPhase:             scop.StatementPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
+		SkipPlannerSanityChecks:    true,
 		MemAcc:                     memAcc,
 	})
 	if err != nil {
