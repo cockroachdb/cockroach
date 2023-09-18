@@ -1609,7 +1609,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 							return err
 						}
 					}
-					scTable.RowLevelTTL = nil
+					scTable.RowLevelTTL = modify.RowLevelTTL()
 				}
 			}
 
