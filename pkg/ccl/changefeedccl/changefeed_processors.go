@@ -545,6 +545,11 @@ func (ca *changeAggregator) close() {
 	if ca.Closed {
 		return
 	}
+	if ca.cancel == nil {
+		// consumer close may be called even before Start is called.
+		// If that's the case, cancel is not initialized.
+		return
+	}
 	ca.cancel()
 	// Wait for the poller to finish shutting down.
 	ca.waitForKVFeedDone()
