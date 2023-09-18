@@ -3912,7 +3912,7 @@ func (a *floatSumSqrDiffsAggregate) Add(
 	// considering that we are losing 11 bits on a 52+-bit operation and
 	// that users dealing with floating points should be aware
 	// of floating-point imprecision.
-	a.sqrDiff += sqrDiff + delta*delta*float64(count)*float64(a.count)/float64(totalCount)
+	a.sqrDiff += sqrDiff + float64(count)*float64(a.count)*(delta/float64(totalCount))*delta
 	a.count = totalCount
 	a.mean += delta * float64(count) / float64(a.count)
 	return nil
