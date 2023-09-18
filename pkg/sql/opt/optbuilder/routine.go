@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -226,9 +227,9 @@ func (b *Builder) buildRoutine(
 			panic(err)
 		}
 		// Add a VALUES (NULL) statement if the return type of the function is
-		// VOID. We cant simply project NULL from the last statement because all
-		// column would be pruned and the contents of last statement would not
-		// be executed.
+		// VOID. We cannot simply project NULL from the last statement because
+		// all column would be pruned and the contents of last statement would
+		// not be executed.
 		// TODO(mgartner): This will add some planning overhead for every
 		// invocation of the function. Is there a more efficient way to do this?
 		if rtyp.Family() == types.VoidFamily {
@@ -262,8 +263,17 @@ func (b *Builder) buildRoutine(
 		if err != nil {
 			panic(err)
 		}
-		// TODO(#108298): Figure out how to handle PLpgSQL functions with VOID
-		// return types.
+		// Add a RETURN NULL statement if the return type of the function is
+		// VOID and the last statement is not already a RETURN statement. This
+		// ensures that all possible code paths lead to a RETURN statement.
+		// TODO(#108298): There is a parsing bug that affects some PLpgSQL
+		// functions with VOID return types.
+		if rtyp.Family() == types.VoidFamily {
+			lastStmt := stmt.AST.Body[len(stmt.AST.Body)-1]
+			if _, ok := lastStmt.(*plpgsqltree.Return); !ok {
+				stmt.AST.Body = append(stmt.AST.Body, &plpgsqltree.Return{Expr: tree.DNull})
+			}
+		}
 		var plBuilder plpgsqlBuilder
 		plBuilder.init(b, colRefs, o.Types.(tree.ParamTypes), stmt.AST, rtyp)
 		stmtScope := plBuilder.build(stmt.AST, bodyScope)
