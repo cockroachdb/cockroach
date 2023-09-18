@@ -157,16 +157,25 @@ func (n dnsProvider) Domain() string {
 func (n dnsProvider) lookupSRVRecords(
 	ctx context.Context, service, proto, name string,
 ) ([]vm.DNSRecord, error) {
-	cName, srvRecords, err := n.resolver.LookupSRV(ctx, service, proto, name)
-	if dnsError := (*net.DNSError)(nil); errors.As(err, &dnsError) {
-		// We ignore some errors here as they are likely due to the record name not
-		// existing. The net.LookupSRV function tends to return "server misbehaving"
-		// and "no such host" errors when no record entries are found. Hence, making
-		// the errors ambiguous and not useful. The errors are not exported, so we
-		// have to check the error message.
-		if dnsError.Err != "server misbehaving" && dnsError.Err != "no such host" && !dnsError.IsNotFound {
-			return nil, err
+	var err error
+	var cName string
+	var srvRecords []*net.SRV
+	err = retry.WithMaxAttempts(ctx, retry.Options{}, 10, func() error {
+		cName, srvRecords, err = n.resolver.LookupSRV(ctx, service, proto, name)
+		if dnsError := (*net.DNSError)(nil); errors.As(err, &dnsError) {
+			// We ignore some errors here as they are likely due to the record name not
+			// existing. The net.LookupSRV function tends to return "server misbehaving"
+			// and "no such host" errors when no record entries are found. Hence, making
+			// the errors ambiguous and not useful. The errors are not exported, so we
+			// have to check the error message.
+			if dnsError.Err != "server misbehaving" && dnsError.Err != "no such host" && !dnsError.IsNotFound {
+				return dnsError
+			}
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	records := make([]vm.DNSRecord, len(srvRecords))
 	for i, srvRecord := range srvRecords {
