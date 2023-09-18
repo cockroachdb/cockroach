@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -90,7 +89,7 @@ func TestReplicaRateLimit(t *testing.T) {
 	// Now the rate limiter is saturated. If we try to write a request to the
 	// replica now, the rate limiter will block it. If this races with a range
 	// destruction (for example, due to a merge like below), maybeRateLimitBatch()
-	// returns a quota pool closed error.
+	// must return a RangeNotFound error.
 	g := ctxgroup.WithContext(ctx)
 	g.Go(func() error {
 		_, pErr := leftRepl.AdminMerge(ctx, kvpb.AdminMergeRequest{
@@ -101,7 +100,7 @@ func TestReplicaRateLimit(t *testing.T) {
 		return pErr.GoError()
 	})
 	err := put(5 * time.Second)
-	require.True(t, testutils.IsError(err, "123 pool closed: released"), err)
+	require.True(t, errors.Is(err, &kvpb.RangeNotFoundError{RangeID: 2, StoreID: 1}), err)
 
 	require.NoError(t, g.Wait())
 }
