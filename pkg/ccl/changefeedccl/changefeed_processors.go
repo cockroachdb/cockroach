@@ -1093,8 +1093,6 @@ func newChangeFrontierProcessor(
 	} else {
 		cf.freqEmitResolved = emitNoResolved
 	}
-	log.Errorf(ctx, "AAAAA %s", cf.freqEmitResolved.String())
-
 	encodingOpts, err := opts.GetEncodingOptions()
 	if err != nil {
 		return nil, err
@@ -1396,8 +1394,6 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 	emitResolved = checkpointed
 
 	if emitResolved {
-		log.Errorf(context.Background(), "AAAAA maybe emitting resolved")
-
 		// Keeping this after the checkpointJobProgress call will avoid
 		// some duplicates if a restart happens.
 		newResolved := cf.frontier.Frontier()
@@ -1587,8 +1583,6 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 }
 
 func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
-	log.Errorf(context.Background(), "AAAAA maybe emitresolved")
-
 	if cf.freqEmitResolved == emitNoResolved || newResolved.IsEmpty() {
 		return nil
 	}

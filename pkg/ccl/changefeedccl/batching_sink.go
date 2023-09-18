@@ -32,7 +32,7 @@ type SinkClient interface {
 	// FlushResolvedPayload flushes the resolved payload to the sink. It takes
 	// an iterator over the set of topics in case the client chooses to emit
 	// the payload to multiple topics.
-	FlushResolvedPayload(context.Context, []byte, func(func(topic string) error) error) error
+	FlushResolvedPayload(context.Context, []byte, func(func(topic string) error) error, retry.Options) error
 	Flush(context.Context, SinkPayload) error
 	Close() error
 }
@@ -197,8 +197,6 @@ func (s *batchingSink) EmitRow(
 func (s *batchingSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
-	log.Errorf(context.Background(), "AAAAA batching sink emit reoslved")
-
 	data, err := encoder.EncodeResolvedTimestamp(ctx, "", resolved)
 	if err != nil {
 		return err
@@ -208,7 +206,7 @@ func (s *batchingSink) EmitResolvedTimestamp(
 		return err
 	}
 
-	return s.client.FlushResolvedPayload(ctx, data, s.topicNamer.Each)
+	return s.client.FlushResolvedPayload(ctx, data, s.topicNamer.Each, s.retryOpts)
 }
 
 // Close implements the Sink interface.

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -130,7 +131,10 @@ func makePubsubSinkClient(
 
 // FlushResolvedPayload implements the SinkClient interface.
 func (sc *pubsubSinkClient) FlushResolvedPayload(
-	ctx context.Context, body []byte, forEachTopic func(func(topic string) error) error,
+	ctx context.Context,
+	body []byte,
+	forEachTopic func(func(topic string) error) error,
+	retryOpts retry.Options,
 ) error {
 	return forEachTopic(func(topic string) error {
 		pl := &pb.PublishRequest{
@@ -139,7 +143,9 @@ func (sc *pubsubSinkClient) FlushResolvedPayload(
 				Data: body,
 			}},
 		}
-		return sc.Flush(ctx, pl)
+		return retry.WithMaxAttempts(ctx, retryOpts, retryOpts.MaxRetries+1, func() error {
+			return sc.Flush(ctx, pl)
+		})
 	})
 }
 
