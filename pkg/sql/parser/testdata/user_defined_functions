@@ -1,0 +1,40 @@
+parse
+SELECT udf()
+----
+SELECT udf()
+SELECT (udf()) -- fully parenthesized
+SELECT udf() -- literals removed
+SELECT _() -- identifiers removed
+
+parse
+SELECT udf('arg1', 2.0, now(), rtrim('abcd'))
+----
+SELECT udf('arg1', 2.0, now(), rtrim('abcd'))
+SELECT (udf(('arg1'), (2.0), (now()), (rtrim(('abcd'))))) -- fully parenthesized
+SELECT udf('_', _, now(), rtrim('_')) -- literals removed
+SELECT _('arg1', 2.0, _(), _('abcd')) -- identifiers removed
+
+parse
+SELECT floor(udf('arg'))
+----
+SELECT floor(udf('arg'))
+SELECT (floor((udf(('arg'))))) -- fully parenthesized
+SELECT floor(udf('_')) -- literals removed
+SELECT _(_('arg')) -- identifiers removed
+
+parse
+SELECT substring(udf(1, 2), 3)
+----
+SELECT substring(udf(1, 2), 3)
+SELECT (substring((udf((1), (2))), (3))) -- fully parenthesized
+SELECT substring(udf(_, _), _) -- literals removed
+SELECT substring(_(1, 2), 3) -- identifiers removed
+
+# This is not a signature for the built-in function btrim.
+parse
+SELECT btrim()
+----
+SELECT btrim()
+SELECT (btrim()) -- fully parenthesized
+SELECT btrim() -- literals removed
+SELECT _() -- identifiers removed
