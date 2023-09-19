@@ -156,6 +156,13 @@ func RequestDidNotStart(err error) bool {
 	// NB: gRPC doesn't provide a way to distinguish unambiguous failures, but
 	// InitialHeartbeatFailedError serves mostly the same purpose. See also
 	// https://github.com/grpc/grpc-go/issues/1443.
+	//
+	// NB: We specifically don't check circuit.ErrBreakerOpen. These are returned
+	// both by the RPC circuit breakers and also the Raft replica circuit
+	// breakers, and the latter don't guarantee that the request won't go through
+	// (e.g. they can be broken on a proposal that's actively being reproposed and
+	// will eventually succeed). The RPC circuit breakers will result in an
+	// InitialHeartbeatFailedError.
 	return errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) ||
 		errors.Is(err, circuit.ErrBreakerOpen) ||
 		IsConnectionRejected(err) ||
