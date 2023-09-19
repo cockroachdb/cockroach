@@ -1503,16 +1503,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_cockroachdb_circuitbreaker",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/cockroachdb/circuitbreaker",
-        sha256 = "52fdb5ba6a60e9a2f1db42d5b3c4c13cc5bb3947d5ce7f1bba9b0a14de71813a",
-        strip_prefix = "github.com/cockroachdb/circuitbreaker@v2.2.2-0.20190114160014-a614b14ccf63+incompatible",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/circuitbreaker/com_github_cockroachdb_circuitbreaker-v2.2.2-0.20190114160014-a614b14ccf63+incompatible.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_cockroachdb_cmux",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/cmux",
@@ -2654,16 +2644,6 @@ def go_deps():
         strip_prefix = "github.com/evanphx/json-patch@v4.11.0+incompatible",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/evanphx/json-patch/com_github_evanphx_json_patch-v4.11.0+incompatible.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_facebookgo_clock",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/facebookgo/clock",
-        sha256 = "5d6b671bd5afef8459fb7561d19bcf7c7f378da9943722d36676735b3c6272fa",
-        strip_prefix = "github.com/facebookgo/clock@v0.0.0-20150410010913-600d898af40a",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/facebookgo/clock/com_github_facebookgo_clock-v0.0.0-20150410010913-600d898af40a.zip",
         ],
     )
     go_repository(
@@ -7201,16 +7181,6 @@ def go_deps():
         strip_prefix = "github.com/peterbourgon/diskv@v2.0.1+incompatible",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/peterbourgon/diskv/com_github_peterbourgon_diskv-v2.0.1+incompatible.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_peterbourgon_g2s",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/peterbourgon/g2s",
-        sha256 = "41526f42b4fe3019581ab3745afea18271d7f037eb55a6e9fb3e32fd09ff9b8d",
-        strip_prefix = "github.com/peterbourgon/g2s@v0.0.0-20170223122336-d4e7ad98afea",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/peterbourgon/g2s/com_github_peterbourgon_g2s-v0.0.0-20170223122336-d4e7ad98afea.zip",
         ],
     )
     go_repository(
