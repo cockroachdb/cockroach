@@ -13,7 +13,6 @@ package scbuildstmt
 import (
 	"fmt"
 	"math"
-	"reflect"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -33,21 +32,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type supportedAlterTableCommand = supportedStatement
-
-// supportedAlterTableStatements tracks alter table operations fully supported by
-// declarative schema  changer. Operations marked as non-fully supported can
-// only be with the use_declarative_schema_changer session variable.
-var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
-	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):          {on: true},
-	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):         {on: true},
-	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)):    {on: true},
-	reflect.TypeOf((*tree.AlterTableSetNotNull)(nil)):         {on: true},
-	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)):      {on: true},
-	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     {on: true},
-	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): {on: true},
-}
-
 // alterTableChecks determines if the entire set of alter table commands
 // are supported.
 // One side-effect is that this function will modify `n` when it hoists
@@ -64,16 +48,6 @@ func alterTableChecks(
 	})
 	for _, cmd := range n.Cmds {
 		if mode == sessiondatapb.UseNewSchemaChangerOff {
-			return false
-		}
-
-		info, ok := supportedAlterTableStatements[reflect.TypeOf(cmd)]
-		if !ok {
-			return false
-		}
-		if isOn := info.on ||
-			mode == sessiondatapb.UseNewSchemaChangerUnsafeAlways ||
-			mode == sessiondatapb.UseNewSchemaChangerUnsafe; !isOn {
 			return false
 		}
 
