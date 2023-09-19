@@ -14,7 +14,7 @@ CREATE TABLE abc (
 build
 CALL p()
 ----
-error (42883): unknown function: p: function undefined
+error (42883): procedure p does not exist
 
 exec-ddl
 CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS 'INSERT INTO abc VALUES (1, 2, 3)'
