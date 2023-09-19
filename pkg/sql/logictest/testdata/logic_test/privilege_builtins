@@ -1270,9 +1270,10 @@ ALTER TABLE hcp_test DROP COLUMN b
 query TI rowsort
 SELECT attname, attnum FROM pg_attribute WHERE attrelid = 'hcp_test'::REGCLASS
 ----
-a     1
-c     3
-rowid 4
+a                            1
+c                            3
+rowid                        4
+........pg.dropped.2.......  2
 
 query B
 SELECT has_column_privilege('hcp_test'::REGCLASS, 1, 'SELECT')

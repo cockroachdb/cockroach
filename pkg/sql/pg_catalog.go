@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -408,8 +409,14 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error,
 	) error {
+		populatedColumns := intsets.Fast{}
+		maxColumnID := 0
 		// addColumn adds either a table or an index column to the pg_attribute table.
 		addColumn := func(column catalog.Column, attRelID tree.Datum, attNum uint32) error {
+			if int(column.GetID()) > maxColumnID {
+				maxColumnID = int(column.GetID())
+			}
+			populatedColumns.Add(int(column.GetPGAttributeNum()))
 			colTyp := column.GetType()
 			// Sets the attgenerated column to 's' if the column is generated/
 			// computed stored, "v" if virtual, zero byte otherwise.
@@ -474,10 +481,58 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		}
 
 		// Columns for table.
+		tableID := tableOid(table.GetID())
 		for _, column := range table.AccessibleColumns() {
-			tableID := tableOid(table.GetID())
 			if err := addColumn(column, tableID, uint32(column.GetPGAttributeNum())); err != nil {
 				return err
+			}
+		}
+		// The next column ID may not be populated on certain relations like
+		// sequences, so only use if it's available.
+		if int(table.GetNextColumnID()) > maxColumnID {
+			maxColumnID = int(table.GetNextColumnID() - 1)
+		}
+		// Add a dropped entry for any attribute numbers in the middle that are
+		// missing, assuming there are any numeric gaps in the number of columns
+		// observed.
+		missingColumnType := types.Any
+		if populatedColumns.Len() != maxColumnID {
+			for colID := 1; colID <= maxColumnID; colID++ {
+				if populatedColumns.Contains(colID) {
+					continue
+				}
+				colName := strings.Replace(fmt.Sprintf("........pg.dropped.%-8d", colID), " ", ".", -1)
+				if err := addRow(
+					tableID,                        // attrelid
+					tree.NewDName(colName),         // attname
+					typOid(missingColumnType),      // atttypid
+					zeroVal,                        // attstattarget
+					typLen(missingColumnType),      // attlen
+					tree.NewDInt(tree.DInt(colID)), // attnum
+					zeroVal,                        // attndims
+					negOneVal,                      // attcacheoff
+					tree.NewDInt(tree.DInt(missingColumnType.TypeModifier())), // atttypmod
+					tree.DNull,                    // attbyval (see pg_type.typbyval)
+					tree.DNull,                    // attstorage
+					tree.DNull,                    // attalign
+					tree.DBoolFalse,               // attnotnull
+					tree.DBoolFalse,               // atthasdef
+					tree.NewDString(""),           // attidentity
+					tree.NewDString(""),           // attgenerated
+					tree.DBoolTrue,                // attisdropped
+					tree.DBoolTrue,                // attislocal
+					zeroVal,                       // attinhcount
+					typColl(missingColumnType, h), // attcollation
+					tree.DNull,                    // attacl
+					tree.DNull,                    // attoptions
+					tree.DNull,                    // attfdwoptions
+					// These columns were automatically created by pg_catalog_test's missing column generator.
+					tree.DNull, // atthasmissing
+					// These columns were automatically created by pg_catalog_test's missing column generator.
+					tree.DNull, // attmissingval
+				); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -1811,6 +1866,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
 			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				tableOid := tableOid(table.GetID())
+
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 					isMutation, isWriteOnly :=
 						table.GetIndexMutationCapabilities(index.GetID())
@@ -1843,7 +1899,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 							}
 							exprs = append(exprs, fmt.Sprintf("(%s)", formattedExpr))
 						} else {
-							colIDs = append(colIDs, columnID)
+							colIDs = append(colIDs, descpb.ColumnID(col.GetPGAttributeNum()))
 						}
 						if err := collationOids.Append(typColl(col.GetType(), h)); err != nil {
 							return err
