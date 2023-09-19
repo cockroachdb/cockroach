@@ -11,6 +11,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -54,6 +55,17 @@ func (d *dev) builder(cmd *cobra.Command, extraArgs []string) error {
 		logCommand("docker", args...)
 	}
 	return d.exec.CommandContextInheritingStdStreams(ctx, "docker", args...)
+}
+
+func (d *dev) dockerIsPodman(ctx context.Context) (bool, error) {
+	output, err := d.exec.CommandContextSilent(ctx, "docker", "help")
+	if err != nil {
+		return false, err
+	}
+	if bytes.Contains(output, []byte("podman")) {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (d *dev) getDockerRunArgs(
@@ -119,6 +131,13 @@ func (d *dev) getDockerRunArgs(
 	}
 
 	args = append(args, "run", "--rm")
+	isPodman, err := d.dockerIsPodman(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if isPodman {
+		args = append(args, "--passwd=false")
+	}
 	if tty {
 		args = append(args, "-it")
 	} else {
