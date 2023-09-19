@@ -29,7 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCheckSSTConflictsMaxIntents(t *testing.T) {
+func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -38,15 +38,15 @@ func TestCheckSSTConflictsMaxIntents(t *testing.T) {
 	start, end := "a", "z"
 
 	testcases := []struct {
-		maxIntents    int64
-		expectIntents []string
+		maxLockConflicts int64
+		expectIntents    []string
 	}{
-		{maxIntents: -1, expectIntents: []string{"a"}},
-		{maxIntents: 0, expectIntents: []string{"a"}},
-		{maxIntents: 1, expectIntents: []string{"a"}},
-		{maxIntents: 2, expectIntents: []string{"a", "b"}},
-		{maxIntents: 3, expectIntents: []string{"a", "b", "c"}},
-		{maxIntents: 4, expectIntents: []string{"a", "b", "c"}},
+		{maxLockConflicts: -1, expectIntents: []string{"a"}},
+		{maxLockConflicts: 0, expectIntents: []string{"a"}},
+		{maxLockConflicts: 1, expectIntents: []string{"a"}},
+		{maxLockConflicts: 2, expectIntents: []string{"a", "b"}},
+		{maxLockConflicts: 3, expectIntents: []string{"a", "b", "c"}},
+		{maxLockConflicts: 4, expectIntents: []string{"a", "b", "c"}},
 	}
 
 	// Create SST with keys equal to intents at txn2TS.
@@ -86,13 +86,13 @@ func TestCheckSSTConflictsMaxIntents(t *testing.T) {
 	require.NoError(t, engine.Flush())
 
 	for _, tc := range testcases {
-		t.Run(fmt.Sprintf("maxIntents=%d", tc.maxIntents), func(t *testing.T) {
+		t.Run(fmt.Sprintf("maxLockConflicts=%d", tc.maxLockConflicts), func(t *testing.T) {
 			for _, usePrefixSeek := range []bool{false, true} {
 				t.Run(fmt.Sprintf("usePrefixSeek=%v", usePrefixSeek), func(t *testing.T) {
 					// Provoke and check LockConflictError.
 					startKey, endKey := MVCCKey{Key: roachpb.Key(start)}, MVCCKey{Key: roachpb.Key(end)}
 					_, err := CheckSSTConflicts(ctx, sstFile.Bytes(), engine, startKey, endKey, startKey.Key, endKey.Key.Next(),
-						false /*disallowShadowing*/, hlc.Timestamp{} /*disallowShadowingBelow*/, hlc.Timestamp{} /* sstReqTS */, tc.maxIntents, usePrefixSeek)
+						false /*disallowShadowing*/, hlc.Timestamp{} /*disallowShadowingBelow*/, hlc.Timestamp{} /* sstReqTS */, tc.maxLockConflicts, usePrefixSeek)
 					require.Error(t, err)
 					lcErr := &kvpb.LockConflictError{}
 					require.ErrorAs(t, err, &lcErr)

@@ -152,7 +152,7 @@ func DeleteRange(
 
 		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
-		maxIntents := storage.MaxIntentsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+		maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 
 		// If no predicate parameters are passed, use the fast path. If we're
 		// deleting the entire Raft range, use an even faster path that avoids a
@@ -167,7 +167,7 @@ func DeleteRange(
 			}
 			if err := storage.MVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
 				args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
-				args.IdempotentTombstone, maxIntents, statsCovered); err != nil {
+				args.IdempotentTombstone, maxLockConflicts, statsCovered); err != nil {
 				return result.Result{}, err
 			}
 			var res result.Result
@@ -197,7 +197,7 @@ func DeleteRange(
 		resumeSpan, err := storage.MVCCPredicateDeleteRange(ctx, readWriter, cArgs.Stats,
 			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
 			args.Predicates, h.MaxSpanRequestKeys, maxDeleteRangeBatchBytes,
-			defaultRangeTombstoneThreshold, maxIntents)
+			defaultRangeTombstoneThreshold, maxLockConflicts)
 		if err != nil {
 			return result.Result{}, err
 		}

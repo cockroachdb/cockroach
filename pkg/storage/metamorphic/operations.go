@@ -335,7 +335,7 @@ func (m mvccDeleteRangeUsingRangeTombstoneOp) run(ctx context.Context) string {
 	}
 
 	err := storage.MVCCDeleteRangeUsingTombstone(ctx, writer, nil, m.key, m.endKey, m.ts,
-		hlc.ClockTimestamp{}, m.key, m.endKey, false /* idempotent */, math.MaxInt64, /* maxIntents */
+		hlc.ClockTimestamp{}, m.key, m.endKey, false /* idempotent */, math.MaxInt64, /* maxLockConflicts */
 		nil /* msCovered */)
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
