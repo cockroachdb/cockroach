@@ -12,6 +12,7 @@ package keysutils
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -73,7 +74,11 @@ func parseTableKeysAsAscendingInts(
 	tableName := input[:slashPos]
 	tableID, ok := tableNameToID[tableName]
 	if !ok {
-		panic(fmt.Sprintf("unknown table: %s", tableName))
+		i, err := strconv.Atoi(tableName)
+		if err != nil {
+			panic(fmt.Sprintf("unknown table: %s", tableName))
+		}
+		tableID = i
 	}
 	// We assume that the tenant prefix (if there was any) was already removed
 	// and included into the output by the caller, so we use the system codec
@@ -100,7 +105,11 @@ func parseTableKeysAsAscendingInts(
 	} else {
 		idxID, ok = idxNameToID[fmt.Sprintf("%s.%s", tableName, idxName)]
 		if !ok {
-			panic(fmt.Sprintf("unknown index: %s", idxName))
+			i, err := strconv.Atoi(idxName)
+			if err != nil {
+				panic(fmt.Sprintf("unknown index: %s", idxName))
+			}
+			idxID = i
 		}
 	}
 	output = encoding.EncodeUvarintAscending(output, uint64(idxID))

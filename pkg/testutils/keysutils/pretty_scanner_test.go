@@ -33,9 +33,21 @@ func TestPrettyScanner(t *testing.T) {
 			},
 		},
 		{
+			prettyKey: "/Table/100",
+			expKey: func(tenantID roachpb.TenantID) roachpb.Key {
+				return keys.MakeSQLCodec(tenantID).TablePrefix(100)
+			},
+		},
+		{
 			prettyKey: "/Table/t1/pk",
 			expKey: func(tenantID roachpb.TenantID) roachpb.Key {
 				return keys.MakeSQLCodec(tenantID).IndexPrefix(50, 1)
+			},
+		},
+		{
+			prettyKey: "/Table/100/7",
+			expKey: func(tenantID roachpb.TenantID) roachpb.Key {
+				return keys.MakeSQLCodec(tenantID).IndexPrefix(100, 7)
 			},
 		},
 		{
