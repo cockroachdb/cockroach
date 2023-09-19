@@ -317,6 +317,7 @@ SELECT job_id
   FROM [SHOW JOBS]
  WHERE job_type = 'SCHEMA CHANGE GC' AND description LIKE '%foo%';`,
 	).Scan(&jobID)
+	tdb.SucceedsSoonDuration = 3 * time.Minute
 	tdb.CheckQueryResultsRetry(t,
 		"SELECT running_status FROM crdb_internal.jobs WHERE job_id = "+jobID,
 		[][]string{{string(sql.RunningStatusWaitingForMVCCGC)}},
