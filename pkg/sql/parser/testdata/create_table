@@ -631,7 +631,7 @@ CREATE TABLE a (b INT8 DEFAULT now())
 CREATE TABLE a (b INT8 DEFAULT now())
 CREATE TABLE a (b INT8 DEFAULT (now())) -- fully parenthesized
 CREATE TABLE a (b INT8 DEFAULT now()) -- literals removed
-CREATE TABLE _ (_ INT8 DEFAULT now()) -- identifiers removed
+CREATE TABLE _ (_ INT8 DEFAULT _()) -- identifiers removed
 
 error
 CREATE TABLE test (

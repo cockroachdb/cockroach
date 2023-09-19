@@ -203,6 +203,8 @@ var OidToBuiltinName map[oid.Oid]string
 var OidToQualifiedBuiltinOverload map[oid.Oid]QualifiedOverload
 
 // Format implements the NodeFormatter interface.
+// FunctionDefinitions should always be builtin functions, so we do not need to
+// anonymize them, even if the flag is set.
 func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 	ctx.WriteString(fd.Name)
 }
@@ -211,6 +213,8 @@ func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 func (fd *FunctionDefinition) String() string { return AsString(fd) }
 
 // Format implements the NodeFormatter interface.
+// ResolvedFunctionDefinitions should always be builtin functions, so we do not
+// need to anonymize them, even if the flag is set.
 func (fd *ResolvedFunctionDefinition) Format(ctx *FmtCtx) {
 	// This is necessary when deserializing function expressions for SHOW CREATE
 	// statements. When deserializing a function expression with function OID

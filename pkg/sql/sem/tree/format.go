@@ -76,9 +76,7 @@ const (
 	// also shorten long lists in tuples, VALUES and array expressions.
 	FmtHideConstants
 
-	// FmtAnonymize instructs the pretty-printer to remove
-	// any name but function names.
-	// TODO(knz): temporary until a better solution is found for #13968
+	// FmtAnonymize instructs the pretty-printer to remove any name.
 	FmtAnonymize
 
 	// FmtAlwaysQualifyTableNames instructs the pretty-printer to

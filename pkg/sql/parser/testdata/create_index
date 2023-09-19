@@ -226,7 +226,7 @@ CREATE INDEX ON a (lower(a))
 CREATE INDEX ON a (lower(a))
 CREATE INDEX ON a ((lower((a)))) -- fully parenthesized
 CREATE INDEX ON a (lower(a)) -- literals removed
-CREATE INDEX ON _ (lower(_)) -- identifiers removed
+CREATE INDEX ON _ (_(_)) -- identifiers removed
 
 parse
 CREATE INDEX ON a (a, lower(b))
@@ -234,7 +234,7 @@ CREATE INDEX ON a (a, lower(b))
 CREATE INDEX ON a (a, lower(b))
 CREATE INDEX ON a (a, (lower((b)))) -- fully parenthesized
 CREATE INDEX ON a (a, lower(b)) -- literals removed
-CREATE INDEX ON _ (_, lower(_)) -- identifiers removed
+CREATE INDEX ON _ (_, _(_)) -- identifiers removed
 
 parse
 CREATE INDEX ON a (((lower(a) || ' ') || lower(b)))
@@ -242,7 +242,7 @@ CREATE INDEX ON a (((lower(a) || ' ') || lower(b)))
 CREATE INDEX ON a (((lower(a) || ' ') || lower(b)))
 CREATE INDEX ON a (((((((lower((a))) || (' ')))) || (lower((b)))))) -- fully parenthesized
 CREATE INDEX ON a (((lower(a) || '_') || lower(b))) -- literals removed
-CREATE INDEX ON _ (((lower(_) || ' ') || lower(_))) -- identifiers removed
+CREATE INDEX ON _ (((_(_) || ' ') || _(_))) -- identifiers removed
 
 parse
 CREATE INDEX ON a (a, (a + 1), (b + 2))
@@ -258,7 +258,7 @@ CREATE INDEX ON a (lower(a))
 CREATE INDEX ON a (lower(a))
 CREATE INDEX ON a ((lower((a)))) -- fully parenthesized
 CREATE INDEX ON a (lower(a)) -- literals removed
-CREATE INDEX ON _ (lower(_)) -- identifiers removed
+CREATE INDEX ON _ (_(_)) -- identifiers removed
 
 parse
 CREATE INDEX ON a (lower(a), lower(b))
@@ -266,7 +266,7 @@ CREATE INDEX ON a (lower(a), lower(b))
 CREATE INDEX ON a (lower(a), lower(b))
 CREATE INDEX ON a ((lower((a))), (lower((b)))) -- fully parenthesized
 CREATE INDEX ON a (lower(a), lower(b)) -- literals removed
-CREATE INDEX ON _ (lower(_), lower(_)) -- identifiers removed
+CREATE INDEX ON _ (_(_), _(_)) -- identifiers removed
 
 parse
 CREATE INDEX ON a (a, lower(b))
@@ -274,7 +274,7 @@ CREATE INDEX ON a (a, lower(b))
 CREATE INDEX ON a (a, lower(b))
 CREATE INDEX ON a (a, (lower((b)))) -- fully parenthesized
 CREATE INDEX ON a (a, lower(b)) -- literals removed
-CREATE INDEX ON _ (_, lower(_)) -- identifiers removed
+CREATE INDEX ON _ (_, _(_)) -- identifiers removed
 
 parse
 CREATE INDEX ON a (((lower(a) || ' ') || lower(b)))
@@ -282,7 +282,7 @@ CREATE INDEX ON a (((lower(a) || ' ') || lower(b)))
 CREATE INDEX ON a (((lower(a) || ' ') || lower(b)))
 CREATE INDEX ON a (((((((lower((a))) || (' ')))) || (lower((b)))))) -- fully parenthesized
 CREATE INDEX ON a (((lower(a) || '_') || lower(b))) -- literals removed
-CREATE INDEX ON _ (((lower(_) || ' ') || lower(_))) -- identifiers removed
+CREATE INDEX ON _ (((_(_) || ' ') || _(_))) -- identifiers removed
 
 parse
 CREATE INDEX ON a (a, (lower(b)))
@@ -290,7 +290,7 @@ CREATE INDEX ON a (a, (lower(b)))
 CREATE INDEX ON a (a, lower(b)) -- normalized!
 CREATE INDEX ON a (a, (lower((b)))) -- fully parenthesized
 CREATE INDEX ON a (a, lower(b)) -- literals removed
-CREATE INDEX ON _ (_, lower(_)) -- identifiers removed
+CREATE INDEX ON _ (_, _(_)) -- identifiers removed
 
 parse
 CREATE INDEX ON a ((lower(a) || ' ' || lower(b)))
@@ -298,7 +298,7 @@ CREATE INDEX ON a ((lower(a) || ' ' || lower(b)))
 CREATE INDEX ON a (((lower(a) || ' ') || lower(b))) -- normalized!
 CREATE INDEX ON a ((((((lower((a))) || (' '))) || (lower((b)))))) -- fully parenthesized
 CREATE INDEX ON a (((lower(a) || '_') || lower(b))) -- literals removed
-CREATE INDEX ON _ (((lower(_) || ' ') || lower(_))) -- identifiers removed
+CREATE INDEX ON _ (((_(_) || ' ') || _(_))) -- identifiers removed
 
 parse
 CREATE UNIQUE INDEX ON a ((a + b))
@@ -314,7 +314,7 @@ CREATE UNIQUE INDEX ON a (lower(a))
 CREATE UNIQUE INDEX ON a (lower(a))
 CREATE UNIQUE INDEX ON a ((lower((a)))) -- fully parenthesized
 CREATE UNIQUE INDEX ON a (lower(a)) -- literals removed
-CREATE UNIQUE INDEX ON _ (lower(_)) -- identifiers removed
+CREATE UNIQUE INDEX ON _ (_(_)) -- identifiers removed
 
 parse
 CREATE UNIQUE INDEX ON a (a, lower(b))
@@ -322,7 +322,7 @@ CREATE UNIQUE INDEX ON a (a, lower(b))
 CREATE UNIQUE INDEX ON a (a, lower(b))
 CREATE UNIQUE INDEX ON a (a, (lower((b)))) -- fully parenthesized
 CREATE UNIQUE INDEX ON a (a, lower(b)) -- literals removed
-CREATE UNIQUE INDEX ON _ (_, lower(_)) -- identifiers removed
+CREATE UNIQUE INDEX ON _ (_, _(_)) -- identifiers removed
 
 parse
 CREATE UNIQUE INDEX ON a (((lower(a) || ' ') || lower(b)))
@@ -330,7 +330,7 @@ CREATE UNIQUE INDEX ON a (((lower(a) || ' ') || lower(b)))
 CREATE UNIQUE INDEX ON a (((lower(a) || ' ') || lower(b)))
 CREATE UNIQUE INDEX ON a (((((((lower((a))) || (' ')))) || (lower((b)))))) -- fully parenthesized
 CREATE UNIQUE INDEX ON a (((lower(a) || '_') || lower(b))) -- literals removed
-CREATE UNIQUE INDEX ON _ (((lower(_) || ' ') || lower(_))) -- identifiers removed
+CREATE UNIQUE INDEX ON _ (((_(_) || ' ') || _(_))) -- identifiers removed
 
 parse
 CREATE UNIQUE INDEX ON a (a, (a + 1), (b + 2))
@@ -346,7 +346,7 @@ CREATE UNIQUE INDEX ON a (lower(a))
 CREATE UNIQUE INDEX ON a (lower(a))
 CREATE UNIQUE INDEX ON a ((lower((a)))) -- fully parenthesized
 CREATE UNIQUE INDEX ON a (lower(a)) -- literals removed
-CREATE UNIQUE INDEX ON _ (lower(_)) -- identifiers removed
+CREATE UNIQUE INDEX ON _ (_(_)) -- identifiers removed
 
 parse
 CREATE UNIQUE INDEX ON a (lower(a), lower(b))
@@ -354,7 +354,7 @@ CREATE UNIQUE INDEX ON a (lower(a), lower(b))
 CREATE UNIQUE INDEX ON a (lower(a), lower(b))
 CREATE UNIQUE INDEX ON a ((lower((a))), (lower((b)))) -- fully parenthesized
 CREATE UNIQUE INDEX ON a (lower(a), lower(b)) -- literals removed
-CREATE UNIQUE INDEX ON _ (lower(_), lower(_)) -- identifiers removed
+CREATE UNIQUE INDEX ON _ (_(_), _(_)) -- identifiers removed
 
 parse
 CREATE UNIQUE INDEX ON a (a, lower(b))
@@ -362,7 +362,7 @@ CREATE UNIQUE INDEX ON a (a, lower(b))
 CREATE UNIQUE INDEX ON a (a, lower(b))
 CREATE UNIQUE INDEX ON a (a, (lower((b)))) -- fully parenthesized
 CREATE UNIQUE INDEX ON a (a, lower(b)) -- literals removed
-CREATE UNIQUE INDEX ON _ (_, lower(_)) -- identifiers removed
+CREATE UNIQUE INDEX ON _ (_, _(_)) -- identifiers removed
 
 parse
 CREATE UNIQUE INDEX ON a (((lower(a) || ' ') || lower(b)))
@@ -370,7 +370,7 @@ CREATE UNIQUE INDEX ON a (((lower(a) || ' ') || lower(b)))
 CREATE UNIQUE INDEX ON a (((lower(a) || ' ') || lower(b)))
 CREATE UNIQUE INDEX ON a (((((((lower((a))) || (' ')))) || (lower((b)))))) -- fully parenthesized
 CREATE UNIQUE INDEX ON a (((lower(a) || '_') || lower(b))) -- literals removed
-CREATE UNIQUE INDEX ON _ (((lower(_) || ' ') || lower(_))) -- identifiers removed
+CREATE UNIQUE INDEX ON _ (((_(_) || ' ') || _(_))) -- identifiers removed
 
 parse
 CREATE INVERTED INDEX ON a ((ARRAY[a, b]))
@@ -427,7 +427,7 @@ CREATE UNIQUE INDEX idx ON a (((lower(a) || ' ') || lower(b))) NOT VISIBLE
 CREATE UNIQUE INDEX idx ON a (((lower(a) || ' ') || lower(b))) NOT VISIBLE
 CREATE UNIQUE INDEX idx ON a (((((((lower((a))) || (' ')))) || (lower((b)))))) NOT VISIBLE -- fully parenthesized
 CREATE UNIQUE INDEX idx ON a (((lower(a) || '_') || lower(b))) NOT VISIBLE -- literals removed
-CREATE UNIQUE INDEX _ ON _ (((lower(_) || ' ') || lower(_))) NOT VISIBLE -- identifiers removed
+CREATE UNIQUE INDEX _ ON _ (((_(_) || ' ') || _(_))) NOT VISIBLE -- identifiers removed
 
 parse
 CREATE INVERTED INDEX IF NOT EXISTS a ON b (c) WHERE d > 3 VISIBLE
