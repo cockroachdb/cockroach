@@ -42,7 +42,7 @@ func IsFullySupportedWithFalsePositive(
 
 	switch typedN := n.(type) {
 	case *tree.AlterTable:
-		return alterTableChecks(typedN, mode, activeVersion)
+		return alterTableChecks(typedN, activeVersion)
 	case *tree.CreateIndex:
 		return activeVersion.IsActive(clusterversion.V23_1)
 	case *tree.DropDatabase:
