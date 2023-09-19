@@ -56,18 +56,26 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 		_, err := storage.MVCCDelete(ctx, db, roachpb.Key(k), hlc.Timestamp{}, storage.MVCCWriteOptions{})
 		require.NoError(t, err)
 	}
+	writeLock := func(k string, str lock.Strength) {
+		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, 0, makeTS(1), 0, 1, 0)
+		err := storage.MVCCAcquireLock(ctx, db, &txn, str, roachpb.Key(k), nil, 0)
+		require.NoError(t, err)
+	}
 
 	// Setup: (with separated intents the actual key layout in the store is not what is listed below.)
 	//
 	//  a: intent @ 5
 	//  a: value  @ 3
 	//  b: inline value
+	//  c: shared lock #1
+	//  c: shared lock #2
 	//  c: value  @ 6
 	//  c: value  @ 4
 	//  c: value  @ 1
 	//  d: intent @ 2
 	//  e: intent @ 7
 	//  f: inline value
+	//  g: exclusive lock
 	//
 	// NB: must write each key in increasing timestamp order.
 	writeValue("a", 3)
@@ -75,9 +83,12 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 	writeInline("b")
 	writeValue("c", 1)
 	writeValue("c", 4)
+	writeLock("c", lock.Shared)
+	writeLock("c", lock.Shared)
 	writeIntent("d", 2)
 	writeIntent("e", 7)
 	writeInline("f")
+	writeLock("g", lock.Exclusive)
 
 	for _, cfg := range []struct {
 		name                         string
