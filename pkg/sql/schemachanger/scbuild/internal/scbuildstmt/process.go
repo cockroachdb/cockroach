@@ -35,7 +35,7 @@ func IsFullySupportedWithFalsePositive(
 	n tree.Statement,
 	activeVersion clusterversion.ClusterVersion,
 	mode sessiondatapb.NewSchemaChangerMode,
-) (ret bool) {
+) bool {
 	if mode == sessiondatapb.UseNewSchemaChangerOff {
 		return false
 	}
@@ -46,31 +46,31 @@ func IsFullySupportedWithFalsePositive(
 	case *tree.CreateIndex:
 		return activeVersion.IsActive(clusterversion.V23_1)
 	case *tree.DropDatabase:
-		return activeVersion.IsActive(clusterversion.TODODelete_V22_1)
+		return true
 	case *tree.DropOwnedBy:
-		return activeVersion.IsActive(clusterversion.V22_2)
+		return true
 	case *tree.DropSchema:
-		return activeVersion.IsActive(clusterversion.TODODelete_V22_1)
+		return true
 	case *tree.DropSequence:
-		return activeVersion.IsActive(clusterversion.TODODelete_V22_1)
+		return true
 	case *tree.DropTable:
-		return activeVersion.IsActive(clusterversion.TODODelete_V22_1)
+		return true
 	case *tree.DropType:
-		return activeVersion.IsActive(clusterversion.TODODelete_V22_1)
+		return true
 	case *tree.DropView:
-		return activeVersion.IsActive(clusterversion.TODODelete_V22_1)
+		return true
 	case *tree.CommentOnConstraint:
-		return activeVersion.IsActive(clusterversion.V22_2)
+		return true
 	case *tree.CommentOnDatabase:
-		return activeVersion.IsActive(clusterversion.V22_2)
+		return true
 	case *tree.CommentOnSchema:
-		return activeVersion.IsActive(clusterversion.V22_2)
+		return true
 	case *tree.CommentOnTable:
-		return activeVersion.IsActive(clusterversion.V22_2)
+		return true
 	case *tree.CommentOnColumn:
-		return activeVersion.IsActive(clusterversion.V22_2)
+		return true
 	case *tree.CommentOnIndex:
-		return activeVersion.IsActive(clusterversion.V22_2)
+		return true
 	case *tree.DropIndex:
 		return activeVersion.IsActive(clusterversion.V23_1)
 	case *tree.DropFunction:

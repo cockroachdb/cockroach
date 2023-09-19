@@ -53,35 +53,17 @@ func alterTableChecks(
 
 		switch typedCmd := cmd.(type) {
 		case *tree.AlterTableAddColumn:
-			if !activeVersion.IsActive(clusterversion.V22_2) {
-				return false
-			}
 		case *tree.AlterTableDropColumn:
-			if !activeVersion.IsActive(clusterversion.V22_2) {
-				return false
-			}
 		case *tree.AlterTableAlterPrimaryKey:
-			if typedCmd.Sharded == nil {
-				// Start supporting ALTER PRIMARY KEY (in general with fallback cases) from V22_2.
-				if !activeVersion.IsActive(clusterversion.V22_2) {
-					return false
-				}
-			} else {
-				if !activeVersion.IsActive(clusterversion.V23_1) {
-					return false
-				}
+			if typedCmd.Sharded != nil && !activeVersion.IsActive(clusterversion.V23_1) {
+				return false
 			}
 		case *tree.AlterTableSetNotNull:
 			if !activeVersion.IsActive(clusterversion.V23_1) {
 				return false
 			}
 		case *tree.AlterTableAddConstraint:
-			// Start supporting ADD PRIMARY KEY from V22_2.
-			if d, ok := typedCmd.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey && typedCmd.ValidationBehavior == tree.ValidationDefault {
-				if !activeVersion.IsActive(clusterversion.V22_2) {
-					return false
-				}
-			} else {
+			if d, ok := typedCmd.ConstraintDef.(*tree.UniqueConstraintTableDef); !ok || !d.PrimaryKey || typedCmd.ValidationBehavior != tree.ValidationDefault {
 				// Start supporting all other ADD CONSTRAINTs from V23_1, including
 				// - ADD PRIMARY KEY NOT VALID
 				// - ADD UNIQUE [NOT VALID]
