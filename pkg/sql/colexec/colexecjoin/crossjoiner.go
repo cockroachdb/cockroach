@@ -56,7 +56,6 @@ func NewCrossJoiner(
 		TwoInputInitHelper: colexecop.MakeTwoInputInitHelper(left, right),
 		outputTypes:        joinType.MakeOutputTypes(leftTypes, rightTypes),
 	}
-	c.helper.Init(unlimitedAllocator, memoryLimit)
 	return c
 }
 
@@ -64,7 +63,6 @@ type crossJoiner struct {
 	*crossJoinerBase
 	colexecop.TwoInputInitHelper
 
-	helper             colmem.AccountingHelper
 	rightInputConsumed bool
 	outputTypes        []*types.T
 	// isLeftAllNulls and isRightAllNulls indicate whether the output vectors
@@ -334,6 +332,7 @@ func newCrossJoinerBase(
 	if joinType.ShouldIncludeLeftColsInOutput() {
 		base.builderState.rightColOffset = len(leftTypes)
 	}
+	base.helper.Init(unlimitedAllocator, memoryLimit, joinType.MakeOutputTypes(leftTypes, rightTypes), false /* alwaysReallocate */)
 	return base
 }
 
@@ -362,6 +361,7 @@ type crossJoinerBase struct {
 		rightColOffset int
 	}
 	output        coldata.Batch
+	helper        colmem.SetAccountingHelper
 	cancelChecker colexecutils.CancelChecker
 }
 
