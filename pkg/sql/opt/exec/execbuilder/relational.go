@@ -2911,6 +2911,11 @@ func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
 				"cannot execute %s in a read-only transaction", locking.Strength.String(),
 			)
 		}
+		if locking.Form == tree.LockPredicate {
+			return opt.Locking{}, unimplemented.NewWithIssuef(
+				110873, "explicit unique checks are not yet supported under read committed isolation",
+			)
+		}
 		if locking.Durability == tree.LockDurabilityGuaranteed {
 			return opt.Locking{}, unimplemented.NewWithIssuef(
 				100193, "guaranteed-durable locking not yet implemented",

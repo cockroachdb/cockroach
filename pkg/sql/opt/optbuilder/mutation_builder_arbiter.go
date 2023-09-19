@@ -278,30 +278,36 @@ func (mb *mutationBuilder) inferArbitersFromConflictOrds(
 //   - pred is the partial index or constraint predicate. If the arbiter is
 //     not a partial index or constraint, pred is nil.
 func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
-	inScope *scope, conflictOrds intsets.Fast, pred tree.Expr, uniqueWithoutIndex bool,
+	inScope *scope, conflictOrds intsets.Fast, pred tree.Expr, uniqueWithoutIndex bool, uniqueOrd int,
 ) {
 	locking := noRowLocking
 	// If we're using a weaker isolation level, we must lock the right side of the
 	// anti-join to prevent concurrent inserts from other transactions from
-	// violating the unique constraint. This is only necessary when there is no
-	// index directly enforcing the unique constraint. (With an index, concurrent
-	// transactions will always conflict on the same KV key.)
-	if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable && uniqueWithoutIndex {
-		locking = lockingSpec{
-			&tree.LockingItem{
-				// TODO(michae2): Change this to ForKeyShare when it is supported.
-				// Actually, for INSERT ON CONFLICT DO NOTHING, I think this could be
-				// ForNone if we supported predicate locking at that strength. I'm
-				// pretty sure we don't need to lock existing rows at *any* locking
-				// strength, only need to prevent insertion of new rows.
-				Strength:   tree.ForShare,
-				Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(mb.tab.Name())},
-				WaitPolicy: tree.LockWaitBlock,
-				// Unique arbiters must ensure the non-existence of certain rows, so we
-				// use predicate locks instead of record locks to prevent insertion of
-				// new rows into the locked span(s) by other concurrent transactions.
-				Form: tree.LockPredicate,
-			},
+	// violating the unique constraint. This is only necessary when a unique check
+	// is necessary. (That is, when there is no index directly enforcing the
+	// unique constraint. With an index directly enforcing the unique constraint,
+	// concurrent transactions will always conflict on the same KV key.)
+	if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable && uniqueWithoutIndex && uniqueOrd >= 0 {
+		// Use uniqueCheckHelper to determine if a unique check is necessary.
+		h := &mb.uniqueCheckHelper
+		if h.init(mb, uniqueOrd) {
+			locking = lockingSpec{
+				&tree.LockingItem{
+					// TODO(michae2): Change this to ForKeyShare when it is supported.
+					// Actually, for INSERT ON CONFLICT DO NOTHING, I think this could be
+					// ForNone if we supported predicate locking at that strength. I'm
+					// pretty sure we don't need to lock existing rows at *any* locking
+					// strength, only need to prevent insertion of new non-existing rows.
+					Strength:   tree.ForShare,
+					Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(mb.tab.Name())},
+					WaitPolicy: tree.LockWaitBlock,
+					// Unique arbiters must ensure the non-existence of certain rows, so
+					// we use predicate locks instead of record locks to prevent insertion
+					// of new rows into the locked span(s) by other concurrent
+					// transactions.
+					Form: tree.LockPredicate,
+				},
+			}
 		}
 	}
 	// Build the right side of the anti-join. Use a new metadata instance
@@ -396,26 +402,33 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 //   - uniqueWithoutIndex is true if the arbiter is a unique constraint without
 //     an enforcing index.
 func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
-	inScope *scope, conflictOrds intsets.Fast, pred tree.Expr, uniqueWithoutIndex bool,
+	inScope *scope, conflictOrds intsets.Fast, pred tree.Expr, uniqueWithoutIndex bool, uniqueOrd int,
 ) {
 	locking := noRowLocking
 	// If we're using a weaker isolation level, we must lock the right side of the
 	// left join to prevent concurrent inserts from other transactions from
-	// violating the unique constraint. This is only necessary when there is no
-	// index directly enforcing the unique constraint. (With an index, concurrent
-	// transactions will always conflict on the same KV key.)
-	if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable && uniqueWithoutIndex {
-		locking = lockingSpec{
-			&tree.LockingItem{
-				// We're about to update the row, so take an exclusive lock.
-				Strength:   tree.ForUpdate,
-				Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(mb.tab.Name())},
-				WaitPolicy: tree.LockWaitBlock,
-				// Unique arbiters must ensure the non-existence of certain rows, so we
-				// use predicate locks instead of record locks to prevent insertion of
-				// new rows into the locked span(s) by other concurrent transactions.
-				Form: tree.LockPredicate,
-			},
+	// violating the unique constraint. This is only necessary when a unique check
+	// is necessary. (That is, when there is no index directly enforcing the
+	// unique constraint. With an index directly enforcing the unique constraint,
+	// concurrent transactions will always conflict on the same KV key.)
+	if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable && uniqueWithoutIndex && uniqueOrd >= 0 {
+		// Use uniqueCheckHelper to determine if a unique check is necessary.
+		h := &mb.uniqueCheckHelper
+		if h.init(mb, uniqueOrd) {
+			locking = lockingSpec{
+				&tree.LockingItem{
+					// If the row exists, we're about to update it, so take an exclusive
+					// lock to prevent a lock promotion.
+					Strength:   tree.ForUpdate,
+					Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(mb.tab.Name())},
+					WaitPolicy: tree.LockWaitBlock,
+					// Unique arbiters must ensure the non-existence of certain rows, so
+					// we use predicate locks instead of record locks to prevent insertion
+					// of new rows into the locked span(s) by other concurrent
+					// transactions.
+					Form: tree.LockPredicate,
+				},
+			}
 		}
 	}
 	// Build the right side of the left outer join. Use a different instance of
