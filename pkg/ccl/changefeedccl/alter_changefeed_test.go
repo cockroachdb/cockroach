@@ -1023,9 +1023,11 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 		require.NoError(t, jobFeed.Pause())
 
 		var maxCheckpointSize int64 = 100 << 20
-		// Checkpoint progress frequently, and set the checkpoint size limit.
+		// Ensure that checkpoints happen every time by setting a large checkpoint size.
+		// Because setting 0 for the FrontierCheckpointFrequency disables checkpointing,
+		// setting 1 nanosecond is the smallest possible value.
 		changefeedbase.FrontierCheckpointFrequency.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+			context.Background(), &s.Server.ClusterSettings().SV, 1*time.Nanosecond)
 		changefeedbase.FrontierCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
