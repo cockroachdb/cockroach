@@ -37,12 +37,14 @@ describe("statementsSagas", () => {
   describe("requestDiagnostics generator", () => {
     it("calls api#createStatementDiagnosticsReport with statement fingerprint, min exec latency, and expires after fields as payload", () => {
       const statementFingerprint = "some-id";
+      const planGist = "gist";
       const minExecLatency = 10; // num seconds
       const expiresAfter = 15 * 60; // num seconds (num mins * num seconds per min)
       const insertStmtDiagnosticsRequest = {
         stmtFingerprint: statementFingerprint,
         minExecutionLatencySeconds: minExecLatency,
         expiresAfterSeconds: expiresAfter,
+        planGist: planGist,
       };
       const action = createStatementDiagnosticsReportAction(
         insertStmtDiagnosticsRequest,
@@ -66,12 +68,14 @@ describe("statementsSagas", () => {
 
   it("calls dispatched failed action if api#createStatementDiagnosticsReport request failed ", () => {
     const statementFingerprint = "some-id";
+    const planGist = "gist";
     const minExecLatency = 10; // num seconds
     const expiresAfter = 15 * 60; // num seconds (num mins * num seconds per min)
     const insertStmtDiagnosticsRequest = {
       stmtFingerprint: statementFingerprint,
       minExecutionLatencySeconds: minExecLatency,
       expiresAfterSeconds: expiresAfter,
+      planGist: planGist,
     };
     const action = createStatementDiagnosticsReportAction(
       insertStmtDiagnosticsRequest,

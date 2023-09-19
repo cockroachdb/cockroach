@@ -53,6 +53,10 @@
     font-weight: $font-weight--light;
   }
 
+  &__plan-gist-group {
+    margin-bottom: -25px;
+  }
+
   &__conditional-container {
     display: flex;
     flex-direction: column;
@@ -71,6 +75,14 @@
     flex-direction: row;
     margin-top: $spacing-smaller;
     margin-bottom: $spacing-smaller;
+  }
+
+  &__plan-gist-container {
+    display: flex;
+    flex-direction: row;
+    margin-top: $spacing-smaller;
+    margin-bottom: $spacing-smaller;
+    margin-left: $spacing-medium;
   }
 
   &__trace-warning {
@@ -131,6 +143,15 @@
         margin-top: 0;
       }
     }
+    &__plan-gist {
+      width: 400px;
+      height: 40px;
+      line-height: 40px;
+
+      .ant-select-selection__rendered {
+        margin-top: 0;
+      }
+    }
   }
 
   &__alert {
@@ -143,4 +164,8 @@
     margin: $spacing-xx-small 0px;
     white-space: normal;
   }
+}
+
+.margin-bottom {
+  margin-bottom: 10px;
 }
