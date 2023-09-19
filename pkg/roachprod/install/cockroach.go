@@ -566,23 +566,36 @@ func (c *SyncedCluster) generateStartCmd(
 			"GOTRACEBACK=crash",
 			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1",
 		}, c.Env...), getEnvVars()...),
-		Binary:        cockroachNodeBinary(c, node),
-		Args:          args,
-		MemoryMax:     config.MemoryMax,
-		NumFilesLimit: startOpts.NumFilesLimit,
-		Local:         c.IsLocal(),
+		Binary:              cockroachNodeBinary(c, node),
+		Args:                args,
+		MemoryMax:           config.MemoryMax,
+		NumFilesLimit:       startOpts.NumFilesLimit,
+		VirtualClusterLabel: VirtualClusterLabel(startOpts.VirtualClusterName, startOpts.SQLInstance),
+		Local:               c.IsLocal(),
 	})
 }
 
 type startTemplateData struct {
-	Local         bool
-	LogDir        string
-	Binary        string
-	KeyCmd        string
-	MemoryMax     string
-	NumFilesLimit int64
-	Args          []string
-	EnvVars       []string
+	Local               bool
+	LogDir              string
+	Binary              string
+	KeyCmd              string
+	MemoryMax           string
+	NumFilesLimit       int64
+	VirtualClusterLabel string
+	Args                []string
+	EnvVars             []string
+}
+
+// VirtualClusterLabel is the value used to "label" virtual cluster
+// (cockroach) processes running locally or in a VM. This is used by
+// roachprod to monitor identify such processes and monitor them.
+func VirtualClusterLabel(virtualClusterName string, sqlInstance int) string {
+	if virtualClusterName == "" || virtualClusterName == SystemInterfaceName {
+		return "cockroach-system"
+	}
+
+	return fmt.Sprintf("cockroach-%s_%d", virtualClusterName, sqlInstance)
 }
 
 func execStartTemplate(data startTemplateData) (string, error) {
