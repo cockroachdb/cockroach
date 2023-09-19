@@ -92,7 +92,7 @@ verify_docker_image(){
     error=1
   fi
   if [[ $fips_build == true ]]; then
-    if [[ "$go_version" != *"fips" ]]; then
+    if [[ "$go_version" != *"fips"* ]]; then
       echo "ERROR: Go version '$go_version' does not contain 'fips'"
       error=1
     fi
