@@ -401,7 +401,7 @@
 #!/pkg/ccl/utilccl/          @cockroachdb/unowned
 /pkg/ccl/workloadccl/        @cockroachdb/test-eng #! @cockroachdb/sql-foundations-noreview
 /pkg/ccl/benchccl/rttanalysisccl/     @cockroachdb/sql-foundations
-#!/pkg/clusterversion/       @cockroachdb/dev-inf-noreview  @cockroachdb/kv-prs-noreview
+#!/pkg/clusterversion/       @cockroachdb/dev-inf-noreview  @cockroachdb/kv-prs-noreview @cockroachdb/test-eng-prs
 /pkg/cmd/allocsim/           @cockroachdb/kv-prs
 /pkg/cmd/bazci/              @cockroachdb/dev-inf
 /pkg/cmd/cloudupload/        @cockroachdb/dev-inf
