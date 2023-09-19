@@ -292,14 +292,18 @@ func (c *SyncedCluster) roachprodEnvValue(node Node) string {
 	return strings.Join(parts, "/")
 }
 
+func envVarRegex(name, value string) string {
+	escaped := strings.ReplaceAll(value, "/", "\\/")
+	// We look for either a trailing space or a slash (in which case, we
+	// tolerate any remaining tag suffix). The env var may also be the
+	// last environment variable declared, so we also account for that.
+	return fmt.Sprintf(`(%[1]s=%[2]s$|%[1]s=%[2]s[ \/])`, name, escaped)
+}
+
 // roachprodEnvRegex returns a regexp that matches the ROACHPROD value for the
 // given node.
 func (c *SyncedCluster) roachprodEnvRegex(node Node) string {
-	escaped := strings.Replace(c.roachprodEnvValue(node), "/", "\\/", -1)
-	// We look for either a trailing space or a slash (in which case, we tolerate
-	// any remaining tag suffix). ROACHPROD may also be the last environment
-	// variable declared, so we also account for that.
-	return fmt.Sprintf(`(ROACHPROD=%[1]s$|ROACHPROD=%[1]s[ \/])`, escaped)
+	return envVarRegex("ROACHPROD", c.roachprodEnvValue(node))
 }
 
 // validateHostnameCmd wraps the command given with a check that the
@@ -394,7 +398,8 @@ func (c *SyncedCluster) newSession(
 // Stop is used to stop cockroach on all nodes in the cluster.
 //
 // It sends a signal to all processes that have been started with ROACHPROD env
-// var and optionally waits until the processes stop.
+// var and optionally waits until the processes stop. If the virtualClusterLabel
+// is not empty, then only sql processes with a matching label are stopped.
 //
 // When running roachprod stop without other flags, the signal is 9 (SIGKILL)
 // and wait is true.
@@ -402,28 +407,38 @@ func (c *SyncedCluster) newSession(
 // If maxWait is non-zero, Stop stops waiting after that approximate
 // number of seconds.
 func (c *SyncedCluster) Stop(
-	ctx context.Context, l *logger.Logger, sig int, wait bool, maxWait int,
+	ctx context.Context,
+	l *logger.Logger,
+	sig int,
+	wait bool,
+	maxWait int,
+	virtualClusterLabel string,
 ) error {
 	display := fmt.Sprintf("%s: stopping", c.Name)
 	if wait {
 		display += " and waiting"
 	}
-	return c.kill(ctx, l, "stop", display, sig, wait, maxWait)
+	return c.kill(ctx, l, "stop", display, sig, wait, maxWait, virtualClusterLabel)
 }
 
 // Signal sends a signal to the CockroachDB process.
 func (c *SyncedCluster) Signal(ctx context.Context, l *logger.Logger, sig int) error {
 	display := fmt.Sprintf("%s: sending signal %d", c.Name, sig)
-	return c.kill(ctx, l, "signal", display, sig, false /* wait */, 0 /* maxWait */)
+	return c.kill(ctx, l, "signal", display, sig, false /* wait */, 0 /* maxWait */, "")
 }
 
 // kill sends the signal sig to all nodes in the cluster using the kill command.
 // cmdName and display specify the roachprod subcommand and a status message,
 // for output/logging. If wait is true, the command will wait for the processes
 // to exit, up to maxWait seconds.
-// TODO(herko): This command does not support virtual clusters yet.
 func (c *SyncedCluster) kill(
-	ctx context.Context, l *logger.Logger, cmdName, display string, sig int, wait bool, maxWait int,
+	ctx context.Context,
+	l *logger.Logger,
+	cmdName, display string,
+	sig int,
+	wait bool,
+	maxWait int,
+	virtualClusterLabel string,
 ) error {
 	if sig == 9 {
 		// `kill -9` without wait is never what a caller wants. See #77334.
@@ -454,6 +469,14 @@ func (c *SyncedCluster) kill(
 			)
 		}
 
+		var virtualClusterFilter string
+		if virtualClusterLabel != "" {
+			virtualClusterFilter = fmt.Sprintf(
+				"grep -E '%s' |",
+				envVarRegex("ROACHPROD_VIRTUAL_CLUSTER", virtualClusterLabel),
+			)
+		}
+
 		// NB: the awkward-looking `awk` invocation serves to avoid having the
 		// awk process match its own output from `ps`.
 		cmd := fmt.Sprintf(`
@@ -461,17 +484,19 @@ mkdir -p %[1]s
 echo ">>> roachprod %[1]s: $(date)" >> %[2]s/roachprod.log
 ps axeww -o pid -o command >> %[2]s/roachprod.log
 pids=$(ps axeww -o pid -o command | \
+  %[3]s \
   sed 's/export ROACHPROD=//g' | \
-  awk '/%[3]s/ { print $1 }')
+  awk '/%[4]s/ { print $1 }')
 if [ -n "${pids}" ]; then
-  kill -%[4]d ${pids}
-%[5]s
+  kill -%[5]d ${pids}
+%[6]s
 fi`,
 			cmdName,                   // [1]
 			c.LogDir(node, "", 0),     // [2]
-			c.roachprodEnvRegex(node), // [3]
-			sig,                       // [4]
-			waitCmd,                   // [5]
+			virtualClusterFilter,      // [3]
+			c.roachprodEnvRegex(node), // [4]
+			sig,                       // [5]
+			waitCmd,                   // [6]
 		)
 
 		return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("kill"))
@@ -481,7 +506,7 @@ fi`,
 // Wipe TODO(peter): document
 func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCerts bool) error {
 	display := fmt.Sprintf("%s: wiping", c.Name)
-	if err := c.Stop(ctx, l, 9, true /* wait */, 0 /* maxWait */); err != nil {
+	if err := c.Stop(ctx, l, 9, true /* wait */, 0 /* maxWait */, ""); err != nil {
 		return err
 	}
 	return c.Parallel(ctx, l, c.Nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
