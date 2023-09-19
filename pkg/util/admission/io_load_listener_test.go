@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
@@ -56,8 +55,6 @@ func TestIOLoadListener(t *testing.T) {
 					kvRequester:           req,
 					perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
 					diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
-					l0CompactedBytes:      metric.NewCounter(l0CompactedBytes),
-					l0TokensProduced:      metric.NewCounter(l0TokensProduced),
 				}
 				// The mutex is needed by ioLoadListener but is not useful in this
 				// test -- the channels provide synchronization and prevent this
@@ -217,10 +214,8 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	ioll := ioLoadListener{
-		settings:         st,
-		kvRequester:      req,
-		l0CompactedBytes: metric.NewCounter(l0CompactedBytes),
-		l0TokensProduced: metric.NewCounter(l0TokensProduced),
+		settings:    st,
+		kvRequester: req,
 	}
 	ioll.kvGranter = kvGranter
 	// Bug 1: overflow when totalNumByteTokens is too large.
@@ -280,12 +275,7 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 	var buf redact.StringBuilder
 	for _, tt := range tests {
 		buf.Printf("%s:\n", tt.name)
-		ioll := &ioLoadListener{
-			settings:         cluster.MakeTestingClusterSettings(),
-			l0CompactedBytes: metric.NewCounter(l0CompactedBytes),
-			l0TokensProduced: metric.NewCounter(l0TokensProduced),
-		}
-		res := ioll.adjustTokensInner(
+		res := (*ioLoadListener)(nil).adjustTokensInner(
 			ctx, tt.prev, tt.l0Metrics, 12, pebble.ThroughputMetric{},
 			100, 10, 0, 0.50)
 		buf.Printf("%s\n", res)
@@ -326,8 +316,6 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		kvRequester:           req,
 		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
 		diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
-		l0CompactedBytes:      metric.NewCounter(l0CompactedBytes),
-		l0TokensProduced:      metric.NewCounter(l0TokensProduced),
 	}
 	ioll.kvGranter = kvGranter
 	for i := 0; i < 100; i++ {

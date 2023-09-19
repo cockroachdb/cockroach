@@ -315,12 +315,11 @@ type kvStoreTokenGranter struct {
 	// computing startingIOTokens-availableIOTokens.
 	startingIOTokens                int64
 	ioTokensExhaustedDurationMetric *metric.Counter
-	availableTokensMetric           *metric.Gauge
+	availableTokensMetrics          *metric.Gauge
 	availableElasticTokensMetric    *metric.Gauge
-	tokensReturnedMetric            *metric.Counter
-	tokensTakenMetric               *metric.Counter
-
-	exhaustedStart time.Time
+	tookWithoutPermissionMetric     *metric.Counter
+	totalTokensTaken                *metric.Counter
+	exhaustedStart                  time.Time
 
 	// Estimation models.
 	l0WriteLM, l0IngestLM, ingestLM tokensLinearModel
@@ -405,6 +404,7 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 		if sg.coordMu.availableIOTokens > 0 {
 			sg.subtractTokensLocked(count, count, false)
 			sg.coordMu.diskBWTokensUsed[wc] += count
+			sg.totalTokensTaken.Inc(count)
 			return grantSuccess
 		}
 	case admissionpb.ElasticWorkClass:
@@ -414,6 +414,7 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 			sg.subtractTokensLocked(count, count, false)
 			sg.coordMu.elasticIOTokensUsedByElastic += count
 			sg.coordMu.diskBWTokensUsed[wc] += count
+			sg.totalTokensTaken.Inc(count)
 			return grantSuccess
 		}
 	}
@@ -445,6 +446,8 @@ func (sg *kvStoreTokenGranter) tookWithoutPermission(workClass admissionpb.WorkC
 func (sg *kvStoreTokenGranter) tookWithoutPermissionLocked(count int64, demuxHandle int8) {
 	wc := admissionpb.WorkClass(demuxHandle)
 	sg.subtractTokensLocked(count, count, false)
+	sg.tookWithoutPermissionMetric.Inc(count)
+	sg.totalTokensTaken.Inc(count)
 	if wc == admissionpb.ElasticWorkClass {
 		sg.coordMu.elasticDiskBWTokensAvailable -= count
 		sg.coordMu.elasticIOTokensUsedByElastic += count
@@ -455,28 +458,18 @@ func (sg *kvStoreTokenGranter) tookWithoutPermissionLocked(count int64, demuxHan
 // subtractTokensLocked is a helper function that subtracts count tokens (count
 // can be negative, in which case this is really an addition).
 func (sg *kvStoreTokenGranter) subtractTokensLocked(
-	count int64, elasticCount int64, settingAvailableTokens bool,
+	count int64, elasticCount int64, forceTickMetric bool,
 ) {
 	avail := sg.coordMu.availableIOTokens
 	sg.coordMu.availableIOTokens -= count
-	sg.coordMu.availableElasticIOTokens -= elasticCount
-	sg.availableTokensMetric.Update(sg.coordMu.availableIOTokens)
-	sg.availableElasticTokensMetric.Update(sg.coordMu.availableElasticIOTokens)
-	if !settingAvailableTokens {
-		if count > 0 {
-			sg.tokensTakenMetric.Inc(count)
-		} else {
-			sg.tokensReturnedMetric.Inc(-count)
-		}
-	}
 	if count > 0 && avail > 0 && sg.coordMu.availableIOTokens <= 0 {
 		// Transition from > 0 to <= 0.
 		sg.exhaustedStart = timeutil.Now()
-	} else if count < 0 && avail <= 0 && (sg.coordMu.availableIOTokens > 0 || settingAvailableTokens) {
-		// Transition from <= 0 to > 0, or if we're newly setting available
-		// tokens. The latter ensures that if the available tokens stay <= 0, we
-		// don't show a sudden change in the metric after minutes of exhaustion
-		// (we had observed such behavior prior to this change).
+	} else if count < 0 && avail <= 0 && (sg.coordMu.availableIOTokens > 0 || forceTickMetric) {
+		// Transition from <= 0 to > 0, or forced to tick the metric. The latter
+		// ensures that if the available tokens stay <= 0, we don't show a sudden
+		// change in the metric after minutes of exhaustion (we had observed such
+		// behavior prior to this change).
 		now := timeutil.Now()
 		exhaustedMicros := now.Sub(sg.exhaustedStart).Microseconds()
 		sg.ioTokensExhaustedDurationMetric.Inc(exhaustedMicros)
@@ -484,6 +477,9 @@ func (sg *kvStoreTokenGranter) subtractTokensLocked(
 			sg.exhaustedStart = now
 		}
 	}
+	sg.availableTokensMetrics.Update(sg.coordMu.availableIOTokens)
+	sg.coordMu.availableElasticIOTokens -= elasticCount
+	sg.availableElasticTokensMetric.Update(sg.coordMu.availableElasticIOTokens)
 }
 
 // requesterHasWaitingRequests implements granterWithLockedCalls.
@@ -574,9 +570,10 @@ func (sg *kvStoreTokenGranter) setAvailableTokens(
 		sg.coordMu.availableElasticIOTokens =
 			min(sg.coordMu.availableElasticIOTokens, sg.coordMu.availableIOTokens)
 	}
-	sg.availableTokensMetric.Update(sg.coordMu.availableIOTokens)
-	sg.availableElasticTokensMetric.Update(sg.coordMu.availableElasticIOTokens)
+
 	sg.startingIOTokens = sg.coordMu.availableIOTokens
+	sg.availableTokensMetrics.Update(sg.coordMu.availableIOTokens)
+	sg.availableElasticTokensMetric.Update(sg.coordMu.availableElasticIOTokens)
 
 	sg.coordMu.elasticDiskBWTokensAvailable += elasticDiskBandwidthTokens
 	if sg.coordMu.elasticDiskBWTokensAvailable > elasticDiskBandwidthTokensCapacity {
@@ -739,15 +736,15 @@ var (
 		Measurement: "Microseconds",
 		Unit:        metric.Unit_COUNT,
 	}
-	kvIOTotalTokensTaken = metric.Metadata{
-		Name:        "admission.granter.io_tokens_taken.kv",
-		Help:        "Total number of tokens taken",
+	kvIONumIOTokensTookWithoutPermission = metric.Metadata{
+		Name:        "admission.granter.io_tokens_took_without_permission.kv",
+		Help:        "Total number of tokens taken without permission",
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
 	}
-	kvIOTotalTokensReturned = metric.Metadata{
-		Name:        "admission.granter.io_tokens_returned.kv",
-		Help:        "Total number of tokens returned",
+	kvIOTotalTokensTaken = metric.Metadata{
+		Name:        "admission.granter.io_tokens_taken.kv",
+		Help:        "Total number of tokens taken",
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -760,18 +757,6 @@ var (
 	kvElasticIOTokensAvailable = metric.Metadata{
 		Name:        "admission.granter.elastic_io_tokens_available.kv",
 		Help:        "Number of tokens available",
-		Measurement: "Tokens",
-		Unit:        metric.Unit_COUNT,
-	}
-	l0CompactedBytes = metric.Metadata{
-		Name:        "admission.l0_compacted_bytes.kv",
-		Help:        "Total bytes compacted out of L0 (used to generate IO tokens)",
-		Measurement: "Tokens",
-		Unit:        metric.Unit_COUNT,
-	}
-	l0TokensProduced = metric.Metadata{
-		Name:        "admission.l0_tokens_produced.kv",
-		Help:        "Total bytes produced for L0 writes",
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
 	}
