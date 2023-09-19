@@ -421,6 +421,7 @@ shutdown cockroach. The --wait flag causes stop to loop waiting for all
 processes with the right ROACHPROD environment variable to exit. Note that stop
 will wait forever if you specify --wait with a non-terminating signal (e.g.
 SIGHUP), unless you also configure --max-wait.
+
 --wait defaults to true for signal 9 (SIGKILL) and false for all other signals.
 ` + tagHelp + `
 `,
@@ -479,6 +480,43 @@ environment variables to the cockroach process.
 		}
 		return roachprod.StartServiceForVirtualCluster(context.Background(),
 			config.Logger, targetRoachprodCluster, storageCluster, startOpts, clusterSettingsOpts...)
+	}),
+}
+
+var stopInstanceAsSeparateProcessCmd = &cobra.Command{
+	Use:   "stop-sql <virtual-cluster> --tenant-id <id> --sql-instance <instance> [--sig] [--wait]",
+	Short: "stop sql instances on a cluster",
+	Long: `Stop sql instances on a cluster.
+
+Stop roachprod created sql instances running on the nodes in a cluster. Every
+process started by roachprod is tagged with a ROACHPROD environment variable
+which is used by "stop-sql" to locate the processes and terminate them. By default,
+processes are killed with signal 9 (SIGKILL) giving them no chance for a graceful
+exit.
+
+The --sig flag will pass a signal to kill to allow us finer control over how we
+shutdown processes. The --wait flag causes stop to loop waiting for all
+processes with the right ROACHPROD environment variable to exit. Note that stop
+will wait forever if you specify --wait with a non-terminating signal (e.g.
+SIGHUP), unless you also configure --max-wait.
+
+--wait defaults to true for signal 9 (SIGKILL) and false for all other signals.
+`,
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		wait := waitFlag
+		if sig == 9 /* SIGKILL */ && !cmd.Flags().Changed("wait") {
+			wait = true
+		}
+		stopOpts := roachprod.StopOpts{
+			Wait:             wait,
+			MaxWait:          maxWait,
+			Sig:              sig,
+			VirtualClusterID: virtualClusterID,
+			SQLInstance:      sqlInstance,
+		}
+		virtualCluster := args[0]
+		return roachprod.StopServiceForVirtualCluster(context.Background(), config.Logger, virtualCluster, stopOpts)
 	}),
 }
 
@@ -589,7 +627,7 @@ of nodes, outputting a line whenever a change is detected:
 var signalCmd = &cobra.Command{
 	Use:   "signal <cluster> <signal>",
 	Short: "send signal to cluster",
-	Long:  "Send a POSIX signal to the nodes in a cluster, specified by its integer code.",
+	Long:  "Send a POSIX signal, specified by its integer code, to every process started via roachprod in a cluster.",
 	Args:  cobra.ExactArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		sig, err := strconv.ParseInt(args[1], 10, 8)
@@ -1122,6 +1160,7 @@ func main() {
 		startCmd,
 		stopCmd,
 		startInstanceAsSeparateProcessCmd,
+		stopInstanceAsSeparateProcessCmd,
 		initCmd,
 		runCmd,
 		signalCmd,

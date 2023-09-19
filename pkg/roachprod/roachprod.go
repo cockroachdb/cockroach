@@ -708,6 +708,11 @@ type StopOpts struct {
 	// If MaxWait is set, roachprod waits that approximate number of seconds
 	// until the PID disappears.
 	MaxWait int
+
+	// Options that only apply to StopServiceForVirtualCluster
+	VirtualClusterID   int
+	VirtualClusterName string
+	SQLInstance        int
 }
 
 // DefaultStopOpts returns StopOpts populated with the default values used by Stop.
@@ -729,7 +734,7 @@ func Stop(ctx context.Context, l *logger.Logger, clusterName string, opts StopOp
 	if err != nil {
 		return err
 	}
-	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait)
+	return c.Stop(ctx, l, opts.Sig, opts.Wait, opts.MaxWait, "")
 }
 
 // Signal sends a signal to nodes in the cluster.
