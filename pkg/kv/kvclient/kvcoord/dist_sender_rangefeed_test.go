@@ -609,7 +609,7 @@ func TestMuxRangeCatchupScanQuotaReleased(t *testing.T) {
 	// Initial setup: only single catchup scan allowed.
 	sqlDB.ExecMultiple(t,
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
-		`SET CLUSTER SETTING kv.rangefeed.catchup_scan_concurrency = 1`,
+		`SET CLUSTER SETTING kv.rangefeed.max_catchup_scans = 1`,
 		`ALTER DATABASE defaultdb  CONFIGURE ZONE USING num_replicas = 1`,
 		`CREATE TABLE foo (key INT PRIMARY KEY)`,
 		`INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`,

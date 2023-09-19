@@ -48,8 +48,10 @@ kv.closed_timestamp.lead_for_global_reads_override	duration	0s	if nonzero, overr
 kv.closed_timestamp.side_transport_interval	duration	200ms	the interval at which the closed timestamp side-transport attempts to advance each range's closed timestamp; set to 0 to disable the side-transport	tenant-ro
 kv.closed_timestamp.target_duration	duration	3s	if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration	tenant-ro
 kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records	tenant-ro
+kv.rangefeed.catchup_scan_duration_estimate	duration	3s	an estimate on how long catchup scans take; setting controls the rate with which new catchup scans can start	tenant-rw
 kv.rangefeed.closed_timestamp_refresh_interval	duration	3s	the interval at which closed-timestamp updatesare delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval	tenant-ro
 kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled	tenant-rw
+kv.rangefeed.max_catchup_scans	integer	180	maximum number of ranges that may run concurrently; 0 implies unlimited	tenant-rw
 kv.rangefeed.range_stuck_threshold	duration	1m0s	restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.rangefeed.closed_timestamp_refresh_interval takes precedence)	tenant-rw
 kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions	tenant-rw
 kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes used to track refresh spans in serializable transactions	tenant-rw
