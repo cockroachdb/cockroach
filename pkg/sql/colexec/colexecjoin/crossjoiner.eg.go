@@ -57,6 +57,22 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 					leftSrcEndIdx := b.builderState.setup.leftSrcEndIdx
 					outputCapacity := b.output.Capacity()
 					var srcStartIdx int
+
+					if b.isCrossJoin {
+						curSrcStartIdx := bs.curSrcStartIdx
+						outStartIndex := destStartIdx
+						for curSrcStartIdx < leftSrcEndIdx && outStartIndex < outputCapacity {
+							if done := b.helper.AccountForSet(outStartIndex); done {
+								// Use a smaller output capacity for the current set of rows if
+								// producing the output causes the budget to be exceeded.
+								outputCapacity = outStartIndex + 1
+								break
+							}
+							outStartIndex++
+							curSrcStartIdx++
+						}
+					}
+
 					// Loop over every column.
 					for colIdx := range b.left.types {
 						if colIdx > 0 {
@@ -730,6 +746,22 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 					leftSrcEndIdx := b.builderState.setup.leftSrcEndIdx
 					outputCapacity := b.output.Capacity()
 					var srcStartIdx int
+
+					if b.isCrossJoin {
+						curSrcStartIdx := bs.curSrcStartIdx
+						outStartIndex := destStartIdx
+						for curSrcStartIdx < leftSrcEndIdx && outStartIndex < outputCapacity {
+							if done := b.helper.AccountForSet(outStartIndex); done {
+								// Use a smaller output capacity for the current set of rows if
+								// producing the output causes the budget to be exceeded.
+								outputCapacity = outStartIndex + 1
+								break
+							}
+							outStartIndex++
+							curSrcStartIdx++
+						}
+					}
+
 					// Loop over every column.
 					for colIdx := range b.left.types {
 						if colIdx > 0 {

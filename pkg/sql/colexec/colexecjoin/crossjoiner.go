@@ -52,11 +52,11 @@ func NewCrossJoiner(
 			fdSemaphore,
 			diskAcc,
 			converterMemAcc,
+			true, /* isCrossJoin */
 		),
 		TwoInputInitHelper: colexecop.MakeTwoInputInitHelper(left, right),
 		outputTypes:        joinType.MakeOutputTypes(leftTypes, rightTypes),
 	}
-	c.helper.Init(unlimitedAllocator, memoryLimit)
 	return c
 }
 
@@ -64,7 +64,6 @@ type crossJoiner struct {
 	*crossJoinerBase
 	colexecop.TwoInputInitHelper
 
-	helper             colmem.AccountingHelper
 	rightInputConsumed bool
 	outputTypes        []*types.T
 	// isLeftAllNulls and isRightAllNulls indicate whether the output vectors
@@ -306,6 +305,7 @@ func newCrossJoinerBase(
 	fdSemaphore semaphore.Semaphore,
 	diskAcc *mon.BoundAccount,
 	converterMemAcc *mon.BoundAccount,
+	isCrossJoin bool,
 ) *crossJoinerBase {
 	base := &crossJoinerBase{
 		joinType: joinType,
@@ -330,10 +330,12 @@ func newCrossJoinerBase(
 				ConverterMemAcc:    converterMemAcc,
 			},
 		),
+		isCrossJoin: isCrossJoin,
 	}
 	if joinType.ShouldIncludeLeftColsInOutput() {
 		base.builderState.rightColOffset = len(leftTypes)
 	}
+	base.helper.Init(unlimitedAllocator, memoryLimit, joinType.MakeOutputTypes(leftTypes, rightTypes), false /* alwaysReallocate */)
 	return base
 }
 
@@ -362,7 +364,12 @@ type crossJoinerBase struct {
 		rightColOffset int
 	}
 	output        coldata.Batch
+	helper        colmem.SetAccountingHelper
 	cancelChecker colexecutils.CancelChecker
+
+	// isCrossJoin is true if this crossJoinerBase was created to handle a cross
+	// join operation (as opposed to a merge join).
+	isCrossJoin bool
 }
 
 func (b *crossJoinerBase) init(ctx context.Context) {

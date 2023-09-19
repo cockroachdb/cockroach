@@ -599,6 +599,7 @@ func (o *mergeJoinBase) Init(ctx context.Context) {
 	o.bufferedGroup.helper = newCrossJoinerBase(
 		o.unlimitedAllocator, o.joinType, o.left.sourceTypes, o.right.sourceTypes,
 		o.memoryLimit, o.diskQueueCfg, o.fdSemaphore, o.diskAcc, o.converterMemAcc,
+		false, /* isCrossJoin */
 	)
 	o.bufferedGroup.helper.init(o.Ctx)
 
