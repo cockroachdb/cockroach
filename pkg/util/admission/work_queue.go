@@ -1862,8 +1862,6 @@ type StoreWorkQueue struct {
 	settings           *cluster.Settings
 	onLogEntryAdmitted OnLogEntryAdmitted
 
-	ioTokensBypassed *metric.Counter
-
 	knobs *TestingKnobs
 }
 
@@ -2085,8 +2083,7 @@ func (q *StoreWorkQueue) BypassedWorkDone(workCount int64, doneInfo StoreWorkDon
 	q.updateStoreStatsAfterWorkDone(uint64(workCount), doneInfo, true)
 	// Since we have no control over such work, we choose to count it as
 	// regularWorkClass.
-	additionalTokensTaken := q.granters[admissionpb.RegularWorkClass].storeWriteDone(0 /* originalTokens */, doneInfo)
-	q.ioTokensBypassed.Inc(additionalTokensTaken)
+	_ = q.granters[admissionpb.RegularWorkClass].storeWriteDone(0, doneInfo)
 }
 
 // StatsToIgnore is called for range snapshot ingestion -- see the comment in
@@ -2157,7 +2154,6 @@ func makeStoreWorkQueue(
 	opts workQueueOptions,
 	knobs *TestingKnobs,
 	onLogEntryAdmitted OnLogEntryAdmitted,
-	ioTokensBypassedMetric *metric.Counter,
 	coordMu *syncutil.Mutex,
 ) storeRequester {
 	if knobs == nil {
@@ -2175,7 +2171,6 @@ func makeStoreWorkQueue(
 		timeSource:         opts.timeSource,
 		settings:           settings,
 		onLogEntryAdmitted: onLogEntryAdmitted,
-		ioTokensBypassed:   ioTokensBypassedMetric,
 	}
 
 	opts.usesAsyncAdmit = true
