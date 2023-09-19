@@ -11,6 +11,8 @@
 package privilege
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -57,7 +59,7 @@ const (
 	VIEWJOB                  Kind = 27
 	MODIFYSQLCLUSTERSETTING  Kind = 28
 	REPLICATION              Kind = 29
-	MANAGETENANT             Kind = 30
+	MANAGEVIRTUALCLUSTER     Kind = 30
 	VIEWSYSTEMTABLE          Kind = 31
 	CREATEROLE               Kind = 32
 	CREATELOGIN              Kind = 33
@@ -133,7 +135,8 @@ func (k Kind) InternalKey() KindInternalKey {
 		return "MODIFYSQLCLUSTERSETTING"
 	case REPLICATION:
 		return "REPLICATION"
-	case MANAGETENANT:
+	case MANAGEVIRTUALCLUSTER:
+		// This Kind was renamed during 23.2 cycle.
 		return "MANAGETENANT"
 	case VIEWSYSTEMTABLE:
 		return "VIEWSYSTEMTABLE"
@@ -160,7 +163,8 @@ type KindDisplayName string
 // DisplayName reports the display name for a privilege.
 func (k Kind) DisplayName() KindDisplayName {
 	switch k {
-	// TODO(knz): More exceptions can be added here.
+	case MANAGEVIRTUALCLUSTER:
+		return "MANAGEVIRTUALCLUSTER"
 	default:
 		// Unless we have an exception above, the internal
 		// key is also a valid display name.
@@ -181,8 +185,11 @@ func (k Kind) SafeFormat(p redact.SafePrinter, _ rune) {
 
 // KeyToName converts a privilege key to its name.
 func KeyToName(key string) (string, error) {
-	// TODO(knz): Improve this.
-	return key, nil
+	kind, ok := ByInternalKey[KindInternalKey(strings.ToUpper(key))]
+	if !ok {
+		return "", errors.Errorf("not a valid privilege: %q", key)
+	}
+	return string(kind.DisplayName()), nil
 }
 
 // ByDisplayName is a map of display name -> kind value. It is populated by
