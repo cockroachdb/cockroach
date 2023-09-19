@@ -5,7 +5,7 @@ CREATE FUNCTION f(b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT b + 1 $$;
 /* test */
 EXPLAIN (DDL, SHAPE) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
 ----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹check_b› CHECK (f(‹b›) > ‹1›);
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹check_b› CHECK (‹f›(‹b›) > ‹1›);
  ├── execute 1 system table mutations transaction
  ├── validate non-index-backed constraint check_b+ in relation t
  └── execute 1 system table mutations transaction

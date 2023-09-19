@@ -44,17 +44,9 @@ func TestMarkRedactionStatement(t *testing.T) {
 			"CREATE TABLE defaultdb.public.t()",
 			"CREATE TABLE ‹defaultdb›.public.‹t› ()",
 		},
-		// Note: this test only passes due to the overriding of the FmtMarkRedactionNode flag
-		// when formatting FuncExpr.Func. Although the overriding of the redaction flag
-		// is correct (function names do not hold PII and therefore do not need redaction),
-		// the incorrect typing of FuncExpr.Func as an UnresolvedName results in the
-		// function name being incorrectly redacted when logging statements. In this
-		// test case, that would be: SELECT ‹lower›(‹'foo'›).
-		// The intended functionality is for function names to be correctly typed as
-		// FunctionDefinition, which is logically identified as non-PII.
 		{
 			"SELECT lower('foo')",
-			"SELECT lower(‹'foo'›)",
+			"SELECT ‹lower›(‹'foo'›)",
 		},
 		{
 			"SELECT crdb_internal.node_executable_version()",
