@@ -6127,16 +6127,14 @@ func TestRaftPreVote(t *testing.T) {
 
 				// We don't want any writes to the range, to avoid the follower from
 				// falling behind on the log and failing prevotes only because of that.
-				// We install a request filter which rejects writes to the range during
-				// the partition (typically txn record cleanup via GC requests).
-				//
-				// We reject requests, not proposals, because we don't want to mess too
-				// much with the Raft machinery and mask other issues.
+				// We install a proposal filter which rejects proposals to the range
+				// during the partition (typically txn record cleanup via GC requests,
+				// but also e.g. lease extensions).
 				var partitioned atomic.Bool
 				var rangeID roachpb.RangeID
-				reqFilter := func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
-					if partitioned.Load() && ba.IsWrite() && ba.RangeID == rangeID {
-						t.Logf("r%d write rejected: %s", rangeID, ba)
+				propFilter := func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
+					if partitioned.Load() && args.Req.RangeID == rangeID {
+						t.Logf("r%d proposal rejected: %s", rangeID, args.Req)
 						return kvpb.NewError(errors.New("rejected"))
 					}
 					return nil
@@ -6160,7 +6158,7 @@ func TestRaftPreVote(t *testing.T) {
 						Knobs: base.TestingKnobs{
 							Store: &kvserver.StoreTestingKnobs{
 								DisableQuiescence:            !quiesce,
-								TestingRequestFilter:         reqFilter,
+								TestingProposalFilter:        propFilter,
 								DisableAutomaticLeaseRenewal: true,
 							},
 						},
