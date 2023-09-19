@@ -157,8 +157,6 @@ func (f *Factory) New(
 		initialTimestamp: initialTimestamp,
 		name:             name,
 		onValue:          onValue,
-
-		stopped: make(chan struct{}),
 	}
 	initConfig(&r.config, options)
 	return &r
@@ -181,10 +179,8 @@ type RangeFeed struct {
 
 	onValue OnValue
 
-	closeOnce sync.Once
-	cancel    context.CancelFunc
-	stopped   chan struct{}
-
+	cancel  context.CancelFunc
+	running sync.WaitGroup
 	started int32 // accessed atomically
 }
 
@@ -228,6 +224,7 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 		defer pprof.SetGoroutineLabels(ctx)
 		ctx = pprof.WithLabels(ctx, pprof.Labels(append(f.extraPProfLabels, "rangefeed", f.name)...))
 		pprof.SetGoroutineLabels(ctx)
+		f.running.Add(1)
 		f.run(ctx, frontier)
 	}
 
@@ -253,10 +250,8 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 // idempotently. It waits for the currently running handler, if any, to complete
 // and guarantees that no future handlers will be invoked after this point.
 func (f *RangeFeed) Close() {
-	f.closeOnce.Do(func() {
-		f.cancel()
-		<-f.stopped
-	})
+	f.cancel()
+	f.running.Wait()
 }
 
 // Run the rangefeed in a loop in the case of failure, likely due to node
@@ -272,7 +267,7 @@ var useMuxRangeFeed = util.ConstantWithMetamorphicTestBool("use-mux-rangefeed", 
 // run will run the RangeFeed until the context is canceled or if the client
 // indicates that an initial scan error is non-recoverable.
 func (f *RangeFeed) run(ctx context.Context, frontier *span.Frontier) {
-	defer close(f.stopped)
+	defer f.running.Done()
 	r := retry.StartWithCtx(ctx, f.retryOptions)
 	restartLogEvery := log.Every(10 * time.Second)
 
