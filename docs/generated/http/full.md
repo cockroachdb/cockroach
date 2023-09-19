@@ -5333,6 +5333,134 @@ Support status: [reserved](#support-status)
 
 
 
+## StatementExecutionInsights
+
+`POST /_status/insights/statements`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+StatementExecutionInsightsRequest requests a list of statement execution insights that match
+specified statement ID or fingerprint ID in case they're specified.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| statement_id | [bytes](#cockroach.server.serverpb.StatementExecutionInsightsRequest-bytes) |  |  | [reserved](#support-status) |
+| stmt_fingerprint_id | [uint64](#cockroach.server.serverpb.StatementExecutionInsightsRequest-uint64) |  |  | [reserved](#support-status) |
+| start_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementExecutionInsightsRequest-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| end_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementExecutionInsightsRequest-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+StatementExecutionInsightsResponse returns list of requested statement execution insights.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| statement_insights | [StatementExecutionInsightsResponse.StatementInsight](#cockroach.server.serverpb.StatementExecutionInsightsResponse-cockroach.server.serverpb.StatementExecutionInsightsResponse.StatementInsight) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.StatementExecutionInsightsResponse-cockroach.server.serverpb.StatementExecutionInsightsResponse.StatementInsight"></a>
+#### StatementExecutionInsightsResponse.StatementInsight
+
+StatementInsight message is a wrapper on top of cockroach.sql.insights.Statement message to
+extend it with transaction and session level information.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| transaction_id | [bytes](#cockroach.server.serverpb.StatementExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| session_id | [bytes](#cockroach.server.serverpb.StatementExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| statement | [cockroach.sql.insights.Statement](#cockroach.server.serverpb.StatementExecutionInsightsResponse-cockroach.sql.insights.Statement) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+## TransactionExecutionInsights
+
+`POST /_status/insights/transactions`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+TransactionExecutionInsightsRequest requests a list of transaction execution insights that match
+specified ID or fingerprint ID in case they're specified.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| transaction_id | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsRequest-bytes) |  |  | [reserved](#support-status) |
+| txn_fingerprint_id | [uint64](#cockroach.server.serverpb.TransactionExecutionInsightsRequest-uint64) |  |  | [reserved](#support-status) |
+| start_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.TransactionExecutionInsightsRequest-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| end_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.TransactionExecutionInsightsRequest-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| with_contention_events | [bool](#cockroach.server.serverpb.TransactionExecutionInsightsRequest-bool) |  |  | [reserved](#support-status) |
+| with_statement_insights | [bool](#cockroach.server.serverpb.TransactionExecutionInsightsRequest-bool) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+TransactionExecutionInsightsResponse returns list of requested transaction execution insights.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| transaction_insights | [TransactionExecutionInsightsResponse.TransactionInsight](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.server.serverpb.TransactionExecutionInsightsResponse.TransactionInsight) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.server.serverpb.TransactionExecutionInsightsResponse.TransactionInsight"></a>
+#### TransactionExecutionInsightsResponse.TransactionInsight
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| session_id | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| transaction | [cockroach.sql.insights.Transaction](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.sql.insights.Transaction) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`

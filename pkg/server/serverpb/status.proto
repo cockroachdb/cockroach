@@ -2021,6 +2021,30 @@ message ListExecutionInsightsResponse {
 }
 
 
+// TransactionExecutionInsightsRequest requests a list of transaction execution insights that match
+// specified ID or fingerprint ID in case they're specified.
+message TransactionExecutionInsightsRequest {
+  bytes transaction_id = 1 [(gogoproto.customname) = "TransactionID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  uint64 txn_fingerprint_id = 2 [(gogoproto.customname) = "TxnFingerprintID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.TransactionFingerprintID"];
+  google.protobuf.Timestamp start_time = 3 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp end_time = 4 [(gogoproto.stdtime) = true];
+  bool with_contention_events = 5;
+  bool with_statement_insights = 6;
+}
+
+// TransactionExecutionInsightsResponse returns list of requested transaction execution insights.
+message TransactionExecutionInsightsResponse {
+  message TransactionInsight {
+    bytes session_id = 2 [(gogoproto.customname) = "SessionID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
+      (gogoproto.nullable) = false];
+    cockroach.sql.insights.Transaction transaction = 3;
+  }
+  repeated TransactionInsight transaction_insights = 1;
+}
+
 message CriticalNodesRequest {}
 message CriticalNodesResponse {
   repeated roachpb.NodeDescriptor critical_nodes = 1 [(gogoproto.nullable) = false];
@@ -2586,6 +2610,13 @@ service Status {
     (ListJobProfilerExecutionDetailsResponse) {
     option (google.api.http) = {
       get: "/_status/list_job_profiler_execution_details/{job_id}"
+    };
+  }
+
+  rpc TransactionExecutionInsights(TransactionExecutionInsightsRequest) returns (TransactionExecutionInsightsResponse) {
+    option (google.api.http) = {
+      post: "/_status/insights/transactions"
+      body: "*"
     };
   }
 }
