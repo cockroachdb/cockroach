@@ -616,6 +616,9 @@ func (b *Builder) buildFunction(
 
 // buildUDF builds a set of memo groups that represents a user-defined function
 // invocation.
+//
+// TODO(mgartner): This function also builds built-in functions defined with a
+// SQL body. Consider renaming it to make it more clear.
 func (b *Builder) buildUDF(
 	f *tree.FuncExpr,
 	def *tree.ResolvedFunctionDefinition,
@@ -624,6 +627,15 @@ func (b *Builder) buildUDF(
 	colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
 	o := f.ResolvedOverload()
+
+	// Check for execution privileges for user-defined overloads. Built-in
+	// overloads do not need to be checked.
+	if o.Type == tree.UDFRoutine {
+		if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid); err != nil {
+			panic(err)
+		}
+	}
+
 	b.factory.Metadata().AddUserDefinedFunction(o, f.Func.ReferenceByName)
 
 	if o.Type == tree.ProcedureRoutine {

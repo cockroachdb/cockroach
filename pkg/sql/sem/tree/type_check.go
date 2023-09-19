@@ -3303,9 +3303,9 @@ func getMostSignificantOverload(
 	for _, idx := range filter {
 		o := qualifiedOverloads[idx]
 		if o.Type == UDFRoutine {
-			// This check is only concerned with user-defined functions, not with
-			// builtin functions defined with a SQL string body. For this reason we
-			// check o.IsUDF instead of o.HasSQLBody().
+			// This check is only concerned with user-defined functions, not
+			// with builtin functions defined with a SQL string body. For this
+			// reason we check o.Type instead of o.HasSQLBody().
 			udfFound = true
 		}
 		if seenSchema != "" && o.Schema != seenSchema {
