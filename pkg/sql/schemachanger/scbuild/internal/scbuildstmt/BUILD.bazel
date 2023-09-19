@@ -83,7 +83,7 @@ go_library(
 
 go_test(
     name = "scbuildstmt_test",
-    srcs = ["process_test.go"],
+    srcs = ["statement_control_test.go"],
     args = ["-test.timeout=295s"],
     embed = [":scbuildstmt"],
     deps = [

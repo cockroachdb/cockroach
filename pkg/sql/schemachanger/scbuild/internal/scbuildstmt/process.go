@@ -19,31 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 )
 
-// supportedStatementTags tracks statement tags which are implemented
-// by the declarative schema changer.
-var supportedStatementTags = map[string]struct{}{
-	tree.AlterTableTag:          {},
-	tree.CreateIndexTag:         {},
-	tree.DropDatabaseTag:        {},
-	tree.DropOwnedByTag:         {},
-	tree.DropSchemaTag:          {},
-	tree.DropSequenceTag:        {},
-	tree.DropTableTag:           {},
-	tree.DropTypeTag:            {},
-	tree.DropViewTag:            {},
-	tree.CommentOnConstraintTag: {},
-	tree.CommentOnDatabaseTag:   {},
-	tree.CommentOnSchemaTag:     {},
-	tree.CommentOnTableTag:      {},
-	tree.CommentOnColumnTag:     {},
-	tree.CommentOnIndexTag:      {},
-	tree.DropIndexTag:           {},
-	tree.DropFunctionTag:        {},
-	tree.CreateRoutineTag:       {},
-	tree.CreateSchemaTag:        {},
-	tree.CreateSequenceTag:      {},
-}
-
 func offByDefaultCheck(mode sessiondatapb.NewSchemaChangerMode) bool {
 	return mode == sessiondatapb.UseNewSchemaChangerUnsafeAlways ||
 		mode == sessiondatapb.UseNewSchemaChangerUnsafe
