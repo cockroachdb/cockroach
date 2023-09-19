@@ -11,7 +11,6 @@
 package scbuildstmt
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 
@@ -19,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSupportedStatements(t *testing.T) {
+func TestSupportedStatementTags(t *testing.T) {
 	sv := &settings.Values{}
 	// Non-existent tags should error out.
 	require.Error(t, forceDeclarativeStatements.Validate(sv, "FAKE STATEMENT"))
@@ -27,16 +26,10 @@ func TestSupportedStatements(t *testing.T) {
 	allTags := strings.Builder{}
 	noTags := strings.Builder{}
 	first := true
-	for typ, stmt := range supportedStatements {
-		require.Greaterf(t, len(stmt.statementTag), 0, "statement tag is missing %v %v", typ, stmt)
-		// Validate tags matches the statement tag
-		typTag, found := typ.MethodByName("StatementTag")
-		require.True(t, found, "unable to find stmt: %v %v", typ, stmt)
-		ret := typTag.Func.Call([]reflect.Value{reflect.New(typ.Elem())})
-		require.Equal(t, ret[0].String(), stmt.statementTag, "statement tag is different in AST")
+	for tag := range supportedStatementTags {
 		// Validate all tags are supported.
-		require.NoError(t, forceDeclarativeStatements.Validate(sv, "+"+stmt.statementTag))
-		require.NoError(t, forceDeclarativeStatements.Validate(sv, "!"+stmt.statementTag))
+		require.NoError(t, forceDeclarativeStatements.Validate(sv, "+"+tag))
+		require.NoError(t, forceDeclarativeStatements.Validate(sv, "!"+tag))
 		// Validate all of them can be specified at once.
 		if !first {
 			allTags.WriteString(",")
@@ -44,9 +37,9 @@ func TestSupportedStatements(t *testing.T) {
 		}
 		first = false
 		allTags.WriteString("+")
-		allTags.WriteString(stmt.statementTag)
+		allTags.WriteString(tag)
 		noTags.WriteString("!")
-		noTags.WriteString(stmt.statementTag)
+		noTags.WriteString(tag)
 	}
 	require.NoError(t, forceDeclarativeStatements.Validate(sv, allTags.String()))
 	require.NoError(t, forceDeclarativeStatements.Validate(sv, noTags.String()))
