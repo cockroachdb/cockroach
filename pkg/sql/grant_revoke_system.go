@@ -53,8 +53,8 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 		if n.desiredprivs.Contains(privilege.REPLICATION) {
 			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using REPLICATION system privilege")
 		}
-		if n.desiredprivs.Contains(privilege.MANAGETENANT) {
-			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using MANAGETENANT system privilege")
+		if n.desiredprivs.Contains(privilege.MANAGEVIRTUALCLUSTER) {
+			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using MANAGEVIRTUALCLUSTER system privilege")
 		}
 
 	}

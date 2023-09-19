@@ -142,7 +142,7 @@ set default_transaction_read_only = off;
 
 user testuser
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER privilege on global
 CREATE TENANT four
 
 subtest drop_tenant
@@ -195,19 +195,19 @@ set default_transaction_read_only = off;
 
 user testuser
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER privilege on global
 DROP TENANT three
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER privilege on global
 SHOW TENANTS
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER privilege on global
 SHOW TENANT 'two'
 
 user root
 
 statement ok
-GRANT SYSTEM MANAGETENANT TO testuser
+GRANT SYSTEM MANAGEVIRTUALCLUSTER TO testuser
 
 user testuser
 
@@ -229,7 +229,7 @@ id  name        data_state  service_mode
 user root
 
 statement ok
-REVOKE SYSTEM MANAGETENANT FROM testuser
+REVOKE SYSTEM MANAGEVIRTUALCLUSTER FROM testuser
 
 subtest read_only
 
