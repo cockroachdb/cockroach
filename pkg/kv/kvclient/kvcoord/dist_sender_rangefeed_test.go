@@ -192,6 +192,8 @@ func makeTransportFactory(
 
 // rangeFeed is a helper to execute rangefeed.  We are not using rangefeed library
 // here because of circular dependencies.
+// Returns cleanup function, which is safe to call multiple times, that shuts down
+// and waits for the rangefeed to terminate.
 func rangeFeed(
 	dsI interface{},
 	sp roachpb.Span,
@@ -307,8 +309,8 @@ func TestBiDirectionalRangefeedNotUsedUntilUpgradeFinalilzed(t *testing.T) {
 
 		allSeen, onValue := observeNValues(1000)
 		closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, onValue, false)
+		defer closeFeed()
 		channelWaitWithTimeout(t, allSeen)
-		closeFeed()
 	}
 
 	t.Run("rangefeed-stream-disabled-prior-to-version-upgrade", func(t *testing.T) {
@@ -378,8 +380,9 @@ func TestMuxRangeFeedConnectsToNodeOnce(t *testing.T) {
 
 	allSeen, onValue := observeNValues(1000)
 	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, onValue, true)
+	defer closeFeed()
 	channelWaitWithTimeout(t, allSeen)
-	closeFeed()
+	closeFeed() // Explicitly shutdown the feed to make sure counters no longer change.
 
 	// Verify we connected to each node once.
 	connCounts.Lock()
@@ -458,8 +461,9 @@ func TestRestartsStuckRangeFeeds(t *testing.T) {
 
 	allSeen, onValue := observeNValues(100)
 	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, onValue, false)
+	defer closeFeed()
 	channelWaitWithTimeout(t, allSeen)
-	closeFeed()
+	closeFeed() // Explicitly shutdown feed to make sure metrics no longer change.
 
 	require.True(t, blockingClient.ctxCanceled)
 	require.EqualValues(t, 1, tc.Server(0).DistSenderI().(*kvcoord.DistSender).Metrics().Errors.Stuck.Count())
@@ -609,7 +613,6 @@ func TestMuxRangeCatchupScanQuotaReleased(t *testing.T) {
 	// Initial setup: only single catchup scan allowed.
 	sqlDB.ExecMultiple(t,
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
-		`SET CLUSTER SETTING kv.rangefeed.catchup_scan_concurrency = 1`,
 		`ALTER DATABASE defaultdb  CONFIGURE ZONE USING num_replicas = 1`,
 		`CREATE TABLE foo (key INT PRIMARY KEY)`,
 		`INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`,
@@ -640,8 +643,8 @@ func TestMuxRangeCatchupScanQuotaReleased(t *testing.T) {
 				}
 				return false, nil
 			}))
+	defer closeFeed()
 	channelWaitWithTimeout(t, enoughErrors)
-	closeFeed()
 }
 
 // Test to make sure the various metrics used by rangefeed are correctly
