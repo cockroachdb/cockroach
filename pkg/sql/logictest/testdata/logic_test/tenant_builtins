@@ -264,13 +264,13 @@ SELECT crdb_internal.update_tenant_resource_limits('tenant-number-ten', 1000, 10
 
 user testuser
 
-statement error user testuser does not have MANAGETENANT system privilege
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 SELECT crdb_internal.create_tenant(314)
 
-statement error user testuser does not have MANAGETENANT system privilege
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 SELECT crdb_internal.create_tenant('not-allowed')
 
-statement error user testuser does not have MANAGETENANT system privilege
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 DROP TENANT [1]
 
 statement error crdb_internal.gc_tenant\(\): user testuser does not have REPAIRCLUSTERMETADATA system privilege

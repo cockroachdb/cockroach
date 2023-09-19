@@ -59,12 +59,12 @@ func TestRevertTenantToTimestamp(t *testing.T) {
 		require.ErrorContains(t, err, "cannot revert the system tenant")
 		require.Error(t, err)
 	})
-	t.Run("requires the MANAGETENANT permission", func(t *testing.T) {
+	t.Run("requires the MANAGEVIRTUALCLUSTER permission", func(t *testing.T) {
 		systemSQL.Exec(t, "CREATE ROLE otheruser LOGIN")
 		systemSQL.Exec(t, "SET role=otheruser")
 		defer func() { systemSQL.Exec(t, "SET role=admin") }()
 		_, err := systemDB.Exec("SELECT crdb_internal.unsafe_revert_tenant_to_timestamp('target', cluster_logical_timestamp())")
-		require.ErrorContains(t, err, "does not have MANAGETENANT system privilege")
+		require.ErrorContains(t, err, "does not have MANAGEVIRTUALCLUSTER system privilege")
 	})
 	t.Run("requires sql_safe_updates=false", func(t *testing.T) {
 		systemSQL.Exec(t, "SET sql_safe_updates=true")

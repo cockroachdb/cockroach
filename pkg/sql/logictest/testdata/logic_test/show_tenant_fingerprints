@@ -53,5 +53,5 @@ SELECT * FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT target WITH START TIME
 
 user testuser
 
-statement error user testuser does not have MANAGETENANT system privilege
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT target
