@@ -477,28 +477,10 @@ func getDirectoryFromTarget(target string) string {
 }
 
 func (d *dev) determineAffectedTargets(ctx context.Context) ([]string, error) {
-	// List files changed against `master`.
-	remotes, err := d.exec.CommandContextSilent(ctx, "git", "remote", "-v")
+	base, err := d.getMergeBaseHash(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var upstream string
-	for _, remote := range strings.Split(strings.TrimSpace(string(remotes)), "\n") {
-		if (strings.Contains(remote, "github.com/cockroachdb/cockroach") || strings.Contains(remote, "github.com:cockroachdb/cockroach")) && strings.HasSuffix(remote, "(fetch)") {
-			upstream = strings.Fields(remote)[0]
-			break
-		}
-	}
-	if upstream == "" {
-		return nil, fmt.Errorf("could not find git upstream")
-	}
-
-	baseBytes, err := d.exec.CommandContextSilent(ctx, "git", "merge-base", fmt.Sprintf("%s/master", upstream), "HEAD")
-	if err != nil {
-		return nil, err
-	}
-	base := strings.TrimSpace(string(baseBytes))
-
 	changedFiles, err := d.exec.CommandContextSilent(ctx, "git", "diff", "--no-ext-diff", "--name-only", base, "--", "*.go", "**/testdata/**")
 	if err != nil {
 		return nil, err
