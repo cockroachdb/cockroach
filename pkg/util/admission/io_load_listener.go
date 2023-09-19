@@ -84,30 +84,6 @@ var L0SubLevelCountOverloadThreshold = settings.RegisterIntSetting(
 	"when the L0 sub-level count exceeds this threshold, the store is considered overloaded",
 	l0SubLevelCountOverloadThreshold, settings.PositiveInt)
 
-// L0MinimumSizePerSubLevel is a minimum size threshold per sub-level, to
-// avoid over reliance on the sub-level count as a signal of overload. Pebble
-// sometimes has to do frequent flushes of the memtable due to ingesting
-// sstables that overlap with the memtable, and each flush may generate a
-// sub-level. We have seen situations where these flushes have a tiny amount
-// of bytes, but a sequence of these can result in a high sub-level count.
-// The default of 5MB is chosen since:
-// 5MB*l0SubLevelCountOverloadThreshold=100MB, which can be very quickly
-// compacted into Lbase (say Lbase overlapping bytes are 200MB, this is a
-// 100MB+200MB=300MB compaction, which takes < 15s).
-//
-// NB: 5MB is typically significantly smaller than the flush size of a 64MB
-// memtable (after accounting for compression when flushing the memtable). If
-// it were comparable, this size based computation of sub-levels would
-// typically override the actual sub-levels, which would defeat the point of
-// using the sub-level count as a metric to guide admission.
-//
-// Setting this to 0 disables this minimum size logic.
-var L0MinimumSizePerSubLevel = settings.RegisterIntSetting(
-	settings.SystemOnly,
-	"admission.l0_min_size_per_sub_level",
-	"when non-zero, this indicates the minimum size that is needed to count towards one sub-level",
-	5<<20, settings.NonNegativeInt)
-
 // Experimental observations:
 //   - Sub-level count of ~40 caused a node heartbeat latency p90, p99 of 2.5s,
 //     4s. With a setting that limits sub-level count to 10, before the system
@@ -414,12 +390,10 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 			},
 			aux: adjustTokensAuxComputations{},
 			ioThreshold: &admissionpb.IOThreshold{
-				L0NumSubLevels:           int64(m.Levels[0].Sublevels),
-				L0NumSubLevelsThreshold:  math.MaxInt64,
-				L0NumFiles:               m.Levels[0].NumFiles,
-				L0NumFilesThreshold:      math.MaxInt64,
-				L0Size:                   m.Levels[0].Size,
-				L0MinimumSizePerSubLevel: 0,
+				L0NumSubLevels:          int64(m.Levels[0].Sublevels),
+				L0NumSubLevelsThreshold: math.MaxInt64,
+				L0NumFiles:              m.Levels[0].NumFiles,
+				L0NumFilesThreshold:     math.MaxInt64,
 			},
 		}
 		io.diskBW.bytesRead = metrics.DiskStats.BytesRead
@@ -555,7 +529,6 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 		metrics.Levels[0], metrics.WriteStallCount, wt,
 		L0FileCountOverloadThreshold.Get(&io.settings.SV),
 		L0SubLevelCountOverloadThreshold.Get(&io.settings.SV),
-		L0MinimumSizePerSubLevel.Get(&io.settings.SV),
 		MinFlushUtilizationFraction.Get(&io.settings.SV),
 	)
 	io.adjustTokensResult = res
@@ -648,16 +621,13 @@ func (*ioLoadListener) adjustTokensInner(
 	cumWriteStallCount int64,
 	flushWriteThroughput pebble.ThroughputMetric,
 	threshNumFiles, threshNumSublevels int64,
-	l0MinSizePerSubLevel int64,
 	minFlushUtilTargetFraction float64,
 ) adjustTokensResult {
 	ioThreshold := &admissionpb.IOThreshold{
-		L0NumFiles:               l0Metrics.NumFiles,
-		L0NumFilesThreshold:      threshNumFiles,
-		L0NumSubLevels:           int64(l0Metrics.Sublevels),
-		L0NumSubLevelsThreshold:  threshNumSublevels,
-		L0Size:                   l0Metrics.Size,
-		L0MinimumSizePerSubLevel: l0MinSizePerSubLevel,
+		L0NumFiles:              l0Metrics.NumFiles,
+		L0NumFilesThreshold:     threshNumFiles,
+		L0NumSubLevels:          int64(l0Metrics.Sublevels),
+		L0NumSubLevelsThreshold: threshNumSublevels,
 	}
 
 	curL0Bytes := l0Metrics.Size
