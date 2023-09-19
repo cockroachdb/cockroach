@@ -109,11 +109,10 @@ func CanUseMVCCRangeTombstones(ctx context.Context, st *cluster.Settings) bool {
 
 // MaxConflictsPerLockConflictError sets maximum number of locks returned in
 // LockConflictError in operations that return multiple locks per error.
-// Currently it is used in Scan, ReverseScan, and ExportToSST.
 var MaxConflictsPerLockConflictError = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"storage.mvcc.max_intents_per_error",
-	"maximum number of locks returned in error during export or scan requests",
+	"maximum number of locks returned in errors during evaluation",
 	MaxConflictsPerLockConflictErrorDefault,
 	settings.WithName("storage.mvcc.max_conflicts_per_lock_conflict_error"),
 )
@@ -1586,9 +1585,7 @@ func MVCCPut(
 		}
 		defer iter.Close()
 
-		// TODO(nvanbenschoten): plumb in a maxConflicts value to limit the number
-		// of shared locks that can be returned from the key.
-		ltScanner, err = newLockTableKeyScanner(rw, opts.Txn, lock.Intent, 0 /* maxConflicts */)
+		ltScanner, err = newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
 		if err != nil {
 			return err
 		}
@@ -1645,9 +1642,7 @@ func MVCCDelete(
 	}
 	defer iter.Close()
 
-	// TODO(nvanbenschoten): plumb in a maxConflicts value to limit the number
-	// of shared locks that can be returned from the key.
-	ltScanner, err := newLockTableKeyScanner(rw, opts.Txn, lock.Intent, 0 /* maxConflicts */)
+	ltScanner, err := newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
 	if err != nil {
 		return false, err
 	}
@@ -2415,7 +2410,7 @@ func MVCCIncrement(
 	}
 	defer iter.Close()
 
-	ltScanner, err := newLockTableKeyScanner(rw, opts.Txn, lock.Intent, 0 /* maxConflicts */)
+	ltScanner, err := newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
 	if err != nil {
 		return 0, err
 	}
@@ -2502,7 +2497,7 @@ func MVCCConditionalPut(
 	}
 	defer iter.Close()
 
-	ltScanner, err := newLockTableKeyScanner(rw, opts.Txn, lock.Intent, 0 /* maxConflicts */)
+	ltScanner, err := newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
 	if err != nil {
 		return err
 	}
@@ -2593,7 +2588,7 @@ func MVCCInitPut(
 	}
 	defer iter.Close()
 
-	ltScanner, err := newLockTableKeyScanner(rw, opts.Txn, lock.Intent, 0 /* maxConflicts */)
+	ltScanner, err := newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
 	if err != nil {
 		return err
 	}
@@ -3222,7 +3217,10 @@ func MVCCDeleteRange(
 		scanTxn = prevSeqTxn
 	}
 	res, err := MVCCScan(ctx, rw, key, endKey, scanTs, MVCCScanOptions{
-		FailOnMoreRecent: failOnMoreRecent, Txn: scanTxn, MaxKeys: max,
+		FailOnMoreRecent: failOnMoreRecent,
+		Txn:              scanTxn,
+		MaxKeys:          max,
+		MaxLockConflicts: opts.MaxLockConflicts,
 	})
 	if err != nil {
 		return nil, nil, 0, err
@@ -3239,7 +3237,7 @@ func MVCCDeleteRange(
 	}
 	defer iter.Close()
 
-	ltScanner, err := newLockTableKeyScanner(rw, opts.Txn, lock.Intent, 0 /* maxConflicts */)
+	ltScanner, err := newLockTableKeyScanner(rw, opts.Txn, lock.Intent, opts.MaxLockConflicts)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -3414,7 +3412,7 @@ func MVCCPredicateDeleteRange(
 	}
 	defer pointTombstoneIter.Close()
 
-	ltScanner, err := newLockTableKeyScanner(rw, nil /* txn */, lock.Intent, 0 /* maxConflicts */)
+	ltScanner, err := newLockTableKeyScanner(rw, nil /* txn */, lock.Intent, maxLockConflicts)
 	if err != nil {
 		return nil, err
 	}
@@ -4105,6 +4103,13 @@ type MVCCWriteOptions struct {
 	LocalTimestamp                 hlc.ClockTimestamp
 	Stats                          *enginepb.MVCCStats
 	ReplayWriteTimestampProtection bool
+	// MaxLockConflicts is a maximum number of conflicting locks collected before
+	// returning LockConflictError. Even single-key writes can encounter multiple
+	// conflicting shared locks, so the limit is important to bound the number of
+	// locks returned.
+	//
+	// The zero value indicates no limit.
+	MaxLockConflicts int64
 }
 
 func (opts *MVCCWriteOptions) validate() error {
