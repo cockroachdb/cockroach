@@ -1383,6 +1383,7 @@ func validReadTimes(
 
 		// Handle a point key - put it into `hist`.
 		valB, err := iter.ValueAndErr()
+		valB = append([]byte{}, valB...)
 		if err != nil {
 			panic(err)
 		}
