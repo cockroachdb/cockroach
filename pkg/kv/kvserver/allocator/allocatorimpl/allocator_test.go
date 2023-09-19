@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -8458,7 +8457,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	tr := tracing.NewTracer()
 	clock := hlc.NewClockForTesting(nil)
 
-	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := gossip.NewTest(1, stopper, metric.NewRegistry())
 
 	liveness.TimeUntilNodeDead.Override(ctx, &st.SV, liveness.TestTimeUntilNodeDeadOff)
 
@@ -8916,7 +8915,7 @@ func exampleRebalancing(
 
 	// Model a set of stores in a cluster,
 	// adding / rebalancing ranges of random sizes.
-	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := gossip.NewTest(1, stopper, metric.NewRegistry())
 
 	liveness.TimeUntilNodeDead.Override(ctx, &st.SV, liveness.TestTimeUntilNodeDeadOff)
 

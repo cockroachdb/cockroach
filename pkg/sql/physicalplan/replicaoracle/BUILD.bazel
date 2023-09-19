@@ -25,7 +25,6 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":replicaoracle"],
     deps = [
-        "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/roachpb",
         "//pkg/testutils",

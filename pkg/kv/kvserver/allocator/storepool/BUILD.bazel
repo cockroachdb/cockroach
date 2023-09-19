@@ -10,7 +10,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/load",
