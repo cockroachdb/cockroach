@@ -53,6 +53,13 @@ func NewSSTIterator(
 	return newPebbleSSTIterator(files, opts, forwardOnly)
 }
 
+// NewSSTEngineIterator is like NewSSTIterator, but returns an EngineIterator.
+func NewSSTEngineIterator(
+	files [][]sstable.ReadableFile, opts IterOptions, forwardOnly bool,
+) (EngineIterator, error) {
+	return newPebbleSSTIterator(files, opts, forwardOnly)
+}
+
 // NewMemSSTIterator returns an MVCCIterator for the provided SST data,
 // similarly to NewSSTIterator().
 func NewMemSSTIterator(sst []byte, verify bool, opts IterOptions) (MVCCIterator, error) {

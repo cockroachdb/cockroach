@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -1382,7 +1383,7 @@ func TestApproximateDiskBytes(t *testing.T) {
 	require.NoError(t, err)
 	defer p.Close()
 
-	key := func(i int) roachpb.Key {
+	keyFunc := func(i int) roachpb.Key {
 		return keys.SystemSQLCodec.TablePrefix(uint32(i))
 	}
 
@@ -1390,7 +1391,7 @@ func TestApproximateDiskBytes(t *testing.T) {
 	b := p.NewWriteBatch()
 	for i := 0; i < 1000; i++ {
 		require.NoError(t, b.PutMVCC(
-			MVCCKey{Key: key(i), Timestamp: hlc.Timestamp{WallTime: int64(i + 1)}},
+			MVCCKey{Key: keyFunc(i), Timestamp: hlc.Timestamp{WallTime: int64(i + 1)}},
 			MVCCValue{Value: roachpb.Value{RawBytes: randutil.RandBytes(rng, 100)}},
 		))
 	}
@@ -1406,9 +1407,116 @@ func TestApproximateDiskBytes(t *testing.T) {
 
 	all := approxBytes(roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax})
 	for i := 0; i < 1000; i++ {
-		s := roachpb.Span{Key: key(i), EndKey: key(i + 1)}
+		s := roachpb.Span{Key: keyFunc(i), EndKey: keyFunc(i + 1)}
 		if v := approxBytes(s); v >= all {
 			t.Errorf("ApproximateDiskBytes(%q) = %d >= entire DB size %d", s, v, all)
 		}
 	}
+}
+
+func TestConvertFilesToBatchAndCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	const ingestEngine = 0
+	const batchEngine = 1
+	var engs [batchEngine + 1]Engine
+	mem := vfs.NewMem()
+	for i := range engs {
+		engs[i] = InMemFromFS(ctx, mem, fmt.Sprintf("eng-%d", i), st)
+		defer engs[i].Close()
+	}
+	// Populate points that will have MVCC value and an intent.
+	points := []testValue{
+		intent(key(1), "value1", ts(1000)),
+		value(key(2), "value2", ts(1000)),
+		intent(key(2), "value3", ts(2000)),
+		intent(key(5), "value4", ts(1500)),
+		intent(key(6), "value4", ts(2500)),
+	}
+	for i := range engs {
+		// Put points
+		require.NoError(t, fillInData(ctx, engs[i], points))
+		// Put wide range keys that will be partially cleared.
+		require.NoError(t, engs[i].PutMVCCRangeKey(MVCCRangeKey{
+			StartKey:  key(1),
+			EndKey:    key(7),
+			Timestamp: ts(2300),
+		}, MVCCValue{}))
+		require.NoError(t, engs[i].PutMVCCRangeKey(MVCCRangeKey{
+			StartKey:  key(0),
+			EndKey:    key(8),
+			Timestamp: ts(2700),
+		}, MVCCValue{}))
+	}
+	// Ingest into [2, 6) with 2 files.
+	fileName1 := "file1"
+	f1, err := mem.Create(fileName1)
+	require.NoError(t, err)
+	w1 := MakeIngestionSSTWriter(ctx, st, objstorageprovider.NewFileWritable(f1))
+	startKey := key(2)
+	endKey := key(6)
+	lkStart, _ := keys.LockTableSingleKey(startKey, nil)
+	lkEnd, _ := keys.LockTableSingleKey(endKey, nil)
+	require.NoError(t, w1.ClearRawRange(lkStart, lkEnd, true, true))
+	// Not a real lock table key, since lacks a version, but it doesn't matter
+	// for this test. We can't use MVCCPut since the intent and the
+	// corresponding provisional value belong in different ssts.
+	lk3, _ := keys.LockTableSingleKey(key(3), nil)
+	require.NoError(t, w1.PutEngineKey(EngineKey{Key: lk3}, []byte("")))
+	require.NoError(t, w1.Finish())
+	w1.Close()
+
+	fileName2 := "file2"
+	f2, err := mem.Create(fileName2)
+	require.NoError(t, err)
+	w2 := MakeIngestionSSTWriter(ctx, st, objstorageprovider.NewFileWritable(f2))
+	require.NoError(t, w2.ClearRawRange(startKey, endKey, true, true))
+	val := roachpb.MakeValueFromString("value5")
+	val.InitChecksum(key(3))
+	require.NoError(t, w2.PutMVCC(
+		MVCCKey{Key: key(3), Timestamp: ts(2800)}, MVCCValue{Value: val}))
+	require.NoError(t, w2.Finish())
+	w2.Close()
+
+	require.NoError(t, engs[batchEngine].ConvertFilesToBatchAndCommit(
+		ctx, []string{fileName1, fileName2}, []roachpb.Span{
+			{Key: lkStart, EndKey: lkEnd}, {Key: startKey, EndKey: endKey},
+		}))
+	require.NoError(t, engs[ingestEngine].IngestLocalFiles(ctx, []string{fileName1, fileName2}))
+	outputState := func(eng Engine) []string {
+		it, err := eng.NewEngineIterator(IterOptions{
+			UpperBound: roachpb.KeyMax,
+			KeyTypes:   IterKeyTypePointsAndRanges,
+		})
+		require.NoError(t, err)
+		defer it.Close()
+		var state []string
+		valid, err := it.SeekEngineKeyGE(EngineKey{Key: roachpb.KeyMin})
+		for valid {
+			hasPoint, hasRange := it.HasPointAndRange()
+			if hasPoint {
+				k, err := it.EngineKey()
+				require.NoError(t, err)
+				v, err := it.UnsafeValue()
+				require.NoError(t, err)
+				state = append(state, fmt.Sprintf("point %s = %x\n", k, v))
+			}
+			if hasRange {
+				k, err := it.EngineRangeBounds()
+				require.NoError(t, err)
+				v := it.EngineRangeKeys()
+				for i := range v {
+					state = append(state, fmt.Sprintf(
+						"range [%s,%s) = %x/%x\n", k.Key, k.EndKey, v[i].Value, v[i].Version))
+				}
+			}
+			valid, err = it.NextEngineKey()
+		}
+		require.NoError(t, err)
+		return state
+	}
+	require.Equal(t, outputState(engs[ingestEngine]), outputState(engs[batchEngine]))
 }
