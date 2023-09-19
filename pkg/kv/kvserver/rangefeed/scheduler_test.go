@@ -44,8 +44,8 @@ func TestStopNonEmpty(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 1})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c := createAndRegisterConsumerOrFail(t, s)
-	s.StopProcessor(c.id)
+	c := createAndRegisterConsumerOrFail(t, s, 1)
+	s.stopProcessor(c.id)
 	assertStopsWithinTimeout(t, s)
 	c.requireStopped(t, time.Second*30)
 }
@@ -63,16 +63,18 @@ type schedulerConsumer struct {
 	id         int64
 }
 
-func createAndRegisterConsumerOrFail(t *testing.T, scheduler *Scheduler) *schedulerConsumer {
+func createAndRegisterConsumerOrFail(
+	t *testing.T, scheduler *Scheduler, id int64,
+) *schedulerConsumer {
 	t.Helper()
 	c := &schedulerConsumer{
 		c:          make(chan processorEventType, 1000),
 		reschedule: make(chan processorEventType, 1),
 		sched:      scheduler,
+		id:         id,
 	}
-	id, err := c.sched.Register(c.process)
+	err := c.sched.register(id, c.process)
 	require.NoError(t, err, "failed to register processor")
-	c.id = id
 	return c
 }
 
@@ -93,7 +95,7 @@ func (c *schedulerConsumer) process(ev processorEventType) processorEventType {
 	default:
 	}
 	if ev&Stopped != 0 {
-		c.sched.Unregister(c.id)
+		c.sched.unregister(c.id)
 	}
 	return 0
 }
@@ -214,8 +216,8 @@ func TestDeliverEvents(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 1})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c := createAndRegisterConsumerOrFail(t, s)
-	s.Enqueue(c.id, te1)
+	c := createAndRegisterConsumerOrFail(t, s, 1)
+	s.enqueue(c.id, te1)
 	c.requireEvent(t, time.Second*30000, te1, 1)
 	assertStopsWithinTimeout(t, s)
 }
@@ -228,11 +230,11 @@ func TestNoParallel(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 2})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c := createAndRegisterConsumerOrFail(t, s)
+	c := createAndRegisterConsumerOrFail(t, s, 1)
 	c.pause()
-	s.Enqueue(c.id, te1)
+	s.enqueue(c.id, te1)
 	c.waitPaused()
-	s.Enqueue(c.id, te2)
+	s.enqueue(c.id, te2)
 	c.resume()
 	c.requireHistory(t, time.Second*30, []processorEventType{te1, te2})
 	assertStopsWithinTimeout(t, s)
@@ -246,12 +248,12 @@ func TestProcessOtherWhilePaused(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 2})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c1 := createAndRegisterConsumerOrFail(t, s)
-	c2 := createAndRegisterConsumerOrFail(t, s)
+	c1 := createAndRegisterConsumerOrFail(t, s, 1)
+	c2 := createAndRegisterConsumerOrFail(t, s, 2)
 	c1.pause()
-	s.Enqueue(c1.id, te1)
+	s.enqueue(c1.id, te1)
 	c1.waitPaused()
-	s.Enqueue(c2.id, te1)
+	s.enqueue(c2.id, te1)
 	c2.requireHistory(t, time.Second*30, []processorEventType{te1})
 	c1.resume()
 	c1.requireHistory(t, time.Second*30, []processorEventType{te1})
@@ -268,12 +270,12 @@ func TestEventsCombined(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 2})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c := createAndRegisterConsumerOrFail(t, s)
+	c := createAndRegisterConsumerOrFail(t, s, 1)
 	c.pause()
-	s.Enqueue(c.id, te1)
+	s.enqueue(c.id, te1)
 	c.waitPaused()
-	s.Enqueue(c.id, te2)
-	s.Enqueue(c.id, te3)
+	s.enqueue(c.id, te2)
+	s.enqueue(c.id, te3)
 	c.resume()
 	c.requireHistory(t, time.Second*30, []processorEventType{te1, te2 | te3})
 	assertStopsWithinTimeout(t, s)
@@ -287,11 +289,11 @@ func TestRescheduleEvent(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 2})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c := createAndRegisterConsumerOrFail(t, s)
+	c := createAndRegisterConsumerOrFail(t, s, 1)
 	c.pause()
-	s.Enqueue(c.id, te1)
+	s.enqueue(c.id, te1)
 	c.waitPaused()
-	s.Enqueue(c.id, te1)
+	s.enqueue(c.id, te1)
 	c.resume()
 	c.requireHistory(t, time.Second*30, []processorEventType{te1, te1})
 	assertStopsWithinTimeout(t, s)
@@ -305,7 +307,7 @@ func TestClientScheduler(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 2})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	cs := NewClientScheduler(s)
+	cs := s.NewClientScheduler()
 	// Manually create consumer as we don't want it to start, but want to use it
 	// via client scheduler.
 	c := &schedulerConsumer{
@@ -340,7 +342,7 @@ func TestScheduleBatch(t *testing.T) {
 	batch := s.NewEnqueueBatch()
 	defer batch.Close()
 	for i := 0; i < consumerNumber; i++ {
-		consumers[i] = createAndRegisterConsumerOrFail(t, s)
+		consumers[i] = createAndRegisterConsumerOrFail(t, s, int64(i+1))
 		batch.Add(consumers[i].id)
 	}
 	s.EnqueueBatch(batch, te1)
@@ -358,10 +360,10 @@ func TestPartialProcessing(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 1})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c := createAndRegisterConsumerOrFail(t, s)
+	c := createAndRegisterConsumerOrFail(t, s, 1)
 	// Set process response to trigger process once again.
 	c.rescheduleNext(te1)
-	s.Enqueue(c.id, te1)
+	s.enqueue(c.id, te1)
 	c.requireHistory(t, time.Second*30, []processorEventType{te1, te1})
 	assertStopsWithinTimeout(t, s)
 }
@@ -387,10 +389,10 @@ func TestUnregisterWithoutStop(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 1})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c := createAndRegisterConsumerOrFail(t, s)
-	s.Enqueue(c.id, te1)
+	c := createAndRegisterConsumerOrFail(t, s, 1)
+	s.enqueue(c.id, te1)
 	c.requireHistory(t, time.Second*30, []processorEventType{te1})
-	s.Unregister(c.id)
+	s.unregister(c.id)
 	assertStopsWithinTimeout(t, s)
 	// Ensure that we didn't send stop after callback was removed.
 	c.requireHistory(t, time.Second*30, []processorEventType{te1})
@@ -414,9 +416,9 @@ func TestSchedulerShutdown(t *testing.T) {
 
 	s := NewScheduler(SchedulerConfig{Workers: 2, ShardSize: 1})
 	require.NoError(t, s.Start(ctx, stopper), "failed to start")
-	c1 := createAndRegisterConsumerOrFail(t, s)
-	c2 := createAndRegisterConsumerOrFail(t, s)
-	s.StopProcessor(c2.id)
+	c1 := createAndRegisterConsumerOrFail(t, s, 1)
+	c2 := createAndRegisterConsumerOrFail(t, s, 2)
+	s.stopProcessor(c2.id)
 	s.Stop()
 	// Ensure that we are not stopped twice.
 	c1.requireHistory(t, time.Second*30, []processorEventType{Stopped})
