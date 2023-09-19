@@ -11,6 +11,7 @@
 package scbuildstmt
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -23,8 +24,6 @@ import (
 // supportedStatement tracks metadata for statements that are
 // implemented by the new schema changer.
 type supportedStatement struct {
-	// fn is a function to perform a schema change.
-	fn interface{}
 	// statementTag tag for this statement.
 	statementTag string
 	// checks contains a coarse-grained function to filter out most
@@ -46,26 +45,26 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	// Alter table will have commands individually whitelisted via the
 	// supportedAlterTableStatements list, so wwe will consider it fully supported
 	// here.
-	reflect.TypeOf((*tree.AlterTable)(nil)):          {fn: AlterTable, statementTag: tree.AlterTableTag, on: true, checks: alterTableChecks},
-	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, statementTag: tree.CreateIndexTag, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.DropDatabase)(nil)):        {fn: DropDatabase, statementTag: tree.DropDatabaseTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {fn: DropOwnedBy, statementTag: tree.DropOwnedByTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.DropSchema)(nil)):          {fn: DropSchema, statementTag: tree.DropSchemaTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropSequence)(nil)):        {fn: DropSequence, statementTag: tree.DropSequenceTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropTable)(nil)):           {fn: DropTable, statementTag: tree.DropTableTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropType)(nil)):            {fn: DropType, statementTag: tree.DropTypeTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropView)(nil)):            {fn: DropView, statementTag: tree.DropViewTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, statementTag: tree.CommentOnConstraintTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, statementTag: tree.CommentOnDatabaseTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {fn: CommentOnSchema, statementTag: tree.CommentOnSchemaTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {fn: CommentOnTable, statementTag: tree.CommentOnTableTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, statementTag: tree.CommentOnColumnTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, statementTag: tree.CommentOnIndexTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, statementTag: tree.DropIndexTag, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.DropFunction)(nil)):        {fn: DropFunction, statementTag: tree.DropFunctionTag, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {fn: CreateFunction, statementTag: tree.CreateRoutineTag, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.CreateSchema)(nil)):        {fn: CreateSchema, statementTag: tree.CreateSchemaTag, on: false, checks: isV232Active},
-	reflect.TypeOf((*tree.CreateSequence)(nil)):      {fn: CreateSequence, statementTag: tree.CreateSequenceTag, on: false, checks: isV232Active},
+	reflect.TypeOf((*tree.AlterTable)(nil)):          {statementTag: tree.AlterTableTag, on: true, checks: alterTableChecks},
+	reflect.TypeOf((*tree.CreateIndex)(nil)):         {statementTag: tree.CreateIndexTag, on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.DropDatabase)(nil)):        {statementTag: tree.DropDatabaseTag, on: true, checks: isV221Active},
+	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {statementTag: tree.DropOwnedByTag, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.DropSchema)(nil)):          {statementTag: tree.DropSchemaTag, on: true, checks: isV221Active},
+	reflect.TypeOf((*tree.DropSequence)(nil)):        {statementTag: tree.DropSequenceTag, on: true, checks: isV221Active},
+	reflect.TypeOf((*tree.DropTable)(nil)):           {statementTag: tree.DropTableTag, on: true, checks: isV221Active},
+	reflect.TypeOf((*tree.DropType)(nil)):            {statementTag: tree.DropTypeTag, on: true, checks: isV221Active},
+	reflect.TypeOf((*tree.DropView)(nil)):            {statementTag: tree.DropViewTag, on: true, checks: isV221Active},
+	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {statementTag: tree.CommentOnConstraintTag, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {statementTag: tree.CommentOnDatabaseTag, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {statementTag: tree.CommentOnSchemaTag, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {statementTag: tree.CommentOnTableTag, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {statementTag: tree.CommentOnColumnTag, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {statementTag: tree.CommentOnIndexTag, on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.DropIndex)(nil)):           {statementTag: tree.DropIndexTag, on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.DropFunction)(nil)):        {statementTag: tree.DropFunctionTag, on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {statementTag: tree.CreateRoutineTag, on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.CreateSchema)(nil)):        {statementTag: tree.CreateSchemaTag, on: false, checks: isV232Active},
+	reflect.TypeOf((*tree.CreateSequence)(nil)):      {statementTag: tree.CreateSequenceTag, on: false, checks: isV232Active},
 }
 
 // supportedStatementTags tracks statement tags which are implemented
@@ -77,17 +76,6 @@ func init() {
 	// Check function signatures inside the supportedStatements map.
 	for statementType, statementEntry := range supportedStatements {
 		// Validate main callback functions.
-		callBackType := reflect.TypeOf(statementEntry.fn)
-		if callBackType.Kind() != reflect.Func {
-			panic(errors.AssertionFailedf("%v entry for statement is "+
-				"not a function", statementType))
-		}
-		if callBackType.NumIn() != 2 ||
-			!callBackType.In(0).Implements(reflect.TypeOf((*BuildCtx)(nil)).Elem()) ||
-			callBackType.In(1) != statementType {
-			panic(errors.AssertionFailedf("%v entry for statement "+
-				"does not have a valid signature; got %v", statementType, callBackType))
-		}
 		// Validate fully supported function callbacks.
 		if statementEntry.checks != nil {
 			checks := reflect.TypeOf(statementEntry.checks)
@@ -173,16 +161,56 @@ func Process(b BuildCtx, n tree.Statement) {
 		panic(scerrors.NotImplementedError(n))
 	}
 
-	// Invoke the callback function, with the concrete types.
-	info := supportedStatements[reflect.TypeOf(n)]
-	fn := reflect.ValueOf(info.fn)
-	in := []reflect.Value{reflect.ValueOf(b), reflect.ValueOf(n)}
 	// Check if the feature flag for it is enabled.
 	err := b.CheckFeature(b, tree.GetSchemaFeatureNameFromStmt(n))
 	if err != nil {
 		panic(err)
 	}
-	fn.Call(in)
+
+	switch typedN := n.(type) {
+	case *tree.AlterTable:
+		AlterTable(b, typedN)
+	case *tree.CreateIndex:
+		CreateIndex(b, typedN)
+	case *tree.DropDatabase:
+		DropDatabase(b, typedN)
+	case *tree.DropOwnedBy:
+		DropOwnedBy(b, typedN)
+	case *tree.DropSchema:
+		DropSchema(b, typedN)
+	case *tree.DropSequence:
+		DropSequence(b, typedN)
+	case *tree.DropTable:
+		DropTable(b, typedN)
+	case *tree.DropType:
+		DropType(b, typedN)
+	case *tree.DropView:
+		DropView(b, typedN)
+	case *tree.CommentOnConstraint:
+		CommentOnConstraint(b, typedN)
+	case *tree.CommentOnDatabase:
+		CommentOnDatabase(b, typedN)
+	case *tree.CommentOnSchema:
+		CommentOnSchema(b, typedN)
+	case *tree.CommentOnTable:
+		CommentOnTable(b, typedN)
+	case *tree.CommentOnColumn:
+		CommentOnColumn(b, typedN)
+	case *tree.CommentOnIndex:
+		CommentOnIndex(b, typedN)
+	case *tree.DropIndex:
+		DropIndex(b, typedN)
+	case *tree.DropFunction:
+		DropFunction(b, typedN)
+	case *tree.CreateRoutine:
+		CreateFunction(b, typedN)
+	case *tree.CreateSchema:
+		CreateSchema(b, typedN)
+	case *tree.CreateSequence:
+		CreateSequence(b, typedN)
+	default:
+		panic(fmt.Sprintf("invalid statement %T", typedN))
+	}
 }
 
 // getDeclarativeSchemaChangerModeForStmt returns the mode specific for `n`.

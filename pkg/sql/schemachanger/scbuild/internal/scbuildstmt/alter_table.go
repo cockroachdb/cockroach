@@ -11,6 +11,7 @@
 package scbuildstmt
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 	"strings"
@@ -38,32 +39,19 @@ type supportedAlterTableCommand = supportedStatement
 // declarative schema  changer. Operations marked as non-fully supported can
 // only be with the use_declarative_schema_changer session variable.
 var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
-	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):          {fn: alterTableAddColumn, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):         {fn: alterTableDropColumn, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)):    {fn: alterTableAlterPrimaryKey, on: true, checks: alterTableAlterPrimaryKeyChecks},
-	reflect.TypeOf((*tree.AlterTableSetNotNull)(nil)):         {fn: alterTableSetNotNull, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)):      {fn: alterTableAddConstraint, on: true, checks: alterTableAddConstraintChecks},
-	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     {fn: alterTableDropConstraint, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): {fn: alterTableValidateConstraint, on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):          {on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):         {on: true, checks: isV222Active},
+	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)):    {on: true, checks: alterTableAlterPrimaryKeyChecks},
+	reflect.TypeOf((*tree.AlterTableSetNotNull)(nil)):         {on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)):      {on: true, checks: alterTableAddConstraintChecks},
+	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     {on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): {on: true, checks: isV231Active},
 }
 
 func init() {
 	boolType := reflect.TypeOf((*bool)(nil)).Elem()
 	// Check function signatures inside the supportedAlterTableStatements map.
 	for statementType, statementEntry := range supportedAlterTableStatements {
-		callBackType := reflect.TypeOf(statementEntry.fn)
-		if callBackType.Kind() != reflect.Func {
-			panic(errors.AssertionFailedf("%v entry for statement is "+
-				"not a function", statementType))
-		}
-		if callBackType.NumIn() != 4 ||
-			!callBackType.In(0).Implements(reflect.TypeOf((*BuildCtx)(nil)).Elem()) ||
-			callBackType.In(1) != reflect.TypeOf((*tree.TableName)(nil)) ||
-			callBackType.In(2) != reflect.TypeOf((*scpb.Table)(nil)) ||
-			callBackType.In(3) != statementType {
-			panic(errors.AssertionFailedf("%v entry for alter table statement "+
-				"does not have a valid signature; got %v", statementType, callBackType))
-		}
 		if statementEntry.checks != nil {
 			checks := reflect.TypeOf(statementEntry.checks)
 			if checks.Kind() != reflect.Func {
@@ -172,14 +160,24 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 	for _, cmd := range n.Cmds {
 		// Invoke the callback function for each command.
 		b.IncrementSchemaChangeAlterCounter("table", cmd.TelemetryName())
-		info := supportedAlterTableStatements[reflect.TypeOf(cmd)]
-		fn := reflect.ValueOf(info.fn)
-		fn.Call([]reflect.Value{
-			reflect.ValueOf(b),
-			reflect.ValueOf(&tn),
-			reflect.ValueOf(tbl),
-			reflect.ValueOf(cmd),
-		})
+		switch typedCmd := cmd.(type) {
+		case *tree.AlterTableAddColumn:
+			alterTableAddColumn(b, &tn, tbl, typedCmd)
+		case *tree.AlterTableDropColumn:
+			alterTableDropColumn(b, &tn, tbl, typedCmd)
+		case *tree.AlterTableAlterPrimaryKey:
+			alterTableAlterPrimaryKey(b, &tn, tbl, typedCmd)
+		case *tree.AlterTableSetNotNull:
+			alterTableSetNotNull(b, &tn, tbl, typedCmd)
+		case *tree.AlterTableAddConstraint:
+			alterTableAddConstraint(b, &tn, tbl, typedCmd)
+		case *tree.AlterTableDropConstraint:
+			alterTableDropConstraint(b, &tn, tbl, typedCmd)
+		case *tree.AlterTableValidateConstraint:
+			alterTableValidateConstraint(b, &tn, tbl, typedCmd)
+		default:
+			panic(fmt.Sprintf("invalid cmd %T", typedCmd))
+		}
 		b.IncrementSubWorkID()
 	}
 	maybeDropRedundantPrimaryIndexes(b, tbl.TableID)
