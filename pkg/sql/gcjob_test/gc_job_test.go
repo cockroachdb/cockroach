@@ -311,12 +311,21 @@ func TestGCJobRetry(t *testing.T) {
 	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
 	tdb.Exec(t, "INSERT INTO foo SELECT generate_series(1, 1000)")
 	tdb.Exec(t, "DROP TABLE foo")
-	var jobID string
+
+	var jobID, status, lastRun, nextRun, numRuns string
 	tdb.QueryRow(t, `
-SELECT job_id
+SELECT job_id, status, last_run, next_run, num_runs
   FROM [SHOW JOBS]
  WHERE job_type = 'SCHEMA CHANGE GC' AND description LIKE '%foo%';`,
-	).Scan(&jobID)
+	).Scan(&jobID, &status, &lastRun, &nextRun, &numRuns)
+
+	t.Log("Details about SCHEMA CHANGE GC job")
+	t.Logf("job_id: %s", jobID)
+	t.Logf("status: %s", status)
+	t.Logf("last_run: %s", lastRun)
+	t.Logf("next_run: %s", nextRun)
+	t.Logf("num_runs: %s", numRuns)
+
 	tdb.CheckQueryResultsRetry(t,
 		"SELECT running_status FROM crdb_internal.jobs WHERE job_id = "+jobID,
 		[][]string{{string(sql.RunningStatusWaitingForMVCCGC)}},
