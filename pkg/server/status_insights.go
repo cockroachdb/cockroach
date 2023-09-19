@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -107,41 +109,65 @@ func (s *statusServer) StatementExecutionInsights(
 					contentionEvents = append(contentionEvents, ci)
 				}
 			}
-
-			resp.Statements = append(resp.Statements, &serverpb.StatementExecutionInsightsResponse_Statement{
-				ID:                   &stmt.ID,
-				FingerprintID:        stmt.FingerprintID,
-				TransactionID:        &insight.Transaction.ID,
-				TxnFingerprintID:     insight.Transaction.FingerprintID,
-				SessionID:            &insight.Session.ID,
-				Query:                stmt.Query,
-				Status:               stmt.Status,
-				StartTime:            &stmt.StartTime,
-				EndTime:              &stmt.EndTime,
-				FullScan:             stmt.FullScan,
-				ImplicitTxn:          insight.Transaction.ImplicitTxn,
-				User:                 insight.Transaction.User,
-				UserPriority:         insight.Transaction.UserPriority,
-				ApplicationName:      insight.Transaction.ApplicationName,
-				Database:             stmt.Database,
-				PlanGist:             stmt.PlanGist,
-				RowsRead:             stmt.RowsRead,
-				RowsWritten:          stmt.RowsWritten,
-				Retries:              stmt.Retries,
-				AutoRetryReason:      stmt.AutoRetryReason,
-				Nodes:                stmt.Nodes,
-				Contention:           stmt.Contention,
-				IndexRecommendations: stmt.IndexRecommendations,
-				Problem:              stmt.Problem,
-				Causes:               stmt.Causes,
-				CPUSQLNanos:          stmt.CPUSQLNanos,
-				ErrorCode:            stmt.ErrorCode,
-				ServiceLatSeconds:    stmt.LatencyInSeconds,
-				ContentionEvents:     contentionEvents,
-			})
+			statement := convertToStmtInsight(
+				stmt,
+				insight.Session.ID,
+				insight.Transaction.ID,
+				insight.Transaction.FingerprintID,
+				insight.Transaction.ImplicitTxn,
+				insight.Transaction.User,
+				insight.Transaction.UserPriority,
+				insight.Transaction.ApplicationName,
+				contentionEvents,
+			)
+			resp.Statements = append(resp.Statements, statement)
 		}
 	}
 	return resp, nil
+}
+
+func convertToStmtInsight(
+	stmt *insights.Statement,
+	sessionID clusterunique.ID,
+	transactionID uuid.UUID,
+	txnFingerprintID appstatspb.TransactionFingerprintID,
+	implicitTxn bool,
+	user string,
+	userPriority string,
+	applicationName string,
+	contentionEvents []*serverpb.ContentionEvent,
+) *serverpb.StatementExecutionInsightsResponse_Statement {
+	return &serverpb.StatementExecutionInsightsResponse_Statement{
+		ID:                   &stmt.ID,
+		FingerprintID:        stmt.FingerprintID,
+		TransactionID:        &transactionID,
+		TxnFingerprintID:     txnFingerprintID,
+		SessionID:            &sessionID,
+		Query:                stmt.Query,
+		Status:               stmt.Status,
+		StartTime:            &stmt.StartTime,
+		EndTime:              &stmt.EndTime,
+		FullScan:             stmt.FullScan,
+		ImplicitTxn:          implicitTxn,
+		User:                 user,
+		UserPriority:         userPriority,
+		ApplicationName:      applicationName,
+		Database:             stmt.Database,
+		PlanGist:             stmt.PlanGist,
+		RowsRead:             stmt.RowsRead,
+		RowsWritten:          stmt.RowsWritten,
+		Retries:              stmt.Retries,
+		AutoRetryReason:      stmt.AutoRetryReason,
+		Nodes:                stmt.Nodes,
+		Contention:           stmt.Contention,
+		IndexRecommendations: stmt.IndexRecommendations,
+		Problem:              stmt.Problem,
+		Causes:               stmt.Causes,
+		CPUSQLNanos:          stmt.CPUSQLNanos,
+		ErrorCode:            stmt.ErrorCode,
+		ServiceLatSeconds:    stmt.LatencyInSeconds,
+		ContentionEvents:     contentionEvents,
+	}
 }
 
 func (b *baseStatusServer) getContentionEventDetails(
@@ -224,4 +250,123 @@ func (b *baseStatusServer) getContentionEventDetails(
 		IndexName:                indexName,
 		TableName:                tableName,
 	}, nil
+}
+
+// TransactionExecutionInsights requests transaction insights that satisfy specified
+// parameters in request payload if any provided.
+func (s *statusServer) TransactionExecutionInsights(
+	ctx context.Context, req *serverpb.TransactionExecutionInsightsRequest,
+) (*serverpb.TransactionExecutionInsightsResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+	// Validate that either both start and end time are defined or not.
+	if (req.StartTime != nil && req.EndTime == nil) || (req.EndTime != nil && req.StartTime == nil) {
+		return nil, errors.New("required that both StartTime and EndTime to be set")
+	}
+
+	resp := &serverpb.TransactionExecutionInsightsResponse{
+		Transactions: make([]*serverpb.TransactionExecutionInsightsResponse_Transaction, 0),
+	}
+
+	// Request in-memory statement insights in case persisted data is incomplete.
+	inMemoryInsights, err := s.ListExecutionInsights(ctx, &serverpb.ListExecutionInsightsRequest{})
+	if err != nil {
+		return nil, err
+	}
+	stmtIDToContentionMap := make(map[clusterunique.ID][]contentionpb.ExtendedContentionEvent)
+	txnIDToContentionMap := make(map[uuid.UUID][]contentionpb.ExtendedContentionEvent)
+	if req.WithContentionEvents {
+		contentionEventsResp, err := s.TransactionContentionEvents(ctx, &serverpb.TransactionContentionEventsRequest{})
+		if err != nil {
+			return nil, err
+		}
+		for _, event := range contentionEventsResp.Events {
+			// users with VIEWACTIVITYREDACTED role have no access to range keys so
+			// it will be empty.
+			if event.BlockingEvent.Key.Equal(roachpb.Key{}) {
+				continue
+			}
+			stmtIDToContentionMap[event.WaitingStmtID] = append(stmtIDToContentionMap[event.WaitingStmtID], event)
+			txnIDToContentionMap[event.WaitingTxnID] = append(txnIDToContentionMap[event.WaitingTxnID], event)
+		}
+	}
+	for _, insight := range inMemoryInsights.Insights {
+		// Filter by TransactionID.
+		if req.TransactionID != nil && insight.Transaction.ID != *req.TransactionID {
+			continue
+		}
+		// Filter by TxnFingerprintID.
+		if req.TxnFingerprintID > 0 && insight.Transaction.FingerprintID != req.TxnFingerprintID {
+			continue
+		}
+		// Filter by start and end time.
+		if req.StartTime != nil && req.EndTime != nil &&
+			!timeutil.IsOverlappingTimeRanges(*req.StartTime, *req.EndTime, insight.Transaction.StartTime, insight.Transaction.EndTime) {
+			continue
+		}
+		transaction := &serverpb.TransactionExecutionInsightsResponse_Transaction{
+			ID:               &insight.Transaction.ID,
+			FingerprintID:    insight.Transaction.FingerprintID,
+			SessionID:        &insight.Session.ID,
+			UserPriority:     insight.Transaction.UserPriority,
+			ImplicitTxn:      insight.Transaction.ImplicitTxn,
+			Contention:       insight.Transaction.Contention,
+			StartTime:        &insight.Transaction.StartTime,
+			EndTime:          &insight.Transaction.EndTime,
+			User:             insight.Transaction.User,
+			ApplicationName:  insight.Transaction.ApplicationName,
+			RowsRead:         insight.Transaction.RowsRead,
+			RowsWritten:      insight.Transaction.RowsWritten,
+			RetryCount:       insight.Transaction.RetryCount,
+			AutoRetryReason:  insight.Transaction.AutoRetryReason,
+			Problems:         insight.Transaction.Problems,
+			Causes:           insight.Transaction.Causes,
+			StmtExecutionIDs: insight.Transaction.StmtExecutionIDs,
+			CPUSQLNanos:      insight.Transaction.CPUSQLNanos,
+			LastErrorCode:    insight.Transaction.LastErrorCode,
+			LastErrorMsg:     insight.Transaction.LastErrorMsg,
+			Status:           insight.Transaction.Status,
+		}
+		resp.Transactions = append(resp.Transactions, transaction)
+		if ce, ok := txnIDToContentionMap[insight.Transaction.ID]; ok && req.WithContentionEvents {
+			for _, event := range ce {
+				ci, err := s.getContentionEventDetails(ctx, &event)
+				if err != nil {
+					return nil, err
+				}
+				transaction.ContentionEvents = append(transaction.ContentionEvents, ci)
+			}
+		}
+		if !req.WithStatementInsights {
+			continue
+		}
+		for _, stmt := range insight.Statements {
+			var contentionEvents []*serverpb.ContentionEvent
+			if events, ok := stmtIDToContentionMap[stmt.ID]; ok && req.WithContentionEvents {
+				for _, event := range events {
+					ci, err := s.getContentionEventDetails(ctx, &event)
+					if err != nil {
+						return nil, err
+					}
+					contentionEvents = append(contentionEvents, ci)
+				}
+			}
+			si := convertToStmtInsight(
+				stmt,
+				insight.Session.ID,
+				insight.Transaction.ID,
+				insight.Transaction.FingerprintID,
+				insight.Transaction.ImplicitTxn,
+				insight.Transaction.User,
+				insight.Transaction.UserPriority,
+				insight.Transaction.ApplicationName,
+				contentionEvents,
+			)
+			transaction.Statements = append(transaction.Statements, si)
+		}
+	}
+	return resp, nil
 }

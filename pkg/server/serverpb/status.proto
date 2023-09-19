@@ -2117,6 +2117,54 @@ message StatementExecutionInsightsResponse {
    string table_name = 14;
  }
 
+// TransactionExecutionInsightsRequest requests a list of transaction execution insights that match
+// specified ID or fingerprint ID in case they're specified.
+message TransactionExecutionInsightsRequest {
+  bytes transaction_id = 1 [(gogoproto.customname) = "TransactionID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  uint64 txn_fingerprint_id = 2 [(gogoproto.customname) = "TxnFingerprintID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.TransactionFingerprintID"];
+  google.protobuf.Timestamp start_time = 3 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp end_time = 4 [(gogoproto.stdtime) = true];
+  bool with_contention_events = 5;
+  bool with_statement_insights = 6;
+}
+
+// TransactionExecutionInsightsResponse returns list of requested transaction execution insights.
+message TransactionExecutionInsightsResponse {
+  message Transaction {
+    bytes id = 1 [(gogoproto.customname) = "ID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+    uint64 fingerprint_id = 2
+    [(gogoproto.customname) = "FingerprintID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.TransactionFingerprintID"];
+    bytes session_id = 3 [(gogoproto.customname) = "SessionID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID"];
+    string user_priority = 4;
+    bool implicit_txn = 5;
+    google.protobuf.Duration contention = 6 [(gogoproto.stdduration) = true];
+    google.protobuf.Timestamp start_time = 7 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp end_time = 8 [(gogoproto.stdtime) = true];
+    string user = 9;
+    string application_name = 10;
+    int64 rows_read = 11;
+    int64 rows_written = 12;
+    int64 retry_count = 13;
+    string auto_retry_reason = 14;
+    repeated cockroach.sql.insights.Problem problems = 15;
+    repeated cockroach.sql.insights.Cause causes = 16;
+    repeated bytes stmt_execution_ids = 17 [ (gogoproto.customname) = "StmtExecutionIDs",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID"];
+    int64 cpu_sql_nanos = 18 [(gogoproto.customname) = "CPUSQLNanos"];
+    string last_error_code = 19;
+    string last_error_msg = 20 [(gogoproto.casttype) = "github.com/cockroachdb/redact.RedactableString"];
+    cockroach.sql.insights.Transaction.Status status = 21;
+    repeated ContentionEvent contention_events = 22;
+    repeated StatementExecutionInsightsResponse.Statement statements = 23;
+  }
+  repeated Transaction transactions = 1;
+}
+
 message CriticalNodesRequest {}
 message CriticalNodesResponse {
   repeated roachpb.NodeDescriptor critical_nodes = 1 [(gogoproto.nullable) = false];
@@ -2688,6 +2736,13 @@ service Status {
   rpc StatementExecutionInsights(StatementExecutionInsightsRequest) returns (StatementExecutionInsightsResponse) {
     option (google.api.http) = {
       post: "/_status/insights/statements"
+      body: "*"
+    };
+  }
+
+  rpc TransactionExecutionInsights(TransactionExecutionInsightsRequest) returns (TransactionExecutionInsightsResponse) {
+    option (google.api.http) = {
+      post: "/_status/insights/transactions"
       body: "*"
     };
   }

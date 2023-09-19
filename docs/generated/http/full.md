@@ -5452,6 +5452,188 @@ StatementExecutionInsightsResponse returns list of requested statement execution
 
 
 
+## TransactionExecutionInsights
+
+`POST /_status/insights/transactions`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+TransactionExecutionInsightsRequest requests a list of transaction execution insights that match
+specified ID or fingerprint ID in case they're specified.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| transaction_id | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsRequest-bytes) |  |  | [reserved](#support-status) |
+| txn_fingerprint_id | [uint64](#cockroach.server.serverpb.TransactionExecutionInsightsRequest-uint64) |  |  | [reserved](#support-status) |
+| start_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.TransactionExecutionInsightsRequest-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| end_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.TransactionExecutionInsightsRequest-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| with_contention_events | [bool](#cockroach.server.serverpb.TransactionExecutionInsightsRequest-bool) |  |  | [reserved](#support-status) |
+| with_statement_insights | [bool](#cockroach.server.serverpb.TransactionExecutionInsightsRequest-bool) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+TransactionExecutionInsightsResponse returns list of requested transaction execution insights.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| transactions | [TransactionExecutionInsightsResponse.Transaction](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.server.serverpb.TransactionExecutionInsightsResponse.Transaction) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.server.serverpb.TransactionExecutionInsightsResponse.Transaction"></a>
+#### TransactionExecutionInsightsResponse.Transaction
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| fingerprint_id | [uint64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-uint64) |  |  | [reserved](#support-status) |
+| session_id | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| user_priority | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| implicit_txn | [bool](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bool) |  |  | [reserved](#support-status) |
+| contention | [google.protobuf.Duration](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
+| start_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| end_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| user | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| application_name | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| rows_read | [int64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-int64) |  |  | [reserved](#support-status) |
+| rows_written | [int64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-int64) |  |  | [reserved](#support-status) |
+| retry_count | [int64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-int64) |  |  | [reserved](#support-status) |
+| auto_retry_reason | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| problems | [cockroach.sql.insights.Problem](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.sql.insights.Problem) | repeated |  | [reserved](#support-status) |
+| causes | [cockroach.sql.insights.Cause](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.sql.insights.Cause) | repeated |  | [reserved](#support-status) |
+| stmt_execution_ids | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) | repeated |  | [reserved](#support-status) |
+| cpu_sql_nanos | [int64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-int64) |  |  | [reserved](#support-status) |
+| last_error_code | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| last_error_msg | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| status | [cockroach.sql.insights.Transaction.Status](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.sql.insights.Transaction.Status) |  |  | [reserved](#support-status) |
+| contention_events | [ContentionEvent](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.server.serverpb.ContentionEvent) | repeated |  | [reserved](#support-status) |
+| statements | [StatementExecutionInsightsResponse.Statement](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.server.serverpb.StatementExecutionInsightsResponse.Statement) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.server.serverpb.ContentionEvent"></a>
+#### ContentionEvent
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) |  | Key is the key that this and the other transaction conflicted on. | [reserved](#support-status) |
+| pretty_key | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| id | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| blocking_txn_fingerprint_id | [uint64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-uint64) |  |  | [reserved](#support-status) |
+| duration | [google.protobuf.Duration](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-google.protobuf.Duration) |  | Duration spent contending against the other transaction. | [reserved](#support-status) |
+| waiting_txn_id | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| waiting_txn_fingerprint_id | [uint64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-uint64) |  |  | [reserved](#support-status) |
+| collection_ts | [google.protobuf.Timestamp](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| waiting_stmt_fingerprint_id | [uint64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-uint64) |  |  | [reserved](#support-status) |
+| waiting_stmt_id | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| database_name | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| schema_name | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| index_name | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| table_name | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.server.serverpb.StatementExecutionInsightsResponse.Statement"></a>
+#### StatementExecutionInsightsResponse.Statement
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| fingerprint_id | [uint64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-uint64) |  |  | [reserved](#support-status) |
+| transaction_id | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| txn_fingerprint_id | [uint64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-uint64) |  |  | [reserved](#support-status) |
+| session_id | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| query | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| status | [cockroach.sql.insights.Statement.Status](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.sql.insights.Statement.Status) |  |  | [reserved](#support-status) |
+| start_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| end_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| full_scan | [bool](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bool) |  |  | [reserved](#support-status) |
+| implicit_txn | [bool](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bool) |  |  | [reserved](#support-status) |
+| user | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| user_priority | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| application_name | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| database | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| plan_gist | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| rows_read | [int64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-int64) |  |  | [reserved](#support-status) |
+| rows_written | [int64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-int64) |  |  | [reserved](#support-status) |
+| retries | [int64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-int64) |  |  | [reserved](#support-status) |
+| auto_retry_reason | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| nodes | [int64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-int64) | repeated | Nodes is the ordered list of nodes ids on which the statement was executed. | [reserved](#support-status) |
+| contention | [google.protobuf.Duration](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
+| index_recommendations | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) | repeated |  | [reserved](#support-status) |
+| problem | [cockroach.sql.insights.Problem](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.sql.insights.Problem) |  |  | [reserved](#support-status) |
+| causes | [cockroach.sql.insights.Cause](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.sql.insights.Cause) | repeated |  | [reserved](#support-status) |
+| cpu_sql_nanos | [int64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-int64) |  |  | [reserved](#support-status) |
+| error_code | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| idle_lat_seconds | [double](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-double) |  | IdleLatSeconds is the time spent in seconds in an open transaction waiting for the client to send the statement. | [reserved](#support-status) |
+| parse_lat_seconds | [double](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-double) |  | ParseLat is the time in seconds to transform the SQL string into an AST. | [reserved](#support-status) |
+| plan_lat_seconds | [double](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-double) |  | PlanLatSeconds is the time spent in seconds to transform the AST into a logical query plan. | [reserved](#support-status) |
+| run_lat_seconds | [double](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-double) |  | RunLatSeconds is the time in seconds to run the query and fetch/compute the result rows. | [reserved](#support-status) |
+| service_lat_seconds | [double](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-double) |  | ServiceLatSeconds is the time in seconds to service the query, from start of parse to end of execute. | [reserved](#support-status) |
+| contention_events | [ContentionEvent](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.server.serverpb.ContentionEvent) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.TransactionExecutionInsightsResponse-cockroach.server.serverpb.ContentionEvent"></a>
+#### ContentionEvent
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) |  | Key is the key that this and the other transaction conflicted on. | [reserved](#support-status) |
+| pretty_key | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| id | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| blocking_txn_fingerprint_id | [uint64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-uint64) |  |  | [reserved](#support-status) |
+| duration | [google.protobuf.Duration](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-google.protobuf.Duration) |  | Duration spent contending against the other transaction. | [reserved](#support-status) |
+| waiting_txn_id | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| waiting_txn_fingerprint_id | [uint64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-uint64) |  |  | [reserved](#support-status) |
+| collection_ts | [google.protobuf.Timestamp](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| waiting_stmt_fingerprint_id | [uint64](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-uint64) |  |  | [reserved](#support-status) |
+| waiting_stmt_id | [bytes](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| database_name | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| schema_name | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| index_name | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| table_name | [string](#cockroach.server.serverpb.TransactionExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`

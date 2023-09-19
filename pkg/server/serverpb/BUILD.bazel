@@ -107,6 +107,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util/errorutil",
         "//pkg/util/metric",
+        "@com_github_cockroachdb_redact//:redact",  # keep
         "@com_github_prometheus_client_model//go",
         "@org_golang_google_grpc//:go_default_library",
     ],

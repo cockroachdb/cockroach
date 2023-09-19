@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -177,6 +178,119 @@ func TestStatusServer_StatementExecutionInsights(t *testing.T) {
 				err = srvtestutils.PostStatusJSONProtoWithAdminOption(srv, "insights/statements", &req, &resp, false)
 				require.NoError(t, err)
 				require.GreaterOrEqual(t, len(resp.Statements), 1)
+			})
+		}
+	})
+}
+
+func TestStatusServer_TransactionExecutionInsights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // speeds up test
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Enable contention detection by setting a latencyThreshold > 0.
+	insights.LatencyThreshold.Override(ctx, &settings.SV, 30*time.Millisecond)
+	// Enable contention events collection by setting resolution duration > 0.
+	contention.TxnIDResolutionInterval.Override(ctx, &settings.SV, 20*time.Millisecond)
+
+	// Generate insight with contention event
+	sqlConn := tc.ServerConn(0)
+	rng, _ := randutil.NewTestRand()
+	tableName := fmt.Sprintf("t%s", randutil.RandString(rng, 128, "abcdefghijklmnopqrstuvwxyz"))
+	_, err := sqlConn.ExecContext(ctx, fmt.Sprintf("CREATE TABLE %s (k INT, i INT, f FLOAT, s STRING)", tableName))
+	require.NoError(t, err)
+	// Open transaction to insert values into table
+	tx, err := sqlConn.BeginTx(ctx, nil)
+	require.NoError(t, err)
+
+	// Insert statement within transaction will block access to table.
+	_, err = tx.Exec(fmt.Sprintf("INSERT INTO %s VALUES (1, 2, 3.0, '4')", tableName))
+	require.NoError(t, err)
+
+	// Make SELECT query to wait for some period of time to simulate contention.
+	go func() {
+		<-time.After(100 * time.Millisecond)
+		err = tx.Commit()
+		require.NoError(t, err)
+	}()
+
+	// Query the table while above transaction is still open
+	_, err = sqlConn.ExecContext(ctx, fmt.Sprintf("SELECT * FROM %s", tableName))
+	require.NoError(t, err)
+
+	srv := tc.ApplicationLayer(0)
+	sc := srv.StatusServer().(serverpb.StatusServer)
+
+	succeedWithDuration := 5 * time.Second
+	if skip.Stress() {
+		succeedWithDuration = 30 * time.Second
+	}
+	var resp *serverpb.TransactionExecutionInsightsResponse
+	var txnInsight *serverpb.TransactionExecutionInsightsResponse_Transaction
+	testutils.SucceedsWithin(t, func() error {
+		resp, err = sc.TransactionExecutionInsights(ctx, &serverpb.TransactionExecutionInsightsRequest{WithContentionEvents: true})
+		require.NoError(t, err)
+		if len(resp.Transactions) == 0 {
+			return fmt.Errorf("waiting for response with txn insights")
+		}
+		hasInsightWithContentionEvents := false
+		for _, txn := range resp.Transactions {
+			if len(txn.ContentionEvents) > 0 {
+				hasInsightWithContentionEvents = true
+				txnInsight = txn
+				return nil
+			}
+		}
+		if !hasInsightWithContentionEvents {
+			return fmt.Errorf("waiting for insight with contention info")
+		}
+		return nil
+	}, succeedWithDuration)
+
+	t.Run("request_with_filter", func(t *testing.T) {
+		randUuid := func() *uuid.UUID {
+			randUuid := uuid.FastMakeV4()
+			return &randUuid
+		}
+		// Test that TransactionExecutionInsights endpoint returns results that satisfy
+		// provided filters in request payload.
+		testCases := []struct {
+			name string
+			// tReq is a request that should return response with transaction insight
+			tReq serverpb.TransactionExecutionInsightsRequest
+			// fReq is a request that doesn't return any results
+			fReq serverpb.TransactionExecutionInsightsRequest
+		}{
+			{
+				name: "transaction_id",
+				tReq: serverpb.TransactionExecutionInsightsRequest{TransactionID: txnInsight.ID},
+				fReq: serverpb.TransactionExecutionInsightsRequest{TransactionID: randUuid()},
+			},
+			{
+				name: "transaction_fingerprint_id",
+				tReq: serverpb.TransactionExecutionInsightsRequest{TxnFingerprintID: txnInsight.FingerprintID},
+				fReq: serverpb.TransactionExecutionInsightsRequest{TxnFingerprintID: appstatspb.TransactionFingerprintID(123)},
+			},
+		}
+
+		for _, testCase := range testCases {
+			t.Run(testCase.name, func(t *testing.T) {
+				resp, err = sc.TransactionExecutionInsights(ctx, &testCase.tReq)
+				require.NoError(t, err)
+				require.Equal(t, 1, len(resp.Transactions))
+
+				resp, err = sc.TransactionExecutionInsights(ctx, &testCase.fReq)
+				require.NoError(t, err)
+				require.Equal(t, 0, len(resp.Transactions))
 			})
 		}
 	})
