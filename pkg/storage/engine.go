@@ -1945,17 +1945,21 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 		return errors.AssertionFailedf("unknown type for engine key %s", engineKey)
 	}
 
-	// Value must equal UnsafeValue.
-	u, err := iter.UnsafeValue()
-	if err != nil {
-		return err
-	}
-	v, err := iter.Value()
-	if err != nil {
-		return err
-	}
-	if !bytes.Equal(v, u) {
-		return errors.AssertionFailedf("Value %x does not match UnsafeValue %x at %s", v, u, key)
+	// If the iterator position has a point key, Value must equal UnsafeValue.
+	// NB: It's only valid to read an iterator's Value if the iterator is
+	// positioned at a point key.
+	if hasPoint, _ := iter.HasPointAndRange(); hasPoint {
+		u, err := iter.UnsafeValue()
+		if err != nil {
+			return err
+		}
+		v, err := iter.Value()
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(v, u) {
+			return errors.AssertionFailedf("Value %x does not match UnsafeValue %x at %s", v, u, key)
+		}
 	}
 
 	// For prefix iterators, any range keys must be point-sized. We've already
