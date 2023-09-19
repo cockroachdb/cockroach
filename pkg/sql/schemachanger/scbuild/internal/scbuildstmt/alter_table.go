@@ -39,36 +39,13 @@ type supportedAlterTableCommand = supportedStatement
 // declarative schema  changer. Operations marked as non-fully supported can
 // only be with the use_declarative_schema_changer session variable.
 var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
-	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):          {on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):         {on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)):    {on: true, checks: alterTableAlterPrimaryKeyChecks},
-	reflect.TypeOf((*tree.AlterTableSetNotNull)(nil)):         {on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)):      {on: true, checks: alterTableAddConstraintChecks},
-	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     {on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): {on: true, checks: isV231Active},
-}
-
-func init() {
-	boolType := reflect.TypeOf((*bool)(nil)).Elem()
-	// Check function signatures inside the supportedAlterTableStatements map.
-	for statementType, statementEntry := range supportedAlterTableStatements {
-		if statementEntry.checks != nil {
-			checks := reflect.TypeOf(statementEntry.checks)
-			if checks.Kind() != reflect.Func {
-				panic(errors.AssertionFailedf("%v checks for statement is "+
-					"not a function", statementType))
-			}
-			if checks.NumIn() != 3 ||
-				(checks.In(0) != statementType && !statementType.Implements(checks.In(0))) ||
-				checks.In(1) != reflect.TypeOf(sessiondatapb.UseNewSchemaChangerOff) ||
-				checks.In(2) != reflect.TypeOf((*clusterversion.ClusterVersion)(nil)).Elem() ||
-				checks.NumOut() != 1 ||
-				checks.Out(0) != boolType {
-				panic(errors.AssertionFailedf("%v checks does not have a valid signature; got %v",
-					statementType, checks))
-			}
-		}
-	}
+	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):          {on: true},
+	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):         {on: true},
+	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)):    {on: true},
+	reflect.TypeOf((*tree.AlterTableSetNotNull)(nil)):         {on: true},
+	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)):      {on: true},
+	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     {on: true},
+	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): {on: true},
 }
 
 // alterTableChecks determines if the entire set of alter table commands
@@ -86,48 +63,72 @@ func alterTableChecks(
 		telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
 	})
 	for _, cmd := range n.Cmds {
-		if !isFullySupportedWithFalsePositiveInternal(supportedAlterTableStatements,
-			reflect.TypeOf(cmd), reflect.ValueOf(cmd), mode, activeVersion) {
+		if mode == sessiondatapb.UseNewSchemaChangerOff {
 			return false
 		}
-	}
-	return true
-}
 
-func alterTableAlterPrimaryKeyChecks(
-	t *tree.AlterTableAlterPrimaryKey,
-	mode sessiondatapb.NewSchemaChangerMode,
-	activeVersion clusterversion.ClusterVersion,
-) bool {
-	// Start supporting ALTER PRIMARY KEY (in general with fallback cases) from V22_2.
-	if !isV222Active(t, mode, activeVersion) {
-		return false
-	}
-	// Start supporting ALTER PRIMARY KEY USING HASH from V23_1.
-	if t.Sharded != nil && !activeVersion.IsActive(clusterversion.V23_1) {
-		return false
-	}
-	return true
-}
+		info, ok := supportedAlterTableStatements[reflect.TypeOf(cmd)]
+		if !ok {
+			return false
+		}
+		if isOn := info.on ||
+			mode == sessiondatapb.UseNewSchemaChangerUnsafeAlways ||
+			mode == sessiondatapb.UseNewSchemaChangerUnsafe; !isOn {
+			return false
+		}
 
-func alterTableAddConstraintChecks(
-	t *tree.AlterTableAddConstraint,
-	mode sessiondatapb.NewSchemaChangerMode,
-	activeVersion clusterversion.ClusterVersion,
-) bool {
-	// Start supporting ADD PRIMARY KEY from V22_2.
-	if d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault {
-		return isV222Active(t, mode, activeVersion)
-	}
-
-	// Start supporting all other ADD CONSTRAINTs from V23_1, including
-	// - ADD PRIMARY KEY NOT VALID
-	// - ADD UNIQUE [NOT VALID]
-	// - ADD CHECK [NOT VALID]
-	// - ADD FOREIGN KEY [NOT VALID]
-	// - ADD UNIQUE WITHOUT INDEX [NOT VALID]
-	if !isV231Active(t, mode, activeVersion) {
-		return false
+		switch typedCmd := cmd.(type) {
+		case *tree.AlterTableAddColumn:
+			if !activeVersion.IsActive(clusterversion.V22_2) {
+				return false
+			}
+		case *tree.AlterTableDropColumn:
+			if !activeVersion.IsActive(clusterversion.V22_2) {
+				return false
+			}
+		case *tree.AlterTableAlterPrimaryKey:
+			if typedCmd.Sharded == nil {
+				// Start supporting ALTER PRIMARY KEY (in general with fallback cases) from V22_2.
+				if !activeVersion.IsActive(clusterversion.V22_2) {
+					return false
+				}
+			} else {
+				if !activeVersion.IsActive(clusterversion.V23_1) {
+					return false
+				}
+			}
+		case *tree.AlterTableSetNotNull:
+			if !activeVersion.IsActive(clusterversion.V23_1) {
+				return false
+			}
+		case *tree.AlterTableAddConstraint:
+			// Start supporting ADD PRIMARY KEY from V22_2.
+			if d, ok := typedCmd.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey && typedCmd.ValidationBehavior == tree.ValidationDefault {
+				if !activeVersion.IsActive(clusterversion.V22_2) {
+					return false
+				}
+			} else {
+				// Start supporting all other ADD CONSTRAINTs from V23_1, including
+				// - ADD PRIMARY KEY NOT VALID
+				// - ADD UNIQUE [NOT VALID]
+				// - ADD CHECK [NOT VALID]
+				// - ADD FOREIGN KEY [NOT VALID]
+				// - ADD UNIQUE WITHOUT INDEX [NOT VALID]
+				if !activeVersion.IsActive(clusterversion.V23_1) {
+					return false
+				}
+			}
+		case *tree.AlterTableDropConstraint:
+			if !activeVersion.IsActive(clusterversion.V23_1) {
+				return false
+			}
+		case *tree.AlterTableValidateConstraint:
+			if !activeVersion.IsActive(clusterversion.V23_1) {
+				return false
+			}
+		default:
+			return false
+		}
 	}
 	return true
 }
