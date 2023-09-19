@@ -25,8 +25,6 @@ import (
 type supportedStatement struct {
 	// statementTag tag for this statement.
 	statementTag string
-	// on indicates that this statement is on by default.
-	on bool
 }
 
 // Tracks operations which are fully supported when the declarative schema
@@ -36,26 +34,26 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	// Alter table will have commands individually whitelisted via the
 	// supportedAlterTableStatements list, so wwe will consider it fully supported
 	// here.
-	reflect.TypeOf((*tree.AlterTable)(nil)):          {statementTag: tree.AlterTableTag, on: true},
-	reflect.TypeOf((*tree.CreateIndex)(nil)):         {statementTag: tree.CreateIndexTag, on: true},
-	reflect.TypeOf((*tree.DropDatabase)(nil)):        {statementTag: tree.DropDatabaseTag, on: true},
-	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {statementTag: tree.DropOwnedByTag, on: true},
-	reflect.TypeOf((*tree.DropSchema)(nil)):          {statementTag: tree.DropSchemaTag, on: true},
-	reflect.TypeOf((*tree.DropSequence)(nil)):        {statementTag: tree.DropSequenceTag, on: true},
-	reflect.TypeOf((*tree.DropTable)(nil)):           {statementTag: tree.DropTableTag, on: true},
-	reflect.TypeOf((*tree.DropType)(nil)):            {statementTag: tree.DropTypeTag, on: true},
-	reflect.TypeOf((*tree.DropView)(nil)):            {statementTag: tree.DropViewTag, on: true},
-	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {statementTag: tree.CommentOnConstraintTag, on: true},
-	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {statementTag: tree.CommentOnDatabaseTag, on: true},
-	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {statementTag: tree.CommentOnSchemaTag, on: true},
-	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {statementTag: tree.CommentOnTableTag, on: true},
-	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {statementTag: tree.CommentOnColumnTag, on: true},
-	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {statementTag: tree.CommentOnIndexTag, on: true},
-	reflect.TypeOf((*tree.DropIndex)(nil)):           {statementTag: tree.DropIndexTag, on: true},
-	reflect.TypeOf((*tree.DropFunction)(nil)):        {statementTag: tree.DropFunctionTag, on: true},
-	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {statementTag: tree.CreateRoutineTag, on: true},
-	reflect.TypeOf((*tree.CreateSchema)(nil)):        {statementTag: tree.CreateSchemaTag, on: false},
-	reflect.TypeOf((*tree.CreateSequence)(nil)):      {statementTag: tree.CreateSequenceTag, on: false},
+	reflect.TypeOf((*tree.AlterTable)(nil)):          {statementTag: tree.AlterTableTag},
+	reflect.TypeOf((*tree.CreateIndex)(nil)):         {statementTag: tree.CreateIndexTag},
+	reflect.TypeOf((*tree.DropDatabase)(nil)):        {statementTag: tree.DropDatabaseTag},
+	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {statementTag: tree.DropOwnedByTag},
+	reflect.TypeOf((*tree.DropSchema)(nil)):          {statementTag: tree.DropSchemaTag},
+	reflect.TypeOf((*tree.DropSequence)(nil)):        {statementTag: tree.DropSequenceTag},
+	reflect.TypeOf((*tree.DropTable)(nil)):           {statementTag: tree.DropTableTag},
+	reflect.TypeOf((*tree.DropType)(nil)):            {statementTag: tree.DropTypeTag},
+	reflect.TypeOf((*tree.DropView)(nil)):            {statementTag: tree.DropViewTag},
+	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {statementTag: tree.CommentOnConstraintTag},
+	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {statementTag: tree.CommentOnDatabaseTag},
+	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {statementTag: tree.CommentOnSchemaTag},
+	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {statementTag: tree.CommentOnTableTag},
+	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {statementTag: tree.CommentOnColumnTag},
+	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {statementTag: tree.CommentOnIndexTag},
+	reflect.TypeOf((*tree.DropIndex)(nil)):           {statementTag: tree.DropIndexTag},
+	reflect.TypeOf((*tree.DropFunction)(nil)):        {statementTag: tree.DropFunctionTag},
+	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {statementTag: tree.CreateRoutineTag},
+	reflect.TypeOf((*tree.CreateSchema)(nil)):        {statementTag: tree.CreateSchemaTag},
+	reflect.TypeOf((*tree.CreateSequence)(nil)):      {statementTag: tree.CreateSequenceTag},
 }
 
 // supportedStatementTags tracks statement tags which are implemented
@@ -71,6 +69,11 @@ func init() {
 	}
 }
 
+func offByDefaultCheck(mode sessiondatapb.NewSchemaChangerMode) bool {
+	return mode == sessiondatapb.UseNewSchemaChangerUnsafeAlways ||
+		mode == sessiondatapb.UseNewSchemaChangerUnsafe
+}
+
 // IsFullySupportedWithFalsePositive returns if this statement is
 // "fully supported" in the declarative schema changer under mode and active
 // cluster version.
@@ -84,16 +87,6 @@ func IsFullySupportedWithFalsePositive(
 	mode sessiondatapb.NewSchemaChangerMode,
 ) (ret bool) {
 	if mode == sessiondatapb.UseNewSchemaChangerOff {
-		return false
-	}
-
-	info, ok := supportedStatements[reflect.TypeOf(n)]
-	if !ok {
-		return false
-	}
-	if isOn := info.on ||
-		mode == sessiondatapb.UseNewSchemaChangerUnsafeAlways ||
-		mode == sessiondatapb.UseNewSchemaChangerUnsafe; !isOn {
 		return false
 	}
 
@@ -135,9 +128,9 @@ func IsFullySupportedWithFalsePositive(
 	case *tree.CreateRoutine:
 		return activeVersion.IsActive(clusterversion.V23_1)
 	case *tree.CreateSchema:
-		return activeVersion.IsActive(clusterversion.V23_2)
+		return offByDefaultCheck(mode) && activeVersion.IsActive(clusterversion.V23_2)
 	case *tree.CreateSequence:
-		return activeVersion.IsActive(clusterversion.V23_2)
+		return offByDefaultCheck(mode) && activeVersion.IsActive(clusterversion.V23_2)
 	default:
 		return false
 	}
