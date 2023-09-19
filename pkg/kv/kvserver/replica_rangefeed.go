@@ -443,17 +443,12 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		// waiting for the Register call below to return.
 		r.raftMu.AssertHeld()
 
-		lowerBound, _ := keys.LockTableSingleKey(desc.StartKey.AsRawKey(), nil)
-		upperBound, _ := keys.LockTableSingleKey(desc.EndKey.AsRawKey(), nil)
-		iter, err := r.store.TODOEngine().NewEngineIterator(storage.IterOptions{
-			LowerBound: lowerBound,
-			UpperBound: upperBound,
-		})
+		scanner, err := rangefeed.NewSeparatedIntentScanner(r.store.TODOEngine(), desc.RSpan())
 		if err != nil {
 			done.Set(err)
 			return nil
 		}
-		return rangefeed.NewSeparatedIntentScanner(iter)
+		return scanner
 	}
 
 	// NB: This only errors if the stopper is stopping, and we have to return here
