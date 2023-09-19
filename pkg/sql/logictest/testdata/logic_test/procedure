@@ -51,6 +51,29 @@ CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL AS ''
 statement error pgcode 42809 p\(\) is a procedure\nHINT: To call a procedure, use CALL.
 SELECT p()
 
+statement ok
+CREATE OR REPLACE PROCEDURE p(i INT) LANGUAGE SQL AS ''
+
+statement error pgcode 42809 p\(i: int\) is a procedure\nHINT: To call a procedure, use CALL.
+SELECT p(1)
+
+# The error message for a non-existent procedure should mention "procedure" not
+# "function".
+statement error pgcode 42883 procedure no_exist does not exist\nHINT: No procedure matches the given name and argument types. You might need to add explicit type casts.
+CALL no_exist()
+
+# The error message for a non-existent function within a procedure call should
+# still mention "function".
+statement error pgcode 42883 unknown function: foo\(\): function undefined
+CALL p(foo())
+
+statement ok
+CREATE FUNCTION foo(i INT) RETURNS VOID LANGUAGE SQL AS ''
+
+# This is similar to the test above, but with a non-matching function signature.
+statement error pgcode 42883 unknown signature: public.foo\(\) \(desired <int>\)
+CALL p(foo())
+
 # TODO(mgartner): This should be pgcode 42723 with the message: 'function "p"
 # already exists with the same argument types'.
 skipif config local-legacy-schema-changer
