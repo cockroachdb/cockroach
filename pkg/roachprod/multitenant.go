@@ -33,12 +33,12 @@ import (
 func StartServiceForVirtualCluster(
 	ctx context.Context,
 	l *logger.Logger,
-	tenantCluster string,
+	virtualCluster string,
 	storageCluster string,
 	startOpts install.StartOpts,
 	clusterSettingsOpts ...install.ClusterSettingOption,
 ) error {
-	tc, err := newCluster(l, tenantCluster, clusterSettingsOpts...)
+	tc, err := newCluster(l, virtualCluster, clusterSettingsOpts...)
 	if err != nil {
 		return err
 	}
@@ -53,8 +53,7 @@ func StartServiceForVirtualCluster(
 	if startOpts.VirtualClusterID < 2 {
 		return errors.Errorf("invalid tenant ID %d (must be 2 or higher)", startOpts.VirtualClusterID)
 	}
-	// TODO(herko): Allow users to pass in a virtual cluster name.
-	startOpts.VirtualClusterName = fmt.Sprintf("tenant-%d", startOpts.VirtualClusterID)
+	startOpts.VirtualClusterName = defaultVirtualClusterName(startOpts.VirtualClusterID)
 
 	// Create virtual cluster, if necessary. We only need to run this
 	// SQL against a single connection to the storage cluster.
@@ -78,6 +77,28 @@ func StartServiceForVirtualCluster(
 	startOpts.KVAddrs = strings.Join(kvAddrs, ",")
 	startOpts.KVCluster = hc
 	return tc.Start(ctx, l, startOpts)
+}
+
+// StopServiceForVirtualCluster stops SQL instance processes on the virtualCluster given.
+func StopServiceForVirtualCluster(
+	ctx context.Context, l *logger.Logger, virtualCluster string, stopOpts StopOpts,
+) error {
+	tc, err := newCluster(l, virtualCluster)
+	if err != nil {
+		return err
+	}
+
+	stopOpts.VirtualClusterName = defaultVirtualClusterName(stopOpts.VirtualClusterID)
+	vc := install.VirtualClusterLabel(stopOpts.VirtualClusterName, stopOpts.SQLInstance)
+	return tc.Stop(ctx, l, stopOpts.Sig, stopOpts.Wait, stopOpts.MaxWait, vc)
+}
+
+// defaultVirtualClusterName returns the virtual cluster name used for
+// the virtual cluster with ID given.
+//
+// TODO(herko): Allow users to pass in a virtual cluster name.
+func defaultVirtualClusterName(virtualClusterID int) string {
+	return fmt.Sprintf("virtual-cluster-%d", virtualClusterID)
 }
 
 // createVirtualClusterIfNotExistsQuery is used to initialize the
