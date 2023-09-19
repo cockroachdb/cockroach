@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -93,6 +94,8 @@ func (s *txnSeqNumAllocator) SendLocked(
 			if err := s.maybeAutoStepReadSeqLocked(ctx); err != nil {
 				return nil, kvpb.NewError(err)
 			}
+		} else if !kvpb.IsReadOnly(req) {
+			log.Fatalf(ctx, "unexpected request %T\n", req)
 		}
 
 		// Note: only read-only requests can operate at a past seqnum.
