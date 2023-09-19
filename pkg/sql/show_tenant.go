@@ -96,7 +96,7 @@ func CanManageTenant(ctx context.Context, p AuthorizationAccessor) error {
 		return nil
 	}
 
-	return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MANAGETENANT)
+	return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MANAGEVIRTUALCLUSTER)
 }
 
 func (n *showTenantNode) startExec(params runParams) error {
