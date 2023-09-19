@@ -7,6 +7,8 @@ else
   export host_arch=amd64
 fi
 
+ROACHTEST_COCKROACH_BUILD_EXTRA_FLAGS="${ROACHTEST_COCKROACH_BUILD_EXTRA_FLAGS:-}"
+
 echo "Host architecture: $host_arch"
 
 # Builds all bits needed for roachtests, stages them in bin/ and lib/.
@@ -36,8 +38,9 @@ for platform in "${cross_builds[@]}"; do
   echo "Building $platform, os=$os, arch=$arch..."
   # Build cockroach, workload and geos libs.
   bazel build --config $platform --config ci -c opt --config force_build_cdeps \
-        //pkg/cmd/cockroach //pkg/cmd/workload \
-        //c-deps:libgeos
+        //pkg/cmd/cockroach $ROACHTEST_COCKROACH_BUILD_EXTRA_FLAGS
+  bazel build --config $platform --config ci -c opt --config force_build_cdeps \
+        //pkg/cmd/workload //c-deps:libgeos
   BAZEL_BIN=$(bazel info bazel-bin --config $platform --config ci -c opt)
 
   # N.B. roachtest is built once, for the host architecture.
@@ -49,7 +52,8 @@ for platform in "${cross_builds[@]}"; do
     chmod a+w bin/roachtest
   fi
   # Build cockroach-short with assertions enabled.
-  bazel build --config $platform --config ci -c opt //pkg/cmd/cockroach-short --crdb_test
+  bazel build --config $platform --config ci -c opt //pkg/cmd/cockroach-short \
+        --crdb_test $ROACHTEST_COCKROACH_BUILD_EXTRA_FLAGS
   # Copy the binaries.
   cp $BAZEL_BIN/pkg/cmd/cockroach/cockroach_/cockroach bin/cockroach.$os-$arch
   cp $BAZEL_BIN/pkg/cmd/workload/workload_/workload    bin/workload.$os-$arch
