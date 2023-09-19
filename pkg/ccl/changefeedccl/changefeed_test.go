@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -8810,4 +8811,50 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 		}
 	}
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+// TestChangefeedPubsubResolvedMessages tests that the pubsub sink emits
+// resolved messages to each topic.
+func TestChangefeedPubsubResolvedMessages(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		ctx := context.Background()
+		PubsubV2Enabled.Override(ctx, &s.Server.ClusterSettings().SV, true)
+
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, "CREATE TABLE one (i int)")
+		db.Exec(t, "CREATE TABLE two (i int)")
+		db.Exec(t, "CREATE TABLE three (i int)")
+
+		foo, err := f.Feed("CREATE CHANGEFEED FOR TABLE one, TABLE two, TABLE three with resolved = '10ms'")
+		require.NoError(t, err)
+
+		seenTopics := make(map[string]struct{})
+		expectedTopics := map[string]struct{}{
+			"projects/testfeed/topics/one":   {},
+			"projects/testfeed/topics/two":   {},
+			"projects/testfeed/topics/three": {},
+		}
+
+		// There may be retries, so we could get the same resolved message for a topic more than once.
+		testutils.SucceedsSoon(t, func() error {
+			for i := 0; i < 3; i++ {
+				// We should only see resolved messages since there is no data in the table.
+				msg, err := foo.Next()
+				require.NoError(t, err)
+				seenTopics[msg.Topic] = struct{}{}
+			}
+			if !reflect.DeepEqual(seenTopics, expectedTopics) {
+				return errors.Newf("failed to see expected resolved messages on each topic. seen: %v, expected: %v",
+					seenTopics, expectedTopics)
+			}
+			return nil
+		})
+
+		require.NoError(t, foo.Close())
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("pubsub"))
 }

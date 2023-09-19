@@ -205,12 +205,6 @@ func (meta MVCCMetadata) IsInline() bool {
 	return meta.RawBytes != nil
 }
 
-// AddToIntentHistory adds the sequence and value to the intent history.
-func (meta *MVCCMetadata) AddToIntentHistory(seq TxnSeq, val []byte) {
-	meta.IntentHistory = append(meta.IntentHistory,
-		MVCCMetadata_SequencedIntent{Sequence: seq, Value: val})
-}
-
 // GetPrevIntentSeq goes through the intent history and finds the previous
 // intent's sequence number given the current sequence.
 func (meta *MVCCMetadata) GetPrevIntentSeq(
