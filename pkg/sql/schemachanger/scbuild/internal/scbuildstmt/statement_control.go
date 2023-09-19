@@ -19,6 +19,31 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// supportedStatementTags tracks statement tags which are implemented
+// by the declarative schema changer.
+var supportedStatementTags = map[string]struct{}{
+	tree.AlterTableTag:          {},
+	tree.CreateIndexTag:         {},
+	tree.DropDatabaseTag:        {},
+	tree.DropOwnedByTag:         {},
+	tree.DropSchemaTag:          {},
+	tree.DropSequenceTag:        {},
+	tree.DropTableTag:           {},
+	tree.DropTypeTag:            {},
+	tree.DropViewTag:            {},
+	tree.CommentOnConstraintTag: {},
+	tree.CommentOnDatabaseTag:   {},
+	tree.CommentOnSchemaTag:     {},
+	tree.CommentOnTableTag:      {},
+	tree.CommentOnColumnTag:     {},
+	tree.CommentOnIndexTag:      {},
+	tree.DropIndexTag:           {},
+	tree.DropFunctionTag:        {},
+	tree.CreateRoutineTag:       {},
+	tree.CreateSchemaTag:        {},
+	tree.CreateSequenceTag:      {},
+}
+
 // statementsForceControl track if a statement tag is enabled or disabled
 // forcefully by the user to use declarative schema changer.
 type statementsForceControl map[string]bool
