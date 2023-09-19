@@ -409,8 +409,17 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	}
 	r.rangefeedMu.Unlock()
 
+	// Determine if this is a system span, which should get priority.
+	//
+	// TODO(erikgrinaker): With dynamic system tables, this should really check
+	// catalog.IsSystemDescriptor() for the table descriptor, but we don't have
+	// easy access to it here. Consider plumbing this down from the client
+	// instead. See: https://github.com/cockroachdb/cockroach/issues/110883
+	isSystemSpan := span.EndKey.Compare(
+		roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID+1))) <= 0
+
 	// Create a new rangefeed.
-	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(r.startKey)
+	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(isSystemSpan)
 
 	var sched *rangefeed.Scheduler
 	if shouldUseRangefeedScheduler(&r.ClusterSettings().SV) {
@@ -433,6 +442,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		Metrics:          r.store.metrics.RangeFeedMetrics,
 		MemBudget:        feedBudget,
 		Scheduler:        sched,
+		Priority:         isSystemSpan, // only takes effect when Scheduler != nil
 	}
 	p = rangefeed.NewProcessor(cfg)
 
