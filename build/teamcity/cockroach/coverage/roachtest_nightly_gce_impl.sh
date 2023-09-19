@@ -29,5 +29,5 @@ build/teamcity-roachtest-invoke.sh \
   --cluster-id="${TC_BUILD_ID}" \
   --artifacts=/artifacts \
   --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
-  --slack-token="${SLACK_TOKEN}" \
+  --slack-token="${SLACK_TOKEN:-}" \
   "${TESTS}" ${FILTER}
