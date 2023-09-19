@@ -241,8 +241,8 @@ type Overload struct {
 	// Type indicates if the overload represents a built-in function, a
 	// user-defined function, or a user-define procedure.
 	Type RoutineType
-	// Body is the SQL string body of a function. It can be set even if IsUDF is
-	// false if a builtin function is defined using a SQL string.
+	// Body is the SQL string body of a function. It can be set even if Type is
+	// BuiltinRoutine if a builtin function is defined using a SQL string.
 	Body string
 	// UDFContainsOnlySignature is only set to true for Overload signatures cached
 	// in a Schema descriptor, which means that the full UDF descriptor need to be
