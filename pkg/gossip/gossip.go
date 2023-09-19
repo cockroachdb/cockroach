@@ -58,7 +58,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -256,8 +255,6 @@ type Gossip struct {
 	bootstrapAddrs map[util.UnresolvedAddr]roachpb.NodeID
 
 	locality roachpb.Locality
-
-	defaultZoneConfig *zonepb.ZoneConfig
 }
 
 // New creates an instance of a gossip node.
@@ -271,7 +268,6 @@ func New(
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	locality roachpb.Locality,
-	defaultZoneConfig *zonepb.ZoneConfig,
 ) *Gossip {
 	ambient.SetEventLog("gossip", "gossip")
 	g := &Gossip{
@@ -288,7 +284,6 @@ func New(
 		addressExists:     map[util.UnresolvedAddr]bool{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
 		locality:          locality,
-		defaultZoneConfig: defaultZoneConfig,
 	}
 
 	stopper.AddCloser(stop.CloserFn(g.server.AmbientContext.FinishEventLog))
@@ -306,13 +301,8 @@ func New(
 
 // NewTest is a simplified wrapper around New that creates the
 // ClusterIDContainer and NodeIDContainer internally. Used for testing.
-func NewTest(
-	nodeID roachpb.NodeID,
-	stopper *stop.Stopper,
-	registry *metric.Registry,
-	defaultZoneConfig *zonepb.ZoneConfig,
-) *Gossip {
-	return NewTestWithLocality(nodeID, stopper, registry, roachpb.Locality{}, defaultZoneConfig)
+func NewTest(nodeID roachpb.NodeID, stopper *stop.Stopper, registry *metric.Registry) *Gossip {
+	return NewTestWithLocality(nodeID, stopper, registry, roachpb.Locality{})
 }
 
 // NewTestWithLocality calls NewTest with an explicit locality value.
@@ -321,13 +311,12 @@ func NewTestWithLocality(
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 	locality roachpb.Locality,
-	defaultZoneConfig *zonepb.ZoneConfig,
 ) *Gossip {
 	c := &base.ClusterIDContainer{}
 	n := &base.NodeIDContainer{}
 	var ac log.AmbientContext
 	ac.AddLogTag("n", n)
-	gossip := New(ac, c, n, stopper, registry, locality, defaultZoneConfig)
+	gossip := New(ac, c, n, stopper, registry, locality)
 	if nodeID != 0 {
 		n.Set(context.TODO(), nodeID)
 	}

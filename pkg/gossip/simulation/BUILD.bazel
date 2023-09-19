@@ -6,7 +6,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/gossip/simulation",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/roachpb",
         "//pkg/rpc",
