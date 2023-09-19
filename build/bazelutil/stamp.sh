@@ -66,7 +66,12 @@ else
     shift 1
 fi
 
-BUILD_REV=$(git describe --match="" --always --abbrev=40 --dirty)
+if [[ "$(git status -s --ignore-submodules --untracked-files=no)" ]]; then
+  BUILD_REV=$(git describe --match="" --always --abbrev=40 --dirty)
+else
+  BUILD_REV=$(git describe --match="" --always --abbrev=40)
+fi
+
 BUILD_UTCTIME=$(date -u '+%Y/%m/%d %H:%M:%S')
 
 
