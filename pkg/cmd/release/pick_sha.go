@@ -111,18 +111,13 @@ func pickSHA(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("cannot publish release metadata: %w", err)
 	}
 
-	fmt.Println("Creating SRE issue")
 	jiraClient, err := newJiraClient(jiraBaseURL, jiraUsername, jiraToken)
 	if err != nil {
 		return fmt.Errorf("cannot create Jira client: %w", err)
 	}
-	sreIssue, err := createSREIssue(jiraClient, nextRelease, pickSHAFlags.dryRun)
-	if err != nil {
-		return err
-	}
 
 	fmt.Println("Creating tracking issue")
-	trackingIssue, err := createTrackingIssue(jiraClient, nextRelease, sreIssue, pickSHAFlags.dryRun)
+	trackingIssue, err := createTrackingIssue(jiraClient, nextRelease, pickSHAFlags.dryRun)
 	if err != nil {
 		return fmt.Errorf("cannot create tracking issue: %w", err)
 	}
