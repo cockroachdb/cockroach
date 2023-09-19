@@ -265,15 +265,15 @@ func EvalAddSSTable(
 		}
 
 	} else {
-		// If not checking for MVCC conflicts, at least check for separated intents.
-		// The caller is expected to make sure there are no writers across the span,
-		// and thus no or few intents, so this is cheap in the common case.
-		log.VEventf(ctx, 2, "checking conflicting intents for SSTable [%s,%s)", start.Key, end.Key)
-		intents, err := storage.ScanIntents(ctx, readWriter, start.Key, end.Key, maxIntents, 0)
+		// If not checking for MVCC conflicts, at least check for locks. The
+		// caller is expected to make sure there are no writers across the span,
+		// and thus no or few locks, so this is cheap in the common case.
+		log.VEventf(ctx, 2, "checking conflicting locks for SSTable [%s,%s)", start.Key, end.Key)
+		locks, err := storage.ScanLocks(ctx, readWriter, start.Key, end.Key, maxIntents, 0)
 		if err != nil {
-			return result.Result{}, errors.Wrap(err, "scanning intents")
-		} else if len(intents) > 0 {
-			return result.Result{}, &kvpb.LockConflictError{Locks: roachpb.AsLocks(intents)}
+			return result.Result{}, errors.Wrap(err, "scanning locks")
+		} else if len(locks) > 0 {
+			return result.Result{}, &kvpb.LockConflictError{Locks: locks}
 		}
 	}
 

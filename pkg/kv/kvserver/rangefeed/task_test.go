@@ -15,8 +15,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -229,6 +228,10 @@ func TestInitResolvedTSScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	startKey := roachpb.RKey("d")
 	endKey := roachpb.RKey("w")
+	span := roachpb.RSpan{
+		Key:    startKey,
+		EndKey: endKey,
+	}
 
 	makeTxn := func(key string, id uuid.UUID, iso isolation.Level, ts hlc.Timestamp) roachpb.Transaction {
 		txnMeta := enginepb.TxnMeta{
@@ -271,22 +274,26 @@ func TestInitResolvedTSScan(t *testing.T) {
 				txn: &txn1,
 				kv:  makeProvisionalKV("c", "txnKey1", 15),
 			},
+			// --- Start of span ---
 			{kv: makeKV("d", "val6", 19)},
 			{kv: makeKV("d", "val5", 20)},
 			{
 				txn: &txn2,
 				kv:  makeProvisionalKV("d", "txnKey2", 21),
 			},
+			{kv: makeKV("e", "val7", 19)},
 			{kv: makeKV("m", "val8", 1)},
 			{
 				txn: &txn1,
 				kv:  makeProvisionalKV("n", "txnKey1", 15),
 			},
+			{kv: makeKV("p", "val12", 19)},
 			{kv: makeKV("r", "val9", 4)},
 			{
 				txn: &txn1,
 				kv:  makeProvisionalKV("r", "txnKey1", 15),
 			},
+			// --- End of span ---
 			{
 				txn: &txn1,
 				kv:  makeProvisionalKV("w", "txnKey1", 15),
@@ -300,6 +307,18 @@ func TestInitResolvedTSScan(t *testing.T) {
 		for _, op := range testData {
 			kv := op.kv
 			err := storage.MVCCPut(ctx, engine, kv.Key.Key, kv.Key.Timestamp, roachpb.Value{RawBytes: kv.Value}, storage.MVCCWriteOptions{Txn: op.txn})
+			require.NoError(t, err)
+		}
+
+		// Add some replicated locks to test that they are ignored.
+		// NOTE: these must be on keys that don't already have intents, or the
+		// acquisition will be a no-op.
+		testLocks := []roachpb.Lock{
+			roachpb.MakeLock(&txn1.TxnMeta, roachpb.Key("e"), lock.Shared),
+			roachpb.MakeLock(&txn1.TxnMeta, roachpb.Key("p"), lock.Exclusive),
+		}
+		for _, l := range testLocks {
+			err := storage.MVCCAcquireLock(ctx, engine, &txn1, l.Strength, l.Key, nil, 0)
 			require.NoError(t, err)
 		}
 		return engine
@@ -336,16 +355,11 @@ func TestInitResolvedTSScan(t *testing.T) {
 		"separated intent scanner": {
 			intentScanner: func() (IntentScanner, func()) {
 				engine := makeEngine()
-				lowerBound, _ := keys.LockTableSingleKey(startKey.AsRawKey(), nil)
-				upperBound, _ := keys.LockTableSingleKey(endKey.AsRawKey(), nil)
-				iter, err := engine.NewEngineIterator(storage.IterOptions{
-					LowerBound: lowerBound,
-					UpperBound: upperBound,
-				})
+				scanner, err := NewSeparatedIntentScanner(engine, span)
 				if err != nil {
 					t.Fatal(err)
 				}
-				return NewSeparatedIntentScanner(iter), func() { engine.Close() }
+				return scanner, func() { engine.Close() }
 			},
 		},
 	}
@@ -355,10 +369,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 			// Mock processor. We just needs its eventC.
 			p := LegacyProcessor{
 				Config: Config{
-					Span: roachpb.RSpan{
-						Key:    startKey,
-						EndKey: endKey,
-					},
+					Span: span,
 				},
 				eventC: make(chan *event, 100),
 			}
@@ -367,11 +378,10 @@ func TestInitResolvedTSScan(t *testing.T) {
 			initScan := newInitResolvedTSScan(p.Span, &p, isc)
 			initScan.Run(context.Background())
 			// Compare the event channel to the expected events.
-			assert.Equal(t, len(expEvents), len(p.eventC))
+			require.Equal(t, len(expEvents), len(p.eventC))
 			for _, expEvent := range expEvents {
-				assert.Equal(t, expEvent, <-p.eventC)
+				require.Equal(t, expEvent, <-p.eventC)
 			}
-
 		})
 	}
 }

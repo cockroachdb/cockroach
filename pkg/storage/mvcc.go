@@ -111,6 +111,7 @@ func CanUseMVCCRangeTombstones(ctx context.Context, st *cluster.Settings) bool {
 // MaxIntentsPerLockConflictError sets maximum number of intents returned in
 // LockConflictError in operations that return multiple intents per error.
 // Currently it is used in Scan, ReverseScan, and ExportToSST.
+// TODO(nvanbenschoten): rename to MaxLocksPerLockConflictError.
 var MaxIntentsPerLockConflictError = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"storage.mvcc.max_intents_per_error",
@@ -3335,11 +3336,11 @@ func MVCCPredicateDeleteRange(
 				" computation during Delete operations")
 	}
 
-	// Check for any overlapping intents, and return them to be resolved.
-	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
+	// Check for any overlapping locks, and return them to be resolved.
+	if locks, err := ScanLocks(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
 		return nil, err
-	} else if len(intents) > 0 {
-		return nil, &kvpb.LockConflictError{Locks: roachpb.AsLocks(intents)}
+	} else if len(locks) > 0 {
+		return nil, &kvpb.LockConflictError{Locks: locks}
 	}
 
 	// continueRun returns three bools: the first is true if the current run
@@ -3640,11 +3641,11 @@ func MVCCDeleteRangeUsingTombstone(
 		return err
 	}
 
-	// Check for any overlapping intents, and return them to be resolved.
-	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
+	// Check for any overlapping locks, and return them to be resolved.
+	if locks, err := ScanLocks(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
 		return err
-	} else if len(intents) > 0 {
-		return &kvpb.LockConflictError{Locks: roachpb.AsLocks(intents)}
+	} else if len(locks) > 0 {
+		return &kvpb.LockConflictError{Locks: locks}
 	}
 
 	// If requested, check if there are any point keys/tombstones in the span that

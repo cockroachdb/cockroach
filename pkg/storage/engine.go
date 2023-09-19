@@ -1460,43 +1460,47 @@ func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, err
 	return kvs, err
 }
 
-// ScanIntents scans intents using only the separated intents lock table. It
-// does not take interleaved intents into account at all.
-func ScanIntents(
-	ctx context.Context, reader Reader, start, end roachpb.Key, maxIntents int64, targetBytes int64,
-) ([]roachpb.Intent, error) {
-	var intents []roachpb.Intent
+// ScanLocks scans locks (shared, exclusive, and intent) using only the lock
+// table keyspace. It does not scan over the MVCC keyspace.
+func ScanLocks(
+	ctx context.Context, reader Reader, start, end roachpb.Key, maxLocks int64, targetBytes int64,
+) ([]roachpb.Lock, error) {
+	var locks []roachpb.Lock
 
 	if bytes.Compare(start, end) >= 0 {
-		return intents, nil
+		return locks, nil
 	}
 
 	ltStart, _ := keys.LockTableSingleKey(start, nil)
 	ltEnd, _ := keys.LockTableSingleKey(end, nil)
-	iter, err := reader.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
+	iter, err := NewLockTableIterator(reader, LockTableIteratorOptions{
+		LowerBound:  ltStart,
+		UpperBound:  ltEnd,
+		MatchMinStr: lock.Shared, // all locks
+	})
 	if err != nil {
 		return nil, err
 	}
 	defer iter.Close()
 
 	var meta enginepb.MVCCMetadata
-	var intentBytes int64
+	var lockBytes int64
 	var ok bool
 	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if maxIntents != 0 && int64(len(intents)) >= maxIntents {
+		if maxLocks != 0 && int64(len(locks)) >= maxLocks {
 			break
 		}
-		if targetBytes != 0 && intentBytes >= targetBytes {
+		if targetBytes != 0 && lockBytes >= targetBytes {
 			break
 		}
 		key, err := iter.EngineKey()
 		if err != nil {
 			return nil, err
 		}
-		lockedKey, err := keys.DecodeLockTableSingleKey(key.Key)
+		ltKey, err := key.ToLockTableKey()
 		if err != nil {
 			return nil, err
 		}
@@ -1507,13 +1511,13 @@ func ScanIntents(
 		if err = protoutil.Unmarshal(v, &meta); err != nil {
 			return nil, err
 		}
-		intents = append(intents, roachpb.MakeIntent(meta.Txn, lockedKey))
-		intentBytes += int64(len(lockedKey)) + int64(len(v))
+		locks = append(locks, roachpb.MakeLock(meta.Txn, ltKey.Key, ltKey.Strength))
+		lockBytes += int64(len(ltKey.Key)) + int64(len(v))
 	}
 	if err != nil {
 		return nil, err
 	}
-	return intents, nil
+	return locks, nil
 }
 
 // WriteSyncNoop carries out a synchronous no-op write to the engine.
