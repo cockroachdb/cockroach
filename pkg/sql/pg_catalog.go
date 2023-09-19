@@ -1811,6 +1811,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
 			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				tableOid := tableOid(table.GetID())
+
+				// Generate a map to determine the position of a column ID for creating
+				// the indkey.
+				colToOrdinal := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
+
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 					isMutation, isWriteOnly :=
 						table.GetIndexMutationCapabilities(index.GetID())
@@ -1843,7 +1848,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 							}
 							exprs = append(exprs, fmt.Sprintf("(%s)", formattedExpr))
 						} else {
-							colIDs = append(colIDs, columnID)
+							colIDs = append(colIDs, descpb.ColumnID(colToOrdinal.GetDefault(col.GetID())+1))
 						}
 						if err := collationOids.Append(typColl(col.GetType(), h)); err != nil {
 							return err
@@ -1863,7 +1868,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					// indnkeyatts is the number of attributes without INCLUDED columns.
 					indnkeyatts := len(colIDs)
 					for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
-						colIDs = append(colIDs, index.GetStoredColumnID(i))
+						colIDs = append(colIDs, descpb.ColumnID(colToOrdinal.GetDefault(index.GetStoredColumnID(i))+1))
 					}
 					// indnatts is the number of attributes with INCLUDED columns.
 					indnatts := len(colIDs)
