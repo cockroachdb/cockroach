@@ -597,7 +597,7 @@ func TestMVCCScanLockConflictError(t *testing.T) {
 	for _, scan := range scanCases {
 		t.Run(scan.name, func(t *testing.T) {
 			res, err := MVCCScan(ctx, engine, testKey1, testKey6.Next(),
-				hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Inconsistent: !scan.consistent, Txn: scan.txn, MaxIntents: 2})
+				hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Inconsistent: !scan.consistent, Txn: scan.txn, MaxLockConflicts: 2})
 			var lcErr *kvpb.LockConflictError
 			_ = errors.As(err, &lcErr)
 			if (err == nil) != (lcErr == nil) {
@@ -6635,7 +6635,7 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 				ExportAllRevisions: true,
 				TargetSize:         0,
 				MaxSize:            0,
-				MaxIntents:         uint64(MaxIntentsPerLockConflictError.Default()),
+				MaxLockConflicts:   uint64(MaxConflictsPerLockConflictError.Default()),
 				StopMidKey:         false,
 			}, &bytes.Buffer{})
 			if len(expectedIntentIndices) == 0 {
@@ -6655,7 +6655,7 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 	}
 
 	// Export range is fixed to k:["00010", "10000"), ts:(999, 2000] for all tests.
-	testDataCount := int(MaxIntentsPerLockConflictError.Default() + 1)
+	testDataCount := int(MaxConflictsPerLockConflictError.Default() + 1)
 	testData := make([]testValue, testDataCount*2)
 	expectedErrors := make([]int, testDataCount)
 	for i := 0; i < testDataCount; i++ {
@@ -6663,7 +6663,7 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 		testData[i*2+1] = intent(key(i*2+12), "intent", ts(1001))
 		expectedErrors[i] = i*2 + 1
 	}
-	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:MaxIntentsPerLockConflictError.Default()]))
+	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:MaxConflictsPerLockConflictError.Default()]))
 }
 
 // TestMVCCExportToSSTSplitMidKey verifies that split mid key in exports will
