@@ -2377,6 +2377,87 @@ func (p *Pebble) BufferedSize() int {
 	return 0
 }
 
+// ConvertFilesToBatchAndCommit implements the Engine interface.
+func (p *Pebble) ConvertFilesToBatchAndCommit(
+	_ context.Context, paths []string, exciseSpans []roachpb.Span,
+) error {
+	files := make([]sstable.ReadableFile, len(paths))
+	closeFiles := func() {
+		for i := range files {
+			if files[i] != nil {
+				files[i].Close()
+			}
+		}
+	}
+	for i, fileName := range paths {
+		f, err := p.FS.Open(fileName)
+		if err != nil {
+			closeFiles()
+			return err
+		}
+		files[i] = f
+	}
+	iter, err := NewSSTEngineIterator(
+		[][]sstable.ReadableFile{files},
+		IterOptions{
+			KeyTypes:   IterKeyTypePointsAndRanges,
+			LowerBound: roachpb.KeyMin,
+			UpperBound: roachpb.KeyMax,
+		}, true)
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	batch := p.NewWriteBatch()
+	for i := range exciseSpans {
+		err :=
+			batch.ClearRawRange(exciseSpans[i].Key, exciseSpans[i].EndKey, true, true)
+		if err != nil {
+			return err
+		}
+	}
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: roachpb.KeyMin})
+	for valid {
+		hasPoint, hasRange := iter.HasPointAndRange()
+		if hasPoint {
+			var k EngineKey
+			if k, err = iter.UnsafeEngineKey(); err != nil {
+				break
+			}
+			var v []byte
+			if v, err = iter.UnsafeValue(); err != nil {
+				break
+			}
+			if err = batch.PutEngineKey(k, v); err != nil {
+				break
+			}
+		}
+		if hasRange && iter.RangeKeyChanged() {
+			var rangeBounds roachpb.Span
+			if rangeBounds, err = iter.EngineRangeBounds(); err != nil {
+				break
+			}
+			rangeKeys := iter.EngineRangeKeys()
+			for i := range rangeKeys {
+				if err = batch.PutEngineRangeKey(rangeBounds.Key, rangeBounds.EndKey, rangeKeys[i].Version,
+					rangeKeys[i].Value); err != nil {
+					break
+				}
+			}
+			if err != nil {
+				break
+			}
+		}
+		valid, err = iter.NextEngineKey()
+	}
+	if err != nil {
+		batch.Close()
+		return err
+	}
+	return batch.Commit(true)
+}
+
 type pebbleReadOnly struct {
 	parent *Pebble
 	// The iterator reuse optimization in pebbleReadOnly is for servicing a

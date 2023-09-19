@@ -725,6 +725,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				msgAppRespCh:      make(chan raftpb.Message, 1),
 				sharedSSTs:        sharedSSTs,
 				doExcise:          doExcise,
+				clearedSpans:      keyRanges,
 			}
 
 			timingTag.stop("totalTime")
