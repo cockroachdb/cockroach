@@ -12,7 +12,6 @@ package scbuildstmt
 
 import (
 	"fmt"
-	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -20,53 +19,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 )
 
-// supportedStatement tracks metadata for statements that are
-// implemented by the new schema changer.
-type supportedStatement struct {
-	// statementTag tag for this statement.
-	statementTag string
-}
-
-// Tracks operations which are fully supported when the declarative schema
-// changer is enabled. Operations marked as non-fully supported can only be
-// with the use_declarative_schema_changer session variable.
-var supportedStatements = map[reflect.Type]supportedStatement{
-	// Alter table will have commands individually whitelisted via the
-	// supportedAlterTableStatements list, so wwe will consider it fully supported
-	// here.
-	reflect.TypeOf((*tree.AlterTable)(nil)):          {statementTag: tree.AlterTableTag},
-	reflect.TypeOf((*tree.CreateIndex)(nil)):         {statementTag: tree.CreateIndexTag},
-	reflect.TypeOf((*tree.DropDatabase)(nil)):        {statementTag: tree.DropDatabaseTag},
-	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {statementTag: tree.DropOwnedByTag},
-	reflect.TypeOf((*tree.DropSchema)(nil)):          {statementTag: tree.DropSchemaTag},
-	reflect.TypeOf((*tree.DropSequence)(nil)):        {statementTag: tree.DropSequenceTag},
-	reflect.TypeOf((*tree.DropTable)(nil)):           {statementTag: tree.DropTableTag},
-	reflect.TypeOf((*tree.DropType)(nil)):            {statementTag: tree.DropTypeTag},
-	reflect.TypeOf((*tree.DropView)(nil)):            {statementTag: tree.DropViewTag},
-	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {statementTag: tree.CommentOnConstraintTag},
-	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {statementTag: tree.CommentOnDatabaseTag},
-	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {statementTag: tree.CommentOnSchemaTag},
-	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {statementTag: tree.CommentOnTableTag},
-	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {statementTag: tree.CommentOnColumnTag},
-	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {statementTag: tree.CommentOnIndexTag},
-	reflect.TypeOf((*tree.DropIndex)(nil)):           {statementTag: tree.DropIndexTag},
-	reflect.TypeOf((*tree.DropFunction)(nil)):        {statementTag: tree.DropFunctionTag},
-	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {statementTag: tree.CreateRoutineTag},
-	reflect.TypeOf((*tree.CreateSchema)(nil)):        {statementTag: tree.CreateSchemaTag},
-	reflect.TypeOf((*tree.CreateSequence)(nil)):      {statementTag: tree.CreateSequenceTag},
-}
-
 // supportedStatementTags tracks statement tags which are implemented
 // by the declarative schema changer.
-var supportedStatementTags = map[string]struct{}{}
-
-func init() {
-	// Check function signatures inside the supportedStatements map.
-	for _, statementEntry := range supportedStatements {
-		// Fetch the statement tag using the statement tag method on the type,
-		// we can use this as a blacklist of blocked schema changes.
-		supportedStatementTags[statementEntry.statementTag] = struct{}{}
-	}
+var supportedStatementTags = map[string]struct{}{
+	tree.AlterTableTag:          {},
+	tree.CreateIndexTag:         {},
+	tree.DropDatabaseTag:        {},
+	tree.DropOwnedByTag:         {},
+	tree.DropSchemaTag:          {},
+	tree.DropSequenceTag:        {},
+	tree.DropTableTag:           {},
+	tree.DropTypeTag:            {},
+	tree.DropViewTag:            {},
+	tree.CommentOnConstraintTag: {},
+	tree.CommentOnDatabaseTag:   {},
+	tree.CommentOnSchemaTag:     {},
+	tree.CommentOnTableTag:      {},
+	tree.CommentOnColumnTag:     {},
+	tree.CommentOnIndexTag:      {},
+	tree.DropIndexTag:           {},
+	tree.DropFunctionTag:        {},
+	tree.CreateRoutineTag:       {},
+	tree.CreateSchemaTag:        {},
+	tree.CreateSequenceTag:      {},
 }
 
 func offByDefaultCheck(mode sessiondatapb.NewSchemaChangerMode) bool {
