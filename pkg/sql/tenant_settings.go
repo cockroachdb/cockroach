@@ -40,7 +40,7 @@ type alterTenantSetClusterSettingNode struct {
 }
 
 // AlterTenantSetClusterSetting sets tenant level session variables.
-// Privileges: MANAGETENANT.
+// Privileges: MANAGEVIRTUALCLUSTER.
 func (p *planner) AlterTenantSetClusterSetting(
 	ctx context.Context, n *tree.AlterTenantSetClusterSetting,
 ) (planNode, error) {

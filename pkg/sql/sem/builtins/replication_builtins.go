@@ -373,7 +373,8 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Decimal),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// NB: GetReplicationStreamManager does a permissions check for ADMIN or MANAGETENANT.
+				// NB: GetReplicationStreamManager does a permissions check for
+				// ADMIN or MANAGEVIRTUALCLUSTER.
 				if evalCtx.SessionData().SafeUpdates {
 					err := errors.Newf("crdb_internal.unsafe_revert_tenant_to_timestamp causes irreversible data loss")
 					err = errors.WithMessage(err, "rejected (via sql_safe_updates)")

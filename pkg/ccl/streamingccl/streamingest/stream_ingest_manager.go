@@ -194,7 +194,7 @@ func newStreamIngestManagerWithPrivilegesCheck(
 	if !isAdmin {
 		if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
 			syntheticprivilege.GlobalPrivilegeObject,
-			privilege.MANAGETENANT); err != nil {
+			privilege.MANAGEVIRTUALCLUSTER); err != nil {
 			return nil, err
 		}
 	}
