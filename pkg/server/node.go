@@ -127,13 +127,6 @@ This metric is thus not an indicator of KV health.`,
 		Unit:        metric.Unit_COUNT,
 	}
 
-	metaDiskStalls = metric.Metadata{
-		Name:        "engine.stalls",
-		Help:        "Number of disk stalls detected on this node",
-		Measurement: "Disk stalls detected",
-		Unit:        metric.Unit_COUNT,
-	}
-
 	metaInternalBatchRPCMethodCount = metric.Metadata{
 		Name:        "rpc.method.%s.recv",
 		Help:        "Number of %s requests processed",
@@ -257,10 +250,9 @@ var (
 )
 
 type nodeMetrics struct {
-	Latency    metric.IHistogram
-	Success    *metric.Counter
-	Err        *metric.Counter
-	DiskStalls *metric.Counter
+	Latency metric.IHistogram
+	Success *metric.Counter
+	Err     *metric.Counter
 
 	BatchCount                    *metric.Counter
 	MethodCounts                  [kvpb.NumMethods]*metric.Counter
@@ -286,7 +278,6 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 		}),
 		Success:                       metric.NewCounter(metaExecSuccess),
 		Err:                           metric.NewCounter(metaExecError),
-		DiskStalls:                    metric.NewCounter(metaDiskStalls),
 		BatchCount:                    metric.NewCounter(metaInternalBatchRPCCount),
 		BatchRequestsBytes:            metric.NewCounter(metaBatchRequestsBytes),
 		BatchResponsesBytes:           metric.NewCounter(metaBatchResponsesBytes),
