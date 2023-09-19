@@ -307,6 +307,13 @@ func (*DummyEvalPlanner) IsConstraintActive(
 	return false, errors.WithStack(errEvalPlanner)
 }
 
+// ConvertExternalPGAttrNumToInternalAttrNum is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) ConvertExternalPGAttrNumToInternalAttrNum(
+	ctx context.Context, tableID int, extPgAttribNum int,
+) (descpb.PGAttributeNum, error) {
+	return 0, errors.WithStack(errEvalPlanner)
+}
+
 // ValidateTTLScheduledJobsInCurrentDB is part of the Planner interface.
 func (*DummyEvalPlanner) ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error {
 	return errors.WithStack(errEvalPlanner)

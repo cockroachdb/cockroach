@@ -3824,8 +3824,8 @@ query I rowsort
 select adnum from pg_attrdef WHERE adrelid = 't46799'::REGCLASS
 ----
 1
+2
 3
-4
 
 # Check virtual table lookup joins.
 statement ok

@@ -7581,6 +7581,22 @@ active for the current transaction.`,
 			Volatility: volatility.Volatile,
 		},
 	),
+	"crdb_internal.convert_pg_ext_attrib_num_to_int_attrib_num": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "table_id", Typ: types.Int}, {Name: "ext_attrib_num", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				val, err := evalCtx.Planner.ConvertExternalPGAttrNumToInternalAttrNum(ctx, int(tree.MustBeDInt(args[0])), int(tree.MustBeDInt(args[1])))
+				return tree.NewDInt(tree.DInt(val)), err
+			},
+			Info: `This function is used to convert external pg attribute numbers to internal
+ones used for storing metadata like comments.`,
+			Volatility: volatility.Leakproof,
+		},
+	),
 
 	"crdb_internal.kv_set_queue_active": makeBuiltin(
 		tree.FunctionProperties{

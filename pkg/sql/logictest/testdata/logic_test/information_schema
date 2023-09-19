@@ -5014,7 +5014,7 @@ WHERE
 	AND column_name = 'b'
 	AND ordinal_position = $attnum;
 ----
-2
+1
 
 statement ok
 DROP TABLE ab

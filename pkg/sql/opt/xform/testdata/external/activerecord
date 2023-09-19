@@ -132,22 +132,21 @@ sort
       │    ├── key: (6)
       │    ├── fd: (6)-->(2,3,9,13,27,29,34,84), (2)-->(3,6,9,13,27,29,34)
       │    ├── right-join (hash)
-      │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null adrelid:27 adbin:29 c.collname:34 type:81 object_id:82 sub_id:83 c.comment:84 column86:86!null
+      │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null adrelid:27 adbin:29 c.collname:34 type:81 object_id:82 sub_id:83 c.comment:84 column86:86!null column87:87
       │    │    ├── immutable
-      │    │    ├── fd: ()-->(1,86), (6)-->(2,3,9,13,27,29,34), (2)-->(3,6,9,13,27,29,34)
+      │    │    ├── fd: ()-->(1,86), (6)-->(2,3,9,13,27,29,34,87), (2)-->(3,6,9,13,27,29,34,87)
       │    │    ├── select
       │    │    │    ├── columns: type:81!null object_id:82!null sub_id:83!null c.comment:84!null
       │    │    │    ├── fd: ()-->(81)
       │    │    │    ├── scan comments [as=c]
       │    │    │    │    └── columns: type:81!null object_id:82!null sub_id:83!null c.comment:84!null
       │    │    │    └── filters
-      │    │    │         ├── type:81 = 2 [outer=(81), constraints=(/81: [/2 - /2]; tight), fd=()-->(81)]
-      │    │    │         └── sub_id:83 != 0 [outer=(83), constraints=(/83: (/NULL - /-1] [/1 - ]; tight)]
+      │    │    │         └── type:81 = 2 [outer=(81), constraints=(/81: [/2 - /2]; tight), fd=()-->(81)]
       │    │    ├── project
-      │    │    │    ├── columns: column86:86!null attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null adrelid:27 adbin:29 c.collname:34
+      │    │    │    ├── columns: column87:87 column86:86!null attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null adrelid:27 adbin:29 c.collname:34
       │    │    │    ├── immutable
       │    │    │    ├── key: (6)
-      │    │    │    ├── fd: ()-->(1,86), (6)-->(2,3,9,13,27,29,34), (2)-->(3,6,9,13,27,29,34)
+      │    │    │    ├── fd: ()-->(1,86), (6)-->(2,3,9,13,27,29,34,87), (2)-->(3,6,9,13,27,29,34,87)
       │    │    │    ├── right-join (hash)
       │    │    │    │    ├── columns: attrelid:1!null attname:2!null atttypid:3!null attnum:6!null atttypmod:9!null attnotnull:13!null attisdropped:17!null attcollation:20!null adrelid:27 adnum:28 adbin:29 c.oid:33 c.collname:34 t.oid:42 typcollation:69
       │    │    │    │    ├── key: (6)
@@ -197,11 +196,13 @@ sort
       │    │    │    │         ├── c.oid:33 = attcollation:20 [outer=(20,33), constraints=(/20: (/NULL - ]; /33: (/NULL - ]), fd=(20)==(33), (33)==(20)]
       │    │    │    │         └── t.oid:42 = atttypid:3 [outer=(3,42), constraints=(/3: (/NULL - ]; /42: (/NULL - ]), fd=(3)==(42), (42)==(3)]
       │    │    │    └── projections
+      │    │    │         ├── crdb_internal.convert_pg_ext_attrib_num_to_int_attrib_num(attrelid:1::INT8, attnum:6) [as=column87:87, outer=(1,6), immutable]
       │    │    │         └── attrelid:1::INT8 [as=column86:86, outer=(1), immutable]
       │    │    └── filters
       │    │         ├── column86:86 = object_id:82 [outer=(82,86), constraints=(/82: (/NULL - ]; /86: (/NULL - ]), fd=(82)==(86), (86)==(82)]
-      │    │         ├── sub_id:83 = attnum:6 [outer=(6,83), constraints=(/6: (/NULL - ]; /83: (/NULL - ]), fd=(6)==(83), (83)==(6)]
-      │    │         └── attrelid:1 < 4294966977 [outer=(1), constraints=(/1: (/NULL - /4294966976]; tight)]
+      │    │         ├── column87:87 = sub_id:83 [outer=(83,87), constraints=(/83: (/NULL - ]; /87: (/NULL - ]), fd=(83)==(87), (87)==(83)]
+      │    │         ├── attrelid:1 < 4294966977 [outer=(1), constraints=(/1: (/NULL - /4294966976]; tight)]
+      │    │         └── attnum:6 != 0 [outer=(6), constraints=(/6: (/NULL - /-1] [/1 - ]; tight)]
       │    └── aggregations
       │         ├── const-agg [as=attname:2, outer=(2)]
       │         │    └── attname:2

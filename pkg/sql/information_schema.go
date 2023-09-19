@@ -512,7 +512,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					tree.NewDString(table.GetName()),  // table_name
 					tree.NewDString(column.GetName()), // column_name
 					description,                       // column_comment
-					tree.NewDInt(tree.DInt(column.GetPGAttributeNum())), // ordinal_position
+					tree.NewDInt(tree.DInt(column.GetExtPGAttributeNum())), // ordinal_position
 					colDefault,                        // column_default
 					yesOrNoDatum(column.IsNullable()), // is_nullable
 					tree.NewDString(column.GetType().InformationSchemaName()), // data_type

@@ -256,6 +256,10 @@ func (c *prevCol) GetPGAttributeNum() descpb.PGAttributeNum {
 	return descpb.PGAttributeNum(c.id)
 }
 
+func (c *prevCol) GetExtPGAttributeNum() descpb.PGAttributeNum {
+	return descpb.PGAttributeNum(0)
+}
+
 func (c *prevCol) IsSystemColumn() bool {
 	return false
 }

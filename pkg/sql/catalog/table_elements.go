@@ -394,6 +394,11 @@ type Column interface {
 	// column descriptor if the PGAttributeNum is not set.
 	GetPGAttributeNum() descpb.PGAttributeNum
 
+	// GetExtPGAttributeNum returns the PGAttributeNum assigned
+	// for external usage. This will intentionally be positional
+	// in the output of the table.
+	GetExtPGAttributeNum() descpb.PGAttributeNum
+
 	// IsSystemColumn returns true iff the column is a system column.
 	IsSystemColumn() bool
 

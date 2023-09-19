@@ -533,6 +533,24 @@ func (p *planner) IsConstraintActive(
 	return constraint != nil && constraint.IsEnforced(), nil
 }
 
+// ConvertExternalPGAttrNumToInternalAttrNum is used to convert an external
+// PG attribute number used by catalog tables into an internal one (which
+// is based on column ID).
+func (p *planner) ConvertExternalPGAttrNumToInternalAttrNum(
+	ctx context.Context, tableID int, extPgAttribNum int,
+) (descpb.PGAttributeNum, error) {
+	tableDesc, err := p.Descriptors().ByID(p.Txn()).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
+	if err != nil {
+		return 0, err
+	}
+	for _, col := range tableDesc.PublicColumns() {
+		if col.GetExtPGAttributeNum() == descpb.PGAttributeNum(extPgAttribNum) {
+			return col.GetPGAttributeNum(), nil
+		}
+	}
+	return 0, nil
+}
+
 // HasVirtualUniqueConstraints returns true if the table has one or more
 // constraints that are validated by RevalidateUniqueConstraintsInTable.
 func HasVirtualUniqueConstraints(tableDesc catalog.TableDescriptor) bool {

@@ -386,9 +386,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 			}
 			defSrc := tree.NewDString(displayExpr)
 			if err := addRow(
-				h.ColumnOid(table.GetID(), column.GetID()),          // oid
-				tableOid(table.GetID()),                             // adrelid
-				tree.NewDInt(tree.DInt(column.GetPGAttributeNum())), // adnum
+				h.ColumnOid(table.GetID(), column.GetID()),             // oid
+				tableOid(table.GetID()),                                // adrelid
+				tree.NewDInt(tree.DInt(column.GetExtPGAttributeNum())), // adnum
 				defSrc, // adbin
 				defSrc, // adsrc
 			); err != nil {
@@ -476,7 +476,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		// Columns for table.
 		for _, column := range table.AccessibleColumns() {
 			tableID := tableOid(table.GetID())
-			if err := addColumn(column, tableID, uint32(column.GetPGAttributeNum())); err != nil {
+			if err := addColumn(column, tableID, uint32(column.GetExtPGAttributeNum())); err != nil {
 				return err
 			}
 		}
@@ -1811,6 +1811,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
 			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				tableOid := tableOid(table.GetID())
+
+				colIDToAttrib := make(map[descpb.ColumnID]descpb.PGAttributeNum)
+				for _, col := range table.PublicColumns() {
+					colIDToAttrib[col.GetID()] = col.GetExtPGAttributeNum()
+				}
+
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 					isMutation, isWriteOnly :=
 						table.GetIndexMutationCapabilities(index.GetID())
@@ -1843,7 +1849,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 							}
 							exprs = append(exprs, fmt.Sprintf("(%s)", formattedExpr))
 						} else {
-							colIDs = append(colIDs, columnID)
+							colIDs = append(colIDs, descpb.ColumnID(col.GetExtPGAttributeNum()))
 						}
 						if err := collationOids.Append(typColl(col.GetType(), h)); err != nil {
 							return err
@@ -1863,7 +1869,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					// indnkeyatts is the number of attributes without INCLUDED columns.
 					indnkeyatts := len(colIDs)
 					for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
-						colIDs = append(colIDs, index.GetStoredColumnID(i))
+						colIDs = append(colIDs, descpb.ColumnID(colIDToAttrib[index.GetStoredColumnID(i)]))
 					}
 					// indnatts is the number of attributes with INCLUDED columns.
 					indnatts := len(colIDs)

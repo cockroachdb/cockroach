@@ -11,6 +11,7 @@
 package tabledesc
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -33,8 +34,9 @@ var _ catalog.Column = (*column)(nil)
 // descriptor.
 type column struct {
 	maybeMutation
-	desc    *descpb.ColumnDescriptor
-	ordinal int
+	desc       *descpb.ColumnDescriptor
+	ordinal    int
+	extAttrNum descpb.PGAttributeNum
 }
 
 // ColumnDesc returns the underlying protobuf descriptor.
@@ -166,7 +168,7 @@ func (w column) IsInaccessible() bool {
 	return w.desc.Inaccessible
 }
 
-// IsExpressionIndexColumn returns true iff the column is an an inaccessible
+// IsExpressionIndexColumn returns true iff the column is an inaccessible
 // virtual computed column that represents an expression in an expression index.
 func (w column) IsExpressionIndexColumn() bool {
 	return w.IsInaccessible() && w.IsVirtual()
@@ -224,7 +226,21 @@ func (w column) CheckCanBeOutboundFKRef() error {
 // if the PGAttributeNum is set (non-zero). Returns the ID of the
 // column descriptor if the PGAttributeNum is not set.
 func (w column) GetPGAttributeNum() descpb.PGAttributeNum {
+	// Otherwise, return the internal attribute number.
 	return w.desc.GetPGAttributeNum()
+}
+
+// GetExtPGAttributeNum returns the PGAttributeNum assigned
+// for external usage. This will intentionally be positional
+// relative to the visible columns of a table.
+func (w column) GetExtPGAttributeNum() descpb.PGAttributeNum {
+	// The cache will assign IDs to the attribute numbers
+	// directly, if its populated use that.
+	if w.extAttrNum > 0 {
+		return w.extAttrNum
+	}
+	// Return an invalid ID, otherwise.
+	return descpb.PGAttributeNum(0)
 }
 
 // IsSystemColumn returns true iff the column is a system column.
@@ -334,6 +350,21 @@ func newColumnCache(desc *descpb.TableDescriptor, mutations *mutationCache) *col
 	backingStructs := make([]column, numPublic, numPublic+len(colinfo.AllSystemColumnDescs))
 	for i := range desc.Columns {
 		backingStructs[i] = column{desc: &desc.Columns[i], ordinal: i}
+	}
+	// Assign attribute number based on publicly visible
+	// columns, where these will be assigned sorting by column
+	// IDs and be positional.
+	sortedColumns := make([]*column, 0, len(backingStructs))
+	for i := range backingStructs {
+		if backingStructs[i].Public() {
+			sortedColumns = append(sortedColumns, &backingStructs[i])
+		}
+	}
+	sort.SliceStable(sortedColumns, func(i, j int) bool {
+		return sortedColumns[i].GetPGAttributeNum() < sortedColumns[j].GetPGAttributeNum()
+	})
+	for i, c := range sortedColumns {
+		c.extAttrNum = descpb.PGAttributeNum(i + 1)
 	}
 	numMutations := len(mutations.columns)
 	numDeletable := numPublic + numMutations

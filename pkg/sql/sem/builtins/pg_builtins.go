@@ -1084,7 +1084,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				 FROM system.public.comments c
 				 WHERE c.type=%[1]d
 				 AND c.object_id=$1::int
-				 AND c.sub_id=$2::int
+				 AND c.sub_id=crdb_internal.convert_pg_ext_attrib_num_to_int_attrib_num($1::int,$2::int)
 				 AND $1 < %[2]d /* Virtual table columns do not have descriptions. */
 				 AND $2 != 0 /* Column ID 0 never exists, and we don't want the query
 					              to pick up the table comment by accident. */

@@ -341,6 +341,13 @@ type Planner interface {
 	// for the current transaction.
 	IsConstraintActive(ctx context.Context, tableID int, constraintName string) (bool, error)
 
+	// ConvertExternalPGAttrNumToInternalAttrNum is used to convert an external
+	// PG attribute number used by catalog tables into an internal one (which
+	// is based on column ID).
+	ConvertExternalPGAttrNumToInternalAttrNum(
+		ctx context.Context, tableID int, extPgAttribNum int,
+	) (descpb.PGAttributeNum, error)
+
 	// ValidateTTLScheduledJobsInCurrentDB checks scheduled jobs for each table
 	// in the database maps to a scheduled job.
 	ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error
