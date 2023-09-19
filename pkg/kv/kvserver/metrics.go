@@ -851,9 +851,12 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	// TODO(jackson): Consider removing the `storage.disk-stalled` metric.
+	// Stalls fatal the node. It's unlikely this metric will ever be reported
+	// greater than zero.
 	metaDiskStalled = metric.Metadata{
 		Name:        "storage.disk-stalled",
-		Help:        "Number of instances of disk operations taking longer than 30s",
+		Help:        "Number of instances of disk operations taking longer than 20s",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
