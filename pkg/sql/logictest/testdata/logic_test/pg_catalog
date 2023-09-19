@@ -3976,7 +3976,8 @@ CREATE TABLE default_arrays (
   id INT8 NOT NULL PRIMARY KEY,
   string_array text[] DEFAULT '{cat, dog}',
   weird_array text[] DEFAULT '{a,"", "b,c", "a''::string","''::string", "a''::string, ''::string",null}',
-  int_array int[] default '{1, 2}'
+  int_array int[] default '{1, 2}',
+  varchar_array varchar(32)[] DEFAULT '{cat, dog}'
 );
 
 query TTTBOI
@@ -3990,10 +3991,11 @@ WHERE a.attrelid = 'default_arrays'::regclass
   AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY a.attnum;
 ----
-id            bigint    NULL                                                                            true   20    -1
-string_array  text[]    '{cat,dog}'::STRING[]                                                           false  1009  -1
-weird_array   text[]    '{a,"","b,c",a''::string,''::string,"a''::string, ''::string",NULL}'::STRING[]  false  1009  -1
-int_array     bigint[]  '{1,2}'::INT8[]                                                                 false  1016  -1
+id             bigint                   NULL                                                                            true   20    -1
+string_array   text[]                   '{cat,dog}'::STRING[]                                                           false  1009  -1
+weird_array    text[]                   '{a,"","b,c",a''::string,''::string,"a''::string, ''::string",NULL}'::STRING[]  false  1009  -1
+int_array      bigint[]                 '{1,2}'::INT8[]                                                                 false  1016  -1
+varchar_array  character varying(32)[]  '{cat,dog}'::STRING[]                                                           false  1015  36
 
 # Regression test for limits on virtual index scans. (#53522)
 
