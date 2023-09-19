@@ -263,9 +263,11 @@ var (
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaIntentAge = metric.Metadata{
+	// TODO(nvanbenschoten): add a "lockcount" metric.
+	// TODO(nvanbenschoten): rename "intentage" metric to "lockage".
+	metaLockAge = metric.Metadata{
 		Name:        "intentage",
-		Help:        "Cumulative age of intents",
+		Help:        "Cumulative age of locks",
 		Measurement: "Age",
 		Unit:        metric.Unit_SECONDS,
 	}
@@ -2581,7 +2583,7 @@ type TenantsStorageMetrics struct {
 	RangeKeyCount  *aggmetric.AggGauge
 	RangeValCount  *aggmetric.AggGauge
 	IntentCount    *aggmetric.AggGauge
-	IntentAge      *aggmetric.AggGauge
+	LockAge        *aggmetric.AggGauge
 	GcBytesAge     *aggmetric.AggGauge
 	SysBytes       *aggmetric.AggGauge
 	SysCount       *aggmetric.AggGauge
@@ -2615,7 +2617,7 @@ func tenantsStorageMetricsSet() map[string]struct{} {
 		metaRangeKeyCount.Name:  {},
 		metaRangeValCount.Name:  {},
 		metaIntentCount.Name:    {},
-		metaIntentAge.Name:      {},
+		metaLockAge.Name:        {},
 		metaGcBytesAge.Name:     {},
 		metaSysBytes.Name:       {},
 		metaSysCount.Name:       {},
@@ -2681,7 +2683,7 @@ func (sm *TenantsStorageMetrics) acquireTenant(tenantID roachpb.TenantID) *tenan
 			m.RangeKeyCount = sm.RangeKeyCount.AddChild(tenantIDStr)
 			m.RangeValCount = sm.RangeValCount.AddChild(tenantIDStr)
 			m.IntentCount = sm.IntentCount.AddChild(tenantIDStr)
-			m.IntentAge = sm.IntentAge.AddChild(tenantIDStr)
+			m.LockAge = sm.LockAge.AddChild(tenantIDStr)
 			m.GcBytesAge = sm.GcBytesAge.AddChild(tenantIDStr)
 			m.SysBytes = sm.SysBytes.AddChild(tenantIDStr)
 			m.SysCount = sm.SysCount.AddChild(tenantIDStr)
@@ -2732,7 +2734,7 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantM
 		&m.RangeKeyCount,
 		&m.RangeValCount,
 		&m.IntentCount,
-		&m.IntentAge,
+		&m.LockAge,
 		&m.GcBytesAge,
 		&m.SysBytes,
 		&m.SysCount,
@@ -2779,7 +2781,7 @@ type tenantStorageMetrics struct {
 	RangeKeyCount  *aggmetric.Gauge
 	RangeValCount  *aggmetric.Gauge
 	IntentCount    *aggmetric.Gauge
-	IntentAge      *aggmetric.Gauge
+	LockAge        *aggmetric.Gauge
 	GcBytesAge     *aggmetric.Gauge
 	SysBytes       *aggmetric.Gauge
 	SysCount       *aggmetric.Gauge
@@ -2802,7 +2804,7 @@ func newTenantsStorageMetrics() *TenantsStorageMetrics {
 		RangeKeyCount:  b.Gauge(metaRangeKeyCount),
 		RangeValCount:  b.Gauge(metaRangeValCount),
 		IntentCount:    b.Gauge(metaIntentCount),
-		IntentAge:      b.Gauge(metaIntentAge),
+		LockAge:        b.Gauge(metaLockAge),
 		GcBytesAge:     b.Gauge(metaGcBytesAge),
 		SysBytes:       b.Gauge(metaSysBytes),
 		SysCount:       b.Gauge(metaSysCount),
@@ -3273,7 +3275,7 @@ func (sm *TenantsStorageMetrics) incMVCCGauges(
 	tm.RangeKeyCount.Inc(delta.RangeKeyCount)
 	tm.RangeValCount.Inc(delta.RangeValCount)
 	tm.IntentCount.Inc(delta.IntentCount)
-	tm.IntentAge.Inc(delta.IntentAge)
+	tm.LockAge.Inc(delta.LockAge)
 	tm.GcBytesAge.Inc(delta.GCBytesAge)
 	tm.SysBytes.Inc(delta.SysBytes)
 	tm.SysCount.Inc(delta.SysCount)

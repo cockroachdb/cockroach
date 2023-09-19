@@ -114,26 +114,26 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	goldMS := enginepb.MVCCStats{
-		ContainsEstimates:    1,
-		KeyBytes:             1,
-		KeyCount:             1,
-		ValBytes:             1,
-		ValCount:             1,
-		IntentBytes:          1,
-		IntentCount:          1,
-		RangeKeyCount:        1,
-		RangeKeyBytes:        1,
-		RangeValCount:        1,
-		RangeValBytes:        1,
-		SeparatedIntentCount: 1,
-		IntentAge:            1,
-		GCBytesAge:           1,
-		LiveBytes:            1,
-		LiveCount:            1,
-		SysBytes:             1,
-		SysCount:             1,
-		LastUpdateNanos:      1,
-		AbortSpanBytes:       1,
+		ContainsEstimates: 1,
+		KeyBytes:          1,
+		KeyCount:          1,
+		ValBytes:          1,
+		ValCount:          1,
+		IntentBytes:       1,
+		IntentCount:       1,
+		RangeKeyCount:     1,
+		RangeKeyBytes:     1,
+		RangeValCount:     1,
+		RangeValBytes:     1,
+		LockCount:         1,
+		LockAge:           1,
+		GCBytesAge:        1,
+		LiveBytes:         1,
+		LiveCount:         1,
+		SysBytes:          1,
+		SysCount:          1,
+		LastUpdateNanos:   1,
+		AbortSpanBytes:    1,
 	}
 	require.NoError(t, zerofields.NoZeroField(&goldMS))
 
@@ -170,7 +170,7 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 		delta.AgeTo(ns)
 		require.GreaterOrEqual(t, delta.LastUpdateNanos, ns, "LastUpdateNanos")
 		shouldAge := ns/1e9-oldDelta.LastUpdateNanos/1e9 > 0
-		didAge := delta.IntentAge != oldDelta.IntentAge &&
+		didAge := delta.LockAge != oldDelta.LockAge &&
 			delta.GCBytesAge != oldDelta.GCBytesAge
 		require.Equal(t, shouldAge, didAge)
 	}
@@ -178,13 +178,13 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	expDelta := goldDelta
 	expDelta.LastUpdateNanos = 2e9 - 1
 	expDelta.GCBytesAge = 42
-	expDelta.IntentAge = 11
+	expDelta.LockAge = 11
 	require.Equal(t, expDelta, delta)
 
 	delta.AgeTo(2e9)
 	expDelta.LastUpdateNanos = 2e9
 	expDelta.GCBytesAge += 42
-	expDelta.IntentAge += 11
+	expDelta.LockAge += 11
 	require.Equal(t, expDelta, delta)
 
 	{
@@ -196,7 +196,7 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 		tmpDelta.AgeTo(2e9 - 1)
 		expDelta.LastUpdateNanos = 2e9 - 1
 		expDelta.GCBytesAge -= 42
-		expDelta.IntentAge -= 11
+		expDelta.LockAge -= 11
 		require.Equal(t, expDelta, tmpDelta)
 	}
 
@@ -214,7 +214,7 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	expMS := goldMS
 	expMS.Add(goldMS)
 	expMS.LastUpdateNanos = 10e9 + 1
-	expMS.IntentAge += 9      // from aging 9 ticks from 2E9-1 to 10E9+1
+	expMS.LockAge += 9        // from aging 9 ticks from 2E9-1 to 10E9+1
 	expMS.GCBytesAge += 3 * 9 // ditto
 
 	for i := range mss[:1] {
@@ -232,7 +232,7 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 
 	exp.LastUpdateNanos = 2e9
 	exp.GCBytesAge = -7
-	exp.IntentAge = -3
+	exp.LockAge = -3
 	require.Equal(t, exp, neg)
 }
 
