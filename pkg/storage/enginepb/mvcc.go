@@ -92,16 +92,16 @@ func (ms MVCCStats) HasNoUserData() bool {
 	return ms.ContainsEstimates == 0 && ms.RangeKeyCount == 0 && ms.KeyCount == 0 && ms.IntentCount == 0
 }
 
-// AvgIntentAge returns the average age of outstanding intents,
+// AvgLockAge returns the average age of outstanding locks,
 // based on current wall time specified via nowNanos.
-func (ms MVCCStats) AvgIntentAge(nowNanos int64) float64 {
+func (ms MVCCStats) AvgLockAge(nowNanos int64) float64 {
 	if ms.IntentCount == 0 {
 		return 0
 	}
 	// Advance age by any elapsed time since last computed. Note that
 	// we operate on a copy.
 	ms.AgeTo(nowNanos)
-	return float64(ms.IntentAge) / float64(ms.IntentCount)
+	return float64(ms.LockAge) / float64(ms.IntentCount)
 }
 
 // GCByteAge returns the total age of outstanding gc'able
@@ -134,7 +134,7 @@ func (ms *MVCCStats) AgeTo(nowNanos int64) {
 	diffSeconds := nowNanos/1e9 - ms.LastUpdateNanos/1e9
 
 	ms.GCBytesAge += ms.GCBytes() * diffSeconds
-	ms.IntentAge += ms.IntentCount * diffSeconds
+	ms.LockAge += ms.IntentCount * diffSeconds
 	ms.LastUpdateNanos = nowNanos
 }
 
@@ -149,7 +149,7 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	ms.ContainsEstimates += oms.ContainsEstimates
 
 	// Now that we've done that, we may just add them.
-	ms.IntentAge += oms.IntentAge
+	ms.LockAge += oms.LockAge
 	ms.GCBytesAge += oms.GCBytesAge
 	ms.LiveBytes += oms.LiveBytes
 	ms.KeyBytes += oms.KeyBytes
@@ -159,7 +159,7 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	ms.KeyCount += oms.KeyCount
 	ms.ValCount += oms.ValCount
 	ms.IntentCount += oms.IntentCount
-	ms.SeparatedIntentCount += oms.SeparatedIntentCount
+	ms.LockCount += oms.LockCount
 	ms.RangeKeyCount += oms.RangeKeyCount
 	ms.RangeKeyBytes += oms.RangeKeyBytes
 	ms.RangeValCount += oms.RangeValCount
@@ -180,7 +180,7 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.ContainsEstimates -= oms.ContainsEstimates
 
 	// Now that we've done that, we may subtract.
-	ms.IntentAge -= oms.IntentAge
+	ms.LockAge -= oms.LockAge
 	ms.GCBytesAge -= oms.GCBytesAge
 	ms.LiveBytes -= oms.LiveBytes
 	ms.KeyBytes -= oms.KeyBytes
@@ -190,7 +190,7 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.KeyCount -= oms.KeyCount
 	ms.ValCount -= oms.ValCount
 	ms.IntentCount -= oms.IntentCount
-	ms.SeparatedIntentCount -= oms.SeparatedIntentCount
+	ms.LockCount -= oms.LockCount
 	ms.RangeKeyCount -= oms.RangeKeyCount
 	ms.RangeKeyBytes -= oms.RangeKeyBytes
 	ms.RangeValCount -= oms.RangeValCount

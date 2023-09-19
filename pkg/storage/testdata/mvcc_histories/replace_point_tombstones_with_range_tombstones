@@ -102,7 +102,7 @@ data: "k"/5.000000000,0 -> /BYTES/k5
 data: "k"/1.000000000,0 -> /<empty>
 data: "l"/1.000000000,0 -> /BYTES/l1
 data: "m"/5.000000000,0 -> /BYTES/m5
-stats: key_count=10 key_bytes=200 val_count=15 val_bytes=152 range_key_count=7 range_key_bytes=160 range_val_count=14 live_count=5 live_bytes=153 gc_bytes_age=34769 intent_count=2 intent_bytes=31 separated_intent_count=2 intent_age=190
+stats: key_count=10 key_bytes=200 val_count=15 val_bytes=152 range_key_count=7 range_key_bytes=160 range_val_count=14 live_count=5 live_bytes=153 gc_bytes_age=34769 intent_count=2 intent_bytes=31 lock_count=2 lock_age=190
 
 
 # Then, set the dataset up again and replace point keys.
@@ -241,4 +241,4 @@ data: "k"/5.000000000,0 -> /BYTES/k5
 data: "k"/1.000000000,0 -> /<empty>
 data: "l"/1.000000000,0 -> /BYTES/l1
 data: "m"/5.000000000,0 -> /BYTES/m5
-stats: key_count=10 key_bytes=200 val_count=15 val_bytes=152 range_key_count=7 range_key_bytes=160 range_val_count=14 live_count=5 live_bytes=153 gc_bytes_age=34769 intent_count=2 intent_bytes=31 separated_intent_count=2 intent_age=190
+stats: key_count=10 key_bytes=200 val_count=15 val_bytes=152 range_key_count=7 range_key_bytes=160 range_val_count=14 live_count=5 live_bytes=153 gc_bytes_age=34769 intent_count=2 intent_bytes=31 lock_count=2 lock_age=190

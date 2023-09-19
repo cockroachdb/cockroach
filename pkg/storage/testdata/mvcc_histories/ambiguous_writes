@@ -16,12 +16,12 @@ with t=A k=a
   put v=first
 ----
 >> put v=first t=A k=a
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+61 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+22 separated_intent_count=+1 intent_age=+89
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+61 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+22 lock_count=+1 lock_age=+89
 >> at end:
 txn: "A" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
 meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/11.000000000,0 -> /BYTES/first
-stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=22 separated_intent_count=1 intent_age=89
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=22 lock_count=1 lock_age=89
 
 run stats ok
 with t=A k=a
@@ -35,7 +35,7 @@ stats: no change
 txn: "A" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
 meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/11.000000000,0 -> /BYTES/first
-stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=22 separated_intent_count=1 intent_age=89
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=22 lock_count=1 lock_age=89
 
 run ok
 with t=A k=a
@@ -53,13 +53,13 @@ with t=B k=k
   initput k=k ts=0,1 v=k1 ambiguousReplay
 ----
 >> initput k=k ts=0,1 v=k1 ambiguousReplay t=B k=k
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+50 live_count=+1 live_bytes=+64 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+100
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+50 live_count=+1 live_bytes=+64 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+100
 >> at end:
 txn: "B" meta={id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} lock=true stat=PENDING rts=0,1 wto=false gul=0,0
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 meta: "k"/0,0 -> txn={id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} ts=0,1 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/0,1 -> /BYTES/k1
-stats: key_count=2 key_bytes=28 val_count=2 val_bytes=73 live_count=2 live_bytes=101 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=100
+stats: key_count=2 key_bytes=28 val_count=2 val_bytes=73 live_count=2 live_bytes=101 intent_count=1 intent_bytes=19 lock_count=1 lock_age=100
 
 run ok
 with t=B k=k
@@ -78,14 +78,14 @@ with t=C k=k
   cput v=k2 cond=k1
 ----
 >> cput v=k2 cond=k1 t=C k=k
-stats: key_bytes=+12 val_count=+1 val_bytes=+50 live_bytes=+43 gc_bytes_age=+1900 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+100
+stats: key_bytes=+12 val_count=+1 val_bytes=+50 live_bytes=+43 gc_bytes_age=+1900 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+100
 >> at end:
 txn: "C" meta={id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,2 min=0,0 seq=0} lock=true stat=PENDING rts=0,2 wto=false gul=0,0
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 meta: "k"/0,0 -> txn={id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,2 min=0,0 seq=0} ts=0,2 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/0,2 -> /BYTES/k2
 data: "k"/0,1 -> /BYTES/k1
-stats: key_count=2 key_bytes=40 val_count=3 val_bytes=80 live_count=2 live_bytes=101 gc_bytes_age=1900 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=100
+stats: key_count=2 key_bytes=40 val_count=3 val_bytes=80 live_count=2 live_bytes=101 gc_bytes_age=1900 intent_count=1 intent_bytes=19 lock_count=1 lock_age=100
 
 run stats ok
 with t=C k=k
@@ -98,7 +98,7 @@ data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
 meta: "k"/0,0 -> txn={id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,2 min=0,0 seq=0} ts=0,2 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/0,2 -> /BYTES/k2
 data: "k"/0,1 -> /BYTES/k1
-stats: key_count=2 key_bytes=40 val_count=3 val_bytes=80 live_count=2 live_bytes=101 gc_bytes_age=1900 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=100
+stats: key_count=2 key_bytes=40 val_count=3 val_bytes=80 live_count=2 live_bytes=101 gc_bytes_age=1900 intent_count=1 intent_bytes=19 lock_count=1 lock_age=100
 
 run ok
 with t=C k=k
@@ -118,7 +118,7 @@ with t=D k=k
   put v=k3
 ----
 >> put v=k3 t=D k=k
-stats: key_bytes=+12 val_count=+1 val_bytes=+58 live_bytes=+51 gc_bytes_age=+1843 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+97
+stats: key_bytes=+12 val_count=+1 val_bytes=+58 live_bytes=+51 gc_bytes_age=+1843 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+97
 >> at end:
 txn: "D" meta={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
@@ -126,7 +126,7 @@ meta: "k"/0,0 -> txn={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "k"/0,2 -> /BYTES/k2
 data: "k"/0,1 -> /BYTES/k1
-stats: key_count=2 key_bytes=52 val_count=4 val_bytes=95 live_count=2 live_bytes=109 gc_bytes_age=3743 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=97
+stats: key_count=2 key_bytes=52 val_count=4 val_bytes=95 live_count=2 live_bytes=109 gc_bytes_age=3743 intent_count=1 intent_bytes=19 lock_count=1 lock_age=97
 
 run stats error
 with t=D k=k
@@ -142,7 +142,7 @@ meta: "k"/0,0 -> txn={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "k"/0,2 -> /BYTES/k2
 data: "k"/0,1 -> /BYTES/k1
-stats: key_count=2 key_bytes=52 val_count=4 val_bytes=95 live_count=2 live_bytes=109 gc_bytes_age=3743 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=97
+stats: key_count=2 key_bytes=52 val_count=4 val_bytes=95 live_count=2 live_bytes=109 gc_bytes_age=3743 intent_count=1 intent_bytes=19 lock_count=1 lock_age=97
 error: (*withstack.withStack:) transaction 00000004-0000-0000-0000-000000000000 with sequence 0 prevented from changing write timestamp from 3.000000000,0 to 3.000000000,1 due to ambiguous replay protection
 
 run ok
@@ -207,7 +207,7 @@ with t=F k=k
   put v=k5
 ----
 >> put v=k5 t=F k=k
-stats: key_bytes=+12 val_count=+1 val_bytes=+58 live_count=+1 live_bytes=+72 gc_bytes_age=-192 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+95
+stats: key_bytes=+12 val_count=+1 val_bytes=+58 live_count=+1 live_bytes=+72 gc_bytes_age=-192 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+95
 >> at end:
 txn: "F" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
 data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
@@ -217,7 +217,7 @@ data: "k"/4.000000000,0 -> /<empty>
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "k"/0,2 -> /BYTES/k2
 data: "k"/0,1 -> /BYTES/k1
-stats: key_count=2 key_bytes=76 val_count=6 val_bytes=102 live_count=2 live_bytes=109 gc_bytes_age=6719 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=95
+stats: key_count=2 key_bytes=76 val_count=6 val_bytes=102 live_count=2 live_bytes=109 gc_bytes_age=6719 intent_count=1 intent_bytes=19 lock_count=1 lock_age=95
 
 run stats ok
 with t=F k=k
@@ -237,7 +237,7 @@ data: "k"/4.000000000,0 -> /<empty>
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "k"/0,2 -> /BYTES/k2
 data: "k"/0,1 -> /BYTES/k1
-stats: key_count=2 key_bytes=76 val_count=6 val_bytes=108 live_count=1 live_bytes=37 gc_bytes_age=14129 intent_count=1 intent_bytes=12 separated_intent_count=1 intent_age=95
+stats: key_count=2 key_bytes=76 val_count=6 val_bytes=108 live_count=1 live_bytes=37 gc_bytes_age=14129 intent_count=1 intent_bytes=12 lock_count=1 lock_age=95
 
 run stats ok
 with t=F k=k
@@ -256,7 +256,7 @@ data: "k"/4.000000000,0 -> /<empty>
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "k"/0,2 -> /BYTES/k2
 data: "k"/0,1 -> /BYTES/k1
-stats: key_count=2 key_bytes=76 val_count=6 val_bytes=108 live_count=1 live_bytes=37 gc_bytes_age=14129 intent_count=1 intent_bytes=12 separated_intent_count=1 intent_age=95
+stats: key_count=2 key_bytes=76 val_count=6 val_bytes=108 live_count=1 live_bytes=37 gc_bytes_age=14129 intent_count=1 intent_bytes=12 lock_count=1 lock_age=95
 
 run stats error
 with t=F k=k
@@ -275,7 +275,7 @@ data: "k"/4.000000000,0 -> /<empty>
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "k"/0,2 -> /BYTES/k2
 data: "k"/0,1 -> /BYTES/k1
-stats: key_count=2 key_bytes=76 val_count=6 val_bytes=108 live_count=1 live_bytes=37 gc_bytes_age=14129 intent_count=1 intent_bytes=12 separated_intent_count=1 intent_age=95
+stats: key_count=2 key_bytes=76 val_count=6 val_bytes=108 live_count=1 live_bytes=37 gc_bytes_age=14129 intent_count=1 intent_bytes=12 lock_count=1 lock_age=95
 error: (*withstack.withStack:) transaction 00000006-0000-0000-0000-000000000000 with sequence 1 prevented from changing write timestamp from 5.000000000,0 to 5.000000000,1 due to ambiguous replay protection
 
 run ok
@@ -312,7 +312,7 @@ with t=G k=k
 del_range: "a"-"z" -> deleted 2 key(s)
 del_range: returned "a"
 del_range: returned "k"
-stats: key_bytes=+24 val_count=+2 val_bytes=+106 live_count=-2 live_bytes=-58 gc_bytes_age=+16544 intent_count=+2 intent_bytes=+24 separated_intent_count=+2 intent_age=+176
+stats: key_bytes=+24 val_count=+2 val_bytes=+106 live_count=-2 live_bytes=-58 gc_bytes_age=+16544 intent_count=+2 intent_bytes=+24 lock_count=+2 lock_age=+176
 >> at end:
 txn: "G" meta={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} lock=true stat=PENDING rts=12.000000000,1 wto=false gul=0,0
 meta: "a"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} ts=12.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
@@ -325,7 +325,7 @@ data: "k"/4.000000000,0 -> /<empty>
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "k"/0,2 -> /BYTES/k2
 data: "k"/0,1 -> /BYTES/k1
-stats: key_count=2 key_bytes=100 val_count=8 val_bytes=157 gc_bytes_age=23263 intent_count=2 intent_bytes=24 separated_intent_count=2 intent_age=176
+stats: key_count=2 key_bytes=100 val_count=8 val_bytes=157 gc_bytes_age=23263 intent_count=2 intent_bytes=24 lock_count=2 lock_age=176
 
 run stats ok
 with t=G k=k
@@ -350,7 +350,7 @@ data: "k"/4.000000000,0 -> /<empty>
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "k"/0,2 -> /BYTES/k2
 data: "k"/0,1 -> /BYTES/k1
-stats: key_count=2 key_bytes=100 val_count=8 val_bytes=157 gc_bytes_age=23263 intent_count=2 intent_bytes=24 separated_intent_count=2 intent_age=176
+stats: key_count=2 key_bytes=100 val_count=8 val_bytes=157 gc_bytes_age=23263 intent_count=2 intent_bytes=24 lock_count=2 lock_age=176
 
 run stats error
 with t=G k=k
@@ -372,7 +372,7 @@ data: "k"/4.000000000,0 -> /<empty>
 data: "k"/3.000000000,0 -> /BYTES/k3
 data: "k"/0,2 -> /BYTES/k2
 data: "k"/0,1 -> /BYTES/k1
-stats: key_count=2 key_bytes=100 val_count=8 val_bytes=157 gc_bytes_age=23263 intent_count=2 intent_bytes=24 separated_intent_count=2 intent_age=176
+stats: key_count=2 key_bytes=100 val_count=8 val_bytes=157 gc_bytes_age=23263 intent_count=2 intent_bytes=24 lock_count=2 lock_age=176
 error: (*withstack.withStack:) transaction 00000007-0000-0000-0000-000000000000 with sequence 0 prevented from changing write timestamp from 12.000000000,1 to 12.000000000,3 due to ambiguous replay protection
 
 run ok

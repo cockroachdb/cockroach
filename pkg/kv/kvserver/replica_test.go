@@ -6451,15 +6451,15 @@ func TestRangeStatsComputation(t *testing.T) {
 	}
 	expMS = baseStats
 	expMS.Add(enginepb.MVCCStats{
-		LiveBytes:            103,
-		KeyBytes:             28,
-		ValBytes:             75,
-		IntentBytes:          23,
-		LiveCount:            2,
-		KeyCount:             2,
-		ValCount:             2,
-		IntentCount:          1,
-		SeparatedIntentCount: 1,
+		LiveBytes:   103,
+		KeyBytes:    28,
+		ValBytes:    75,
+		IntentBytes: 23,
+		LiveCount:   2,
+		KeyCount:    2,
+		ValCount:    2,
+		IntentCount: 1,
+		LockCount:   1,
 	})
 	if err := verifyRangeStats(tc.engine, tc.repl.RangeID, expMS); err != nil {
 		t.Fatal(err)
