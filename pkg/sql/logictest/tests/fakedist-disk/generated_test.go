@@ -939,6 +939,13 @@ func TestLogic_hash_sharded_index(
 	runLogicTest(t, "hash_sharded_index")
 }
 
+func TestLogic_hash_sharded_index_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "hash_sharded_index_read_committed")
+}
+
 func TestLogic_hidden_columns(
 	t *testing.T,
 ) {

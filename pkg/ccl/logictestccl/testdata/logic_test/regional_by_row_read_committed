@@ -48,71 +48,155 @@ CREATE TABLE volcano (
 )
 LOCALITY REGIONAL BY ROW AS region
 
-# TODO(michae2): statement ok
-statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+# Create a table without a unique constraint.
+
+statement ok
+CREATE TABLE city (
+  name STRING NOT NULL,
+  nickname STRING NOT NULL,
+  state_or_province CHAR(2) NOT NULL,
+  region crdb_internal_region NOT NULL AS (
+    CASE
+      WHEN lower(state_or_province) = 'or' THEN 'ca-central-1'   -- Oregon
+      WHEN lower(state_or_province) = 'wa' THEN 'ap-southeast-2' -- Washington
+      ELSE 'us-east-1'                                           -- British Columbia
+    END
+  ) STORED,
+  PRIMARY KEY (name, state_or_province),
+  FAMILY (name, nickname, state_or_province, region)
+)
+LOCALITY REGIONAL BY ROW AS region
+
+# Create a table with region included in all unique constraints.
+
+statement ok
+CREATE TABLE river (
+  region crdb_internal_region NOT NULL,
+  name STRING NOT NULL,
+  outlet STRING NOT NULL,
+  PRIMARY KEY (region, name),
+  UNIQUE INDEX (region, outlet),
+  FAMILY (region, name, outlet)
+)
+LOCALITY REGIONAL BY ROW AS region
+
+# Test non-conflicting INSERT.
+
+statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
 INSERT INTO university (name, mascot, postal_code) VALUES ('Western Oregon', 'wolves', '97361')
 
-# TODO(michae2): statement ok
-statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
 INSERT INTO volcano
 VALUES ('Mount Hood', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.695833 45.373611)', 'ca-central-1')
 
-# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"\nDETAIL: Key \(mascot\)=\('wolves'\) already exists.
-statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+statement ok
+INSERT INTO city VALUES ('Vancouver', 'Hollywood North', 'BC')
+
+statement ok
+INSERT INTO river VALUES ('ap-southeast-2', 'Skykomish', 'Snohomish')
+
+# Test conflicting INSERT.
+
+statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
 INSERT INTO university (name, mascot, postal_code) VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8')
 
-# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_origin_key"\nDETAIL: Key \(origin\)=\('Fought over Loowit and was transformed by Saghalie.'\) already exists.
-statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
 INSERT INTO volcano VALUES
 ('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2')
 
-# TODO(michae2): statement ok
-statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "city_pkey"\nDETAIL: Key \(name, state_or_province\)=\('Vancouver', 'BC'\) already exists\.
+INSERT INTO city VALUES ('Vancouver', 'The ''Couve', 'BC')
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "river_pkey"\nDETAIL: Key \(region, name\)=\('ap-southeast-2', 'Skykomish'\) already exists\.
+INSERT INTO river VALUES ('ap-southeast-2', 'Skykomish', 'Snoqualmie')
+
+# Test conflicting INSERT ON CONFLICT DO NOTHING.
+
+statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
 INSERT INTO university (name, mascot, postal_code)
 VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8'), ('Evergreen State', 'geoducks', '98505')
 ON CONFLICT (mascot) DO NOTHING
 
-# TODO(michae2): statement ok
-statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+query TTT
+SELECT name, mascot, postal_code FROM university ORDER BY name
+----
+
+statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
 INSERT INTO volcano VALUES
 ('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2'),
 ('Mount St. Helens', 'Fair maiden Loowit could not choose between Wyeast and Pahto and was transformed by Saghalie.', 'POINT(-122.1944 46.1912)', 'ap-southeast-2')
 ON CONFLICT (origin) DO NOTHING
 
 query TTT
-SELECT name, mascot, postal_code FROM university ORDER BY name
-----
-
-query TTT
 SELECT name, origin, location FROM volcano ORDER BY name
 ----
 
-# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"\nDETAIL: Key \(mascot\)=\('wolves'\) already exists.
-statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+statement ok
+INSERT INTO city VALUES ('Vancouver', 'The Big Smoke', 'BC'), ('Salem', 'Cherry City', 'OR')
+ON CONFLICT (name, state_or_province) DO NOTHING
+
+query TTT
+SELECT name, nickname, state_or_province FROM city ORDER BY name
+----
+Salem      Cherry City      OR
+Vancouver  Hollywood North  BC
+
+statement ok
+INSERT INTO river VALUES ('ap-southeast-2', 'Snoqualmie', 'Snohomish'), ('us-east-1', 'Fraser', 'Strait of Georgia')
+ON CONFLICT (region, outlet) DO NOTHING
+
+query TTT
+SELECT region, name, outlet FROM river ORDER BY region, name
+----
+ap-southeast-2  Skykomish  Snohomish
+us-east-1       Fraser     Strait of Georgia
+
+# Test conflicting UPSERT.
+
+statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
 UPSERT INTO university (name, mascot, postal_code) VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8')
 
-# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_origin_key"\nDETAIL: Key \(origin\)=\('Fought over Loowit and was transformed by Saghalie.'\) already exists.
-statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
 UPSERT INTO volcano VALUES
 ('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2')
 
-# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"\nDETAIL: Key \(mascot\)=\('wolves'\) already exists.
-statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+statement ok
+UPSERT INTO city VALUES ('Vancouver', 'The Big Smoke', 'BC')
+
+statement ok
+UPSERT INTO river VALUES ('us-east-1', 'Fraser', 'Salish Sea')
+
+# Test conflicting UPDATE.
+
+statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
 UPDATE university SET mascot = 'wolves' WHERE name = 'Evergreen State'
 
-# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_origin_key"\nDETAIL: Key \(origin\)=\('Fought over Loowit and was transformed by Saghalie.'\) already exists.
-statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
 UPDATE volcano SET origin = 'Fought over Loowit and was transformed by Saghalie.' WHERE name = 'Mount St. Helens'
 
-# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_pkey"\nDETAIL: Key \(name\)=\('Evergreen State'\) already exists.
-statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "city_pkey"\nDETAIL: Key \(name, state_or_province\)=\('Vancouver', 'BC'\) already exists\.
+UPDATE city SET name = 'Vancouver', state_or_province = 'BC' WHERE name = 'Salem'
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "river_region_outlet_key"\nDETAIL: Key \(region, outlet\)=\('us-east-1', 'Salish Sea'\) already exists\.
+UPDATE river SET region = 'us-east-1', outlet = 'Salish Sea' WHERE name = 'Skykomish'
+
+# Test conflicting INSERT ON CONFLICT DO UPDATE.
+
+statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
 INSERT INTO university (name, mascot, postal_code)
 VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8'), ('Oregon Tech', 'owls', '97601')
 ON CONFLICT (mascot) DO UPDATE SET name = 'Evergreen State', mascot = 'banana slugs'
 
-# TODO(michae2): statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_pkey"\nDETAIL: Key \(name\)=\('Mount St. Helens'\) already exists.
-statement error pgcode 0A000 guaranteed-durable locking not yet implemented
+statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
 INSERT INTO volcano VALUES
 ('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2'),
 ('Mount Garibaldi', 'Lightning from thunderbird eyes struck the ground.', 'POINT(-123.004722 49.850278)', 'us-east-1')
 ON CONFLICT (origin) DO UPDATE SET name = 'Mount St. Helens', origin = 'Discovered by the Vancouver expedition in 1792.', region = 'us-east-1'
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "city_pkey"\nDETAIL: Key \(name, state_or_province\)=\('Vancouver', 'BC'\) already exists\.
+INSERT INTO city VALUES ('Seattle', 'The Emerald City', 'WA'), ('Salem', 'The Witch City', 'OR')
+ON CONFLICT (name, state_or_province) DO UPDATE SET name = 'Vancouver', nickname = 'Land of the mud-turtles', state_or_province = 'BC'
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "river_pkey"\nDETAIL: Key \(region, name\)=\('ap-southeast-2', 'Skykomish'\) already exists\.
+INSERT INTO river VALUES ('us-east-1', 'Squamish', 'Salish Sea'), ('ca-central-1', 'Rogue', 'Pacific Ocean')
+ON CONFLICT (region, outlet) DO UPDATE SET region = 'ap-southeast-2', name = 'Skykomish', outlet = 'Puget Sound'
