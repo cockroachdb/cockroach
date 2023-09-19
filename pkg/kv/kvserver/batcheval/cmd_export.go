@@ -154,9 +154,9 @@ func evalExport(
 		maxSize = targetSize + uint64(allowedOverage)
 	}
 
-	var maxIntents uint64
-	if m := storage.MaxIntentsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV); m > 0 {
-		maxIntents = uint64(m)
+	var maxLockConflicts uint64
+	if m := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV); m > 0 {
+		maxLockConflicts = uint64(m)
 	}
 
 	// Only use resume timestamp if splitting mid key is enabled.
@@ -184,7 +184,7 @@ func evalExport(
 			ExportAllRevisions: exportAllRevisions,
 			TargetSize:         targetSize,
 			MaxSize:            maxSize,
-			MaxIntents:         maxIntents,
+			MaxLockConflicts:   maxLockConflicts,
 			StopMidKey:         args.SplitMidKey,
 		}
 		var summary kvpb.BulkOpSummary

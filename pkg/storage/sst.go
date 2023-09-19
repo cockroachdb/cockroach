@@ -112,7 +112,7 @@ func CheckSSTConflicts(
 	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
 	sstTimestamp hlc.Timestamp,
-	maxIntents int64,
+	maxLockConflicts int64,
 	usePrefixSeek bool,
 ) (enginepb.MVCCStats, error) {
 
@@ -281,7 +281,7 @@ func CheckSSTConflicts(
 				// would be quadratic, so this significantly reduces the overall number
 				// of scans.
 				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, extIter.UnsafeKey().Key.Clone()))
-				if int64(len(intents)) >= maxIntents {
+				if int64(len(intents)) >= maxLockConflicts {
 					return &kvpb.LockConflictError{Locks: roachpb.AsLocks(intents)}
 				}
 				return nil
@@ -531,7 +531,7 @@ func CheckSSTConflicts(
 					return enginepb.MVCCStats{}, err
 				}
 				intents = append(intents, roachpb.MakeIntent(mvccMeta.Txn, extIter.UnsafeKey().Key.Clone()))
-				if int64(len(intents)) >= maxIntents {
+				if int64(len(intents)) >= maxLockConflicts {
 					return statsDiff, &kvpb.LockConflictError{Locks: roachpb.AsLocks(intents)}
 				}
 				extIter.Next()

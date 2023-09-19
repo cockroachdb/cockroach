@@ -2264,7 +2264,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 				tc.start,
 				tc.end,
 				&intents,
-				0, /* maxIntents */
+				0, /* maxLockConflicts */
 			)
 			if tc.expErr != "" {
 				require.Error(t, err)
@@ -2486,7 +2486,7 @@ func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testi
 				keyA,
 				nil,
 				&intents,
-				0, /* maxIntents */
+				0, /* maxLockConflicts */
 			)
 			require.NoError(t, err)
 			if alwaysFallbackToIntentInterleavingIteratorForReadYourOwnWrites {
