@@ -28,6 +28,16 @@ func init() {
 						IsSecondaryIndex: this.IsUsingSecondaryEncoding,
 					}
 				}),
+				emit(func(this *scpb.TemporaryIndex) *scop.SetAddedIndexPartialPredicate {
+					if this.Expr == nil {
+						return nil
+					}
+					return &scop.SetAddedIndexPartialPredicate{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+						Expr:    this.Expr.Expr,
+					}
+				}),
 				emit(func(this *scpb.TemporaryIndex) *scop.MaybeAddSplitForIndex {
 					return &scop.MaybeAddSplitForIndex{
 						TableID: this.TableID,

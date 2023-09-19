@@ -269,6 +269,7 @@ message SecondaryIndex {
 message TemporaryIndex {
   Index embedded_index = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool is_using_secondary_encoding = 2;
+  Expression expr = 3 [(gogoproto.nullable) = true];
 }
 
 message SecondaryIndexPartial {

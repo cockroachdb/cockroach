@@ -362,6 +362,7 @@ object TemporaryIndex
 
 TemporaryIndex :  Index
 TemporaryIndex :  IsUsingSecondaryEncoding
+TemporaryIndex :  Expr
 
 object UniqueWithoutIndexConstraint
 
