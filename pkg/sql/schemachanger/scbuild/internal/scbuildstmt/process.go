@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/errors"
 )
 
 // supportedStatement tracks metadata for statements that are
@@ -26,14 +25,6 @@ import (
 type supportedStatement struct {
 	// statementTag tag for this statement.
 	statementTag string
-	// checks contains a coarse-grained function to filter out most
-	// unsupported statements.
-	// It's possible for certain unsupported statements to pass it but will
-	// eventually be discovered in the builder and cause an unimplemented panic.
-	// It should only contain "simple" checks that does not require us to resolve
-	// the descriptor and its elements, so we can avoid unnecessary round-trips
-	// made in the builder.
-	checks interface{}
 	// on indicates that this statement is on by default.
 	on bool
 }
@@ -45,26 +36,26 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	// Alter table will have commands individually whitelisted via the
 	// supportedAlterTableStatements list, so wwe will consider it fully supported
 	// here.
-	reflect.TypeOf((*tree.AlterTable)(nil)):          {statementTag: tree.AlterTableTag, on: true, checks: alterTableChecks},
-	reflect.TypeOf((*tree.CreateIndex)(nil)):         {statementTag: tree.CreateIndexTag, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.DropDatabase)(nil)):        {statementTag: tree.DropDatabaseTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {statementTag: tree.DropOwnedByTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.DropSchema)(nil)):          {statementTag: tree.DropSchemaTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropSequence)(nil)):        {statementTag: tree.DropSequenceTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropTable)(nil)):           {statementTag: tree.DropTableTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropType)(nil)):            {statementTag: tree.DropTypeTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.DropView)(nil)):            {statementTag: tree.DropViewTag, on: true, checks: isV221Active},
-	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {statementTag: tree.CommentOnConstraintTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {statementTag: tree.CommentOnDatabaseTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {statementTag: tree.CommentOnSchemaTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {statementTag: tree.CommentOnTableTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {statementTag: tree.CommentOnColumnTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {statementTag: tree.CommentOnIndexTag, on: true, checks: isV222Active},
-	reflect.TypeOf((*tree.DropIndex)(nil)):           {statementTag: tree.DropIndexTag, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.DropFunction)(nil)):        {statementTag: tree.DropFunctionTag, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {statementTag: tree.CreateRoutineTag, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.CreateSchema)(nil)):        {statementTag: tree.CreateSchemaTag, on: false, checks: isV232Active},
-	reflect.TypeOf((*tree.CreateSequence)(nil)):      {statementTag: tree.CreateSequenceTag, on: false, checks: isV232Active},
+	reflect.TypeOf((*tree.AlterTable)(nil)):          {statementTag: tree.AlterTableTag, on: true},
+	reflect.TypeOf((*tree.CreateIndex)(nil)):         {statementTag: tree.CreateIndexTag, on: true},
+	reflect.TypeOf((*tree.DropDatabase)(nil)):        {statementTag: tree.DropDatabaseTag, on: true},
+	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {statementTag: tree.DropOwnedByTag, on: true},
+	reflect.TypeOf((*tree.DropSchema)(nil)):          {statementTag: tree.DropSchemaTag, on: true},
+	reflect.TypeOf((*tree.DropSequence)(nil)):        {statementTag: tree.DropSequenceTag, on: true},
+	reflect.TypeOf((*tree.DropTable)(nil)):           {statementTag: tree.DropTableTag, on: true},
+	reflect.TypeOf((*tree.DropType)(nil)):            {statementTag: tree.DropTypeTag, on: true},
+	reflect.TypeOf((*tree.DropView)(nil)):            {statementTag: tree.DropViewTag, on: true},
+	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {statementTag: tree.CommentOnConstraintTag, on: true},
+	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {statementTag: tree.CommentOnDatabaseTag, on: true},
+	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {statementTag: tree.CommentOnSchemaTag, on: true},
+	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {statementTag: tree.CommentOnTableTag, on: true},
+	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {statementTag: tree.CommentOnColumnTag, on: true},
+	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {statementTag: tree.CommentOnIndexTag, on: true},
+	reflect.TypeOf((*tree.DropIndex)(nil)):           {statementTag: tree.DropIndexTag, on: true},
+	reflect.TypeOf((*tree.DropFunction)(nil)):        {statementTag: tree.DropFunctionTag, on: true},
+	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {statementTag: tree.CreateRoutineTag, on: true},
+	reflect.TypeOf((*tree.CreateSchema)(nil)):        {statementTag: tree.CreateSchemaTag, on: false},
+	reflect.TypeOf((*tree.CreateSequence)(nil)):      {statementTag: tree.CreateSequenceTag, on: false},
 }
 
 // supportedStatementTags tracks statement tags which are implemented
@@ -72,27 +63,8 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 var supportedStatementTags = map[string]struct{}{}
 
 func init() {
-	boolType := reflect.TypeOf((*bool)(nil)).Elem()
 	// Check function signatures inside the supportedStatements map.
-	for statementType, statementEntry := range supportedStatements {
-		// Validate main callback functions.
-		// Validate fully supported function callbacks.
-		if statementEntry.checks != nil {
-			checks := reflect.TypeOf(statementEntry.checks)
-			if checks.Kind() != reflect.Func {
-				panic(errors.AssertionFailedf("%v entry for statement is "+
-					"not a function", statementType))
-			}
-			if checks.NumIn() != 3 ||
-				(checks.In(0) != statementType && !statementType.Implements(checks.In(0))) ||
-				checks.In(1) != reflect.TypeOf(sessiondatapb.UseNewSchemaChangerOff) ||
-				checks.In(2) != reflect.TypeOf((*clusterversion.ClusterVersion)(nil)).Elem() ||
-				checks.NumOut() != 1 ||
-				checks.Out(0) != boolType {
-				panic(errors.AssertionFailedf("%v checks does not have a valid signature; got %v",
-					statementType, checks))
-			}
-		}
+	for _, statementEntry := range supportedStatements {
 		// Fetch the statement tag using the statement tag method on the type,
 		// we can use this as a blacklist of blocked schema changes.
 		supportedStatementTags[statementEntry.statementTag] = struct{}{}
@@ -111,44 +83,64 @@ func IsFullySupportedWithFalsePositive(
 	activeVersion clusterversion.ClusterVersion,
 	mode sessiondatapb.NewSchemaChangerMode,
 ) (ret bool) {
-	return isFullySupportedWithFalsePositiveInternal(supportedStatements, reflect.TypeOf(n),
-		reflect.ValueOf(n), mode, activeVersion)
-}
-
-// isFullySupportedWithFalsePositiveInternal determines whether a stmt is
-// fully supported, with false positive, in the declarative schema changer,
-// given mode the active cluster version.
-func isFullySupportedWithFalsePositiveInternal(
-	stmtSupportMap map[reflect.Type]supportedStatement,
-	stmtType reflect.Type,
-	stmtValue reflect.Value,
-	mode sessiondatapb.NewSchemaChangerMode,
-	activeVersion clusterversion.ClusterVersion,
-) bool {
 	if mode == sessiondatapb.UseNewSchemaChangerOff {
 		return false
 	}
 
-	info, ok := stmtSupportMap[stmtType]
+	info, ok := supportedStatements[reflect.TypeOf(n)]
 	if !ok {
 		return false
 	}
-
-	// If extraFn does not pass, then it's not supported, regardless of mode.
-	if info.checks != nil {
-		fn := reflect.ValueOf(info.checks)
-		in := []reflect.Value{stmtValue, reflect.ValueOf(mode), reflect.ValueOf(activeVersion)}
-		values := fn.Call(in)
-		if !values[0].Bool() {
-			return false
-		}
+	if isOn := info.on ||
+		mode == sessiondatapb.UseNewSchemaChangerUnsafeAlways ||
+		mode == sessiondatapb.UseNewSchemaChangerUnsafe; !isOn {
+		return false
 	}
 
-	// We now can just return whether the statement is labelled as "on" or not,
-	// with the possibility of mode forcing "not on" to be on.
-	return info.on ||
-		mode == sessiondatapb.UseNewSchemaChangerUnsafeAlways ||
-		mode == sessiondatapb.UseNewSchemaChangerUnsafe
+	switch typedN := n.(type) {
+	case *tree.AlterTable:
+		return alterTableChecks(typedN, mode, activeVersion)
+	case *tree.CreateIndex:
+		return activeVersion.IsActive(clusterversion.V23_1)
+	case *tree.DropDatabase:
+		return activeVersion.IsActive(clusterversion.TODODelete_V22_1)
+	case *tree.DropOwnedBy:
+		return activeVersion.IsActive(clusterversion.V22_2)
+	case *tree.DropSchema:
+		return activeVersion.IsActive(clusterversion.TODODelete_V22_1)
+	case *tree.DropSequence:
+		return activeVersion.IsActive(clusterversion.TODODelete_V22_1)
+	case *tree.DropTable:
+		return activeVersion.IsActive(clusterversion.TODODelete_V22_1)
+	case *tree.DropType:
+		return activeVersion.IsActive(clusterversion.TODODelete_V22_1)
+	case *tree.DropView:
+		return activeVersion.IsActive(clusterversion.TODODelete_V22_1)
+	case *tree.CommentOnConstraint:
+		return activeVersion.IsActive(clusterversion.V22_2)
+	case *tree.CommentOnDatabase:
+		return activeVersion.IsActive(clusterversion.V22_2)
+	case *tree.CommentOnSchema:
+		return activeVersion.IsActive(clusterversion.V22_2)
+	case *tree.CommentOnTable:
+		return activeVersion.IsActive(clusterversion.V22_2)
+	case *tree.CommentOnColumn:
+		return activeVersion.IsActive(clusterversion.V22_2)
+	case *tree.CommentOnIndex:
+		return activeVersion.IsActive(clusterversion.V22_2)
+	case *tree.DropIndex:
+		return activeVersion.IsActive(clusterversion.V23_1)
+	case *tree.DropFunction:
+		return activeVersion.IsActive(clusterversion.V23_1)
+	case *tree.CreateRoutine:
+		return activeVersion.IsActive(clusterversion.V23_1)
+	case *tree.CreateSchema:
+		return activeVersion.IsActive(clusterversion.V23_2)
+	case *tree.CreateSequence:
+		return activeVersion.IsActive(clusterversion.V23_2)
+	default:
+		return false
+	}
 }
 
 // Process dispatches on the statement type to populate the BuilderState
@@ -229,20 +221,4 @@ func getDeclarativeSchemaChangerModeForStmt(
 		ret = sessiondatapb.UseNewSchemaChangerUnsafe
 	}
 	return ret
-}
-
-var isV221Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
-	return activeVersion.IsActive(clusterversion.TODODelete_V22_1)
-}
-
-var isV222Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
-	return activeVersion.IsActive(clusterversion.V22_2)
-}
-
-var isV231Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
-	return activeVersion.IsActive(clusterversion.V23_1)
-}
-
-var isV232Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
-	return activeVersion.IsActive(clusterversion.V23_2)
 }
