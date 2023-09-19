@@ -1,0 +1,116 @@
+# Set up a key with 3 shared locks.
+run ok
+put k=k1 v=v1 ts=5,0
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+
+run ok
+txn_begin t=A ts=10,0
+txn_begin t=B ts=11,0
+txn_begin t=C ts=12,0
+txn_begin t=D ts=13,0
+----
+>> at end:
+txn: "D" meta={id=00000004 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=13.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=13.000000000,0 wto=false gul=0,0
+
+run ok
+acquire_lock t=A k=k1 str=shared
+acquire_lock t=B k=k1 str=shared
+acquire_lock t=C k=k1 str=shared
+----
+>> at end:
+lock (Replicated): "k1"/Shared -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+
+# Perform locking and mutation operations with maxLockConflicts set.
+run error
+check_for_acquire_lock t=D k=k1 str=exclusive maxLockConflicts=0
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1", "k1"
+
+run error
+check_for_acquire_lock t=D k=k1 str=exclusive maxLockConflicts=1
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k1"
+
+run error
+check_for_acquire_lock t=D k=k1 str=exclusive maxLockConflicts=2
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
+
+run error
+check_for_acquire_lock t=D k=k1 str=exclusive maxLockConflicts=3
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1", "k1"
+
+run error
+check_for_acquire_lock t=D k=k1 str=exclusive maxLockConflicts=4
+----
+error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1", "k1"
+
+run error
+acquire_lock t=D k=k1 str=exclusive maxLockConflicts=2
+----
+>> at end:
+lock (Replicated): "k1"/Shared -> txn={id=00000003 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+lock (Replicated): "k1"/Shared -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=0,0 del=false klen=0 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
+
+run error
+put t=D k=k1 v=v1 maxLockConflicts=2
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
+
+run error
+increment t=D k=k1 maxLockConflicts=2
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
+
+run error
+cput t=D k=k1 v=v2 maxLockConflicts=2
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
+
+run error
+initput t=D k=k1 v=v2 maxLockConflicts=2
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
+
+run error
+del t=D k=k1 maxLockConflicts=2
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
+
+run error
+del_range t=D k=k1 k=k2 maxLockConflicts=2
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
+
+run error
+del_range_ts k=k1 k=k2 ts=10,0 maxLockConflicts=2
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
+
+run error
+del_range_pred k=k1 k=k2 maxLockConflicts=2
+----
+>> at end:
+data: "k1"/5.000000000,0 -> /BYTES/v1
+error: (*kvpb.LockConflictError:) conflicting locks on "k1", "k1"
