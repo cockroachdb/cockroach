@@ -177,7 +177,6 @@ func makeCDCBenchOptions() (option.StartOpts, install.ClusterSettings) {
 
 	// Bump up the number of allowed catchup scans.  Doing catchup for 100k ranges with default
 	// configuration (8 client side, 16 per store) takes a while (~1500-2000 ranges per min minutes).
-	settings.ClusterSettings["kv.rangefeed.catchup_scan_concurrency"] = "16"
 	settings.ClusterSettings["kv.rangefeed.concurrent_catchup_iterators"] = "16"
 
 	// Give changefeed more memory and slow down rangefeed checkpoints.

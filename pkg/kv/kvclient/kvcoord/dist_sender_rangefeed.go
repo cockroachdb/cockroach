@@ -38,9 +38,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
-	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -64,12 +64,13 @@ var useDedicatedRangefeedConnectionClass = settings.RegisterBoolSetting(
 		"kv.rangefeed.use_dedicated_connection_class.enabled", false),
 )
 
-var catchupScanConcurrency = settings.RegisterIntSetting(
+var catchupStartupRate = settings.RegisterIntSetting(
 	settings.TenantWritable,
-	"kv.rangefeed.catchup_scan_concurrency",
-	"number of catchup scans that a single rangefeed can execute concurrently; 0 implies unlimited",
-	8,
+	"kv.rangefeed.client.stream_startup_rate",
+	"controls the rate per second the client will initiate new rangefeed stream for a single range; 0 implies unlimited",
+	100, // e.g.: 200 seconds for 20k ranges.
 	settings.NonNegativeInt,
+	settings.WithPublic,
 )
 
 var rangefeedRangeStuckThreshold = settings.RegisterDurationSetting(
@@ -79,14 +80,6 @@ var rangefeedRangeStuckThreshold = settings.RegisterDurationSetting(
 	time.Minute,
 	settings.NonNegativeDuration,
 	settings.WithPublic)
-
-func maxConcurrentCatchupScans(sv *settings.Values) int {
-	l := catchupScanConcurrency.Get(sv)
-	if l == 0 {
-		return math.MaxInt
-	}
-	return int(l)
-}
 
 // ForEachRangeFn is used to execute `fn` over each range in a rangefeed.
 type ForEachRangeFn func(fn ActiveRangeFeedIterFn) error
@@ -226,12 +219,11 @@ func (ds *DistSender) RangeFeedSpans(
 		cfg.rangeObserver(rr.ForEachPartialRangefeed)
 	}
 
-	catchupSem := limit.MakeConcurrentRequestLimiter(
-		"distSenderCatchupLimit", maxConcurrentCatchupScans(&ds.st.SV))
+	rl := newCatchupScanRateLimiter(&ds.st.SV)
 
 	if ds.st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2RangefeedUseOneStreamPerNode) &&
 		enableMuxRangeFeed && cfg.useMuxRangeFeed {
-		return muxRangeFeed(ctx, cfg, spans, ds, rr, &catchupSem, eventCh)
+		return muxRangeFeed(ctx, cfg, spans, ds, rr, rl, eventCh)
 	}
 
 	// Goroutine that processes subdivided ranges and creates a rangefeed for
@@ -256,7 +248,7 @@ func (ds *DistSender) RangeFeedSpans(
 				}
 				// Prior to spawning goroutine to process this feed, acquire catchup scan quota.
 				// This quota acquisition paces the rate of new goroutine creation.
-				if err := active.acquireCatchupScanQuota(ctx, &ds.st.SV, &catchupSem, metrics); err != nil {
+				if err := active.acquireCatchupScanQuota(ctx, rl, metrics); err != nil {
 					return err
 				}
 				if log.V(1) {
@@ -700,23 +692,17 @@ func (a catchupAlloc) Release() {
 }
 
 func (a *activeRangeFeed) acquireCatchupScanQuota(
-	ctx context.Context,
-	sv *settings.Values,
-	catchupSem *limit.ConcurrentRequestLimiter,
-	metrics *DistSenderRangeFeedMetrics,
+	ctx context.Context, rl *catchupScanRateLimiter, metrics *DistSenderRangeFeedMetrics,
 ) error {
-	// Indicate catchup scan is starting;  Before potentially blocking on a semaphore, take
-	// opportunity to update semaphore limit.
-	catchupSem.SetLimit(maxConcurrentCatchupScans(sv))
-	res, err := catchupSem.Begin(ctx)
-	if err != nil {
+	// Indicate catchup scan is starting.
+	if err := rl.Pace(ctx); err != nil {
 		return err
 	}
 	metrics.RangefeedCatchupRanges.Inc(1)
 	a.catchupRes = func() {
 		metrics.RangefeedCatchupRanges.Dec(1)
-		res.Release()
 	}
+
 	a.Lock()
 	defer a.Unlock()
 	a.InCatchup = true
@@ -989,3 +975,34 @@ func TestingWithMuxRangeFeedRequestSenderCapture(
 
 // TestingMakeRangeFeedMetrics exposes makeDistSenderRangeFeedMetrics for test use.
 var TestingMakeRangeFeedMetrics = makeDistSenderRangeFeedMetrics
+
+type catchupScanRateLimiter struct {
+	pacer *quotapool.RateLimiter
+	sv    *settings.Values
+	limit quotapool.Limit
+}
+
+func newCatchupScanRateLimiter(sv *settings.Values) *catchupScanRateLimiter {
+	rl := &catchupScanRateLimiter{sv: sv}
+	rl.limit = getCatchupRateLimit(rl.sv)
+	rl.pacer = quotapool.NewRateLimiter("distSenderCatchupLimit", rl.limit, 0 /* smooth rate */)
+	return rl
+}
+
+func getCatchupRateLimit(sv *settings.Values) quotapool.Limit {
+	if r := catchupStartupRate.Get(sv); r > 0 {
+		return quotapool.Limit(r)
+	}
+	return quotapool.Inf()
+}
+
+// Pace paces the catchup scan startup.
+func (rl *catchupScanRateLimiter) Pace(ctx context.Context) error {
+	// Take opportunity to update limits if they have changed.
+	if lim := getCatchupRateLimit(rl.sv); lim != rl.limit {
+		rl.limit = lim
+		rl.pacer.UpdateLimit(lim, 0)
+	}
+
+	return rl.pacer.WaitN(ctx, 1)
+}

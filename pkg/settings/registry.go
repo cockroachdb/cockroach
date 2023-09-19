@@ -188,6 +188,7 @@ var retiredSettings = map[InternalKey]struct{}{
 	"jobs.trace.force_dump_mode":                               {},
 	"timeseries.storage.30m_resolution_ttl":                    {},
 	"server.cpu_profile.enabled":                               {},
+	"kv.rangefeed.catchup_scan_concurrency":                    {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
