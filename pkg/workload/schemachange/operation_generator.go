@@ -177,6 +177,7 @@ const (
 	dropIndex         // DROP INDEX <index>@<table>
 	dropSequence      // DROP SEQUENCE <sequence>
 	dropTable         // DROP TABLE <table>
+	dropEnumValue     // ALTER TYPE <type> DROP VALUE <value>
 	dropView          // DROP VIEW <view>
 	dropSchema        // DROP SCHEMA <schema>
 
@@ -226,6 +227,7 @@ var opFuncs = map[opType]func(*operationGenerator, context.Context, pgx.Tx) (*op
 	dropSequence:            (*operationGenerator).dropSequence,
 	dropTable:               (*operationGenerator).dropTable,
 	dropView:                (*operationGenerator).dropView,
+	dropEnumValue:           (*operationGenerator).dropTypeValue,
 	dropSchema:              (*operationGenerator).dropSchema,
 	primaryRegion:           (*operationGenerator).primaryRegion,
 	renameColumn:            (*operationGenerator).renameColumn,
@@ -272,6 +274,7 @@ var opWeights = []int{
 	dropSequence:            1,
 	dropTable:               1,
 	dropView:                1,
+	dropEnumValue:           1,
 	dropSchema:              1,
 	primaryRegion:           0, // Disabled and tracked with #83831
 	renameColumn:            1,
@@ -311,6 +314,7 @@ var opDeclarative = []bool{
 	dropSequence:            true,
 	dropTable:               true,
 	dropView:                true,
+	dropEnumValue:           false,
 	dropSchema:              true,
 	primaryRegion:           false,
 	renameColumn:            false,
@@ -344,6 +348,7 @@ var opDeclarativeVersion = []clusterversion.Key{
 	dropSequence:            clusterversion.BinaryMinSupportedVersionKey,
 	dropTable:               clusterversion.BinaryMinSupportedVersionKey,
 	dropView:                clusterversion.BinaryMinSupportedVersionKey,
+	dropEnumValue:           clusterversion.BinaryMinSupportedVersionKey,
 	dropSchema:              clusterversion.BinaryMinSupportedVersionKey,
 }
 
@@ -2155,6 +2160,39 @@ func (og *operationGenerator) dropView(ctx context.Context, tx pgx.Tx) (*opStmt,
 	return stmt, nil
 }
 
+func (og *operationGenerator) dropTypeValue(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	enum, exists, err := og.randEnum(ctx, tx, og.pctExisting(true))
+	if err != nil {
+		return nil, err
+	}
+
+	validValue := false
+	value := "IrrelevantEnumValue"
+
+	if exists {
+		value, validValue, err = og.randEnumValue(ctx, tx, og.pctExisting(true), enum)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	valueDropping := false
+	if validValue {
+		valueDropping, err = og.enumValueIsBeingRemoved(ctx, tx, enum.String(), value)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.expectedExecErrors.addAll(codesWithConditions{
+		{pgcode.UndefinedObject, !exists || !validValue},
+		{pgcode.ObjectNotInPrerequisiteState, valueDropping},
+	})
+	stmt.sql = fmt.Sprintf(`ALTER TYPE %s DROP VALUE '%s'`, enum, value)
+	return stmt, nil
+}
+
 func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
 	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
 	if err != nil {
@@ -3390,6 +3428,50 @@ ORDER BY random()
 	return &typeName, true, nil
 }
 
+func (og *operationGenerator) randEnumValue(
+	ctx context.Context, tx pgx.Tx, pctExisting int, enum *tree.TypeName,
+) (value string, exists bool, err error) {
+	const q = `SELECT UNNEST(values) FROM [SHOW ENUMS] WHERE schema = $1 AND name = $2`
+
+	rows, err := tx.Query(ctx, q, enum.Schema(), enum.Object())
+	if err != nil {
+		return "", false, err
+	}
+
+	defer rows.Close()
+
+	var values []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return "", false, err
+		}
+		values = append(values, v)
+	}
+
+	if rows.Err() != nil {
+		return "", false, rows.Err()
+	}
+
+	if og.randIntn(100) >= pctExisting || len(values) == 0 {
+		valueSet := make(map[string]bool, len(values))
+		for _, v := range values {
+			valueSet[v] = true
+		}
+
+		// It's pretty unlikely that we'll generate conflicting values but better
+		// safe than sorry.
+		for {
+			nonExistentValue := og.randString(5, 5)
+			if !valueSet[nonExistentValue] {
+				return nonExistentValue, false, nil
+			}
+		}
+	}
+
+	return values[og.randIntn(len(values))], true, nil
+}
+
 // randTable returns a schema name along with a table name
 func (og *operationGenerator) randTable(
 	ctx context.Context, tx pgx.Tx, pctExisting int, desiredSchema string,
@@ -3820,9 +3902,25 @@ func (og *operationGenerator) produceError() bool {
 	return og.randIntn(100) < og.params.errorRate
 }
 
-// Returns an int in the range [0,topBound). It panics if topBound <= 0.
+// randIntn returns an int in the range [0,topBound). It panics if topBound <= 0.
 func (og *operationGenerator) randIntn(topBound int) int {
 	return og.params.rng.Intn(topBound)
+}
+
+// randString return a random string that matches the regex `[a-z_]{min,max}`.
+// It panics if min < 0 or min > max.
+func (og *operationGenerator) randString(min, max int) string {
+	if min < 0 || min > max {
+		panic("invalid arguments to randString")
+	}
+
+	const alphabet = "abcdefghijklmnopqrstuvwxyz_"
+	length := og.randIntn(max) + min
+	str := make([]byte, length)
+	for i := 0; i < length; i++ {
+		str[i] = alphabet[og.randIntn(len(alphabet))]
+	}
+	return string(str)
 }
 
 func (og *operationGenerator) newUniqueSeqNum() int64 {

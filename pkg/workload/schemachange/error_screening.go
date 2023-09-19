@@ -1468,6 +1468,32 @@ SELECT
 	)
 }
 
+// enumValueIsBeingRemoved returns true if val is currently being removed from
+// enum.
+func (og *operationGenerator) enumValueIsBeingRemoved(
+	ctx context.Context, tx pgx.Tx, enum, val string,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `
+WITH enum_members AS (
+		SELECT
+				json_array_elements(
+						crdb_internal.pb_to_json(
+								'cockroach.sql.sqlbase.Descriptor',
+								descriptor
+						)->'type'->'enumMembers'
+				) AS member
+		FROM
+				system.descriptor
+		WHERE
+			id = ($1::REGTYPE::INT8 - 100000)
+)
+SELECT EXISTS(SELECT * FROM enum_members WHERE member->>'logicalRepresentation' = $2 AND member->>'direction' = 'REMOVE')
+`,
+		enum,
+		val,
+	)
+}
+
 // tableHasOngoingSchemaChanges returns whether the table has any mutations lined up.
 func (og *operationGenerator) tableHasOngoingSchemaChanges(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
