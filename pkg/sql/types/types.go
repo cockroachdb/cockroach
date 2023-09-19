@@ -1647,7 +1647,14 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		case oid.T_int2vector:
 			return "int2vector"
 		}
-		return t.ArrayContents().SQLStandardName() + "[]"
+		// If we have a typemod specified then pass it down when
+		// formatting the array type.
+		if !haveTypmod {
+			return t.ArrayContents().SQLStandardName() + "[]"
+		} else {
+			ac := t.ArrayContents()
+			return ac.SQLStandardNameWithTypmod(haveTypmod, typmod) + "[]"
+		}
 	case BitFamily:
 		if t.Oid() == oid.T_varbit {
 			buf.WriteString("bit varying")
