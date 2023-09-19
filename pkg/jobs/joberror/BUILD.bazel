@@ -12,7 +12,6 @@ go_library(
         "//pkg/util/circuit",
         "//pkg/util/grpcutil",
         "//pkg/util/sysutil",
-        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -24,7 +23,6 @@ go_test(
     embed = [":joberror"],
     deps = [
         "//pkg/util/circuit",
-        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",

@@ -15,7 +15,6 @@ import (
 	"io"
 	"strings"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
@@ -164,7 +163,6 @@ func RequestDidNotStart(err error) bool {
 	// will eventually succeed). The RPC circuit breakers will result in an
 	// InitialHeartbeatFailedError.
 	return errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) ||
-		errors.Is(err, circuit.ErrBreakerOpen) ||
 		IsConnectionRejected(err) ||
 		IsWaitingForInit(err)
 }

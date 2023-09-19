@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"testing"
 
-	circuitbreaker "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -60,7 +59,6 @@ func TestRequestDidNotStart_Errors(t *testing.T) {
 		"permission denied":   {status.Error(codes.PermissionDenied, "permission denied"), true},
 		"failed precondition": {status.Error(codes.FailedPrecondition, "failed precondition"), true},
 		"circuit breaker":     {circuit.ErrBreakerOpen, false},
-		"circuit breaker 2":   {circuitbreaker.ErrBreakerOpen, true},
 		"plain":               {errors.New("foo"), false},
 	}
 	for name, tc := range testcases {

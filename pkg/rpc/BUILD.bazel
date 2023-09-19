@@ -62,7 +62,6 @@ go_library(
         "//pkg/util/tracing",
         "//pkg/util/tracing/grpcinterceptor",
         "//pkg/util/uuid",
-        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
