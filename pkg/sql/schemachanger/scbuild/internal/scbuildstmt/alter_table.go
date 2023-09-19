@@ -36,21 +36,13 @@ import (
 // are supported.
 // One side-effect is that this function will modify `n` when it hoists
 // add column constraints.
-func alterTableChecks(
-	n *tree.AlterTable,
-	mode sessiondatapb.NewSchemaChangerMode,
-	activeVersion clusterversion.ClusterVersion,
-) bool {
+func alterTableChecks(n *tree.AlterTable, activeVersion clusterversion.ClusterVersion) bool {
 	// For ALTER TABLE stmt, we will need to further check whether each
 	// individual command is fully supported.
 	n.HoistAddColumnConstraints(func() {
 		telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
 	})
 	for _, cmd := range n.Cmds {
-		if mode == sessiondatapb.UseNewSchemaChangerOff {
-			return false
-		}
-
 		switch typedCmd := cmd.(type) {
 		case *tree.AlterTableAddColumn:
 		case *tree.AlterTableDropColumn:
