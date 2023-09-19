@@ -494,25 +494,34 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	pss.Flush(ctx)
 	stmtStatsCount, txnStatsCount := countStats(t, sqlConn)
 
-	// Execute enough so all the shards will have data.
-	const additionalStatements = int64(systemschema.SQLStatsHashShardBucketCount*10) + 1
-	for i := int64(0); i < additionalStatements; i++ {
-		appName := fmt.Sprintf("TestSQLStatsPersistedLimitReached%d", i)
+	// The size check is done at the shard level. Execute enough so all the shards
+	// will have a minimum amount of rows.
+	additionalStatements := int64(0)
+	const minCountByShard = int64(8)
+	for smallestStatsCountAcrossAllShards(t, sqlConn) <= minCountByShard {
+		appName := fmt.Sprintf("TestSQLStatsPersistedLimitReached%d", additionalStatements)
 		sqlConn.Exec(t, `SET application_name = $1`, appName)
 		sqlConn.Exec(t, "SELECT 1")
+		additionalStatements += 2
+		pss.Flush(ctx)
 	}
 
-	pss.Flush(ctx)
 	stmtStatsCountFlush2, txnStatsCountFlush2 := countStats(t, sqlConn)
 
 	// 2. After flushing and counting a second time, we should see at least
-	// 80 (8 shards * 10) more rows.
+	// additionalStatements count or more rows.
 	require.GreaterOrEqual(t, stmtStatsCountFlush2-stmtStatsCount, additionalStatements)
 	require.GreaterOrEqual(t, txnStatsCountFlush2-txnStatsCount, additionalStatements)
 
 	// 3. Set sql.stats.persisted_rows.max according to the smallest table.
-	smallest := math.Min(float64(stmtStatsCountFlush2), float64(txnStatsCountFlush2))
-	maxRows := int(math.Floor(smallest / 1.5))
+	smallest := smallestStatsCountAcrossAllShards(t, sqlConn)
+	require.GreaterOrEqual(t, smallest, minCountByShard, "min count by shard is less than expected: %d", smallest)
+
+	// Calculate the max value to stop the flush. The -1 is used to ensure it's
+	// always less than to avoid it possibly being equal.
+	maxRows := int(math.Floor(float64(smallest)/1.5)) - 1
+	// increase it by the number of shard to get a total table count.
+	maxRows *= systemschema.SQLStatsHashShardBucketCount
 	sqlConn.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.stats.persisted_rows.max=%d", maxRows))
 
 	// 4. Wait for the cluster setting to be applied.
@@ -527,7 +536,7 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	})
 
 	// Set table size check interval to a very small value to invalidate the cache.
-	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.limit_table_size_check.interval='0.00001ms'")
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.limit_table_size_check.interval='00:00:00'")
 	testutils.SucceedsSoon(t, func() error {
 		var appliedSetting string
 		row := sqlConn.QueryRow(t, "SHOW CLUSTER SETTING sql.stats.limit_table_size_check.interval")
@@ -538,7 +547,9 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 		return nil
 	})
 
-	for i := int64(0); i < additionalStatements; i++ {
+	// Add new in memory statements to verify that when the check is enabled the
+	// stats are not flushed.
+	for i := int64(0); i < 20; i++ {
 		appName := fmt.Sprintf("TestSQLStatsPersistedLimitReached2nd%d", i)
 		sqlConn.Exec(t, `SET application_name = $1`, appName)
 		sqlConn.Exec(t, "SELECT 1")
@@ -547,7 +558,6 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	for _, enforceLimitEnabled := range []bool{true, false} {
 		boolStr := strconv.FormatBool(enforceLimitEnabled)
 		t.Run("enforce-limit-"+boolStr, func(t *testing.T) {
-
 			sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.limit_table_size.enabled = "+boolStr)
 
 			pss.Flush(ctx)
@@ -556,12 +566,12 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 
 			if enforceLimitEnabled {
 				// Assert that neither table has grown in length.
-				require.Equal(t, stmtStatsCountFlush3, stmtStatsCountFlush2)
-				require.Equal(t, txnStatsCountFlush3, txnStatsCountFlush2)
+				require.Equal(t, stmtStatsCountFlush3, stmtStatsCountFlush2, "stmt table should not change. original: %d, current: %d", stmtStatsCountFlush2, stmtStatsCountFlush3)
+				require.Equal(t, txnStatsCountFlush3, txnStatsCountFlush2, "txn table should not change. original: %d, current: %d", txnStatsCountFlush2, txnStatsCountFlush3)
 			} else {
 				// Assert that tables were allowed to grow.
-				require.Greater(t, stmtStatsCountFlush3, stmtStatsCountFlush2)
-				require.Greater(t, txnStatsCountFlush3, txnStatsCountFlush2)
+				require.Greater(t, stmtStatsCountFlush3, stmtStatsCountFlush2, "stmt table should have grown. original: %d, current: %d", stmtStatsCountFlush2, stmtStatsCountFlush3)
+				require.Greater(t, txnStatsCountFlush3, txnStatsCountFlush2, "txn table should have grown. original: %d, current: %d", txnStatsCountFlush2, txnStatsCountFlush3)
 			}
 		})
 	}
@@ -978,4 +988,22 @@ func waitForFollowerReadTimestamp(t *testing.T, sqlConn *sqlutils.SQLRunner) {
 		}
 		return nil
 	})
+}
+
+func smallestStatsCountAcrossAllShards(
+	t *testing.T, sqlConn *sqlutils.SQLRunner,
+) (numStmtStats int64) {
+	numStmtStats = math.MaxInt64
+	for i := 0; i < systemschema.SQLStatsHashShardBucketCount; i++ {
+		var temp int64
+		sqlConn.QueryRow(t, `
+		SELECT count(*)
+		FROM system.statement_statistics
+		WHERE crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 = $1`, i).Scan(&temp)
+		if temp < numStmtStats {
+			numStmtStats = temp
+		}
+	}
+
+	return numStmtStats
 }
