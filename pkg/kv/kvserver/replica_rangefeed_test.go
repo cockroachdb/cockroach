@@ -1312,6 +1312,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 				WallClock: manualClock,
 			},
 			Store: &kvserver.StoreTestingKnobs{
+				DisableMaxOffsetCheck: true, // has been seen to cause flakes
 				TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 					// Once reject is set, the test wants full control over the requests
 					// evaluating on the scratch range. On that range, we'll reject
