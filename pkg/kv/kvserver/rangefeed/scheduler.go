@@ -231,27 +231,21 @@ func (s *Scheduler) Start(ctx context.Context, stopper *stop.Stopper) error {
 	return nil
 }
 
-// Register callback to be able to schedule work. Returns allocated callback id
-// which should be used to send notifications to the callback. Returns error if
-// Scheduler is stopped.
-func (s *Scheduler) Register(f Callback) (int64, error) {
-	id := s.nextID.Add(1)
-	if err := s.shards[shardIndex(id, len(s.shards))].register(id, f); err != nil {
-		return 0, err
-	}
-	return id, nil
+// register callback to be able to schedule work. Returns error if id is already
+// registered or if Scheduler is stopped.
+func (s *Scheduler) register(id int64, f Callback) error {
+	return s.shards[shardIndex(id, len(s.shards))].register(id, f)
 }
 
-// Unregister a processor. This function is removing processor callback and
-// status from scheduler. If processor is currently processing event it will
-// finish processing.
+// unregister removed the processor callback from scheduler. If processor is
+// currently processing event it will finish processing.
 //
 // Processor won't receive Stopped event if it wasn't explicitly sent.
 // To make sure processor performs cleanup, it is easier to send it Stopped
 // event first and let it remove itself from registration during event handling.
 // Any attempts to enqueue events for processor after this call will return an
 // error.
-func (s *Scheduler) Unregister(id int64) {
+func (s *Scheduler) unregister(id int64) {
 	s.shards[shardIndex(id, len(s.shards))].unregister(id)
 }
 
@@ -268,16 +262,16 @@ func (s *Scheduler) Stop() {
 	}
 }
 
-// StopProcessor instructs processor to stop gracefully by sending it Stopped event.
+// stopProcessor instructs processor to stop gracefully by sending it Stopped event.
 // Once stop is called all subsequent Schedule calls for this id will return
 // error.
-func (s *Scheduler) StopProcessor(id int64) {
-	s.Enqueue(id, Stopped)
+func (s *Scheduler) stopProcessor(id int64) {
+	s.enqueue(id, Stopped)
 }
 
 // Enqueue event for existing callback. The event is ignored if the processor
 // does not exist.
-func (s *Scheduler) Enqueue(id int64, evt processorEventType) {
+func (s *Scheduler) enqueue(id int64, evt processorEventType) {
 	s.shards[shardIndex(id, len(s.shards))].enqueue(id, evt)
 }
 
@@ -307,11 +301,14 @@ func (ss *schedulerShard) register(id int64, f Callback) error {
 		// Don't accept new registrations if quiesced.
 		return errors.New("server stopping")
 	}
+	if _, registered := ss.procs[id]; registered {
+		return errors.Newf("callback is already registered with id %d", id)
+	}
 	ss.procs[id] = f
 	return nil
 }
 
-// unregister unregisters a callbak with the shard. The caller must not
+// unregister unregisters a callback with the shard. The caller must not
 // hold the shard lock.
 func (ss *schedulerShard) unregister(id int64) {
 	ss.Lock()
@@ -529,12 +526,14 @@ type ClientScheduler struct {
 	s  *Scheduler
 }
 
-// NewClientScheduler creates an instance of ClientScheduler for specific id.
+// NewClientScheduler creates an instance of ClientScheduler for next available
+// id.
 // It is safe to use it as value as it is immutable and delegates all work to
 // underlying scheduler.
-func NewClientScheduler(s *Scheduler) ClientScheduler {
+func (s *Scheduler) NewClientScheduler() ClientScheduler {
 	return ClientScheduler{
-		s: s,
+		s:  s,
+		id: s.nextID.Add(1),
 	}
 }
 
@@ -547,29 +546,24 @@ func (cs *ClientScheduler) ID() int64 {
 // callback was already registered for this ClientScheduler or if scheduler is
 // already quiescing.
 func (cs *ClientScheduler) Register(cb Callback) error {
-	if cs.id != 0 {
-		return errors.Newf("callback is already registered with id %d", cs.id)
-	}
-	var err error
-	cs.id, err = cs.s.Register(cb)
-	return err
+	return cs.s.register(cs.id, cb)
 }
 
 // Enqueue schedules callback execution for event.
 func (cs *ClientScheduler) Enqueue(event processorEventType) {
-	cs.s.Enqueue(cs.id, event)
+	cs.s.enqueue(cs.id, event)
 }
 
 // StopProcessor instructs processor to stop gracefully by sending it Stopped event.
 // Once stop is called all subsequent Schedule calls will return error.
 func (cs *ClientScheduler) StopProcessor() {
-	cs.s.StopProcessor(cs.id)
+	cs.s.stopProcessor(cs.id)
 }
 
 // Unregister will remove callback associated with this processor. No stopped
 // event will be scheduled. See Scheduler.Unregister for details.
 func (cs *ClientScheduler) Unregister() {
-	cs.s.Unregister(cs.id)
+	cs.s.unregister(cs.id)
 }
 
 // Number of queue elements allocated at once to amortize queue allocations.
