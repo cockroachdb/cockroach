@@ -2183,81 +2183,6 @@ type mockPubsubMessage struct {
 	data string
 }
 
-type deprecatedMockPubsubMessageBuffer struct {
-	mu   syncutil.Mutex
-	rows []mockPubsubMessage
-}
-
-func (p *deprecatedMockPubsubMessageBuffer) pop() *mockPubsubMessage {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if len(p.rows) == 0 {
-		return nil
-	}
-	var head mockPubsubMessage
-	head, p.rows = p.rows[0], p.rows[1:]
-	return &head
-}
-
-func (p *deprecatedMockPubsubMessageBuffer) push(m mockPubsubMessage) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.rows = append(p.rows, m)
-}
-
-type deprecatedFakePubsubClient struct {
-	buffer *deprecatedMockPubsubMessageBuffer
-}
-
-var _ deprecatedPubsubClient = (*deprecatedFakePubsubClient)(nil)
-
-func (p *deprecatedFakePubsubClient) init() error {
-	return nil
-}
-
-func (p *deprecatedFakePubsubClient) closeTopics() {
-}
-
-// sendMessage sends a message to the topic
-func (p *deprecatedFakePubsubClient) sendMessage(m []byte, _ string, _ string) error {
-	message := mockPubsubMessage{data: string(m)}
-	p.buffer.push(message)
-	return nil
-}
-
-func (p *deprecatedFakePubsubClient) sendMessageToAllTopics(m []byte) error {
-	message := mockPubsubMessage{data: string(m)}
-	p.buffer.push(message)
-	return nil
-}
-
-func (p *deprecatedFakePubsubClient) flushTopics() {
-}
-
-type deprecatedFakePubsubSink struct {
-	Sink
-	client *deprecatedFakePubsubClient
-	sync   *sinkSynchronizer
-}
-
-var _ Sink = (*deprecatedFakePubsubSink)(nil)
-
-func (p *deprecatedFakePubsubSink) Dial() error {
-	s := p.Sink.(*deprecatedPubsubSink)
-	s.client = p.client
-	s.setupWorkers()
-	return nil
-}
-
-func (p *deprecatedFakePubsubSink) Flush(ctx context.Context) error {
-	defer p.sync.addFlush()
-	return p.Sink.Flush(ctx)
-}
-
-func (p *deprecatedFakePubsubClient) connectivityErrorLocked() error {
-	return nil
-}
-
 type fakePubsubServer struct {
 	srv *pstest.Server
 	mu  struct {
@@ -2374,12 +2299,6 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 
 	mockServer := makeFakePubsubServer()
 
-	deprecatedClient := &deprecatedFakePubsubClient{
-		buffer: &deprecatedMockPubsubMessageBuffer{
-			rows: make([]mockPubsubMessage, 0),
-		},
-	}
-
 	ss := &sinkSynchronizer{}
 	var mu syncutil.Mutex
 	wrapSink := func(s Sink) Sink {
@@ -2392,22 +2311,15 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 				sinkClient.client = mockClient
 			}
 			return &notifyFlushSink{Sink: s, sync: ss}
-		} else if _, ok := s.(*deprecatedPubsubSink); ok {
-			return &deprecatedFakePubsubSink{
-				Sink:   s,
-				client: deprecatedClient,
-				sync:   ss,
-			}
 		}
-		return s
+		return s // should never happen
 	}
 
 	c := &pubsubFeed{
-		jobFeed:          newJobFeed(p.jobsTableConn(), wrapSink),
-		seenTrackerMap:   make(map[string]struct{}),
-		ss:               ss,
-		mockServer:       mockServer,
-		deprecatedClient: deprecatedClient,
+		jobFeed:        newJobFeed(p.jobsTableConn(), wrapSink),
+		seenTrackerMap: make(map[string]struct{}),
+		ss:             ss,
+		mockServer:     mockServer,
 	}
 
 	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
@@ -2425,9 +2337,8 @@ func (p *pubsubFeedFactory) Server() serverutils.ApplicationLayerInterface {
 type pubsubFeed struct {
 	*jobFeed
 	seenTrackerMap
-	ss               *sinkSynchronizer
-	mockServer       *fakePubsubServer
-	deprecatedClient *deprecatedFakePubsubClient
+	ss         *sinkSynchronizer
+	mockServer *fakePubsubServer
 }
 
 var _ cdctest.TestFeed = (*pubsubFeed)(nil)
@@ -2463,9 +2374,6 @@ func extractJSONMessagePubsub(wrapped []byte) (value []byte, key []byte, topic s
 func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
 		msg := p.mockServer.Pop()
-		if msg == nil {
-			msg = p.deprecatedClient.buffer.pop()
-		}
 		if msg != nil {
 			details, err := p.Details()
 			if err != nil {

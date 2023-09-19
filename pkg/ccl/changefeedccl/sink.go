@@ -25,11 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -156,30 +154,6 @@ func getAndDialSink(
 	return sink, sink.Dial()
 }
 
-// WebhookV2Enabled determines whether or not the refactored Webhook sink
-// or the deprecated sink should be used.
-var WebhookV2Enabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"changefeed.new_webhook_sink_enabled",
-	"if enabled, this setting enables a new implementation of the webhook sink"+
-		" that allows for a much higher throughput",
-	// TODO: delete the original webhook sink code
-	util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink.enabled", true),
-	settings.WithName("changefeed.new_webhook_sink.enabled"),
-)
-
-// PubsubV2Enabled determines whether or not the refactored Webhook sink
-// or the deprecated sink should be used.
-var PubsubV2Enabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"changefeed.new_pubsub_sink_enabled",
-	"if enabled, this setting enables a new implementation of the pubsub sink"+
-		" that allows for a higher throughput",
-	// TODO: delete the original pubsub sink code
-	util.ConstantWithMetamorphicTestBool("changefeed.new_pubsub_sink.enabled", true),
-	settings.WithName("changefeed.new_pubsub_sink.enabled"),
-)
-
 func getSink(
 	ctx context.Context,
 	serverCfg *execinfra.ServerConfig,
@@ -241,28 +215,17 @@ func getSink(
 			if err != nil {
 				return nil, err
 			}
-			if WebhookV2Enabled.Get(&serverCfg.Settings.SV) {
-				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
-					return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
-						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder)
-				})
-			} else {
-				return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
-					return makeDeprecatedWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
-						defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
-				})
-			}
+			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
+				return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
+					numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder)
+			})
 		case isPubsubSink(u):
 			var testingKnobs *TestingKnobs
 			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
 				testingKnobs = knobs
 			}
-			if PubsubV2Enabled.Get(&serverCfg.Settings.SV) {
-				return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered),
-					numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder, testingKnobs)
-			} else {
-				return makeDeprecatedPubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered), metricsBuilder, testingKnobs)
-			}
+			return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), AllTargets(feedCfg), opts.IsSet(changefeedbase.OptUnordered),
+				numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{}, metricsBuilder, testingKnobs)
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
 				var testingKnobs *TestingKnobs
