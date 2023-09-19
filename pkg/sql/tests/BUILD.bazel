@@ -62,7 +62,9 @@ go_test(
         "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
         "//conditions:default": ["-test.timeout=3595s"],
     }),
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "//c-deps:libgeos",  # keep
+    ],
     embed = [":tests"],
     exec_properties = {"Pool": "large"},
     shard_count = 16,

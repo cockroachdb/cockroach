@@ -4,7 +4,6 @@ set -xeuo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
 
-bazel build --config ci --config force_build_cdeps //c-deps:libgeos
 bazel build //pkg/cmd/bazci --config=ci
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 exit_status=0
