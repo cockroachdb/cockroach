@@ -124,7 +124,26 @@ func (d *dev) getDockerRunArgs(
 	} else {
 		args = append(args, "-i")
 	}
-	args = append(args, "-v", workspace+":/cockroach")
+	gitDir, err := d.exec.CommandContextSilent(ctx, "git", "rev-parse", "--git-dir")
+	if err != nil {
+		return nil, err
+	}
+	gitCommonDir, err := d.exec.CommandContextSilent(ctx, "git", "rev-parse", "--git-common-dir")
+	if err != nil {
+		return nil, err
+	}
+	// If run from inside a git worktree
+	if string(gitDir) != string(gitCommonDir) {
+		mainRepo, err := d.exec.CommandContextSilent(ctx, "cat", ".git")
+		if err != nil {
+			return nil, err
+		}
+		mountPath := strings.Split(strings.Split(string(mainRepo), ": ")[1], "/.git/")[0]
+		args = append(args, "-v", mountPath+":/cockroach")
+		args = append(args, "-v", workspace)
+	} else {
+		args = append(args, "-v", workspace+":/cockroach")
+	}
 	args = append(args, "--workdir=/cockroach")
 	args = append(args, "-v", filepath.Join(workspace, "build", "bazelutil", "empty.bazelrc")+":/cockroach/.bazelrc.user")
 	// Create the artifacts directory.
