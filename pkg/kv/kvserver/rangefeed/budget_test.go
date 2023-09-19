@@ -16,8 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
@@ -195,14 +193,14 @@ func TestBudgetFactory(t *testing.T) {
 		CreateBudgetFactoryConfig(rootMon, 10000, time.Second*5, budgetLowThresholdFn(10000), &s.SV))
 
 	// Verify system ranges use own budget.
-	bSys := bf.CreateBudget(keys.MustAddr(keys.Meta1Prefix))
+	bSys := bf.CreateBudget(true)
 	_, e := bSys.TryGet(context.Background(), 199)
 	require.NoError(t, e, "failed to obtain system range budget")
 	require.Equal(t, int64(0), rootMon.AllocBytes(), "System feeds should borrow from own budget")
 	require.Equal(t, int64(199), bf.Metrics().SystemBytesCount.Value(), "Metric was not updated")
 
 	// Verify user feeds use shared root budget.
-	bUsr := bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)))
+	bUsr := bf.CreateBudget(false)
 	_, e = bUsr.TryGet(context.Background(), 99)
 	require.NoError(t, e, "failed to obtain non-system budget")
 	require.Equal(t, int64(99), rootMon.AllocBytes(),
@@ -220,7 +218,7 @@ func TestDisableBudget(t *testing.T) {
 			return 0
 		}, &s.SV))
 
-	bUsr := bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)))
+	bUsr := bf.CreateBudget(false)
 	require.Nil(t, bUsr, "Range budget when budgets are disabled.")
 }
 
@@ -239,7 +237,7 @@ func TestDisableBudgetOnTheFly(t *testing.T) {
 			},
 			&s.SV))
 
-	f := bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)))
+	f := bf.CreateBudget(false)
 
 	objectSize := int64(1000)
 	alloc, err := f.TryGet(context.Background(), objectSize)
@@ -302,8 +300,7 @@ func TestBudgetLimits(t *testing.T) {
 		settings:                &s.SV,
 	})
 
-	userKey := roachpb.RKey(keys.ScratchRangeMin)
-	b := bf.CreateBudget(userKey)
+	b := bf.CreateBudget(false)
 	require.NotNil(t, b, "budget is disabled")
 	require.Equal(t, b.limit, adjustedSize, "budget limit is not adjusted")
 
@@ -318,6 +315,6 @@ func TestBudgetLimits(t *testing.T) {
 		histogramWindowInterval: time.Second * 5,
 		settings:                &s.SV,
 	})
-	b = bf.CreateBudget(userKey)
+	b = bf.CreateBudget(false)
 	require.Nil(t, b, "budget is disabled")
 }
