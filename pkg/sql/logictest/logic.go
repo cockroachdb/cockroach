@@ -394,8 +394,8 @@ import (
 //
 //  - skipif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
 //    Skips the following `statement` or `query` if the argument is
-//    postgresql, cockroachdb, or a config matching the currently
-//    running configuration.
+//    postgresql, cockroachdb, or a space-separated list of configs contains
+//    the currently running configuration.
 //
 //  - onlyif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
 //    Skips the following `statement` or `query` if the argument is not
@@ -3029,13 +3029,15 @@ func (t *logicTest) processSubtest(
 				if len(fields) < 3 {
 					return errors.New("skipif config CONFIG [ISSUE] command requires configuration parameter")
 				}
-				configName := fields[2]
-				if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
-					issue := "no issue given"
-					if len(fields) > 3 {
-						issue = fields[3]
+				for _, configName := range fields[2:] {
+					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
+						issue := "no issue given"
+						if len(fields) > 3 {
+							issue = fields[3]
+						}
+						s.SetSkip(fmt.Sprintf("unsupported configuration %s (%s)", configName, issue))
+						break
 					}
-					s.SetSkip(fmt.Sprintf("unsupported configuration %s (%s)", configName, issue))
 				}
 			case "backup-restore":
 				if config.BackupRestoreProbability > 0.0 {

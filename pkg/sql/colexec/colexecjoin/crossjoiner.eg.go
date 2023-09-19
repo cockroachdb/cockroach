@@ -28,6 +28,8 @@ var (
 	_ = types.BoolFamily
 )
 
+const singleSetThreshold = int64(1 << 26) // 64 MiB
+
 // buildFromLeftBatch is the body of buildFromLeftInput that templates out the
 // fact whether the current left batch has a selection vector or not.
 // execgen:inline
@@ -56,6 +58,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 					leftNumRepeats := b.builderState.setup.leftNumRepeats
 					leftSrcEndIdx := b.builderState.setup.leftSrcEndIdx
 					outputCapacity := b.output.Capacity()
+					needAccountForBytesLike := false
 					var srcStartIdx int
 					// Loop over every column.
 					for colIdx := range b.left.types {
@@ -144,6 +147,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 											outNulls.SetNull(outStartIdx)
 										} else {
 											outCol.Copy(srcCol, outStartIdx, srcStartIdx)
+											needAccountForBytesLike = true
 										}
 										outStartIdx++
 										bs.curSrcStartIdx++
@@ -173,8 +177,27 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
 										} else {
+											accountFrequency := int64(toAppend)
 											for i := 0; i < toAppend; i++ {
 												outCol.Copy(srcCol, outStartIdx+i, srcStartIdx)
+												needAccountForBytesLike = true
+												if i == 0 {
+													// Calling AccountForBytesLike too many times may be expensive.
+													// Scale the frequency of calling it based on the bytes delta of
+													// appending the value.
+													deltaBytes := b.helper.AccountForBytesLike()
+													if deltaBytes > 0 {
+														accountFrequency = singleSetThreshold / deltaBytes
+														if accountFrequency < 1 {
+															accountFrequency = 1
+														}
+													}
+												} else if (int64(i) % accountFrequency) == 0 {
+													// Grow the memory account for JSONB and BYTES output columns.
+													// TODO(msirek): Add accounting support for other variable-length
+													// types, like DECIMAL, in a CPU-friendly manner.
+													b.helper.AccountForBytesLike()
+												}
 											}
 										}
 										outStartIdx += toAppend
@@ -595,6 +618,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 											outNulls.SetNull(outStartIdx)
 										} else {
 											outCol.Copy(srcCol, outStartIdx, srcStartIdx)
+											needAccountForBytesLike = true
 										}
 										outStartIdx++
 										bs.curSrcStartIdx++
@@ -624,8 +648,27 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
 										} else {
+											accountFrequency := int64(toAppend)
 											for i := 0; i < toAppend; i++ {
 												outCol.Copy(srcCol, outStartIdx+i, srcStartIdx)
+												needAccountForBytesLike = true
+												if i == 0 {
+													// Calling AccountForBytesLike too many times may be expensive.
+													// Scale the frequency of calling it based on the bytes delta of
+													// appending the value.
+													deltaBytes := b.helper.AccountForBytesLike()
+													if deltaBytes > 0 {
+														accountFrequency = singleSetThreshold / deltaBytes
+														if accountFrequency < 1 {
+															accountFrequency = 1
+														}
+													}
+												} else if (int64(i) % accountFrequency) == 0 {
+													// Grow the memory account for JSONB and BYTES output columns.
+													// TODO(msirek): Add accounting support for other variable-length
+													// types, like DECIMAL, in a CPU-friendly manner.
+													b.helper.AccountForBytesLike()
+												}
 											}
 										}
 										outStartIdx += toAppend
@@ -690,6 +733,12 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 						default:
 							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", b.left.types[colIdx].String()))
 						}
+					}
+					// Grow the memory account for JSONB and BYTES output columns.
+					// TODO(msirek): Add accounting support for other variable-length
+					// types, like DECIMAL, in a CPU-friendly manner.
+					if needAccountForBytesLike {
+						b.helper.AccountForBytesLike()
 					}
 					// If there are no columns projected from the left input, simply advance the
 					// cross-joiner state according to the number of input rows.
@@ -729,6 +778,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 					leftNumRepeats := b.builderState.setup.leftNumRepeats
 					leftSrcEndIdx := b.builderState.setup.leftSrcEndIdx
 					outputCapacity := b.output.Capacity()
+					needAccountForBytesLike := false
 					var srcStartIdx int
 					// Loop over every column.
 					for colIdx := range b.left.types {
@@ -817,6 +867,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 											outNulls.SetNull(outStartIdx)
 										} else {
 											outCol.Copy(srcCol, outStartIdx, srcStartIdx)
+											needAccountForBytesLike = true
 										}
 										outStartIdx++
 										bs.curSrcStartIdx++
@@ -846,8 +897,27 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
 										} else {
+											accountFrequency := int64(toAppend)
 											for i := 0; i < toAppend; i++ {
 												outCol.Copy(srcCol, outStartIdx+i, srcStartIdx)
+												needAccountForBytesLike = true
+												if i == 0 {
+													// Calling AccountForBytesLike too many times may be expensive.
+													// Scale the frequency of calling it based on the bytes delta of
+													// appending the value.
+													deltaBytes := b.helper.AccountForBytesLike()
+													if deltaBytes > 0 {
+														accountFrequency = singleSetThreshold / deltaBytes
+														if accountFrequency < 1 {
+															accountFrequency = 1
+														}
+													}
+												} else if (int64(i) % accountFrequency) == 0 {
+													// Grow the memory account for JSONB and BYTES output columns.
+													// TODO(msirek): Add accounting support for other variable-length
+													// types, like DECIMAL, in a CPU-friendly manner.
+													b.helper.AccountForBytesLike()
+												}
 											}
 										}
 										outStartIdx += toAppend
@@ -1268,6 +1338,7 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 											outNulls.SetNull(outStartIdx)
 										} else {
 											outCol.Copy(srcCol, outStartIdx, srcStartIdx)
+											needAccountForBytesLike = true
 										}
 										outStartIdx++
 										bs.curSrcStartIdx++
@@ -1297,8 +1368,27 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 										if srcNulls.NullAt(srcStartIdx) {
 											outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
 										} else {
+											accountFrequency := int64(toAppend)
 											for i := 0; i < toAppend; i++ {
 												outCol.Copy(srcCol, outStartIdx+i, srcStartIdx)
+												needAccountForBytesLike = true
+												if i == 0 {
+													// Calling AccountForBytesLike too many times may be expensive.
+													// Scale the frequency of calling it based on the bytes delta of
+													// appending the value.
+													deltaBytes := b.helper.AccountForBytesLike()
+													if deltaBytes > 0 {
+														accountFrequency = singleSetThreshold / deltaBytes
+														if accountFrequency < 1 {
+															accountFrequency = 1
+														}
+													}
+												} else if (int64(i) % accountFrequency) == 0 {
+													// Grow the memory account for JSONB and BYTES output columns.
+													// TODO(msirek): Add accounting support for other variable-length
+													// types, like DECIMAL, in a CPU-friendly manner.
+													b.helper.AccountForBytesLike()
+												}
 											}
 										}
 										outStartIdx += toAppend
@@ -1363,6 +1453,12 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 						default:
 							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", b.left.types[colIdx].String()))
 						}
+					}
+					// Grow the memory account for JSONB and BYTES output columns.
+					// TODO(msirek): Add accounting support for other variable-length
+					// types, like DECIMAL, in a CPU-friendly manner.
+					if needAccountForBytesLike {
+						b.helper.AccountForBytesLike()
 					}
 					// If there are no columns projected from the left input, simply advance the
 					// cross-joiner state according to the number of input rows.
@@ -1412,6 +1508,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 		func() {
 			outStartIdx := destStartIdx
 			outputCapacity := b.output.Capacity()
+			needAccountForBytesLike := false
 			// Repeat the buffered tuples rightNumRepeats times until we fill
 			// the output capacity.
 			for ; outStartIdx < outputCapacity && bs.numRepeatsIdx < rightNumRepeats; bs.numRepeatsIdx++ {
@@ -1479,6 +1576,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 										outNulls.SetNull(outStartIdx)
 									} else {
 										outCol.Copy(srcCol, outStartIdx, bs.curSrcStartIdx)
+										needAccountForBytesLike = true
 									}
 								} else {
 									out.Copy(
@@ -1489,6 +1587,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 											SrcEndIdx:   bs.curSrcStartIdx + toAppend,
 										},
 									)
+									needAccountForBytesLike = true
 								}
 							}
 						case types.DecimalFamily:
@@ -1686,6 +1785,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 										outNulls.SetNull(outStartIdx)
 									} else {
 										outCol.Copy(srcCol, outStartIdx, bs.curSrcStartIdx)
+										needAccountForBytesLike = true
 									}
 								} else {
 									out.Copy(
@@ -1696,6 +1796,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 											SrcEndIdx:   bs.curSrcStartIdx + toAppend,
 										},
 									)
+									needAccountForBytesLike = true
 								}
 							}
 						case typeconv.DatumVecCanonicalTypeFamily:
@@ -1735,6 +1836,9 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 						// If we haven't materialized all the tuples from the
 						// batch, then we are ready to emit the output batch.
 						bs.curSrcStartIdx += toAppend
+						if needAccountForBytesLike {
+							b.helper.AccountForBytesLike()
+						}
 						return
 					}
 					// We have fully processed the current batch, so we need to
@@ -1753,6 +1857,12 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 					colexecerror.InternalError(err)
 				}
 				bs.currentBatch = nil
+			}
+			// Grow the memory account for JSONB and BYTES output columns.
+			// TODO(msirek): Add accounting support for other variable-length
+			// types, like DECIMAL, in a CPU-friendly manner.
+			if needAccountForBytesLike {
+				b.helper.AccountForBytesLike()
 			}
 		})
 }

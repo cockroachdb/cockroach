@@ -14231,7 +14231,7 @@ func (o *mergeJoinExceptAllOp) buildFromBufferedGroup() (bufferedGroupComplete b
 }
 
 func (o *mergeJoinExceptAllOp) Next() coldata.Batch {
-	o.output, _ = o.helper.ResetMaybeReallocate(o.outputTypes, o.output, 0 /* tuplesToBeSet */)
+	o.output, _ = o.bufferedGroup.helper.helper.ResetMaybeReallocate(o.outputTypes, o.output, 0 /* tuplesToBeSet */)
 	o.outputCapacity = o.output.Capacity()
 	o.bufferedGroup.helper.output = o.output
 	o.builderState.outCount = 0

@@ -990,6 +990,20 @@ func (h *SetAccountingHelper) ResetMaybeReallocate(
 	return newBatch, reallocated
 }
 
+// AccountForBytesLike records the total size of allocated BytesLike vectors,
+// and grows the memory account to accommodate them if required. It can throw an
+// internal error if a new memory allocation would cause the budget to be
+// exceeded.
+func (h *SetAccountingHelper) AccountForBytesLike() (deltaBytes int64) {
+	if len(h.bytesLikeVectors) > 0 {
+		newBytesLikeTotalSize := h.getBytesLikeTotalSize()
+		deltaBytes = newBytesLikeTotalSize - h.prevBytesLikeTotalSize
+		h.helper.allocator.AdjustMemoryUsageAfterAllocation(deltaBytes)
+		h.prevBytesLikeTotalSize = newBytesLikeTotalSize
+	}
+	return deltaBytes
+}
+
 // AccountForSet updates the Allocator according to the new variable length
 // values in the row rowIdx in the batch that was returned by the last call to
 // ResetMaybeReallocate. It returns a boolean indicating whether the batch is
@@ -1005,11 +1019,7 @@ func (h *SetAccountingHelper) AccountForSet(rowIdx int) (batchDone bool) {
 		return batchDone
 	}
 
-	if len(h.bytesLikeVectors) > 0 {
-		newBytesLikeTotalSize := h.getBytesLikeTotalSize()
-		h.helper.allocator.AdjustMemoryUsageAfterAllocation(newBytesLikeTotalSize - h.prevBytesLikeTotalSize)
-		h.prevBytesLikeTotalSize = newBytesLikeTotalSize
-	}
+	h.AccountForBytesLike()
 
 	if !h.varSizeVecIdxs.Empty() {
 		var newVarLengthDatumSize int64
