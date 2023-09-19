@@ -1994,7 +1994,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	ts hlc.Timestamp,
 	start, end roachpb.Key,
 	intents *[]roachpb.Intent,
-	maxIntents int64,
+	maxLockConflicts int64,
 ) (needIntentHistory bool, err error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -2031,7 +2031,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	var meta enginepb.MVCCMetadata
 	var ok bool
 	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
-		if maxIntents != 0 && int64(len(*intents)) >= maxIntents {
+		if maxLockConflicts != 0 && int64(len(*intents)) >= maxLockConflicts {
 			// Return early if we're done accumulating intents; make no claims about
 			// not needing intent history.
 			return true /* needsIntentHistory */, nil

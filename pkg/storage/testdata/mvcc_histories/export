@@ -84,12 +84,12 @@ export k=a end=z
 error: (*kvpb.LockConflictError:) conflicting locks on "a"
 
 run error
-export k=a end=z maxIntents=100
+export k=a end=z maxLockConflicts=100
 ----
 error: (*kvpb.LockConflictError:) conflicting locks on "a", "d", "j", "l", "o"
 
 run error
-export k=a end=z maxIntents=3
+export k=a end=z maxLockConflicts=3
 ----
 error: (*kvpb.LockConflictError:) conflicting locks on "a", "d", "j"
 

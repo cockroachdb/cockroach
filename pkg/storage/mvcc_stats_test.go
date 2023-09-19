@@ -1724,20 +1724,20 @@ func TestMVCCStatsRandomized(t *testing.T) {
 			desc = fmt.Sprintf("mvccDeleteRangeUsingTombstone=%s",
 				roachpb.Span{Key: mvccRangeDelKey, EndKey: mvccRangeDelEndKey})
 			const idempotent = false
-			const maxIntents = 0 // unlimited
+			const maxLockConflicts = 0 // unlimited
 			msCovered := (*enginepb.MVCCStats)(nil)
 			err = MVCCDeleteRangeUsingTombstone(
 				ctx, s.batch, s.MSDelta, mvccRangeDelKey, mvccRangeDelEndKey, s.TS, hlc.ClockTimestamp{}, nil, /* leftPeekBound */
-				nil /* rightPeekBound */, idempotent, maxIntents, msCovered,
+				nil /* rightPeekBound */, idempotent, maxLockConflicts, msCovered,
 			)
 		} else {
 			rangeTombstoneThreshold := s.rng.Int63n(5)
 			desc = fmt.Sprintf("mvccPredicateDeleteRange=%s, predicates=%s, rangeTombstoneThreshold=%d",
 				roachpb.Span{Key: mvccRangeDelKey, EndKey: mvccRangeDelEndKey}, predicates, rangeTombstoneThreshold)
-			const maxIntents = 0 // unlimited
+			const maxLockConflicts = 0 // unlimited
 			_, err = MVCCPredicateDeleteRange(ctx, s.batch, s.MSDelta, mvccRangeDelKey, mvccRangeDelEndKey,
 				s.TS, hlc.ClockTimestamp{}, nil /* leftPeekBound */, nil, /* rightPeekBound */
-				predicates, 0, 0, rangeTombstoneThreshold, maxIntents)
+				predicates, 0, 0, rangeTombstoneThreshold, maxLockConflicts)
 		}
 		if err != nil {
 			return false, desc + ": " + err.Error()

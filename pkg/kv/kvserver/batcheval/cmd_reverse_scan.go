@@ -46,7 +46,7 @@ func ReverseScan(
 		ScanStats:             cArgs.ScanStats,
 		Uncertainty:           cArgs.Uncertainty,
 		MaxKeys:               h.MaxSpanRequestKeys,
-		MaxIntents:            storage.MaxIntentsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		MaxLockConflicts:      storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetBytes:           h.TargetBytes,
 		AllowEmpty:            h.AllowEmpty,
 		WholeRowsOfSize:       h.WholeRowsOfSize,
