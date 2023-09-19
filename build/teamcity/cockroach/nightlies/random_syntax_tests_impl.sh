@@ -5,7 +5,6 @@ set -xeuo pipefail
 dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
 source "$dir/teamcity-bazel-support.sh"
 
-bazel build --config ci --config force_build_cdeps //c-deps:libgeos
 bazel build //pkg/cmd/bazci //pkg/cmd/github-post //pkg/cmd/testfilter --config=ci
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 GO_TEST_JSON_OUTPUT_FILE=/artifacts/test.json.txt
