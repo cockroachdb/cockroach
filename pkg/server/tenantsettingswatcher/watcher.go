@@ -60,6 +60,10 @@ type Watcher struct {
 	// startCh is closed once the rangefeed starts.
 	startCh  chan struct{}
 	startErr error
+
+	// rfc provides access to the underlying rangefeedcache.Watcher for
+	// testing.
+	rfc *rangefeedcache.Watcher
 }
 
 // New constructs a new Watcher.
@@ -182,6 +186,7 @@ func (w *Watcher) startRangeFeed(
 		onUpdate,
 		nil, /* knobs */
 	)
+	w.rfc = c
 
 	// Kick off the rangefeedcache which will retry until the stopper stops.
 	if err := rangefeedcache.Start(ctx, w.stopper, c, onError); err != nil {
@@ -212,6 +217,12 @@ func (w *Watcher) WaitForStart(ctx context.Context) error {
 		return w.startErr
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+func (w *Watcher) TestingRestart() {
+	if w.rfc != nil {
+		w.rfc.TestingRestart()
 	}
 }
 

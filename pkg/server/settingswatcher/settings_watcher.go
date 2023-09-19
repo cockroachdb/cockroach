@@ -65,6 +65,10 @@ type SettingsWatcher struct {
 	// testingWatcherKnobs allows the client to inject testing knobs into
 	// the underlying rangefeedcache.Watcher.
 	testingWatcherKnobs *rangefeedcache.TestingKnobs
+
+	// rfc provides access to the underlying rangefeedcache.Watcher for
+	// testing.
+	rfc *rangefeedcache.Watcher
 }
 
 // Storage is used to write a snapshot of KVs out to disk for use upon restart.
@@ -216,6 +220,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		},
 		s.testingWatcherKnobs,
 	)
+	s.rfc = c
 
 	// Kick off the rangefeedcache which will retry until the stopper stops.
 	if err := rangefeedcache.Start(ctx, s.stopper, c, func(err error) {
@@ -240,6 +245,12 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 
 	case <-ctx.Done():
 		return errors.Wrap(ctx.Err(), "failed to retrieve initial cluster settings")
+	}
+}
+
+func (w *SettingsWatcher) TestingRestart() {
+	if w.rfc != nil {
+		w.rfc.TestingRestart()
 	}
 }
 
