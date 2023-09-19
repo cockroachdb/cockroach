@@ -1272,14 +1272,20 @@ func TestReproIncorrectJobQuery(t *testing.T) {
 
 	replicationtestutils.CreateScatteredTable(t, c, 4)
 
-	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
-	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
-	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+	var jobID int
+	c.DestSysSQL.QueryRow(t, `
+SELECT job_id FROM [SHOW AUTOMATIC JOBS]
+WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION' AND status = 'running'
+`).Scan(&jobID)
 
-	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
+	//producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	//jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(jobID))
+
+	//c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
 
 	var coordinatorNodeIndexByOne int
-	c.SrcSysSQL.QueryRow(t, `SELECT coordinator_id FROM crdb_internal.jobs WHERE job_id = $1`, ingestionJobID).Scan(&coordinatorNodeIndexByOne)
+	c.SrcSysSQL.QueryRow(t, `SELECT coordinator_id FROM crdb_internal.jobs WHERE job_id = $1`, jobID).Scan(&coordinatorNodeIndexByOne)
 	coordinatorNode := coordinatorNodeIndexByOne - 1
 
 	findAnotherNode := func(notThisNode int) int {
@@ -1303,7 +1309,7 @@ func TestReproIncorrectJobQuery(t *testing.T) {
 		return retry.ForDuration(time.Second*100, func() error {
 			var status string
 			var payloadBytes []byte
-			res := db.QueryRowContext(ctx, `SELECT status, payload FROM crdb_internal.system_jobs WHERE id = $1`, ingestionJobID)
+			res := db.QueryRowContext(ctx, `SELECT status, payload FROM crdb_internal.system_jobs WHERE id = $1`, jobID)
 			if res.Err() != nil {
 				// This query can fail if a node shuts down during the query execution;
 				// therefore, tolerate errors.
@@ -1317,7 +1323,7 @@ func TestReproIncorrectJobQuery(t *testing.T) {
 				}
 				t.Fatalf("job failed")
 			}
-			if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
+			if e, a := jobs.StatusCanceled, jobs.Status(status); e != a {
 				return errors.Errorf("expected job status %s, but got %s", e, a)
 			}
 			return nil
@@ -1327,14 +1333,8 @@ func TestReproIncorrectJobQuery(t *testing.T) {
 	group.GoCtx(func(ctx context.Context) error {
 		sleepBeforeShutdown := time.Duration(rng.Intn(3))
 		time.Sleep(sleepBeforeShutdown * time.Second)
-		var emptyCutoverTime time.Time
-		// Don't validate that the job completed here bc the helper's dest cluster sql
-		// connection might be hosed.
-		c.Cutover(producerJobID, ingestionJobID, emptyCutoverTime, true)
+		c.DestSysSQL.Exec(t, "CANCEL JOB $1", jobID)
 		c.DestCluster.Server(coordinatorNode).Stop(ctx)
 		return nil
 	})
-
-	//time.Sleep(time.Second * 5)
-
 }
