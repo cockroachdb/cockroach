@@ -37,8 +37,7 @@ type Cache struct {
 	mu                  struct {
 		syncutil.RWMutex
 
-		cfg       *config.SystemConfig
-		timestamp hlc.Timestamp
+		cfg *config.SystemConfig
 
 		registry notificationRegistry
 
@@ -173,15 +172,6 @@ func (c *Cache) RegisterSystemConfigChannel() (_ <-chan struct{}, unregister fun
 	}
 }
 
-// LastUpdated returns the timestamp corresponding to the current state of
-// the cache. Any subsequent call to GetSystemConfig will see a state that
-// corresponds to a snapshot as least as new as this timestamp.
-func (c *Cache) LastUpdated() hlc.Timestamp {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.mu.timestamp
-}
-
 func (c *Cache) setAdditionalKeys(kvs []roachpb.KeyValue) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -240,29 +230,25 @@ func (c *Cache) handleUpdate(_ context.Context, update rangefeedcache.Update) {
 	case rangefeedcache.CompleteUpdate:
 		updatedData = rangefeedbuffer.MergeKVs(c.mu.additionalKVs, updateKVs)
 	case rangefeedcache.IncrementalUpdate:
+		if len(updateKVs) == 0 {
+			// Simply return since there is nothing interesting.
+			return
+		}
 		// Note that handleUpdate is called synchronously, so we can use the
 		// old snapshot as the basis for the new snapshot without any risk of
 		// missing anything.
 		prev := c.mu.cfg
-
-		// If there is nothing interesting, just update the timestamp and
-		// return without notifying anybody.
-		if len(updateKVs) == 0 {
-			c.setUpdatedConfigLocked(prev, update.Timestamp)
-			return
-		}
 		updatedData = rangefeedbuffer.MergeKVs(prev.Values, updateKVs)
 	}
 
 	updatedCfg := config.NewSystemConfig(c.defaultZoneConfig)
 	updatedCfg.Values = updatedData
-	c.setUpdatedConfigLocked(updatedCfg, update.Timestamp)
+	c.setUpdatedConfigLocked(updatedCfg)
 }
 
-func (c *Cache) setUpdatedConfigLocked(updated *config.SystemConfig, ts hlc.Timestamp) {
+func (c *Cache) setUpdatedConfigLocked(updated *config.SystemConfig) {
 	changed := c.mu.cfg != updated
 	c.mu.cfg = updated
-	c.mu.timestamp = ts
 	if changed {
 		c.mu.registry.notify()
 	}
