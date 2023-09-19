@@ -1945,17 +1945,21 @@ func assertMVCCIteratorInvariants(iter MVCCIterator) error {
 		return errors.AssertionFailedf("unknown type for engine key %s", engineKey)
 	}
 
-	// Value must equal UnsafeValue.
-	u, err := iter.UnsafeValue()
-	if err != nil {
-		return err
-	}
-	v, err := iter.Value()
-	if err != nil {
-		return err
-	}
-	if !bytes.Equal(v, u) {
-		return errors.AssertionFailedf("Value %x does not match UnsafeValue %x at %s", v, u, key)
+	// If the iterator position has a point key, Value must equal UnsafeValue.
+	// NB: It's only valid to read an iterator's Value if the iterator is
+	// positioned at a point key.
+	if hasPoint, _ := iter.HasPointAndRange(); hasPoint {
+		u, err := iter.UnsafeValue()
+		if err != nil {
+			return err
+		}
+		v, err := iter.Value()
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(v, u) {
+			return errors.AssertionFailedf("Value %x does not match UnsafeValue %x at %s", v, u, key)
+		}
 	}
 
 	// For prefix iterators, any range keys must be point-sized. We've already
@@ -1994,7 +1998,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	ts hlc.Timestamp,
 	start, end roachpb.Key,
 	intents *[]roachpb.Intent,
-	maxIntents int64,
+	maxLockConflicts int64,
 ) (needIntentHistory bool, err error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -2031,7 +2035,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	var meta enginepb.MVCCMetadata
 	var ok bool
 	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
-		if maxIntents != 0 && int64(len(*intents)) >= maxIntents {
+		if maxLockConflicts != 0 && int64(len(*intents)) >= maxLockConflicts {
 			// Return early if we're done accumulating intents; make no claims about
 			// not needing intent history.
 			return true /* needsIntentHistory */, nil

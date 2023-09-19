@@ -112,8 +112,8 @@ func ClearRange(
 	// txns. Otherwise, txn recovery would fail to find these intents and
 	// consider the txn incomplete, uncommitting it and its writes (even those
 	// outside of the cleared range).
-	maxIntents := storage.MaxIntentsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
-	locks, err := storage.ScanLocks(ctx, readWriter, from, to, maxIntents, 0)
+	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+	locks, err := storage.ScanLocks(ctx, readWriter, from, to, maxLockConflicts, 0)
 	if err != nil {
 		return result.Result{}, err
 	} else if len(locks) > 0 {

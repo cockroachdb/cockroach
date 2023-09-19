@@ -2306,9 +2306,9 @@ func TestStoreScanIntents(t *testing.T) {
 // limits.
 //
 // The test proceeds as follows: a writer lays down more than
-// `MaxIntentsPerLockConflictError` intents, and a reader is expected to
+// `MaxConflictsPerLockConflictError` intents, and a reader is expected to
 // encounter these intents and raise a `LockConflictError` with exactly
-// `MaxIntentsPerLockConflictError` intents in the error.
+// `MaxConflictsPerLockConflictError` intents in the error.
 func TestStoreScanIntentsRespectsLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2331,10 +2331,10 @@ func TestStoreScanIntentsRespectsLimit(t *testing.T) {
 						ctx context.Context, ba *kvpb.BatchRequest, pErr *kvpb.Error,
 					) {
 						if errors.HasType(pErr.GoError(), (*kvpb.LockConflictError)(nil)) {
-							// Assert that the LockConflictError has MaxIntentsPerLockConflictError intents.
+							// Assert that the LockConflictError has MaxConflictsPerLockConflictError intents.
 							if trap := interceptLockConflictErrors.Load(); trap != nil && trap.(bool) {
 								require.Equal(
-									t, storage.MaxIntentsPerLockConflictErrorDefault,
+									t, storage.MaxConflictsPerLockConflictErrorDefault,
 									len(pErr.GetDetail().(*kvpb.LockConflictError).Locks),
 								)
 								interceptLockConflictErrors.Store(false)
@@ -2356,13 +2356,13 @@ func TestStoreScanIntentsRespectsLimit(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	// Lay down more than `MaxIntentsPerLockConflictErrorDefault` intents.
+	// Lay down more than `MaxConflictsPerLockConflictErrorDefault` intents.
 	go func() {
 		defer wg.Done()
 		txn := newTransaction(
 			"test", roachpb.Key("test-key"), roachpb.NormalUserPriority, tc.Server(0).Clock(),
 		)
-		for j := 0; j < storage.MaxIntentsPerLockConflictErrorDefault+10; j++ {
+		for j := 0; j < storage.MaxConflictsPerLockConflictErrorDefault+10; j++ {
 			var key roachpb.Key
 			key = append(key, keys.ScratchRangeMin...)
 			key = append(key, []byte(fmt.Sprintf("%d", j))...)
@@ -2385,10 +2385,10 @@ func TestStoreScanIntentsRespectsLimit(t *testing.T) {
 	}
 
 	// Now, expect a conflicting reader to encounter the intents and raise a
-	// LockConflictError with exactly `MaxIntentsPerLockConflictErrorDefault`
+	// LockConflictError with exactly `MaxConflictsPerLockConflictErrorDefault`
 	// intents. See the TestingConcurrencyRetryFilter above.
 	var ba kv.Batch
-	for i := 0; i < storage.MaxIntentsPerLockConflictErrorDefault+10; i += 10 {
+	for i := 0; i < storage.MaxConflictsPerLockConflictErrorDefault+10; i += 10 {
 		for _, key := range intentKeys[i : i+10] {
 			args := getArgs(key)
 			ba.AddRawRequest(&args)
