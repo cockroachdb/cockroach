@@ -40,4 +40,4 @@ type MetricName string
 // FluentSinkConnectionError is the MetricName for the metric
 // used to count fluent-server log sink connection errors. Please
 // refer to its metric metadata for more details (hint: see usages).
-const FluentSinkConnectionError MetricName = "fluent.sink.conn.errors"
+const FluentSinkConnectionError MetricName = "log.fluent.sink.conn.errors"
