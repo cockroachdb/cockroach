@@ -133,6 +133,9 @@ func (d *dev) getDockerRunArgs(
 	if err != nil {
 		return
 	}
+	// We want to at least try to update the permissions here. If we fail to
+	// do so, there's not *necessarily* a reason to freak out yet.
+	_ = d.os.Chmod(artifacts, 0777)
 	args = append(args, "-v", artifacts+":/artifacts")
 	// The `delegated` switch ensures that the container's view of the cache
 	// is authoritative. This can result in writes to the actual underlying
