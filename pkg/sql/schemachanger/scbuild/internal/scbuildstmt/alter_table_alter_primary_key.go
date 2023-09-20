@@ -490,6 +490,41 @@ func mustRetrieveColumnElem(
 	return column
 }
 
+func retrieveColumnElemAndStatus(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) (scpb.Status, scpb.TargetStatus, *scpb.Column) {
+	elems := b.QueryByID(tableID).FilterColumn().Filter(func(
+		_ scpb.Status, _ scpb.TargetStatus, e *scpb.Column,
+	) bool {
+		return e.ColumnID == columnID
+	}).MustHaveZeroOrOne()
+
+	if elems.Size() == 1 {
+		current, target, elem := elems.Get(0)
+		return current, target, elem.(*scpb.Column)
+	}
+	return scpb.Status_UNKNOWN, scpb.InvalidTarget, nil
+}
+
+func retrieveIndexColumnElemAndStatus(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID, columnID catid.ColumnID,
+) (scpb.Status, scpb.TargetStatus, *scpb.IndexColumn) {
+	elems := b.QueryByID(tableID).FilterIndexColumn().Filter(func(
+		_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn,
+	) bool {
+		if e.IndexID == indexID && e.ColumnID == columnID {
+			return true
+		}
+		return false
+	}).MustHaveZeroOrOne()
+
+	if elems.Size() == 1 {
+		current, target, elem := elems.Get(0)
+		return current, target, elem.(*scpb.IndexColumn)
+	}
+	return scpb.Status_UNKNOWN, scpb.InvalidTarget, nil
+}
+
 func mustRetrieveColumnNameElem(
 	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
 ) (columnName *scpb.ColumnName) {
