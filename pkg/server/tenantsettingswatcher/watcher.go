@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -64,6 +65,11 @@ type Watcher struct {
 	// rfc provides access to the underlying rangefeedcache.Watcher for
 	// testing.
 	rfc *rangefeedcache.Watcher
+	mu  struct {
+		syncutil.Mutex
+		// Used by TestingRestart.
+		updateWait chan struct{}
+	}
 }
 
 // New constructs a new Watcher.
@@ -78,6 +84,7 @@ func New(
 		dec:     MakeRowDecoder(),
 	}
 	w.store.Init()
+	w.mu.updateWait = make(chan struct{})
 	return w
 }
 
@@ -162,6 +169,11 @@ func (w *Watcher) startRangeFeed(
 				initialScan.done = true
 				close(initialScan.ch)
 			}
+			// Used by TestingRestart().
+			w.mu.Lock()
+			defer w.mu.Unlock()
+			close(w.mu.updateWait)
+			w.mu.updateWait = make(chan struct{})
 		}
 	}
 
@@ -220,9 +232,15 @@ func (w *Watcher) WaitForStart(ctx context.Context) error {
 	}
 }
 
+// TestingRestart restarts the rangefeeds and waits for the initial
+// update after the rangefeed update to be processed.
 func (w *Watcher) TestingRestart() {
 	if w.rfc != nil {
+		w.mu.Lock()
+		waitCh := w.mu.updateWait
+		w.mu.Unlock()
 		w.rfc.TestingRestart()
+		<-waitCh
 	}
 }
 

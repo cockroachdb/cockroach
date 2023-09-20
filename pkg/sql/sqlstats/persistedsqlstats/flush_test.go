@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"testing"
 	"time"
@@ -249,6 +250,68 @@ func TestSQLStatsInitialDelay(t *testing.T) {
 
 	require.True(t, maxNextRunAt.After(initialNextFlushAt),
 		"expected latest nextFlushAt to be %s, but found %s", maxNextRunAt, initialNextFlushAt)
+}
+
+func TestSQLStatsLogDiscardMessage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	fakeTime := stubTime{
+		aggInterval: time.Hour,
+	}
+	fakeTime.setTime(timeutil.Now())
+
+	var params base.TestServerArgs
+	params.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
+		StubTimeNow: fakeTime.Now,
+	}
+	srv, conn, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.flush.minimum_interval = '10m'")
+	sqlConn.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints=%d", 8))
+
+	for i := 0; i < 20; i++ {
+		appName := fmt.Sprintf("logDiscardTestApp%d", i)
+		sqlConn.Exec(t, "SET application_name = $1", appName)
+		sqlConn.Exec(t, "SELECT 1")
+	}
+
+	log.FlushFiles()
+
+	entries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`statistics discarded due to memory limit. transaction discard count:`),
+		log.WithFlattenedSensitiveData,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(entries), "there should only be 1 log for the initial execution because the test should take less than 1 minute to execute the 20 commands. cnt: %v", entries)
+
+	// lower the time frame to verify log still occurs after the initial one
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.metrics.discarded_stats_log.interval='0.00001ms'")
+
+	for i := 0; i < 20; i++ {
+		appName := fmt.Sprintf("logDiscardTestApp2%d", i)
+		sqlConn.Exec(t, "SET application_name = $1", appName)
+		sqlConn.Exec(t, "SELECT 1")
+	}
+
+	log.FlushFiles()
+
+	entries, err = log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`statistics discarded due to memory limit. transaction discard count:`),
+		log.WithFlattenedSensitiveData,
+	)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(entries), 1, "there should only be 1 log for the initial execution because the test should take less than 1 minute to execute the 20 commands. cnt: %v", entries)
 }
 
 func TestSQLStatsMinimumFlushInterval(t *testing.T) {
