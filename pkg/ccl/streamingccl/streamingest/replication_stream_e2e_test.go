@@ -1283,7 +1283,7 @@ func TestReproIncorrectJobQuery(t *testing.T) {
 	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
 	defer cleanup()
 
-	serverutils.SetClusterSetting(t, c.DestCluster, "server.shutdown.jobs_wait", "0ms")
+	//serverutils.SetClusterSetting(t, c.DestCluster, "server.shutdown.jobs_wait", "0ms")
 	serverutils.SetClusterSetting(t, c.DestCluster, "server.shutdown.query_wait", "10ms")
 	serverutils.SetClusterSetting(t, c.DestCluster, "server.shutdown.lease_transfer_wait", "10ms")
 
@@ -1358,7 +1358,7 @@ func TestReproIncorrectJobQuery(t *testing.T) {
 		time.Sleep(sleepBeforeShutdown * time.Second)
 		var emptyCutoverTime time.Time
 		c.Cutover(producerJobID, ingestionJobID, emptyCutoverTime, true)
-		c.DestCluster.Server(coordinatorNode).Stop(ctx)
+		c.DestCluster.Server(coordinatorNode).Stopper().Stop(ctx)
 		return nil
 	})
 }
