@@ -159,6 +159,93 @@ func (h adjustment) String() string {
 	)
 }
 
+func TestBucketSignalingBug(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	regularTokensPerStream.Override(ctx, &st.SV, 10)
+	elasticTokensPerStream.Override(ctx, &st.SV, 5)
+	kvflowcontrol.Mode.Override(ctx, &st.SV, int64(kvflowcontrol.ApplyToAll))
+	controller := New(
+		metric.NewRegistry(),
+		st,
+		hlc.NewClockForTesting(nil),
+	)
+	stream := kvflowcontrol.Stream{
+		TenantID: roachpb.MustMakeTenantID(1),
+		StoreID:  1,
+	}
+	controller.DeductTokens(ctx, admissionpb.NormalPri, 10, stream)
+	controller.DeductTokens(ctx, admissionpb.BulkNormalPri, 10, stream)
+	streamState := controller.InspectStream(ctx, stream)
+	require.Equal(t, int64(0), streamState.AvailableRegularTokens)
+	require.Equal(t, int64(-15), streamState.AvailableElasticTokens)
+
+	connectedStream := &mockConnectedStream{
+		stream: stream,
+	}
+
+	// Elastic work waits first.
+	lowPriAdmitted := make(chan struct{})
+	go func() {
+		admitted, err := controller.Admit(ctx, admissionpb.BulkNormalPri, time.Time{}, connectedStream)
+		require.Equal(t, true, admitted)
+		require.NoError(t, err)
+		lowPriAdmitted <- struct{}{}
+	}()
+	// Sleep until it has started waiting.
+	time.Sleep(time.Second)
+	select {
+	case <-lowPriAdmitted:
+		log.Fatalf(ctx, "low-pri should not be admitted")
+	default:
+	}
+	// Regular work waits second.
+	normalPriAdmitted := make(chan struct{})
+	go func() {
+		admitted, err := controller.Admit(ctx, admissionpb.NormalPri, time.Time{}, connectedStream)
+		require.Equal(t, true, admitted)
+		require.NoError(t, err)
+		normalPriAdmitted <- struct{}{}
+	}()
+	// Sleep until it has started waiting.
+	time.Sleep(time.Second)
+	select {
+	case <-normalPriAdmitted:
+		log.Fatalf(ctx, "normal-pri should not be admitted")
+	default:
+	}
+
+	controller.ReturnTokens(ctx, admissionpb.NormalPri, 1, stream)
+	streamState = controller.InspectStream(ctx, stream)
+	require.Equal(t, int64(1), streamState.AvailableRegularTokens)
+	require.Equal(t, int64(-14), streamState.AvailableElasticTokens)
+
+	// Sleep to give enough time for regular work to get admitted.
+	time.Sleep(2 * time.Second)
+
+	select {
+	case <-normalPriAdmitted:
+	default:
+		// Bug: fails here since the entry in bucket.signalCh has been taken by
+		// the elastic work.
+		log.Fatalf(ctx, "normal-pri should be admitted")
+	}
+	// Return enough tokens that the elastic work gets admitted.
+	controller.ReturnTokens(ctx, admissionpb.NormalPri, 9, stream)
+	streamState = controller.InspectStream(ctx, stream)
+	require.Equal(t, int64(10), streamState.AvailableRegularTokens)
+	require.Equal(t, int64(-5), streamState.AvailableElasticTokens)
+
+	controller.ReturnTokens(ctx, admissionpb.BulkNormalPri, 7, stream)
+	streamState = controller.InspectStream(ctx, stream)
+	require.Equal(t, int64(10), streamState.AvailableRegularTokens)
+	require.Equal(t, int64(2), streamState.AvailableElasticTokens)
+	<-lowPriAdmitted
+}
+
 // TestInspectController tests the Inspect() API.
 func TestInspectController(t *testing.T) {
 	defer leaktest.AfterTest(t)()
