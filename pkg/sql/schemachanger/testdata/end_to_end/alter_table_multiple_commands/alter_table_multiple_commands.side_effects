@@ -5,7 +5,7 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL, k INT, FAMILY "primary" (i, j
 +object {100 101 t} -> 104
 
 /* test */
-ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT DEFAULT 30;
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT DEFAULT 30, ADD COLUMN q INT, DROP COLUMN q;
 ----
 begin transaction #1
 # begin StatementPhase
@@ -16,11 +16,14 @@ increment telemetry for sql.schema.alter_table.drop_column
 increment telemetry for sql.schema.alter_table.add_column
 increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
+increment telemetry for sql.schema.alter_table.add_column
+increment telemetry for sql.schema.new_column_type.int8
+increment telemetry for sql.schema.alter_table.drop_column
 write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
     descriptorId: 104
-    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›, ADD COLUMN ‹q› INT8, DROP COLUMN ‹q›
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
@@ -28,7 +31,7 @@ write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
     descriptorId: 104
-    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›, ADD COLUMN ‹q› INT8, DROP COLUMN ‹q›
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
@@ -36,7 +39,7 @@ write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
     descriptorId: 104
-    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›, ADD COLUMN ‹q› INT8, DROP COLUMN ‹q›
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
@@ -273,8 +276,8 @@ upsert descriptor #104
   +      name: t
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›
-  +        statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT8 DEFAULT 30
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›, ADD COLUMN ‹q› INT8, DROP COLUMN ‹q›
+  +        statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT8 DEFAULT 30, ADD COLUMN q INT8, DROP COLUMN q
   +        statementTag: ALTER TABLE
   +    revertible: true
   +    targetRanks: <redacted>
@@ -461,7 +464,7 @@ upsert descriptor #104
   -  version: "1"
   +  version: "2"
 persist all catalog changes to storage
-create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT8 DEFAULT 30"
+create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT8 DEFAULT 30, ADD COLUMN q INT8, DROP COLUMN q"
   descriptor IDs: [104]
 # end PreCommitPhase
 commit transaction #1
@@ -1309,7 +1312,7 @@ upsert descriptor #104
      createAsOfTime:
        wallTime: "1640995200000000000"
   ...
-           statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT8 DEFAULT 30
+           statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT8 DEFAULT 30, ADD COLUMN q INT8, DROP COLUMN q
            statementTag: ALTER TABLE
   -    revertible: true
        targetRanks: <redacted>
@@ -1556,8 +1559,8 @@ upsert descriptor #104
   -      name: t
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›
-  -        statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT8 DEFAULT 30
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›, ADD COLUMN ‹q› INT8, DROP COLUMN ‹q›
+  -        statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT8 DEFAULT 30, ADD COLUMN q INT8, DROP COLUMN q
   -        statementTag: ALTER TABLE
   -    targetRanks: <redacted>
   -    targets: <redacted>
@@ -1685,7 +1688,7 @@ upsert descriptor #104
   -  version: "22"
   +  version: "23"
 persist all catalog changes to storage
-create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT8 DEFAULT 30"
+create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT8 DEFAULT 30, ADD COLUMN q INT8, DROP COLUMN q"
   descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
