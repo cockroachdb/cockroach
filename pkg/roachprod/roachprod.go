@@ -666,8 +666,10 @@ func DefaultStartOpts() install.StartOpts {
 		ScheduleBackups:    false,
 		ScheduleBackupArgs: "",
 		InitTarget:         1,
-		SQLPort:            config.DefaultSQLPort,
-		AdminUIPort:        config.DefaultAdminUIPort,
+		// TODO(renato): change the defaults below to `0` (i.e., pick a
+		// random available port) once #111052 is addressed.
+		SQLPort:     config.DefaultSQLPort,
+		AdminUIPort: config.DefaultAdminUIPort,
 	}
 }
 
