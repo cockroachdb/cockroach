@@ -4684,6 +4684,13 @@ func TestMergeQueueWithSlowNonVoterSnaps(t *testing.T) {
 					// Disable load-based splitting, so that the absence of sufficient QPS
 					// measurements do not prevent ranges from merging.
 					DisableLoadBasedSplitting: true,
+					// Occasionally, the initial snapshot sent to the newly relocated
+					// non-voter replica can get rejected, prompting another snapshot to
+					// be sent via the snapshot queue. Because snapshots in this test are
+					// expensive/slow on purpose, this can cause the expected merge to
+					// time out. For more details on these circumstances, see the comment
+					// for DisableRaftSnapshotQueue.
+					DisableRaftSnapshotQueue: true,
 				},
 			},
 		},
@@ -4701,6 +4708,7 @@ func TestMergeQueueWithSlowNonVoterSnaps(t *testing.T) {
 						},
 						// See above.
 						DisableLoadBasedSplitting: true,
+						DisableRaftSnapshotQueue:  true,
 					},
 				},
 			},
