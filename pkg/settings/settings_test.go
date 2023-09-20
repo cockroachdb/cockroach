@@ -802,13 +802,13 @@ func TestOverride(t *testing.T) {
 	require.Equal(t, 42.0, overrideFloat.Get(sv))
 }
 
-func TestSystemOnlyDisallowedOnTenant(t *testing.T) {
+func TestSystemOnlyDisallowedOnVirtualCluster(t *testing.T) {
 	skip.UnderNonTestBuild(t)
 
 	ctx := context.Background()
 	sv := &settings.Values{}
 	sv.Init(ctx, settings.TestOpaque)
-	sv.SetNonSystemTenant()
+	sv.SpecializeForVirtualCluster()
 
 	// Check that we can still read non-SystemOnly settings.
 	if expected, actual := "", strFooA.Get(sv); expected != actual {
@@ -819,7 +819,7 @@ func TestSystemOnlyDisallowedOnTenant(t *testing.T) {
 		defer func() {
 			if r := recover(); r == nil {
 				t.Error("Get did not panic")
-			} else if !strings.Contains(fmt.Sprint(r), "attempted to set forbidden setting") {
+			} else if !strings.Contains(fmt.Sprint(r), "invalid access to SystemOnly") {
 				t.Errorf("received unexpected panic: %v", r)
 			}
 		}()

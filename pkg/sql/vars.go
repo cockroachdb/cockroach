@@ -1619,7 +1619,8 @@ var varGen = map[string]sessionVar{
 			// - The session var is named "disable_" because we want the Go
 			//   default value (false) to mean that tenant deletion is enabled.
 			//   This is needed for backward-compatibility with Cockroach Cloud.
-			return formatBoolAsPostgresSetting(!enableDropVirtualCluster.Get(sv))
+			enabled := !sv.SpecializedToVirtualCluster() && !enableDropVirtualCluster.Get(sv)
+			return formatBoolAsPostgresSetting(enabled)
 		},
 	},
 

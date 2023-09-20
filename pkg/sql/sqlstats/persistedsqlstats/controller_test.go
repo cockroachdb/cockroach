@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -263,9 +262,7 @@ func TestStmtStatsEnable(t *testing.T) {
 
 	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
-	tc := testcluster.StartTestCluster(t, 1, args)
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	serverutils.SetClusterSetting(t, tc, "sql.metrics.statement_details.enabled", "false")

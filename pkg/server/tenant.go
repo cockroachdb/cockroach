@@ -1020,6 +1020,10 @@ func makeTenantSQLServerArgs(
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 
+	// Ensure that the settings accessor bark if an attempt is made
+	// to use a SystemOnly setting.
+	st.SV.SpecializeForVirtualCluster()
+
 	// We want all log messages issued on behalf of this SQL instance to report
 	// the instance ID (once known) as a tag.
 	startupCtx = baseCfg.AmbientCtx.AnnotateCtx(startupCtx)

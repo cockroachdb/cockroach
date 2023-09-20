@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -137,13 +138,18 @@ func TestEventDecoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(context.Background())
+	defer srv.Stopper().Stop(ctx)
 
 	s := srv.ApplicationLayer()
 
+	for _, l := range []serverutils.ApplicationLayerInterface{s, srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
+
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
 	sqlDB.Exec(t, `
 CREATE TABLE foo (
@@ -419,12 +425,17 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 	skip.UnderRace(t)
 	skip.UnderStress(t)
 
+	ctx := context.Background()
+
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(context.Background())
+	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
+	for _, l := range []serverutils.ApplicationLayerInterface{s, srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
+
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 	// Use alter column type to force column reordering.
 	sqlDB.Exec(t, `SET enable_experimental_alter_column_type_general = true`)
 

@@ -47,7 +47,7 @@ import (
 // ranges and ranges covering tables in the system database); this setting
 // covers everything else.
 var RangefeedEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.TenantReadOnly,
 	"kv.rangefeed.enabled",
 	"if set, rangefeed registration is enabled",
 	false,
