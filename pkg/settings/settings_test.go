@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	proto "github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,6 +35,10 @@ import (
 type dummyVersion struct {
 	msg1       string
 	growsbyone string
+}
+
+func init() {
+	proto.RegisterType((*dummyVersion)(nil), "cockroach.dummyVersion")
 }
 
 var _ settings.ClusterVersionImpl = &dummyVersion{}
@@ -145,6 +150,7 @@ var changes = struct {
 	duA      int
 	eA       int
 	byteSize int
+	pA       int
 }{}
 
 var boolTA = settings.RegisterBoolSetting(settings.SystemOnly, "bool.t", "desc", true)
@@ -156,6 +162,7 @@ var i2A = settings.RegisterIntSetting(settings.TenantWritable, "i.2", "desc", 5)
 var fA = settings.RegisterFloatSetting(settings.TenantReadOnly, "f", "desc", 5.4)
 var dA = settings.RegisterDurationSetting(settings.TenantWritable, "d", "desc", time.Second)
 var duA = settings.RegisterDurationSettingWithExplicitUnit(settings.TenantWritable, "d_with_explicit_unit", "desc", time.Second, settings.NonNegativeDuration, settings.WithPublic)
+var pA = settings.RegisterProtobufSetting(settings.TenantWritable, "p", "desc", &dummyVersion{msg1: "foo"})
 var _ = settings.RegisterDurationSetting(settings.TenantWritable, "d_with_maximum", "desc", time.Second, settings.NonNegativeDurationWithMaximum(time.Hour))
 var eA = settings.RegisterEnumSetting(settings.SystemOnly, "e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
 var byteSize = settings.RegisterByteSizeSetting(settings.TenantWritable, "zzz", "desc", mb)
@@ -235,6 +242,7 @@ func TestCache(t *testing.T) {
 	dA.SetOnChange(sv, func(context.Context) { changes.dA++ })
 	duA.SetOnChange(sv, func(context.Context) { changes.duA++ })
 	eA.SetOnChange(sv, func(context.Context) { changes.eA++ })
+	pA.SetOnChange(sv, func(context.Context) { changes.pA++ })
 	byteSize.SetOnChange(sv, func(context.Context) { changes.byteSize++ })
 
 	t.Run("VersionSetting", func(t *testing.T) {
@@ -339,6 +347,10 @@ func TestCache(t *testing.T) {
 		}
 		if expected, actual := int64(1), eA.Get(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		{
+			expected, actual := (&dummyVersion{msg1: "foo"}), pA.Get(sv)
+			require.Equal(t, expected, actual)
 		}
 		// Note that we don't test the state-machine setting for a default, since it
 		// doesn't have one and it would crash.
@@ -462,6 +474,20 @@ func TestCache(t *testing.T) {
 			u.Set(ctx, "e", v("notAValidValue", "e")); !testutils.IsError(err, expected) {
 			t.Fatalf("expected '%s' != actual error '%s'", expected, err)
 		}
+
+		if expected, actual := 0, changes.pA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
+		testVal := &dummyVersion{msg1: "bar"}
+		encoded, err := testVal.Marshal()
+		require.NoError(t, err)
+		if err := u.Set(ctx, "p", v(string(encoded), "p")); err != nil {
+			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.pA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
+
 		defaultDummyV := dummyVersion{msg1: "default", growsbyone: "AB"}
 		if err := setDummyVersion(defaultDummyV, mA, sv); err != nil {
 			t.Fatal(err)
@@ -509,6 +535,10 @@ func TestCache(t *testing.T) {
 		}
 		if expected, actual := "default.AB", mA.Encoded(sv); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		{
+			expected, actual := (&dummyVersion{msg1: "bar"}), pA.Get(sv)
+			require.Equal(t, expected, actual)
 		}
 
 		// We didn't change this one, so should still see the default.
@@ -766,6 +796,8 @@ var overrideBool = settings.RegisterBoolSetting(settings.SystemOnly, "override.b
 var overrideInt = settings.RegisterIntSetting(settings.TenantReadOnly, "override.int", "desc", 0)
 var overrideDuration = settings.RegisterDurationSetting(settings.TenantWritable, "override.duration", "desc", time.Second)
 var overrideFloat = settings.RegisterFloatSetting(settings.TenantWritable, "override.float", "desc", 1.0)
+var overrideString = settings.RegisterStringSetting(settings.TenantWritable, "override.string", "desc", "foo")
+var overrideProto = settings.RegisterProtobufSetting(settings.TenantWritable, "override.proto", "desc", &dummyVersion{msg1: "foo"})
 
 func TestOverride(t *testing.T) {
 	ctx := context.Background()
@@ -800,6 +832,21 @@ func TestOverride(t *testing.T) {
 	require.Equal(t, 42.0, overrideFloat.Get(sv))
 	u.ResetRemaining(ctx)
 	require.Equal(t, 42.0, overrideFloat.Get(sv))
+
+	// Test override for string setting.
+	require.Equal(t, "foo", overrideString.Get(sv))
+	overrideString.Override(ctx, sv, "bar")
+	require.Equal(t, "bar", overrideString.Get(sv))
+	u.ResetRemaining(ctx)
+	require.Equal(t, "bar", overrideString.Get(sv))
+
+	// Test override for proto setting.
+	require.Equal(t, &dummyVersion{msg1: "foo"}, overrideProto.Get(sv))
+	overrideProto.Override(ctx, sv, &dummyVersion{msg1: "bar"})
+	require.Equal(t, &dummyVersion{msg1: "bar"}, overrideProto.Get(sv))
+	u.ResetRemaining(ctx)
+	require.Equal(t, &dummyVersion{msg1: "bar"}, overrideProto.Get(sv))
+
 }
 
 func TestSystemOnlyDisallowedOnVirtualCluster(t *testing.T) {
