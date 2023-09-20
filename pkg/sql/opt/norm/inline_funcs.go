@@ -413,8 +413,6 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 //  4. Its arguments are only Variable or Const expressions.
 //  5. It is not a record-returning function.
 //  6. It does not recursively call itself.
-//  7. It does not open a cursor.
-//  8. It does not have an exception-handling block.
 //
 // UDFs with mutations (INSERT, UPDATE, UPSERT, DELETE) cannot be inlined, but
 // we do not need an explicit check for this because immutable UDFs cannot
@@ -443,13 +441,15 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 // UDFs used as data sources return multiple columns. Other UDFs returning a
 // single column can be inlined since subqueries can only return a single
 // column.
+//
+// Note: Routines with an exception block or cursor declaration are volatile, so
+// there is no need to check those cases.
 func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFCallPrivate) bool {
 	if udfp.Def == nil {
 		panic(errors.AssertionFailedf("expected non-nil UDF definition"))
 	}
 	if udfp.Def.IsRecursive || udfp.Def.Volatility == volatility.Volatile ||
-		len(udfp.Def.Body) != 1 || udfp.Def.SetReturning || udfp.Def.MultiColDataSource ||
-		udfp.Def.CursorDeclaration != nil || udfp.Def.ExceptionBlock != nil {
+		len(udfp.Def.Body) != 1 || udfp.Def.SetReturning || udfp.Def.MultiColDataSource {
 		return false
 	}
 	if !args.IsConstantsAndPlaceholdersAndVariables() {

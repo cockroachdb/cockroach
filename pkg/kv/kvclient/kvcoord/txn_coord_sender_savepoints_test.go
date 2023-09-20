@@ -220,6 +220,15 @@ func TestSavepoints(t *testing.T) {
 					ptxn()
 				}
 
+			case "can-use":
+				spn := td.CmdArgs[0].Key
+				spt := sp[spn]
+				if txn.CanUseSavepoint(ctx, spt) {
+					fmt.Fprintf(&buf, "true\n")
+				} else {
+					fmt.Fprintf(&buf, "false\n")
+				}
+
 			default:
 				td.Fatalf(t, "unknown directive: %s", td.Cmd)
 			}

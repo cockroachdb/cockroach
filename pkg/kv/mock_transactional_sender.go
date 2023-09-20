@@ -201,6 +201,11 @@ func (m *MockTransactionalSender) ReleaseSavepoint(context.Context, SavepointTok
 	panic("unimplemented")
 }
 
+// CanUseSavepoint is part of the kv.TxnSender interface.
+func (m *MockTransactionalSender) CanUseSavepoint(context.Context, SavepointToken) bool {
+	panic("unimplemented")
+}
+
 // Epoch is part of the TxnSender interface.
 func (m *MockTransactionalSender) Epoch() enginepb.TxnEpoch { panic("unimplemented") }
 

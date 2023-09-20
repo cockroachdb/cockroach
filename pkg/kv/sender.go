@@ -164,6 +164,10 @@ type TxnSender interface {
 	// This method is only valid when called on RootTxns.
 	ReleaseSavepoint(context.Context, SavepointToken) error
 
+	// CanUseSavepoint checks whether it would be valid to roll back or release
+	// the given savepoint in the current transaction state. It will never error.
+	CanUseSavepoint(context.Context, SavepointToken) bool
+
 	// SetFixedTimestamp makes the transaction run in an unusual way, at
 	// a "fixed timestamp": Timestamp and ReadTimestamp are set to ts,
 	// there's no clock uncertainty, and the txn's deadline is set to ts
