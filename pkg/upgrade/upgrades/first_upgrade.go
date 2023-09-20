@@ -21,9 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
+
+// RunFirstUpgradePrecondition short-circuits FirstUpgradeFromReleasePrecondition if set to false.
+var RunFirstUpgradePrecondition = envutil.EnvOrDefaultBool("COCKROACH_RUN_FIRST_UPGRADE_PRECONDITION", true)
 
 // FirstUpgradeFromRelease implements the tenant upgrade step for all
 // V[0-9]+_[0-9]+Start cluster versions, which is every first internal version
@@ -39,6 +43,9 @@ import (
 func FirstUpgradeFromRelease(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
+	if !RunFirstUpgradePrecondition {
+		return nil
+	}
 	var all nstree.Catalog
 	if err := d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) (err error) {
 		all, err = txn.Descriptors().GetAll(ctx, txn.KV())
