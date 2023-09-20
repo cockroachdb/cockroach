@@ -1069,6 +1069,14 @@ func insufficientPrivilegeError(
 			user, typeForError, object.GetName())
 	}
 
+	// Make a slightly different message for the global privilege object so that
+	// it uses more understandable user-facing language.
+	if object.GetObjectType() == privilege.Global {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"user %s does not have %s system privilege",
+			user, kind)
+	}
+
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
 		user, kind, typeForError, object.GetName())
