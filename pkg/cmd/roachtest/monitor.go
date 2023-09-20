@@ -168,7 +168,7 @@ func (m *monitorImpl) startNodeMonitor() {
 			}
 
 			for info := range eventsCh {
-				_, isDeath := info.Event.(install.MonitorNodeDead)
+				_, isDeath := info.Event.(install.MonitorProcessDead)
 				isExpectedDeath := isDeath && atomic.AddInt32(&m.expDeaths, -1) >= 0
 				var expectedDeathStr string
 				if isExpectedDeath {
