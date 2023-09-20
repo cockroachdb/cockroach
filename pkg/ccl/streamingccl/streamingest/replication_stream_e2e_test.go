@@ -1307,6 +1307,7 @@ func TestReproIncorrectJobQuery(t *testing.T) {
 
 	var coordinatorNodeIndexByOne int
 	c.SrcSysSQL.QueryRow(t, `SELECT coordinator_id FROM crdb_internal.jobs WHERE job_id = $1`, ingestionJobID).Scan(&coordinatorNodeIndexByOne)
+	t.Logf("coordinator to be shutdown is n%d", coordinatorNodeIndexByOne)
 	coordinatorNode := coordinatorNodeIndexByOne - 1
 
 	// Find a different node to run queries on once the coordinator node has shut
