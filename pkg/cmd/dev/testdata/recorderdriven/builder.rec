@@ -27,6 +27,9 @@ docker volume inspect bzlhome
     }
 ]
 
+docker help
+----
+
 mkdir crdb-checkout/artifacts
 ----
 
@@ -64,6 +67,9 @@ docker volume inspect bzlhome
         "Scope": "local"
     }
 ]
+
+docker help
+----
 
 mkdir crdb-checkout/artifacts
 ----
