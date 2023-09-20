@@ -591,3 +591,23 @@ func TestRegistrationString(t *testing.T) {
 		require.Equal(t, tc.exp, tc.r.String())
 	}
 }
+
+// TestRegistryShutdown test verifies that when we shutdown registry with
+// existing registration, registration won't try to update any metrics
+// implicitly.
+func TestRegistryShutdownMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	reg := makeRegistry(NewMetrics())
+
+	regDoneC := make(chan interface{})
+	r := newTestRegistration(spAB, hlc.Timestamp{WallTime: 10}, nil, false)
+	go func() {
+		r.runOutputLoop(context.Background(), 0)
+		close(regDoneC)
+	}()
+	reg.Register(&r.registration)
+
+	reg.DisconnectAllOnShutdown(nil)
+	<-regDoneC
+	require.Zero(t, reg.metrics.RangeFeedRegistrations.Value(), "metric is not zero on stop")
+}
