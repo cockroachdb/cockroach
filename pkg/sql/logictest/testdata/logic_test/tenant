@@ -142,7 +142,7 @@ set default_transaction_read_only = off;
 
 user testuser
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGETENANT system privilege
 CREATE TENANT four
 
 subtest drop_tenant
@@ -195,13 +195,13 @@ set default_transaction_read_only = off;
 
 user testuser
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGETENANT system privilege
 DROP TENANT three
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGETENANT system privilege
 SHOW TENANTS
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGETENANT system privilege
 SHOW TENANT 'two'
 
 user root
