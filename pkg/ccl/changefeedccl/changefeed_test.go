@@ -7348,12 +7348,11 @@ func TestChangefeedEndTimeWithCursor(t *testing.T) {
 		feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH cursor = $1, end_time = $2, no_initial_scan", tsCursor, fakeEndTime)
 		defer closeFeed(t, feed)
 
-		assertPayloads(t, feed, []string{
-			`foo: [4]->{"after": {"a": 4}}`,
-			`foo: [5]->{"after": {"a": 5}}`,
-			`foo: [6]->{"after": {"a": 6}}`,
-		})
-		close(endTimeReached)
+		// Don't care much about the values emitted (tested elsewhere) -- all
+		// we want to make sure is that the feed terminates.  However, we do need
+		// to consume those values since some of the test sink implementations (kafka)
+		// will block.
+		defer DiscardMessages(feed)()
 
 		testFeed := feed.(cdctest.EnterpriseTestFeed)
 		require.NoError(t, testFeed.WaitForStatus(func(s jobs.Status) bool {
