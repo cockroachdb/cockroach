@@ -1213,36 +1213,10 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 		c.SrcSysServer.DB(), srcCodec, "test", "x")
 	destCodec := keys.MakeSQLCodec(c.Args.DestTenantID)
 
-	testutils.SucceedsSoon(t,
-		checkLocalities(tableDesc.PrimaryIndexSpan(srcCodec), rangedesc.NewScanner(c.SrcSysServer.DB())))
+	// Under stress, this takes quite a long time to succeed because of hardware exhaustion.
+	testutils.SucceedsWithin(t,
+		checkLocalities(tableDesc.PrimaryIndexSpan(srcCodec), rangedesc.NewScanner(c.SrcSysServer.DB())), testutils.RaceSucceedsSoonDuration)
 
-	testutils.SucceedsSoon(t,
-		checkLocalities(tableDesc.PrimaryIndexSpan(destCodec), rangedesc.NewScanner(c.DestSysServer.DB())))
-
-	tableName := "test"
-	tabledIDQuery := fmt.Sprintf(`SELECT id FROM system.namespace WHERE name ='%s'`, tableName)
-
-	var tableID uint32
-	c.SrcTenantSQL.QueryRow(t, tabledIDQuery).Scan(&tableID)
-	fmt.Printf("%d", tableID)
-
-	checkLocalityRanges(t, c.SrcSysSQL, srcCodec, uint32(tableDesc.GetID()), "mars")
-
-}
-
-func checkLocalityRanges(
-	t *testing.T, sysSQL *sqlutils.SQLRunner, codec keys.SQLCodec, tableID uint32, region string,
-) {
-	targetPrefix := codec.TablePrefix(tableID)
-	distinctQuery := fmt.Sprintf(`
-SELECT 
-  DISTINCT replica_localities
-FROM 
-  [SHOW CLUSTER RANGES]
-WHERE 
-  start_key ~ '%s'
-`, targetPrefix)
-	var locality string
-	sysSQL.QueryRow(t, distinctQuery).Scan(&locality)
-	require.Contains(t, locality, region)
+	testutils.SucceedsWithin(t,
+		checkLocalities(tableDesc.PrimaryIndexSpan(destCodec), rangedesc.NewScanner(c.DestSysServer.DB())), testutils.RaceSucceedsSoonDuration)
 }
