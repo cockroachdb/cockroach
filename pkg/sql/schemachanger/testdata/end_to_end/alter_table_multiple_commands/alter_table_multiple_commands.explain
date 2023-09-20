@@ -2,9 +2,9 @@
 CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL, k INT, FAMILY "primary" (i, j, k));
 
 /* test */
-EXPLAIN (DDL) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT DEFAULT 30;
+EXPLAIN (DDL) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT DEFAULT 30, ADD COLUMN q INT, DROP COLUMN q;
 ----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›;
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›, ADD COLUMN ‹q› INT8, DROP COLUMN ‹q›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 9 elements transitioning toward PUBLIC
