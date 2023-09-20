@@ -8867,3 +8867,89 @@ func TestChangefeedPubsubResolvedMessages(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestForceSink("pubsub"))
 }
+
+// TestChangefeedEmittedMessages tests that the changefeed.emitted_messages
+// metric is incremented correctly.
+func TestChangefeedEmittedMessages(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		// Set this interval to be very small so we continuously checkpoint and
+		// flush the sink.
+		defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(1 * time.Nanosecond)()
+
+		// Count the resolved spans as emitted messages.
+		var numResolvedSpans int64
+		var resolvedSpansMu syncutil.Mutex
+		knobs.FilterSpanWithMutation = func(rs *jobspb.ResolvedSpan) (bool, error) {
+			resolvedSpansMu.Lock()
+			defer resolvedSpansMu.Unlock()
+			numResolvedSpans += 1
+			return false, nil
+		}
+
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
+		sliDefault, err := metrics.getSLIMetrics(defaultSLIScope)
+		require.NoError(t, err)
+		sliTier1, err := metrics.getSLIMetrics("t1")
+		require.NoError(t, err)
+
+		sqlDB.Exec(t, "CREATE TABLE default1 (i INT)")
+		sqlDB.Exec(t, "CREATE TABLE default2 (i INT)")
+		sqlDB.Exec(t, "CREATE TABLE tier1a (i INT)")
+		sqlDB.Exec(t, "CREATE TABLE tier1b (i INT)")
+
+		f1 := feed(t, f, `CREATE CHANGEFEED FOR default1`)
+		f2 := feed(t, f, `CREATE CHANGEFEED FOR default2`)
+		f3 := feed(t, f, `CREATE CHANGEFEED FOR tier1a WITH metrics_label="t1"`)
+		f4 := feed(t, f, `CREATE CHANGEFEED FOR tier1b WITH  metrics_label="t1"`)
+
+		assertEmittedMessages := func(tier string, expected int64) {
+			testutils.SucceedsWithin(t, func() error {
+				resolvedSpansMu.Lock()
+				var emittedMessagesObserved int64
+				if tier == "default" {
+					emittedMessagesObserved = sliDefault.EmittedMessages.Value()
+				} else {
+					emittedMessagesObserved = sliTier1.EmittedMessages.Value()
+				}
+
+				if emittedMessagesObserved != expected {
+					resolvedSpansMu.Unlock()
+					// Ensure the FilterSpanWithMutation goroutine runs for a bit to allow the expected
+					// kv messages to pass through.
+					time.Sleep(10 * time.Millisecond)
+					return fmt.Errorf("expected %d emitted messages, but found %d", expected,
+						emittedMessagesObserved)
+				}
+				resolvedSpansMu.Unlock()
+				return nil
+			}, 5*time.Second)
+		}
+
+		sqlDB.Exec(t, "INSERT INTO default1 VALUES (1)")
+		assertEmittedMessages("default", 1)
+		sqlDB.Exec(t, "INSERT INTO default2 VALUES (1)")
+		sqlDB.Exec(t, "INSERT INTO default2 VALUES (2)")
+		assertEmittedMessages("default", 3)
+
+		sqlDB.Exec(t, "INSERT INTO tier1a VALUES (1)")
+		sqlDB.Exec(t, "INSERT INTO tier1b VALUES (2)")
+		assertEmittedMessages("t1", 2)
+		sqlDB.Exec(t, "INSERT INTO tier1a VALUES (1)")
+		assertEmittedMessages("t1", 3)
+
+		require.NoError(t, f1.Close())
+		require.NoError(t, f2.Close())
+		require.NoError(t, f3.Close())
+		require.NoError(t, f4.Close())
+	}
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
