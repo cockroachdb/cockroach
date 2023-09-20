@@ -100,7 +100,7 @@ func makeRunCommand() *cobra.Command {
 }
 
 func makeCompareCommand() *cobra.Command {
-	config := compareConfig{}
+	config := defaultCompareConfig()
 	runCmdFunc := func(cmd *cobra.Command, commandLine []string) error {
 		args, _ := splitArgsAtDash(cmd, commandLine)
 
@@ -115,7 +115,18 @@ func makeCompareCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return c.publishToGoogleSheets(metricMaps)
+
+		links, err := c.publishToGoogleSheets(metricMaps)
+		if err != nil {
+			return err
+		}
+		if config.slackToken != "" {
+			err = c.postToSlack(links, metricMaps)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
 	cmd := &cobra.Command{
@@ -125,7 +136,10 @@ func makeCompareCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(2),
 		RunE:  runCmdFunc,
 	}
-	cmd.Flags().StringVar(&config.sheetDesc, "sheet-desc", "", "append a description to the sheet title when doing a comparison")
+	cmd.Flags().StringVar(&config.sheetDesc, "sheet-desc", config.sheetDesc, "append a description to the sheet title when doing a comparison")
+	cmd.Flags().StringVar(&config.slackToken, "slack-token", config.slackToken, "pass a slack token to post the results to a slack channel")
+	cmd.Flags().StringVar(&config.slackUser, "slack-user", config.slackUser, "slack user to post the results as")
+	cmd.Flags().StringVar(&config.slackChannel, "slack-channel", config.slackChannel, "slack channel to post the results to")
 	return cmd
 }
 
