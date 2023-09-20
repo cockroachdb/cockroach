@@ -1193,14 +1193,17 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		t.Logf("txn1 completed with err: %+v", err)
 		wg.Wait()
 
-		aErr := (*kvpb.AmbiguousResultError)(nil)
-		tErr := (*kvpb.TransactionStatusError)(nil)
-		require.ErrorAsf(t, err, &aErr,
-			"expected AmbiguousResultError due to encountering an intent on retry")
-		require.Falsef(t, errors.As(err, &tErr),
-			"did not expect TransactionStatusError due to being already committed")
+		// NB: Prior to #102808 and #102809 which were introduced in 23.2,
+		// WriteTooOlds were handled via a complicated deferral mechanism, and
+		// writes that encountered higher-ts values would succeed, with a flag
+		// on the response for the client to handle. This has the side effect of
+		// masking AmbiguousResultErrors, and results in a serialization error.
+		tErr := (*kvpb.TransactionRetryWithProtoRefreshError)(nil)
+		require.ErrorAsf(t, err, &tErr,
+			"expected TransactionRetryWithProtoRefreshError due to failed refresh")
+		require.False(t, tErr.PrevTxnAborted())
 		require.Falsef(t, errors.HasAssertionFailure(err),
-			"expected no AssertionFailedError due to sanity check on transaction already committed")
+			"expected no AssertionFailedError due to sanity check")
 	})
 
 	// When a retried write happens after our txn's intent has already been
@@ -1244,10 +1247,12 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 
 		// KV Request sequencing.
 		var txn1KeyBWriteCount int64
+		var keyBResolveCount int64
 		tMu.Lock()
 		tMu.maybeWait = func(cp InterceptPoint, req *interceptedReq, resp *interceptedResp) (override error) {
 			putReq, hasPut := req.ba.GetArg(kvpb.Put)
 			var keyBWriteCount int64 = -1
+			var curKeyBResolveCount int64 = -1
 
 			// These conditions are checked in order of expected operations of the
 			// test.
@@ -1275,8 +1280,11 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 
 			// 8. _->n1: ResolveIntent(txn1, b)
 			if riReq, ok := req.ba.GetArg(kvpb.ResolveIntent); ok && riReq.Header().Key.Equal(keyB) && cp == AfterSending {
-				t.Logf("%s - complete", req.prefix)
-				close(resolveIntentComplete)
+				curKeyBResolveCount = atomic.AddInt64(&keyBResolveCount, 1)
+				if curKeyBResolveCount == 1 {
+					t.Logf("%s - complete", req.prefix)
+					close(resolveIntentComplete)
+				}
 			}
 
 			// <inject a network failure and finally allow (4) txn1->n1: Put(b) to
@@ -1308,16 +1316,18 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		t.Logf("txn1 completed with err: %+v", err)
 		wg.Wait()
 
-		// TODO(sarkesian): Once we incorporate secondary errors into the
-		// AmbiguousResultError, check that we see the WriteTooOldError.
-		aErr := (*kvpb.AmbiguousResultError)(nil)
+		// NB: Prior to #102808 and #102809 which were introduced in 23.2,
+		// WriteTooOlds were handled via a complicated deferral mechanism, and
+		// writes that encountered higher-ts values would succeed, with a flag
+		// on the response for the client to handle. This has the side effect of
+		// masking AmbiguousResultErrors, and results in "unexpectedly committed".
 		tErr := (*kvpb.TransactionStatusError)(nil)
-		require.ErrorAsf(t, err, &aErr,
-			"expected AmbiguousResultError due to encountering an intent on retry")
-		require.Falsef(t, errors.As(err, &tErr),
-			"did not expect TransactionStatusError due to being already committed")
-		require.Falsef(t, errors.HasAssertionFailure(err),
-			"expected no AssertionFailedError due to sanity check on transaction already committed")
+		require.ErrorAsf(t, err, &tErr,
+			"expected TransactionStatusError due to being already committed")
+		require.Equalf(t, kvpb.TransactionStatusError_REASON_TXN_COMMITTED, tErr.Reason,
+			"expected TransactionStatusError due to being already committed")
+		require.Truef(t, errors.HasAssertionFailure(err),
+			"expected AssertionFailedError due to sanity check on transaction already committed")
 	})
 
 	// This test is included for completeness, but tests expected behavior;
