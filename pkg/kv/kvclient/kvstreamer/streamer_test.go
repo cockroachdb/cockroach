@@ -59,6 +59,7 @@ func getStreamer(
 		nil, /* kvPairsRead */
 		nil, /* batchRequestsIssued */
 		lock.None,
+		lock.Unreplicated,
 	)
 }
 

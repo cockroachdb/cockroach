@@ -2916,11 +2916,6 @@ func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
 				110873, "explicit unique checks are not yet supported under read committed isolation",
 			)
 		}
-		if locking.Durability == tree.LockDurabilityGuaranteed {
-			return opt.Locking{}, unimplemented.NewWithIssuef(
-				100193, "guaranteed-durable locking not yet implemented",
-			)
-		}
 		b.ContainsNonDefaultKeyLocking = true
 	}
 	return locking, nil

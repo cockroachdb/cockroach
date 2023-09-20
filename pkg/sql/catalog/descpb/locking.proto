@@ -129,3 +129,9 @@ enum ScanLockingWaitPolicy {
   // ERROR represents NOWAIT - raise an error if a row cannot be locked.
   ERROR = 2;
 }
+
+// LockingDurability controls the durability of locks.
+enum ScanLockingDurability {
+  BEST_EFFORT = 0;
+  GUARANTEED = 1;
+}
