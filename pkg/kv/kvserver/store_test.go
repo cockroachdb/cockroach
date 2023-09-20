@@ -60,7 +60,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -155,7 +154,7 @@ func (m mockNodeStore) GetNodeDescriptorCount() int {
 }
 
 func (m mockNodeStore) GetStoreDescriptor(id roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
-	return nil, errorutil.NewStoreNotFoundError(id)
+	return nil, kvpb.NewStoreDescNotFoundError(id)
 }
 
 type dummyFirstRangeProvider struct {
