@@ -8906,7 +8906,11 @@ func TestChangefeedEmittedMessages(t *testing.T) {
 		sqlDB.Exec(t, "CREATE TABLE tier1a (i INT)")
 		sqlDB.Exec(t, "CREATE TABLE tier1b (i INT)")
 
-		f1 := feed(t, f, `CREATE CHANGEFEED FOR default1`)
+		useParquet := ""
+		if _, ok := f.(*cloudFeedFactory); ok {
+			useParquet = "WITH format='parquet'"
+		}
+		f1 := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR default1 %s`, useParquet))
 		f2 := feed(t, f, `CREATE CHANGEFEED FOR default2`)
 		f3 := feed(t, f, `CREATE CHANGEFEED FOR tier1a WITH metrics_label="t1"`)
 		f4 := feed(t, f, `CREATE CHANGEFEED FOR tier1b WITH  metrics_label="t1"`)
@@ -8951,5 +8955,9 @@ func TestChangefeedEmittedMessages(t *testing.T) {
 		require.NoError(t, f3.Close())
 		require.NoError(t, f4.Close())
 	}
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("pubsub"))
+	cdcTest(t, testFn, feedTestForceSink("webhook"))
+	cdcTest(t, testFn, feedTestForceSink("enterprise"))
 }
