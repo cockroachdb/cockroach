@@ -30,12 +30,16 @@ type csvReporter struct {
 // buffered CSV/TSV data.
 const csvFlushInterval = 5 * time.Second
 
-func makeCSVReporter(w io.Writer, format TableDisplayFormat) (*csvReporter, func()) {
+func makeCSVReporter(
+	w io.Writer, format TableDisplayFormat, escapeNewline bool,
+) (*csvReporter, func()) {
 	r := &csvReporter{}
-	r.mu.csvWriter = csv.NewWriter(w)
+	csvWriter := csv.NewWriter(w)
+	csvWriter.EscapeNewline = escapeNewline
 	if format == TableDisplayTSV {
-		r.mu.csvWriter.Comma = '\t'
+		csvWriter.Comma = '\t'
 	}
+	r.mu.csvWriter = csvWriter
 
 	// Set up a flush daemon. This is useful when e.g. visualizing data
 	// from change feeds.

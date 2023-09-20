@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"strings"
 	"unicode"
 )
 
@@ -41,6 +42,8 @@ type Writer struct {
 	midRow                   bool
 	currentRecordNeedsQuotes bool
 	maybeTerminatorString    bool
+	// EscapeNewline escapes newline with \n in field output.
+	EscapeNewline bool
 }
 
 // NewWriter returns a new Writer that writes to w.
@@ -61,6 +64,9 @@ func (w *Writer) Write(record []string) error {
 	}
 
 	for _, field := range record {
+		if w.EscapeNewline {
+			field = strings.ReplaceAll(field, "\n", `\n`)
+		}
 		if err := w.WriteField(bytes.NewBufferString(field)); err != nil {
 			return err
 		}

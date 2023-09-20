@@ -42,7 +42,11 @@ func (sqlExecCtx *Context) RunQuery(
 // Timings is enabled are written to 'tw'.
 // Errors and warnings, if any, are printed to 'ew'.
 func (sqlExecCtx *Context) RunQueryAndFormatResults(
-	ctx context.Context, conn clisqlclient.Conn, w, tw, ew io.Writer, fn clisqlclient.QueryFn,
+	ctx context.Context,
+	conn clisqlclient.Conn,
+	w, tw, ew io.Writer,
+	fn clisqlclient.QueryFn,
+	csvEscapeNewline bool,
 ) (err error) {
 	startTime := timeutil.Now()
 	rows, isMultiStatementQuery, err := fn(ctx, conn)
@@ -92,7 +96,7 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 		}
 
 		cols := getColumnStrings(rows, true /* showMoreChars */)
-		reporter, cleanup, err := sqlExecCtx.makeReporter(w)
+		reporter, cleanup, err := sqlExecCtx.makeReporter(w, csvEscapeNewline)
 		if err != nil {
 			return err
 		}
@@ -104,7 +108,18 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 			if cleanup != nil {
 				defer cleanup()
 			}
-			return render(reporter, w, ew, cols, newRowIter(rows, true /* showMoreChars */), completedHook, noRowsHook)
+			return render(
+				reporter,
+				w,
+				ew,
+				cols,
+				&rowIter{
+					rows:          rows,
+					showMoreChars: true,
+				},
+				completedHook,
+				noRowsHook,
+			)
 		}(); err != nil {
 			return err
 		}

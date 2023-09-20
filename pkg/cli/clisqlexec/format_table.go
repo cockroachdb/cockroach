@@ -131,13 +131,6 @@ func (iter *rowIter) Align() []int {
 	return align
 }
 
-func newRowIter(rows clisqlclient.Rows, showMoreChars bool) *rowIter {
-	return &rowIter{
-		rows:          rows,
-		showMoreChars: showMoreChars,
-	}
-}
-
 // rowReporter is used to render result sets.
 //   - describe is called once in any case with the result column set.
 //   - beforeFirstRow is called once upon the first row encountered.
@@ -242,7 +235,9 @@ func render(
 // makeReporter instantiates a table formatter. It returns the
 // formatter and a cleanup function that must be called in all cases
 // when the formatting completes.
-func (sqlExecCtx *Context) makeReporter(w io.Writer) (rowReporter, func(), error) {
+func (sqlExecCtx *Context) makeReporter(
+	w io.Writer, csvEscapeNewline bool,
+) (rowReporter, func(), error) {
 	switch sqlExecCtx.TableDisplayFormat {
 	case TableDisplayTable:
 		return newASCIITableReporter(sqlExecCtx.TableBorderMode), nil, nil
@@ -250,7 +245,7 @@ func (sqlExecCtx *Context) makeReporter(w io.Writer) (rowReporter, func(), error
 	case TableDisplayTSV:
 		fallthrough
 	case TableDisplayCSV:
-		reporter, cleanup := makeCSVReporter(w, sqlExecCtx.TableDisplayFormat)
+		reporter, cleanup := makeCSVReporter(w, sqlExecCtx.TableDisplayFormat, csvEscapeNewline)
 		return reporter, cleanup, nil
 
 	case TableDisplayNDJSON:
@@ -287,7 +282,7 @@ func (sqlExecCtx *Context) makeReporter(w io.Writer) (rowReporter, func(), error
 func (sqlExecCtx *Context) PrintQueryOutput(
 	w, ew io.Writer, cols []string, allRows RowStrIter,
 ) error {
-	reporter, cleanup, err := sqlExecCtx.makeReporter(w)
+	reporter, cleanup, err := sqlExecCtx.makeReporter(w, false /* csvEscapeNewline */)
 	if err != nil {
 		return err
 	}
