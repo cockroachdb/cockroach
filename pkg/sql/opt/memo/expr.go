@@ -726,6 +726,11 @@ type UDFDefinition struct {
 	// body of this routine returns an error. It can be unset.
 	ExceptionBlock *ExceptionBlock
 
+	// BlockState is shared between the routines that encapsulate a PLpgSQL block.
+	// It is used to coordinate between the nested routines during exception
+	// handling.
+	BlockState *tree.BlockState
+
 	// CursorDeclaration contains the information needed to open a SQL cursor with
 	// the result of the *first* body statement. If it is set, there will be at
 	// least two body statements - one to open the cursor, and one to evaluate the

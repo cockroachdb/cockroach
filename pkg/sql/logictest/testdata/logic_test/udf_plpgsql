@@ -1938,3 +1938,279 @@ query T noticetrace
 SELECT f(-1)
 ----
 NOTICE: outside IF
+
+statement ok
+DELETE FROM xy WHERE x >= 100;
+
+# Testing rollback behavior for EXCEPTION blocks.
+statement ok
+DROP FUNCTION f(INT);
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    INSERT INTO xy VALUES (-100, -100);
+    i := 100;
+    RETURN 1 // 0;
+  EXCEPTION WHEN division_by_zero THEN
+    INSERT INTO xy VALUES (-200, -200);
+    IF n > 0 THEN
+      RAISE EXCEPTION 'foo';
+    END IF;
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# After the division-by-zero error, the INSERT should have been rolled back
+# but the updated value for "i" should be returned. The INSERT in the exception
+# handler can proceed.
+query I
+SELECT f(0);
+----
+100
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+-200  -200
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# The error raised in the exception handler should prevent the second insert
+# from succeeding as well.
+statement error pgcode P0001 pq: foo
+SELECT f(1);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT x INTO i FROM xy ORDER BY x;
+    INSERT INTO xy VALUES (-100, -100);
+    IF n = 0 THEN
+      RAISE division_by_zero;
+    END IF;
+    SELECT x INTO i FROM xy ORDER BY x;
+    IF n = 1 THEN
+      RAISE division_by_zero;
+    END IF;
+    RETURN i;
+  EXCEPTION WHEN division_by_zero THEN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# The error occurs before reading from xy the second time.
+query I
+SELECT f(0);
+----
+1
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# The error occurs after reading from xy the second time. The insert should
+# "appear" in the result, but should not have been committed.
+query I
+SELECT f(1);
+----
+-100
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# There is no error, so the newly inserted value should be returned and
+# also committed.
+query I
+SELECT f(2);
+----
+-100
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+-100  -100
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# Test interaction with IF statements.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    IF n >= 0 THEN
+      INSERT INTO xy VALUES (n, n);
+    ELSIF n < 0 THEN
+      INSERT INTO xy VALUES (n*2, n*2);
+    END IF;
+    RETURN 1 // n;
+  EXCEPTION WHEN division_by_zero THEN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# The insert should succeed.
+statement ok
+SELECT f(100);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+100   100
+
+# The insert should succeed with n * 2.
+statement ok
+SELECT f(-100);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+100   100
+-200  -200
+
+# The insert should fail.
+statement ok
+SELECT f(0);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1     2
+3     4
+100   100
+-200  -200
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# Test interaction with loops.
+statement ok
+CREATE OR REPLACE FUNCTION f(n INT) RETURNS INT AS $$
+  DECLARE
+    i INT := n;
+  BEGIN
+    WHILE i <= (n + 5) LOOP
+      IF i = 105 THEN
+        RAISE division_by_zero;
+      ELSIF i % 2 = 0 THEN
+        INSERT INTO xy VALUES (i, i);
+      END IF;
+      i := i + 1;
+    END LOOP;
+    RETURN 0;
+  EXCEPTION WHEN division_by_zero THEN
+    RETURN i;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# The insert should fail.
+statement ok
+SELECT f(100);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# The inserts should succeed for even values.
+statement ok
+SELECT f(200);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1    2
+3    4
+200  200
+202  202
+204  204
+
+statement ok
+DELETE FROM xy WHERE x <> 1 AND x <> 3;
+
+# Catching a Transaction Retry error is not supported, because such errors
+# leave the transaction in a poisoned state.
+statement error pgcode 0A000 pq: unimplemented: catching a Transaction Retry error in a PLpgSQL EXCEPTION block is not yet implemented
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION WHEN serialization_failure THEN
+    RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: catching a Transaction Retry error in a PLpgSQL EXCEPTION block is not yet implemented
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 0;
+  EXCEPTION WHEN SQLSTATE '40001' THEN
+    RETURN -1;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# Branches of an exception block don't interact with one another.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      INSERT INTO xy VALUES (100, 100);
+      RAISE invalid_password;
+    WHEN invalid_password THEN
+      INSERT INTO xy VALUES (200, 200);
+      RETURN -2;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 28P01 pq: invalid_password
+SELECT f();
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4

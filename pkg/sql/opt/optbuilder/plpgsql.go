@@ -143,12 +143,12 @@ type plpgsqlBuilder struct {
 	// statements that follow the loop.
 	exitContinuations []continuation
 
-	// exceptionBlock is the exception handler built to handle the (optional)
-	// EXCEPTION block of the PLpgSQL routine. See the buildExceptions comments
-	// for more detail.
-	exceptionBlock *memo.ExceptionBlock
+	// blockState is shared state for all routines that make up a PLpgSQL block,
+	// including the implicit block that surrounds the body statements.
+	blockState *tree.BlockState
 
-	identCounter int
+	hasExceptionBlock bool
+	identCounter      int
 }
 
 func (b *plpgsqlBuilder) init(
@@ -214,19 +214,22 @@ func (b *plpgsqlBuilder) build(block *ast.Block, s *scope) *scope {
 			b.constants[dec.Var] = struct{}{}
 		}
 	}
-	b.buildExceptions(block)
-	if b.exceptionBlock != nil {
-		// Wrap the body in a routine to ensure that any errors thrown from the body
-		// are caught. Note that errors thrown during variable elimination are
-		// intentionally not caught.
-		catchCon := b.makeContinuation("exception_block")
-		b.appendPlpgSQLStmts(&catchCon, block.Body)
-		s = b.callContinuation(&catchCon, s)
-	} else {
-		// No exception block, so no need to wrap the body statements.
-		s = b.buildPLpgSQLStatements(block.Body, s)
+	if exceptions := b.buildExceptions(block); exceptions != nil {
+		// There is an implicit block around the body statements, with an optional
+		// exception handler. Note that the variable declarations are not in block
+		// scope, and exceptions thrown during variable declaration are not caught.
+		//
+		// The routine is volatile to prevent inlining. Only the block and
+		// variable-assignment routines need to be volatile; see the buildExceptions
+		// comment for details.
+		b.blockState = &tree.BlockState{}
+		blockCon := b.makeContinuation("exception_block")
+		blockCon.def.ExceptionBlock = exceptions
+		blockCon.def.Volatility = volatility.Volatile
+		b.appendPlpgSQLStmts(&blockCon, block.Body)
+		return b.callContinuation(&blockCon, s)
 	}
-	return s
+	return b.buildPLpgSQLStatements(block.Body, s)
 }
 
 // buildPLpgSQLStatements performs the majority of the work building a PL/pgSQL
@@ -256,13 +259,16 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// Assignment (:=) is handled by projecting a new column with the same
 			// name as the variable being assigned.
 			s = b.addPLpgSQLAssign(s, t.Var, t.Value)
-			if b.exceptionBlock != nil {
+			if b.hasExceptionBlock {
 				// If exception handling is required, we have to start a new
 				// continuation after each variable assignment. This ensures that in the
 				// event of an error, the arguments of the currently executing routine
 				// will be the correct values for the variables, and can be passed to
-				// the exception handler routines.
+				// the exception handler routines. Set the volatility to Volatile in
+				// order to ensure that the routine is not inlined. See the
+				// handleException comment for details on why this is necessary.
 				catchCon := b.makeContinuation("assign_exception_block")
+				catchCon.def.Volatility = volatility.Volatile
 				b.appendPlpgSQLStmts(&catchCon, stmts[i+1:])
 				return b.callContinuation(&catchCon, s)
 			}
@@ -522,7 +528,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// This is handled by calling the plpgsql_open_cursor internal builtin
 			// function in a separate body statement that returns no results, similar
 			// to the RAISE implementation.
-			if b.exceptionBlock != nil {
+			if b.hasExceptionBlock {
 				panic(unimplemented.New("open with exception block",
 					"opening a cursor in a routine with an exception block is not yet supported",
 				))
@@ -798,24 +804,23 @@ func (b *plpgsqlBuilder) makeRaiseFormatMessage(
 
 // buildExceptions builds the ExceptionBlock for a PLpgSQL routine as a list of
 // matchable error codes and routine definitions that handle each matched error.
-// There are two sets of statements that need to be wrapped in a continuation
-// with an exception handler:
-//  1. The entire set of body statements, not including variable initialization.
-//  2. Execution of all statements following a variable assignment.
+// The exception handler is set for the top-level block routine. All child
+// sub-routines of the block routine will use the same exception handler through
+// the shared BlockState.
 //
-// The first condition handles the case when an error occurs before any variable
-// assignments happen. PLpgSQL exception blocks do not catch errors that occur
-// during variable declaration.
+// Note that the variable declarations are not within the body of the block
+// routine; this is because the declaration block is not within the scope of the
+// exception block.
 //
-// The second condition is necessary because the exception block must see the
-// most recent values for all variables from the point when the error occurred.
-// It works because if an error occurs before the assignment continuation is
-// called, it must have happened logically during or before the assignment
-// statement completed. Therefore, the assignment did not succeed and the
-// previous values for the variables should be used. If the error occurs after
-// the assignment continuation is called, the continuation will have access to
-// the updated value from the assignment, and can supply it to the exception
-// handler. Consider the following example:
+// The exception handler must observe up-to-date values for the PLpgSQL
+// variables, so a new continuation routine must be created for all body
+// statements following an assignment statement. This works because if an error
+// occurs before the assignment continuation is called, it must have happened
+// logically during or before the assignment statement completed. Therefore, the
+// assignment did not succeed and the previous values for the variables should
+// be used. If the error occurs after the assignment continuation is called, the
+// continuation will have access to the updated value from the assignment, and
+// can supply it to the exception handler. Consider the following example:
 //
 //		 CREATE TABLE t (x INT PRIMARY KEY);
 //
@@ -863,18 +868,28 @@ func (b *plpgsqlBuilder) makeRaiseFormatMessage(
 // cannot throw an exception, and so the "i := 2" assignment will never become
 // visible.
 //
-// Currently, all continuations set the exception handler if there is one. This
-// is necessary because tail-call optimization depends on parent routines doing
-// no further work after a tail-call returns.
-// TODO(drewk): We could make a special case for exception handling, since the
-// exception handler is the same across all PLpgSQL routines. This would allow
-// us to only set the exception handler for the two cases above.
-func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) {
+// The block and assignment continuations must be volatile to prevent inlining.
+// The presence of an exception handler does not impose restrictions on inlining
+// for other continuations.
+func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) *memo.ExceptionBlock {
 	if len(block.Exceptions) == 0 {
-		return
+		return nil
 	}
 	codes := make([]pgcode.Code, 0, len(block.Exceptions))
 	handlers := make([]*memo.UDFDefinition, 0, len(block.Exceptions))
+	addHandler := func(codeStr string, handler *memo.UDFDefinition) {
+		code := pgcode.MakeCode(strings.ToUpper(codeStr))
+		switch code {
+		case pgcode.TransactionRollback, pgcode.TransactionIntegrityConstraintViolation,
+			pgcode.SerializationFailure, pgcode.StatementCompletionUnknown,
+			pgcode.DeadlockDetected:
+			panic(unimplemented.NewWithIssue(111446,
+				"catching a Transaction Retry error in a PLpgSQL EXCEPTION block is not yet implemented",
+			))
+		}
+		codes = append(codes, code)
+		handlers = append(handlers, handler)
+	}
 	for _, e := range block.Exceptions {
 		handlerCon := b.makeContinuation("exception_handler")
 		b.appendPlpgSQLStmts(&handlerCon, e.Action)
@@ -884,8 +899,7 @@ func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) {
 				if !pgcode.IsValidPGCode(cond.SqlErrState) {
 					panic(pgerror.Newf(pgcode.Syntax, "invalid SQLSTATE code '%s'", cond.SqlErrState))
 				}
-				codes = append(codes, pgcode.MakeCode(cond.SqlErrState))
-				handlers = append(handlers, handlerCon.def)
+				addHandler(cond.SqlErrState, handlerCon.def)
 				continue
 			}
 			// The match condition was supplied by name instead of code.
@@ -896,12 +910,12 @@ func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) {
 				))
 			}
 			for i := range branchCodes {
-				codes = append(codes, pgcode.MakeCode(branchCodes[i]))
-				handlers = append(handlers, handlerCon.def)
+				addHandler(branchCodes[i], handlerCon.def)
 			}
 		}
 	}
-	b.exceptionBlock = &memo.ExceptionBlock{
+	b.hasExceptionBlock = true
+	return &memo.ExceptionBlock{
 		Codes:   codes,
 		Actions: handlers,
 	}
@@ -959,7 +973,7 @@ func (b *plpgsqlBuilder) makeContinuation(name string) continuation {
 			Name:              b.makeIdentifier(name),
 			Typ:               b.returnType,
 			CalledOnNullInput: true,
-			ExceptionBlock:    b.exceptionBlock,
+			BlockState:        b.blockState,
 		},
 		s: s,
 	}

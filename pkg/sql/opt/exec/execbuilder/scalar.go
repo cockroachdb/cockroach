@@ -702,7 +702,7 @@ func (b *Builder) buildExistsSubquery(
 				false, /* generator */
 				false, /* tailCall */
 				false, /* procedure */
-				nil,   /* exceptionHandler */
+				nil,   /* blockState */
 				nil,   /* cursorDeclaration */
 			),
 			tree.DBoolFalse,
@@ -821,7 +821,7 @@ func (b *Builder) buildSubquery(
 			false, /* generator */
 			false, /* tailCall */
 			false, /* procedure */
-			nil,   /* exceptionHandler */
+			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
 		), nil
 	}
@@ -879,7 +879,7 @@ func (b *Builder) buildSubquery(
 			false, /* generator */
 			false, /* tailCall */
 			false, /* procedure */
-			nil,   /* exceptionHandler */
+			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
 		), nil
 	}
@@ -952,6 +952,10 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		}
 	}
 
+	if udf.Def.BlockState != nil {
+		b.initRoutineExceptionHandler(udf.Def.BlockState, udf.Def.ExceptionBlock)
+	}
+
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
 	// TODO(mgartner): Add support for WITH expressions inside UDF bodies.
 	planGen := b.buildRoutinePlanGenerator(
@@ -996,7 +1000,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 				action.SetReturning,
 				false, /* tailCall */
 				false, /* procedure */
-				nil,   /* exceptionHandler */
+				nil,   /* blockState */
 				nil,   /* cursorDeclaration */
 			)
 		}
@@ -1013,9 +1017,51 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.SetReturning,
 		udf.TailCall,
 		false, /* procedure */
-		exceptionHandler,
+		udf.Def.BlockState,
 		udf.Def.CursorDeclaration,
 	), nil
+}
+
+// initRoutineExceptionHandler initializes the exception handler (if any) for
+// the shared BlockState of a group of sub-routines within a PLpgSQL block.
+func (b *Builder) initRoutineExceptionHandler(
+	blockState *tree.BlockState, exceptionBlock *memo.ExceptionBlock,
+) {
+	if exceptionBlock == nil {
+		// Building the exception block is currently the only necessary
+		// initialization.
+		return
+	}
+	exceptionHandler := &tree.RoutineExceptionHandler{
+		Codes:   exceptionBlock.Codes,
+		Actions: make([]*tree.RoutineExpr, len(exceptionBlock.Actions)),
+	}
+	for i, action := range exceptionBlock.Actions {
+		actionPlanGen := b.buildRoutinePlanGenerator(
+			action.Params,
+			action.Body,
+			action.BodyProps,
+			false, /* allowOuterWithRefs */
+			nil,   /* wrapRootExpr */
+		)
+		// Build a routine with no arguments for the exception handler. The actual
+		// arguments will be supplied when (if) the handler is invoked.
+		exceptionHandler.Actions[i] = tree.NewTypedRoutineExpr(
+			action.Name,
+			nil, /* args */
+			actionPlanGen,
+			action.Typ,
+			true, /* enableStepping */
+			action.CalledOnNullInput,
+			action.MultiColDataSource,
+			action.SetReturning,
+			false, /* tailCall */
+			false, /* procedure */
+			nil,   /* blockState */
+			nil,   /* cursorDeclaration */
+		)
+	}
+	blockState.ExceptionHandler = exceptionHandler
 }
 
 type wrapRootExprFn func(f *norm.Factory, e memo.RelExpr) opt.Expr
