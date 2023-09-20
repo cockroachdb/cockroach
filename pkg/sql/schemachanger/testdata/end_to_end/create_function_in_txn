@@ -157,10 +157,8 @@ upsert descriptor #105
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS
-  +          INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
-  +        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT
-  +          1 $$"
+  +        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
+  +        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT 1 $$"
   +        statementTag: CREATE FUNCTION
   +    revertible: true
   +    targetRanks: <redacted>
@@ -499,7 +497,7 @@ upsert descriptor #104
   +  version: "7"
 upsert descriptor #105
   ...
-             1 $$"
+           statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT 1 $$"
            statementTag: CREATE FUNCTION
   -    revertible: true
        targetRanks: <redacted>
@@ -583,10 +581,8 @@ upsert descriptor #105
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS
-  -          INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
-  -        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT
-  -          1 $$"
+  -        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
+  -        statement: "CREATE FUNCTION t()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$ SELECT 1 $$"
   -        statementTag: CREATE FUNCTION
   -    targetRanks: <redacted>
   -    targets: <redacted>

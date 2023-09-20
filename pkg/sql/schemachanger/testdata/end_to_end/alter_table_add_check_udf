@@ -17,8 +17,7 @@ write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
     descriptorId: 104
-    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹check_b› CHECK (f(‹b›)
-      > ‹1›)
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹check_b› CHECK (f(‹b›) > ‹1›)
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
@@ -104,8 +103,7 @@ upsert descriptor #104
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹check_b›
-  +          CHECK (f(‹b›) > ‹1›)
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹check_b› CHECK (f(‹b›) > ‹1›)
   +        statement: ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1)
   +        statementTag: ALTER TABLE
   +    revertible: true
@@ -195,8 +193,7 @@ upsert descriptor #104
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹check_b›
-  -          CHECK (f(‹b›) > ‹1›)
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹check_b› CHECK (f(‹b›) > ‹1›)
   -        statement: ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1)
   -        statementTag: ALTER TABLE
   -    revertible: true

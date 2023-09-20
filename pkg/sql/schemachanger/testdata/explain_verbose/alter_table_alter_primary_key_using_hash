@@ -780,10 +780,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
 │                 JobID: 1
 │                 RunningStatus: PostCommitPhase stage 1 of 7 with 4 MutationType ops pending
 │                 Statements:
-│                 - statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count
-│                     = 3)
-│                   redactedstatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING
-│                     COLUMNS (‹j›) USING HASH WITH (‹bucket_count› = ‹3›)
+│                 - statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
+│                   redactedstatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›) USING HASH WITH (‹bucket_count› = ‹3›)
 │                   statementtag: ALTER TABLE
 │
 ├── • PostCommitPhase
@@ -1473,22 +1471,19 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j) USING H
             ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING
-            │         HASH WITH (bucket_count = 3)
+            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
             │     TableID: 104
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING
-            │         HASH WITH (bucket_count = 3)
+            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
             │     TableID: 104
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 5
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING
-            │         HASH WITH (bucket_count = 3)
+            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH (bucket_count = 3)
             │     TableID: 104
             │
             ├── • RemoveJobStateFromDescriptor

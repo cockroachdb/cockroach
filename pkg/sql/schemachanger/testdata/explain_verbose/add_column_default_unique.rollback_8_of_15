@@ -226,8 +226,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 8 of 15;
             │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year',
-            │         now()) AS INT8)
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year', now()) AS INT8)
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
@@ -238,8 +237,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 8 of 15;
             │     IndexID: 3
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year',
-            │         now()) AS INT8)
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year', now()) AS INT8)
             │     TableID: 106
             │
             ├── • MakeDeleteOnlyColumnAbsent

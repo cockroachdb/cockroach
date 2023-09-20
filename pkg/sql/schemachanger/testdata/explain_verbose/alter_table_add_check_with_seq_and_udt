@@ -116,8 +116,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
 │                 RunningStatus: PostCommitPhase stage 1 of 2 with 1 ValidationType op pending
 │                 Statements:
 │                 - statement: ALTER TABLE t ADD CHECK ((i > nextval('s')) OR (j::typ = 'a'))
-│                   redactedstatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› > nextval(‹'s'›))
-│                     OR (‹j›::‹typ› = ‹'a'›))
+│                   redactedstatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› > nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›))
 │                   statementtag: ALTER TABLE
 │
 └── • PostCommitPhase

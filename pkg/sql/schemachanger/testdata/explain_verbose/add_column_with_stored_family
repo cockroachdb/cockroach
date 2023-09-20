@@ -448,10 +448,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL AS (k
 │                 JobID: 1
 │                 RunningStatus: PostCommitPhase stage 1 of 7 with 3 MutationType ops pending
 │                 Statements:
-│                 - statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE
-│                     FAMILY bob
-│                   redactedstatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL
-│                     AS (‹k›) STORED CREATE FAMILY ‹bob›
+│                 - statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE FAMILY bob
+│                   redactedstatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL AS (‹k›) STORED CREATE FAMILY ‹bob›
 │                   statementtag: ALTER TABLE
 │
 ├── • PostCommitPhase
@@ -948,15 +946,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL AS (k
             ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE
-            │         FAMILY bob
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE FAMILY bob
             │     TableID: 106
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE
-            │         FAMILY bob
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE FAMILY bob
             │     TableID: 106
             │
             ├── • RemoveJobStateFromDescriptor

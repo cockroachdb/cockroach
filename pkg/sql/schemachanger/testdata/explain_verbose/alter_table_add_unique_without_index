@@ -74,8 +74,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
 │                 RunningStatus: PostCommitPhase stage 1 of 2 with 1 ValidationType op pending
 │                 Statements:
 │                 - statement: ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j)
-│                   redactedstatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹unique_j›
-│                     UNIQUE WITHOUT INDEX (‹j›)
+│                   redactedstatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹unique_j› UNIQUE WITHOUT INDEX (‹j›)
 │                   statementtag: ALTER TABLE
 │
 └── • PostCommitPhase

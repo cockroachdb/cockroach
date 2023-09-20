@@ -58,8 +58,7 @@ write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
     descriptorId: 106
-    statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT NULL DEFAULT
-      nextval(‹'db.public.sq1'›)
+    statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT NULL DEFAULT nextval(‹'db.public.sq1'›)
     tag: ALTER TABLE
     user: root
   tableName: db.public.tbl
@@ -194,8 +193,7 @@ upsert descriptor #106
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT
-  +          NULL DEFAULT nextval(‹'db.public.sq1'›)
+  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT NULL DEFAULT nextval(‹'db.public.sq1'›)
   +        statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
   +        statementTag: ALTER TABLE
   +    revertible: true
@@ -712,8 +710,7 @@ upsert descriptor #106
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT
-  -          NULL DEFAULT nextval(‹'db.public.sq1'›)
+  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT NULL DEFAULT nextval(‹'db.public.sq1'›)
   -        statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
   -        statementTag: ALTER TABLE
   -    targetRanks: <redacted>

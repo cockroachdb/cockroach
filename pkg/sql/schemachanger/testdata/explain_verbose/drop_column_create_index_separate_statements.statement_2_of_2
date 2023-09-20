@@ -983,8 +983,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 10 MutationType ops
-    │               pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 10 MutationType ops pending
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │

@@ -259,8 +259,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
             │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE
-            │         FAMILY bob
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE FAMILY bob
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
@@ -271,8 +270,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
             │     IndexID: 3
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE
-            │         FAMILY bob
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE FAMILY bob
             │     TableID: 106
             │
             ├── • MakeDeleteOnlyColumnAbsent

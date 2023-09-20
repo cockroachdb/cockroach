@@ -192,8 +192,7 @@ upsert descriptor #106
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE
-  +          (‹v› = ‹'a'›)
+  +        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v› = ‹'a'›)
   +        statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
   +        statementTag: CREATE INDEX
   +    revertible: true
@@ -555,8 +554,7 @@ upsert descriptor #106
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE
-  -          (‹v› = ‹'a'›)
+  -        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v› = ‹'a'›)
   -        statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
   -        statementTag: CREATE INDEX
   -    targetRanks: <redacted>
