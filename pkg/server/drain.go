@@ -43,7 +43,7 @@ var (
 		"the timeout for waiting for active queries to finish during a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting)",
-		10*time.Second,
+		10*time.Millisecond,
 		settings.NonNegativeDurationWithMaximum(10*time.Hour),
 		settings.WithPublic)
 

@@ -1294,7 +1294,7 @@ func TestReproIncorrectJobQuery(t *testing.T) {
 	defer cleanup()
 
 	// These cluster setting changes are attempts to speed up the test.
-	serverutils.SetClusterSetting(t, c.DestCluster, "server.shutdown.query_wait", "10ms")
+	//serverutils.SetClusterSetting(t, c.DestCluster, "server.shutdown.query_wait", "10ms")
 	serverutils.SetClusterSetting(t, c.DestCluster, "server.shutdown.lease_transfer_wait", "10ms")
 
 	replicationtestutils.CreateScatteredTable(t, c, 4)
@@ -1384,7 +1384,9 @@ func TestReproIncorrectJobQuery(t *testing.T) {
 
 // debugCrdbInternalJobs checks for the existence of the ingestionJob via a
 // variety of queries.
-func debugCrdbInternalJobs(ctx context.Context, t *testing.T, ingestionJob int, db *gosql.DB, aost string) {
+func debugCrdbInternalJobs(
+	ctx context.Context, t *testing.T, ingestionJob int, db *gosql.DB, aost string,
+) {
 	t.Logf("sadness")
 	sameQueryRes := db.QueryRowContext(ctx, fmt.Sprintf(`SELECT status, payload FROM crdb_internal.system_jobs AS OF SYSTEM TIME '%s' WHERE id = $1 `, aost), ingestionJob)
 	if sameQueryRes.Err() != nil {
