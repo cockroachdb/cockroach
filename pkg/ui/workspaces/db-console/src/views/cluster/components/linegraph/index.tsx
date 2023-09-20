@@ -66,6 +66,7 @@ export interface OwnProps extends MetricsDataComponentProps {
   hoverOff?: typeof hoverOff;
   hoverState?: HoverState;
   preCalcGraphSize?: boolean;
+  legendAsTooltip?: boolean;
 }
 
 export type LineGraphProps = OwnProps & WithTimezoneProps;
@@ -354,6 +355,7 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
         this.setNewTimeRange,
         () => this.xAxisDomain,
         () => this.yAxisDomain,
+        this.props.legendAsTooltip,
       );
 
       if (this.u) {
@@ -371,8 +373,15 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   render() {
-    const { title, subtitle, tooltip, data, tenantSource, preCalcGraphSize } =
-      this.props;
+    const {
+      title,
+      subtitle,
+      tooltip,
+      data,
+      tenantSource,
+      preCalcGraphSize,
+      legendAsTooltip,
+    } = this.props;
     if (!this.hasDataPoints(data) && isSecondaryTenant(tenantSource)) {
       return (
         <div className="linegraph-empty">
@@ -390,6 +399,7 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
         </div>
       );
     }
+    const legendClassName = legendAsTooltip ? "linegraph-tooltip" : "linegraph";
     return (
       <Visualization
         title={title}
@@ -398,7 +408,7 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
         loading={!data}
         preCalcGraphSize={preCalcGraphSize}
       >
-        <div className="linegraph">
+        <div className={legendClassName}>
           <div ref={this.el} />
         </div>
       </Visualization>
