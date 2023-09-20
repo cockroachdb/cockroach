@@ -11,6 +11,8 @@
 package explain
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -254,6 +256,12 @@ func tableColumns(table cat.Table, ordinals exec.TableColumnOrdinalSet) colinfo.
 			cols = append(cols, colinfo.ResultColumn{
 				Name: string(col.ColName()),
 				Typ:  col.DatumType(),
+			})
+		} else {
+			// Give downstream operators something to chew on so that they don't panic.
+			cols = append(cols, colinfo.ResultColumn{
+				Name: fmt.Sprintf("unknownCol-%d", i),
+				Typ:  types.Unknown,
 			})
 		}
 	}
