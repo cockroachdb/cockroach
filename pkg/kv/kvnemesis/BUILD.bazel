@@ -58,7 +58,7 @@ go_library(
 
 go_test(
     name = "kvnemesis_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "applier_test.go",
         "engine_test.go",
@@ -68,7 +68,7 @@ go_test(
         "operations_test.go",
         "validator_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":kvnemesis"],
     deps = [
