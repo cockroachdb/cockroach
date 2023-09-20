@@ -8,9 +8,9 @@ go_library(
         "error_code_set.go",
         "error_screening.go",
         "operation_generator.go",
+        "optype.go",
         "schemachange.go",
         "type_resolver.go",
-        "optype.go",
         "watch_dog.go",
         ":gen-optype-stringer",  # keep
     ],
