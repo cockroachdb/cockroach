@@ -23,7 +23,7 @@ var (
 	FluentSinkConnErrors = metric.Metadata{
 		Name:        string(log.FluentSinkConnectionError),
 		Help:        "Number of connection errors experienced by fluent-server logging sinks",
-		Measurement: "fluent-server log sink connection errors",
+		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
 )
