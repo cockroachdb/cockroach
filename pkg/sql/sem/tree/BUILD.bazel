@@ -126,6 +126,7 @@ go_library(
         "//pkg/col/typeconv",  # keep
         "//pkg/geo",
         "//pkg/geo/geopb",
+        "//pkg/kv",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",

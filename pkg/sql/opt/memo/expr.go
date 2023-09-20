@@ -725,6 +725,11 @@ type UDFDefinition struct {
 	// ExceptionBlock contains information needed for exception-handling when the
 	// body of this routine returns an error. It can be unset.
 	ExceptionBlock *ExceptionBlock
+
+	// BlockState is shared between the routines that encapsulate a PLpgSQL block.
+	// It is used to coordinate between the nested routines during exception
+	// handling.
+	BlockState *tree.BlockState
 }
 
 // ExceptionBlock contains the information needed to match and handle errors in
