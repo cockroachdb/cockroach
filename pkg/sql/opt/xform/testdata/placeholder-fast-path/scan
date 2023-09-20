@@ -41,7 +41,7 @@ SELECT * FROM kv WHERE k = $1 FOR UPDATE
 ----
 placeholder-scan kv
  ├── columns: k:1!null v:2
- ├── locking: for-update
+ ├── locking: for-update,durability-guaranteed
  ├── cardinality: [0 - 1]
  ├── volatile, has-placeholder
  ├── stats: [rows=1, distinct(1)=1, null(1)=0]

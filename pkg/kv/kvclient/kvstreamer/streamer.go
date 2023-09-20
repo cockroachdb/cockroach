@@ -221,11 +221,12 @@ type Streamer struct {
 	distSender *kvcoord.DistSender
 	stopper    *stop.Stopper
 
-	mode          OperationMode
-	hints         Hints
-	maxKeysPerRow int32
-	budget        *budget
-	keyLocking    lock.Strength
+	mode           OperationMode
+	hints          Hints
+	maxKeysPerRow  int32
+	budget         *budget
+	lockStrength   lock.Strength
+	lockDurability lock.Durability
 
 	streamerStatistics
 
@@ -370,16 +371,18 @@ func NewStreamer(
 	acc *mon.BoundAccount,
 	kvPairsRead *int64,
 	batchRequestsIssued *int64,
-	keyLocking lock.Strength,
+	lockStrength lock.Strength,
+	lockDurability lock.Durability,
 ) *Streamer {
 	if txn.Type() != kv.LeafTxn {
 		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
 	}
 	s := &Streamer{
-		distSender: distSender,
-		stopper:    stopper,
-		budget:     newBudget(acc, limitBytes),
-		keyLocking: keyLocking,
+		distSender:     distSender,
+		stopper:        stopper,
+		budget:         newBudget(acc, limitBytes),
+		lockStrength:   lockStrength,
+		lockDurability: lockDurability,
 	}
 
 	if kvPairsRead == nil {
@@ -1744,7 +1747,8 @@ func buildResumeSingleRangeBatch(
 			newGet := gets[0]
 			gets = gets[1:]
 			newGet.req.SetSpan(*get.ResumeSpan)
-			newGet.req.KeyLockingStrength = s.keyLocking
+			newGet.req.KeyLockingStrength = s.lockStrength
+			newGet.req.KeyLockingDurability = s.lockDurability
 			newGet.union.Get = &newGet.req
 			resumeReq.reqs[resumeReqIdx].Value = &newGet.union
 			resumeReq.positions = append(resumeReq.positions, position)
@@ -1772,7 +1776,8 @@ func buildResumeSingleRangeBatch(
 			scans = scans[1:]
 			newScan.req.SetSpan(*scan.ResumeSpan)
 			newScan.req.ScanFormat = kvpb.BATCH_RESPONSE
-			newScan.req.KeyLockingStrength = s.keyLocking
+			newScan.req.KeyLockingStrength = s.lockStrength
+			newScan.req.KeyLockingDurability = s.lockDurability
 			newScan.union.Scan = &newScan.req
 			resumeReq.reqs[resumeReqIdx].Value = &newScan.union
 			resumeReq.positions = append(resumeReq.positions, position)

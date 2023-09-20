@@ -2919,11 +2919,6 @@ func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
 				110873, "explicit unique checks are not yet supported under read committed isolation",
 			)
 		}
-		if locking.Durability == tree.LockDurabilityGuaranteed {
-			return opt.Locking{}, unimplemented.NewWithIssuef(
-				100193, "guaranteed-durable locking not yet implemented",
-			)
-		}
 		// Check if we can actually use shared locks here, or we need to use
 		// non-locking reads instead.
 		if locking.Strength == tree.ForShare || locking.Strength == tree.ForKeyShare {
@@ -2937,6 +2932,19 @@ func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
 				// Reset locking information as we've determined we're going to be
 				// performing a non-locking read.
 				return opt.Locking{}, nil // early return; do not set b.ContainsNonDefaultKeyLocking
+			}
+		}
+		// Check if we can actually use guaranteed-durable locking here.
+		if locking.Durability == tree.LockDurabilityGuaranteed {
+			// Guaranteed-durable locking didn't exist prior to v23.2.
+			if !b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V23_2) ||
+				// Under serializable isolation we only use guaranteed-durable locks if
+				// enable_durable_locking_for_serializable is set. (Serializable
+				// isolation does not require locking for correctness, so by default we
+				// use best-effort locks for better performance.)
+				(b.evalCtx.TxnIsoLevel == isolation.Serializable &&
+					!b.evalCtx.SessionData().DurableLockingForSerializable) {
+				locking.Durability = tree.LockDurabilityBestEffort
 			}
 		}
 		b.ContainsNonDefaultKeyLocking = true
