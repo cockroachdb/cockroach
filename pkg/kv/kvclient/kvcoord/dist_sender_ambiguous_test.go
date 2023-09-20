@@ -238,6 +238,13 @@ func (tMu *interceptorHelperMutex) configureSubTest(t *testing.T) (restore func(
 	return restore
 }
 
+// makeValFromInt is a helper function to create a Value from a Go int64.
+func makeValueFromInt(val int64) roachpb.Value {
+	v := roachpb.Value{}
+	v.SetInt(val)
+	return v
+}
+
 // TestTransactionUnexpectedlyCommitted validates the handling of the case where
 // a parallel commit transaction with an ambiguous error on a write races with
 // a contending transaction's recovery attempt. In the case that the recovery
@@ -488,6 +495,18 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		batch.Put(keyA, vals[0]-xferAmount)
 		batch.Put(keyB, vals[1]+xferAmount)
 		return txn.CommitInBatch(tCtx, batch)
+	}
+
+	execConditionalWorkloadTxn := func(t *testing.T, name string) error {
+		tCtx := context.Background()
+		txn := db.NewTxn(tCtx, name)
+		vals := getInBatch(t, tCtx, txn, keyA, keyB)
+
+		batch := txn.NewBatch()
+		batch.CPut(keyA, vals[0]-xferAmount, makeValueFromInt(vals[0]).TagAndDataBytes())
+		batch.CPut(keyB, vals[1]+xferAmount, makeValueFromInt(vals[1]).TagAndDataBytes())
+
+		return txn.CommitInBatch(ctx, batch)
 	}
 
 	execLeaseMover := func(t *testing.T, name string) error {
@@ -1127,24 +1146,24 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		// Concurrent transactions.
 		var wg sync.WaitGroup
 		wg.Add(3)
-		go runConcurrentOp(t, "txn1", execWorkloadTxn, &wg, txn1Ready, txn1Done, txn1ResultCh)
+		go runConcurrentOp(t, "txn1", execConditionalWorkloadTxn, &wg, txn1Ready, txn1Done, txn1ResultCh)
 		go runConcurrentOp(t, "txn2", execWorkloadTxn, &wg, txn2Ready, nil /* doneCh */, nil /* resultCh */)
 		go runConcurrentOp(t, "lease mover", execLeaseMover, &wg, leaseMoveReady, leaseMoveComplete, nil /* resultCh */)
 
 		// KV Request sequencing.
 		tMu.Lock()
 		tMu.maybeWait = func(cp InterceptPoint, req *interceptedReq, resp *interceptedResp) (override error) {
-			_, hasPut := req.ba.GetArg(kvpb.Put)
+			_, hasCPut := req.ba.GetArg(kvpb.ConditionalPut)
 
 			// These conditions are checked in order of expected operations of the test.
 
 			// 1. txn1->n1: Get(a)
 			// 2. txn1->n2: Get(b)
-			// 3. txn1->n1: Put(a), EndTxn(parallel commit) -- Puts txn1 in STAGING.
-			// 4. txn1->n2: Put(b) -- Send the request, but pause before returning the
+			// 3. txn1->n1: CPut(a, 50), EndTxn(parallel commit) -- Puts txn1 in STAGING.
+			// 4. txn1->n2: CPut(b, 50) -- Send the request, but pause before returning the
 			// response so we can inject network failure.
 			// <transfer b's lease to n1>
-			if req.txnName == "txn1" && hasPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
+			if req.txnName == "txn1" && hasCPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
 				close(leaseMoveReady)
 				req.pauseUntil(t, leaseMoveComplete, cp)
 				close(txn2Ready)
@@ -1166,7 +1185,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 
 			// <inject a network failure and finally allow (4) txn1->n2: Put(b) to
 			// return with error>
-			if req.txnName == "txn1" && hasPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
+			if req.txnName == "txn1" && hasCPut && req.toNodeID == tc.Server(1).NodeID() && cp == AfterSending {
 				// Hold the operation open until we are ready to retry on the new
 				// replica, after which we will return the injected failure.
 				req.pauseUntil(t, txn2ETReady, cp)
@@ -1174,7 +1193,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 				return grpcstatus.Errorf(codes.Unavailable, "response jammed on n%d<-n%d", req.fromNodeID, req.toNodeID)
 			}
 
-			// 9. txn1->n1: Put(b) -- Retry sees intent, so returns a WriteTooOld
+			// 9. txn1->n1: CPut(b, 50) -- Retry sees new value, so returns a WriteTooOld
 			// error. Since the transaction had an earlier ambiguous failure on a
 			// batch with a commit, it should propagate the ambiguous error.
 
@@ -1239,14 +1258,15 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		// Concurrent transactions.
 		var wg sync.WaitGroup
 		wg.Add(2)
-		go runConcurrentOp(t, "txn1", execWorkloadTxn, &wg, txn1Ready, txn1Done, txn1ResultCh)
+		go runConcurrentOp(t, "txn1", execConditionalWorkloadTxn, &wg, txn1Ready, txn1Done, txn1ResultCh)
 		go runConcurrentOp(t, "txn2", execTxn2, &wg, txn2Ready, nil /* doneCh */, nil /* resultCh */)
 
 		// KV Request sequencing.
 		var txn1KeyBWriteCount int64
 		tMu.Lock()
 		tMu.maybeWait = func(cp InterceptPoint, req *interceptedReq, resp *interceptedResp) (override error) {
-			putReq, hasPut := req.ba.GetArg(kvpb.Put)
+			cputReq, hasCPut := req.ba.GetArg(kvpb.ConditionalPut)
+			_, hasPut := req.ba.GetArg(kvpb.Put)
 			var keyBWriteCount int64 = -1
 
 			// These conditions are checked in order of expected operations of the
@@ -1254,10 +1274,10 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 
 			// 1. txn1->n1: Get(a)
 			// 2. txn1->n1: Get(b)
-			// 3. txn1->n1: Put(a), EndTxn(parallel commit) -- Puts txn1 in STAGING.
-			// 4. txn1->n1: Put(b) -- Send the request, but pause before returning
+			// 3. txn1->n1: CPut(a, 50), EndTxn(parallel commit) -- Puts txn1 in STAGING.
+			// 4. txn1->n1: CPut(b, 50) -- Send the request, but pause before returning
 			// the response so we can inject network failure.
-			if req.txnName == "txn1" && hasPut && putReq.Header().Key.Equal(keyB) && cp == AfterSending {
+			if req.txnName == "txn1" && hasCPut && cputReq.Header().Key.Equal(keyB) && cp == AfterSending {
 				keyBWriteCount = atomic.AddInt64(&txn1KeyBWriteCount, 1)
 				if keyBWriteCount == 1 {
 					close(txn2Ready)
@@ -1289,7 +1309,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 				return grpcstatus.Errorf(codes.Unavailable, "response jammed on n%d<-n%d", req.fromNodeID, req.toNodeID)
 			}
 
-			// 9. txn1->n1: Put(b) -- Retry gets WriteTooOld and cannot perform a
+			// 9. txn1->n1: CPut(b, 50) -- Retry gets WriteTooOld and cannot perform a
 			// serverside refresh as reads were already returned. Fails, and should
 			// propagate the ambiguous error.
 
