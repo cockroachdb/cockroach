@@ -80,3 +80,28 @@ func ToScanLockingWaitPolicy(wp tree.LockingWaitPolicy) ScanLockingWaitPolicy {
 		panic(errors.AssertionFailedf("unknown locking wait policy %s", wp))
 	}
 }
+
+// PrettyString returns the locking durability as a user-readable string.
+func (s ScanLockingDurability) PrettyString() string {
+	switch s {
+	case ScanLockingDurability_BEST_EFFORT:
+		return "best effort"
+	case ScanLockingDurability_GUARANTEED:
+		return "guaranteed"
+	default:
+		panic(errors.AssertionFailedf("unexpected durability %s", s))
+	}
+}
+
+// ToScanLockingDurability converts a tree.LockingDurability to its
+// corresponding ScanLockingDurability.
+func ToScanLockingDurability(s tree.LockingDurability) ScanLockingDurability {
+	switch s {
+	case tree.LockDurabilityBestEffort:
+		return ScanLockingDurability_BEST_EFFORT
+	case tree.LockDurabilityGuaranteed:
+		return ScanLockingDurability_GUARANTEED
+	default:
+		panic(errors.AssertionFailedf("unknown locking durability %d", s))
+	}
+}

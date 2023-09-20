@@ -563,6 +563,7 @@ func NewColIndexJoin(
 			flowCtx.EvalCtx.Settings,
 			spec.LockingWaitPolicy,
 			spec.LockingStrength,
+			spec.LockingDurability,
 			streamerBudgetLimit,
 			streamerBudgetAcc,
 			spec.MaintainOrdering,
@@ -580,6 +581,7 @@ func NewColIndexJoin(
 			false, /* reverse */
 			spec.LockingStrength,
 			spec.LockingWaitPolicy,
+			spec.LockingDurability,
 			flowCtx.EvalCtx.SessionData().LockTimeout,
 			kvFetcherMemAcc,
 			flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
