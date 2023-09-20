@@ -351,6 +351,11 @@ func (r *reportErrorResumer) OnFailOrCancel(
 	return r.wrapped.OnFailOrCancel(ctx, execCtx, jobErr)
 }
 
+// CollectProfile implements jobs.Resumer.
+func (r *reportErrorResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 type wrapSinkFn func(sink Sink) Sink
 
 // jobFeed indicates that the feed is an "enterprise feed" -- that is,

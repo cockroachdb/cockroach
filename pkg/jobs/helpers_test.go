@@ -57,6 +57,10 @@ func (d FakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ error)
 	return nil
 }
 
+func (d FakeResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // OnPauseRequestFunc forwards the definition for use in tests.
 type OnPauseRequestFunc = onPauseRequestFunc
 

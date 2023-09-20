@@ -63,7 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/bulk"
+	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -159,7 +159,7 @@ func restoreWithRetry(
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	dataToRestore restorationData,
-	job *jobs.Job,
+	resumer *restoreResumer,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (roachpb.RowCount, error) {
@@ -186,7 +186,7 @@ func restoreWithRetry(
 				backupLocalityInfo,
 				endTime,
 				dataToRestore,
-				job,
+				resumer,
 				encryption,
 				kmsEnv,
 			)
@@ -263,7 +263,7 @@ func restore(
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	dataToRestore restorationData,
-	job *jobs.Job,
+	resumer *restoreResumer,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (roachpb.RowCount, error) {
@@ -281,6 +281,7 @@ func restore(
 	// If we've already migrated some of the system tables we're about to
 	// restore, this implies that a previous attempt restored all of this data.
 	// We want to avoid restoring again since we'll be shadowing migrated keys.
+	job := resumer.job
 	details := job.Details().(jobspb.RestoreDetails)
 	if alreadyMigrated := checkForMigratedData(details, dataToRestore); alreadyMigrated {
 		return emptyRowCount, nil
@@ -406,16 +407,23 @@ func restore(
 	}
 	tasks = append(tasks, generativeCheckpointLoop)
 
+	// tracingAggLoop is responsible for draining the channel on which processors
+	// in the DistSQL flow will send back their tracing aggregator stats. These
+	// stats will be persisted to the job_info table whenever the job is told to
+	// collect a profile.
 	tracingAggCh := make(chan *execinfrapb.TracingAggregatorEvents)
 	tracingAggLoop := func(ctx context.Context) error {
-		if err := bulk.AggregateTracingStats(ctx, job.ID(),
-			execCtx.ExecCfg().Settings, execCtx.ExecCfg().InternalDB, tracingAggCh); err != nil {
-			log.Warningf(ctx, "failed to aggregate tracing stats: %v", err)
-			// Even if we fail to aggregate tracing stats, we must continue draining
-			// the channel so that the sender in the DistSQLReceiver does not block
-			// and allows the backup to continue uninterrupted.
-			for range tracingAggCh {
+		for agg := range tracingAggCh {
+			componentID := execinfrapb.ComponentID{
+				FlowID:        agg.FlowID,
+				SQLInstanceID: agg.SQLInstanceID,
 			}
+
+			// Update the running aggregate of the component with the latest received
+			// aggregate.
+			resumer.mu.Lock()
+			resumer.mu.perNodeAggregatorStats[componentID] = agg.Events
+			resumer.mu.Unlock()
 		}
 		return nil
 	}
@@ -546,6 +554,14 @@ type restoreResumer struct {
 	settings     *cluster.Settings
 	execCfg      *sql.ExecutorConfig
 	restoreStats roachpb.RowCount
+
+	mu struct {
+		syncutil.Mutex
+		// perNodeAggregatorStats is a per component running aggregate of trace
+		// driven AggregatorStats pushed backed to the resumer from all the
+		// processors running the backup.
+		perNodeAggregatorStats bulkutil.ComponentAggregatorStats
+	}
 
 	testingKnobs struct {
 		// beforePublishingDescriptors is called right before publishing
@@ -1711,7 +1727,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			details.BackupLocalityInfo,
 			details.EndTime,
 			preData,
-			r.job,
+			r,
 			details.Encryption,
 			&kmsEnv,
 		)
@@ -1747,7 +1763,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			details.BackupLocalityInfo,
 			details.EndTime,
 			preValidateData,
-			r.job,
+			r,
 			details.Encryption,
 			&kmsEnv,
 		)
@@ -1768,7 +1784,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			details.BackupLocalityInfo,
 			details.EndTime,
 			mainData,
-			r.job,
+			r,
 			details.Encryption,
 			&kmsEnv,
 		)
@@ -2504,6 +2520,20 @@ func (r *restoreResumer) OnFailOrCancel(
 	// Emit to the event log that the job has completed reverting.
 	emitRestoreJobEvent(ctx, p, jobs.StatusFailed, r.job)
 	return nil
+}
+
+// CollectProfile implements jobs.Resumer interface
+func (r *restoreResumer) CollectProfile(ctx context.Context, execCtx interface{}) error {
+	p := execCtx.(sql.JobExecContext)
+
+	var aggStatsCopy bulkutil.ComponentAggregatorStats
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		aggStatsCopy = r.mu.perNodeAggregatorStats.DeepCopy()
+	}()
+	return bulkutil.FlushTracingAggregatorStats(ctx, r.job.ID(),
+		p.ExecCfg().InternalDB, aggStatsCopy)
 }
 
 // dropDescriptors implements the OnFailOrCancel logic.
@@ -3343,10 +3373,12 @@ func init() {
 	jobs.RegisterConstructor(
 		jobspb.TypeRestore,
 		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
-			return &restoreResumer{
+			r := &restoreResumer{
 				job:      job,
 				settings: settings,
 			}
+			r.mu.perNodeAggregatorStats = make(bulkutil.ComponentAggregatorStats)
+			return r
 		},
 		jobs.UsesTenantCostControl,
 	)

@@ -14,27 +14,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
-)
-
-var flushTracingAggregatorFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
-	"jobs.aggregator_stats_flush_frequency",
-	"frequency at which the coordinator node processes and persists tracing aggregator stats to storage",
-	10*time.Minute,
 )
 
 // ConstructTracingAggregatorProducerMeta constructs a ProducerMetadata that
@@ -64,26 +52,46 @@ func ConstructTracingAggregatorProducerMeta(
 	return &execinfrapb.ProducerMetadata{AggregatorEvents: aggEvents}
 }
 
-// flushTracingStats persists the following files to the `system.job_info` table
-// for consumption by job observability tools:
+// ComponentAggregatorStats is a mapping from a component to all the Aggregator
+// Stats collected for that component.
+type ComponentAggregatorStats map[execinfrapb.ComponentID]map[string][]byte
+
+// DeepCopy takes a deep copy of the component aggregator stats map.
+func (c ComponentAggregatorStats) DeepCopy() ComponentAggregatorStats {
+	mapCopy := make(ComponentAggregatorStats, len(c))
+	for k, v := range c {
+		innerMap := make(map[string][]byte, len(v))
+		for k2, v2 := range v {
+			// Create a copy of the byte slice to avoid modifying the original data.
+			dataCopy := make([]byte, len(v2))
+			copy(dataCopy, v2)
+			innerMap[k2] = dataCopy
+		}
+		mapCopy[k] = innerMap
+	}
+	return mapCopy
+}
+
+// FlushTracingAggregatorStats persists the following files to the
+// `system.job_info` table for consumption by job observability tools:
 //
 // - A file per node, for each aggregated TracingAggregatorEvent. These files
 // contain the machine-readable proto bytes of the TracingAggregatorEvent.
 //
 // - A text file that contains a cluster-wide and per-node summary of each
 // TracingAggregatorEvent in its human-readable format.
-func flushTracingStats(
+func FlushTracingAggregatorStats(
 	ctx context.Context,
 	jobID jobspb.JobID,
 	db isql.DB,
-	perNodeStats map[execinfrapb.ComponentID]map[string][]byte,
+	perNodeAggregatorStats ComponentAggregatorStats,
 ) error {
 	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		clusterWideAggregatorStats := make(map[string]TracingAggregatorEvent)
 		asOf := timeutil.Now().Format("20060102_150405.00")
 
 		var clusterWideSummary bytes.Buffer
-		for component, nameToEvent := range perNodeStats {
+		for component, nameToEvent := range perNodeAggregatorStats {
 			clusterWideSummary.WriteString(fmt.Sprintf("## SQL Instance ID: %s; Flow ID: %s\n\n",
 				component.SQLInstanceID.String(), component.FlowID.String()))
 			for name, event := range nameToEvent {
@@ -129,63 +137,4 @@ func flushTracingStats(
 		filename := fmt.Sprintf("aggregatorstats.%s.txt", asOf)
 		return jobs.WriteExecutionDetailFile(ctx, filename, clusterWideSummary.Bytes(), txn, jobID)
 	})
-}
-
-// AggregateTracingStats listens for AggregatorEvents on a channel and
-// periodically processes them to human and machine-readable file formats that
-// are persisted in the system.job_info table. These files can then be consumed
-// for improved observability into the job's execution.
-//
-// This method does not return until the passed in channel is closed or an error
-// is encountered.
-func AggregateTracingStats(
-	ctx context.Context,
-	jobID jobspb.JobID,
-	st *cluster.Settings,
-	db isql.DB,
-	tracingAgg chan *execinfrapb.TracingAggregatorEvents,
-) error {
-	if !st.Version.IsActive(ctx, clusterversion.V23_2Start) {
-		return errors.Newf("aggregator stats are supported when the cluster version >= %s",
-			clusterversion.V23_2Start.String())
-	}
-	perNodeAggregatorStats := make(map[execinfrapb.ComponentID]map[string][]byte)
-
-	// AggregatorEvents are periodically received from each node in the DistSQL
-	// flow.
-	flushTimer := timeutil.NewTimer()
-	defer flushTimer.Stop()
-	flushTimer.Reset(flushTracingAggregatorFrequency.Get(&st.SV))
-
-	var flushOnClose bool
-	for agg := range tracingAgg {
-		flushOnClose = true
-		componentID := execinfrapb.ComponentID{
-			FlowID:        agg.FlowID,
-			SQLInstanceID: agg.SQLInstanceID,
-		}
-
-		// Update the running aggregate of the component with the latest received
-		// aggregate.
-		perNodeAggregatorStats[componentID] = agg.Events
-
-		select {
-		case <-flushTimer.C:
-			flushTimer.Read = true
-			flushTimer.Reset(flushTracingAggregatorFrequency.Get(&st.SV))
-			// Flush the per-node and cluster wide aggregator stats to the job_info
-			// table.
-			if err := flushTracingStats(ctx, jobID, db, perNodeAggregatorStats); err != nil {
-				return err
-			}
-			flushOnClose = false
-		default:
-		}
-	}
-	if flushOnClose {
-		if err := flushTracingStats(ctx, jobID, db, perNodeAggregatorStats); err != nil {
-			return err
-		}
-	}
-	return nil
 }

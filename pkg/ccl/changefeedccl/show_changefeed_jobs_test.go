@@ -50,6 +50,10 @@ func (d *fakeResumer) OnFailOrCancel(context.Context, interface{}, error) error 
 	return nil
 }
 
+func (d *fakeResumer) CollectProfile(context.Context, interface{}) error {
+	return nil
+}
+
 func TestShowChangefeedJobsBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

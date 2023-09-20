@@ -1479,6 +1479,11 @@ func (r *importResumer) OnFailOrCancel(
 	return nil
 }
 
+// CollectProfile is a part of the Resumer interface.
+func (r *importResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // dropTables implements the OnFailOrCancel logic.
 func (r *importResumer) dropTables(
 	ctx context.Context, txn isql.Txn, descsCol *descs.Collection, execCfg *sql.ExecutorConfig,
