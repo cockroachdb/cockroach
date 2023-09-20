@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
 var (
@@ -25,6 +26,7 @@ var (
 		Help:        "Number of connection errors experienced by fluent-server logging sinks",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
 )
 
