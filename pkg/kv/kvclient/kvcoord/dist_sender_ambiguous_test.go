@@ -1206,7 +1206,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 
 		// NB: It is likely not possible to eliminate ambiguity in this case, as
 		// the original intents were already cleaned up.
-		validateTxnCommitAmbiguousError(t, err, "WriteTooOld" /* reason */)
+		validateTxnCommitAmbiguousError(t, err, "unexpected value" /* reason */)
 	})
 
 	// When a retried write happens after our txn's intent has already been
@@ -1320,7 +1320,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 
 		// NB: It is likely not possible to eliminate ambiguity in this case, as
 		// the original intents were already cleaned up.
-		validateTxnCommitAmbiguousError(t, err, "WriteTooOld" /* reason */)
+		validateTxnCommitAmbiguousError(t, err, "unexpected value" /* reason */)
 	})
 
 	// This test is included for completeness, but tests expected behavior;
@@ -1583,8 +1583,20 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		t.Logf("txn1 completed with err: %v", err)
 		wg.Wait()
 
+		// TODO(sarkesian): The elimination of WriteTooOld deferrals, implemented
+		// in #102808 and #102809, is unfortunately required to eliminate the
+		// "transaction unexpectedly committed" error when retrying blind writes.
+		// Once those have been merged, we would expect an AmbiguousResultError due
+		// to the retry getting a WriteTooOld error.
+
 		// NB: It is likely not possible to eliminate ambiguity in this case, as
 		// the original intents were already cleaned up.
-		validateTxnCommitAmbiguousError(t, err, "WriteTooOld" /* reason */)
+		tErr := (*kvpb.TransactionStatusError)(nil)
+		require.ErrorAsf(t, err, &tErr,
+			"expected TransactionStatusError due to being already committed")
+		require.Equalf(t, kvpb.TransactionStatusError_REASON_TXN_COMMITTED, tErr.Reason,
+			"expected TransactionStatusError due to being already committed")
+		require.Truef(t, errors.HasAssertionFailure(err),
+			"expected AssertionFailedError due to sanity check on transaction already committed")
 	})
 }
