@@ -193,9 +193,6 @@ func (dt *Tracker) Untrack(
 		log.Infof(ctx, "released %s flow control tokens for %d out of %d tracked deductions for pri=%s stream=%s, up to %s; %d tracked deduction(s) remain%s",
 			tokens, untracked, trackedBefore, pri, dt.stream, upto, len(dt.trackedM[pri].items), remaining)
 	}
-	if len(dt.trackedM[pri].items) == 0 {
-		delete(dt.trackedM, pri)
-	}
 
 	if dt.lowerBound.Less(upto) {
 		dt.lowerBound = upto
