@@ -345,8 +345,6 @@ type settingsValue struct {
 	tombstone bool
 }
 
-const versionSettingKey = "version"
-
 // set the current value of a setting.
 func (s *SettingsWatcher) setLocked(
 	ctx context.Context,
@@ -361,7 +359,7 @@ func (s *SettingsWatcher) setLocked(
 	// bootstrap the initial cluster version on tenant startup. In all other
 	// instances, this code should no-op (either because we're in the system
 	// tenant, or because the new version <= old version).
-	if key == versionSettingKey && !s.codec.ForSystemTenant() {
+	if key == clusterversion.KeyVersionSetting && !s.codec.ForSystemTenant() {
 		var newVersion clusterversion.ClusterVersion
 		oldVersion := s.settings.Version.ActiveVersionOrEmpty(ctx)
 		if err := protoutil.Unmarshal([]byte(val.Value), &newVersion); err != nil {
@@ -409,7 +407,7 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context) (updateCh <-chan 
 	defer s.mu.Unlock()
 
 	for key, val := range newOverrides {
-		if key == versionSettingKey {
+		if key == clusterversion.KeyVersionSetting {
 			var newVersion clusterversion.ClusterVersion
 			if err := protoutil.Unmarshal([]byte(val.Value), &newVersion); err != nil {
 				log.Warningf(ctx, "ignoring invalid cluster version: %s - %v\n"+
