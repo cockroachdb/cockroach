@@ -57,6 +57,8 @@ func registerDiskStalledDetection(r registry.Registry) {
 			Name:                fmt.Sprintf("disk-stalled/%s", name),
 			Owner:               registry.OwnerStorage,
 			Cluster:             makeSpec(),
+			CompatibleClouds:    registry.AllExceptAWS,
+			Suites:              registry.Suites(registry.Nightly),
 			Timeout:             30 * time.Minute,
 			SkipPostValidations: registry.PostValidationNoDeadNodes,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

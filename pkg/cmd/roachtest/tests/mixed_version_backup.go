@@ -2151,6 +2151,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(5),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		RequiresLicense:   true,
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
 				t.Skip("uses gs://cockroachdb-backup-testing-long-ttl; see https://github.com/cockroachdb/cockroach/issues/105968")

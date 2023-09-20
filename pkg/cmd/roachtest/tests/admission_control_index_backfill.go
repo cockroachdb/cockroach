@@ -41,14 +41,16 @@ func registerIndexBackfill(r registry.Registry) {
 	clusterSpec.GCEVolumeType = "pd-ssd"
 
 	r.Add(registry.TestSpec{
-		Name:            "admission-control/index-backfill",
-		Timeout:         6 * time.Hour,
-		Owner:           registry.OwnerAdmissionControl,
-		Benchmark:       true,
-		Tags:            registry.Tags(`weekly`),
-		Cluster:         clusterSpec,
-		RequiresLicense: true,
-		SnapshotPrefix:  "index-backfill-tpce-100k",
+		Name:             "admission-control/index-backfill",
+		Timeout:          6 * time.Hour,
+		Owner:            registry.OwnerAdmissionControl,
+		Benchmark:        true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Weekly),
+		Tags:             registry.Tags(`weekly`),
+		Cluster:          clusterSpec,
+		RequiresLicense:  true,
+		SnapshotPrefix:   "index-backfill-tpce-100k",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			crdbNodes := c.Spec().NodeCount - 1
 			workloadNode := c.Spec().NodeCount

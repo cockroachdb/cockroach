@@ -54,6 +54,15 @@ type TestSpec struct {
 	// N.B. performance tests may have different requirements than correctness tests, e.g., machine type/architecture.
 	// Thus, they must be opted into explicitly via this field.
 	Benchmark bool
+
+	// CompatibleClouds is the set of clouds this test can run on (e.g. AllClouds,
+	// OnlyGCE, etc). Must be set.
+	CompatibleClouds CloudSet
+
+	// Suites is the set of suites this test is part of (e.g. Nightly, Weekly,
+	// etc). Must be set, even if empty (see ManualOnly).
+	Suites SuiteSet
+
 	// Tags is a set of tags associated with the test that allow grouping
 	// tests. If no tags are specified, the set ["default"] is automatically
 	// given.
@@ -237,3 +246,218 @@ const (
 	// leases (across the entire cluster)
 	MetamorphicLeases
 )
+
+var allClouds = []string{spec.Local, spec.GCE, spec.AWS, spec.Azure}
+
+// CloudSet represents a set of clouds.
+//
+// Instances of CloudSet are immutable. The uninitialized (zero) value is not
+// valid.
+type CloudSet struct {
+	// m contains only values from allClouds.
+	m map[string]struct{}
+}
+
+// AllClouds contains all clouds.
+var AllClouds = Clouds(allClouds...)
+
+// AllExceptLocal contains all clouds except Local.
+var AllExceptLocal = AllClouds.NoLocal()
+
+// AllExceptAWS contains all clouds except AWS.
+var AllExceptAWS = AllClouds.NoAWS()
+
+// OnlyGCE contains only the GCE cloud.
+var OnlyGCE = Clouds(spec.GCE)
+
+// OnlyLocal contains only the GCE cloud.
+var OnlyLocal = Clouds(spec.Local)
+
+// Clouds creates a CloudSet for the given clouds. Cloud names must be one of:
+// spec.Local, spec.GCE, spec.AWS, spec.Azure.
+func Clouds(clouds ...string) CloudSet {
+	assertValidValues(allClouds, clouds...)
+	return CloudSet{m: addToSet(nil, clouds...)}
+}
+
+// NoLocal removes the Local cloud and returns the new set.
+func (cs CloudSet) NoLocal() CloudSet {
+	return CloudSet{m: removeFromSet(cs.m, spec.Local)}
+}
+
+// NoAWS removes the AWS cloud and returns the new set.
+func (cs CloudSet) NoAWS() CloudSet {
+	return CloudSet{m: removeFromSet(cs.m, spec.AWS)}
+}
+
+// NoAzure removes the Azure cloud and returns the new set.
+func (cs CloudSet) NoAzure() CloudSet {
+	return CloudSet{m: removeFromSet(cs.m, spec.Azure)}
+}
+
+// Contains returns true if the set contains the given cloud.
+func (cs CloudSet) Contains(cloud string) bool {
+	cs.AssertInitialized()
+	_, ok := cs.m[cloud]
+	return ok
+}
+
+func (cs CloudSet) String() string {
+	cs.AssertInitialized()
+	return setToString(allClouds, cs.m)
+}
+
+// AssertInitialized panics if the CloudSet is the zero value.
+func (cs CloudSet) AssertInitialized() {
+	if cs.m == nil {
+		panic("CloudSet not initialized")
+	}
+}
+
+// Suite names.
+const (
+	Nightly               = "nightly"
+	Weekly                = "weekly"
+	ReleaseQualification  = "release_qualification"
+	ORM                   = "orm"
+	Driver                = "driver"
+	Tool                  = "tool"
+	Smoketest             = "smoketest"
+	Quick                 = "quick"
+	Fixtures              = "fixtures"
+	Pebble                = "pebble"
+	PebbleNightlyWrite    = "pebble_nightly_write"
+	PebbleNightlyYCSB     = "pebble_nightly_ycsb"
+	PebbleNightlyYCSBRace = "pebble_nightly_ycsb_race"
+	Roachtest             = "roachtest"
+)
+
+var allSuites = []string{
+	Nightly, Weekly, ReleaseQualification, ORM, Driver, Tool, Smoketest, Quick, Fixtures,
+	Pebble, PebbleNightlyWrite, PebbleNightlyYCSB, PebbleNightlyYCSBRace, Roachtest,
+}
+
+// SuiteSet represents a set of suites.
+//
+// Instances of SuiteSet are immutable. The uninitialized (zero) value is not
+// valid.
+type SuiteSet struct {
+	// m contains only values from allSuites.
+	m map[string]struct{}
+}
+
+// ManualOnly is used for tests that are not part of any suite; these tests are
+// only run manually.
+var ManualOnly = Suites()
+
+// Suites creates a SuiteSet with the given suites. Only the constants above are
+// valid values.
+func Suites(suites ...string) SuiteSet {
+	assertValidValues(allSuites, suites...)
+	return SuiteSet{m: addToSet(nil, suites...)}
+}
+
+// Contains returns true if the set contains the given suite.
+func (ss SuiteSet) Contains(suite string) bool {
+	ss.AssertInitialized()
+	_, ok := ss.m[suite]
+	return ok
+}
+
+func (ss SuiteSet) String() string {
+	return setToString(allSuites, ss.m)
+}
+
+// AssertInitialized panics if the SuiteSet is the zero value.
+func (ss SuiteSet) AssertInitialized() {
+	if ss.m == nil {
+		panic("SuiteSet not initialized")
+	}
+}
+
+// CrossCheckTags verifies that the CompatibleClouds and Suites values match those of the tags.
+func (t *TestSpec) CrossCheckTags() {
+	// Check that CompatibleClouds + Suites would make the same determination as
+	// tags for what test to run for Nightly/Weekly and GCE/AWS.
+	var expected, actual struct {
+		nightlyGCE bool
+		weeklyGCE  bool
+		nightlyAWS bool
+		weeklyAWS  bool
+	}
+
+	expected.nightlyGCE = matchesAll(t.Tags, []string{"default"}) || matchesAll(t.Tags, []string{"aws"})
+	expected.weeklyGCE = matchesAll(t.Tags, []string{"weekly"})
+	expected.nightlyAWS = matchesAll(t.Tags, []string{"aws"})
+	expected.weeklyAWS = matchesAll(t.Tags, []string{"aws-weekly"})
+
+	actual.nightlyGCE = t.Suites.Contains(Nightly) && t.CompatibleClouds.Contains(spec.GCE)
+	actual.weeklyGCE = t.Suites.Contains(Weekly) && t.CompatibleClouds.Contains(spec.GCE)
+	actual.nightlyAWS = t.Suites.Contains(Nightly) && t.CompatibleClouds.Contains(spec.AWS)
+	actual.weeklyAWS = t.Suites.Contains(Weekly) && t.CompatibleClouds.Contains(spec.AWS)
+
+	if actual != expected {
+		panic(fmt.Sprintf("CompatibleClouds/Suites inconsistent with Tags\nexpected: %#v\nactual:   %#v\nclouds: %s  suites:%s  tags:%v\n", expected, actual, t.CompatibleClouds, t.Suites, t.Tags))
+	}
+
+	otherSuiteTags := fmt.Sprintf("%v", removeFromSet(t.Tags, "default", "weekly", "aws-weekly", "aws", "owner-"+string(t.Owner)))
+	otherSuites := fmt.Sprintf("%v", removeFromSet(t.Suites.m, Weekly, Nightly))
+	if otherSuiteTags != otherSuites && !(otherSuiteTags == "map[manual:{}]" && otherSuites == "map[]") {
+		panic(fmt.Sprintf("Suites inconsistent with Tags\nexpected: %v\nactual:   %v\nsuites:%s  tags:%v\n", otherSuiteTags, otherSuites, t.Suites, t.Tags))
+	}
+}
+
+// assertValidValues asserts that the given values exist in the validValues slice.
+func assertValidValues(validValues []string, values ...string) {
+	for _, v := range values {
+		found := false
+		for _, valid := range validValues {
+			if valid == v {
+				found = true
+				break
+			}
+		}
+		if !found {
+			panic(fmt.Sprintf("invalid value %q (valid values: %v)", v, validValues))
+		}
+	}
+}
+
+// addToSet returns a new set that is the initial set with the given values added.
+func addToSet(initial map[string]struct{}, values ...string) map[string]struct{} {
+	m := make(map[string]struct{})
+	for k := range initial {
+		m[k] = struct{}{}
+	}
+	for _, v := range values {
+		m[v] = struct{}{}
+	}
+	return m
+}
+
+// removeFromSet returns a new set that is the initial set with the given values removed.
+func removeFromSet(initial map[string]struct{}, values ...string) map[string]struct{} {
+	m := make(map[string]struct{})
+	for k := range initial {
+		m[k] = struct{}{}
+	}
+	for _, v := range values {
+		delete(m, v)
+	}
+	return m
+}
+
+// setToString returns the elements of a set, in the relative order in which they appear
+// in validValues. Returns "<none>" if the set is empty.
+func setToString(validValues []string, m map[string]struct{}) string {
+	var elems []string
+	for _, v := range validValues {
+		if _, ok := m[v]; ok {
+			elems = append(elems, v)
+		}
+	}
+	if len(elems) == 0 {
+		return "<none>"
+	}
+	return strings.Join(elems, ",")
+}

@@ -24,11 +24,13 @@ import (
 
 func registerInconsistency(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "inconsistency",
-		Owner:   registry.OwnerReplication,
-		Cluster: r.MakeClusterSpec(3),
-		Leases:  registry.MetamorphicLeases,
-		Run:     runInconsistency,
+		Name:             "inconsistency",
+		Owner:            registry.OwnerReplication,
+		Cluster:          r.MakeClusterSpec(3),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Run:              runInconsistency,
 	})
 }
 
