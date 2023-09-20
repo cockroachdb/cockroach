@@ -150,7 +150,6 @@ func (og *operationGenerator) resetTxnState() {
 	og.stmtsInTxt = nil
 }
 
-
 // getSupportedDeclarativeOp generates declarative operations until,
 // a fully supported one is found. This is required for mixed version testing
 // support, where statements may be partially supproted.
