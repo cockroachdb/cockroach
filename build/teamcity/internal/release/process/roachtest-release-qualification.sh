@@ -43,6 +43,7 @@ cp $BAZEL_BIN/pkg/cmd/roachprod/roachprod_/roachprod bin
 cp $BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest bin
 cp $BAZEL_BIN/pkg/cmd/workload/workload_/workload    bin
 chmod a+w bin/roachprod bin/roachtest bin/workload
+
 EOF
 
 # NB: Teamcity has a 7920 minute timeout that, when reached,
