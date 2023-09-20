@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -594,6 +595,44 @@ func VirtualClusterLabel(virtualClusterName string, sqlInstance int) string {
 	}
 
 	return fmt.Sprintf("cockroach-%s_%d", virtualClusterName, sqlInstance)
+}
+
+// VirtualClusterInfoFromLabel takes as parameter a tenant label
+// produced with `VirtuaLClusterLabel()` and returns the corresponding
+// tenant name and instance.
+func VirtualClusterInfoFromLabel(virtualClusterLabel string) (string, int, error) {
+	var (
+		sqlInstance          int
+		sqlInstanceStr       string
+		labelWithoutInstance string
+		err                  error
+	)
+
+	sep := "_"
+	parts := strings.Split(virtualClusterLabel, sep)
+
+	// Note that this logic assumes that virtual cluster names cannot
+	// have a '_' character, which is currently (Sep 2023) the case.
+	switch len(parts) {
+	case 1:
+		// This should be a system tenant (no instance identifier)
+		labelWithoutInstance = parts[0]
+
+	case 2:
+		// SQL instance process: instance number is after the '_' character.
+		labelWithoutInstance, sqlInstanceStr = parts[0], parts[1]
+		sqlInstance, err = strconv.Atoi(sqlInstanceStr)
+		if err != nil {
+			return "", 0, fmt.Errorf("invalid virtual cluster label: %s", virtualClusterLabel)
+		}
+
+	default:
+		return "", 0, fmt.Errorf("invalid virtual cluster label: %s", virtualClusterLabel)
+	}
+
+	// Remove the "cockroach-" prefix added by VirtualClusterLabel.
+	virtualClusterName := strings.TrimPrefix(labelWithoutInstance, "cockroach-")
+	return virtualClusterName, sqlInstance, nil
 }
 
 func execStartTemplate(data startTemplateData) (string, error) {

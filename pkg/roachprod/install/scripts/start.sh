@@ -35,7 +35,11 @@ ENV_VARS=(
 # End of templated code.
 
 if [[ -n "${LOCAL}" ]]; then
-  ARGS+=("--background")
+  # Write to an empty pid file. This is referenced by the roachprod
+  # monitor to find the PID of cockroach processes running locally.
+  PID_FILE="${LOG_DIR}/cockroach.pid"
+  rm -f "${PID_FILE}"
+  ARGS+=("--background" "--pid-file" "${PID_FILE}")
 fi
 
 if [[ -n "${LOCAL}" || "${1-}" == "run" ]]; then
@@ -61,20 +65,20 @@ fi
 # Set up systemd unit and start it, which will recursively
 # invoke this script but hit the above conditional.
 
-if systemctl is-active -q cockroach; then
-  echo "cockroach service already active"
-  echo "To get more information: systemctl status cockroach"
+if systemctl is-active -q "${VIRTUAL_CLUSTER_LABEL}"; then
+  echo "${VIRTUAL_CLUSTER_LABEL} service already active"
+  echo "To get more information: systemctl status ${VIRTUAL_CLUSTER_LABEL}"
   exit 1
 fi
 
 # If cockroach failed, the service still exists; we need to clean it up before
 # we can start it again.
-sudo systemctl reset-failed cockroach 2>/dev/null || true
+sudo systemctl reset-failed "${VIRTUAL_CLUSTER_LABEL}" 2>/dev/null || true
 
 # The first time we run, install a small script that shows some helpful
 # information when we ssh in.
 if [ ! -e "${HOME}/.profile-cockroach" ]; then
-  cat > "${HOME}/.profile-${VIRTUAL_CLUSTER_LABEL}" <<'EOQ'
+  cat > "${HOME}/.profile-${VIRTUAL_CLUSTER_LABEL}" <<EOQ
 echo ""
 if systemctl is-active -q ${VIRTUAL_CLUSTER_LABEL}; then
   echo "${VIRTUAL_CLUSTER_LABEL} is running; see: systemctl status ${VIRTUAL_CLUSTER_LABEL}"

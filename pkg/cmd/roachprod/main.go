@@ -478,6 +478,15 @@ environment variables to the cockroach process.
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
 		}
+
+		// Always pick a random available port when starting virtual
+		// clusters. We do not expose the functionality of choosing a
+		// specific port, so this is fine.
+		//
+		// TODO(renato): remove this once #111052 is addressed.
+		startOpts.SQLPort = 0
+		startOpts.AdminUIPort = 0
+
 		return roachprod.StartServiceForVirtualCluster(context.Background(),
 			config.Logger, targetRoachprodCluster, storageCluster, startOpts, clusterSettingsOpts...)
 	}),
