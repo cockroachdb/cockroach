@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -78,7 +77,7 @@ func (p *planner) EvalRoutineExpr(
 
 	if expr.TailCall && !expr.Generator && p.EvalContext().RoutineSender != nil {
 		// This is a nested routine in tail-call position.
-		if !p.curPlan.flags.IsDistributed() && tailCallOptimizationEnabled {
+		if tailCallOptimizationEnabled {
 			// Tail-call optimizations are enabled. Send the information needed to
 			// evaluate this routine to the parent routine, then return. It is safe to
 			// return NULL here because the parent is guaranteed not to perform any
@@ -210,6 +209,13 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	}
 	g.rch.Init(ctx, retTypes, g.p.ExtendedEvalContext(), "routine" /* opName */)
 
+	// If this is the start of a PLpgSQL block with an exception handler, create a
+	// savepoint.
+	err = g.maybeInitBlockState(ctx)
+	if err != nil {
+		return err
+	}
+
 	// Configure stepping for volatile routines so that mutations made by the
 	// invoking statement are visible to the routine.
 	if g.expr.EnableStepping {
@@ -281,7 +287,6 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 		}
 		return g.handleException(ctx, err)
 	}
-
 	g.rci = newRowContainerIterator(ctx, g.rch)
 	return nil
 }
@@ -289,34 +294,68 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 // handleException attempts to match the code of the given error to an exception
 // handler for the routine. If the error finds a match, the corresponding branch
 // for the exception handler is executed as a routine.
-// TODO(drewk): When there is an exception block, we need to nest the body of
-// the routine in a sub-transaction, probably using savepoints. If an error
-// occurs in the body of a block with an exception handler, changes to the
-// database that happened within the block should be rolled back, but not those
-// that occurred outside the block.
+//
+// handleException uses the current set of arguments for the routine to ensure
+// that the exception handler sees up-to-date PLpgSQL variables.
+//
+// If an error is matched, handleException will roll back the database state
+// using the current PLpgSQL block's savepoint. Otherwise, it will do nothing,
+// in which case the savepoint will be rolled back either by a parent PLpgSQL
+// block (if the error is eventually caught), or when the transaction aborts.
 func (g *routineGenerator) handleException(ctx context.Context, err error) error {
-	if plpgsql.IsCaughtRoutineException(err) {
-		// This error has already been through handleException in a nested call.
+	blockState := g.expr.BlockState
+	if err == nil || blockState == nil || blockState.ExceptionHandler == nil {
 		return err
 	}
 	caughtCode := pgerror.GetPGCode(err)
 	if caughtCode == pgcode.Uncategorized {
+		// It is not safe to catch an uncategorized error.
 		return err
 	}
-	if handler := g.expr.ExceptionHandler; handler != nil {
-		for i, code := range handler.Codes {
-			if code == caughtCode {
-				g.reset(ctx, g.p, handler.Actions[i], g.args)
+	if !g.p.Txn().CanUseSavepoint(ctx, blockState.SavepointTok.(kv.SavepointToken)) {
+		// The current transaction state does not allow roll-back.
+		// TODO(111446): some retryable errors allow the transaction to be rolled
+		// back partially (e.g. for read committed). We should be able to take
+		// advantage of that mechanism here as well.
+		return err
+	}
+	// Unset the exception handler to indicate that it has already encountered an
+	// error.
+	exceptionHandler := blockState.ExceptionHandler
+	blockState.ExceptionHandler = nil
+	for i, code := range exceptionHandler.Codes {
+		if code == caughtCode {
+			spErr := g.p.Txn().RollbackToSavepoint(ctx, blockState.SavepointTok.(kv.SavepointToken))
+			if spErr == nil {
+				g.reset(ctx, g.p, exceptionHandler.Actions[i], g.args)
 				err = g.startInternal(ctx, g.p.Txn())
-				break
 			}
-		}
-		if err != nil {
-			return plpgsql.NewCaughtRoutineException(err)
+			return errors.CombineErrors(err, spErr)
 		}
 	}
-	// No exception handler matched.
 	return err
+}
+
+// maybeInitBlockState creates a savepoint if all the following are true:
+//  1. The current routine is within a PLpgSQL exception block.
+//  2. The current block has an exception handler
+//  3. The savepoint hasn't already been created for this block.
+//
+// Note that it is not necessary to explicitly release the savepoint at any
+// point, because it does not add any overhead.
+func (g *routineGenerator) maybeInitBlockState(ctx context.Context) error {
+	blockState := g.expr.BlockState
+	if blockState == nil {
+		return nil
+	}
+	if blockState.ExceptionHandler != nil && blockState.SavepointTok == nil {
+		// Drop down a savepoint for the current scope.
+		var err error
+		if blockState.SavepointTok, err = g.p.Txn().CreateSavepoint(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Next is part of the ValueGenerator interface.
