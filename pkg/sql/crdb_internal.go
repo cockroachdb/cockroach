@@ -8222,7 +8222,8 @@ CREATE TABLE crdb_internal.%s (
 	index_recommendations      STRING[] NOT NULL,
 	implicit_txn               BOOL NOT NULL,
 	cpu_sql_nanos              INT8,
-    error_code                 STRING
+    error_code                 STRING,
+	latency_in_seconds         FLOAT
 )`
 
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
@@ -8352,6 +8353,7 @@ func populateStmtInsights(
 				tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
 				tree.NewDInt(tree.DInt(s.CPUSQLNanos)),
 				tree.NewDString(s.ErrorCode),
+				tree.NewDFloat(tree.DFloat(s.LatencyInSeconds)),
 			))
 		}
 	}

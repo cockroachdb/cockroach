@@ -2036,13 +2036,20 @@ message StatementExecutionInsightsResponse {
   // StatementInsight message is a wrapper on top of cockroach.sql.insights.Statement message to
   // extend it with transaction and session level information.
   message StatementInsight {
-    bytes transaction_id = 1 [(gogoproto.customname) = "TransactionID",
+    cockroach.sql.insights.Statement statement = 1;
+    bytes transaction_id = 2 [(gogoproto.customname) = "TransactionID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
       (gogoproto.nullable) = false];
-    bytes session_id = 2 [(gogoproto.customname) = "ID",
+    uint64 txn_fingerprint_id = 3 [(gogoproto.customname) = "TxnFingerprintID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.TransactionFingerprintID",
+      (gogoproto.nullable) = false];
+    bytes session_id = 4 [(gogoproto.customname) = "SessionID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
       (gogoproto.nullable) = false];
-    cockroach.sql.insights.Statement statement = 3;
+    string user_priority = 5;
+    string user = 6;
+    string application_name = 7;
+    bool implicit_txn = 8;
   }
   repeated StatementInsight statement_insights = 1;
 }

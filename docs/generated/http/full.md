@@ -5388,9 +5388,14 @@ extend it with transaction and session level information.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| transaction_id | [bytes](#cockroach.server.serverpb.StatementExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
-| session_id | [bytes](#cockroach.server.serverpb.StatementExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
 | statement | [cockroach.sql.insights.Statement](#cockroach.server.serverpb.StatementExecutionInsightsResponse-cockroach.sql.insights.Statement) |  |  | [reserved](#support-status) |
+| transaction_id | [bytes](#cockroach.server.serverpb.StatementExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| txn_fingerprint_id | [uint64](#cockroach.server.serverpb.StatementExecutionInsightsResponse-uint64) |  |  | [reserved](#support-status) |
+| session_id | [bytes](#cockroach.server.serverpb.StatementExecutionInsightsResponse-bytes) |  |  | [reserved](#support-status) |
+| user_priority | [string](#cockroach.server.serverpb.StatementExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| user | [string](#cockroach.server.serverpb.StatementExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| application_name | [string](#cockroach.server.serverpb.StatementExecutionInsightsResponse-string) |  |  | [reserved](#support-status) |
+| implicit_txn | [bool](#cockroach.server.serverpb.StatementExecutionInsightsResponse-bool) |  |  | [reserved](#support-status) |
 
 
 
