@@ -16,6 +16,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -1056,6 +1057,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // descriptor.
 func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
 	priv := privilege.List{privilege.CONNECT}
+	binaryVersion := clusterversion.ByKey(clusterversion.BinaryVersionKey)
 	return dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name:    SystemDatabaseName,
 		ID:      keys.SystemDatabaseID,
@@ -1063,6 +1065,7 @@ func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
 		// Assign max privileges to root user.
 		Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
 			priv, username.NodeUserName()),
+		SystemDatabaseSchemaVersion: &binaryVersion,
 	}).BuildImmutableDatabase()
 }
 
