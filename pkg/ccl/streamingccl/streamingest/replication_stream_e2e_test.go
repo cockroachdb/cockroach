@@ -1312,6 +1312,11 @@ func TestReproIncorrectJobQuery(t *testing.T) {
 	watcherNode := findAnotherNode(coordinatorNode)
 	db := c.DestCluster.Conns[watcherNode]
 
+	var aost string
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT clock_timestamp()::timestamp::string`).Scan(&aost))
+	res := db.QueryRowContext(ctx, fmt.Sprintf(`SELECT status, payload FROM crdb_internal.system_jobs AS OF SYSTEM TIME '%s' WHERE id = $1`, aost), ingestionJobID)
+	require.NoError(t, res.Err())
+
 	group := ctxgroup.WithContext(ctx)
 	defer func() {
 		require.NoError(t, group.Wait())
@@ -1323,14 +1328,18 @@ func TestReproIncorrectJobQuery(t *testing.T) {
 		return retry.ForDuration(time.Second*100, func() error {
 			var status string
 			var payloadBytes []byte
-			res := db.QueryRowContext(ctx, `SELECT status, payload FROM crdb_internal.system_jobs WHERE id = $1`, ingestionJobID)
+			var aost string
+			if err := db.QueryRowContext(ctx, `SELECT clock_timestamp()::timestamp::string`).Scan(&aost); err != nil {
+				return err
+			}
+			res := db.QueryRowContext(ctx, fmt.Sprintf(`SELECT status, payload FROM crdb_internal.system_jobs AS OF SYSTEM TIME '%s' WHERE id = $1`, aost), ingestionJobID)
 			if res.Err() != nil {
 				// This query can fail if a node shuts down during the query execution;
 				// therefore, tolerate errors.
 				return res.Err()
 			}
 			if err := res.Scan(&status, &payloadBytes); err != nil && strings.Contains(err.Error(), "sql: no rows in result set") {
-				debugCrdbInternalJobs(ctx, t, ingestionJobID, db)
+				debugCrdbInternalJobs(ctx, t, ingestionJobID, db, aost)
 				t.Fatalf("incorrect results %s", err.Error())
 
 			} else if err != nil {
@@ -1365,9 +1374,9 @@ func TestReproIncorrectJobQuery(t *testing.T) {
 
 // debugCrdbInternalJobs checks for the existence of the ingestionJob via a
 // variety of queries.
-func debugCrdbInternalJobs(ctx context.Context, t *testing.T, ingestionJob int, db *gosql.DB) {
+func debugCrdbInternalJobs(ctx context.Context, t *testing.T, ingestionJob int, db *gosql.DB, aost string) {
 	t.Logf("sadness")
-	sameQueryRes := db.QueryRowContext(ctx, `SELECT status, payload FROM crdb_internal.system_jobs WHERE id = $1`, ingestionJob)
+	sameQueryRes := db.QueryRowContext(ctx, fmt.Sprintf(`SELECT status, payload FROM crdb_internal.system_jobs AS OF SYSTEM TIME '%s' WHERE id = $1 `, aost), ingestionJob)
 	if sameQueryRes.Err() != nil {
 		t.Logf("same query failed: %s", sameQueryRes.Err())
 	} else {
@@ -1395,7 +1404,7 @@ func debugCrdbInternalJobs(ctx context.Context, t *testing.T, ingestionJob int, 
 		}
 	}
 
-	jobIDQuery(ctx, "system.jobs", `SELECT id FROM system.jobs WHERE id = $1`)
-	jobIDQuery(ctx, "system.job_info", `SELECT job_id FROM system.job_info where job_id=$1 LIMIT 1`)
+	jobIDQuery(ctx, "system.jobs", fmt.Sprintf(`SELECT id FROM system.jobs AS OF SYSTEM TIME '%s' WHERE id = $1`, aost))
+	jobIDQuery(ctx, "system.job_info", fmt.Sprintf(`SELECT job_id FROM system.job_info AS OF SYSTEM TIME '%s' WHERE job_id=$1 LIMIT 1`, aost))
 
 }
