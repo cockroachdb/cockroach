@@ -33,7 +33,7 @@ type RoutinePlanGenerator func(
 type RoutinePlanGeneratedFunc func(plan RoutinePlan, isFinalPlan bool) error
 
 // RoutinePlan represents a plan for a statement in a routine. It currently maps
-// to exec.Plan. We use the empty interface here rather then exec.Plan to avoid
+// to exec.Plan. We use the empty interface here rather than exec.Plan to avoid
 // import cycles.
 type RoutinePlan interface{}
 
@@ -123,9 +123,9 @@ type RoutineExpr struct {
 	// Procedure is true if the routine is a procedure being invoked by CALL.
 	Procedure bool
 
-	// ExceptionHandler holds the information needed to handle errors if an
-	// exception block was defined.
-	ExceptionHandler *RoutineExceptionHandler
+	// BlockState holds the information needed to coordinate error-handling
+	// between the sub-routines that make up a PLpgSQL exception block.
+	BlockState *BlockState
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
@@ -140,7 +140,7 @@ func NewTypedRoutineExpr(
 	generator bool,
 	tailCall bool,
 	procedure bool,
-	exceptionHandler *RoutineExceptionHandler,
+	blockState *BlockState,
 ) *RoutineExpr {
 	return &RoutineExpr{
 		Args:              args,
@@ -153,7 +153,7 @@ func NewTypedRoutineExpr(
 		Generator:         generator,
 		TailCall:          tailCall,
 		Procedure:         procedure,
-		ExceptionHandler:  exceptionHandler,
+		BlockState:        blockState,
 	}
 }
 
@@ -190,4 +190,17 @@ type RoutineExceptionHandler struct {
 
 	// Actions contains a routine to handle each error code.
 	Actions []*RoutineExpr
+}
+
+// BlockState is shared state between all routines that make up a PLpgSQL block.
+// It allows for coordination between the routines for exception handling.
+type BlockState struct {
+	// ExceptionHandler is the exception handler for the current block, if any.
+	ExceptionHandler *RoutineExceptionHandler
+
+	// SavepointTok allows the exception handler to roll-back changes to database
+	// state if an error occurs during its execution. It currently maps to
+	// kv.SavepointToken. We use the empty interface here rather than
+	// kv.SavepointToken to avoid import cycles.
+	SavepointTok interface{}
 }
