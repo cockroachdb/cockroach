@@ -2311,6 +2311,17 @@ func (ds *DistSender) sendToReplicas(
 					}
 				}
 
+				// Without the elimination of WriteTooOld deferrals introduced in
+				// #102808 and #102809, in order to handle blind writes that encounter
+				// a higher timestamp value on a retry after an RPC failure on a batch
+				// containing a commit, we need to propagate the original RPC failure
+				// as an ambiguous error. This avoids modifying a transaction that may
+				// have already been committed, but has the side effect of leaving an
+				// intent written on the retry behind.
+				if ambiguousError != nil && br.Txn != nil && br.Txn.WriteTooOld {
+					return nil, kvpb.NewAmbiguousResultErrorf("error=%v [propagate] (last error: WriteTooOld)", ambiguousError)
+				}
+
 				if ds.kvInterceptor != nil {
 					var reqInfo tenantcostmodel.RequestInfo
 					var respInfo tenantcostmodel.ResponseInfo
