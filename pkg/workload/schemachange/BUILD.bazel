@@ -10,6 +10,7 @@ go_library(
         "operation_generator.go",
         "schemachange.go",
         "type_resolver.go",
+        "optype.go",
         "watch_dog.go",
         ":gen-optype-stringer",  # keep
     ],
@@ -46,6 +47,6 @@ go_library(
 
 stringer(
     name = "gen-optype-stringer",
-    src = "operation_generator.go",
+    src = "optype.go",
     typ = "opType",
 )
