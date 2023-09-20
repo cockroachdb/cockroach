@@ -60,17 +60,16 @@ func TestHotRangesStats(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	logcrash.DiagnosticsReportingEnabled.Override(ctx, &s.ClusterSettings().SV, true)
-	structlogging.TelemetryHotRangesStatsEnabled.Override(ctx, &s.ClusterSettings().SV, true)
-	structlogging.TelemetryHotRangesStatsInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Millisecond)
-	structlogging.TelemetryHotRangesStatsLoggingDelay.Override(ctx, &s.ClusterSettings().SV, 10*time.Millisecond)
-
 	tenantID := roachpb.MustMakeTenantID(2)
-	tt, err := s.StartTenant(ctx, base.TestTenantArgs{
+	tt, err := s.TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: tenantID,
-		Settings: s.ClusterSettings(),
 	})
 	require.NoError(t, err)
+
+	logcrash.DiagnosticsReportingEnabled.Override(ctx, &tt.ClusterSettings().SV, true)
+	structlogging.TelemetryHotRangesStatsEnabled.Override(ctx, &tt.ClusterSettings().SV, true)
+	structlogging.TelemetryHotRangesStatsInterval.Override(ctx, &tt.ClusterSettings().SV, 500*time.Millisecond)
+	structlogging.TelemetryHotRangesStatsLoggingDelay.Override(ctx, &tt.ClusterSettings().SV, 10*time.Millisecond)
 
 	testutils.SucceedsSoon(t, func() error {
 		ss := tt.TenantStatusServer().(serverpb.TenantStatusServer)

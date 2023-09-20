@@ -4840,7 +4840,7 @@ func TestChangefeedErrors(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Locality: roachpb.Locality{
 			Tiers: []roachpb.Tier{{
 				Key:   "region",
@@ -4848,10 +4848,13 @@ func TestChangefeedErrors(t *testing.T) {
 			}},
 		},
 	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+
 	schemaReg := cdctest.StartTestSchemaRegistry()
 	defer schemaReg.Close()
 
-	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.SucceedsSoonDuration = 5 * time.Second
 
@@ -4860,22 +4863,28 @@ func TestChangefeedErrors(t *testing.T) {
 
 	// Changefeeds default to rangefeed, but for now, rangefeed defaults to off.
 	// Verify that this produces a useful error.
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = false`)
+	for _, l := range []serverutils.ApplicationLayerInterface{s, srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, false)
+	}
+
 	sqlDB.Exec(t, `CREATE TABLE rangefeed_off (a INT PRIMARY KEY)`)
 	sqlDB.ExpectErrWithTimeout(
 		t, `rangefeeds require the kv.rangefeed.enabled setting`,
 		`EXPERIMENTAL CHANGEFEED FOR rangefeed_off`,
 	)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+
+	for _, l := range []serverutils.ApplicationLayerInterface{s, srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
 
 	// Feature flag for changefeeds is off — test that CREATE CHANGEFEED and
 	// EXPERIMENTAL CHANGEFEED FOR surface error.
-	featureChangefeedEnabled.Override(ctx, &s.ApplicationLayer().ClusterSettings().SV, false)
+	featureChangefeedEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 	sqlDB.ExpectErrWithTimeout(t, `feature CHANGEFEED was disabled by the database administrator`,
 		`CREATE CHANGEFEED FOR foo`)
 	sqlDB.ExpectErrWithTimeout(t, `feature CHANGEFEED was disabled by the database administrator`,
 		`EXPERIMENTAL CHANGEFEED FOR foo`)
-	featureChangefeedEnabled.Override(ctx, &s.ApplicationLayer().ClusterSettings().SV, true)
+	featureChangefeedEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	sqlDB.ExpectErrWithTimeout(
 		t, `unknown format: nope`,

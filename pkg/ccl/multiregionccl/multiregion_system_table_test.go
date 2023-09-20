@@ -40,21 +40,26 @@ func TestMrSystemDatabase(t *testing.T) {
 	ctx := context.Background()
 
 	// Enable settings required for configuring a tenant's system database as multi-region.
-	cs := cluster.MakeTestingClusterSettings()
-	instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+	makeSettings := func() *cluster.Settings {
+		cs := cluster.MakeTestingClusterSettings()
+		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+		return cs
+	}
 
-	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3, base.TestingKnobs{}, multiregionccltestutils.WithSettings(cs))
+	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3,
+		base.TestingKnobs{},
+		multiregionccltestutils.WithSettings(makeSettings()))
 	defer cleanup()
 
 	id, err := roachpb.MakeTenantID(11)
 	require.NoError(t, err)
 
 	tenantArgs := base.TestTenantArgs{
-		Settings: cs,
+		Settings: makeSettings(),
 		TenantID: id,
 		Locality: cluster.Servers[0].Locality(),
 	}
-	_, tenantSQL := serverutils.StartTenant(t, cluster.Servers[0], tenantArgs)
+	ts, tenantSQL := serverutils.StartTenant(t, cluster.Servers[0], tenantArgs)
 
 	tDB := sqlutils.MakeSQLRunner(tenantSQL)
 
@@ -143,7 +148,7 @@ func TestMrSystemDatabase(t *testing.T) {
 				FROM system.sql_instances
 				WHERE session_id IS NULL GROUP BY crdb_region
 			`
-			preallocatedCount := instancestorage.PreallocatedCount.Get(&cs.SV)
+			preallocatedCount := instancestorage.PreallocatedCount.Get(&ts.ClusterSettings().SV)
 			testutils.SucceedsSoon(t, func() error {
 				rows := tDB.Query(t, query)
 				require.True(t, rows.Next())

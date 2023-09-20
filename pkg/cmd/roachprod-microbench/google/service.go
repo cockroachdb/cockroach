@@ -84,12 +84,13 @@ func (srv *Service) CreateSheet(
 	var s sheets.Spreadsheet
 	s.Properties = &sheets.SpreadsheetProperties{Title: name}
 
-	// Sort sheets by name.
+	// Sort sheets by name in reverse order. This ensures `sec/op` is the first
+	// sheet and metric in the summary.
 	sheetNames := make([]string, 0, len(metricMap))
 	for sheetName := range metricMap {
 		sheetNames = append(sheetNames, sheetName)
 	}
-	sort.Strings(sheetNames)
+	sort.Sort(sort.Reverse(sort.StringSlice(sheetNames)))
 
 	// Raw data sheets.
 	sheetInfos := make([]rawSheetInfo, len(metricMap))
