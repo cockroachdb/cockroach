@@ -118,6 +118,8 @@ func TestPlanGistBuilder(t *testing.T) {
 	}
 	// RFC: should I move this to opt_tester?
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "gists"), testGists)
+	// Reset the catalog for the next test.
+	catalog = testcat.New()
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "gists_tpce"), testGists)
 }
 
