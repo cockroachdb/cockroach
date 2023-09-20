@@ -206,7 +206,6 @@ go_test(
         "//pkg/util/caller",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
-        "//pkg/util/errorutil",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
