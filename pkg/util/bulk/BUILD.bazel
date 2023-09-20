@@ -11,11 +11,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
-        "//pkg/settings",
-        "//pkg/settings/cluster",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
         "//pkg/sql/protoreflect",

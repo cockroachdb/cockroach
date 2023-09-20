@@ -82,6 +82,10 @@ func (d fakeExecResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ er
 	return nil
 }
 
+func (d fakeExecResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // checkForPlanDiagram is a method used in tests to wait for the existence of a
 // DSP diagram for the provided jobID.
 func checkForPlanDiagrams(
@@ -171,6 +175,9 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 	runner.Exec(t, `CREATE TABLE t (id INT)`)
 	runner.Exec(t, `INSERT INTO t SELECT generate_series(1, 100)`)
 
+	isRunning := make(chan struct{})
+	defer close(isRunning)
+	continueRunning := make(chan struct{})
 	t.Run("read/write DistSQL diagram", func(t *testing.T) {
 		jobs.RegisterConstructor(jobspb.TypeImport, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return fakeExecResumer{
@@ -180,6 +187,8 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 					p.PhysicalInfrastructure = infra
 					jobsprofiler.StorePlanDiagram(ctx, s.Stopper(), &p, s.InternalDB().(isql.DB), j.ID())
 					checkForPlanDiagrams(ctx, t, s.InternalDB().(isql.DB), j.ID(), 1)
+					isRunning <- struct{}{}
+					<-continueRunning
 					return nil
 				},
 			}
@@ -187,11 +196,12 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 
 		var importJobID int
 		runner.QueryRow(t, `IMPORT INTO t CSV DATA ('nodelocal://1/foo') WITH DETACHED`).Scan(&importJobID)
-		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
-
+		<-isRunning
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		distSQLDiagram := checkExecutionDetails(t, s, jobspb.JobID(importJobID), "distsql")
 		require.Regexp(t, "<meta http-equiv=\"Refresh\" content=\"0\\; url=https://cockroachdb\\.github\\.io/distsqlplan/decode.html.*>", string(distSQLDiagram))
+		close(continueRunning)
+		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
 	})
 
 	t.Run("read/write goroutines", func(t *testing.T) {
@@ -239,7 +249,6 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 		var importJobID int
 		runner.QueryRow(t, `IMPORT INTO t CSV DATA ('nodelocal://1/foo') WITH DETACHED`).Scan(&importJobID)
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
-		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		trace := checkExecutionDetails(t, s, jobspb.JobID(importJobID), "resumer-trace")
 		require.Contains(t, string(trace), "should see this")
 	})
@@ -366,9 +375,9 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 		expectedDiagrams = 2
 		runner.Exec(t, `RESUME JOB $1`, importJobID)
 		<-writtenDiagram
+		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		continueCh <- struct{}{}
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
-		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		files = listExecutionDetails(t, s, jobspb.JobID(importJobID))
 		require.Len(t, files, 10)
 		require.Regexp(t, "[0-9]/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb", files[0])

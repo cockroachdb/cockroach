@@ -142,6 +142,11 @@ func (p *producerJobResumer) OnFailOrCancel(
 	return p.releaseProtectedTimestamp(ctx, execCfg)
 }
 
+// CollectProfile implements jobs.Resumer interface
+func (p *producerJobResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 func init() {
 	jobs.RegisterConstructor(
 		jobspb.TypeReplicationStreamProducer,
