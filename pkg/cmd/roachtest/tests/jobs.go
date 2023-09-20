@@ -125,7 +125,7 @@ func executeNodeShutdown(
 					t.Status("job completed")
 					return nil
 				case jobs.StatusRunning:
-					t.L().Printf("job %s still running, waiting to succeed", jobID)
+					t.L().Printf("job %d still running, waiting to succeed", jobID)
 				default:
 					// Waiting for job to complete.
 					return errors.Newf("unexpectedly found job %s in state %s", jobID, status)
