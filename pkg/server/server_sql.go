@@ -922,6 +922,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		&contentionMetrics,
 	)
 
+	if !cfg.Insecure {
+		certMgr, err := cfg.rpcContext.SecurityContext.GetCertificateManager()
+		if err != nil {
+			return nil, errors.Wrap(err, "initializing certificate manager")
+		}
+		certMgr.RegisterExpirationCache(
+			security.NewClientCertExpirationCache(
+				ctx, cfg.Settings, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
+			),
+		)
+	}
+
 	storageEngineClient := kvserver.NewStorageEngineClient(cfg.kvNodeDialer)
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
@@ -960,9 +972,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		AuditConfig: &auditlogging.AuditConfigLock{
 			Config: auditlogging.EmptyAuditConfig(),
 		},
-		ClientCertExpirationCache: security.NewClientCertExpirationCache(
-			ctx, cfg.Settings, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
-		),
 		RootMemoryMonitor:           rootSQLMemoryMonitor,
 		TestingKnobs:                sqlExecutorTestingKnobs,
 		CompactEngineSpanFunc:       storageEngineClient.CompactEngineSpan,
