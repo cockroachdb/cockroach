@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
@@ -214,7 +215,15 @@ func (s *remoteSession) StderrPipe() (io.Reader, error) {
 }
 
 func (s *remoteSession) RequestPty() error {
-	s.Cmd.Args = append(s.Cmd.Args, "-t")
+	if len(s.Cmd.Args) == 0 {
+		return fmt.Errorf("unexpected remote command: expected arguments, none found")
+	}
+
+	// Add the `-t` option after `ssh user@host`, otherwise, "-t" could
+	// confuse the underlying shell used when executing complex commands
+	// using `ssh`, leading to cryptic errors like: `bash: line 70:
+	// syntax error near -t`.
+	s.Cmd.Args = append(s.Cmd.Args[:1], append([]string{"-t"}, s.Cmd.Args[1:]...)...)
 	return nil
 }
 
@@ -237,6 +246,7 @@ type localSession struct {
 func newLocalSession(cmd string) *localSession {
 	ctx, cancel := context.WithCancel(context.Background())
 	fullCmd := exec.CommandContext(ctx, "/bin/bash", "-c", cmd)
+	fullCmd.WaitDelay = time.Second
 	return &localSession{fullCmd, cancel}
 }
 
