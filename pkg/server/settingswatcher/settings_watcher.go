@@ -60,6 +60,9 @@ type SettingsWatcher struct {
 		// inside secondary tenants. It will be uninitialized in a system
 		// tenant.
 		storageClusterVersion clusterversion.ClusterVersion
+
+		// Used by TestingRestart.
+		updateWait chan struct{}
 	}
 
 	// testingWatcherKnobs allows the client to inject testing knobs into
@@ -85,7 +88,7 @@ func New(
 	stopper *stop.Stopper,
 	storage Storage, // optional
 ) *SettingsWatcher {
-	return &SettingsWatcher{
+	s := &SettingsWatcher{
 		clock:    clock,
 		codec:    codec,
 		settings: settingsToUpdate,
@@ -94,6 +97,8 @@ func New(
 		dec:      MakeRowDecoder(codec),
 		storage:  storage,
 	}
+	s.mu.updateWait = make(chan struct{})
+	return s
 }
 
 // NewWithOverrides constructs a new SettingsWatcher which allows external
@@ -141,6 +146,9 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 			initialScan.done = true
 			close(initialScan.ch)
 		}
+		// Used by TestingRestart().
+		close(s.mu.updateWait)
+		s.mu.updateWait = make(chan struct{})
 	}
 
 	s.mu.values = make(map[settings.InternalKey]settingsValue)
@@ -248,9 +256,15 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	}
 }
 
-func (w *SettingsWatcher) TestingRestart() {
-	if w.rfc != nil {
-		w.rfc.TestingRestart()
+// TestingRestart restarts the rangefeeds and waits for the initial
+// update after the rangefeed update to be processed.
+func (s *SettingsWatcher) TestingRestart() {
+	if s.rfc != nil {
+		s.mu.Lock()
+		waitCh := s.mu.updateWait
+		s.mu.Unlock()
+		s.rfc.TestingRestart()
+		<-waitCh
 	}
 }
 
