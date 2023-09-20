@@ -95,7 +95,10 @@ export const StatementTableCell = {
           {canActivateDiagnosticReport ? (
             <Button
               onClick={() =>
-                activateDiagnosticsRef?.current?.showModalFor(stmt.label)
+                activateDiagnosticsRef?.current?.showModalFor(
+                  stmt.label,
+                  stmt.stats.plan_gists,
+                )
               }
               type="secondary"
               size="small"

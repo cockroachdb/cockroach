@@ -46,7 +46,7 @@ REVOKE ADMIN FROM testuser
 exec-sql user=testuser
 BACKUP INTO 'userfile:///test-nonroot-cluster';
 ----
-pq: only users with the admin role or the BACKUP system privilege are allowed to perform full cluster backups: user testuser does not have BACKUP privilege on global 
+pq: only users with the admin role or the BACKUP system privilege are allowed to perform full cluster backups: user testuser does not have BACKUP system privilege
 
 # Grant system backup privilege and re-run the backup.
 exec-sql
