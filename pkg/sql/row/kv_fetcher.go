@@ -56,6 +56,7 @@ func newTxnKVFetcher(
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockDurability descpb.ScanLockingDurability,
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
@@ -93,6 +94,7 @@ func newTxnKVFetcher(
 		reverse:                    reverse,
 		lockStrength:               lockStrength,
 		lockWaitPolicy:             lockWaitPolicy,
+		lockDurability:             lockDurability,
 		lockTimeout:                lockTimeout,
 		acc:                        acc,
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
@@ -122,12 +124,13 @@ func NewDirectKVBatchFetcher(
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockDurability descpb.ScanLockingDurability,
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 ) KVBatchFetcher {
 	f := newTxnKVFetcher(
-		txn, bsHeader, reverse, lockStrength, lockWaitPolicy,
+		txn, bsHeader, reverse, lockStrength, lockWaitPolicy, lockDurability,
 		lockTimeout, acc, forceProductionKVBatchSize,
 	)
 	f.scanFormat = kvpb.COL_BATCH_RESPONSE
@@ -147,12 +150,13 @@ func NewKVFetcher(
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockDurability descpb.ScanLockingDurability,
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 ) *KVFetcher {
 	return newKVFetcher(newTxnKVFetcher(
-		txn, bsHeader, reverse, lockStrength, lockWaitPolicy,
+		txn, bsHeader, reverse, lockStrength, lockWaitPolicy, lockDurability,
 		lockTimeout, acc, forceProductionKVBatchSize,
 	))
 }
@@ -168,6 +172,7 @@ func NewStreamingKVFetcher(
 	st *cluster.Settings,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockStrength descpb.ScanLockingStrength,
+	lockDurability descpb.ScanLockingDurability,
 	streamerBudgetLimit int64,
 	streamerBudgetAcc *mon.BoundAccount,
 	maintainOrdering bool,
@@ -189,6 +194,7 @@ func NewStreamingKVFetcher(
 		&kvPairsRead,
 		&batchRequestsIssued,
 		GetKeyLockingStrength(lockStrength),
+		GetKeyLockingDurability(lockDurability),
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {
@@ -203,7 +209,7 @@ func NewStreamingKVFetcher(
 		maxKeysPerRow,
 		diskBuffer,
 	)
-	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, kvFetcherMemAcc, &kvPairsRead, &batchRequestsIssued))
+	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, lockDurability, kvFetcherMemAcc, &kvPairsRead, &batchRequestsIssued))
 }
 
 func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {

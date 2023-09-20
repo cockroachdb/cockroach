@@ -121,6 +121,9 @@ message TableReaderSpec {
   // to BLOCK when locking_strength is FOR_NONE.
   optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 11 [(gogoproto.nullable) = false];
 
+  // Indicates the row-level locking durability to be used by the scan.
+  optional sqlbase.ScanLockingDurability locking_durability = 23 [(gogoproto.nullable) = false];
+
   // Indicates that misplanned ranges metadata should not be sent back to the
   // DistSQLReceiver. This will be set to true for the scan with a hard limit
   // (in which case we create a single processor that is placed at the
@@ -327,6 +330,9 @@ message JoinReaderSpec {
   // to BLOCK when locking_strength is FOR_NONE.
   optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 10 [(gogoproto.nullable) = false];
 
+  // Indicates the row-level locking durability to be used by the scan.
+  optional sqlbase.ScanLockingDurability locking_durability = 24 [(gogoproto.nullable) = false];
+
   // Indicates that the join reader should maintain the ordering of the input
   // stream. This is applicable to both lookup joins and index joins. For lookup
   // joins, maintaining order is expensive because it requires buffering. For
@@ -469,6 +475,9 @@ message ZigzagJoinerSpec {
     // held by other active transactions when attempting to lock rows. Always set
     // to BLOCK when locking_strength is FOR_NONE.
     optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 5 [(gogoproto.nullable) = false];
+
+    // Indicates the row-level locking durability to be used by the scan.
+    optional sqlbase.ScanLockingDurability locking_durability = 8 [(gogoproto.nullable) = false];
   }
 
   repeated Side sides = 7 [(gogoproto.nullable) = false];
@@ -717,6 +726,9 @@ message InvertedJoinerSpec {
   // held by other active transactions when attempting to lock rows. Always set
   // to BLOCK when locking_strength is FOR_NONE.
   optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 13 [(gogoproto.nullable) = false];
+
+  // Indicates the row-level locking durability to be used by the scan.
+  optional sqlbase.ScanLockingDurability locking_durability = 14 [(gogoproto.nullable) = false];
 }
 
 // InvertedFiltererSpec is the specification of a processor that does filtering

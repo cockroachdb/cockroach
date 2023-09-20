@@ -1955,7 +1955,7 @@ inner-join (hash)
  ├── interesting orderings: (+1) (+7) (-9,+10,+7)
  ├── scan fk
  │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
- │    ├── locking: for-update,skip-locked
+ │    ├── locking: for-update,skip-locked,durability-guaranteed
  │    ├── volatile
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
@@ -1963,7 +1963,7 @@ inner-join (hash)
  │    └── interesting orderings: (+1)
  ├── scan xysd
  │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
- │    ├── locking: for-update,skip-locked
+ │    ├── locking: for-update,skip-locked,durability-guaranteed
  │    ├── volatile
  │    ├── key: (7)
  │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
@@ -1994,7 +1994,7 @@ inner-join (hash)
  │    └── unfiltered-cols: (1-6)
  ├── scan xysd
  │    ├── columns: x:7(int!null) y:8(int) s:9(string) d:10(decimal!null)
- │    ├── locking: for-share,skip-locked
+ │    ├── locking: for-share,skip-locked,durability-guaranteed
  │    ├── volatile
  │    ├── key: (7)
  │    ├── fd: (7)-->(8-10), (9,10)~~>(7,8)
@@ -2019,7 +2019,7 @@ inner-join (hash)
  ├── interesting orderings: (+1) (+7) (-9,+10,+7)
  ├── scan fk
  │    ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int)
- │    ├── locking: for-update,skip-locked
+ │    ├── locking: for-update,skip-locked,durability-guaranteed
  │    ├── volatile
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
