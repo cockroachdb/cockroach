@@ -89,10 +89,11 @@ func NewRowSliceIter(allRows [][]string, align string) RowStrIter {
 type rowIter struct {
 	rows          clisqlclient.Rows
 	showMoreChars bool
+	escapeNewline bool
 }
 
 func (iter *rowIter) Next() (row []string, err error) {
-	nextRowString, err := getNextRowStrings(iter.rows, iter.showMoreChars)
+	nextRowString, err := getNextRowStrings(iter.rows, iter.showMoreChars, iter.escapeNewline)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +104,7 @@ func (iter *rowIter) Next() (row []string, err error) {
 }
 
 func (iter *rowIter) ToSlice() ([][]string, error) {
-	return getAllRowStrings(iter.rows, iter.showMoreChars)
+	return getAllRowStrings(iter.rows, iter.showMoreChars, iter.escapeNewline)
 }
 
 func (iter *rowIter) Align() []int {
@@ -129,13 +130,6 @@ func (iter *rowIter) Align() []int {
 		}
 	}
 	return align
-}
-
-func newRowIter(rows clisqlclient.Rows, showMoreChars bool) *rowIter {
-	return &rowIter{
-		rows:          rows,
-		showMoreChars: showMoreChars,
-	}
 }
 
 // rowReporter is used to render result sets.

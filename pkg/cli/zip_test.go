@@ -28,6 +28,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -35,17 +37,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestZipContainsAllInternalTables verifies that we don't add new internal tables
@@ -254,6 +260,80 @@ func TestZipIncludeRangeInfo(t *testing.T) {
 			return out
 		},
 	)
+}
+
+// This tests that debug zip table files escape newlines in cells.
+func TestTableFileEscapeNewline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	skip.UnderRace(t, "test too slow under race")
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	var server serverutils.TestServerInterface
+	var scheduleJobs func() error
+	jobSchedulerEnv := jobstest.NewJobSchedulerTestEnv(
+		jobstest.UseSystemTables,
+		timeutil.Now(),
+		tree.ScheduledRowLevelTTLExecutor,
+	)
+	c := newCLITestWithArgs(
+		TestCLIParams{
+			StoreSpecs: []base.StoreSpec{{
+				Path: dir,
+			}},
+		},
+		func(args *base.TestServerArgs) {
+			args.Knobs.JobsTestingKnobs = &jobs.TestingKnobs{
+				JobSchedulerEnv: jobSchedulerEnv,
+				TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
+					scheduleJobs = func() error {
+						defer server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+						return fn(context.Background(), 0)
+					}
+				},
+			}
+		},
+	)
+	defer c.Cleanup()
+
+	server = c.Server
+	db := server.SQLConn(t, "")
+	sqlRunner := sqlutils.MakeSQLRunner(db)
+	sqlRunner.Exec(t, "CREATE TABLE t (expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at', ttl_job_cron = '* * * * *')")
+	// Wait for job schedule to appear.
+	sqlRunner.CheckQueryResultsRetry(t, "SELECT count(1) >= 1 FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl%'", [][]string{{"true"}})
+	// Execute job.
+	jobSchedulerEnv.SetTime(timeutil.Now().Add(time.Hour))
+	require.NoError(t, scheduleJobs())
+	// Wait for job record to appear.
+	sqlRunner.CheckQueryResultsRetry(t, "SELECT count(1) >= 1 FROM [SHOW JOBS] WHERE job_type = 'ROW LEVEL TTL'", [][]string{{"true"}})
+
+	const debugFileName = "debug.zip"
+	debugZipPath := dir + "/" + debugFileName
+	_, err := c.RunWithCapture("debug zip " + debugZipPath)
+	require.NoError(t, err)
+
+	debugZipReader, err := zip.OpenReader(debugZipPath)
+	require.NoError(t, err)
+	defer func() {
+		_ = debugZipReader.Close()
+	}()
+
+	jobsFile, err := debugZipReader.Open("debug/crdb_internal.jobs.txt")
+	require.NoError(t, err)
+	defer func() {
+		_ = jobsFile.Close()
+	}()
+
+	JobsFileBuf := bytes.NewBuffer(nil)
+	_, err = io.Copy(JobsFileBuf, jobsFile)
+	require.NoError(t, err)
+
+	jobsFileString := JobsFileBuf.String()
+	// Verify that newlines have been escaped with \n.
+	require.Contains(t, jobsFileString, `ttl for defaultdb.public.t\n-- for each span, iterate to find rows:`)
 }
 
 // This tests the operation of zip running concurrently.

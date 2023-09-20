@@ -40,7 +40,13 @@ func runQueryAndFormatResults(
 ) (err error) {
 	return testExecCtx.RunQueryAndFormatResults(
 		context.Background(),
-		conn, w, io.Discard, io.Discard, fn)
+		conn,
+		w,
+		io.Discard,
+		io.Discard,
+		fn,
+		false, /* escapeNewline */
+	)
 }
 
 func TestRunQuery(t *testing.T) {

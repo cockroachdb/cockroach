@@ -13,15 +13,18 @@ package clisqlexec
 import (
 	"database/sql/driver"
 	"io"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 )
 
-func getAllRowStrings(rows clisqlclient.Rows, showMoreChars bool) ([][]string, error) {
+func getAllRowStrings(
+	rows clisqlclient.Rows, showMoreChars bool, escapeNewline bool,
+) ([][]string, error) {
 	var allRows [][]string
 
 	for {
-		rowStrings, err := getNextRowStrings(rows, showMoreChars)
+		rowStrings, err := getNextRowStrings(rows, showMoreChars, escapeNewline)
 		if err != nil {
 			return nil, err
 		}
@@ -34,7 +37,9 @@ func getAllRowStrings(rows clisqlclient.Rows, showMoreChars bool) ([][]string, e
 	return allRows, nil
 }
 
-func getNextRowStrings(rows clisqlclient.Rows, showMoreChars bool) ([]string, error) {
+func getNextRowStrings(
+	rows clisqlclient.Rows, showMoreChars bool, escapeNewline bool,
+) ([]string, error) {
 	cols := rows.Columns()
 	var vals []driver.Value
 	if len(cols) > 0 {
@@ -54,6 +59,11 @@ func getNextRowStrings(rows clisqlclient.Rows, showMoreChars bool) ([]string, er
 	rowStrings := make([]string, len(cols))
 	for i, v := range vals {
 		rowStrings[i] = FormatVal(v, showMoreChars, showMoreChars)
+	}
+	if escapeNewline {
+		for i := range rowStrings {
+			rowStrings[i] = strings.ReplaceAll(rowStrings[i], "\n", `\n`)
+		}
 	}
 	return rowStrings, nil
 }

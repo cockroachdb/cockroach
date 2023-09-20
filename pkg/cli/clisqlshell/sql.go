@@ -1382,6 +1382,7 @@ func (c *cliState) handleDescribe(cmd []string, loopState, errState cliStateEnum
 				io.Discard,         // we hide timings for describe commands.
 				c.iCtx.stderr,
 				q,
+				false, /* escapeNewline */
 			)
 		}); err != nil {
 			return c.cliError(errState, err)
@@ -2149,6 +2150,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 			c.iCtx.stdout,      // timings.
 			c.iCtx.stderr,
 			q,
+			false, /* escapeNewline */
 		)
 	}); err != nil {
 		// Display the error and set c.exitErr, but do not stop the shell
@@ -2181,12 +2183,15 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 			}
 			if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
 				defer c.maybeFlushOutput()
-				return c.sqlExecCtx.RunQueryAndFormatResults(ctx,
+				return c.sqlExecCtx.RunQueryAndFormatResults(
+					ctx,
 					c.conn,
 					c.iCtx.queryOutput, // query output
 					c.iCtx.stdout,      // timings
 					c.iCtx.stderr,      // errors
-					clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType)))
+					clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType)),
+					false, /* escapeNewline */
+				)
 			}); err != nil {
 				clierror.OutputError(c.iCtx.stderr, err, true /*showSeverity*/, false /*verbose*/)
 				if c.exitErr == nil {
