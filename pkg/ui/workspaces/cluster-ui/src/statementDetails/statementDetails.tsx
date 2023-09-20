@@ -1021,6 +1021,7 @@ export class StatementDetails extends React.Component<
         onSortingChange={this.props.onSortingChange}
         currentScale={this.props.timeScale}
         onChangeTimeScale={this.changeTimeScale}
+        planGists={this.props.statementDetails.statement.stats.plan_gists}
       />
     );
   };

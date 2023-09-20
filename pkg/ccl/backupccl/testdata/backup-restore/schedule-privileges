@@ -54,7 +54,7 @@ REVOKE ADMIN FROM testuser;
 exec-sql user=testuser
 CREATE SCHEDULE foocluster FOR BACKUP INTO 'external://foo/cluster' RECURRING '@hourly';
 ----
-pq: failed to dry run backup: only users with the admin role or the BACKUP system privilege are allowed to perform full cluster backups: user testuser does not have BACKUP privilege on global 
+pq: failed to dry run backup: only users with the admin role or the BACKUP system privilege are allowed to perform full cluster backups: user testuser does not have BACKUP system privilege
 
 exec-sql user=testuser
 CREATE SCHEDULE foodb FOR BACKUP DATABASE foo INTO 'external://foo/database' RECURRING '@hourly';
