@@ -297,7 +297,7 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverloadWithReturnType(
 			tree.ParamTypes{{Name: "input", Typ: types.AnyArray}},
 			func(args []tree.TypedExpr) *types.T {
-				if len(args) == 0 || args[0].ResolvedType().Family() == types.UnknownFamily {
+				if len(args) == 0 || args[0].ResolvedType().Family() != types.ArrayFamily {
 					return tree.UnknownReturnType
 				}
 				return args[0].ResolvedType().ArrayContents()
@@ -317,7 +317,7 @@ var generators = map[string]builtinDefinition{
 				returnTypes := make([]*types.T, len(args))
 				labels := make([]string, len(args))
 				for i, arg := range args {
-					if arg.ResolvedType().Family() == types.UnknownFamily {
+					if arg.ResolvedType().Family() != types.ArrayFamily {
 						return tree.UnknownReturnType
 					}
 					returnTypes[i] = arg.ResolvedType().ArrayContents()
@@ -335,7 +335,7 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverloadWithReturnType(
 			tree.ParamTypes{{Name: "input", Typ: types.AnyArray}},
 			func(args []tree.TypedExpr) *types.T {
-				if len(args) == 0 || args[0].ResolvedType().Family() == types.UnknownFamily {
+				if len(args) == 0 || args[0].ResolvedType().Family() != types.ArrayFamily {
 					return tree.UnknownReturnType
 				}
 				t := args[0].ResolvedType().ArrayContents()
