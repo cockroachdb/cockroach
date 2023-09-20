@@ -187,7 +187,7 @@ CREATE USER testuser;
 exec-sql user=testuser
 RESTORE FROM LATEST IN 'nodelocal://1/foo';
 ----
-pq: only users with the admin role or the RESTORE system privilege are allowed to perform a cluster restore: user testuser does not have RESTORE privilege on global 
+pq: only users with the admin role or the RESTORE system privilege are allowed to perform a cluster restore: user testuser does not have RESTORE system privilege
 
 exec-sql
 GRANT SYSTEM RESTORE TO testuser;
