@@ -52,7 +52,9 @@ go_test(
         "virtual_table_test.go",
     ],
     args = ["-test.timeout=3595s"],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "//c-deps:libgeos",  # keep
+    ],
     embed = [":tests"],
     shard_count = 16,
     deps = [
