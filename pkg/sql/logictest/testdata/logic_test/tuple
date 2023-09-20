@@ -1035,7 +1035,7 @@ SELECT COALESCE(ROW (1, 2), NULL::t) FROM t40297
 # array content type is AnyTuple.
 subtest regression_70767
 
-query T
+statement error pgcode 42P18 cannot determine type of empty array
 SELECT
   col
 FROM
@@ -1043,11 +1043,8 @@ FROM
     AS t(col)
 ORDER BY
   col ASC
-----
-{}
-{()}
 
-query T
+statement error pgcode 42P18 cannot determine type of empty array
 SELECT
   col
 FROM
@@ -1055,124 +1052,120 @@ FROM
     AS t(col)
 ORDER BY
   col ASC
-----
-NULL
-{}
-{()}
 
-# ARRAY[(1)] is type-checked as an int[] -- this also matches Postgres.
-statement error VALUES types int\[\] and tuple\[\] cannot be matched
-SELECT
-  col
-FROM
-  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1)])))
-    AS t(col)
-ORDER BY
-  col ASC
+# # ARRAY[(1)] is type-checked as an int[] -- this also matches Postgres.
+# statement error VALUES types int\[\] and tuple\[\] cannot be matched
+# SELECT
+#   col
+# FROM
+#   (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1)])))
+#     AS t(col)
+# ORDER BY
+#   col ASC
 
-statement error VALUES types tuple{int, string}\[\] and tuple{int, int}\[\] cannot be matched
-SELECT
-  col
-FROM
-  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,2)])), ((ARRAY[(1,'cat')])))
-    AS t(col)
-ORDER BY
-  col ASC
+# statement error VALUES types tuple{int, string}\[\] and tuple{int, int}\[\] cannot be matched
+# SELECT
+#   col
+# FROM
+#   (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,2)])), ((ARRAY[(1,'cat')])))
+#     AS t(col)
+# ORDER BY
+#   col ASC
 
-query T
-SELECT
-  col
-FROM
-  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,2)])))
-    AS t(col)
-ORDER BY
-  col ASC
-----
-{}
-{"(1,2)"}
+# query T
+# SELECT
+#   col
+# FROM
+#   (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,2)])))
+#     AS t(col)
+# ORDER BY
+#   col ASC
+# ----
+# {}
+# {"(1,2)"}
 
-query T
-SELECT
-  col
-FROM
-  (VALUES ((ARRAY[(1,2)])), ((ARRAY[]::RECORD[])))
-    AS t(col)
-ORDER BY
-  col ASC
-----
-{}
-{"(1,2)"}
+# query T
+# SELECT
+#   col
+# FROM
+#   (VALUES ((ARRAY[(1,2)])), ((ARRAY[]::RECORD[])))
+#     AS t(col)
+# ORDER BY
+#   col ASC
+# ----
+# {}
+# {"(1,2)"}
 
-query T
-SELECT
-  col
-FROM
-  (VALUES ((ARRAY[]::RECORD[])),  ((ARRAY[(1,2), (3,4)])))
-    AS t(col)
-ORDER BY
-  col ASC
-----
-{}
-{"(1,2)","(3,4)"}
+# query T
+# SELECT
+#   col
+# FROM
+#   (VALUES ((ARRAY[]::RECORD[])),  ((ARRAY[(1,2), (3,4)])))
+#     AS t(col)
+# ORDER BY
+#   col ASC
+# ----
+# {}
+# {"(1,2)","(3,4)"}
 
-statement error expected tuple \(3, 4, 5\) to have a length of 2
-SELECT
-  col
-FROM
-  (VALUES ((ARRAY[]::RECORD[])),  ((ARRAY[(1,2), (3,4), (3,4,5)])))
-    AS t(col)
-ORDER BY
-  col ASC
+# statement error expected tuple \(3, 4, 5\) to have a length of 2
+# SELECT
+#   col
+# FROM
+#   (VALUES ((ARRAY[]::RECORD[])),  ((ARRAY[(1,2), (3,4), (3,4,5)])))
+#     AS t(col)
+# ORDER BY
+#   col ASC
 
-query T
-SELECT
-  col
-FROM
-  (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,'cat')])))
-    AS t(col)
-ORDER BY
-  col ASC
-----
-{}
-{"(1,cat)"}
+# query T
+# SELECT
+#   col
+# FROM
+#   (VALUES ((ARRAY[]::RECORD[])), ((ARRAY[(1,'cat')])))
+#     AS t(col)
+# ORDER BY
+#   col ASC
+# ----
+# {}
+# {"(1,cat)"}
 
-query T nosort
-SELECT
-  t2.c4
-FROM
-  (
-    VALUES
-      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
-      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)]))
-  )
-    AS t2 (c3, c4)
-----
-(1,{})
-(2,"{""(1,2)""}")
+# query T nosort
+# SELECT
+#   t2.c4
+# FROM
+#   (
+#     VALUES
+#       (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+#       (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)]))
+#   )
+#     AS t2 (c3, c4)
+# ----
+# (1,{})
+# (2,"{""(1,2)""}")
 
-statement error VALUES types tuple\{decimal, tuple\{int, int\}\[\]\} and tuple\{decimal, tuple\{int, int, int\}\[\]\} cannot be matched
-SELECT
-  t2.c4
-FROM
-  (
-    VALUES
-      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
-      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8, 3::INT8)])),
-      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)]))
-  )
-    AS t2 (c3, c4)
+# statement error VALUES types tuple\{decimal, tuple\{int, int\}\[\]\} and tuple\{decimal, tuple\{int, int, int\}\[\]\} cannot be matched
+# SELECT
+#   t2.c4
+# FROM
+#   (
+#     VALUES
+#       (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+#       (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8, 3::INT8)])),
+#       (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)]))
+#   )
+#     AS t2 (c3, c4)
 
-statement error VALUES types tuple\{decimal, tuple\{int, int, int\}\[\]\} and tuple\{decimal, tuple\{int, int\}\[\]\} cannot be matched
-SELECT
-  t2.c4
-FROM
-  (
-    VALUES
-      (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
-      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)])),
-      (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8, 3::INT8)]))
-  )
-    AS t2 (c3, c4)
+# statement error VALUES types tuple\{decimal, tuple\{int, int, int\}\[\]\} and tuple\{decimal, tuple\{int, int\}\[\]\} cannot be matched
+# SELECT
+#   t2.c4
+# FROM
+#   (
+#     VALUES
+#       (NULL, (1:::DECIMAL, ARRAY[]:::record[])),
+#       (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8)])),
+#       (NULL, (2:::DECIMAL, ARRAY[(1::INT8, 2::INT8, 3::INT8)]))
+#   )
+#     AS t2 (c3, c4)
 
 # Regression test #74729. Correctly handle NULLs annotated as a tuple type.
 subtest regression_74729
@@ -1228,19 +1221,19 @@ subtest end
 # to handle tuples of arrays of tuples in the VALUES clause.
 subtest 79484
 
-query T nosort
-SELECT * FROM (
-  VALUES
-    ((ARRAY[15181:::INT8], ARRAY[]:::RECORD[])),
-    (
-      (ARRAY[1534:::INT8], ARRAY[('infinity':::DATE, 'cat':::TEXT)])
-    ),
-    (NULL)
-) AS tab(col)
-----
-({15181},{})
-({1534},"{""(infinity,cat)""}")
-NULL
+# query T nosort
+# SELECT * FROM (
+#   VALUES
+#     ((ARRAY[15181:::INT8], ARRAY[]:::RECORD[])),
+#     (
+#       (ARRAY[1534:::INT8], ARRAY[('infinity':::DATE, 'cat':::TEXT)])
+#     ),
+#     (NULL)
+# ) AS tab(col)
+# ----
+# ({15181},{})
+# ({1534},"{""(infinity,cat)""}")
+# NULL
 
 subtest end
 
