@@ -299,6 +299,8 @@ type FetcherInitArgs struct {
 	// LockWaitPolicy represents the policy to be used for handling conflicting
 	// locks held by other active transactions.
 	LockWaitPolicy descpb.ScanLockingWaitPolicy
+	// LockDurability represents the row-level locking durability to use.
+	LockDurability descpb.ScanLockingDurability
 	// LockTimeout specifies the maximum amount of time that the fetcher will
 	// wait while attempting to acquire a lock on a key or while blocking on an
 	// existing lock in order to perform a non-locking read on a key.
@@ -440,6 +442,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			reverse:                    args.Reverse,
 			lockStrength:               args.LockStrength,
 			lockWaitPolicy:             args.LockWaitPolicy,
+			lockDurability:             args.LockDurability,
 			lockTimeout:                args.LockTimeout,
 			acc:                        rf.kvFetcherMemAcc,
 			forceProductionKVBatchSize: args.ForceProductionKVBatchSize,

@@ -600,7 +600,7 @@ update child
       │         ├── scan parent
       │         │    ├── columns: parent.p:13!null
       │         │    ├── flags: disabled not visible index feature
-      │         │    └── locking: for-share
+      │         │    └── locking: for-share,durability-guaranteed
       │         └── filters
       │              └── p:11 = parent.p:13
       ├── f-k-checks-item: grandchild(c) -> child(c)
@@ -670,7 +670,7 @@ update self
                 ├── scan self
                 │    ├── columns: x:11!null
                 │    ├── flags: disabled not visible index feature
-                │    └── locking: for-share
+                │    └── locking: for-share,durability-guaranteed
                 └── filters
                      └── y:10 = x:11
 

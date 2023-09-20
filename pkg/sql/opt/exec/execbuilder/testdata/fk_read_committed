@@ -7,7 +7,7 @@ statement ok
 CREATE TABLE jars (j INT PRIMARY KEY)
 
 statement ok
-CREATE TABLE cookies (c INT PRIMARY KEY, j INT REFERENCES jars (j))
+CREATE TABLE cookies (c INT PRIMARY KEY, j INT REFERENCES jars (j), FAMILY (c, j))
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
@@ -28,23 +28,43 @@ insert cookies
                 ├── with-scan &1
                 └── filters (true)
 
+query T
+EXPLAIN (VERBOSE) INSERT INTO cookies VALUES (1, 1)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: cookies(c, j)
+  auto commit
+  FK check: jars@jars_pkey
+  FK check locking strength: for share
+  FK check locking durability: guaranteed
+  size: 2 columns, 1 row
+  row 0, expr 0: 1
+  row 0, expr 1: 1
+
 # Under serializable isolation, locking is not required, unless
 # enable_implicit_fk_locking_for_serializable is true.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
 query T
-EXPLAIN (OPT) INSERT INTO cookies VALUES (1, 1)
+EXPLAIN (VERBOSE) INSERT INTO cookies VALUES (1, 1)
 ----
-insert cookies
- ├── values
- │    └── (1, 1)
- └── f-k-checks
-      └── f-k-checks-item: cookies(j) -> jars(j)
-           └── anti-join (lookup jars)
-                ├── lookup columns are key
-                ├── with-scan &1
-                └── filters (true)
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: cookies(c, j)
+  FK check: jars@jars_pkey
+  size: 2 columns, 1 row
+  row 0, expr 0: 1
+  row 0, expr 1: 1
 
 statement ok
 SET enable_implicit_fk_locking_for_serializable = true
@@ -55,18 +75,43 @@ statement ok
 SET enable_shared_locking_for_serializable=true
 
 query T
-EXPLAIN (OPT) INSERT INTO cookies VALUES (1, 1)
+EXPLAIN (VERBOSE) INSERT INTO cookies VALUES (1, 1)
 ----
-insert cookies
- ├── values
- │    └── (1, 1)
- └── f-k-checks
-      └── f-k-checks-item: cookies(j) -> jars(j)
-           └── anti-join (lookup jars)
-                ├── lookup columns are key
-                ├── locking: for-share
-                ├── with-scan &1
-                └── filters (true)
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: cookies(c, j)
+  FK check: jars@jars_pkey
+  FK check locking strength: for share
+  size: 2 columns, 1 row
+  row 0, expr 0: 1
+  row 0, expr 1: 1
+
+statement ok
+SET enable_durable_locking_for_serializable = true
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO cookies VALUES (1, 1)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: cookies(c, j)
+  FK check: jars@jars_pkey
+  FK check locking strength: for share
+  FK check locking durability: guaranteed
+  size: 2 columns, 1 row
+  row 0, expr 0: 1
+  row 0, expr 1: 1
+
+statement ok
+RESET enable_durable_locking_for_serializable
 
 statement ok
 RESET enable_implicit_fk_locking_for_serializable
@@ -91,6 +136,60 @@ update cookies
                 ├── with-scan &1
                 └── filters (true)
 
+query T
+EXPLAIN (VERBOSE) UPDATE cookies SET j = 2 WHERE c = 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • update
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ table: cookies
+│   │ set: j
+│   │
+│   └── • buffer
+│       │ columns: (c, j, j_new)
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │ columns: (c, j, j_new)
+│           │ render j_new: 2
+│           │ render c: c
+│           │ render j: j
+│           │
+│           └── • scan
+│                 columns: (c, j)
+│                 estimated row count: 1 (missing stats)
+│                 table: cookies@cookies_pkey
+│                 spans: /1/0
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • lookup join (anti)
+            │ columns: (j_new)
+            │ estimated row count: 0 (missing stats)
+            │ table: jars@jars_pkey
+            │ equality: (j_new) = (j)
+            │ equality cols are key
+            │ locking strength: for share
+            │ locking durability: guaranteed
+            │
+            └── • project
+                │ columns: (j_new)
+                │
+                └── • scan buffer
+                      columns: (c, j, j_new)
+                      estimated row count: 1 (missing stats)
+                      label: buffer 1
+
 # Foreign key checks of the child do not require locking.
 query T
 EXPLAIN (OPT) UPDATE jars SET j = j + 4
@@ -113,6 +212,83 @@ update jars
                           └── j = cookies.j
 
 query T
+EXPLAIN (VERBOSE) UPDATE jars SET j = j + 4
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • update
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ table: jars
+│   │ set: j
+│   │
+│   └── • buffer
+│       │ columns: (j, j_new)
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │ columns: (j, j_new)
+│           │ render j_new: j + 4
+│           │ render j: j
+│           │
+│           └── • scan
+│                 columns: (j)
+│                 estimated row count: 1,000 (missing stats)
+│                 table: jars@jars_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • project
+            │ columns: (j)
+            │
+            └── • hash join (inner)
+                │ columns: (j, j)
+                │ estimated row count: 99 (missing stats)
+                │ equality: (j) = (j)
+                │ left cols are key
+                │ right cols are key
+                │
+                ├── • except all
+                │   │ columns: (j)
+                │   │ estimated row count: 1,000 (missing stats)
+                │   │
+                │   ├── • project
+                │   │   │ columns: (j)
+                │   │   │
+                │   │   └── • scan buffer
+                │   │         columns: (j, j_new)
+                │   │         estimated row count: 1,000 (missing stats)
+                │   │         label: buffer 1
+                │   │
+                │   └── • project
+                │       │ columns: (j_new)
+                │       │
+                │       └── • scan buffer
+                │             columns: (j, j_new)
+                │             estimated row count: 1,000 (missing stats)
+                │             label: buffer 1
+                │
+                └── • distinct
+                    │ columns: (j)
+                    │ estimated row count: 100 (missing stats)
+                    │ distinct on: j
+                    │
+                    └── • scan
+                          columns: (j)
+                          estimated row count: 1,000 (missing stats)
+                          table: cookies@cookies_pkey
+                          spans: FULL SCAN
+
+query T
 EXPLAIN (OPT) DELETE FROM jars WHERE j = 1
 ----
 delete jars
@@ -125,3 +301,49 @@ delete jars
                 ├── scan cookies
                 └── filters
                      └── j = cookies.j
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM jars WHERE j = 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • delete
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ from: jars
+│   │
+│   └── • buffer
+│       │ columns: (j)
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             columns: (j)
+│             estimated row count: 1 (missing stats)
+│             table: jars@jars_pkey
+│             spans: /1/0
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • hash join (right semi)
+            │ columns: (j)
+            │ estimated row count: 1 (missing stats)
+            │ equality: (j) = (j)
+            │ right cols are key
+            │
+            ├── • scan
+            │     columns: (j)
+            │     estimated row count: 1,000 (missing stats)
+            │     table: cookies@cookies_pkey
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  columns: (j)
+                  estimated row count: 1 (missing stats)
+                  label: buffer 1

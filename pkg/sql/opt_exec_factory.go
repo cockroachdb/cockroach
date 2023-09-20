@@ -169,6 +169,7 @@ func (ef *execFactory) ConstructScan(
 	scan.estimatedRowCount = uint64(params.EstimatedRowCount)
 	scan.lockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
 	scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
+	scan.lockingDurability = descpb.ToScanLockingDurability(params.Locking.Durability)
 	scan.localityOptimized = params.LocalityOptimized
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -665,6 +666,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	tableScan.disableBatchLimit()
 	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -725,6 +727,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	tableScan.index = idx
 	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -865,6 +868,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	tableScan.index = idx
 	tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	tableScan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	if !ef.isExplain && !ef.planner.SessionData().Internal {
 		idxUsageKey := roachpb.IndexUsageKey{
@@ -945,6 +949,7 @@ func (ef *execFactory) constructScanForZigzag(
 	scan.index = idxDesc
 	scan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	scan.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	return scan, eqColOrdinals, nil
 }
