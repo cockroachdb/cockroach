@@ -360,17 +360,21 @@ type bucket struct {
 	}
 
 	// Waiting requests do so by waiting on signalCh without holding mutexes.
-	// Requests first check for available tokens, waiting if unavailable.
+	//
+	// Requests first check for available tokens (by acquiring and releasing the
+	// mutex), and then wait if tokens for their work class are unavailable. The
+	// risk in such waiting after releasing the mutex is the race where tokens
+	// become available after the waiter releases the mutex and before it starts
+	// waiting. We handle this race by ensuring that signalCh always has an
+	// entry if tokens are available:
+	//
 	// - Whenever tokens are returned, signalCh is signaled, waking up a single
 	//   waiting request. If the request finds no available tokens, it starts
 	//   waiting again.
 	// - Whenever a request gets admitted, it signals the next waiter if any.
-	// The invariant we are ensuring is that whenever there are tokens
-	// available, the channel will have an entry, so at least one request that
-	// observed unavailable tokens will get unblocked, which will in turn
-	// unblock others. The concurrent request that adds tokens also tops up the
-	// channel so that the at least one waiter that observed unavailable tokens
-	// will find the channel signaled.
+	//
+	// So at least one request that observed unavailable tokens will get
+	// unblocked, which will in turn unblock others.
 	signalCh chan struct{}
 }
 
