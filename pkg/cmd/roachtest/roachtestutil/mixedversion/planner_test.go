@@ -359,7 +359,7 @@ func Test_upgradeTimeout(t *testing.T) {
 		return steps
 	}
 
-	assertTimeout := func(expectedTimeout time.Duration, opts ...customOption) {
+	assertTimeout := func(expectedTimeout time.Duration, opts ...CustomOption) {
 		mvt := newTest(opts...)
 		plan, err := mvt.plan()
 		require.NoError(t, err)
@@ -374,7 +374,7 @@ func Test_upgradeTimeout(t *testing.T) {
 	assertTimeout(30*time.Minute, UpgradeTimeout(30*time.Minute)) // custom timeout applies.
 }
 
-func newTest(options ...customOption) *Test {
+func newTest(options ...CustomOption) *Test {
 	testOptions := defaultTestOptions
 	for _, fn := range options {
 		fn(&testOptions)
