@@ -51,6 +51,7 @@ go_test(
     name = "install_test",
     srcs = [
         "cluster_synced_test.go",
+        "cockroach_test.go",
         "services_test.go",
         "staging_test.go",
         "start_template_test.go",

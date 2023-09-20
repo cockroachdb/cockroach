@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
@@ -237,6 +238,7 @@ type localSession struct {
 func newLocalSession(cmd string) *localSession {
 	ctx, cancel := context.WithCancel(context.Background())
 	fullCmd := exec.CommandContext(ctx, "/bin/bash", "-c", cmd)
+	fullCmd.WaitDelay = time.Second
 	return &localSession{fullCmd, cancel}
 }
 
