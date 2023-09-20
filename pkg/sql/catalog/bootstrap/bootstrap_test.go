@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -80,24 +81,18 @@ func TestInitialValuesToString(t *testing.T) {
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			codec := keys.SystemSQLCodec
+			var tenantID uint64
 			switch d.Cmd {
 			case "system":
-				break
-
 			case "tenant":
-				const dummyTenantID = 12345
-				codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(dummyTenantID))
-
+				tenantID = 12345
 			default:
 				t.Fatalf("unexpected command %q", d.Cmd)
 			}
 			var expectedHash string
 			d.ScanArgs(t, "hash", &expectedHash)
-			ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
-			result := InitialValuesToString(ms)
-			h := sha256.Sum256([]byte(result))
-			if actualHash := hex.EncodeToString(h[:]); expectedHash != actualHash {
+			initialValues, actualHash := getAndHashInitialValuesToString(tenantID)
+			if expectedHash != actualHash {
 				t.Errorf(`Unexpected hash value %s for %s.
 If you're seeing this error message, this means that the bootstrapped system
 schema has changed. Assuming that this is expected:
@@ -109,9 +104,18 @@ schema has changed. Assuming that this is expected:
   hardcoded literals in the main development branch as well as any subsequent
   release branches that need to be updated also.`, actualHash, d.Cmd)
 			}
-			return result
+
+			return initialValues
 		})
 	})
+}
+
+func getAndHashInitialValuesToString(tenantID uint64) (initialValues string, hash string) {
+	ms := makeMetadataSchema(tenantID)
+	initialValues = InitialValuesToString(ms)
+	h := sha256.Sum256([]byte(initialValues))
+	hash = hex.EncodeToString(h[:])
+	return initialValues, hash
 }
 
 func TestRoundTripInitialValuesStringRepresentation(t *testing.T) {
@@ -157,4 +161,31 @@ func makeMetadataSchema(tenantID uint64) MetadataSchema {
 		codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
 	}
 	return MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+}
+
+// TestSystemDatabaseSchemaBootstrapVersionBumped serves as a reminder to bump
+// systemschema.SystemDatabaseSchemaBootstrapVersion whenever a new upgrade
+// creates or modifies the schema of system tables. We unfortunately cannot
+// programmatically determine if an upgrade should bump the version so by
+// adding a test failure when the initial values change, the programmer and
+// code reviewers are reminded to manually check whether the version should
+// be bumped.
+func TestSystemDatabaseSchemaBootstrapVersionBumped(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// If you need to update this value (i.e. failed this test), check whether
+	// you need to bump systemschema.SystemDatabaseSchemaBootstrapVersion too.
+	const prevSystemHash = "b23cc2e4f5d8e1a3d3bdd514addb3bd9af3eff65cd485fa2822ced1a6a2e8fd4"
+	_, curSystemHash := getAndHashInitialValuesToString(0 /* tenantID */)
+
+	if prevSystemHash != curSystemHash {
+		t.Fatalf(
+			`Check whether you need to bump systemschema.SystemDatabaseSchemaBootstrapVersion
+and then update prevSystemHash to %q.
+The current value of SystemDatabaseSchemaBootstrapVersion is %s.`,
+			curSystemHash,
+			systemschema.SystemDatabaseSchemaBootstrapVersion,
+		)
+	}
 }

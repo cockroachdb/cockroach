@@ -16,6 +16,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -1052,6 +1053,11 @@ const (
 // SystemDatabaseName is the name of the system database.
 const SystemDatabaseName = catconstants.SystemDatabaseName
 
+// SystemDatabaseSchemaBootstrapVersion is the system database schema version
+// that should be used during bootstrap. It should be bumped up alongside any
+// upgrade that creates or modifies the schema of a system table.
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.ByKey(clusterversion.V23_2_RegionaLivenessTable)
+
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
 func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
@@ -1063,6 +1069,7 @@ func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
 		// Assign max privileges to root user.
 		Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
 			priv, username.NodeUserName()),
+		SystemDatabaseSchemaVersion: &SystemDatabaseSchemaBootstrapVersion,
 	}).BuildImmutableDatabase()
 }
 
