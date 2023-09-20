@@ -189,6 +189,8 @@ var retiredSettings = map[InternalKey]struct{}{
 	"timeseries.storage.30m_resolution_ttl":                    {},
 	"server.cpu_profile.enabled":                               {},
 	"kv.rangefeed.catchup_scan_concurrency":                    {},
+	"changefeed.lagging_ranges_threshold":                      {},
+	"changefeed.lagging_ranges_polling_rate":                   {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
