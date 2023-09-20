@@ -1085,9 +1085,8 @@ func populateSystemJobsTableRows(
 	for {
 		hasNext, err := it.Next(ctx)
 		if !hasNext || err != nil {
-			log.Infof(ctx, "query: %s, \n %v", query, params)
 			if !matched {
-				log.Infof(ctx, "system scan returning hasNext: %t, matched %t, err %s, ctx %s", hasNext, matched, err, ctx.Err())
+				log.Infof(ctx, "system scan returning hasNext: %t, matched %t, err %v, ctx.Err() %v", hasNext, matched, err, ctx.Err())
 			}
 			return matched, jobs.MaybeGenerateForcedRetryableError(ctx, p.Txn(), err)
 		}
