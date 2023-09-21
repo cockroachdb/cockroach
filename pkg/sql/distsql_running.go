@@ -2001,7 +2001,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 			// successful local execution.
 			return
 		}
-		log.Infof(ctx, "encountered an error when running the distributed plan, re-running it as local: %v", distributedErr)
+		log.Infof(ctx, "encountered an error when running the distributed plan, re-running it as local: %v\nrecv=%+v\ntxn=%+v", distributedErr, recv, txn)
 		recv.resetForLocalRerun(subqueriesStats)
 		telemetry.Inc(sqltelemetry.DistributedErrorLocalRetryAttempt)
 		dsp.distSQLSrv.ServerConfig.Metrics.DistErrorLocalRetryAttempts.Inc(1)
