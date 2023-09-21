@@ -666,8 +666,8 @@ func DefaultStartOpts() install.StartOpts {
 		ScheduleBackups:    false,
 		ScheduleBackupArgs: "",
 		InitTarget:         1,
-		SQLPort:            config.DefaultSQLPort,
-		AdminUIPort:        config.DefaultAdminUIPort,
+		SQLPort:            0, // config.DefaultSQLPort,
+		AdminUIPort:        0, // config.DefaultAdminUIPort,
 	}
 }
 
