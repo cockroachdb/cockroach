@@ -98,12 +98,13 @@ func init() {
 
 func newLeaseTest(tb testing.TB, params base.TestClusterArgs) *leaseTest {
 	c := serverutils.StartCluster(tb, 3, params)
+	s := c.Server(0).ApplicationLayer()
 	lt := &leaseTest{
 		TB:      tb,
 		cluster: c,
-		server:  c.Server(0).ApplicationLayer(),
-		db:      c.ServerConn(0),
-		kvDB:    c.Server(0).DB(),
+		server:  s,
+		db:      s.SQLConn(tb, ""),
+		kvDB:    s.DB(),
 		nodes:   map[uint32]*lease.Manager{},
 	}
 
