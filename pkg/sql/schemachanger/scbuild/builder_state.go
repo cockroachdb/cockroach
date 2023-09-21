@@ -1218,9 +1218,10 @@ func (b *builderState) ResolveConstraint(
 }
 
 func (b *builderState) ResolveUDF(
-	fnObj *tree.FuncObj, p scbuildstmt.ResolveParams,
+	routineObj *tree.RoutineObj, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
-	fd, err := b.cr.ResolveFunction(b.ctx, fnObj.FuncName.ToUnresolvedObjectName().ToUnresolvedName(), b.semaCtx.SearchPath)
+	name := routineObj.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
+	fd, err := b.cr.ResolveFunction(b.ctx, name, b.semaCtx.SearchPath)
 	if err != nil {
 		if p.IsExistenceOptional && errors.Is(err, tree.ErrFunctionUndefined) {
 			return nil
@@ -1228,11 +1229,11 @@ func (b *builderState) ResolveUDF(
 		panic(err)
 	}
 
-	paramTypes, err := fnObj.ParamTypes(b.ctx, b.cr)
+	paramTypes, err := routineObj.ParamTypes(b.ctx, b.cr)
 	if err != nil {
 		return nil
 	}
-	ol, err := fd.MatchOverload(paramTypes, fnObj.FuncName.Schema(), b.semaCtx.SearchPath)
+	ol, err := fd.MatchOverload(paramTypes, routineObj.FuncName.Schema(), b.semaCtx.SearchPath)
 	if err != nil {
 		if p.IsExistenceOptional && errors.Is(err, tree.ErrFunctionUndefined) {
 			return nil
@@ -1246,7 +1247,7 @@ func (b *builderState) ResolveUDF(
 		panic(
 			errors.Errorf(
 				"cannot perform schema change on function %s%s because it is required by the database system",
-				fnObj.FuncName.Object(), ol.Signature(true),
+				routineObj.FuncName.Object(), ol.Signature(true),
 			),
 		)
 	}

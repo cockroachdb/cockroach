@@ -856,11 +856,11 @@ func (u *sqlSymUnion) stmts() tree.Statements {
 func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
     return u.val.(*tree.RoutineBody)
 }
-func (u *sqlSymUnion) functionObj() tree.FuncObj {
-    return u.val.(tree.FuncObj)
+func (u *sqlSymUnion) functionObj() tree.RoutineObj {
+    return u.val.(tree.RoutineObj)
 }
-func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
-    return u.val.(tree.FuncObjs)
+func (u *sqlSymUnion) functionObjs() tree.RoutineObjs {
+    return u.val.(tree.RoutineObjs)
 }
 func (u *sqlSymUnion) tenantReplicationOptions() *tree.TenantReplicationOptions {
   return u.val.(*tree.TenantReplicationOptions)
@@ -1684,8 +1684,8 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <tree.Statement> routine_return_stmt routine_body_stmt
 %type <tree.Statements> routine_body_stmt_list
 %type <*tree.RoutineBody> opt_routine_body
-%type <tree.FuncObj> function_with_paramtypes
-%type <tree.FuncObjs> function_with_paramtypes_list
+%type <tree.RoutineObj> function_with_paramtypes
+%type <tree.RoutineObjs> function_with_paramtypes_list
 %type <empty> opt_link_sym
 
 %type <*tree.LabelSpec> label_spec
@@ -4920,7 +4920,7 @@ drop_func_stmt:
 function_with_paramtypes_list:
   function_with_paramtypes
   {
-    $$.val = tree.FuncObjs{$1.functionObj()}
+    $$.val = tree.RoutineObjs{$1.functionObj()}
   }
   | function_with_paramtypes_list ',' function_with_paramtypes
   {
@@ -4930,14 +4930,14 @@ function_with_paramtypes_list:
 function_with_paramtypes:
   db_object_name func_params
   {
-    $$.val = tree.FuncObj{
+    $$.val = tree.RoutineObj{
       FuncName: $1.unresolvedObjectName().ToRoutineName(),
       Params: $2.routineParams(),
     }
   }
   | db_object_name
   {
-    $$.val = tree.FuncObj{
+    $$.val = tree.RoutineObj{
       FuncName: $1.unresolvedObjectName().ToRoutineName(),
     }
   }
@@ -11584,7 +11584,7 @@ target_object_type:
   }
 | FUNCTIONS
   {
-    $$.val = privilege.Functions
+    $$.val = privilege.Routines
   }
 | ROUTINES error
   {

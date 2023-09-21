@@ -849,7 +849,7 @@ func TestModifyDefaultDefaultPrivilegesForPublic(t *testing.T) {
 		catpb.DefaultPrivilegesRole{Role: creatorUser},
 		privilege.List{privilege.EXECUTE},
 		[]username.SQLUsername{username.PublicRoleName()},
-		privilege.Functions,
+		privilege.Routines,
 		false, /* grantOptionFor */
 	); err != nil {
 		t.Fatal(err)
@@ -861,7 +861,7 @@ func TestModifyDefaultDefaultPrivilegesForPublic(t *testing.T) {
 		catpb.DefaultPrivilegesRole{Role: creatorUser},
 		privilege.List{privilege.EXECUTE},
 		[]username.SQLUsername{username.PublicRoleName()},
-		privilege.Functions,
+		privilege.Routines,
 		false, /* withGrantOption */
 	); err != nil {
 		t.Fatal(err)
@@ -875,7 +875,7 @@ func TestModifyDefaultDefaultPrivilegesForPublic(t *testing.T) {
 		catpb.DefaultPrivilegesRole{Role: creatorUser},
 		privilege.List{privilege.EXECUTE},
 		[]username.SQLUsername{username.PublicRoleName()},
-		privilege.Functions,
+		privilege.Routines,
 		false, /* grantOptionFor */
 	); err != nil {
 		t.Fatal(err)

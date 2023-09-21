@@ -21,7 +21,7 @@ var targetObjectToPrivilegeObject = map[TargetObjectType]ObjectType{
 	Sequences: Sequence,
 	Schemas:   Schema,
 	Types:     Type,
-	Functions: Function,
+	Routines:  Routine,
 }
 
 // ToObjectType returns the privilege.ObjectType corresponding to
@@ -38,7 +38,7 @@ const (
 	Sequences TargetObjectType = 2
 	Types     TargetObjectType = 3
 	Schemas   TargetObjectType = 4
-	Functions TargetObjectType = 5
+	Routines  TargetObjectType = 5
 )
 
 // GetTargetObjectTypes returns a slice of all the
@@ -49,7 +49,7 @@ func GetTargetObjectTypes() []TargetObjectType {
 		Sequences,
 		Types,
 		Schemas,
-		Functions,
+		Routines,
 	}
 }
 
@@ -64,8 +64,8 @@ func (t TargetObjectType) String() string {
 		return "types"
 	case Schemas:
 		return "schemas"
-	case Functions:
-		return "functions"
+	case Routines:
+		return "routines"
 	default:
 		panic(errors.AssertionFailedf("unknown TargetObjectType value: %d", t))
 	}

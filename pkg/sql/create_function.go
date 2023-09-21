@@ -249,11 +249,11 @@ func (n *createFunctionNode) getMutableFuncDesc(
 	}
 
 	// Try to look up an existing function.
-	fuObj := tree.FuncObj{
+	routineObj := tree.RoutineObj{
 		FuncName: n.cf.Name,
 		Params:   n.cf.Params,
 	}
-	existing, err := params.p.matchUDF(params.ctx, &fuObj, false /* required */)
+	existing, err := params.p.matchUDF(params.ctx, &routineObj, false /* required */)
 	if err != nil {
 		return nil, false, err
 	}
@@ -290,7 +290,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 		scDesc.GetDefaultPrivilegeDescriptor(),
 		n.dbDesc.GetID(),
 		params.SessionData().User(),
-		privilege.Functions,
+		privilege.Routines,
 	)
 	if err != nil {
 		return nil, false, err

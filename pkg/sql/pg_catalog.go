@@ -1369,13 +1369,13 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 							catprivilege.GetPublicHasUsageOnTypes(&defaultPrivilegesForRole) {
 							continue
 						}
-					} else if objectType == privilege.Functions {
-						// if the objectType is Functions, we only omit the entry
+					} else if objectType == privilege.Routines {
+						// if the objectType is Routines, we only omit the entry
 						// if both the role has ALL privileges AND public has EXECUTE.
-						// This is the "default" state for default privileges on functions
+						// This is the "default" state for default privileges on routines
 						// in Postgres.
 						if (!defaultPrivilegesForRole.IsExplicitRole() ||
-							catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Functions)) &&
+							catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Routines)) &&
 							catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) {
 							continue
 						}
@@ -1397,7 +1397,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 					c = "T"
 				case privilege.Schemas:
 					c = "n"
-				case privilege.Functions:
+				case privilege.Routines:
 					c = "f"
 				}
 				privilegeObjectType := targetObjectToPrivilegeObject[objectType]
@@ -1466,8 +1466,8 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 							}
 						}
 					}
-					if objectType == privilege.Functions {
-						if !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Functions) &&
+					if objectType == privilege.Routines {
+						if !catprivilege.GetRoleHasAllPrivilegesOnTargetObject(&defaultPrivilegesForRole, privilege.Routines) &&
 							catprivilege.GetPublicHasExecuteOnFunctions(&defaultPrivilegesForRole) {
 							defaclItem, err := createDefACLItem(
 								"" /* public role */, privilege.List{privilege.EXECUTE}, privilege.List{}, privilegeObjectType,

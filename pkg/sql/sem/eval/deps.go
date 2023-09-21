@@ -166,7 +166,7 @@ type HasPrivilegeSpecifier struct {
 	ColumnName   *tree.Name
 	ColumnAttNum *uint32
 
-	// Function privilege
+	// Routine privilege
 	// This needs to be a user-defined function OID. Builtin function OIDs won't
 	// work since they're not descriptors based.
 	FunctionOID *oid.Oid

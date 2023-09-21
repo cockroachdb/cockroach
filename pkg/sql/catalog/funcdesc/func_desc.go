@@ -195,7 +195,7 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	if desc.Privileges == nil {
 		vea.Report(errors.AssertionFailedf("privileges not set"))
 	} else {
-		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Function))
+		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Routine))
 	}
 
 	// Validate types are properly set.
@@ -660,9 +660,9 @@ func (desc *Mutable) RemoveReference(id descpb.ID) {
 	desc.DependedOnBy = ret
 }
 
-// ToFuncObj converts the descriptor to a tree.FuncObj.
-func (desc *immutable) ToFuncObj() *tree.FuncObj {
-	ret := &tree.FuncObj{
+// ToRoutineObj converts the descriptor to a tree.RoutineObj.
+func (desc *immutable) ToRoutineObj() *tree.RoutineObj {
+	ret := &tree.RoutineObj{
 		FuncName: tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
 		Params:   make(tree.RoutineParams, len(desc.Params)),
 	}
@@ -676,7 +676,15 @@ func (desc *immutable) ToFuncObj() *tree.FuncObj {
 
 // GetObjectType implements the Object interface.
 func (desc *immutable) GetObjectType() privilege.ObjectType {
-	return privilege.Function
+	return privilege.Routine
+}
+
+// GetObjectTypeString implements the Object interface.
+func (desc *immutable) GetObjectTypeString() string {
+	if desc.IsProcedure {
+		return "procedure"
+	}
+	return "function"
 }
 
 // FuncDesc implements the catalog.FunctionDescriptor interface.

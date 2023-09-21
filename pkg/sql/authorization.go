@@ -1045,17 +1045,17 @@ func insufficientPrivilegeError(
 ) error {
 	// For consistency Postgres, we report the error message as not
 	// having a privilege on the object type "relation".
+	objTypeStr := object.GetObjectTypeString()
 	objType := object.GetObjectType()
-	typeForError := string(objType)
 	if objType == privilege.VirtualTable || objType == privilege.Table || objType == privilege.Sequence {
-		typeForError = "relation"
+		objTypeStr = "relation"
 	}
 
 	// If kind is 0 (no-privilege is 0), we return that the user has no privileges.
 	if kind == 0 {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"user %s has no privileges on %s %s",
-			user, typeForError, object.GetName())
+			user, objTypeStr, object.GetName())
 	}
 
 	// Make a slightly different message for the global privilege object so that
@@ -1068,7 +1068,7 @@ func insufficientPrivilegeError(
 
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
-		user, kind, typeForError, object.GetName())
+		user, kind, objTypeStr, object.GetName())
 }
 
 // IsInsufficientPrivilegeError returns true if the error is a pgerror

@@ -368,7 +368,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			}
 			descs = append(descs, DescriptorWithObjectType{
 				descriptor: fnDesc,
-				objectType: privilege.Function,
+				objectType: privilege.Routine,
 			})
 		}
 		return descs, nil
@@ -457,7 +457,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 					}
 					descs = append(descs, DescriptorWithObjectType{
 						descriptor: fn,
-						objectType: privilege.Function,
+						objectType: privilege.Routine,
 					})
 					return nil
 				})

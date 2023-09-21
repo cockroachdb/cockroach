@@ -1824,7 +1824,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 					if !canSeeDescriptor {
 						return nil
 					}
-					privs, err := fn.GetPrivileges().Show(privilege.Function, true /* showImplicitOwnerPrivs */)
+					privs, err := fn.GetPrivileges().Show(privilege.Routine, true /* showImplicitOwnerPrivs */)
 					if err != nil {
 						return err
 					}
