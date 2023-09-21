@@ -227,6 +227,17 @@ func TerminateOnMigration() Option {
 	return &terminateOnMigrationOption{}
 }
 
+type useSpotOption struct{}
+
+func (o useSpotOption) apply(spec *ClusterSpec) {
+	spec.UseSpot = true
+}
+
+// UseSpot creates a spot instance or equivalent of a cloud provider.
+func UseSpot() Option {
+	return &useSpotOption{}
+}
+
 type setFileSystem struct {
 	fs fileSystemType
 }
