@@ -97,6 +97,7 @@ go_library(
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/storageparam",
         "//pkg/sql/storageparam/indexstorageparam",
+        "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/storage/enginepb",
