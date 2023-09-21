@@ -217,7 +217,7 @@ bucket is initialized with `16MiB` of flow tokens and the elastic with `8MiB` an
 step through multiple token deductions/returns tagged with different work
 classes.
 
-https://github.com/irfansharif/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller/testdata/flow_token_adjustment#L41-L65
+https://github.com/cockroachdb/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller/testdata/flow_token_adjustment#L41-L65
 
 ### Write shaping for the raft-group
 
@@ -236,7 +236,7 @@ be admitted at the rate flow tokens are returned for this depleted bucket, i.e.
 case from `pkg/.../kvflowsimulator/testdata/handle_single_slow_stream`
 simulating exactly the above:
 
-https://github.com/irfansharif/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/kvflowcontrol/kvflowsimulator/testdata/handle_single_slow_stream#L1-L82
+https://github.com/cockroachdb/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/kvflowcontrol/kvflowsimulator/testdata/handle_single_slow_stream#L1-L82
 
 To manage the per-leaseholder replica list of underlying replication streams we
 need to deduct/return flow tokens from, we embed a `kvflowcontrol.Handle` in
@@ -392,9 +392,9 @@ safety (no token leaks, no double returns) and liveness (eventual token
 returns). We rather fail-open preferring to over-admit rather than risking token
 leakage.
 
-https://github.com/irfansharif/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/flow_control_integration.go#L21-L211
+https://github.com/cockroachdb/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/flow_control_integration.go#L21-L211
 
-https://github.com/irfansharif/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/kvflowcontrol/doc.go#L155-L476
+https://github.com/cockroachdb/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/kvflowcontrol/doc.go#L155-L476
 
 We'll note that it took many years to harden the proposal quota pool, which
 shares similar leakiness concerns. Hopefully we've applied enough of those
@@ -406,7 +406,7 @@ scrutiny is welcome.
 Here's how the various pieces fit together; they make references to the specific
 interfaces/APIs introduced in the package.
 
-https://github.com/irfansharif/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/kvflowcontrol/doc.go#L13-L151
+https://github.com/cockroachdb/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/kvflowcontrol/doc.go#L13-L151
 
 ### Performance overhead
 
@@ -463,7 +463,7 @@ Consider a few cases:
 See `pkg/../admission/testdata/replicated_write_admission` for some of these
 possible test cases, for example:
 
-https://github.com/irfansharif/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/util/admission/testdata/replicated_write_admission/tenant_fairness#L43-L49
+https://github.com/cockroachdb/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/util/admission/testdata/replicated_write_admission/tenant_fairness#L43-L49
 
 
 ## Operationalizability
@@ -566,7 +566,7 @@ something that's often of interest. If `admission_io_overload` or
 individual stores are IO overloaded and thus looking to shape writes through
 flow tokens, we do log the high-cardinality state. It looks as follows:
 
-https://github.com/irfansharif/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller/kvflowcontroller_metrics.go#L255-L257
+https://github.com/cockroachdb/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller/kvflowcontroller_metrics.go#L255-L257
 
 ```
 W230918 14:34:11.468469 437 kv/kvserver/kvflowcontrol/kvflowcontroller/kvflowcontroller_metrics.go:234 ⋮ [-] 994  1 blocked ‹elastic› replication stream(s): ‹t1/s6›
@@ -643,7 +643,7 @@ These tables can be joined like regular tables, and are used internally in some
 end-to-end integration tests. Like the ones below (click around in the directory
 for other examples):
 
-https://github.com/irfansharif/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/testdata/flow_control_integration/basic#L37-L45
+https://github.com/cockroachdb/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/testdata/flow_control_integration/basic#L37-L45
 
 Since they expose the in-memory state, it's possible to remix them to figure out
 what specific ranges are running low/empty on flow tokens, and based on which
@@ -653,7 +653,7 @@ the `/inspectz` endpoint. Specifically, `/inspectz/kvflowcontroller` and
 is optional and variadic). We've not found a need to use them directly, instead
 mostly using the virtual tables above. The data returned looks like so:
 
-https://github.com/irfansharif/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/kvflowcontrol/kvflowhandle/testdata/handle_inspect#L65-L138
+https://github.com/cockroachdb/cockroach/blob/6cbd07ee6fbfb92706e8cdc8c559960b1bc41663/pkg/kv/kvserver/kvflowcontrol/kvflowhandle/testdata/handle_inspect#L65-L138
 
 ## Drawbacks
 
