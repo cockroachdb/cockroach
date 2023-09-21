@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"math"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -1061,6 +1062,10 @@ func (ie *InternalExecutor) execInternal(
 
 	syncCallback := func(results []*streamingCommandResult) {
 		// Close the stmtBuf so that the connExecutor exits its run() loop.
+		if opName == "system-jobs-scan" && r != nil && r.rowsAffected == 0 {
+			log.Info(ctx, "closing the stmt buf")
+			debug.PrintStack()
+		}
 		stmtBuf.Close()
 		for _, res := range results {
 			if res.Err() != nil {
