@@ -12,6 +12,8 @@
 package xform
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -118,6 +120,7 @@ func (c *CustomFuncs) handleSingleRowInsert(
 	md := c.e.f.Memo().Metadata()
 
 	var scanExpr *memo.ScanExpr
+	spansInFoundScan := math.MaxInt
 	for check = check.FirstExpr(); check != nil; check = check.NextExpr() {
 		expr := check
 
@@ -127,13 +130,22 @@ func (c *CustomFuncs) handleSingleRowInsert(
 		if scan, isScan := expr.(*memo.ScanExpr); isScan {
 			// We need a scan with a constraint for analysis, and it should not be
 			// a contradiction (having no spans).
-			if scan.Constraint != nil && scan.Constraint.Spans.Count() != 0 {
+			numSpans := scan.Constraint.Spans.Count()
+			if numSpans == 0 {
+				continue
+			}
+			// Prefer indexes for this check which minimize the number of
+			// KV requests in the fast-path check.
+			// TODO(msirek): Make this a cost-based decision which considers latency
+			// of accessing rows in remote regions, for example, when an index has
+			// a leaseholder preference defined.
+			if scan.Constraint != nil && numSpans < spansInFoundScan {
+				spansInFoundScan = numSpans
 				scanExpr = scan
-				break
 			}
 		}
 	}
-	if check == nil {
+	if scanExpr == nil {
 		return nil, false
 	}
 	referencedTable := md.Table(scanExpr.Table)
