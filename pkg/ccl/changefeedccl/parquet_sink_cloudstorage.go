@@ -207,6 +207,7 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	if err := file.parquetCodec.addData(updatedRow, prevRow, updated, mvcc); err != nil {
 		return err
 	}
+	file.numMessages += 1
 
 	if int64(file.buf.Len()) > s.targetMaxFileSize {
 		s.metrics.recordSizeBasedFlush()
