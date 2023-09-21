@@ -204,8 +204,8 @@ func (ca *changeAggregator) MustBeStreaming() bool {
 	return true
 }
 
-// wrapMetricsController wraps the supplied metricsRecorder to emit metrics to telemetry.
-// This method modifies ca.cancel().
+// wrapMetricsController wraps the supplied metricsRecorder to emit metrics to
+// telemetry.
 func (ca *changeAggregator) wrapMetricsController(
 	ctx context.Context, recorder metricsRecorder,
 ) (metricsRecorder, error) {
@@ -220,6 +220,9 @@ func (ca *changeAggregator) wrapMetricsController(
 	}
 	ca.closeTelemetryRecorder = recorderWithTelemetry.close
 
+	if ca.knobs.WrapMetricsRecorder != nil {
+		return ca.knobs.WrapMetricsRecorder(recorderWithTelemetry), nil
+	}
 	return recorderWithTelemetry, nil
 }
 

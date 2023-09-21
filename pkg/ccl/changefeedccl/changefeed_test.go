@@ -8869,7 +8869,8 @@ func TestChangefeedPubsubResolvedMessages(t *testing.T) {
 }
 
 // TestChangefeedEmittedMessages tests that the changefeed.emitted_messages
-// metric is incremented correctly.
+// metric correctly counts rows. This test does not count resolved messages.
+// TODO(#111043): add test coverage for resolved messages.
 func TestChangefeedEmittedMessages(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -8880,19 +8881,15 @@ func TestChangefeedEmittedMessages(t *testing.T) {
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 
+		knobs.WrapMetricsRecorder = func(r metricsRecorder) metricsRecorder {
+			return &metricsRecorderNoResolved{
+				metricsRecorder: r,
+			}
+		}
+
 		// Set this interval to be very small so we continuously checkpoint and
 		// flush the sink.
 		defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(1 * time.Nanosecond)()
-
-		// Count the resolved spans as emitted messages.
-		var numResolvedSpans int64
-		var resolvedSpansMu syncutil.Mutex
-		knobs.FilterSpanWithMutation = func(rs *jobspb.ResolvedSpan) (bool, error) {
-			resolvedSpansMu.Lock()
-			defer resolvedSpansMu.Unlock()
-			numResolvedSpans += 1
-			return false, nil
-		}
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
@@ -8917,7 +8914,6 @@ func TestChangefeedEmittedMessages(t *testing.T) {
 
 		assertEmittedMessages := func(tier string, expected int64) {
 			testutils.SucceedsWithin(t, func() error {
-				resolvedSpansMu.Lock()
 				var emittedMessagesObserved int64
 				if tier == "default" {
 					emittedMessagesObserved = sliDefault.EmittedMessages.Value()
@@ -8926,14 +8922,9 @@ func TestChangefeedEmittedMessages(t *testing.T) {
 				}
 
 				if emittedMessagesObserved != expected {
-					resolvedSpansMu.Unlock()
-					// Ensure the FilterSpanWithMutation goroutine runs for a bit to allow the expected
-					// kv messages to pass through.
-					time.Sleep(10 * time.Millisecond)
 					return fmt.Errorf("expected %d emitted messages, but found %d", expected,
 						emittedMessagesObserved)
 				}
-				resolvedSpansMu.Unlock()
 				return nil
 			}, 5*time.Second)
 		}

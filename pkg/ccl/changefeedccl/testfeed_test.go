@@ -2574,3 +2574,13 @@ func stopFeedWhenDone(ctx context.Context, f cdctest.TestFeed) func() {
 		wg.Wait()
 	}
 }
+
+// metricsRecorderNoResolved wraps a metricsRecorder and overrides the
+// `recordResolvedCallback` method with a noop.
+type metricsRecorderNoResolved struct {
+	metricsRecorder
+}
+
+func (s *metricsRecorderNoResolved) recordResolvedCallback() func() {
+	return func() {}
+}

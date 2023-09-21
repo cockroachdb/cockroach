@@ -77,6 +77,10 @@ type TestingKnobs struct {
 
 	// OnDrain returns the channel to select on to detect node drain
 	OnDrain func() <-chan struct{}
+
+	// WrapMetricsRecorder can be used to wrap the metricsRecorder
+	// to override certain methods.
+	WrapMetricsRecorder func(metricsRecorder) metricsRecorder
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
