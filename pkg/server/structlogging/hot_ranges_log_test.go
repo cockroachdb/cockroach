@@ -83,7 +83,7 @@ func TestHotRangesStats(t *testing.T) {
 		return nil
 	})
 
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		log.FlushFiles()
 		entries, err := log.FetchEntriesFromFiles(
 			0,
@@ -99,5 +99,5 @@ func TestHotRangesStats(t *testing.T) {
 			return errors.New("waiting for logs")
 		}
 		return nil
-	}, 5*time.Second)
+	})
 }
