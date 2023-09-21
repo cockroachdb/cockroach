@@ -271,25 +271,24 @@ func (r *Replica) RangeFeed(
 	}
 
 	// Register the stream with a catch-up iterator.
-	var catchUpIterFunc rangefeed.CatchUpIteratorConstructor
+	var catchupIter *rangefeed.CatchUpIterator
 	if usingCatchUpIter {
-		catchUpIterFunc = func(span roachpb.Span, startTime hlc.Timestamp) (*rangefeed.CatchUpIterator, error) {
-			// Assert that we still hold the raftMu when this is called to ensure
-			// that the catchUpIter reads from the current snapshot.
-			r.raftMu.AssertHeld()
-			i, err := rangefeed.NewCatchUpIterator(r.store.TODOEngine(), span, startTime, iterSemRelease, pacer)
-			if err != nil {
-				return nil, err
-			}
-			if f := r.store.TestingKnobs().RangefeedValueHeaderFilter; f != nil {
-				i.OnEmit = f
-			}
-			return i, nil
+		catchupIter, err = rangefeed.NewCatchUpIterator(r.store.TODOEngine(), rSpan.AsRawSpanWithNoLocals(),
+			args.Timestamp, iterSemRelease, pacer)
+		if err != nil {
+			r.raftMu.Unlock()
+			iterSemRelease()
+			return future.MakeCompletedErrorFuture(err)
+		}
+		if f := r.store.TestingKnobs().RangefeedValueHeaderFilter; f != nil {
+			catchupIter.OnEmit = f
 		}
 	}
+	catchUpIterContainer := rangefeed.NewCatchUpIteratorContainer(catchupIter)
+	defer catchUpIterContainer.Close()
 	var done future.ErrorFuture
 	p := r.registerWithRangefeedRaftMuLocked(
-		ctx, rSpan, args.Timestamp, catchUpIterFunc, args.WithDiff, lockedStream, &done,
+		ctx, rSpan, args.Timestamp, catchUpIterContainer.Detach, args.WithDiff, lockedStream, &done,
 	)
 	r.raftMu.Unlock()
 
