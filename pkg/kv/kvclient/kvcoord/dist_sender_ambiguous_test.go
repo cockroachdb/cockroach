@@ -274,7 +274,6 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 	// several seconds, and requires maintaining expected leases.
 	skip.UnderShort(t)
 	skip.UnderStressRace(t)
-	skip.WithIssue(t, 110187, "flaky test")
 
 	succeedsSoonDuration := testutils.DefaultSucceedsSoonDuration
 	if util.RaceEnabled {
@@ -1050,7 +1049,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// 7. _->n1: PushTxn(txn2->txn1) -- Discovers txn1 in STAGING and starts
 			// recovery.
 			// 8. _->n1: RecoverTxn(txn1) -- Recovery should mark txn1 committed, but
-			// pauses before returning so that txn1's intents don't get cleaned up.
+			// intent resolution on txn1 needs to be paused until after txn1 finishes.
 			if req.ba.IsSingleRecoverTxnRequest() && cp == AfterSending {
 				close(recoverComplete)
 			}
@@ -1077,8 +1076,15 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			// 12. txn1->n1: EndTxn(commit) -- Recovery has already completed, so this
 			// request fails with "transaction unexpectedly committed".
 
-			// <allow (8) recovery to return and txn2 to continue>
-			if req.ba.IsSingleRecoverTxnRequest() && cp == AfterSending {
+			// <allow intent resolution after (8) recovery so txn2 can continue>
+			// If the intent on (b) were resolved and txn2 could grab the lock prior
+			// to txn1's retry of the Put(b), the retry will cause a PushTxn to txn2.
+			// Given that the recovery at (8) has already completed, a PushTxn
+			// request where the pusher is a committed transaction results in an
+			// "already committed" TransactionStatusError from the txnwait queue.
+			// While this still results in AmbiguousResultError from the DistSender,
+			// the reason will be distinct; as such we pause the intent resolution.
+			if riReq, ok := req.ba.GetArg(kvpb.ResolveIntent); ok && riReq.Header().Key.Equal(keyB) && cp == BeforeSending {
 				req.pauseUntil(t, txn1Done, cp)
 				t.Logf("%s - complete, resp={%s}", req.prefix, resp)
 			}
