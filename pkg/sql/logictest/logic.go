@@ -74,7 +74,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -1888,13 +1887,7 @@ func (t *logicTest) setup(
 		if err != nil {
 			t.Fatal(err)
 		}
-		bootstrapBinaryPath, err := binfetcher.Download(context.Background(), binfetcher.Options{
-			Binary:  "cockroach",
-			Dir:     tempExternalIODir,
-			Version: "v" + bootstrapVersion,
-			GOOS:    runtime.GOOS,
-			GOARCH:  runtime.GOARCH,
-		})
+		bootstrapBinaryPath, err := locateCockroachPredecessor(bootstrapVersion)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4373,4 +4366,32 @@ func (t *logicTest) printCompletion(path string, config logictestbase.TestCluste
 	}
 	t.outf("--- done: %s with config %s: %d tests, %d failures%s", path, config.Name,
 		t.progress, t.failures, unsupportedMsg)
+}
+
+func locateCockroachPredecessor(version string) (string, error) {
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
+	}
+	munge := func(s string) string {
+		return strings.ReplaceAll(
+			strings.ReplaceAll(s, ".", "_"), "-", "_")
+	}
+	configs := map[string]string{
+		"linux_amd64":  "linux-amd64",
+		"linux_arm64":  "linux-arm64",
+		"darwin_amd64": "darwin-10.9-amd64",
+		"darwin_arm64": "darwin-11.0-arm64",
+	}
+	cfg, ok := configs[fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)]
+	if !ok {
+		return "", fmt.Errorf("unknown GOOS/GOARCH combination")
+	}
+	where := fmt.Sprintf(
+		"external/cockroach_binary_%s_%s/cockroach-%s.%s/cockroach",
+		munge(version), munge(cfg), version, cfg)
+	path, err := bazel.Runfile(where)
+	if err != nil {
+		return "", err
+	}
+	return path, nil
 }
