@@ -10,7 +10,12 @@
 
 package sql
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+)
 
 // TryClearGossipInfo implements the tree.GossipOperator interface.
 func (p *planner) TryClearGossipInfo(ctx context.Context, key string) (bool, error) {
@@ -18,7 +23,7 @@ func (p *planner) TryClearGossipInfo(ctx context.Context, key string) (bool, err
 	if err != nil {
 		return false, err
 	}
-	if err := p.RequireAdminRole(ctx, "try clear gossip info"); err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA); err != nil {
 		return false, err
 	}
 	return g.TryClearInfo(key)

@@ -273,7 +273,7 @@ SELECT crdb_internal.create_tenant('not-allowed')
 statement error user testuser does not have MANAGETENANT system privilege
 DROP TENANT [1]
 
-statement error only users with the admin role are allowed to gc tenant
+statement error crdb_internal.gc_tenant\(\): user testuser does not have REPAIRCLUSTERMETADATA system privilege
 SELECT crdb_internal.gc_tenant(314)
 
 user root

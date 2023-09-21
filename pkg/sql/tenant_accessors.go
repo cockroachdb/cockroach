@@ -24,8 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
 
@@ -132,7 +134,7 @@ func (p *planner) LookupTenantID(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (tid roachpb.TenantID, err error) {
 	const op = "get-tenant-info"
-	if err := p.RequireAdminRole(ctx, op); err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA); err != nil {
 		return tid, err
 	}
 

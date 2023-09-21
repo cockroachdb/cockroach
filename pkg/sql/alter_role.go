@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
@@ -215,8 +216,11 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		return err
 	}
 	if isAdmin {
-		if err := params.p.RequireAdminRole(params.ctx, "ALTER ROLE admin"); err != nil {
+		if hasAdmin, err := params.p.HasAdminRole(params.ctx); err != nil {
 			return err
+		} else if !hasAdmin {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to alter another admin")
 		}
 	}
 
@@ -287,8 +291,11 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 	// modifying their own defaults unless they have CREATEROLE. This is analogous
 	// to our restriction that prevents a user from modifying their own password.
 	if n.AllRoles {
-		if err := p.RequireAdminRole(ctx, "ALTER ROLE ALL"); err != nil {
+		if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
 			return nil, err
+		} else if !hasAdmin {
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to ALTER ROLE ALL ... SET")
 		}
 	} else {
 		canAlterRoleSet, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE)
@@ -607,7 +614,17 @@ func (n *alterRoleSetNode) getRoleName(
 		return false, username.SQLUsername{}, err
 	}
 	if isAdmin {
-		if err := params.p.RequireAdminRole(params.ctx, "ALTER ROLE admin"); err != nil {
+		if hasAdmin, err := params.p.HasAdminRole(params.ctx); err != nil {
+			return false, username.SQLUsername{}, err
+		} else if !hasAdmin {
+			return false, username.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to alter another admin")
+		}
+
+		// Note that admins implicitly have the REPAIRCLUSTERMETADATA privilege.
+		if err := params.p.CheckPrivilege(
+			params.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+		); err != nil {
 			return false, username.SQLUsername{}, err
 		}
 	}

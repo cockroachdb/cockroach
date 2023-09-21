@@ -299,7 +299,7 @@ func TestNodelocalNotAdmin(t *testing.T) {
 	writeFile(t, testSendFile, fileContent)
 
 	err = runCopyFile(t, userDB, smithUserName, testSendFile, sql.NodelocalFileUploadTable)
-	expectedErr := "only users with the admin role are allowed to upload"
+	expectedErr := "only users with the admin role are allowed to upload to nodelocal"
 	require.True(t, testutils.IsError(err, expectedErr))
 }
 
