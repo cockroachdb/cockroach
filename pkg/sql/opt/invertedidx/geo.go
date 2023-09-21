@@ -334,130 +334,6 @@ type geoFilterPlanner struct {
 
 var _ invertedFilterPlanner = &geoFilterPlanner{}
 
-// STDistanceUseSpheroid returns true if the use_spheroid argument of
-// st_distance is not explicitly false. use_spheroid is the third argument of
-// st_distance for the geography overload and it is true by default. The
-// geometry overload does not have a use_spheroid argument, so if either of the
-// first two arguments are geometries, it returns false.
-func (g *geoFilterPlanner) STDistanceUseSpheroid(args memo.ScalarListExpr) bool {
-	if len(args) < 2 {
-		panic(errors.AssertionFailedf("expected st_distance to have at least two arguments"))
-	}
-	if args[0].DataType().Family() == types.GeometryFamily ||
-		args[1].DataType().Family() == types.GeometryFamily {
-		return false
-	}
-	const useSpheroidIdx = 2
-	if len(args) <= useSpheroidIdx {
-		// The use_spheroid argument is true by default, so return true if it
-		// was not provided.
-		return true
-	}
-	return args[useSpheroidIdx].Op() != opt.FalseOp
-}
-
-// MaybeMakeSTDWithin attempts to derive an ST_DWithin (or ST_DFullyWithin)
-// function that is similar to an expression of the following form:
-// ST_Distance(a,b) <= x. The ST_Distance function can be on either side of the
-// inequality, and the inequality can be one of the following: '<', '<=', '>',
-// '>='. This replacement allows early-exit behavior, and may enable use of an
-// inverted index scan. If the derived expression would need to be negated with
-// a NotExpr, so the derivation fails, and expr, ok=false is returned.
-func (g *geoFilterPlanner) MaybeMakeSTDWithin(
-	expr opt.ScalarExpr,
-	args memo.ScalarListExpr,
-	bound opt.ScalarExpr,
-	fnIsLeftArg bool,
-	fullyWithin bool,
-) (derivedExpr opt.ScalarExpr, ok bool) {
-	op := expr.Op()
-	var not bool
-	var name string
-	fnName := "st_dwithin"
-	if fullyWithin {
-		fnName = "st_dfullywithin"
-	}
-	incName := fnName
-	exName := fnName + "exclusive"
-	switch op {
-	case opt.GeOp:
-		if fnIsLeftArg {
-			// Matched expression: ST_Distance(a,b) >= x.
-			not = true
-			name = exName
-		} else {
-			// Matched expression: x >= ST_Distance(a,b).
-			not = false
-			name = incName
-		}
-
-	case opt.GtOp:
-		if fnIsLeftArg {
-			// Matched expression: ST_Distance(a,b) > x.
-			not = true
-			name = incName
-		} else {
-			// Matched expression: x > ST_Distance(a,b).
-			not = false
-			name = exName
-		}
-
-	case opt.LeOp:
-		if fnIsLeftArg {
-			// Matched expression: ST_Distance(a,b) <= x.
-			not = false
-			name = incName
-		} else {
-			// Matched expression: x <= ST_Distance(a,b).
-			not = true
-			name = exName
-		}
-
-	case opt.LtOp:
-		if fnIsLeftArg {
-			// Matched expression: ST_Distance(a,b) < x.
-			not = false
-			name = exName
-		} else {
-			// Matched expression: x < ST_Distance(a,b).
-			not = true
-			name = incName
-		}
-	}
-	if not {
-		// ST_DWithin and ST_DWithinExclusive are equivalent to ST_Distance <= x and
-		// ST_Distance < x respectively. The comparison operator in the matched
-		// expression (if ST_Distance is normalized to be on the left) is either '>'
-		// or '>='. Therefore, we would have to take the opposite of within. This
-		// would not result in a useful expression for inverted index scan, so return
-		// ok=false.
-		return expr, false
-	}
-	newArgs := make(memo.ScalarListExpr, len(args)+1)
-	const distanceIdx, useSpheroidIdx = 2, 3
-	copy(newArgs, args[:distanceIdx])
-
-	// The distance parameter must be type float.
-	newArgs[distanceIdx] = g.factory.ConstructCast(bound, types.Float)
-
-	// Add the use_spheroid parameter if it exists.
-	if len(newArgs) > useSpheroidIdx {
-		newArgs[useSpheroidIdx] = args[useSpheroidIdx-1]
-	}
-
-	props, overload, ok := memo.FindFunction(&newArgs, name)
-	if !ok {
-		panic(errors.AssertionFailedf("could not find overload for %s", name))
-	}
-	within := g.factory.ConstructFunction(newArgs, &memo.FunctionPrivate{
-		Name:       name,
-		Typ:        types.Bool,
-		Properties: props,
-		Overload:   overload,
-	})
-	return within, true
-}
-
 // maybeDeriveUsefulInvertedFilterCondition identifies an expression of the
 // form: 'st_distance(a, b, bool) = 0', 'st_distance(...) <= x' or
 // 'st_maxdistance(...) <= x', and returns a function call to st_dwithin,
@@ -489,7 +365,7 @@ func (g *geoFilterPlanner) maybeDeriveUsefulInvertedFilterCondition(
 		if private.Name != "st_distance" {
 			return expr, false
 		}
-		if g.STDistanceUseSpheroid(function.Args) {
+		if c.STDistanceUseSpheroid(function.Args) {
 			return expr, false
 		}
 		constant, rightIsConstant := right.(*memo.ConstExpr)
@@ -541,9 +417,9 @@ func (g *geoFilterPlanner) maybeDeriveUsefulInvertedFilterCondition(
 		boundExpr = left
 	}
 	if private.Name == "st_distance" {
-		return g.MaybeMakeSTDWithin(expr, args, boundExpr, leftIsFunction, false /* fullyWithin */)
+		return c.MaybeMakeSTDWithin(expr, args, boundExpr, leftIsFunction, false /* fullyWithin */)
 	}
-	return g.MaybeMakeSTDWithin(expr, args, boundExpr, leftIsFunction, true /* fullyWithin */)
+	return c.MaybeMakeSTDWithin(expr, args, boundExpr, leftIsFunction, true /* fullyWithin */)
 }
 
 // extractInvertedFilterConditionFromLeaf is part of the invertedFilterPlanner
