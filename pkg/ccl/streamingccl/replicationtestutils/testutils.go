@@ -533,7 +533,7 @@ func GetStreamJobIds(
 		destTenantName).Scan(&tenantInfoBytes)
 	require.NoError(t, protoutil.Unmarshal(tenantInfoBytes, &tenantInfo))
 
-	stats := replicationutils.TestingGetStreamIngestionStatsNoHeartbeatFromReplicationJob(t, ctx, sqlRunner, int(tenantInfo.TenantReplicationJobID))
+	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, sqlRunner, int(tenantInfo.TenantReplicationJobID))
 	return int(stats.IngestionDetails.StreamID), int(tenantInfo.TenantReplicationJobID)
 }
 

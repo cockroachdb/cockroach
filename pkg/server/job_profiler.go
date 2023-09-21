@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -40,7 +41,7 @@ func (s *statusServer) RequestJobProfilerExecutionDetails(
 ) (*serverpb.RequestJobProfilerExecutionDetailsResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 	// TODO(adityamaru): Figure out the correct privileges required to request execution details.
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	user, err := s.privilegeChecker.RequireAdminUser(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -78,8 +79,15 @@ func (s *statusServer) RequestJobProfilerExecutionDetails(
 		e.addLabelledGoroutines(ctx)
 		e.addClusterWideTraces(ctx)
 
-		// TODO(dt,adityamaru): add logic to reach out the registry and call resumer
-		// specific execution details collection logic.
+		r, err := execCfg.JobRegistry.GetResumerForClaimedJob(jobID)
+		if err != nil {
+			return nil, err
+		}
+		jobExecCtx, close := sql.MakeJobExecContext(ctx, "collect-profile", user, &sql.MemoryMetrics{}, execCfg)
+		defer close()
+		if err := r.CollectProfile(ctx, jobExecCtx); err != nil {
+			return nil, err
+		}
 
 		return &serverpb.RequestJobProfilerExecutionDetailsResponse{}, nil
 	}

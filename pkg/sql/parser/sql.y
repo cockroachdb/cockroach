@@ -1347,7 +1347,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
-%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list show_backup_connection_options show_backup_connection_options_list
+%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list show_backup_connection_options opt_with_show_backup_connection_options_list show_backup_connection_options_list
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -1413,7 +1413,8 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <str> cursor_name database_name index_name opt_index_name column_name insert_column_item statistics_name window_name opt_in_database
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
 %type <str> db_object_name_component
-%type <*tree.UnresolvedObjectName> table_name db_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
+%type <*tree.UnresolvedObjectName> table_name db_name standalone_index_name sequence_name type_name
+%type <*tree.UnresolvedObjectName> view_name db_object_name simple_db_object_name complex_db_object_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
 %type <str> schema_name opt_in_schema
 %type <tree.ObjectNamePrefix>  qualifiable_schema_name opt_schema_name wildcard_pattern
@@ -4009,9 +4010,17 @@ opt_with_options:
     $$.val = nil
   }
 
-// CALL invokes a stored procedure. It is not currently supported in CRDB.
+// %Help: CALL - invoke a procedure
+// %Category: Misc
+// %Text: CALL <name> ( [ <expr> [, ...] ] )
+// %SeeAlso: CREATE PROCEDURE
 call_stmt:
-  CALL error { return unimplementedWithIssueDetail(sqllex, 17511, "call procedure") }
+  CALL func_application
+  {
+    p := $2.expr().(*tree.FuncExpr)
+    p.InCall = true
+    $$.val = &tree.Call{Proc: p}
+  }
 
 // The COPY grammar in postgres has 3 different versions, all of which are supported by postgres:
 // 1) The "really old" syntax from v7.2 and prior
@@ -4584,7 +4593,7 @@ create_func_stmt:
   RETURNS opt_return_table opt_return_set routine_return_type
   opt_create_routine_opt_list opt_routine_body
   {
-    name := $4.unresolvedObjectName().ToFunctionName()
+    name := $4.unresolvedObjectName().ToRoutineName()
     $$.val = &tree.CreateRoutine{
       IsProcedure: false,
       Replace: $2.bool(),
@@ -4592,7 +4601,7 @@ create_func_stmt:
       Params: $6.routineParams(),
       ReturnType: tree.RoutineReturnType{
         Type: $11.typeReference(),
-        IsSet: $10.bool(),
+        SetOf: $10.bool(),
       },
       Options: $12.routineOptions(),
       RoutineBody: $13.routineBody(),
@@ -4613,7 +4622,7 @@ create_proc_stmt:
   CREATE opt_or_replace PROCEDURE routine_create_name '(' opt_routine_param_with_default_list ')'
   opt_create_routine_opt_list opt_routine_body
   {
-    name := $4.unresolvedObjectName().ToFunctionName()
+    name := $4.unresolvedObjectName().ToRoutineName()
     $$.val = &tree.CreateRoutine{
       IsProcedure: true,
       Replace: $2.bool(),
@@ -4621,6 +4630,9 @@ create_proc_stmt:
       Params: $6.routineParams(),
       Options: $8.routineOptions(),
       RoutineBody: $9.routineBody(),
+      ReturnType: tree.RoutineReturnType{
+        Type: types.Void,
+      },
     }
   }
 | CREATE opt_or_replace PROCEDURE error // SHOW HELP: CREATE PROCEDURE
@@ -4907,14 +4919,14 @@ function_with_paramtypes:
   db_object_name func_params
   {
     $$.val = tree.FuncObj{
-      FuncName: $1.unresolvedObjectName().ToFunctionName(),
+      FuncName: $1.unresolvedObjectName().ToRoutineName(),
       Params: $2.routineParams(),
     }
   }
   | db_object_name
   {
     $$.val = tree.FuncObj{
-      FuncName: $1.unresolvedObjectName().ToFunctionName(),
+      FuncName: $1.unresolvedObjectName().ToRoutineName(),
     }
   }
 
@@ -7597,19 +7609,12 @@ show_backup_stmt:
   			Options: *$5.showBackupOptions(),
   		}
   	}
-| SHOW BACKUP CONNECTION string_or_placeholder
+| SHOW BACKUP CONNECTION string_or_placeholder opt_with_show_backup_connection_options_list
   	{
   		$$.val = &tree.ShowBackup{
   		  Details:  tree.BackupConnectionTest,
   			Path:    $4.expr(),
-  		}
-  	}
-| SHOW BACKUP CONNECTION string_or_placeholder WITH show_backup_connection_options_list
-  	{
-  		$$.val = &tree.ShowBackup{
-  		  Details:  tree.BackupConnectionTest,
-  			Path:    $4.expr(),
-        Options: *$6.showBackupOptions(),
+  			Options: *$5.showBackupOptions(),
   		}
   	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
@@ -7709,6 +7714,20 @@ show_backup_options:
  {
  $$.val = &tree.ShowBackupOptions{DebugMetadataSST: true}
  }
+
+opt_with_show_backup_connection_options_list:
+  WITH show_backup_connection_options_list
+  {
+    $$.val = $2.showBackupOptions()
+  }
+| WITH OPTIONS '(' show_backup_connection_options_list ')'
+  {
+    $$.val = $4.showBackupOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.ShowBackupOptions{}
+  }
 
 show_backup_connection_options_list:
   // Require at least one option

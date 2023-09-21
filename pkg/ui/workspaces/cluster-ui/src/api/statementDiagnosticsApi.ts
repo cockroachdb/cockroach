@@ -74,6 +74,7 @@ export type InsertStmtDiagnosticRequest = {
   samplingProbability?: number;
   minExecutionLatencySeconds?: number;
   expiresAfterSeconds?: number;
+  planGist: string;
 };
 
 export type InsertStmtDiagnosticResponse = {
@@ -85,8 +86,15 @@ export function createStatementDiagnosticsReport({
   samplingProbability,
   minExecutionLatencySeconds,
   expiresAfterSeconds,
+  planGist,
 }: InsertStmtDiagnosticRequest): Promise<InsertStmtDiagnosticResponse> {
   const args: any = [stmtFingerprint];
+  let query = `SELECT crdb_internal.request_statement_bundle($1, $2, $3::INTERVAL, $4::INTERVAL) as req_resp`;
+
+  if (planGist) {
+    args.push(planGist);
+    query = `SELECT crdb_internal.request_statement_bundle($1, $2, $3, $4::INTERVAL, $5::INTERVAL) as req_resp`;
+  }
 
   if (samplingProbability) {
     args.push(samplingProbability);
@@ -105,7 +113,7 @@ export function createStatementDiagnosticsReport({
   }
 
   const createStmtDiag = {
-    sql: `SELECT crdb_internal.request_statement_bundle($1, $2, $3::INTERVAL, $4::INTERVAL) as req_resp`,
+    sql: query,
     arguments: args,
   };
 

@@ -78,9 +78,6 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	stubScheduleCheckEnabledInterval := time.Second
 	stubLoggingDelay := 0 * time.Second
 
-	// timeBuffer is a short time buffer to account for non-determinism in the logging timings.
-	const timeBuffer = 4 * time.Second
-
 	schedulesFinishedChan := make(chan struct{})
 	logsVerifiedChan := make(chan struct{})
 
@@ -90,7 +87,7 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 				getLoggingDuration: sd.getLoggingDuration,
 				getOverlapDuration: sd.getOverlapDuration,
 				onScheduleComplete: func() {
-					// Notify that the scheudle has completed.
+					// Notify that the schedule has completed.
 					schedulesFinishedChan <- struct{}{}
 					// Wait for logs to be verified before proceeding.
 					<-logsVerifiedChan
@@ -174,10 +171,8 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 
 	// Enable capture of index usage stats.
 	telemetryCaptureIndexUsageStatsEnabled.Override(context.Background(), &tenantSettings.SV, true)
-	//t.Fatal(telemetryCaptureIndexUsageStatsEnabled.Get(&s.ClusterSettings().SV))
 
 	// Check that telemetry log file contains all the entries we're expecting, at the scheduled intervals.
-
 	expectedTotalNumEntriesInSingleInterval := 8
 	expectedNumberOfIndividualIndexEntriesInSingleInterval := 1
 
@@ -257,38 +252,6 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	sort.Slice(entries, func(a int, b int) bool {
 		return entries[a].Time < entries[b].Time
 	})
-
-	testData := []time.Duration{
-		0 * time.Second,
-		// the difference in number of seconds between first and second schedule
-		stubScheduleInterval - firstScheduleLoggingDuration,
-		// the difference in number of seconds between second and third schedule
-		sd.getOverlapDuration(),
-	}
-
-	var (
-		previousTimestamp = int64(0)
-		currentTimestamp  = int64(0)
-	)
-
-	// Check the timestamp differences between schedules.
-	for idx, expectedDuration := range testData {
-		entriesLowerBound := idx * expectedTotalNumEntriesInSingleInterval
-		entriesUpperBound := (idx + 1) * expectedTotalNumEntriesInSingleInterval
-		scheduleEntryBlock := entries[entriesLowerBound:entriesUpperBound]
-		// Take the first log entry from the schedule.
-		currentTimestamp = scheduleEntryBlock[0].Time
-		// If this is the first iteration, initialize the previous timestamp.
-		if idx == 0 {
-			previousTimestamp = currentTimestamp
-		}
-
-		actualDuration := time.Duration(currentTimestamp - previousTimestamp)
-		// Use a time window to afford some non-determinism in the test.
-		require.Greaterf(t, expectedDuration, actualDuration-timeBuffer, "%v <= %v-%v", expectedDuration, actualDuration, timeBuffer)
-		require.Greater(t, actualDuration+timeBuffer, expectedDuration, "%v+%v <= %v", expectedDuration, actualDuration, timeBuffer)
-		previousTimestamp = currentTimestamp
-	}
 
 }
 

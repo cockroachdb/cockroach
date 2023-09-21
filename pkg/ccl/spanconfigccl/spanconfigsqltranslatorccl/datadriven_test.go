@@ -12,9 +12,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -43,8 +41,6 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
-
-var tableIDPrefixRegexp = regexp.MustCompile("(/Table/)([0-9]+)(.*)")
 
 // TestDataDriven is a data-driven test for the spanconfig.SQLTranslator. It
 // allows users to set up zone config hierarchies and validate their translation
@@ -115,21 +111,24 @@ func TestDataDriven(t *testing.T) {
 			// test cluster).
 			ManagerDisableJobCreation: true,
 		}
+		sqlExecutorKnobs := &sql.ExecutorTestingKnobs{
+			UseTransactionalDescIDGenerator: true,
+		}
 		tsArgs := func(attr string) base.TestServerArgs {
 			return base.TestServerArgs{
 				Knobs: base.TestingKnobs{
-					GCJob:      gcTestingKnobs,
-					SpanConfig: scKnobs,
+					GCJob:       gcTestingKnobs,
+					SpanConfig:  scKnobs,
+					SQLExecutor: sqlExecutorKnobs,
 				},
 				StoreSpecs: []base.StoreSpec{
 					{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
 				},
 			}
 		}
-		isMultiNode := strings.Contains(path, "3node")
 		// Use 1 node by default to make tests run faster.
 		nodes := 1
-		if isMultiNode {
+		if strings.Contains(path, "3node") {
 			nodes = 3
 		}
 		tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{
@@ -221,42 +220,7 @@ func TestDataDriven(t *testing.T) {
 				for _, record := range records {
 					switch {
 					case record.GetTarget().IsSpanTarget():
-						var translateOutputFmt, spanStr string
-						// The span's table ID may change in multi-node tests. Replace the
-						// table ID with <table-id> or <table-id+1> to make output
-						// deterministic.
-						if isMultiNode {
-							translateOutputFmt = "%-54s %s\n"
-							span := record.GetTarget().GetSpan()
-							parseKey := func(key roachpb.Key) (prefix string, tableID int, suffix string) {
-								keyStr := key.String()
-								matches := tableIDPrefixRegexp.FindStringSubmatch(keyStr)
-								require.Lenf(t, matches, 4, keyStr)
-								prefix = matches[1]
-								var err error
-								tableID, err = strconv.Atoi(matches[2])
-								require.NoErrorf(t, err, keyStr)
-								suffix = matches[3]
-								return
-							}
-							startPrefix, startTableID, startSuffix := parseKey(span.Key)
-							var tableIDPlaceholder = "<table-id>"
-							startKeyStr := fmt.Sprintf("%s%s%s", startPrefix, tableIDPlaceholder, startSuffix)
-							endPrefix, endTableID, endSuffix := parseKey(span.EndKey)
-							switch endTableID {
-							case startTableID:
-							case startTableID + 1:
-								tableIDPlaceholder = "<table-id+1>"
-							default:
-								t.Fatalf("invalid table IDs startTableID=%d endTableID=%d", startTableID, endTableID)
-							}
-							endKeyStr := fmt.Sprintf("%s%s%s", endPrefix, tableIDPlaceholder, endSuffix)
-							spanStr = fmt.Sprintf("[%s, %s)", startKeyStr, endKeyStr)
-						} else {
-							translateOutputFmt = "%-42s %s\n"
-							spanStr = record.GetTarget().GetSpan().String()
-						}
-						output.WriteString(fmt.Sprintf(translateOutputFmt, spanStr,
+						output.WriteString(fmt.Sprintf("%-42s %s\n", record.GetTarget().GetSpan(),
 							spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.GetConfig())))
 					case record.GetTarget().IsSystemTarget():
 						output.WriteString(fmt.Sprintf("%-42s %s\n", record.GetTarget().GetSystemTarget(),

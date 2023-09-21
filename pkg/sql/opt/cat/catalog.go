@@ -173,13 +173,14 @@ type Catalog interface {
 	// the given catalog object. If not, then CheckAnyPrivilege returns an error.
 	CheckAnyPrivilege(ctx context.Context, o Object) error
 
+	// CheckExecutionPrivilege verifies that the current user has execution
+	// privileges for the UDF with the given OID. If not, then CheckPrivilege
+	// returns an error.
+	CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error
+
 	// HasAdminRole checks that the current user has admin privileges. If yes,
 	// returns true. Returns an error if query on the `system.users` table failed
 	HasAdminRole(ctx context.Context) (bool, error)
-
-	// RequireAdminRole checks that the current user has admin privileges. If not,
-	// returns an error.
-	RequireAdminRole(ctx context.Context, action string) error
 
 	// HasRoleOption converts the roleoption to its SQL column name and checks if
 	// the user belongs to a role where the option has value true. Requires a

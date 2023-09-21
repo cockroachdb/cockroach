@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -56,8 +57,10 @@ func TestProfilerStorePlanDiagram(t *testing.T) {
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`INSERT INTO foo VALUES (1), (2)`)
 	require.NoError(t, err)
-	_, err = sqlDB.Exec(`SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	require.NoError(t, err)
+
+	for _, l := range []serverutils.ApplicationLayerInterface{s.ApplicationLayer(), s.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
 
 	for _, tc := range []struct {
 		name string

@@ -2174,6 +2174,11 @@ func (ef *execFactory) ConstructExplain(
 	return n, nil
 }
 
+// ConstructCall is part of the exec.Factory interface.
+func (e *execFactory) ConstructCall(proc *tree.RoutineExpr) (exec.Node, error) {
+	return &callNode{proc: proc}, nil
+}
+
 // renderBuilder encapsulates the code to build a renderNode.
 type renderBuilder struct {
 	r   *renderNode

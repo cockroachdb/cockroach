@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 )
 
@@ -141,7 +142,10 @@ func ShowCreateView(
 	cfg.UseTabs = true
 	cfg.LineWidth = 100 - cfg.TabWidth
 	cfg.ValueRedaction = redactableValues
-	q := formatViewQueryForDisplay(ctx, semaCtx, sessionData, desc, cfg)
+	q, err := formatViewQueryForDisplay(ctx, semaCtx, sessionData, desc, cfg)
+	if err != nil {
+		return "", err
+	}
 	for i, line := range strings.Split(q, "\n") {
 		if i > 0 {
 			f.WriteString("\n\t")
@@ -161,22 +165,31 @@ func formatViewQueryForDisplay(
 	sessionData *sessiondata.SessionData,
 	desc catalog.TableDescriptor,
 	cfg tree.PrettyCfg,
-) (query string) {
+) (query string, err error) {
 	defer func() {
-		parsed, err := parser.ParseOne(query)
-		if err != nil {
+		parsed, parseErr := parser.ParseOne(query)
+		if parseErr != nil {
 			log.Warningf(ctx, "error parsing query for view %s (%v): %+v",
 				desc.GetName(), desc.GetID(), err)
 			return
 		}
-		query = cfg.Pretty(parsed.AST)
+		var prettyErr error
+		query, prettyErr = cfg.Pretty(parsed.AST)
+		if errors.Is(prettyErr, pretty.ErrPrettyMaxRecursionDepthExceeded) {
+			// Use simple printing if pretty-printing fails.
+			query = tree.AsStringWithFlags(parsed.AST, tree.FmtParsable)
+			return
+		} else if prettyErr != nil {
+			err = prettyErr
+			return
+		}
 	}()
 
 	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, semaCtx, sessionData, desc)
 	if err != nil {
 		log.Warningf(ctx, "error deserializing user defined types for view %s (%v): %+v",
 			desc.GetName(), desc.GetID(), err)
-		return desc.GetViewQuery()
+		return desc.GetViewQuery(), nil
 	}
 
 	// Convert sequences referenced by ID in the view back to their names.
@@ -184,10 +197,10 @@ func formatViewQueryForDisplay(
 	if err != nil {
 		log.Warningf(ctx, "error converting sequence IDs to names for view %s (%v): %+v",
 			desc.GetName(), desc.GetID(), err)
-		return typeReplacedViewQuery
+		return typeReplacedViewQuery, nil
 	}
 
-	return sequenceReplacedViewQuery
+	return sequenceReplacedViewQuery, nil
 }
 
 // formatQuerySequencesForDisplay walks the view query and

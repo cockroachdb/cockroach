@@ -69,6 +69,11 @@ func (r *traceSpanResumer) OnFailOrCancel(ctx context.Context, execCtx interface
 	return errors.New("unimplemented")
 }
 
+// CollectProfile implements the jobs.Resumer interface.
+func (r *traceSpanResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 func TestDebugJobTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

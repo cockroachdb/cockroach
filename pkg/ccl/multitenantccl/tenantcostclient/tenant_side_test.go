@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantio"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
@@ -1016,15 +1017,19 @@ func TestScheduledJobsConsumption(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
-	stats.UseStatisticsOnSystemTables.Override(ctx, &st.SV, false)
-	stats.AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, false)
-	tenantcostclient.TargetPeriodSetting.Override(ctx, &st.SV, time.Millisecond*20)
+
+	makeSettings := func() *cluster.Settings {
+		st := cluster.MakeTestingClusterSettings()
+		stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+		stats.UseStatisticsOnSystemTables.Override(ctx, &st.SV, false)
+		stats.AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, false)
+		tenantcostclient.TargetPeriodSetting.Override(ctx, &st.SV, time.Millisecond*20)
+		return st
+	}
 
 	hostServer := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		Settings:          st,
+		Settings:          makeSettings(),
 	})
 	defer hostServer.Stopper().Stop(ctx)
 
@@ -1037,7 +1042,7 @@ func TestScheduledJobsConsumption(t *testing.T) {
 	var tenantDB *gosql.DB
 	tenantServer, tenantDB = serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
 		TenantID: serverutils.TestTenantID(),
-		Settings: st,
+		Settings: makeSettings(),
 		TestingKnobs: base.TestingKnobs{
 			TenantTestingKnobs: &sql.TenantTestingKnobs{
 				OverrideTokenBucketProvider: func(kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider {
@@ -1109,17 +1114,19 @@ func TestConsumptionChangefeeds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	hostServer, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+	ctx := context.Background()
+
+	hostServer := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
-	defer hostServer.Stopper().Stop(context.Background())
-	if _, err := hostDB.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
-		t.Fatalf("changefeed setup failed: %s", err.Error())
-	}
+	defer hostServer.Stopper().Stop(ctx)
+
+	kvserver.RangefeedEnabled.Override(ctx, &hostServer.ClusterSettings().SV, true)
 
 	st := cluster.MakeTestingClusterSettings()
-	tenantcostclient.TargetPeriodSetting.Override(context.Background(), &st.SV, time.Millisecond*20)
-	tenantcostclient.CPUUsageAllowance.Override(context.Background(), &st.SV, 0)
+	tenantcostclient.TargetPeriodSetting.Override(ctx, &st.SV, time.Millisecond*20)
+	tenantcostclient.CPUUsageAllowance.Override(ctx, &st.SV, 0)
+	kvserver.RangefeedEnabled.Override(ctx, &st.SV, true)
 
 	testProvider := newTestProvider()
 
@@ -1143,7 +1150,6 @@ func TestConsumptionChangefeeds(t *testing.T) {
 	r.Exec(t, "CREATE TABLE t (v STRING)")
 	r.Exec(t, "INSERT INTO t SELECT repeat('1234567890', 1024) FROM generate_series(1, 10) AS g(i)")
 	beforeChangefeed := testProvider.waitForConsumption(t)
-	r.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 	r.Exec(t, "CREATE CHANGEFEED FOR t INTO 'null://'")
 
 	// Make sure some external io usage is reported.

@@ -51,6 +51,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/stats",
+        "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
         "//pkg/sql/vtable",
         "//pkg/util/intsets",

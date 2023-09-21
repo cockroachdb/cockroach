@@ -18,7 +18,7 @@ package uuid
 
 import (
 	"crypto/md5"
-	"crypto/rand"
+	crypto_rand "crypto/rand"
 	"crypto/sha1"
 	"encoding/binary"
 	"fmt"
@@ -42,6 +42,7 @@ type epochFunc func() time.Time
 type HWAddrFunc func() (net.HardwareAddr, error)
 
 // DefaultGenerator is the default UUID Generator used by this package.
+// It uses crypto/rand as the source of entropy.
 var DefaultGenerator Generator = NewGen()
 
 // NewV1 returns a UUID based on the current timestamp and MAC address.
@@ -131,7 +132,7 @@ func NewGenWithHWAF(hwaf HWAddrFunc) *Gen {
 	return &Gen{
 		epochFunc:  time.Now,
 		hwAddrFunc: hwaf,
-		rand:       rand.Reader,
+		rand:       crypto_rand.Reader,
 	}
 }
 
@@ -172,7 +173,7 @@ func (g *Gen) NewV3(ns UUID, name string) UUID {
 // NewV4 returns a randomly generated UUID.
 func (g *Gen) NewV4() (UUID, error) {
 	u := UUID{}
-	if r, ok := g.rand.(defaultRandReader); ok {
+	if r, ok := g.rand.(mathRandReader); ok {
 		if n, err := r.Read(u[:]); n != len(u) {
 			panic("math/rand.Read always returns len(p)")
 		} else if err != nil {
@@ -291,7 +292,7 @@ func defaultHWAddrFunc() (net.HardwareAddr, error) {
 func RandomHardwareAddrFunc() (net.HardwareAddr, error) {
 	var err error
 	var hardwareAddr = make(net.HardwareAddr, 6)
-	if _, err = io.ReadFull(rand.Reader, hardwareAddr[:]); err != nil {
+	if _, err = io.ReadFull(crypto_rand.Reader, hardwareAddr[:]); err != nil {
 		return []byte{}, err
 	}
 	// Set multicast bit and local-admin bit to match Postgres.

@@ -33,6 +33,7 @@ jobs:
             ${{ runner.os }}-bazel-    
 
       - name: Get list of changed packages
+        continue-on-error: true
         shell: bash
         run: |
           set -euxo pipefail
@@ -44,12 +45,13 @@ jobs:
           skip() {
             echo "Skipping code coverage on PR #$PR: $1"
             # Generate the json files with an error (which will show up in Reviewable).
-            jq -n --arg err "$1" '{error: $err}' > artifacts/cover-${PR}-${HEAD_SHA}.json 
+            msg="$1; see $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID."
+            jq -n --arg err "$msg" '{error: $err}' > artifacts/cover-${PR}-${HEAD_SHA}.json 
             if [ -n "${BASE_SHA:-}" ]; then
-              jq -n --arg err "$1" '{error: $err}' > artifacts/cover-${PR}-${BASE_SHA}.json 
+              jq -n --arg err "$msg" '{error: $err}' > artifacts/cover-${PR}-${BASE_SHA}.json 
             fi
             echo "SKIP=true" >> "${GITHUB_ENV}"
-            exit 0
+            exit 1
           }
           
           # To get the base commit, we get the number of commits in the PR.
@@ -59,19 +61,22 @@ jobs:
           
           # The number of commits bust be below the checkout fetch-depth.
           if [ ${NUM_COMMITS} -ge ${FETCH_DEPTH} ]; then
-            skip "too many commits (${NUM_COMMITS})"
+            echo "ERROR=too many commits (${NUM_COMMITS})" >> ${GITHUB_ENV}
+            exit 1
           fi
           BASE_SHA=$(git rev-parse HEAD~${NUM_COMMITS})
           CHANGED_PKGS=$(build/ghactions/changed-go-pkgs.sh ${BASE_SHA} ${HEAD_SHA})
           NUM_CHANGED_PKGS=$(echo "${CHANGED_PKGS}" | wc -w)
           if [ ${NUM_CHANGED_PKGS} -gt ${MAX_CHANGED_PKGS} ]; then
-            skip "too many changed packages (${NUM_CHANGED_PKGS})"
+            echo "ERROR=too many changed packages (${NUM_CHANGED_PKGS})" >> ${GITHUB_ENV}
+            exit 1
           fi
           echo "BASE_SHA=${BASE_SHA}" >> "${GITHUB_ENV}"
           echo "CHANGED_PKGS=${CHANGED_PKGS}" >> "${GITHUB_ENV}"
 
       - name: Run "after" test coverage
-        if: env.SKIP != 'true'
+        if: env.ERROR == ''
+        continue-on-error: true
         shell: bash
         run: |
           set -euxo pipefail
@@ -79,22 +84,41 @@ jobs:
           # Make a copy of the script so that the "before" run below uses the
           # same version.
           cp build/ghactions/pr-codecov-run-tests.sh ${RUNNER_TEMP}/
-          ${RUNNER_TEMP}/pr-codecov-run-tests.sh artifacts/cover-${PR}-${HEAD_SHA}.json "${CHANGED_PKGS}"
+          if ! ${RUNNER_TEMP}/pr-codecov-run-tests.sh artifacts/cover-${PR}-${HEAD_SHA}.json "${CHANGED_PKGS}"; then
+            echo "ERROR=tests failed" >> ${GITHUB_ENV}
+            exit 1
+          fi
 
       - name: Run "before" test coverage
-        if: env.SKIP != 'true'
+        if: env.ERROR == ''
+        continue-on-error: true
         shell: bash
         run: |
           set -euxo pipefail
           BASE_SHA='${{ env.BASE_SHA }}'
           CHANGED_PKGS='${{ env.CHANGED_PKGS }}'
           git checkout -f ${BASE_SHA}
-          ${RUNNER_TEMP}/pr-codecov-run-tests.sh artifacts/cover-${PR}-${BASE_SHA}.json "${CHANGED_PKGS}"
+          if ! ${RUNNER_TEMP}/pr-codecov-run-tests.sh artifacts/cover-${PR}-${BASE_SHA}.json "${CHANGED_PKGS}"; then
+            echo "ERROR=tests failed on base branch" >> ${GITHUB_ENV}
+            exit 1
+          fi
+
+      - name: Finalize
+        shell: bash
+        run: |
+          ERROR='${{ env.ERROR }}'
+          if [ -n "$ERROR" ]; then
+            # Generate the json files with an error (which will show up in Reviewable).
+            msg="$ERROR; see [run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+            jq -n --arg err "$msg" '{error: $err}' > artifacts/cover-${PR}-${HEAD_SHA}.json 
+            BASE_SHA=${{ env.BASE_SHA }}
+            if [ -n "$BASE_SHA" ]; then
+              jq -n --arg err "$msg" '{error: $err}' > artifacts/cover-${PR}-${BASE_SHA}.json 
+            fi
+          fi
 
       - name: Upload artifacts
-        # Note: we want to upload artifacts even if we skipped the steps above.
-        # See the skip function in the "Get list of changed packages" step.
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: cover
           path: artifacts/cover-*.json

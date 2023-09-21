@@ -442,6 +442,14 @@ func (md *Metadata) CheckDependencies(
 		}
 	}
 
+	// Check that the role still has execution privilege on the user defined
+	// functions.
+	for _, overload := range md.udfDeps {
+		if err := optCatalog.CheckExecutionPrivilege(ctx, overload.Oid); err != nil {
+			return false, err
+		}
+	}
+
 	// Check that any references to builtin functions do not now resolve to a UDF
 	// with the same signature (e.g. after changes to the search path).
 	for name := range md.builtinRefsByName {
@@ -452,7 +460,7 @@ func (md *Metadata) CheckDependencies(
 			return false, maybeSwallowMetadataResolveErr(err)
 		}
 		for i := range definition.Overloads {
-			if definition.Overloads[i].IsUDF {
+			if definition.Overloads[i].Type == tree.UDFRoutine {
 				return false, nil
 			}
 		}
@@ -550,7 +558,7 @@ func (md *Metadata) HasUserDefinedFunctions() bool {
 func (md *Metadata) AddUserDefinedFunction(
 	overload *tree.Overload, name *tree.UnresolvedObjectName,
 ) {
-	if !overload.IsUDF {
+	if overload.Type != tree.UDFRoutine {
 		return
 	}
 	id := cat.StableID(catid.UserDefinedOIDToID(overload.Oid))

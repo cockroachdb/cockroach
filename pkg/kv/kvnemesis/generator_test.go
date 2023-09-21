@@ -110,20 +110,28 @@ func TestRandStep(t *testing.T) {
 				if _, ok := keys[string(o.Key)]; ok {
 					if o.SkipLocked && o.ForUpdate {
 						client.GetExistingForUpdateSkipLocked++
+					} else if o.SkipLocked && o.ForShare {
+						client.GetExistingForShareSkipLocked++
 					} else if o.SkipLocked {
 						client.GetExistingSkipLocked++
 					} else if o.ForUpdate {
 						client.GetExistingForUpdate++
+					} else if o.ForShare {
+						client.GetExistingForShare++
 					} else {
 						client.GetExisting++
 					}
 				} else {
 					if o.SkipLocked && o.ForUpdate {
 						client.GetMissingForUpdateSkipLocked++
+					} else if o.SkipLocked && o.ForShare {
+						client.GetMissingForShareSkipLocked++
 					} else if o.SkipLocked {
 						client.GetMissingSkipLocked++
 					} else if o.ForUpdate {
 						client.GetMissingForUpdate++
+					} else if o.ForShare {
+						client.GetMissingForShare++
 					} else {
 						client.GetMissing++
 					}
@@ -138,20 +146,28 @@ func TestRandStep(t *testing.T) {
 				if o.Reverse {
 					if o.SkipLocked && o.ForUpdate {
 						client.ReverseScanForUpdateSkipLocked++
+					} else if o.SkipLocked && o.ForShare {
+						client.ReverseScanForShareSkipLocked++
 					} else if o.SkipLocked {
 						client.ReverseScanSkipLocked++
 					} else if o.ForUpdate {
 						client.ReverseScanForUpdate++
+					} else if o.ForShare {
+						client.ReverseScanForShare++
 					} else {
 						client.ReverseScan++
 					}
 				} else {
 					if o.SkipLocked && o.ForUpdate {
 						client.ScanForUpdateSkipLocked++
+					} else if o.SkipLocked && o.ForShare {
+						client.ScanForShareSkipLocked++
 					} else if o.SkipLocked {
 						client.ScanSkipLocked++
 					} else if o.ForUpdate {
 						client.ScanForUpdate++
+					} else if o.ForShare {
+						client.ScanForShare++
 					} else {
 						client.Scan++
 					}

@@ -11,10 +11,10 @@
 package uuid
 
 import (
-	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	math_rand "math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
@@ -109,24 +109,29 @@ func FastMakeV4() UUID {
 	return u
 }
 
-// defaultRandReader is an io.Reader that calls through to "math/rand".Read
+// mathRandReader is an io.Reader that calls through to "math/rand".Read
 // which is safe for concurrent use.
-type defaultRandReader struct{}
+type mathRandReader struct{}
 
-func (r defaultRandReader) Read(p []byte) (n int, err error) {
-	return rand.Read(p)
+func (r mathRandReader) Read(p []byte) (n int, err error) {
+	// https://github.com/cockroachdb/cockroach/issues/110597 tracks this
+	// deprecated usage.
+	//lint:ignore SA1019 deprecated
+	return math_rand.Read(p)
 }
 
 // fastGen is a non-cryptographically secure Generator.
-var fastGen = NewGenWithReader(defaultRandReader{})
+var fastGen = NewGenWithReader(mathRandReader{})
 
 // NewPopulatedUUID returns a populated UUID.
 func NewPopulatedUUID(r interface {
-	Int63() int64
+	Uint32() uint32
 }) *UUID {
 	var u UUID
-	binary.LittleEndian.PutUint64(u[:8], uint64(r.Int63()))
-	binary.LittleEndian.PutUint64(u[8:], uint64(r.Int63()))
+	binary.LittleEndian.PutUint32(u[:4], r.Uint32())
+	binary.LittleEndian.PutUint32(u[4:8], r.Uint32())
+	binary.LittleEndian.PutUint32(u[8:12], r.Uint32())
+	binary.LittleEndian.PutUint32(u[12:], r.Uint32())
 	return &u
 }
 

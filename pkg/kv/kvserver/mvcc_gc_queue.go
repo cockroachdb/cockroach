@@ -174,8 +174,9 @@ func largeAbortSpan(ms enginepb.MVCCStats) bool {
 type mvccGCQueue struct {
 	*baseQueue
 
-	// Set to true when GC finds range that has a hint indicating that range is
-	// completely cleared.
+	// lastRangeWasHighPriority is true when GC found a range with a GCHint
+	// indicating that the range is completely cleared. Reset to false after all
+	// such ranges have been processed.
 	lastRangeWasHighPriority bool
 	// leaseholderCheckInterceptor is a leasholder check used by high priority replica scanner
 	// its only purpose is to allow test function injection.
@@ -287,9 +288,10 @@ func makeMVCCGCQueueScore(
 	gcTTL time.Duration,
 	canAdvanceGCThreshold bool,
 ) mvccGCQueueScore {
-	repl.mu.Lock()
+	repl.mu.RLock()
 	ms := *repl.mu.state.Stats
-	repl.mu.Unlock()
+	hint := *repl.mu.state.GCHint
+	repl.mu.RUnlock()
 
 	if repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
 		lastGC = hlc.Timestamp{}
@@ -300,7 +302,7 @@ func makeMVCCGCQueueScore(
 	// trigger GC at the same time.
 	r := makeMVCCGCQueueScoreImpl(
 		ctx, int64(repl.RangeID), now, ms, gcTTL, lastGC, canAdvanceGCThreshold,
-		repl.GetGCHint(), gc.TxnCleanupThreshold.Get(&repl.ClusterSettings().SV),
+		hint, gc.TxnCleanupThreshold.Get(&repl.ClusterSettings().SV),
 	)
 	return r
 }
@@ -464,7 +466,7 @@ func makeMVCCGCQueueScoreImpl(
 	// Intent score. This computes the average age of outstanding intents and
 	// normalizes. Note that at the time of writing this criterion hasn't
 	// undergone a reality check yet.
-	r.IntentScore = ms.AvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1e9)
+	r.IntentScore = ms.AvgLockAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1e9)
 
 	// Randomly skew the score down a bit to cause decoherence of replicas with
 	// similar load. Note that we'll only ever reduce the score, never increase
@@ -517,10 +519,20 @@ func makeMVCCGCQueueScoreImpl(
 		r.FinalScore++
 	}
 
-	maybeRangeDel := suspectedFullRangeDeletion(ms)
-	hasActiveGCHint := gcHintedRangeDelete(hint, gcTTL, now)
+	// Check if there is a pending GC run according to the GCHint.
+	if canGC(hint.GCTimestamp, gcTTL, now) {
+		// TODO(pavelkalinnikov): using canAdvanceGCThreshold makes the best sense
+		// now, however we should probably check a stronger condition that the GC
+		// threshold can be advanced to timestamp >= hint.GCTimestamp. The current
+		// way can result in false positives and wasteful GC runs.
+		r.ShouldQueue = canAdvanceGCThreshold
+	}
 
-	if hasActiveGCHint && (maybeRangeDel || ms.ContainsEstimates > 0) {
+	// Check if GC should be run because the entire keyspace is likely covered by
+	// MVCC range tombstones.
+	rangeDeleteHint := canGC(hint.LatestRangeDeleteTimestamp, gcTTL, now)
+	maybeRangeDel := suspectedFullRangeDeletion(ms)
+	if rangeDeleteHint && (maybeRangeDel || ms.ContainsEstimates > 0) {
 		// We have GC hint allowing us to collect range and we either satisfy
 		// heuristic that indicate no live data or we have estimates and we assume
 		// hint is correct.
@@ -537,12 +549,10 @@ func makeMVCCGCQueueScoreImpl(
 	return r
 }
 
-func gcHintedRangeDelete(hint roachpb.GCHint, ttl time.Duration, now hlc.Timestamp) bool {
-	deleteTimestamp := hint.LatestRangeDeleteTimestamp
-	if deleteTimestamp.IsEmpty() {
-		return false
-	}
-	return deleteTimestamp.Add(ttl.Nanoseconds(), 0).Less(now)
+// canGC returns true iff the given timestamp can be garbage-collected at the
+// given moment in time, provided the configured data TTL.
+func canGC(t hlc.Timestamp, ttl time.Duration, now hlc.Timestamp) bool {
+	return t.IsSet() && t.Add(ttl.Nanoseconds(), 0).Less(now)
 }
 
 // suspectedFullRangeDeletion checks for ranges where there's no live data and

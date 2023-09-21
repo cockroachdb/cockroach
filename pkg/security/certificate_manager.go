@@ -56,6 +56,9 @@ type CertificateManager struct {
 	// own locking.
 	certMetrics Metrics
 
+	// Client cert expiration cache.
+	clientCertExpirationCache *ClientCertExpirationCache
+
 	// mu protects all remaining fields.
 	mu syncutil.RWMutex
 
@@ -167,6 +170,9 @@ func (cm *CertificateManager) RegisterSignalHandler(
 				return
 			case sig := <-ch:
 				log.Ops.Infof(ctx, "received signal %q, triggering certificate reload", sig)
+				if cache := cm.clientCertExpirationCache; cache != nil {
+					cache.Clear()
+				}
 				if err := cm.LoadCertificates(); err != nil {
 					log.Ops.Warningf(ctx, "could not reload certificates: %v", err)
 					log.StructuredEvent(ctx, &eventpb.CertsReload{Success: false, ErrorMessage: err.Error()})
@@ -176,6 +182,27 @@ func (cm *CertificateManager) RegisterSignalHandler(
 			}
 		}
 	})
+}
+
+// RegisterExpirationCache registers a cache for client certificate expiration.
+// It is called during server startup.
+func (cm *CertificateManager) RegisterExpirationCache(cache *ClientCertExpirationCache) {
+	cm.clientCertExpirationCache = cache
+}
+
+// MaybeUpsertClientExpiration updates or inserts the expiration time for the
+// given client certificate. An update is contingent on whether the old
+// expiration is after the new expiration.
+func (cm *CertificateManager) MaybeUpsertClientExpiration(
+	ctx context.Context, identity username.SQLUsername, expiration int64,
+) {
+	if cache := cm.clientCertExpirationCache; cache != nil {
+		cache.MaybeUpsert(ctx,
+			identity.Normalized(),
+			expiration,
+			cm.certMetrics.ClientExpiration,
+		)
+	}
 }
 
 // CACert returns the CA cert. May be nil.

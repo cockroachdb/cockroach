@@ -2391,7 +2391,7 @@ func TestRemoveLeaseholder(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 		})
 	defer tc.Stopper().Stop(context.Background())
-	_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin())
+	_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec))
 
 	// We start with having the range under test on (1,2,3).
 	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
@@ -4700,7 +4700,7 @@ func TestTenantID(t *testing.T) {
 	t.Run("(1) initial set", func(t *testing.T) {
 		// Ensure that a normal range has the system tenant.
 		{
-			_, repl := getFirstStoreReplica(t, tc.Server(0), bootstrap.TestingUserTableDataMin())
+			_, repl := getFirstStoreReplica(t, tc.Server(0), bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec))
 			ri := repl.State(ctx)
 			require.Equal(t, roachpb.SystemTenantID.ToUint64(), ri.TenantID, "%v", repl)
 		}

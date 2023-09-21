@@ -10,6 +10,7 @@ stmt ::=
 stmt_without_legacy_transaction ::=
 	preparable_stmt
 	| analyze_stmt
+	| call_stmt
 	| copy_stmt
 	| comment_stmt
 	| execute_stmt
@@ -62,6 +63,9 @@ preparable_stmt ::=
 analyze_stmt ::=
 	'ANALYZE' analyze_target
 	| 'ANALYSE' analyze_target
+
+call_stmt ::=
+	'CALL' func_application
 
 copy_stmt ::=
 	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_copy_options opt_where_clause
@@ -312,6 +316,13 @@ upsert_stmt ::=
 
 analyze_target ::=
 	table_name
+
+func_application ::=
+	func_application_name '(' ')'
+	| func_application_name '(' expr_list opt_sort_clause ')'
+	| func_application_name '(' 'ALL' expr_list opt_sort_clause ')'
+	| func_application_name '(' 'DISTINCT' expr_list ')'
+	| func_application_name '(' '*' ')'
 
 table_name ::=
 	db_object_name
@@ -785,8 +796,7 @@ show_backup_stmt ::=
 	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder opt_with_show_backup_options
 	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder opt_with_show_backup_options
 	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' 'CONNECTION' string_or_placeholder
-	| 'SHOW' 'BACKUP' 'CONNECTION' string_or_placeholder 'WITH' show_backup_connection_options_list
+	| 'SHOW' 'BACKUP' 'CONNECTION' string_or_placeholder opt_with_show_backup_connection_options_list
 
 show_columns_stmt ::=
 	'SHOW' 'COLUMNS' 'FROM' table_name with_comment
@@ -971,6 +981,13 @@ opt_from_list ::=
 	'FROM' from_list
 	| 
 
+func_application_name ::=
+	func_name
+	| '[' 'FUNCTION' iconst32 ']'
+
+expr_list ::=
+	( a_expr ) ( ( ',' a_expr ) )*
+
 db_object_name ::=
 	simple_db_object_name
 	| complex_db_object_name
@@ -1001,9 +1018,6 @@ index_name ::=
 
 standalone_index_name ::=
 	db_object_name
-
-expr_list ::=
-	( a_expr ) ( ( ',' a_expr ) )*
 
 unreserved_keyword ::=
 	'ABORT'
@@ -1935,8 +1949,10 @@ opt_with_show_backup_options ::=
 	| 'WITH' 'OPTIONS' '(' show_backup_options_list ')'
 	| 
 
-show_backup_connection_options_list ::=
-	( show_backup_connection_options ) ( ( ',' show_backup_connection_options ) )*
+opt_with_show_backup_connection_options_list ::=
+	'WITH' show_backup_connection_options_list
+	| 'WITH' 'OPTIONS' '(' show_backup_connection_options_list ')'
+	| 
 
 with_comment ::=
 	'WITH' 'COMMENT'
@@ -2010,6 +2026,14 @@ relation_expr ::=
 set_clause ::=
 	single_set_clause
 	| multiple_set_clause
+
+func_name ::=
+	type_function_name
+	| prefixed_column_path
+	| 'INDEX'
+
+iconst32 ::=
+	'ICONST'
 
 simple_db_object_name ::=
 	db_object_name_component
@@ -2685,10 +2709,8 @@ extra_var_value ::=
 show_backup_options_list ::=
 	( show_backup_options ) ( ( ',' show_backup_options ) )*
 
-show_backup_connection_options ::=
-	'TRANSFER' '=' string_or_placeholder
-	| 'TIME' '=' string_or_placeholder
-	| 'CONCURRENTLY' '=' a_expr
+show_backup_connection_options_list ::=
+	( show_backup_connection_options ) ( ( ',' show_backup_connection_options ) )*
 
 targets_roles ::=
 	'ROLE' role_spec_list
@@ -2711,6 +2733,11 @@ single_set_clause ::=
 
 multiple_set_clause ::=
 	'(' insert_column_list ')' '=' in_expr
+
+type_function_name ::=
+	'identifier'
+	| unreserved_keyword
+	| type_func_name_keyword
 
 type_func_name_crdb_extra_keyword ::=
 	'FAMILY'
@@ -3255,6 +3282,11 @@ show_backup_options ::=
 	| 'ENCRYPTION_INFO_DIR' '=' string_or_placeholder
 	| 'DEBUG_DUMP_METADATA_SST'
 
+show_backup_connection_options ::=
+	'TRANSFER' '=' string_or_placeholder
+	| 'TIME' '=' string_or_placeholder
+	| 'CONCURRENTLY' '=' a_expr
+
 schema_wildcard ::=
 	wildcard_pattern
 
@@ -3283,9 +3315,6 @@ func_params_list ::=
 
 general_type_name ::=
 	type_function_name_no_crdb_extra
-
-iconst32 ::=
-	'ICONST'
 
 complex_type_name ::=
 	general_type_name '.' unrestricted_name
@@ -4267,13 +4296,6 @@ opt_interval_qualifier ::=
 	interval_qualifier
 	| 
 
-func_application ::=
-	func_application_name '(' ')'
-	| func_application_name '(' expr_list opt_sort_clause ')'
-	| func_application_name '(' 'ALL' expr_list opt_sort_clause ')'
-	| func_application_name '(' 'DISTINCT' expr_list ')'
-	| func_application_name '(' '*' ')'
-
 within_group_clause ::=
 	'WITHIN' 'GROUP' '(' single_sort_clause ')'
 	| 
@@ -4465,10 +4487,6 @@ reference_actions ::=
 	| reference_on_delete reference_on_update
 	| 
 
-func_application_name ::=
-	func_name
-	| '[' 'FUNCTION' iconst32 ']'
-
 single_sort_clause ::=
 	'ORDER' 'BY' sortby
 	| 'ORDER' 'BY' sortby ',' sortby_list
@@ -4527,11 +4545,6 @@ create_as_params ::=
 col_def_list ::=
 	( col_def ) ( ( ',' col_def ) )*
 
-type_function_name ::=
-	'identifier'
-	| unreserved_keyword
-	| type_func_name_keyword
-
 char_aliases ::=
 	'CHAR'
 	| 'CHARACTER'
@@ -4550,11 +4563,6 @@ reference_on_update ::=
 
 reference_on_delete ::=
 	'ON' 'DELETE' reference_action
-
-func_name ::=
-	type_function_name
-	| prefixed_column_path
-	| 'INDEX'
 
 opt_existing_window_name ::=
 	name

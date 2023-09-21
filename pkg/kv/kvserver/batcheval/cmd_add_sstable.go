@@ -222,7 +222,7 @@ func EvalAddSSTable(
 	}
 
 	var statsDelta enginepb.MVCCStats
-	maxIntents := storage.MaxIntentsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 	checkConflicts := args.DisallowConflicts || args.DisallowShadowing ||
 		!args.DisallowShadowingBelow.IsEmpty()
 	if checkConflicts {
@@ -258,22 +258,22 @@ func EvalAddSSTable(
 
 		log.VEventf(ctx, 2, "checking conflicts for SSTable [%s,%s)", start.Key, end.Key)
 		statsDelta, err = storage.CheckSSTConflicts(ctx, sst, readWriter, start, end, leftPeekBound, rightPeekBound,
-			args.DisallowShadowing, args.DisallowShadowingBelow, sstTimestamp, maxIntents, usePrefixSeek)
+			args.DisallowShadowing, args.DisallowShadowingBelow, sstTimestamp, maxLockConflicts, usePrefixSeek)
 		statsDelta.Add(sstReqStatsDelta)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "checking for key collisions")
 		}
 
 	} else {
-		// If not checking for MVCC conflicts, at least check for separated intents.
-		// The caller is expected to make sure there are no writers across the span,
-		// and thus no or few intents, so this is cheap in the common case.
-		log.VEventf(ctx, 2, "checking conflicting intents for SSTable [%s,%s)", start.Key, end.Key)
-		intents, err := storage.ScanIntents(ctx, readWriter, start.Key, end.Key, maxIntents, 0)
+		// If not checking for MVCC conflicts, at least check for locks. The
+		// caller is expected to make sure there are no writers across the span,
+		// and thus no or few locks, so this is cheap in the common case.
+		log.VEventf(ctx, 2, "checking conflicting locks for SSTable [%s,%s)", start.Key, end.Key)
+		locks, err := storage.ScanLocks(ctx, readWriter, start.Key, end.Key, maxLockConflicts, 0)
 		if err != nil {
-			return result.Result{}, errors.Wrap(err, "scanning intents")
-		} else if len(intents) > 0 {
-			return result.Result{}, &kvpb.LockConflictError{Locks: roachpb.AsLocks(intents)}
+			return result.Result{}, errors.Wrap(err, "scanning locks")
+		} else if len(locks) > 0 {
+			return result.Result{}, &kvpb.LockConflictError{Locks: locks}
 		}
 	}
 

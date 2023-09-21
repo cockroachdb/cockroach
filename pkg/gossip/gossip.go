@@ -877,7 +877,7 @@ func (g *Gossip) getNodeDescriptor(
 		return nodeDescriptor, nil
 	}
 
-	return nil, errorutil.NewNodeNotFoundError(nodeID)
+	return nil, kvpb.NewNodeDescNotFoundError(nodeID)
 }
 
 // getNodeIDAddress looks up the address of the node by ID. The method accepts a

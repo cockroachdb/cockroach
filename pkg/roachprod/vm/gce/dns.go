@@ -34,6 +34,8 @@ const (
 	dnsMaxResults  = 1000
 )
 
+var ErrDNSOperation = fmt.Errorf("error during Google Cloud DNS operation")
+
 var _ vm.DNSProvider = &dnsProvider{}
 
 // dnsProvider implements the vm.DNSProvider interface.
@@ -97,7 +99,7 @@ func (n dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord)
 		cmd := exec.Command("gcloud", args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return errors.Wrapf(err, "output: %s", out)
+			return markDNSOperationError(errors.Wrapf(err, "output: %s", out))
 		}
 	}
 	// The DNS records are not immediately available after creation. We wait until
@@ -119,12 +121,13 @@ func (n dnsProvider) LookupSRVRecords(
 func (n dnsProvider) DeleteRecordsBySubdomain(subdomain string) error {
 	suffix := fmt.Sprintf("%s.%s.", subdomain, n.Domain())
 	records, err := n.listSRVRecords(suffix, dnsMaxResults)
+	if err != nil {
+		return err
+	}
+
 	names := make(map[string]struct{})
 	for _, record := range records {
 		names[record.Name] = struct{}{}
-	}
-	if err != nil {
-		return err
 	}
 	for name := range names {
 		// Only delete records that match the subdomain. The initial filter by
@@ -140,7 +143,7 @@ func (n dnsProvider) DeleteRecordsBySubdomain(subdomain string) error {
 		cmd := exec.Command("gcloud", args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return errors.Wrapf(err, "output: %s", out)
+			return markDNSOperationError(errors.Wrapf(err, "output: %s", out))
 		}
 	}
 	return nil
@@ -151,22 +154,33 @@ func (n dnsProvider) Domain() string {
 	return dnsDomain
 }
 
-// lookupSRVRecords uses standard net tools to perform a DNS lookup. For
-// lookups, we prefer this to using the gcloud command as it is faster, and
-// preferable when service information is being queried regularly.
+// lookupSRVRecords uses standard net tools to perform a DNS lookup. This
+// function will retry the lookup several times if there are any intermittent
+// network problems. For lookups, we prefer this to using the gcloud command as
+// it is faster, and preferable when service information is being queried
+// regularly.
 func (n dnsProvider) lookupSRVRecords(
 	ctx context.Context, service, proto, name string,
 ) ([]vm.DNSRecord, error) {
-	cName, srvRecords, err := n.resolver.LookupSRV(ctx, service, proto, name)
-	if dnsError := (*net.DNSError)(nil); errors.As(err, &dnsError) {
-		// We ignore some errors here as they are likely due to the record name not
-		// existing. The net.LookupSRV function tends to return "server misbehaving"
-		// and "no such host" errors when no record entries are found. Hence, making
-		// the errors ambiguous and not useful. The errors are not exported, so we
-		// have to check the error message.
-		if dnsError.Err != "server misbehaving" && dnsError.Err != "no such host" && !dnsError.IsNotFound {
-			return nil, err
+	var err error
+	var cName string
+	var srvRecords []*net.SRV
+	err = retry.WithMaxAttempts(ctx, retry.Options{}, 10, func() error {
+		cName, srvRecords, err = n.resolver.LookupSRV(ctx, service, proto, name)
+		if dnsError := (*net.DNSError)(nil); errors.As(err, &dnsError) {
+			// We ignore some errors here as they are likely due to the record name not
+			// existing. The net.LookupSRV function tends to return "server misbehaving"
+			// and "no such host" errors when no record entries are found. Hence, making
+			// the errors ambiguous and not useful. The errors are not exported, so we
+			// have to check the error message.
+			if dnsError.Err != "server misbehaving" && dnsError.Err != "no such host" && !dnsError.IsNotFound {
+				return markDNSOperationError(dnsError)
+			}
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	records := make([]vm.DNSRecord, len(srvRecords))
 	for i, srvRecord := range srvRecords {
@@ -189,7 +203,7 @@ func (n dnsProvider) listSRVRecords(filter string, limit int) ([]vm.DNSRecord, e
 	cmd := exec.Command("gcloud", args...)
 	res, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, errors.Wrapf(err, "output: %s", res)
+		return nil, markDNSOperationError(errors.Wrapf(err, "output: %s", res))
 	}
 	var jsonList []struct {
 		Name       string   `json:"name"`
@@ -201,7 +215,7 @@ func (n dnsProvider) listSRVRecords(filter string, limit int) ([]vm.DNSRecord, e
 
 	err = json.Unmarshal(res, &jsonList)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error unmarshalling output: %s", res)
+		return nil, markDNSOperationError(errors.Wrapf(err, "error unmarshalling output: %s", res))
 	}
 
 	records := make([]vm.DNSRecord, 0)
@@ -237,10 +251,7 @@ func (n dnsProvider) waitForRecordsAvailable(ctx context.Context, records ...vm.
 		}] = struct{}{}
 	}
 
-	return retry.WithMaxAttempts(ctx, retry.Options{
-		InitialBackoff: 5 * time.Second,
-		Multiplier:     1,
-	}, 20, func() error {
+	for attempts := 0; attempts < 30; attempts++ {
 		for key := range notAvailable {
 			foundRecords, err := n.lookupSRVRecords(ctx, "", "", key.name)
 			if err != nil {
@@ -256,7 +267,16 @@ func (n dnsProvider) waitForRecordsAvailable(ctx context.Context, records ...vm.
 		if len(notAvailable) == 0 {
 			return nil
 		}
-		return errors.Newf("waiting for DNS records to become available: %d out of %d records not available",
-			len(notAvailable), len(records))
-	})
+		time.Sleep(2 * time.Second)
+	}
+	return markDNSOperationError(
+		errors.Newf("waiting for DNS records to become available: %d out of %d records not available",
+			len(notAvailable), len(records)),
+	)
+}
+
+// markDNSOperationError should be used to mark any external DNS API or Google
+// Cloud DNS CLI errors as DNS operation errors.
+func markDNSOperationError(err error) error {
+	return errors.Mark(err, ErrDNSOperation)
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -128,14 +129,24 @@ func makePubsubSinkClient(
 	return sinkClient, nil
 }
 
-// MakeResolvedPayload implements the SinkClient interface
-func (sc *pubsubSinkClient) MakeResolvedPayload(body []byte, topic string) (SinkPayload, error) {
-	return &pb.PublishRequest{
-		Topic: sc.gcPubsubTopic(topic),
-		Messages: []*pb.PubsubMessage{{
-			Data: body,
-		}},
-	}, nil
+// FlushResolvedPayload implements the SinkClient interface.
+func (sc *pubsubSinkClient) FlushResolvedPayload(
+	ctx context.Context,
+	body []byte,
+	forEachTopic func(func(topic string) error) error,
+	retryOpts retry.Options,
+) error {
+	return forEachTopic(func(topic string) error {
+		pl := &pb.PublishRequest{
+			Topic: sc.gcPubsubTopic(topic),
+			Messages: []*pb.PubsubMessage{{
+				Data: body,
+			}},
+		}
+		return retry.WithMaxAttempts(ctx, retryOpts, retryOpts.MaxRetries+1, func() error {
+			return sc.Flush(ctx, pl)
+		})
+	})
 }
 
 func (sc *pubsubSinkClient) maybeCreateTopic(topic string) error {

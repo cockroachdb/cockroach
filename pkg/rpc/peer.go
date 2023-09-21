@@ -60,18 +60,6 @@ type peer struct {
 	// active - it is the heartbeat loop and manages `mu.c.` (including
 	// recreating it after the connection fails and has to be redialed).
 	//
-	// NB: at the time of writing, we don't use the breaking capabilities,
-	// i.e. we don't check the circuit breaker in `Connect`. We will do that
-	// once the circuit breaker is mature, and then retire the breakers
-	// returned by Context.getBreaker.
-	//
-	// Currently what will happen when a peer is down is that `c` will be
-	// recreated (blocking new callers to `Connect()`), a connection attempt
-	// will be made, and callers will see the failure to this attempt.
-	//
-	// With the breaker, callers would be turned away eagerly until there
-	// is a known-healthy connection.
-	//
 	// mu must *NOT* be held while operating on `b`. This is because the async
 	// probe will sometimes have to synchronously acquire mu before spawning off.
 	b                  *circuit.Breaker

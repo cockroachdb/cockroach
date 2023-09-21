@@ -55,6 +55,7 @@ go_library(
         "//pkg/util/log/logcrash",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
+        "//pkg/util/sentryutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

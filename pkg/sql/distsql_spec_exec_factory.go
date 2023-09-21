@@ -1245,3 +1245,7 @@ func (e *distSQLSpecExecFactory) ConstructLiteralValues(
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: literal values")
 }
+
+func (e *distSQLSpecExecFactory) ConstructCall(proc *tree.RoutineExpr) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: call")
+}

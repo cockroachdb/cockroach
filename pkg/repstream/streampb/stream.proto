@@ -159,11 +159,8 @@ message StreamReplicationStatus {
 }
 
 message StreamIngestionStats {
-  // The status of current stream producer job.
-  StreamReplicationStatus producer_status = 1;
-
-  // The error when trying to reach the current stream producer job.
-  string producer_error = 2;
+  reserved 1;
+  reserved 2;
 
   // Stream ingestion details.
   cockroach.sql.jobs.jobspb.StreamIngestionDetails ingestion_details = 3;

@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -373,7 +374,17 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 	}
 	semiJoinFilters = append(semiJoinFilters, f.ConstructFiltersItem(pkFilter))
 
-	semiJoin := f.ConstructSemiJoin(withScanScope.expr, h.scanScope.expr, semiJoinFilters, memo.EmptyJoinPrivate)
+	joinPrivate := memo.EmptyJoinPrivate
+	// If we're using a weaker isolation level, the semi-joined scan needs to
+	// obtain predicate locks. We must use a lookup semi-join for predicate locks
+	// to work.
+	if h.mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
+		joinPrivate = &memo.JoinPrivate{
+			Flags: memo.PreferLookupJoinIntoRight,
+		}
+	}
+
+	semiJoin := f.ConstructSemiJoin(withScanScope.expr, h.scanScope.expr, semiJoinFilters, joinPrivate)
 
 	// Collect the key columns that will be shown in the error message if there
 	// is a duplicate key violation resulting from this uniqueness check.
@@ -404,13 +415,31 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 		includeSystem:    false,
 		includeInverted:  false,
 	})
+	locking := noRowLocking
+	// If we're using a weaker isolation level, we lock the checked predicate(s)
+	// to prevent concurrent inserts from other transactions from violating the
+	// unique constraint.
+	if h.mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
+		locking = lockingSpec{
+			&tree.LockingItem{
+				// TODO(michae2): Change this to ForKeyShare when it is supported.
+				Strength:   tree.ForShare,
+				Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(h.mb.tab.Name())},
+				WaitPolicy: tree.LockWaitBlock,
+				// Unique checks must ensure the non-existence of certain rows, so we
+				// use predicate locks instead of record locks to prevent insertion of
+				// new rows into the locked span(s) by other concurrent transactions.
+				Form: tree.LockPredicate,
+			},
+		}
+	}
 	return h.mb.b.buildScan(
 		tabMeta,
 		ordinals,
 		// After the update we can't guarantee that the constraints are unique
 		// (which is why we need the uniqueness checks in the first place).
 		&tree.IndexFlags{IgnoreUniqueWithoutIndexKeys: true},
-		noRowLocking,
+		locking,
 		h.mb.b.allocScope(),
 		true, /* disableNotVisibleIndex */
 	), ordinals

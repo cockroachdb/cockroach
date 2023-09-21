@@ -206,17 +206,17 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 	}
 
 	expMS := enginepb.MVCCStats{
-		LastUpdateNanos:      1e9,
-		LiveBytes:            mKeySize + mValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 68[+2][+7]
-		LiveCount:            1,
-		KeyBytes:             mKeySize + vKeySize, // 2+12 =14
-		KeyCount:             1,
-		ValBytes:             mValSize + vValSize, // (46[+2])+(10[+7]) = 54[+2][+7]
-		ValCount:             1,
-		IntentCount:          1,
-		SeparatedIntentCount: 1,
-		IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
-		GCBytesAge:           0,
+		LastUpdateNanos: 1e9,
+		LiveBytes:       mKeySize + mValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 68[+2][+7]
+		LiveCount:       1,
+		KeyBytes:        mKeySize + vKeySize, // 2+12 =14
+		KeyCount:        1,
+		ValBytes:        mValSize + vValSize, // (46[+2])+(10[+7]) = 54[+2][+7]
+		ValCount:        1,
+		IntentCount:     1,
+		LockCount:       1,
+		IntentBytes:     vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
+		GCBytesAge:      0,
 	}
 	assertEq(t, engine, "after put", aggMS, &expMS)
 
@@ -257,7 +257,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 
 // TestMVCCStatsPutPushMovesTimestamp is similar to TestMVCCStatsPutCommitMovesTimestamp:
 // An intent is written and then re-written at a higher timestamp. This formerly messed up
-// the IntentAge computation.
+// the LockAge computation.
 func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -295,17 +295,17 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 	}
 
 	expMS := enginepb.MVCCStats{
-		LastUpdateNanos:      1e9,
-		LiveBytes:            mKeySize + mValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 70[+2][+7]
-		LiveCount:            1,
-		KeyBytes:             mKeySize + vKeySize, // 2+12 = 14
-		KeyCount:             1,
-		ValBytes:             mValSize + vValSize, // (46[+2])+(10[+7]) = 54[+2][+7]
-		ValCount:             1,
-		IntentAge:            0,
-		IntentCount:          1,
-		SeparatedIntentCount: 1,
-		IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
+		LastUpdateNanos: 1e9,
+		LiveBytes:       mKeySize + mValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 70[+2][+7]
+		LiveCount:       1,
+		KeyBytes:        mKeySize + vKeySize, // 2+12 = 14
+		KeyCount:        1,
+		ValBytes:        mValSize + vValSize, // (46[+2])+(10[+7]) = 54[+2][+7]
+		ValCount:        1,
+		LockAge:         0,
+		IntentCount:     1,
+		LockCount:       1,
+		IntentBytes:     vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
 	}
 	assertEq(t, engine, "after put", aggMS, &expMS)
 
@@ -339,11 +339,11 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 		// One versioned key counts for vKeySize.
 		KeyBytes: mKeySize + vKeySize,
 		// The intent is still there, so we see mValSize.
-		ValBytes:             mValSize + vValSize, // 54+23 = 69
-		IntentAge:            0,                   // this was once erroneously positive
-		IntentCount:          1,                   // still there
-		SeparatedIntentCount: 1,
-		IntentBytes:          vKeySize + vValSize, // still there
+		ValBytes:    mValSize + vValSize, // 54+23 = 69
+		LockAge:     0,                   // this was once erroneously positive
+		IntentCount: 1,                   // still there
+		LockCount:   1,
+		IntentBytes: vKeySize + vValSize, // still there
 	}
 
 	assertEq(t, engine, "after pushing", aggMS, &expAggMS)
@@ -410,17 +410,17 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 	}
 
 	expMS := enginepb.MVCCStats{
-		LastUpdateNanos:      1e9,
-		LiveBytes:            mKeySize + m1ValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 70[+2][+7]
-		LiveCount:            1,
-		KeyBytes:             mKeySize + vKeySize, // 2+12 = 14
-		KeyCount:             1,
-		ValBytes:             mVal1Size + vValSize, // (46[+2])+(10[+7]) = 56[+2][+7]
-		ValCount:             1,
-		IntentAge:            0,
-		IntentCount:          1,
-		SeparatedIntentCount: 1,
-		IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
+		LastUpdateNanos: 1e9,
+		LiveBytes:       mKeySize + m1ValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 70[+2][+7]
+		LiveCount:       1,
+		KeyBytes:        mKeySize + vKeySize, // 2+12 = 14
+		KeyCount:        1,
+		ValBytes:        mVal1Size + vValSize, // (46[+2])+(10[+7]) = 56[+2][+7]
+		ValCount:        1,
+		LockAge:         0,
+		IntentCount:     1,
+		LockCount:       1,
+		IntentBytes:     vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
 	}
 	assertEq(t, engine, "after put", aggMS, &expMS)
 
@@ -468,12 +468,12 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 		// One versioned key counts for vKeySize.
 		KeyBytes: mKeySize + vKeySize,
 		// The intent is still there, but this time with mVal2Size, and a zero vValSize.
-		ValBytes:             m2ValSize + vVal2Size,
-		IntentAge:            0,
-		IntentCount:          1, // still there
-		SeparatedIntentCount: 1,
-		IntentBytes:          vKeySize + vVal2Size, // still there, but now without vValSize
-		GCBytesAge:           0,                    // this was once erroneously negative
+		ValBytes:    m2ValSize + vVal2Size,
+		LockAge:     0,
+		IntentCount: 1, // still there
+		LockCount:   1,
+		IntentBytes: vKeySize + vVal2Size, // still there, but now without vValSize
+		GCBytesAge:  0,                    // this was once erroneously negative
 	}
 
 	assertEq(t, engine, "after deleting", aggMS, &expAggMS)
@@ -528,18 +528,18 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 	}
 
 	expMS := enginepb.MVCCStats{
-		LastUpdateNanos:      1e9,
-		LiveBytes:            0,
-		LiveCount:            0,
-		KeyBytes:             mKeySize + vKeySize, // 2 + 12 = 24
-		KeyCount:             1,
-		ValBytes:             mVal1Size + vVal1Size, // 46[+2] [+7]
-		ValCount:             1,
-		IntentAge:            0,
-		IntentCount:          1,
-		SeparatedIntentCount: 1,
-		IntentBytes:          vKeySize + vVal1Size, // 12 [+7]
-		GCBytesAge:           0,
+		LastUpdateNanos: 1e9,
+		LiveBytes:       0,
+		LiveCount:       0,
+		KeyBytes:        mKeySize + vKeySize, // 2 + 12 = 24
+		KeyCount:        1,
+		ValBytes:        mVal1Size + vVal1Size, // 46[+2] [+7]
+		ValCount:        1,
+		LockAge:         0,
+		IntentCount:     1,
+		LockCount:       1,
+		IntentBytes:     vKeySize + vVal1Size, // 12 [+7]
+		GCBytesAge:      0,
 	}
 	assertEq(t, engine, "after delete", aggMS, &expMS)
 
@@ -591,12 +591,12 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 		// One versioned key counts for vKeySize.
 		KeyBytes: mKeySize + vKeySize,
 		// The intent is still there, but this time with mVal2Size, and a zero vValSize.
-		ValBytes:             vVal2Size + mVal2Size, // (10[+7])+46 = 56[+7]
-		IntentAge:            0,
-		IntentCount:          1, // still there
-		SeparatedIntentCount: 1,
-		IntentBytes:          vKeySize + vVal2Size, // still there, now bigger
-		GCBytesAge:           0,                    // this was once erroneously negative
+		ValBytes:    vVal2Size + mVal2Size, // (10[+7])+46 = 56[+7]
+		LockAge:     0,
+		IntentCount: 1, // still there
+		LockCount:   1,
+		IntentBytes: vKeySize + vVal2Size, // still there, now bigger
+		GCBytesAge:  0,                    // this was once erroneously negative
 	}
 
 	assertEq(t, engine, "after put", aggMS, &expAggMS)
@@ -668,14 +668,14 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 	mValSize += 2
 
 	expMS = enginepb.MVCCStats{
-		LastUpdateNanos:      2e9,
-		KeyBytes:             mKeySize + 2*vKeySize, // 2+2*12 = 26
-		KeyCount:             1,
-		ValBytes:             mValSize + 2*vValSize, // 46[+2] [+7]
-		ValCount:             2,
-		IntentCount:          1,
-		SeparatedIntentCount: 1,
-		IntentBytes:          vKeySize + vValSize,
+		LastUpdateNanos: 2e9,
+		KeyBytes:        mKeySize + 2*vKeySize, // 2+2*12 = 26
+		KeyCount:        1,
+		ValBytes:        mValSize + 2*vValSize, // 46[+2] [+7]
+		ValCount:        2,
+		IntentCount:     1,
+		LockCount:       1,
+		IntentBytes:     vKeySize + vValSize,
 		// The original non-transactional write (at 1s) has now aged one second.
 		GCBytesAge: 1 * (vKeySize + vValSize),
 	}
@@ -830,14 +830,14 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 	}
 
 	expMS = enginepb.MVCCStats{
-		LastUpdateNanos:      2e9,
-		KeyBytes:             mKeySize + 2*vKeySize, // 2+2*12 = 26
-		KeyCount:             1,
-		ValBytes:             mValSize + vValSize + vDelSize, // 46[+2]+10[+7] = 56[+2][+7]
-		ValCount:             2,
-		IntentCount:          1,
-		SeparatedIntentCount: 1,
-		IntentBytes:          vKeySize + vDelSize, // 12[+7]
+		LastUpdateNanos: 2e9,
+		KeyBytes:        mKeySize + 2*vKeySize, // 2+2*12 = 26
+		KeyCount:        1,
+		ValBytes:        mValSize + vValSize + vDelSize, // 46[+2]+10[+7] = 56[+2][+7]
+		ValCount:        2,
+		IntentCount:     1,
+		LockCount:       1,
+		IntentBytes:     vKeySize + vDelSize, // 12[+7]
 		// The original non-transactional write becomes non-live at 2s, so no age
 		// is accrued yet.
 		GCBytesAge: 0,
@@ -925,16 +925,16 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 		require.EqualValues(t, expMVal2Size, mVal2SizeWithHistory)
 
 		expAggMS := enginepb.MVCCStats{
-			LastUpdateNanos:      3e9,
-			KeyBytes:             mKeySize + 2*vKeySize, // 2+2*12 = 26
-			KeyCount:             1,
-			ValBytes:             mVal2SizeWithHistory + vValSize + vVal2Size,
-			ValCount:             2,
-			LiveCount:            1,
-			LiveBytes:            mKeySize + mVal2SizeWithHistory + vKeySize + vVal2Size,
-			IntentCount:          1,
-			SeparatedIntentCount: 1,
-			IntentBytes:          vKeySize + vVal2Size,
+			LastUpdateNanos: 3e9,
+			KeyBytes:        mKeySize + 2*vKeySize, // 2+2*12 = 26
+			KeyCount:        1,
+			ValBytes:        mVal2SizeWithHistory + vValSize + vVal2Size,
+			ValCount:        2,
+			LiveCount:       1,
+			LiveBytes:       mKeySize + mVal2SizeWithHistory + vKeySize + vVal2Size,
+			IntentCount:     1,
+			LockCount:       1,
+			IntentBytes:     vKeySize + vVal2Size,
 			// The original write was previously non-live at 2s because that's where the
 			// intent originally lived. But the intent has moved to 3s, and so has the
 			// moment in time at which the shadowed put became non-live; it's now 3s as
@@ -1063,16 +1063,16 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 	}
 
 	expMS := enginepb.MVCCStats{
-		LastUpdateNanos:      2e9 + 1,
-		LiveBytes:            mKeySize + m1ValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 68[+2][+7]
-		LiveCount:            1,
-		KeyBytes:             mKeySize + vKeySize, // 14
-		KeyCount:             1,
-		ValBytes:             m1ValSize + vValSize, // (46[+2])+(10[+7]) = 54[+2][+7]
-		ValCount:             1,
-		IntentCount:          1,
-		SeparatedIntentCount: 1,
-		IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
+		LastUpdateNanos: 2e9 + 1,
+		LiveBytes:       mKeySize + m1ValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 68[+2][+7]
+		LiveCount:       1,
+		KeyBytes:        mKeySize + vKeySize, // 14
+		KeyCount:        1,
+		ValBytes:        m1ValSize + vValSize, // (46[+2])+(10[+7]) = 54[+2][+7]
+		ValCount:        1,
+		IntentCount:     1,
+		LockCount:       1,
+		IntentBytes:     vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
 	}
 	assertEq(t, engine, "after first put", aggMS, &expMS)
 
@@ -1103,18 +1103,18 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 	expAggMS := enginepb.MVCCStats{
 		// Even though we tried to put a new intent at an older timestamp, it
 		// will have been written at 2E9+1, so the age will be 0.
-		IntentAge: 0,
+		LockAge: 0,
 
-		LastUpdateNanos:      2e9 + 1,
-		LiveBytes:            mKeySize + m2ValSize + vKeySize + vValSize, // 2+(46[+7])+12+(10[+7]) = 70[+14]
-		LiveCount:            1,
-		KeyBytes:             mKeySize + vKeySize, // 14
-		KeyCount:             1,
-		ValBytes:             m2ValSize + vValSize, // (46[+7])+(10[+7]) = 56[+14]
-		ValCount:             1,
-		IntentCount:          1,
-		SeparatedIntentCount: 1,
-		IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
+		LastUpdateNanos: 2e9 + 1,
+		LiveBytes:       mKeySize + m2ValSize + vKeySize + vValSize, // 2+(46[+7])+12+(10[+7]) = 70[+14]
+		LiveCount:       1,
+		KeyBytes:        mKeySize + vKeySize, // 14
+		KeyCount:        1,
+		ValBytes:        m2ValSize + vValSize, // (46[+7])+(10[+7]) = 56[+14]
+		ValCount:        1,
+		IntentCount:     1,
+		LockCount:       1,
+		IntentBytes:     vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
 	}
 
 	assertEq(t, engine, "after second put", aggMS, &expAggMS)
@@ -1724,20 +1724,20 @@ func TestMVCCStatsRandomized(t *testing.T) {
 			desc = fmt.Sprintf("mvccDeleteRangeUsingTombstone=%s",
 				roachpb.Span{Key: mvccRangeDelKey, EndKey: mvccRangeDelEndKey})
 			const idempotent = false
-			const maxIntents = 0 // unlimited
+			const maxLockConflicts = 0 // unlimited
 			msCovered := (*enginepb.MVCCStats)(nil)
 			err = MVCCDeleteRangeUsingTombstone(
 				ctx, s.batch, s.MSDelta, mvccRangeDelKey, mvccRangeDelEndKey, s.TS, hlc.ClockTimestamp{}, nil, /* leftPeekBound */
-				nil /* rightPeekBound */, idempotent, maxIntents, msCovered,
+				nil /* rightPeekBound */, idempotent, maxLockConflicts, msCovered,
 			)
 		} else {
 			rangeTombstoneThreshold := s.rng.Int63n(5)
 			desc = fmt.Sprintf("mvccPredicateDeleteRange=%s, predicates=%s, rangeTombstoneThreshold=%d",
 				roachpb.Span{Key: mvccRangeDelKey, EndKey: mvccRangeDelEndKey}, predicates, rangeTombstoneThreshold)
-			const maxIntents = 0 // unlimited
+			const maxLockConflicts = 0 // unlimited
 			_, err = MVCCPredicateDeleteRange(ctx, s.batch, s.MSDelta, mvccRangeDelKey, mvccRangeDelEndKey,
 				s.TS, hlc.ClockTimestamp{}, nil /* leftPeekBound */, nil, /* rightPeekBound */
-				predicates, 0, 0, rangeTombstoneThreshold, maxIntents)
+				predicates, 0, 0, rangeTombstoneThreshold, maxLockConflicts)
 		}
 		if err != nil {
 			return false, desc + ": " + err.Error()

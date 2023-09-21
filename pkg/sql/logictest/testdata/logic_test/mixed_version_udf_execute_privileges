@@ -1,0 +1,83 @@
+# LogicTest: cockroach-go-testserver-upgrade-to-master
+
+# Verify that all nodes are running previous version binaries.
+
+query T nodeidx=0
+SELECT crdb_internal.node_executable_version()
+----
+23.1
+
+query T nodeidx=1
+SELECT crdb_internal.node_executable_version()
+----
+23.1
+
+query T nodeidx=2
+SELECT crdb_internal.node_executable_version()
+----
+23.1
+
+# Create test user.
+
+statement ok
+CREATE USER testuser1
+
+# Create a user-defined function.
+
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+user testuser1
+
+query I
+SELECT f()
+----
+1
+
+# Upgrade node 0 and verify that the user can use the function in mixed version
+# mode.
+
+upgrade 0
+
+user testuser1 nodeidx=0
+
+query I
+SELECT f()
+----
+1
+
+# Upgrade all nodes.
+
+upgrade 1
+
+upgrade 2
+
+# Verify that all nodes are now running 23.2 binaries.
+
+query B nodeidx=0
+SELECT crdb_internal.node_executable_version() SIMILAR TO '23.1-%'
+----
+true
+
+query B nodeidx=1
+SELECT crdb_internal.node_executable_version() SIMILAR TO '23.1-%'
+----
+true
+
+query B nodeidx=2
+SELECT crdb_internal.node_executable_version() SIMILAR TO '23.1-%'
+----
+true
+
+# Makes sure the upgrade job has finished, and the cluster version gate is
+# passed.
+query B retry
+SELECT crdb_internal.is_at_least_version('23.1-26')
+----
+false
+
+# Makes sure the user still has the ability to execute f.
+query I
+SELECT f()
+----
+1

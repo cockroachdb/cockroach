@@ -249,3 +249,27 @@ func (d *dev) warnAboutChangeInStressBehavior(timeout time.Duration) {
 		log.Printf("Set DEV_I_UNDERSTAND_ABOUT_STRESS=1 to squelch this message")
 	}
 }
+
+// This function retrieves the merge-base hash between the current branch and master
+func (d *dev) getMergeBaseHash(ctx context.Context) (string, error) {
+	// List files changed against `master`
+	remotes, err := d.exec.CommandContextSilent(ctx, "git", "remote", "-v")
+	if err != nil {
+		return "", err
+	}
+	var upstream string
+	for _, remote := range strings.Split(strings.TrimSpace(string(remotes)), "\n") {
+		if (strings.Contains(remote, "github.com/cockroachdb/cockroach") || strings.Contains(remote, "github.com:cockroachdb/cockroach")) && strings.HasSuffix(remote, "(fetch)") {
+			upstream = strings.Fields(remote)[0]
+			break
+		}
+	}
+	if upstream == "" {
+		return "", fmt.Errorf("could not find git upstream, run `git remote add upstream git@github.com:cockroachdb/cockroach.git`")
+	}
+	baseBytes, err := d.exec.CommandContextSilent(ctx, "git", "merge-base", fmt.Sprintf("%s/master", upstream), "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(baseBytes)), nil
+}

@@ -720,7 +720,7 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 			batch = eng.NewBatch()
 			minWallTime = sstTimestamps[i/batchSize]
 		}
-		timestamp := hlc.Timestamp{WallTime: minWallTime + rand.Int63n(int64(batchTimeSpan))}
+		timestamp := hlc.Timestamp{WallTime: minWallTime + rng.Int63n(int64(batchTimeSpan))}
 		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
 		value.InitChecksum(key)
 		if err := MVCCPut(ctx, batch, key, timestamp, value, MVCCWriteOptions{}); err != nil {

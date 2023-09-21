@@ -223,7 +223,7 @@ message MVCCStatsDelta {
 
   int64 contains_estimates = 14;
   sfixed64 last_update_nanos = 1;
-  sfixed64 intent_age = 2;
+  sfixed64 lock_age = 2;
   sfixed64 gc_bytes_age = 3 [(gogoproto.customname) = "GCBytesAge"];
   sint64 live_bytes = 4;
   sint64 live_count = 5;
@@ -233,7 +233,7 @@ message MVCCStatsDelta {
   sint64 val_count = 9;
   sint64 intent_bytes = 10;
   sint64 intent_count = 11;
-  sint64 separated_intent_count = 16;
+  sint64 lock_count = 16;
   sint64 range_key_count = 17;
   sint64 range_key_bytes = 18;
   sint64 range_val_count = 19;

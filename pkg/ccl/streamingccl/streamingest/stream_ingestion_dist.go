@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,9 +56,9 @@ var replanFrequency = settings.RegisterDurationSetting(
 )
 
 func startDistIngestion(
-	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
+	ctx context.Context, execCtx sql.JobExecContext, resumer *streamIngestionResumer,
 ) error {
-
+	ingestionJob := resumer.job
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	streamProgress := ingestionJob.Progress().Details.(*jobspb.Progress_StreamIngest).StreamIngest
 
@@ -143,13 +142,17 @@ func startDistIngestion(
 
 	tracingAggCh := make(chan *execinfrapb.TracingAggregatorEvents)
 	tracingAggLoop := func(ctx context.Context) error {
-		if err := bulk.AggregateTracingStats(ctx, ingestionJob.ID(),
-			execCtx.ExecCfg().Settings, execCtx.ExecCfg().InternalDB, tracingAggCh); err != nil {
-			log.Warningf(ctx, "failed to aggregate tracing stats: %v", err)
-			// Drain the channel if the loop to aggregate tracing stats has returned
-			// an error.
-			for range tracingAggCh {
+		for agg := range tracingAggCh {
+			componentID := execinfrapb.ComponentID{
+				FlowID:        agg.FlowID,
+				SQLInstanceID: agg.SQLInstanceID,
 			}
+
+			// Update the running aggregate of the component with the latest received
+			// aggregate.
+			resumer.mu.Lock()
+			resumer.mu.perNodeAggregatorStats[componentID] = agg.Events
+			resumer.mu.Unlock()
 		}
 		return nil
 	}

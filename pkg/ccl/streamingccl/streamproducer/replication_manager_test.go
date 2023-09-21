@@ -78,12 +78,12 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 		{user: "admin", expErr: "", isEnterprise: true},
 		{user: "root", expErr: "", isEnterprise: true},
 		{user: "somebody", expErr: "", isEnterprise: true},
-		{user: "nobody", expErr: "user nobody does not have REPLICATION privilege on global", isEnterprise: true},
+		{user: "nobody", expErr: "user nobody does not have REPLICATION system privilege", isEnterprise: true},
 
 		{user: "admin", expErr: "use of REPLICATION requires an enterprise license", isEnterprise: false},
 		{user: "root", expErr: " use of REPLICATION requires an enterprise license", isEnterprise: false},
 		{user: "somebody", expErr: "use of REPLICATION requires an enterprise license", isEnterprise: false},
-		{user: "nobody", expErr: "user nobody does not have REPLICATION privilege on global", isEnterprise: false},
+		{user: "nobody", expErr: "user nobody does not have REPLICATION system privilege", isEnterprise: false},
 	} {
 		t.Run(fmt.Sprintf("%s/ent=%t", tc.user, tc.isEnterprise), func(t *testing.T) {
 			if tc.isEnterprise {

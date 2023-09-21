@@ -105,27 +105,27 @@ SHOW BACKUP 'bar' -- identifiers removed
 parse
 SHOW BACKUP 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', CHECK_FILES
 ----
-SHOW BACKUP 'bar' WITH check_files, encryption_passphrase = '*****' -- normalized!
-SHOW BACKUP ('bar') WITH check_files, encryption_passphrase = '*****' -- fully parenthesized
-SHOW BACKUP '_' WITH check_files, encryption_passphrase = '*****' -- literals removed
-SHOW BACKUP 'bar' WITH check_files, encryption_passphrase = '*****' -- identifiers removed
-SHOW BACKUP 'bar' WITH check_files, encryption_passphrase = 'secret' -- passwords exposed
+SHOW BACKUP 'bar' WITH OPTIONS (check_files, encryption_passphrase = '*****') -- normalized!
+SHOW BACKUP ('bar') WITH OPTIONS (check_files, encryption_passphrase = '*****') -- fully parenthesized
+SHOW BACKUP '_' WITH OPTIONS (check_files, encryption_passphrase = '*****') -- literals removed
+SHOW BACKUP 'bar' WITH OPTIONS (check_files, encryption_passphrase = '*****') -- identifiers removed
+SHOW BACKUP 'bar' WITH OPTIONS (check_files, encryption_passphrase = 'secret') -- passwords exposed
 
 parse
 SHOW BACKUP FROM LATEST IN 'bar' WITH incremental_location = 'baz', skip size
 ----
-SHOW BACKUP FROM 'latest' IN 'bar' WITH incremental_location = 'baz', skip size -- normalized!
-SHOW BACKUP FROM ('latest') IN ('bar') WITH incremental_location = ('baz'), skip size -- fully parenthesized
-SHOW BACKUP FROM '_' IN '_' WITH incremental_location = '_', skip size -- literals removed
-SHOW BACKUP FROM 'latest' IN 'bar' WITH incremental_location = 'baz', skip size -- identifiers removed
+SHOW BACKUP FROM 'latest' IN 'bar' WITH OPTIONS (incremental_location = 'baz', skip size) -- normalized!
+SHOW BACKUP FROM ('latest') IN ('bar') WITH OPTIONS (incremental_location = ('baz'), skip size) -- fully parenthesized
+SHOW BACKUP FROM '_' IN '_' WITH OPTIONS (incremental_location = '_', skip size) -- literals removed
+SHOW BACKUP FROM 'latest' IN 'bar' WITH OPTIONS (incremental_location = 'baz', skip size) -- identifiers removed
 
 parse
 SHOW BACKUP FROM LATEST IN ('bar','bar1') WITH KMS = ('foo', 'bar'), incremental_location=('hi','hello')
 ----
-SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH incremental_location = ('hi', 'hello'), kms = ('foo', 'bar') -- normalized!
-SHOW BACKUP FROM ('latest') IN (('bar'), ('bar1')) WITH incremental_location = (('hi'), ('hello')), kms = (('foo'), ('bar')) -- fully parenthesized
-SHOW BACKUP FROM '_' IN ('_', '_') WITH incremental_location = ('_', '_'), kms = ('_', '_') -- literals removed
-SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH incremental_location = ('hi', 'hello'), kms = ('foo', 'bar') -- identifiers removed
+SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- normalized!
+SHOW BACKUP FROM ('latest') IN (('bar'), ('bar1')) WITH OPTIONS (incremental_location = (('hi'), ('hello')), kms = (('foo'), ('bar'))) -- fully parenthesized
+SHOW BACKUP FROM '_' IN ('_', '_') WITH OPTIONS (incremental_location = ('_', '_'), kms = ('_', '_')) -- literals removed
+SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- identifiers removed
 
 
 parse
@@ -163,18 +163,18 @@ SHOW BACKUP CONNECTION 'bar' -- identifiers removed
 parse
 SHOW BACKUP CONNECTION 'bar' WITH TRANSFER = '1KiB', TIME = '1h', CONCURRENTLY = 3
 ----
-SHOW BACKUP CONNECTION 'bar' WITH CONCURRENTLY = 3, TRANSFER = '1KiB', TIME = '1h' -- normalized!
-SHOW BACKUP CONNECTION ('bar') WITH CONCURRENTLY = (3), TRANSFER = ('1KiB'), TIME = ('1h') -- fully parenthesized
-SHOW BACKUP CONNECTION '_' WITH CONCURRENTLY = _, TRANSFER = '_', TIME = '_' -- literals removed
-SHOW BACKUP CONNECTION 'bar' WITH CONCURRENTLY = 3, TRANSFER = '1KiB', TIME = '1h' -- identifiers removed
+SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (CONCURRENTLY = 3, TRANSFER = '1KiB', TIME = '1h') -- normalized!
+SHOW BACKUP CONNECTION ('bar') WITH OPTIONS (CONCURRENTLY = (3), TRANSFER = ('1KiB'), TIME = ('1h')) -- fully parenthesized
+SHOW BACKUP CONNECTION '_' WITH OPTIONS (CONCURRENTLY = _, TRANSFER = '_', TIME = '_') -- literals removed
+SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (CONCURRENTLY = 3, TRANSFER = '1KiB', TIME = '1h') -- identifiers removed
 
 parse
 SHOW BACKUP CONNECTION 'bar' WITH TRANSFER = $1, CONCURRENTLY = $2, TIME = $3
 ----
-SHOW BACKUP CONNECTION 'bar' WITH CONCURRENTLY = $2, TRANSFER = $1, TIME = $3 -- normalized!
-SHOW BACKUP CONNECTION ('bar') WITH CONCURRENTLY = ($2), TRANSFER = ($1), TIME = ($3) -- fully parenthesized
-SHOW BACKUP CONNECTION '_' WITH CONCURRENTLY = $1, TRANSFER = $1, TIME = $1 -- literals removed
-SHOW BACKUP CONNECTION 'bar' WITH CONCURRENTLY = $2, TRANSFER = $1, TIME = $3 -- identifiers removed
+SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (CONCURRENTLY = $2, TRANSFER = $1, TIME = $3) -- normalized!
+SHOW BACKUP CONNECTION ('bar') WITH OPTIONS (CONCURRENTLY = ($2), TRANSFER = ($1), TIME = ($3)) -- fully parenthesized
+SHOW BACKUP CONNECTION '_' WITH OPTIONS (CONCURRENTLY = $1, TRANSFER = $1, TIME = $1) -- literals removed
+SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (CONCURRENTLY = $2, TRANSFER = $1, TIME = $3) -- identifiers removed
 
 parse
 SHOW BACKUPS IN 'bar'
@@ -203,10 +203,10 @@ SHOW BACKUP 'foo' IN 'bar' -- identifiers removed
 parse
 SHOW BACKUP FROM $1 IN $2 WITH privileges
 ----
-SHOW BACKUP FROM $1 IN $2 WITH privileges
-SHOW BACKUP FROM ($1) IN ($2) WITH privileges -- fully parenthesized
-SHOW BACKUP FROM $1 IN $1 WITH privileges -- literals removed
-SHOW BACKUP FROM $1 IN $2 WITH privileges -- identifiers removed
+SHOW BACKUP FROM $1 IN $2 WITH OPTIONS (privileges) -- normalized!
+SHOW BACKUP FROM ($1) IN ($2) WITH OPTIONS (privileges) -- fully parenthesized
+SHOW BACKUP FROM $1 IN $1 WITH OPTIONS (privileges) -- literals removed
+SHOW BACKUP FROM $1 IN $2 WITH OPTIONS (privileges) -- identifiers removed
 
 parse
 SHOW BACKUP FILES FROM 'foo' IN 'bar'
@@ -235,11 +235,11 @@ SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar' -- identifiers removed
 parse
 SHOW BACKUP $1 IN $2 WITH ENCRYPTION_PASSPHRASE = 'secret', ENCRYPTION_INFO_DIR = 'long_live_backupper'
 ----
-SHOW BACKUP $1 IN $2 WITH encryption_passphrase = '*****', encryption_info_dir = 'long_live_backupper' -- normalized!
-SHOW BACKUP ($1) IN ($2) WITH encryption_passphrase = '*****', encryption_info_dir = ('long_live_backupper') -- fully parenthesized
-SHOW BACKUP $1 IN $1 WITH encryption_passphrase = '*****', encryption_info_dir = '_' -- literals removed
-SHOW BACKUP $1 IN $2 WITH encryption_passphrase = '*****', encryption_info_dir = 'long_live_backupper' -- identifiers removed
-SHOW BACKUP $1 IN $2 WITH encryption_passphrase = 'secret', encryption_info_dir = 'long_live_backupper' -- passwords exposed
+SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = '*****', encryption_info_dir = 'long_live_backupper') -- normalized!
+SHOW BACKUP ($1) IN ($2) WITH OPTIONS (encryption_passphrase = '*****', encryption_info_dir = ('long_live_backupper')) -- fully parenthesized
+SHOW BACKUP $1 IN $1 WITH OPTIONS (encryption_passphrase = '*****', encryption_info_dir = '_') -- literals removed
+SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = '*****', encryption_info_dir = 'long_live_backupper') -- identifiers removed
+SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = 'secret', encryption_info_dir = 'long_live_backupper') -- passwords exposed
 
 parse
 BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'
@@ -386,10 +386,10 @@ BACKUP TABLE _ TO 'bar' WITH OPTIONS (revision_history = true, detached, kms = (
 parse
 BACKUP foo TO 'bar' WITH OPTIONS (detached = false)
 ----
-BACKUP TABLE foo TO 'bar' WITH OPTIONS (detached = FALSE) -- normalized!
-BACKUP TABLE (foo) TO ('bar') WITH OPTIONS (detached = FALSE) -- fully parenthesized
-BACKUP TABLE foo TO '_' WITH OPTIONS (detached = FALSE) -- literals removed
-BACKUP TABLE _ TO 'bar' WITH OPTIONS (detached = FALSE) -- identifiers removed
+BACKUP TABLE foo TO 'bar' -- normalized!
+BACKUP TABLE (foo) TO ('bar') -- fully parenthesized
+BACKUP TABLE foo TO '_' -- literals removed
+BACKUP TABLE _ TO 'bar' -- identifiers removed
 
 parse
 BACKUP VIRTUAL CLUSTER 36 TO 'bar'
@@ -1024,7 +1024,16 @@ HINT: try \h RESTORE
 parse
 BACKUP INTO LATEST IN UNLOGGED WITH OPTIONS ( DETACHED = FALSE )
 ----
-BACKUP INTO LATEST IN 'unlogged' WITH OPTIONS (detached = FALSE) -- normalized!
-BACKUP INTO LATEST IN ('unlogged') WITH OPTIONS (detached = FALSE) -- fully parenthesized
-BACKUP INTO LATEST IN '_' WITH OPTIONS (detached = FALSE) -- literals removed
-BACKUP INTO LATEST IN 'unlogged' WITH OPTIONS (detached = FALSE) -- identifiers removed
+BACKUP INTO LATEST IN 'unlogged' -- normalized!
+BACKUP INTO LATEST IN ('unlogged') -- fully parenthesized
+BACKUP INTO LATEST IN '_' -- literals removed
+BACKUP INTO LATEST IN 'unlogged' -- identifiers removed
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/110411.
+parse
+SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (TIME = '1h')
+----
+SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (TIME = '1h')
+SHOW BACKUP CONNECTION ('bar') WITH OPTIONS (TIME = ('1h')) -- fully parenthesized
+SHOW BACKUP CONNECTION '_' WITH OPTIONS (TIME = '_') -- literals removed
+SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (TIME = '1h') -- identifiers removed

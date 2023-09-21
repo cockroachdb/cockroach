@@ -51,6 +51,9 @@ const (
 	// TableDisplayRawHTML is a variant of the HTML output format
 	// supported specifically to generate CockroachDB's documentation.
 	TableDisplayRawHTML
+	// TableDisplayUnumberedHTML is a variant of the HTML output
+	// format which does not include a row number prefix on each line.
+	TableDisplayUnnumberedHTML
 	// TableDisplayRaw is a special format optimized to ensure that the
 	// values can be parsed accurately from the text output.
 	TableDisplayRaw
@@ -103,6 +106,8 @@ func (f *TableDisplayFormat) String() string {
 		return "html"
 	case TableDisplayRawHTML:
 		return "rawhtml"
+	case TableDisplayUnnumberedHTML:
+		return "unnumbered-html"
 	case TableDisplayRaw:
 		return "raw"
 	}
@@ -130,6 +135,8 @@ func (f *TableDisplayFormat) Set(s string) error {
 		*f = TableDisplayHTML
 	case "rawhtml":
 		*f = TableDisplayRawHTML
+	case "unnumbered-html":
+		*f = TableDisplayUnnumberedHTML
 	case "raw":
 		*f = TableDisplayRaw
 	default:

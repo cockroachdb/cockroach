@@ -66,6 +66,7 @@ func NewMutableFunctionDescriptor(
 	params []descpb.FunctionDescriptor_Parameter,
 	returnType *types.T,
 	returnSet bool,
+	isProcedure bool,
 	privs *catpb.PrivilegeDescriptor,
 ) Mutable {
 	return Mutable{
@@ -84,6 +85,7 @@ func NewMutableFunctionDescriptor(
 				Volatility:        catpb.DefaultFunctionVolatility,
 				LeakProof:         catpb.DefaultFunctionLeakProof,
 				NullInputBehavior: catpb.Function_CALLED_ON_NULL_INPUT,
+				IsProcedure:       isProcedure,
 				Privileges:        privs,
 				Version:           1,
 				ModificationTime:  hlc.Timestamp{},
@@ -688,12 +690,16 @@ func (desc *immutable) GetLanguage() catpb.Function_Language {
 }
 
 func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
+	routineType := tree.UDFRoutine
+	if desc.IsProcedure {
+		routineType = tree.ProcedureRoutine
+	}
 	ret = &tree.Overload{
 		Oid:        catid.FuncIDToOID(desc.ID),
 		ReturnType: tree.FixedReturnType(desc.ReturnType.Type),
 		ReturnSet:  desc.ReturnType.ReturnSet,
 		Body:       desc.FunctionBody,
-		IsUDF:      true,
+		Type:       routineType,
 		Version:    uint64(desc.Version),
 		Language:   desc.getCreateExprLang(),
 	}
@@ -762,7 +768,7 @@ func (desc *immutable) ToCreateExpr() (ret *tree.CreateRoutine, err error) {
 		Name: tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(desc.Name)),
 		ReturnType: tree.RoutineReturnType{
 			Type:  desc.ReturnType.Type,
-			IsSet: desc.ReturnType.ReturnSet,
+			SetOf: desc.ReturnType.ReturnSet,
 		},
 	}
 	ret.Params = make(tree.RoutineParams, len(desc.Params))

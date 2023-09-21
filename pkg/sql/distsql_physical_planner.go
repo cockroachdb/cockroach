@@ -465,6 +465,19 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	return false
 }
 
+func shouldWrapPlanNodeForExecStats(planCtx *PlanningCtx, node planNode) bool {
+	if !planCtx.collectExecStats {
+		// If execution stats aren't being collected, there is no point in
+		// having the overhead of wrappers.
+		return false
+	}
+	// Wrapping batchedPlanNodes breaks some assumptions (namely that Start is
+	// called on the processor-adapter) because it's executed in a special "fast
+	// path" way, so we exempt these from wrapping.
+	_, ok := node.(batchedPlanNode)
+	return !ok
+}
+
 // mustWrapValuesNode returns whether a valuesNode must be wrapped into the
 // physical plan which indicates that we cannot create a values processor. This
 // method can be used before actually creating the valuesNode to decide whether
@@ -3617,9 +3630,15 @@ func (dsp *DistSQLPlanner) wrapPlan(
 			}
 			var err error
 			// Continue walking until we find a node that has a DistSQL
-			// representation - that's when we'll quit the wrapping process and hand
-			// control of planning back to the DistSQL physical planner.
-			if !dsp.mustWrapNode(planCtx, plan) {
+			// representation - that's when we'll quit the wrapping process and
+			// hand control of planning back to the DistSQL physical planner.
+			//
+			// However, if we're collecting execution stats, then we'll surround
+			// each planNode with a pair of planNodeToRowSource and
+			// rowSourceToPlanNode adapters so that the execution statistics
+			// are collected for each planNode independently. This should have
+			// low enough overhead.
+			if !dsp.mustWrapNode(planCtx, plan) || shouldWrapPlanNodeForExecStats(planCtx, plan) {
 				firstNotWrapped = plan
 				p, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, plan)
 				if err != nil {

@@ -36,7 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -52,7 +54,10 @@ type Catalog struct {
 	testSchema Schema
 	counter    int
 	enumTypes  map[string]*types.T
-	udfs       map[string]*tree.ResolvedFunctionDefinition
+
+	udfs           map[string]*tree.ResolvedFunctionDefinition
+	currUDFOid     oid.Oid
+	revokedUDFOids intsets.Fast
 }
 
 type dataSource interface {
@@ -283,8 +288,18 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 		if t.Revoked {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "user does not have privilege to access %v", t.SeqName)
 		}
+	case *syntheticprivilege.GlobalPrivilege:
+
 	default:
 		panic("invalid Object")
+	}
+	return nil
+}
+
+// CheckExecutionPrivilege is part of the cat.Catalog interface.
+func (tc *Catalog) CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error {
+	if tc.revokedUDFOids.Contains(int(oid)) {
+		return pgerror.Newf(pgcode.InsufficientPrivilege, "user does not have privilege to execute function with OID %d", oid)
 	}
 	return nil
 }
@@ -292,11 +307,6 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 // HasAdminRole is part of the cat.Catalog interface.
 func (tc *Catalog) HasAdminRole(ctx context.Context) (bool, error) {
 	return true, nil
-}
-
-// RequireAdminRole is part of the cat.Catalog interface.
-func (tc *Catalog) RequireAdminRole(ctx context.Context, action string) error {
-	return nil
 }
 
 // HasRoleOption is part of the cat.Catalog interface.
@@ -505,7 +515,7 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 		return "", nil
 
 	case *tree.CreateRoutine:
-		tc.CreateFunction(stmt)
+		tc.CreateRoutine(stmt)
 		return "", nil
 
 	case *tree.SetZoneConfig:

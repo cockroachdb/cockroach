@@ -28,7 +28,7 @@ var _ tree.FunctionReferenceResolver = (*Catalog)(nil)
 func (tc *Catalog) ResolveFunction(
 	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	fn, err := name.ToFunctionName()
+	fn, err := name.ToRoutineName()
 	if err != nil {
 		return nil, err
 	}
@@ -55,8 +55,8 @@ func (tc *Catalog) ResolveFunctionByOID(
 	return nil, nil, errors.AssertionFailedf("ResolveFunctionByOID not supported in test catalog")
 }
 
-// CreateFunction handles the CREATE FUNCTION statement.
-func (tc *Catalog) CreateFunction(c *tree.CreateRoutine) {
+// CreateRoutine handles the CREATE FUNCTION statement.
+func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	name := c.Name.String()
 	if _, ok := tree.FunDefs[name]; ok {
 		panic(fmt.Errorf("built-in function with name %q already exists", name))
@@ -98,16 +98,22 @@ func (tc *Catalog) CreateFunction(c *tree.CreateRoutine) {
 		tc.udfs = make(map[string]*tree.ResolvedFunctionDefinition)
 	}
 
+	routineType := tree.UDFRoutine
+	if c.IsProcedure {
+		routineType = tree.ProcedureRoutine
+	}
+	tc.currUDFOid++
 	overload := &tree.Overload{
+		Oid:               tc.currUDFOid,
 		Types:             paramTypes,
 		ReturnType:        tree.FixedReturnType(retType),
-		IsUDF:             true,
 		Body:              body,
 		Volatility:        v,
 		CalledOnNullInput: calledOnNullInput,
 		Language:          language,
+		Type:              routineType,
 	}
-	if c.ReturnType.IsSet {
+	if c.ReturnType.SetOf {
 		overload.Class = tree.GeneratorClass
 	}
 	prefixedOverload := tree.MakeQualifiedOverload("public", overload)
@@ -118,6 +124,27 @@ func (tc *Catalog) CreateFunction(c *tree.CreateRoutine) {
 		Overloads: []tree.QualifiedOverload{prefixedOverload},
 	}
 	tc.udfs[name] = def
+}
+
+// RevokedExecution revokes execution of the function with the given OID.
+func (tc *Catalog) RevokeExecution(oid oid.Oid) {
+	tc.revokedUDFOids.Add(int(oid))
+}
+
+// GrantExecution grants execution of the function with the given OID.
+func (tc *Catalog) GrantExecution(oid oid.Oid) {
+	tc.revokedUDFOids.Remove(int(oid))
+}
+
+// Function returns the overload of the function with the given name. It returns
+// nil if the function does not exist.
+func (tc *Catalog) Function(name string) *tree.Overload {
+	for _, def := range tc.udfs {
+		if def.Name == name {
+			return def.Overloads[0].Overload
+		}
+	}
+	return nil
 }
 
 func collectFuncOptions(

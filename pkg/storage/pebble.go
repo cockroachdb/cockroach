@@ -80,7 +80,7 @@ var MaxSyncDuration = settings.RegisterDurationSetting(
 // MaxSyncDurationFatalOnExceeded governs whether disk stalls longer than
 // MaxSyncDuration fatal the Cockroach process. Defaults to true.
 var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.TenantWritable, // used for temp storage in virtual cluster servers
 	"storage.max_sync_duration.fatal.enabled",
 	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
 	true,
@@ -92,7 +92,7 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 // compactions, and does not eagerly change the encoding of existing sstables.
 // Reads can correctly read both kinds of sstables.
 var ValueBlocksEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
+	settings.TenantWritable, // used for temp storage in virtual cluster servers
 	"storage.value_blocks.enabled",
 	"set to true to enable writing of value blocks in sstables",
 	util.ConstantWithMetamorphicTestBool(
@@ -123,7 +123,7 @@ var UseEFOS = settings.RegisterBoolSetting(
 //
 // This cluster setting will be removed in a subsequent release.
 var IngestAsFlushable = settings.RegisterBoolSetting(
-	settings.SystemOnly,
+	settings.TenantWritable, // used to init temp storage in virtual cluster servers
 	"storage.ingest_as_flushable.enabled",
 	"set to true to enable lazy ingestion of sstables",
 	util.ConstantWithMetamorphicTestBool(
@@ -1119,6 +1119,18 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		closer:           filesystemCloser,
 		onClose:          cfg.onClose,
 		replayer:         replay.NewWorkloadCollector(cfg.StorageConfig.Dir),
+	}
+	// In test builds, add a layer of VFS middleware that ensures users of an
+	// Engine don't try to use the filesystem after the Engine has been closed.
+	// Usage after close causes goroutine leaks.
+	if buildutil.CrdbTestBuild {
+		testFS := &noUseAfterClose{closed: &p.closed, fs: p.FS}
+		p.FS = testFS
+		p.onClose = append(p.onClose, func(p *Pebble) {
+			if openFiles := testFS.openFiles.Load(); openFiles > 0 {
+				panic(errors.AssertionFailedf("during Engine.Close there remain %d files open by client code; all files must be closed before closing the Engine", openFiles))
+			}
+		})
 	}
 
 	// MaxConcurrentCompactions can be set by multiple sources, but all the
@@ -2907,4 +2919,176 @@ var _ error = &ExceedMaxSizeError{}
 
 func (e *ExceedMaxSizeError) Error() string {
 	return fmt.Sprintf("export size (%d bytes) exceeds max size (%d bytes)", e.reached, e.maxSize)
+}
+
+// noUseAfterClose wraps a vfs.FS and ensures the filesystem is not used after
+// an Engine is closed. It's used only in test builds. It ensures that all files
+// are closed before the Engine is closed and that the vfs.FS is not used after
+// the Engine is closed.
+type noUseAfterClose struct {
+	fs        vfs.FS
+	openFiles atomic.Int32
+	closed    *bool
+}
+
+func (fs *noUseAfterClose) ensureStillOpen() {
+	if *fs.closed {
+		panic(errors.AssertionFailedf("engine is closed; the Engine-provided filesystem cannot be used after Close"))
+	}
+}
+
+type noUseAfterCloseFile struct {
+	file vfs.File
+	fs   *noUseAfterClose
+}
+
+func (f *noUseAfterCloseFile) Close() error {
+	f.fs.ensureStillOpen()
+	f.fs.openFiles.Add(-1)
+	return f.file.Close()
+}
+func (f *noUseAfterCloseFile) Read(p []byte) (n int, err error) {
+	f.fs.ensureStillOpen()
+	return f.file.Read(p)
+}
+func (f *noUseAfterCloseFile) ReadAt(p []byte, off int64) (n int, err error) {
+	f.fs.ensureStillOpen()
+	return f.file.ReadAt(p, off)
+}
+func (f *noUseAfterCloseFile) Write(p []byte) (n int, err error) {
+	f.fs.ensureStillOpen()
+	return f.file.Write(p)
+}
+func (f *noUseAfterCloseFile) WriteAt(p []byte, off int64) (n int, err error) {
+	f.fs.ensureStillOpen()
+	return f.file.WriteAt(p, off)
+}
+func (f *noUseAfterCloseFile) Preallocate(offset, length int64) error {
+	f.fs.ensureStillOpen()
+	return f.file.Preallocate(offset, length)
+}
+func (f *noUseAfterCloseFile) Stat() (os.FileInfo, error) {
+	f.fs.ensureStillOpen()
+	return f.file.Stat()
+}
+func (f *noUseAfterCloseFile) Sync() error {
+	f.fs.ensureStillOpen()
+	return f.file.Sync()
+}
+func (f *noUseAfterCloseFile) SyncTo(length int64) (fullSync bool, err error) {
+	f.fs.ensureStillOpen()
+	return f.file.SyncTo(length)
+}
+func (f *noUseAfterCloseFile) SyncData() error {
+	f.fs.ensureStillOpen()
+	return f.file.SyncData()
+}
+func (f *noUseAfterCloseFile) Prefetch(offset int64, length int64) error {
+	f.fs.ensureStillOpen()
+	return f.file.Prefetch(offset, length)
+}
+func (f *noUseAfterCloseFile) Fd() uintptr { return f.file.Fd() }
+
+var _ vfs.FS = &noUseAfterClose{}
+
+func (fs *noUseAfterClose) Create(name string) (vfs.File, error) {
+	fs.ensureStillOpen()
+	return fs.fs.Create(name)
+}
+
+func (fs *noUseAfterClose) Link(oldname, newname string) error {
+	fs.ensureStillOpen()
+	return fs.fs.Link(oldname, newname)
+}
+
+func (fs *noUseAfterClose) Open(name string, opts ...vfs.OpenOption) (vfs.File, error) {
+	fs.ensureStillOpen()
+	f, err := fs.fs.Open(name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	fs.openFiles.Add(1)
+	return &noUseAfterCloseFile{fs: fs, file: f}, nil
+}
+
+func (fs *noUseAfterClose) OpenReadWrite(name string, opts ...vfs.OpenOption) (vfs.File, error) {
+	fs.ensureStillOpen()
+	f, err := fs.fs.OpenReadWrite(name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	fs.openFiles.Add(1)
+	return &noUseAfterCloseFile{fs: fs, file: f}, nil
+}
+
+func (fs *noUseAfterClose) OpenDir(name string) (vfs.File, error) {
+	fs.ensureStillOpen()
+	f, err := fs.fs.OpenDir(name)
+	if err != nil {
+		return nil, err
+	}
+	fs.openFiles.Add(1)
+	return &noUseAfterCloseFile{fs: fs, file: f}, nil
+}
+
+func (fs *noUseAfterClose) Remove(name string) error {
+	fs.ensureStillOpen()
+	return fs.fs.Remove(name)
+}
+
+func (fs *noUseAfterClose) RemoveAll(name string) error {
+	fs.ensureStillOpen()
+	return fs.fs.RemoveAll(name)
+}
+
+func (fs *noUseAfterClose) Rename(oldname, newname string) error {
+	fs.ensureStillOpen()
+	return fs.fs.Rename(oldname, newname)
+}
+
+func (fs *noUseAfterClose) ReuseForWrite(oldname, newname string) (vfs.File, error) {
+	fs.ensureStillOpen()
+	f, err := fs.fs.ReuseForWrite(oldname, newname)
+	if err != nil {
+		return nil, err
+	}
+	fs.openFiles.Add(1)
+	return &noUseAfterCloseFile{fs: fs, file: f}, nil
+}
+
+func (fs *noUseAfterClose) MkdirAll(dir string, perm os.FileMode) error {
+	fs.ensureStillOpen()
+	return fs.fs.MkdirAll(dir, perm)
+}
+
+func (fs *noUseAfterClose) Lock(name string) (io.Closer, error) {
+	fs.ensureStillOpen()
+	return fs.fs.Lock(name)
+}
+
+func (fs *noUseAfterClose) List(dir string) ([]string, error) {
+	fs.ensureStillOpen()
+	return fs.fs.List(dir)
+}
+
+func (fs *noUseAfterClose) Stat(name string) (os.FileInfo, error) {
+	fs.ensureStillOpen()
+	return fs.fs.Stat(name)
+}
+
+func (fs *noUseAfterClose) PathBase(path string) string {
+	return fs.fs.PathBase(path)
+}
+
+func (fs *noUseAfterClose) PathJoin(elem ...string) string {
+	return fs.fs.PathJoin(elem...)
+}
+
+func (fs *noUseAfterClose) PathDir(path string) string {
+	return fs.fs.PathDir(path)
+}
+
+func (fs *noUseAfterClose) GetDiskUsage(path string) (vfs.DiskUsage, error) {
+	fs.ensureStillOpen()
+	return fs.fs.GetDiskUsage(path)
 }

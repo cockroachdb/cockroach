@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -60,6 +61,15 @@ type Watcher struct {
 	// startCh is closed once the rangefeed starts.
 	startCh  chan struct{}
 	startErr error
+
+	// rfc provides access to the underlying rangefeedcache.Watcher for
+	// testing.
+	rfc *rangefeedcache.Watcher
+	mu  struct {
+		syncutil.Mutex
+		// Used by TestingRestart.
+		updateWait chan struct{}
+	}
 }
 
 // New constructs a new Watcher.
@@ -74,6 +84,7 @@ func New(
 		dec:     MakeRowDecoder(),
 	}
 	w.store.Init()
+	w.mu.updateWait = make(chan struct{})
 	return w
 }
 
@@ -158,6 +169,11 @@ func (w *Watcher) startRangeFeed(
 				initialScan.done = true
 				close(initialScan.ch)
 			}
+			// Used by TestingRestart().
+			w.mu.Lock()
+			defer w.mu.Unlock()
+			close(w.mu.updateWait)
+			w.mu.updateWait = make(chan struct{})
 		}
 	}
 
@@ -182,6 +198,7 @@ func (w *Watcher) startRangeFeed(
 		onUpdate,
 		nil, /* knobs */
 	)
+	w.rfc = c
 
 	// Kick off the rangefeedcache which will retry until the stopper stops.
 	if err := rangefeedcache.Start(ctx, w.stopper, c, onError); err != nil {
@@ -212,6 +229,18 @@ func (w *Watcher) WaitForStart(ctx context.Context) error {
 		return w.startErr
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+// TestingRestart restarts the rangefeeds and waits for the initial
+// update after the rangefeed update to be processed.
+func (w *Watcher) TestingRestart() {
+	if w.rfc != nil {
+		w.mu.Lock()
+		waitCh := w.mu.updateWait
+		w.mu.Unlock()
+		w.rfc.TestingRestart()
+		<-waitCh
 	}
 }
 

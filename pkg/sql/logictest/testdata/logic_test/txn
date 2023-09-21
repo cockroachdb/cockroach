@@ -208,6 +208,9 @@ BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL READ COMMITTED; COMMIT
 # It is an error to change the isolation level of a running transaction.
 
 statement ok
+SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true
+
+statement ok
 BEGIN TRANSACTION
 
 statement ok
@@ -233,6 +236,9 @@ SET transaction_isolation = 'READ COMMITTED'
 statement ok
 ROLLBACK
 
+statement ok
+RESET CLUSTER SETTING sql.txn.read_committed_syntax.enabled
+
 # Transactions default to serializable.
 
 statement ok
@@ -245,6 +251,15 @@ serializable
 
 query T
 SHOW transaction_isolation
+----
+serializable
+
+# READ COMMITTED is mapped to serializable by default.
+statement ok
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
 ----
 serializable
 
@@ -265,9 +280,38 @@ serializable
 statement ok
 COMMIT
 
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+query T
+SHOW TRANSACTION ISOLATION LEVEL
+----
+serializable
+
+statement ok
+COMMIT
+
+# Since read_committed_isolation_syntax.enabled is true, setting isolation level
+# to REPEATABLE READ should map to SNAPSHOT.
+statement ok
+SET default_transaction_isolation = 'read committed'
+
+query T
+SHOW default_transaction_isolation
+----
+serializable
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+query T
+SHOW DEFAULT_TRANSACTION_ISOLATION
+----
+serializable
+
 # SNAPSHOT can be used with a hidden cluster setting
 statement ok
-SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
+SET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled = true
 
 statement ok
 BEGIN
@@ -303,7 +347,7 @@ statement ok
 COMMIT
 
 # We can't set isolation level to an unsupported one.
-statement error invalid value for parameter "transaction_isolation": "this is made up"\n.*Available values: serializable,snapshot,read committed
+statement error invalid value for parameter "transaction_isolation": "this is made up"\n.*Available values: serializable,snapshot
 SET transaction_isolation = 'this is made up'
 
 # We can explicitly start a transaction with isolation level specified.
@@ -335,7 +379,10 @@ statement ok
 COMMIT
 
 statement ok
-SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = false
+SET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled = false
+
+statement ok
+SET CLUSTER SETTING sql.txn.read_committed_syntax.enabled = true
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
@@ -680,7 +727,7 @@ statement ok
 COMMIT
 
 statement ok
-SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
+SET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled = true
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW
@@ -723,7 +770,7 @@ SHOW DEFAULT_TRANSACTION_ISOLATION
 snapshot
 
 statement ok
-SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = false
+SET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled = false
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
@@ -795,7 +842,7 @@ SHOW default_transaction_isolation
 read committed
 
 statement ok
-SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
+SET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled = true
 
 # Since snapshot_isolation.enabled is true, setting isolation level to
 # REPEATABLE READ should map to SNAPSHOT.
@@ -816,7 +863,7 @@ SHOW DEFAULT_TRANSACTION_ISOLATION
 snapshot
 
 statement ok
-SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = false
+SET CLUSTER SETTING sql.txn.snapshot_isolation_syntax.enabled = false
 
 # Since snapshot_isolation.enabled is false, setting isolation level to SNAPSHOT
 # should map to SERIALIZABLE.

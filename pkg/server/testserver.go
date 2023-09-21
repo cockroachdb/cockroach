@@ -589,14 +589,24 @@ func (ts *testServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		return nil
 	}
 
-	tenantSettings := ts.params.Settings
-	if tenantSettings == nil {
-		tenantSettings = cluster.MakeTestingClusterSettings()
+	tenantSettings := cluster.MakeTestingClusterSettings()
+	if st := ts.params.Settings; st != nil {
+		// Copy overrides and other test-specific configuration,
+		// as a convenience for test writers that do the following:
+		// - create a new Settings
+		// - add some overrides
+		// - call serverutils.StartServer
+		// - expect the overrides to propagate to the application layer.
+		tenantSettings.SV.TestingCopyForVirtualCluster(&st.SV)
 	}
-	tempStorageConfig := ts.params.TempStorageConfig
-	if tempStorageConfig.Settings == nil {
+
+	var tempStorageConfig base.TempStorageConfig
+	if tsc := ts.params.TempStorageConfig; tsc.Settings != nil {
+		tempStorageConfig = base.InheritTestTempStorageConfig(tenantSettings, tsc)
+	} else {
 		tempStorageConfig = base.DefaultTestTempStorageConfig(tenantSettings)
 	}
+
 	params := base.TestTenantArgs{
 		// Currently, all the servers leverage the same tenant ID. We may
 		// want to change this down the road, for more elaborate testing.
@@ -1335,6 +1345,10 @@ func (ts *testServer) waitForTenantReadinessImpl(
 	// waiting out the closed timestamp interval required to see new updates.
 	ts.node.tenantInfoWatcher.TestingRestart()
 
+	// Ditto for cluster settings and setting overrides.
+	ts.sqlServer.settingsWatcher.TestingRestart()
+	ts.node.tenantSettingsWatcher.TestingRestart()
+
 	log.Infof(ctx, "waiting for rangefeed to catch up with record for tenant %v", tenantID)
 
 	// Wait for the watcher to handle the complete update from the initial scan
@@ -1760,7 +1774,7 @@ func (v *v2AuthDecorator) RoundTrip(r *http.Request) (*http.Response, error) {
 
 // MustGetSQLCounter implements serverutils.ApplicationLayerInterface.
 func (ts *testServer) MustGetSQLCounter(name string) int64 {
-	return mustGetSQLCounterForRegistry(ts.registry, name)
+	return mustGetSQLCounterForRegistry(ts.appRegistry, name)
 }
 
 // MustGetSQLNetworkCounter implements the serverutils.ApplicationLayerInterface.

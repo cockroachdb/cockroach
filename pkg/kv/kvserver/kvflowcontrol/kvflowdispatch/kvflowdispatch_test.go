@@ -13,6 +13,7 @@ package kvflowdispatch
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -130,7 +132,7 @@ func TestDispatch(t *testing.T) {
 				ni, err := strconv.Atoi(strings.TrimPrefix(arg, "n"))
 				require.NoError(t, err)
 				var buf strings.Builder
-				es := dispatch.PendingDispatchFor(roachpb.NodeID(ni))
+				es, _ := dispatch.PendingDispatchFor(roachpb.NodeID(ni), math.MaxInt)
 				sort.Slice(es, func(i, j int) bool { // for determinism
 					if es[i].RangeID != es[j].RangeID {
 						return es[i].RangeID < es[j].RangeID
@@ -166,6 +168,23 @@ func TestDispatch(t *testing.T) {
 			}
 		})
 	})
+}
+
+// TestDispatchSize is used to estimate the size of a marshalled
+// kvflowcontrolpb.AdmittedRaftLogEntries object. It provides an approximation
+// to use as an upper limit for kvadmission.flow_control.dispatch.max_bytes.
+func TestDispatchSize(t *testing.T) {
+	entry, err := protoutil.Marshal(&kvflowcontrolpb.AdmittedRaftLogEntries{
+		RangeID:           math.MaxInt64,
+		AdmissionPriority: math.MaxInt32,
+		UpToRaftLogPosition: kvflowcontrolpb.RaftLogPosition{
+			Term:  math.MaxUint64,
+			Index: math.MaxUint64,
+		},
+		StoreID: math.MaxInt32,
+	})
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(entry), AdmittedRaftLogEntriesBytes, "consider adjusting kvadmission.flow_control.dispatch.max_bytes")
 }
 
 func parseLogPosition(t *testing.T, input string) kvflowcontrolpb.RaftLogPosition {

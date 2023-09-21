@@ -123,21 +123,24 @@ func DeleteRange(
 			if !args.UpdateRangeDeleteGCHint {
 				return nil
 			}
-			// If GCHint was provided, then we need to check if this request meets
-			// range gc criteria of removing all data. This is not an error as range
-			// might have merged since request was sent and we don't want to fail
-			// deletion.
-			if !args.Key.Equal(desc.StartKey.AsRawKey()) || !args.EndKey.Equal(desc.EndKey.AsRawKey()) {
-				return nil
-			}
 			sl := MakeStateLoader(cArgs.EvalCtx)
 			hint, err := sl.LoadGCHint(ctx, readWriter)
 			if err != nil {
 				return err
 			}
-			if !hint.ForwardLatestRangeDeleteTimestamp(h.Timestamp) {
+
+			// Add the timestamp to GCHint to guarantee that GC eventually clears it.
+			updated := hint.ScheduleGCFor(h.Timestamp)
+			// If the range tombstone covers the whole Range key span, update the
+			// corresponding timestamp in GCHint to enable ClearRange optimization.
+			if args.Key.Equal(desc.StartKey.AsRawKey()) && args.EndKey.Equal(desc.EndKey.AsRawKey()) {
+				// NB: don't swap the order, we want to call the method unconditionally.
+				updated = hint.ForwardLatestRangeDeleteTimestamp(h.Timestamp) || updated
+			}
+			if !updated {
 				return nil
 			}
+
 			if updated, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil || !updated {
 				return err
 			}
@@ -149,7 +152,7 @@ func DeleteRange(
 
 		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
-		maxIntents := storage.MaxIntentsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+		maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 
 		// If no predicate parameters are passed, use the fast path. If we're
 		// deleting the entire Raft range, use an even faster path that avoids a
@@ -164,7 +167,7 @@ func DeleteRange(
 			}
 			if err := storage.MVCCDeleteRangeUsingTombstone(ctx, readWriter, cArgs.Stats,
 				args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
-				args.IdempotentTombstone, maxIntents, statsCovered); err != nil {
+				args.IdempotentTombstone, maxLockConflicts, statsCovered); err != nil {
 				return result.Result{}, err
 			}
 			var res result.Result
@@ -194,7 +197,7 @@ func DeleteRange(
 		resumeSpan, err := storage.MVCCPredicateDeleteRange(ctx, readWriter, cArgs.Stats,
 			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
 			args.Predicates, h.MaxSpanRequestKeys, maxDeleteRangeBatchBytes,
-			defaultRangeTombstoneThreshold, maxIntents)
+			defaultRangeTombstoneThreshold, maxLockConflicts)
 		if err != nil {
 			return result.Result{}, err
 		}
@@ -229,6 +232,7 @@ func DeleteRange(
 		LocalTimestamp:                 cArgs.Now,
 		Stats:                          cArgs.Stats,
 		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
+		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 	}
 
 	// NB: Even if args.ReturnKeys is false, we want to know which intents were

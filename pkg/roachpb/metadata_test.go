@@ -17,7 +17,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -461,4 +463,218 @@ func TestAddTier(t *testing.T) {
 	}
 	require.Equal(t, l2, l1.AddTier(Tier{Key: "foo", Value: "bar"}))
 	require.Equal(t, l3, l2.AddTier(Tier{Key: "bar", Value: "foo"}))
+}
+
+func TestGCHint(t *testing.T) {
+	var empty hlc.Timestamp
+	ts1, ts2, ts3 := makeTS(1234, 2), makeTS(2345, 0), makeTS(3456, 10)
+	hint := func(rangeT, minT, maxT hlc.Timestamp) GCHint {
+		return GCHint{
+			LatestRangeDeleteTimestamp: rangeT,
+			GCTimestamp:                minT,
+			GCTimestampNext:            maxT,
+		}
+	}
+
+	// checkInvariants verifies that the GCHint is well-formed.
+	checkInvariants := func(t *testing.T, hint GCHint) {
+		t.Helper()
+		if hint.GCTimestamp.IsEmpty() {
+			require.True(t, hint.GCTimestampNext.IsEmpty())
+		}
+		if hint.GCTimestampNext.IsSet() {
+			require.True(t, hint.GCTimestamp.Less(hint.GCTimestampNext))
+		}
+	}
+	checkInvariants(t, GCHint{})
+
+	// merge runs GCHint.Merge with the given parameters, and verifies that the
+	// semantics of the returned "updated" bool are satisfied.
+	merge := func(t *testing.T, lhs, rhs GCHint, leftEmtpy, rightEmpty bool) GCHint {
+		t.Helper()
+		before := lhs
+		updated := lhs.Merge(&rhs, leftEmtpy, rightEmpty)
+		require.Equal(t, !lhs.Equal(before), updated, "Merge return value incorrect")
+		return lhs
+	}
+	// checkMerge runs GCHint.Merge, and verifies that:
+	// 	- The result of merging 2 hints does not depend on the order.
+	// 	- Merge returns true iff it modified the hint.
+	// 	- Merge returns GCHint conforming with the invariants.
+	checkMerge := func(t *testing.T, lhs, rhs GCHint, leftEmpty, rightEmpty bool) GCHint {
+		t.Helper()
+		res1 := merge(t, lhs, rhs, leftEmpty, rightEmpty)
+		res2 := merge(t, rhs, lhs, rightEmpty, leftEmpty)
+		require.Equal(t, res1, res2, "Merge is not commutative")
+		checkInvariants(t, res1)
+		return res1
+	}
+
+	// Test the effect of GCHint.Merge with an empty hint. Additionally, test that
+	// the result of such a Merge does not depend on the order, i.e. Merge is
+	// commutative; and that Merge returns a correct "updated" bool.
+	for _, h := range []GCHint{
+		hint(empty, empty, empty),
+		hint(empty, ts1, empty),
+		hint(empty, ts1, ts3),
+		hint(ts1, empty, empty),
+		hint(ts1, ts1, ts3),
+		hint(ts2, ts1, ts3),
+	} {
+		t.Run("Merge-with-empty-hint", func(t *testing.T) {
+			for _, lr := range [][]bool{
+				{false, false},
+				{false, true},
+				{true, false},
+				{true, true},
+			} {
+				t.Run(fmt.Sprintf("leftEmpty=%v/rightEmpty=%v", lr[0], lr[1]), func(t *testing.T) {
+					leftEmpty, rightEmpty := lr[0], lr[1]
+					checkInvariants(t, h)
+					checkMerge(t, h, GCHint{}, leftEmpty, rightEmpty)
+				})
+			}
+		})
+	}
+
+	ts4 := makeTS(4567, 5)
+	for _, tc := range []struct {
+		lhs    GCHint
+		rhs    GCHint
+		lEmpty bool
+		rEmpty bool
+		want   GCHint
+	}{
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts1, empty), want: hint(empty, ts1, ts3)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts1, ts2), want: hint(empty, ts1, ts3)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts1, ts3), want: hint(empty, ts1, ts3)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts1, ts4), want: hint(empty, ts1, ts4)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts2, empty), want: hint(empty, ts1, ts3)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts2, ts3), want: hint(empty, ts1, ts3)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts2, ts4), want: hint(empty, ts1, ts4)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts3, empty), want: hint(empty, ts1, ts3)},
+		{lhs: hint(empty, ts1, ts3), rhs: hint(empty, ts3, ts4), want: hint(empty, ts1, ts4)},
+
+		{lhs: hint(ts1, empty, empty), rhs: hint(ts2, empty, empty), lEmpty: false, rEmpty: false,
+			want: hint(ts2, empty, empty)},
+		{lhs: hint(ts1, empty, empty), rhs: hint(ts2, empty, empty), lEmpty: true, rEmpty: false,
+			want: hint(ts2, empty, empty)},
+		{lhs: hint(ts1, empty, empty), rhs: hint(ts2, empty, empty), lEmpty: false, rEmpty: true,
+			want: hint(ts2, empty, empty)},
+		{lhs: hint(ts1, empty, empty), rhs: hint(ts2, empty, empty), lEmpty: true, rEmpty: true,
+			want: hint(ts2, empty, empty)},
+
+		{lhs: hint(ts2, empty, empty), rhs: hint(empty, ts1, ts3), lEmpty: false, rEmpty: false,
+			want: hint(empty, ts1, ts3)},
+		{lhs: hint(ts2, empty, empty), rhs: hint(empty, ts1, ts3), lEmpty: true, rEmpty: false,
+			want: hint(empty, ts1, ts3)},
+		{lhs: hint(ts2, empty, empty), rhs: hint(empty, ts1, ts3), lEmpty: false, rEmpty: true,
+			want: hint(ts2, ts1, ts3)},
+		{lhs: hint(ts2, empty, empty), rhs: hint(empty, ts1, ts3), lEmpty: true, rEmpty: true,
+			want: hint(ts2, ts1, ts3)},
+	} {
+		t.Run("Merge", func(t *testing.T) {
+			checkInvariants(t, tc.lhs)
+			checkInvariants(t, tc.rhs)
+			got := checkMerge(t, tc.lhs, tc.rhs, tc.lEmpty, tc.rEmpty)
+			require.Equal(t, tc.want, got)
+		})
+	}
+
+	for _, tc := range []struct {
+		was  GCHint
+		add  hlc.Timestamp
+		want GCHint
+	}{
+		// Adding an empty timestamp is a no-op.
+		{was: GCHint{}, add: empty, want: GCHint{}},
+		{was: hint(empty, ts1, empty), add: empty, want: hint(empty, ts1, empty)},
+		{was: hint(empty, ts1, ts2), add: empty, want: hint(empty, ts1, ts2)},
+		{was: hint(ts1, ts1, ts2), add: empty, want: hint(ts1, ts1, ts2)},
+		// Any timestamp is added to a hint with empty timestamps.
+		{was: GCHint{}, add: ts1, want: hint(empty, ts1, empty)},
+		{was: hint(ts1, empty, empty), add: ts1, want: hint(ts1, ts1, empty)},
+		{was: hint(ts2, empty, empty), add: ts1, want: hint(ts2, ts1, empty)},
+		// For a hint with only one timestamp, test all possible relative positions
+		// of the newly added timestamp.
+		{was: hint(empty, ts2, empty), add: ts1, want: hint(empty, ts1, ts2)},
+		{was: hint(empty, ts2, empty), add: ts2, want: hint(empty, ts2, empty)}, // no-op
+		{was: hint(empty, ts1, empty), add: ts2, want: hint(empty, ts1, ts2)},
+		{was: hint(ts1, ts1, empty), add: ts2, want: hint(ts1, ts1, ts2)},
+		// For a hint with both timestamps, test all possible relative positions of
+		// the newly added timestamp.
+		{was: hint(empty, ts2, ts3), add: ts1, want: hint(empty, ts1, ts3)},
+		{was: hint(empty, ts2, ts3), add: ts2, want: hint(empty, ts2, ts3)}, // no-op
+		{was: hint(empty, ts1, ts3), add: ts2, want: hint(empty, ts1, ts3)}, // no-op
+		{was: hint(empty, ts1, ts3), add: ts3, want: hint(empty, ts1, ts3)}, // no-op
+		{was: hint(empty, ts1, ts2), add: ts2, want: hint(empty, ts1, ts2)}, // no-op
+		{was: hint(empty, ts1, ts2), add: ts3, want: hint(empty, ts1, ts3)},
+		{was: hint(ts1, ts1, ts2), add: ts3, want: hint(ts1, ts1, ts3)},
+		{was: hint(ts2, ts1, ts2), add: ts3, want: hint(ts2, ts1, ts3)},
+		{was: hint(ts3, ts1, ts2), add: ts3, want: hint(ts3, ts1, ts3)},
+	} {
+		t.Run("ScheduleGCFor", func(t *testing.T) {
+			hint := tc.was
+			checkInvariants(t, hint)
+			updated := hint.ScheduleGCFor(tc.add)
+			checkInvariants(t, hint)
+			assert.Equal(t, !hint.Equal(tc.was), updated, "returned incorrect 'updated' bit")
+			assert.Equal(t, tc.want, hint)
+		})
+	}
+
+	for _, tc := range []struct {
+		was  GCHint
+		gced hlc.Timestamp
+		want GCHint
+	}{
+		// Check empty timestamp cases.
+		{was: GCHint{}, gced: empty, want: GCHint{}},
+		{was: GCHint{}, gced: ts1, want: GCHint{}},
+		{was: hint(empty, ts1, empty), gced: empty, want: hint(empty, ts1, empty)},
+		{was: hint(ts2, ts1, ts3), gced: empty, want: hint(ts2, ts1, ts3)},
+		{was: hint(ts2, ts1, empty), gced: empty, want: hint(ts2, ts1, empty)},
+		// Check that the GC hint is updated correctly with all relative positions
+		// of the threshold.
+		{was: hint(empty, ts2, ts3), gced: ts1, want: hint(empty, ts2, ts3)}, // no-op
+		{was: hint(empty, ts2, ts3), gced: ts2, want: hint(empty, ts3, empty)},
+		{was: hint(empty, ts1, ts3), gced: ts2, want: hint(empty, ts3, empty)},
+		{was: hint(empty, ts1, ts3), gced: ts3, want: GCHint{}},
+		{was: hint(empty, ts1, ts2), gced: ts3, want: GCHint{}},
+		// Check that the entire-range hint is updated correctly with all relative
+		// positions of the threshold.
+		{was: hint(ts2, empty, empty), gced: ts1, want: hint(ts2, empty, empty)},
+		{was: hint(ts2, empty, empty), gced: ts2, want: GCHint{}},
+		{was: hint(ts2, empty, empty), gced: ts3, want: GCHint{}},
+	} {
+		t.Run("UpdateAfterGC", func(t *testing.T) {
+			hint := tc.was
+			checkInvariants(t, hint)
+			updated := hint.UpdateAfterGC(tc.gced)
+			checkInvariants(t, hint)
+			assert.Equal(t, !hint.Equal(tc.was), updated, "returned incorrect 'updated' bit")
+			assert.Equal(t, tc.want, hint)
+		})
+	}
+
+	for _, tc := range []struct {
+		was  GCHint
+		add  hlc.Timestamp
+		want GCHint
+	}{
+		{was: GCHint{}, add: empty, want: GCHint{}},
+		{was: hint(ts2, empty, empty), add: empty, want: hint(ts2, empty, empty)},
+		{was: hint(ts2, empty, empty), add: ts1, want: hint(ts2, empty, empty)},
+		{was: hint(ts2, empty, empty), add: ts2, want: hint(ts2, empty, empty)},
+		{was: hint(ts2, empty, empty), add: ts3, want: hint(ts3, empty, empty)},
+	} {
+		t.Run("ForwardLatestRangeDeleteTimestamp", func(t *testing.T) {
+			hint := tc.was
+			checkInvariants(t, hint)
+			updated := hint.ForwardLatestRangeDeleteTimestamp(tc.add)
+			checkInvariants(t, hint)
+			assert.Equal(t, !hint.Equal(tc.was), updated, "returned incorrect 'updated' bit")
+			assert.Equal(t, tc.want, hint)
+		})
+	}
 }

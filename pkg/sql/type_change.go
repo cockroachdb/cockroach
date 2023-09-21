@@ -1300,6 +1300,11 @@ func (t *typeChangeResumer) OnFailOrCancel(
 	return nil
 }
 
+// CollectProfile supports the jobs.Resumer interface.
+func (t *typeChangeResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 func init() {
 	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &typeChangeResumer{job: job}
