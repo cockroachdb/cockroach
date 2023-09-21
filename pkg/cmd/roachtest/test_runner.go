@@ -621,7 +621,9 @@ func (r *testRunner) runWorker(
 				c.arch = arch
 			}
 		}
-
+		if testToRun.spec.Benchmark && testToRun.spec.Cluster.Cloud != spec.Local {
+			testToRun.spec.Cluster.UseSpot = true
+		}
 		// Verify that required native libraries are available.
 		//
 		// TODO(radu): the arch is not guaranteed and another arch can be selected
