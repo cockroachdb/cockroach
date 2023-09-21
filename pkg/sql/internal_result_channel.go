@@ -16,7 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // ieResultReader is used to read internalExecutor results.
@@ -120,13 +122,26 @@ func (i *ieResultChannel) firstResult(
 		}
 		return cancelchecker.QueryCanceledError
 	}
+	var doLog bool
+	if t, ok := logtags.FromContext(ctx).GetTag("intExec"); ok && t.ValueStr() == "system-jobs-scan" {
+		doLog = true
+	}
 	select {
 	case <-ctx.Done():
+		if doLog {
+			log.Infof(ctx, "ctx.Done: done=true, err=%+v", errors.Wrap(getCtxErr(ctx), wrapMsg))
+		}
 		return ieIteratorResult{}, true, errors.Wrap(getCtxErr(ctx), wrapMsg)
 	case <-i.doneCh:
+		if doLog {
+			log.Infof(ctx, "doneCh: done=true, err=%+v", errors.Wrap(getCtxErr(ctx), wrapMsg))
+		}
 		return ieIteratorResult{}, true, errors.Wrap(getCtxErr(ctx), wrapMsg)
 	case res, ok := <-i.dataCh:
 		if !ok {
+			if doLog {
+				log.Infof(ctx, "dataCh: done=true, err=%+v", errors.Wrap(getCtxErr(ctx), wrapMsg))
+			}
 			return ieIteratorResult{}, true, errors.Wrap(getCtxErr(ctx), wrapMsg)
 		}
 		return res, false, nil

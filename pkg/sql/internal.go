@@ -219,7 +219,8 @@ func (ie *InternalExecutor) runWithEx(
 	}
 	wg.Add(1)
 	go func() {
-		if err := ex.run(
+		var err error
+		if err = ex.run(
 			ctx,
 			ie.mon,
 			&mon.BoundAccount{}, /*reserved*/
@@ -227,6 +228,9 @@ func (ie *InternalExecutor) runWithEx(
 		); err != nil {
 			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
 			errCallback(err)
+		}
+		if t, ok := logtags.FromContext(ctx).GetTag("intExec"); ok && t.ValueStr() == "system-jobs-scan" {
+			log.Infof(ctx, "intExec connExecutor is exiting and calling finish(), err = %+v", err)
 		}
 		w.finish()
 		closeMode := normalClose
