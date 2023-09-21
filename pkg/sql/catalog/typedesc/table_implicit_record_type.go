@@ -308,6 +308,12 @@ func (v *tableImplicitRecordType) GetObjectType() privilege.ObjectType {
 	return ""
 }
 
+// GetObjectTypeString implements the Object interface.
+func (v *tableImplicitRecordType) GetObjectTypeString() string {
+	v.panicNotSupported("GetObjectTypeString")
+	return ""
+}
+
 // AsEnumTypeDescriptor implements the catalog.TypeDescriptor interface.
 func (v *tableImplicitRecordType) AsEnumTypeDescriptor() catalog.EnumTypeDescriptor {
 	return nil

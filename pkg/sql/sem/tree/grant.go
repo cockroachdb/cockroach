@@ -36,8 +36,8 @@ type GrantTargetList struct {
 	Schemas    ObjectNamePrefixList
 	Tables     TableAttrs
 	Types      []*UnresolvedObjectName
-	Functions  FuncObjs
-	Procedures FuncObjs
+	Functions  RoutineObjs
+	Procedures RoutineObjs
 	// If the target is for all sequences in a set of schemas.
 	AllSequencesInSchema bool
 	// If the target is for all tables in a set of schemas.
