@@ -1352,11 +1352,11 @@ func (r *DistSQLReceiver) checkConcurrentError() {
 // pushMeta takes in non-empty metadata object and pushes it to the result
 // writer. Possibly updated status is returned.
 func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra.ConsumerStatus {
+	if meta.Err == nil {
+		r.dataPushed = true
+	}
 	if metaWriter, ok := r.resultWriterMu.row.(MetadataResultWriter); ok {
 		metaWriter.AddMeta(r.ctx, meta)
-		if meta.Err == nil {
-			r.dataPushed = true
-		}
 	}
 	if meta.LeafTxnFinalState != nil {
 		if r.txn != nil {
@@ -1445,6 +1445,7 @@ func (r *DistSQLReceiver) Push(
 	if meta != nil {
 		return r.pushMeta(meta)
 	}
+	r.dataPushed = true
 	if r.ctx.Err() != nil && r.status != execinfra.ConsumerClosed {
 		r.SetError(r.ctx.Err())
 	}
@@ -1511,7 +1512,6 @@ func (r *DistSQLReceiver) Push(
 	if commErr := r.resultWriterMu.row.AddRow(r.ctx, r.row); commErr != nil {
 		r.handleCommErr(commErr)
 	}
-	r.dataPushed = true
 	return r.status
 }
 
@@ -1526,6 +1526,7 @@ func (r *DistSQLReceiver) PushBatch(
 	if meta != nil {
 		return r.pushMeta(meta)
 	}
+	r.dataPushed = true
 	if r.ctx.Err() != nil && r.status != execinfra.ConsumerClosed {
 		r.SetError(r.ctx.Err())
 	}
@@ -1567,7 +1568,6 @@ func (r *DistSQLReceiver) PushBatch(
 	if commErr := r.resultWriterMu.batch.AddBatch(r.ctx, batch); commErr != nil {
 		r.handleCommErr(commErr)
 	}
-	r.dataPushed = true
 	return r.status
 }
 
