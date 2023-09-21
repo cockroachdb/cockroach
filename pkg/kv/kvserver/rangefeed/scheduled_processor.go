@@ -294,7 +294,7 @@ func (p *ScheduledProcessor) sendStop(pErr *kvpb.Error) {
 func (p *ScheduledProcessor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchUpIterConstructor CatchUpIteratorConstructor,
+	catchUpIter *CatchUpIterator,
 	withDiff bool,
 	stream Stream,
 	disconnectFn func(),
@@ -307,7 +307,7 @@ func (p *ScheduledProcessor) Register(
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
+		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff,
 		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
 	)
 
@@ -317,14 +317,6 @@ func (p *ScheduledProcessor) Register(
 		}
 		if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
 			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
-		}
-
-		// Construct the catchUpIter before notifying the registration that it
-		// has been registered. Note that if the catchUpScan is never run, then
-		// the iterator constructed here will be closed in disconnect.
-		if err := r.maybeConstructCatchUpIter(); err != nil {
-			r.disconnect(kvpb.NewError(err))
-			return nil
 		}
 
 		// Add the new registration to the registry.
