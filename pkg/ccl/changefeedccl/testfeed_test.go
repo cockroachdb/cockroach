@@ -684,18 +684,18 @@ func newDepInjector(srvs ...feedInjectable) *depInjector {
 			}
 
 		// Arrange for error reporting resumer to be used.
-		s.JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs =
-			map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-				jobspb.TypeChangefeed: func(raw jobs.Resumer) jobs.Resumer {
-					f := di.getJobFeed(raw.(*changefeedResumer).job.ID())
-					return &reportErrorResumer{
-						wrapped: raw,
-						jobFailed: func() {
-							f.jobFailed(f.FetchTerminalJobErr())
-						},
-					}
-				},
-			}
+		s.JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+			jobspb.TypeChangefeed,
+			func(raw jobs.Resumer) jobs.Resumer {
+				f := di.getJobFeed(raw.(*changefeedResumer).job.ID())
+				return &reportErrorResumer{
+					wrapped: raw,
+					jobFailed: func() {
+						f.jobFailed(f.FetchTerminalJobErr())
+					},
+				}
+			},
+		)
 	}
 
 	return di
