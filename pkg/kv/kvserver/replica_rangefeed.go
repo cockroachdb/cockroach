@@ -244,6 +244,7 @@ func (r *Replica) RangeFeed(
 		if err != nil {
 			return future.MakeCompletedErrorFuture(err)
 		}
+
 		// Finish the iterator limit if we exit before the iterator finishes.
 		// The release function will be hooked into the Close method on the
 		// iterator below. The sync.Once prevents any races between exiting early
