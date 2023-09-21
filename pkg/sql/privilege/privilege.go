@@ -123,7 +123,7 @@ const (
 	Type ObjectType = "type"
 	// Sequence represents a sequence object.
 	Sequence ObjectType = "sequence"
-	// Function represent a function object.
+	// Function represents a function object.
 	Function ObjectType = "function"
 	// Global represents global privileges.
 	Global ObjectType = "global"
