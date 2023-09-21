@@ -38,6 +38,8 @@ const (
 	OnType = "on_type"
 	// OnFunction is used when a GRANT/REVOKE is happening on a function.
 	OnFunction = "on_function"
+	// OnProcedure is used when a GRANT/REVOKE is happening on a procedure.
+	OnProcedure = "on_procedure"
 	// OnAllTablesInSchema is used when a GRANT/REVOKE is happening on
 	// all tables in a set of schemas.
 	OnAllTablesInSchema = "on_all_tables_in_schemas"
