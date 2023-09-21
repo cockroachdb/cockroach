@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 )
 
 var (
@@ -230,6 +232,10 @@ func newMetrics(c *Controller) *metrics {
 				c.mu.Lock()
 				defer c.mu.Unlock()
 
+				streamStatsCount := 0
+				// TODO(sumeer): this cap is not ideal. Consider dynamically reducing
+				// the logging frequency to maintain a mean of 400 log entries/10min.
+				const streamStatsCountCap = 20
 				c.mu.buckets.Range(func(key, value any) bool {
 					stream := key.(kvflowcontrol.Stream)
 					b := value.(*bucket)
@@ -238,8 +244,9 @@ func newMetrics(c *Controller) *metrics {
 						count += 1
 
 						if shouldLog {
-							if count > 10 {
-								return false // cap output to 10 blocked streams
+							if count > 100 {
+								// TODO(sumeer): this cap is not ideal.
+								return false // cap output to 100 blocked streams
 							}
 							if count == 1 {
 								buf.Reset()
@@ -250,10 +257,33 @@ func newMetrics(c *Controller) *metrics {
 							buf.WriteString(stream.String())
 						}
 					}
+					if shouldLog {
+						regularStats, elasticStats := b.getAndResetStats(c.clock.PhysicalTime())
+						if regularStats.noTokenDuration > 0 || elasticStats.noTokenDuration > 0 {
+							streamStatsCount++
+						}
+						if streamStatsCount <= streamStatsCountCap {
+							var b strings.Builder
+							fmt.Fprintf(&b, "stream %s was blocked: durations: ", stream.String())
+							if regularStats.noTokenDuration > 0 {
+								fmt.Fprintf(&b, "regular %s", regularStats.noTokenDuration.String())
+							}
+							if elasticStats.noTokenDuration > 0 {
+								fmt.Fprintf(&b, "elastic %s", elasticStats.noTokenDuration.String())
+							}
+							fmt.Fprintf(&b, "tokens deducted: regular %s elastic %s",
+								humanize.Bytes(uint64(regularStats.tokensDeducted)),
+								humanize.Bytes(uint64(elasticStats.tokensDeducted)))
+							log.Infof(context.Background(), "%s", redact.SafeString(b.String()))
+						} else if streamStatsCount == streamStatsCountCap+1 {
+							log.Infof(context.Background(), "skipped logging some streams that were blocked")
+						}
+					}
 					return true
 				})
 				if shouldLog && count > 0 {
-					log.Warningf(context.Background(), "%d blocked %s replication stream(s): %s", count, wc, buf.String())
+					log.Warningf(context.Background(), "%d blocked %s replication stream(s): %s",
+						count, wc, redact.SafeString(buf.String()))
 				}
 				return count
 			},
