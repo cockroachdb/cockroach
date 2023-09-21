@@ -9,5 +9,6 @@ See: [roachtest README](https://github.com/cockroachdb/cockroach/blob/master/pkg
 
 See: [How To Investigate \(internal\)](https://cockroachlabs.atlassian.net/l/c/SSSBr8c7)
 
+_Grafana is not yet available for aws clusters_
 ----
 ----
