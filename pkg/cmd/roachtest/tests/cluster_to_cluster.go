@@ -407,6 +407,8 @@ type replicationSpec struct {
 	// maxLatency override the maxAcceptedLatencyDefault.
 	maxAcceptedLatency time.Duration
 
+	nonRevisionHistoryFingerprint bool
+
 	// skipNodeDistributionCheck removes the requirement that multiple source and
 	// destination nodes must participate in the replication stream. This should
 	// be set if the roachtest runs on single node clusters or if the
@@ -720,6 +722,13 @@ SELECT *
 FROM crdb_internal.fingerprint(crdb_internal.tenant_span($1::INT), '%s'::DECIMAL, true)
 AS OF SYSTEM TIME '%s'`, startTime.AsOfSystemTime(), endTime.AsOfSystemTime())
 
+	if rd.rs.nonRevisionHistoryFingerprint {
+		fingerprintQuery = fmt.Sprintf(`
+SELECT *
+FROM crdb_internal.fingerprint(crdb_internal.tenant_span($1::INT), 0::DECIMAL, false)
+AS OF SYSTEM TIME '%s'`, endTime.AsOfSystemTime())
+	}
+
 	var srcFingerprint int64
 	fingerPrintMonitor := rd.newMonitor(ctx)
 	fingerPrintMonitor.Go(func(ctx context.Context) error {
@@ -994,11 +1003,12 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 		srcNodes: 1,
 		dstNodes: 1,
 		// The timeout field ensures the c2c roachtest driver behaves properly.
-		timeout:                   10 * time.Minute,
-		workload:                  replicateKV{readPercent: 0, debugRunDuration: 1 * time.Minute, maxBlockBytes: 1, initWithSplitAndScatter: true},
-		additionalDuration:        0 * time.Minute,
-		cutover:                   30 * time.Second,
-		skipNodeDistributionCheck: true,
+		timeout:                       10 * time.Minute,
+		workload:                      replicateKV{readPercent: 0, debugRunDuration: 1 * time.Minute, maxBlockBytes: 1, initWithSplitAndScatter: true},
+		additionalDuration:            0 * time.Minute,
+		cutover:                       30 * time.Second,
+		skipNodeDistributionCheck:     true,
+		nonRevisionHistoryFingerprint: true,
 	}
 	rd := makeReplicationDriver(t, c, sp)
 	rd.setupC2C(ctx, t, c)
@@ -1083,12 +1093,13 @@ func registerClusterToCluster(r registry.Registry) {
 		},
 		{
 			// Large workload to test our 23.2 perf goals.
-			name:      "c2c/weekly/kv50",
-			benchmark: true,
-			srcNodes:  8,
-			dstNodes:  8,
-			cpus:      8,
-			pdSize:    1000,
+			name:                          "c2c/weekly/kv50",
+			benchmark:                     true,
+			srcNodes:                      8,
+			dstNodes:                      8,
+			cpus:                          8,
+			pdSize:                        1000,
+			nonRevisionHistoryFingerprint: true,
 
 			workload: replicateKV{
 				// Write a ~2TB initial scan.
@@ -1098,7 +1109,7 @@ func registerClusterToCluster(r registry.Registry) {
 				maxQPS:        2000,
 			},
 			timeout:            12 * time.Hour,
-			additionalDuration: 4 * time.Hour,
+			additionalDuration: 2 * time.Hour,
 			cutover:            0,
 			tags:               registry.Tags("weekly", "aws-weekly"),
 		},
