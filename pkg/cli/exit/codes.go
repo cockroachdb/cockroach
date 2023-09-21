@@ -62,6 +62,12 @@ func LoggingNetCollectorUnavailable() Code { return Code{9} }
 // store's full disk.
 func DiskFull() Code { return Code{10} }
 
+// Killed (138) indicates the server process was terminated with SIGUSR1.
+//
+// Orchestration code should handle this exit code the same way it would handle
+// the process being killed via SIGKILL.
+func Killed() Code { return Code{138} }
+
 // Codes that are specific to client commands follow. It's possible
 // for codes to be reused across separate client or server commands.
 // Command-specific exit codes should be allocated down from 125.
