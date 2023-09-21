@@ -1160,6 +1160,9 @@ func (ie *InternalExecutor) execInternal(
 		if first, r.done, r.lastErr = rw.firstResult(ctx); !r.done {
 			r.first = &first
 		}
+		if opName == "system-jobs-scan" {
+			log.Infof(ctx, "firstResult: first=%v, it=%+v", first, r)
+		}
 	}
 	for !r.done && r.first.cols != nil {
 		// If the query is of ROWS statement type, the very first thing sent on
@@ -1183,6 +1186,9 @@ func (ie *InternalExecutor) execInternal(
 		first, r.done, r.lastErr = rw.nextResult(ctx)
 		if !r.done {
 			r.first = &first
+		}
+		if opName == "system-jobs-scan" {
+			log.Infof(ctx, "nextResult: first=%v, it=%+v", first, r)
 		}
 	}
 
