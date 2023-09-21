@@ -1,4 +1,12 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load(
+    ":REPOSITORIES.bzl",
+    "CONFIG_DARWIN_AMD64",
+    "CONFIG_DARWIN_ARM64",
+    "CONFIG_LINUX_AMD64",
+    "CONFIG_LINUX_ARM64",
+    "target",
+)
 
 filegroup(
     name = "testdata",
@@ -15,6 +23,20 @@ filegroup(
         "//pkg/ccl/logictestccl:__subpackages__",
         "//pkg/cmd/generate-logictest:__pkg__",
         "//pkg/sql/logictest:__subpackages__",
+    ],
+)
+
+filegroup(
+    name = "cockroach_predecessor_version",
+    srcs = select({
+        "//build/toolchains:is_linux_amd64": [target(CONFIG_LINUX_AMD64)],
+        "//build/toolchains:is_linux_arm64": [target(CONFIG_LINUX_ARM64)],
+        "//build/toolchains:is_darwin_amd64": [target(CONFIG_DARWIN_AMD64)],
+        "//build/toolchains:is_darwin_arm64": [target(CONFIG_DARWIN_ARM64)],
+        "//conditions:default": [],
+    }),
+    visibility = [
+        "//pkg/sql/logictest/tests/cockroach-go-testserver-upgrade-to-master:__pkg__",
     ],
 )
 
@@ -61,7 +83,6 @@ go_library(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/util",
-        "//pkg/util/binfetcher",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/randutil",
