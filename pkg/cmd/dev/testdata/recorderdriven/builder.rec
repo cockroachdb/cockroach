@@ -30,6 +30,12 @@ docker volume inspect bzlhome
 docker help
 ----
 
+git rev-parse --git-dir
+----
+
+git rev-parse --git-common-dir
+----
+
 mkdir crdb-checkout/artifacts
 ----
 
@@ -69,6 +75,12 @@ docker volume inspect bzlhome
 ]
 
 docker help
+----
+
+git rev-parse --git-dir
+----
+
+git rev-parse --git-common-dir
 ----
 
 mkdir crdb-checkout/artifacts
