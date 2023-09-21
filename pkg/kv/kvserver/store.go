@@ -1033,6 +1033,8 @@ type Store struct {
 	}
 	rangefeedScheduler *rangefeed.Scheduler
 
+	rangefeedRestarter *rangefeedRestarter
+
 	// raftRecvQueues is a map of per-Replica incoming request queues. These
 	// queues might more naturally belong in Replica, but are kept separate to
 	// avoid reworking the locking in getOrCreateReplica which requires
@@ -1624,6 +1626,7 @@ func NewStore(
 			s.scanner.AddQueues(s.tsMaintenanceQueue)
 		}
 	}
+	s.rangefeedRestarter = newRangefeedRestarter(s)
 
 	if cfg.TestingKnobs.DisableGCQueue {
 		s.setGCQueueActive(false)
@@ -2001,6 +2004,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return err
 	}
 	s.rangefeedScheduler = rfs
+
+	s.rangefeedRestarter.start(ctx, stopper)
 
 	// Add the store ID to the scanner's AmbientContext before starting it, since
 	// the AmbientContext provided during construction did not include it.
