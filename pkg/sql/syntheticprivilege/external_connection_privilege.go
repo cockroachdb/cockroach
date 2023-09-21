@@ -46,6 +46,11 @@ func (e *ExternalConnectionPrivilege) GetObjectType() privilege.ObjectType {
 	return privilege.ExternalConnection
 }
 
+// GetObjectTypeString implements the Object interface.
+func (e *ExternalConnectionPrivilege) GetObjectTypeString() string {
+	return string(privilege.ExternalConnection)
+}
+
 // GetName implements the Object interface.
 func (e *ExternalConnectionPrivilege) GetName() string {
 	return e.ConnectionName

@@ -170,7 +170,7 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 		return err
 	}
 
-	maybeExistingFuncObj := fnDesc.ToFuncObj()
+	maybeExistingFuncObj := fnDesc.ToRoutineObj()
 	maybeExistingFuncObj.FuncName.ObjectName = n.n.NewName
 	existing, err := params.p.matchUDF(params.ctx, maybeExistingFuncObj, false /* required */)
 	if err != nil {
@@ -336,7 +336,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	}
 
 	// Check if there is a conflicting function exists.
-	maybeExistingFuncObj := fnDesc.ToFuncObj()
+	maybeExistingFuncObj := fnDesc.ToRoutineObj()
 	maybeExistingFuncObj.FuncName.SchemaName = tree.Name(targetSc.GetName())
 	maybeExistingFuncObj.FuncName.ExplicitSchema = true
 	existing, err := params.p.matchUDF(params.ctx, maybeExistingFuncObj, false /* required */)
@@ -400,9 +400,9 @@ func (n *alterFunctionDepExtensionNode) Values() tree.Datums                 { r
 func (n *alterFunctionDepExtensionNode) Close(ctx context.Context)           {}
 
 func (p *planner) mustGetMutableFunctionForAlter(
-	ctx context.Context, funcObj *tree.FuncObj,
+	ctx context.Context, routineObj *tree.RoutineObj,
 ) (*funcdesc.Mutable, error) {
-	ol, err := p.matchUDF(ctx, funcObj, true /*required*/)
+	ol, err := p.matchUDF(ctx, routineObj, true /*required*/)
 	if err != nil {
 		return nil, err
 	}

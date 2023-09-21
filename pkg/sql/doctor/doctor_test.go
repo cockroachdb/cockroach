@@ -124,7 +124,7 @@ func toBytes(t *testing.T, desc *descpb.Descriptor) []byte {
 			&function.Privileges,
 			function.GetParentID(),
 			descpb.InvalidID,
-			privilege.Function,
+			privilege.Routine,
 			function.GetName(),
 		); err != nil {
 			panic(err)
